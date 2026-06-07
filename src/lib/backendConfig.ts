@@ -11,8 +11,10 @@
 // end up half-pointed at a dead URL.
 //
 // History:
-//   - api.orchidcontinuum.org   -> DEAD (no live DNS record) — do NOT use.
-//   - orchidcontinuum.onrender.com -> LIVE working production backend.
+//   - api.orchidcontinuum.org          -> DEAD / unstable during beta.
+//   - orchidcontinuum.onrender.com     -> LIVE working production backend.
+//   - orchidcontinuumharvester2        -> do NOT use for the homepage frontend;
+//                                          it caused image/atlas drift.
 // ---------------------------------------------------------------------------
 
 /** The canonical backend origin. Change this single line to re-host the app. */
@@ -28,19 +30,21 @@ export const ATLAS_OCCURRENCES_PROBE_URL = `${ATLAS_OCCURRENCES_URL}?limit=1`;
 export const ECUADOR_EMBED_BASE_URL = `${BACKEND_BASE_URL}/atlas/ecuador`;
 
 // ---------------------------------------------------------------------------
-// Dedicated image backend host
+// Image backend host
 // ---------------------------------------------------------------------------
 //
-// The genus image library is served by a SEPARATE host from the main
-// taxonomy/search/atlas backend above. Only image requests
-// (GET /images/genus/{genus}) target this origin; everything else resolves
-// against BACKEND_BASE_URL. To re-host the image library in the future, edit
-// the ONE line below.
+// Homepage images must resolve through the Orchid Continuum backend, not a
+// separate frontend-only or stale harvester host. This keeps the hero image,
+// grid, atlas, species cards, and knowledge graph aligned to the same active
+// genus and makes the later Azure migration a one-line backend URL change.
 //
-// History:
-//   - orchidcontinuumharvester2.onrender.com -> only had a few images per genus.
-//   - orchid-continuum-api.onrender.com -> tried, but wrong.
-//   - orchidcontinuumharvester2.onrender.com -> CURRENT image host.
+// Endpoint expected by the frontend:
+//   GET {IMAGES_BACKEND_BASE_URL}/images/genus/{genus}?limit={limit}
+//
+// No direct GBIF/iNaturalist image calls should be required from the homepage.
+// If this endpoint returns too few images, fix the backend query/cache/table —
+// do not rebuild the frontend or switch to fabricated imagery.
+// ---------------------------------------------------------------------------
 
-/** The canonical image-backend origin. Change this single line to re-host images. */
-export const IMAGES_BACKEND_BASE_URL = 'https://orchidcontinuumharvester2.onrender.com';
+/** The canonical image-backend origin. Kept separate as a named export for compatibility. */
+export const IMAGES_BACKEND_BASE_URL = BACKEND_BASE_URL;
