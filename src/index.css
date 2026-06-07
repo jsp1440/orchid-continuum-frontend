@@ -1,0 +1,257 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   ORCHID CONTINUUM — Botanical Research Observatory
+   Light, airy, editorial. Smithsonian × field journal.
+   ============================================================ */
+
+@layer base {
+  :root {
+    /* Palette (HSL):
+       warm white        #ffffff   →   0  0%  100%
+       soft cream        #faf7f2   →   36 38%  97%
+       parchment         #f5f0e8   →   36 35%  93%
+       forest accent     #1f3d2b   →  142 33%  18%
+       forest deep       #14281c   →  144 33%  12%
+       gold              #b8962a   →   44 64%  44%
+       gold soft         #d4b34a   →   44 60%  56%
+       warm ink          #1c1a17   →   36 9%  10%
+       charcoal          #3a3630   →   33 10% 20%
+       quiet line        #e7dfd1   →   36 36%  86%
+    */
+    --background: 36 38% 97%;            /* soft cream */
+    --foreground: 36 9% 10%;             /* warm ink */
+
+    --card: 0 0% 100%;
+    --card-foreground: 36 9% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 36 9% 10%;
+
+    --primary: 142 33% 18%;              /* forest accent */
+    --primary-foreground: 36 38% 97%;
+
+    --secondary: 36 35% 93%;             /* parchment */
+    --secondary-foreground: 36 9% 10%;
+
+    --muted: 36 35% 93%;
+    --muted-foreground: 33 10% 35%;
+
+    --accent: 44 64% 44%;                /* gold */
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 70% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 36 36% 86%;                /* quiet line */
+    --input: 36 36% 86%;
+    --ring: 142 33% 18%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 36 38% 97%;
+    --sidebar-foreground: 36 9% 10%;
+    --sidebar-primary: 142 33% 18%;
+    --sidebar-primary-foreground: 36 38% 97%;
+    --sidebar-accent: 36 35% 93%;
+    --sidebar-accent-foreground: 36 9% 10%;
+    --sidebar-border: 36 36% 86%;
+    --sidebar-ring: 142 33% 18%;
+  }
+
+  .dark {
+    /* Reserved for deep "observatory mode" — used by select map / atlas pages. */
+    --background: 144 33% 12%;
+    --foreground: 36 38% 97%;
+    --card: 144 33% 12%;
+    --card-foreground: 36 38% 97%;
+    --popover: 144 33% 12%;
+    --popover-foreground: 36 38% 97%;
+    --primary: 44 64% 44%;
+    --primary-foreground: 144 33% 12%;
+    --secondary: 142 25% 18%;
+    --secondary-foreground: 36 38% 97%;
+    --muted: 142 25% 18%;
+    --muted-foreground: 36 20% 70%;
+    --accent: 44 64% 44%;
+    --accent-foreground: 144 33% 12%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 36 38% 97%;
+    --border: 142 25% 22%;
+    --input: 142 25% 22%;
+    --ring: 44 64% 44%;
+    --sidebar-background: 144 33% 10%;
+    --sidebar-foreground: 36 38% 97%;
+    --sidebar-primary: 44 64% 44%;
+    --sidebar-primary-foreground: 144 33% 12%;
+    --sidebar-accent: 142 25% 18%;
+    --sidebar-accent-foreground: 36 38% 97%;
+    --sidebar-border: 142 25% 22%;
+    --sidebar-ring: 44 64% 44%;
+  }
+}
+
+@layer base {
+  * { @apply border-border; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    @apply text-foreground;
+    background: #faf7f2;
+    font-family: 'Source Serif 4', 'Source Serif Pro', Georgia, 'Times New Roman', serif;
+    font-feature-settings: 'kern', 'liga', 'onum';
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', 'Playfair', Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.012em;
+    color: #1c1a17;
+  }
+
+  pre, code, kbd, samp {
+    font-family: 'IBM Plex Mono', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+}
+
+/* ------------------------------------------------------------
+   Continuum utility classes
+   ------------------------------------------------------------ */
+@layer components {
+  .font-display   { font-family: 'Playfair Display', Georgia, serif; }
+  .font-body      { font-family: 'Source Serif 4', Georgia, serif; }
+  .font-label     { font-family: 'IBM Plex Mono', ui-monospace, monospace;
+                    letter-spacing: 0.18em; text-transform: uppercase; font-size: 0.7rem; }
+  .font-mono      { font-family: 'IBM Plex Mono', ui-monospace, monospace; }
+
+  .species-name   { font-style: italic; }
+
+  .bg-cream       { background-color: #faf7f2; }
+  .bg-parchment   { background-color: #f5f0e8; }
+  .bg-warm-white  { background-color: #ffffff; }
+  .bg-ink         { background-color: #14281c; }
+
+  .text-ink       { color: #1c1a17; }
+  .text-charcoal  { color: #3a3630; }
+  .text-forest    { color: #1f3d2b; }
+  .text-gold      { color: #b8962a; }
+  .text-gold-soft { color: #d4b34a; }
+
+  .border-quiet   { border-color: #e7dfd1; }
+  .border-forest  { border-color: #1f3d2b; }
+  .border-gold    { border-color: #b8962a; }
+
+  .ring-gold      { box-shadow: 0 0 0 1px #b8962a; }
+
+  .rule-gold::after {
+    content: ''; display: block; width: 56px; height: 2px;
+    background: #b8962a; margin-top: 1rem;
+  }
+
+  .rule-gold-center::after {
+    content: ''; display: block; width: 56px; height: 2px;
+    background: #b8962a; margin: 1rem auto 0;
+  }
+
+  .label-eyebrow {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    font-size: 0.7rem;
+    color: #b8962a;
+  }
+
+  .display-headline {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 500;
+    letter-spacing: -0.018em;
+    line-height: 1.06;
+    color: #1c1a17;
+  }
+
+  .pullquote {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    line-height: 1.3;
+    color: #1f3d2b;
+  }
+}
+
+/* ------------------------------------------------------------
+   Markdown editor / preview (kept from prior build)
+   ------------------------------------------------------------ */
+.markdown-editor {
+  @apply font-mono text-base leading-relaxed;
+}
+
+.markdown-preview {
+  @apply prose max-w-none;
+}
+
+.markdown-preview pre {
+  @apply bg-secondary p-4 rounded-md overflow-x-auto;
+}
+
+.markdown-preview code {
+  @apply text-sm font-mono;
+  color: #1f3d2b;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4,
+.markdown-preview h5,
+.markdown-preview h6 {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 500;
+  color: #1c1a17;
+}
+
+.markdown-preview ul,
+.markdown-preview ol {
+  @apply my-4 ml-6;
+}
+
+/* ------------------------------------------------------------
+   Botanical decorative motifs
+   ------------------------------------------------------------ */
+.botanical-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(31, 61, 43, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(31, 61, 43, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+@keyframes orchid-drift {
+  from { transform: translateY(0) }
+  to   { transform: translateY(-14px) }
+}
+.orchid-drift { animation: orchid-drift 9s ease-in-out infinite alternate; }
+
+/* ------------------------------------------------------------
+   Shimmer loading indicator (used by FallbackImage)
+   ------------------------------------------------------------ */
+@keyframes oc-shimmer-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+.oc-shimmer {
+  background: linear-gradient(
+    100deg,
+    rgba(231, 224, 207, 0) 20%,
+    rgba(201, 168, 76, 0.28) 50%,
+    rgba(231, 224, 207, 0) 80%
+  );
+  animation: oc-shimmer-sweep 1.4s ease-in-out infinite;
+}
