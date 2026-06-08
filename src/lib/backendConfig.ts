@@ -14,11 +14,19 @@ export const BACKEND_BASE_URL = (
   'https://api.orchidcontinuum.org'
 ).replace(/\/$/, '');
 
-/** Dedicated image harvester backend used for trusted genus image lookups. */
+/**
+ * Dedicated image harvester backend used for trusted genus image lookups.
+ *
+ * Verified live endpoint: GET /images/genus/{genus}?limit=N
+ * Returns: { genus, count, images: [{ id, image_url, image_source, taxonomy_id, genus, species }] }
+ *
+ * NOTE: orchid-continuum-api.onrender.com returns 404 on all paths — the
+ * correct host is orchidcontinuumharvester2.onrender.com.
+ */
 export const IMAGES_BACKEND_BASE_URL = (
   env.VITE_IMAGES_BACKEND_BASE_URL ||
   env.VITE_IMAGE_BACKEND_BASE_URL ||
-  'https://orchid-continuum-api.onrender.com'
+  'https://orchidcontinuumharvester2.onrender.com'
 ).replace(/\/$/, '');
 
 /** External Ecuador expedition map/embed origin. */
