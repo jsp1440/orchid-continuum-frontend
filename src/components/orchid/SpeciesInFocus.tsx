@@ -1,33 +1,17 @@
-import React, {
-  useEffect,
-  useState,
-  useRef,
-  useCallback,
-  useSyncExternalStore,
-} from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  ShieldAlert,
-  MapPin,
-  Leaf,
   ArrowRight,
   Bug,
-  Trees,
+  Leaf,
+  MapPin,
   Search,
+  ShieldAlert,
   Star,
+  Trees,
 } from 'lucide-react';
-import {
-  conservationBadge,
-  fetchSpeciesInFocus,
-  fetchNeighborGenera,
-  fetchGenusRotationPool,
-  binomialOf,
-} from '@/lib/genusData';
-
-
-
+import { conservationBadge, binomialOf } from '@/lib/genusData';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-
 import {
   getFeaturedSpeciesCached,
   isFavorite,
@@ -36,31 +20,19 @@ import {
   type FeaturedSpecies,
 } from '@/lib/speciesFeature';
 
-
 /**
- * SpeciesInFocus — homepage section.
+ * SpeciesInFocus — homepage species section.
  *
- * Shows the featured genus's ecological NEIGHBOURS (other orchid genera that
- * share its region/habitat, discovered live from the OC occurrence Atlas), each
- * with a real iNaturalist photo + a derived ecological-relationship sentence.
- *
- * PHOTO CACHING: every photo resolved from iNaturalist is written to the shared
- * Supabase `genus_photo_cache` table, and read back FIRST on the next visit, so
- * any previously-viewed genus loads instantly (see genusData.ts).
- *
- * SLOW ROTATING CAROUSEL: a tall hero image plus a 4-card grid quietly rotate
- * every 10s. On each tick the hero crossfades (1.5s) into the top-left grid
- * card, the grid shifts left one slot, and a fresh photo from the genus's
- * rotation pool (cache → iNaturalist) loads into the freed right slot. No
- * species repeats until every photo in the pool has been shown. Rotation pauses
- * while the pointer is over the section so a user can read/click a card.
+ * TAXONOMY CONTRACT:
+ * This component must only render full species binomials such as
+ * "Oncidium sotoanum". It must not treat a bare epithet like "sotoanum" as a
+ * species identity, because epithets can repeat across genera. Species loading is
+ * delegated to speciesFeature.ts, which normalizes backend rows to full binomials
+ * from accepted scientific_name OR genus + species/specific_epithet fields.
  */
 
-const TARGET_COUNT = 4;
-const ROTATE_MS = 10000;
-const CROSSFADE_MS = 1500;
+const TARGET_COUNT = 6;
 
-/** Common orchid genera offered as typeahead suggestions for the search box. */
 const GENUS_SUGGESTIONS = [
   'Cattleya',
   'Dendrobium',
@@ -79,7 +51,6 @@ const GENUS_SUGGESTIONS = [
   'Vanilla',
 ];
 
-/** Per-species favorite state via a stable boolean snapshot (no array churn). */
 const useIsFavorite = (name: string) =>
   useSyncExternalStore(
     subscribeFavorites,
@@ -87,221 +58,76 @@ const useIsFavorite = (name: string) =>
     () => false,
   );
 
-/** Stable identity key for a card (used for dedupe + React keys). */
-const cardKey = (c: FeaturedSpecies) =>
-  (binomialOf(c.name) || c.name).toLowerCase();
+function normalizeGenus(raw: string): string {
+  const g = raw.trim();
+  if (!g) return '';
+  return g.charAt(0).toUpperCase() + g.slice(1);
+}
 
-/**
- * Curated ecological-relationship copy for known Catasetum neighbours.
- * Used to fill in (or correct) the relationship line so the requested text
- * always shows beneath the matching neighbour photo. Keyed by genus name.
- */
-const RELATIONSHIP_OVERRIDES: Record<string, string> = {
-  gongora:
-    'Shares orchid bee pollinators — different scent chemistry attracts different bee species',
-  stanhopea:
-    'Same euglossine bee guild — chemical signals partition the shared pollinators',
-  epidendrum:
-    'Co-occurs on same trees — pollinated by butterflies and hummingbirds instead',
-  sobralia:
-    'Same forest floor and understory — uses bee and hummingbird pollinators',
-};
+function isFullBinomial(name: string): boolean {
+  return /^[A-Z][A-Za-z-]+\s+[a-z][a-z-]+/.test(name.trim());
+}
 
-/** Apply a curated relationship override for a neighbour genus, if one exists. */
-const relationshipFor = (genusName: string, current?: string): string | undefined => {
-  const key = (genusName || '').trim().split(/\s+/)[0].toLowerCase();
-  return RELATIONSHIP_OVERRIDES[key] ?? current;
-};
-
-
-
+function cardKey(species: FeaturedSpecies): string {
+  return (binomialOf(species.name) || species.name).toLowerCase();
+}
 
 const SpeciesInFocus: React.FC = () => {
-  // Consume the shared Genus of the Day — same genus as DailyGenusFeature,
-  // ContinuumWeb, and HomeAtlas. Never call featuredGenusName() here.
   const { genus: dailyGenus } = useDailyGenus();
-  const [genus, setGenus] = useState(() => dailyGenus);
-  const [query, setQuery] = useState(() => dailyGenus);
-
-  // Re-sync if the 12-hour window rotates while the page is open, or if the
-  // Supabase snapshot resolves after mount (and the user hasn't searched yet).
-  useEffect(() => {
-    setGenus(dailyGenus);
-    setQuery(dailyGenus);
-  }, [dailyGenus]);
+  const [genus, setGenus] = useState(() => normalizeGenus(dailyGenus));
+  const [query, setQuery] = useState(() => normalizeGenus(dailyGenus));
+  const [species, setSpecies] = useState<FeaturedSpecies[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
-  const [neighborMode, setNeighborMode] = useState(true);
 
-  // ── Carousel state ──
-  // `order` is the full rotation pool (neighbours first, then extra genus
-  // species). `hero` is the large crossfading image; `grid` holds the 4 cards.
-  const [hero, setHero] = useState<FeaturedSpecies | null>(null);
-  const [grid, setGrid] = useState<FeaturedSpecies[]>([]);
-  const gridRef = useRef<FeaturedSpecies[]>([]);
-  const orderRef = useRef<FeaturedSpecies[]>([]);
-  const cursorRef = useRef(0);
-  const pausedRef = useRef(false);
-
-  // Mirror the grid into a ref so the rotation interval can read the current
-  // grid WITHOUT re-subscribing the interval on every tick.
   useEffect(() => {
-    gridRef.current = grid;
-  }, [grid]);
-
-  /** Seed hero + grid from a freshly-built pool. */
-  const seedCarousel = useCallback((pool: FeaturedSpecies[]) => {
-    // Dedupe by binomial / genus name, preserving order (neighbours first).
-    const seen = new Set<string>();
-    const deduped: FeaturedSpecies[] = [];
-    for (const c of pool) {
-      if (!c) continue;
-      const k = cardKey(c);
-      if (seen.has(k)) continue;
-      seen.add(k);
-      deduped.push(c);
-    }
-    orderRef.current = deduped;
-    if (deduped.length === 0) {
-      setHero(null);
-      setGrid([]);
-      return;
-    }
-    setHero(deduped[0]);
-    const initialGrid: FeaturedSpecies[] = [];
-    for (let i = 1; i <= TARGET_COUNT; i++) {
-      initialGrid.push(deduped[i % deduped.length]);
-    }
-    setGrid(initialGrid);
-    cursorRef.current = (TARGET_COUNT + 1) % deduped.length;
-  }, []);
+    const next = normalizeGenus(dailyGenus);
+    setGenus(next);
+    setQuery(next);
+  }, [dailyGenus]);
 
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
     setFailed(false);
-    setHero(null);
-    setGrid([]);
-    orderRef.current = [];
-    cursorRef.current = 0;
+    setSpecies([]);
 
-    // ── PRIMARY: NEW two-step backend flow ──
-    //   1. GET /api/search?q={genus}&limit=6      → 6 species names
-    //   2. GET /api/species/{name}/images?limit=1 → one image per species
-    // Display those 6 species (with their images) in the grid.
-    const loadSpeciesInFocus = async (): Promise<boolean> => {
-      try {
-        const cards = await fetchSpeciesInFocus(genus, ctrl.signal, 6);
-        if (ctrl.signal.aborted) return true;
-        if (cards.length === 0) return false;
-        setNeighborMode(false);
-        seedCarousel(cards);
-        setLoading(false);
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    // ── FALLBACK A: dynamic neighbouring genera (cache-first). ──
-    const loadNeighborMode = async (): Promise<boolean> => {
-      try {
-        const list = await fetchNeighborGenera(genus, ctrl.signal);
-        if (ctrl.signal.aborted) return true;
-        if (list.length === 0) return false;
-        setNeighborMode(true);
-        const neighbourCards: FeaturedSpecies[] = list.map((n) => ({
-          name: n.genus,
-          genus: n.region,
-          image: n.image,
-          relationship: relationshipFor(n.genus, n.relationship),
-        }));
-        seedCarousel(neighbourCards);
-        setLoading(false);
-
-        // Enrich the rotation pool with the genus's own species photos.
-        try {
-          const pool = await fetchGenusRotationPool(genus, ctrl.signal, 12);
-          if (ctrl.signal.aborted || pool.length === 0) return true;
-          const speciesCards: FeaturedSpecies[] = pool.map((p) => ({
-            name: p.name,
-            genus: p.genus,
-            family: 'Orchidaceae',
-            image: p.image,
-          }));
-          seedCarousel([...neighbourCards, ...speciesCards]);
-        } catch {
-          /* keep neighbour-only carousel */
-        }
-        return true;
-      } catch {
-        return false;
-      }
-    };
-
-    // ── FALLBACK B: cached species set (last resort). ──
-    const loadCachedSpecies = async () => {
-      try {
-        const list = await getFeaturedSpeciesCached(TARGET_COUNT, ctrl.signal, genus);
+    getFeaturedSpeciesCached(TARGET_COUNT, ctrl.signal, genus)
+      .then((rows) => {
         if (ctrl.signal.aborted) return;
-        if (list.length === 0) {
-          setFailed(true);
-          setLoading(false);
-          return;
+
+        // Final UI guard: never render bare species epithets even if a backend
+        // endpoint regresses. The loader should already enforce this, but the
+        // component keeps the contract explicit.
+        const safe: FeaturedSpecies[] = [];
+        const seen = new Set<string>();
+        for (const row of rows) {
+          if (!row?.name || !isFullBinomial(row.name)) continue;
+          const key = cardKey(row);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          safe.push(row);
+          if (safe.length >= TARGET_COUNT) break;
         }
-        setNeighborMode(false);
-        seedCarousel(list);
+
+        setSpecies(safe);
+        setFailed(safe.length === 0);
         setLoading(false);
-      } catch {
+      })
+      .catch(() => {
         if (ctrl.signal.aborted) return;
         setFailed(true);
         setLoading(false);
-      }
-    };
-
-    // Run the resolution chain in order: species-in-focus → neighbours → cache.
-    (async () => {
-      if (await loadSpeciesInFocus()) return;
-      if (ctrl.signal.aborted) return;
-      if (await loadNeighborMode()) return;
-      if (ctrl.signal.aborted) return;
-      await loadCachedSpecies();
-    })();
+      });
 
     return () => ctrl.abort();
-  }, [genus, seedCarousel]);
-
-
-  // ── Rotation tick ──
-  // Reads/writes via refs so the interval is installed exactly once and never
-  // double-advances the cursor (React StrictMode re-invokes state updaters in
-  // dev, so we keep the rotation logic OUT of the setState updater).
-  useEffect(() => {
-    const id = window.setInterval(() => {
-      if (pausedRef.current) return;
-      const order = orderRef.current;
-      const prevGrid = gridRef.current;
-      if (order.length < 2 || prevGrid.length === 0) return;
-
-      // Hero crossfades into the current top-left grid card.
-      setHero(prevGrid[0]);
-      // Grid shifts left; a fresh pool photo enters the freed right slot.
-      const next = order[cursorRef.current % order.length];
-      cursorRef.current = (cursorRef.current + 1) % order.length;
-      const nextGrid = [...prevGrid.slice(1), next];
-      gridRef.current = nextGrid;
-      setGrid(nextGrid);
-    }, ROTATE_MS);
-    return () => window.clearInterval(id);
-  }, []);
-
-
+  }, [genus]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const next = query.trim();
+    const next = normalizeGenus(query);
     if (next && next.toLowerCase() !== genus.toLowerCase()) {
-      setGenus(next.charAt(0).toUpperCase() + next.slice(1));
+      setGenus(next);
     }
   };
 
@@ -309,12 +135,6 @@ const SpeciesInFocus: React.FC = () => {
     <section
       id="species-in-focus"
       className="relative bg-[#1a2e1a] text-[#f5f0e8] border-b border-white/[0.06] overflow-hidden"
-      onMouseEnter={() => {
-        pausedRef.current = true;
-      }}
-      onMouseLeave={() => {
-        pausedRef.current = false;
-      }}
     >
       <div
         className="absolute inset-0 pointer-events-none"
@@ -324,6 +144,7 @@ const SpeciesInFocus: React.FC = () => {
             'radial-gradient(ellipse at 10% 90%, rgba(54,102,72,0.22) 0%, transparent 55%)',
         }}
       />
+
       <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 py-20 lg:py-28">
         <div className="flex items-center gap-3 font-mono text-[10px] tracking-[0.32em] uppercase text-[#C9A84C]">
           <span className="inline-block w-8 h-px bg-[#C9A84C]/60" />
@@ -339,18 +160,10 @@ const SpeciesInFocus: React.FC = () => {
           }}
         >
           No orchid exists alone —{' '}
-          <span className="italic text-[#C9A84C]">
-            {neighborMode ? 'meet their neighbors' : 'meet four of them'}
-          </span>
-          .
+          <span className="italic text-[#C9A84C]">meet their species</span>.
         </h2>
 
-
-        {/* Genus search / select */}
-        <form
-          onSubmit={handleSearch}
-          className="mt-8 flex flex-wrap items-center gap-3"
-        >
+        <form onSubmit={handleSearch} className="mt-8 flex flex-wrap items-center gap-3">
           <label className="font-mono text-[10px] tracking-[0.24em] uppercase text-[#cfc8b8]/70">
             Browse genus
           </label>
@@ -382,32 +195,19 @@ const SpeciesInFocus: React.FC = () => {
         </form>
 
         <div className="mt-10">
-          {loading && !hero ? (
-            <div className="space-y-6">
-              <div className="aspect-[21/9] w-full rounded-2xl bg-white/[0.06] animate-pulse" />
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {Array.from({ length: TARGET_COUNT }).map((_, i) => (
-                  <SkeletonCard key={i} />
-                ))}
-              </div>
+          {loading ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: TARGET_COUNT }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
             </div>
-          ) : failed && !hero ? (
+          ) : failed ? (
             <EmptyGenus genus={genus} />
           ) : (
-            <div className="space-y-6 lg:space-y-8">
-              {/* Crossfading hero image */}
-              {hero && <HeroImage data={hero} neighbor={!!hero.relationship} />}
-
-              {/* Rotating 4-card grid */}
-              <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {grid.map((s, i) => (
-                  <SpeciesCard
-                    key={`${cardKey(s)}-${i}`}
-                    data={s}
-                    neighbor={!!s.relationship}
-                  />
-                ))}
-              </div>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {species.map((s) => (
+                <SpeciesCard key={cardKey(s)} data={s} />
+              ))}
             </div>
           )}
         </div>
@@ -415,107 +215,6 @@ const SpeciesInFocus: React.FC = () => {
     </section>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Crossfading hero — double-buffered <img> layers, 1.5s opacity transition.
-// ---------------------------------------------------------------------------
-
-const HeroImage: React.FC<{ data: FeaturedSpecies; neighbor: boolean }> = ({
-  data,
-  neighbor,
-}) => {
-  const navigate = useNavigate();
-  // Keep the previous image mounted underneath while the new one fades in.
-  const [layers, setLayers] = useState<{ src?: string; id: number }[]>(() => [
-    { src: data.image, id: 0 },
-  ]);
-  const lastSrc = useRef<string | undefined>(data.image);
-  const idRef = useRef(0);
-
-  useEffect(() => {
-    if (data.image === lastSrc.current) return;
-    lastSrc.current = data.image;
-    idRef.current += 1;
-    const id = idRef.current;
-    // Add the new layer on top (starts transparent, fades to opaque).
-    setLayers((prev) => [...prev.slice(-1), { src: data.image, id }]);
-    // After the crossfade completes, drop the old layer.
-    const t = window.setTimeout(() => {
-      setLayers((prev) => prev.filter((l) => l.id === id));
-    }, CROSSFADE_MS + 100);
-    return () => window.clearTimeout(t);
-  }, [data.image]);
-
-  const href = neighbor
-    ? `/genus/${encodeURIComponent(data.name)}`
-    : `/species/${encodeURIComponent(data.name)}`;
-
-  return (
-    <button
-      type="button"
-      onClick={() => navigate(href)}
-      aria-label={`View ${data.name}`}
-      className="group relative block w-full aspect-[21/9] overflow-hidden rounded-2xl border border-[#C9A84C]/25 bg-[#16271a] text-left"
-    >
-      {layers.map((layer, idx) =>
-        layer.src ? (
-          <img
-            key={layer.id}
-            src={layer.src}
-            alt={data.name}
-            className="absolute inset-0 h-full w-full object-cover"
-            style={{
-              opacity: idx === layers.length - 1 ? 1 : 0,
-              transition: `opacity ${CROSSFADE_MS}ms ease-in-out`,
-              animation:
-                idx === layers.length - 1 && layers.length > 1
-                  ? `oc-hero-fade ${CROSSFADE_MS}ms ease-in-out`
-                  : undefined,
-            }}
-          />
-        ) : (
-          <div
-            key={layer.id}
-            className="absolute inset-0 flex items-center justify-center bg-[#1a2e1a] text-[#C9A84C]"
-          >
-            <Leaf className="h-10 w-10" strokeWidth={1.1} />
-          </div>
-        ),
-      )}
-      <style>{`@keyframes oc-hero-fade{from{opacity:0}to{opacity:1}}`}</style>
-
-      {/* Bottom gradient + caption */}
-      <span className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-[#0c160d] via-[#0c160d]/40 to-transparent pointer-events-none" />
-      <span className="absolute top-4 left-4 inline-flex items-center gap-1.5 rounded-md bg-[#0d2535]/85 backdrop-blur px-2.5 py-1 font-mono text-[9px] tracking-[0.26em] uppercase text-[#C9A84C] border border-[#C9A84C]/40">
-        <Leaf className="h-3 w-3" />
-        {neighbor ? 'Neighbor' : 'Species'} · In Focus
-      </span>
-      <div className="absolute bottom-5 left-5 right-5">
-        <div
-          className="italic text-[#faf7f2] leading-tight group-hover:text-[#C9A84C] transition-colors"
-          style={{
-            fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
-            fontSize: 'clamp(1.7rem, 3.4vw, 2.8rem)',
-          }}
-        >
-          {data.name}
-        </div>
-        <div className="mt-1.5 font-mono text-[10px] tracking-[0.22em] uppercase text-[#cfc8b8]/85">
-          {[data.genus, data.family].filter(Boolean).join(' · ') || 'Orchidaceae'}
-        </div>
-        {neighbor && data.relationship && (
-          <p className="mt-3 max-w-2xl italic text-[#C9A84C] text-[13px] leading-[1.6]">
-            {data.relationship}
-          </p>
-        )}
-      </div>
-    </button>
-  );
-};
-
-// ---------------------------------------------------------------------------
-// Image area — real photo OR a clean "image pending" placeholder.
-// ---------------------------------------------------------------------------
 
 const ImagePending: React.FC<{ genus?: string }> = ({ genus }) => (
   <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1a2e1a] text-[#C9A84C] px-4 text-center">
@@ -539,53 +238,33 @@ const ImagePending: React.FC<{ genus?: string }> = ({ genus }) => (
   </div>
 );
 
-const CardImage: React.FC<{ src?: string; alt: string; genus?: string }> = ({
-  src,
-  alt,
-  genus,
-}) => {
+const CardImage: React.FC<{ src?: string; alt: string; genus?: string }> = ({ src, alt, genus }) => {
   const [errored, setErrored] = useState(false);
   useEffect(() => setErrored(false), [src]);
-  const showImage = !!src && !errored;
   return (
     <div className="absolute inset-0">
-      {showImage ? (
+      {src && !errored ? (
         <img
           src={src}
           alt={alt}
           loading="lazy"
           onError={() => setErrored(true)}
           className="absolute inset-0 h-full w-full object-cover transition-all duration-[1200ms] ease-in-out group-hover:scale-105"
-          style={{ animation: `oc-card-fade ${CROSSFADE_MS}ms ease-in-out` }}
         />
       ) : (
         <ImagePending genus={genus} />
       )}
-      <style>{`@keyframes oc-card-fade{from{opacity:0.25}to{opacity:1}}`}</style>
     </div>
   );
 };
 
-// ---------------------------------------------------------------------------
-// Species / neighbour card
-// ---------------------------------------------------------------------------
-
-const SpeciesCard: React.FC<{
-  data: FeaturedSpecies;
-  /** When true the card represents a NEIGHBOURING GENUS, not a species. */
-  neighbor?: boolean;
-}> = ({ data, neighbor = false }) => {
+const SpeciesCard: React.FC<{ data: FeaturedSpecies }> = ({ data }) => {
   const navigate = useNavigate();
   const favorited = useIsFavorite(data.name);
   const badge = data.conservation ? conservationBadge(data.conservation) : null;
-
+  const speciesHref = `/species/${encodeURIComponent(data.name)}`;
+  const atlasHref = `/atlas?species=${encodeURIComponent(data.name)}`;
   const ecoNote = data.habitat || data.pollinator || data.climate;
-  const speciesHref = neighbor
-    ? `/genus/${encodeURIComponent(data.name)}`
-    : `/species/${encodeURIComponent(data.name)}`;
-  const atlasHref = neighbor
-    ? `/atlas?genus=${encodeURIComponent(data.name)}`
-    : `/atlas?species=${encodeURIComponent(data.name)}`;
 
   return (
     <div className="group flex flex-col h-full rounded-2xl border border-[#C9A84C]/20 bg-[#16271a] overflow-hidden transition-colors hover:border-[#C9A84C]/45">
@@ -602,7 +281,7 @@ const SpeciesCard: React.FC<{
 
         <span className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-md bg-[#0d2535]/85 backdrop-blur px-2.5 py-1 font-mono text-[9px] tracking-[0.26em] uppercase text-[#C9A84C] border border-[#C9A84C]/40 pointer-events-none">
           <Leaf className="h-3 w-3" />
-          {neighbor ? 'Neighbor' : 'Species'}
+          Species
         </span>
 
         <button
@@ -622,23 +301,20 @@ const SpeciesCard: React.FC<{
       </div>
 
       <div className="flex flex-col flex-1 p-7">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <button
-              type="button"
-              onClick={() => navigate(speciesHref)}
-              className="text-left italic text-[#faf7f2] leading-tight hover:text-[#C9A84C] transition-colors"
-              style={{
-                fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
-                fontSize: 'clamp(1.4rem, 2.2vw, 1.9rem)',
-              }}
-            >
-              {data.name}
-            </button>
-            <div className="mt-2 font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">
-              {[data.genus, data.family].filter(Boolean).join(' · ') || 'Orchidaceae'}
-            </div>
-          </div>
+        <button
+          type="button"
+          onClick={() => navigate(speciesHref)}
+          className="text-left italic text-[#faf7f2] leading-tight hover:text-[#C9A84C] transition-colors"
+          style={{
+            fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
+            fontSize: 'clamp(1.4rem, 2.2vw, 1.9rem)',
+          }}
+        >
+          {data.name}
+        </button>
+
+        <div className="mt-2 font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">
+          {[data.genus, data.family].filter(Boolean).join(' · ') || 'Orchidaceae'}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">
@@ -667,28 +343,11 @@ const SpeciesCard: React.FC<{
         {ecoNote && (
           <p className="mt-5 flex-1 text-[#f5f0e8] text-[17px] leading-[1.75]">
             <span className="inline-flex items-center gap-1.5 mr-2 align-middle text-[#C9A84C]">
-              {data.habitat ? (
-                <Trees className="h-4 w-4" />
-              ) : (
-                <Bug className="h-4 w-4" />
-              )}
+              {data.habitat ? <Trees className="h-4 w-4" /> : <Bug className="h-4 w-4" />}
             </span>
             {ecoNote}
             {data.pollinator && data.habitat ? ` Pollinated by ${data.pollinator.toLowerCase()}.` : ''}
           </p>
-        )}
-
-        {/* ECOLOGICAL RELATIONSHIP — neighbour cards only. */}
-        {neighbor && data.relationship && (
-          <div className="mt-5 flex-1">
-            <div className="flex items-center gap-2 font-mono text-[9px] tracking-[0.3em] uppercase text-[#C9A84C]/80">
-              <span className="inline-block w-5 h-px bg-[#C9A84C]/50" />
-              Ecological Relationship
-            </div>
-            <p className="mt-2 italic text-[#C9A84C] text-[13px] leading-[1.65]">
-              {data.relationship}
-            </p>
-          </div>
         )}
 
         <div className="mt-6 flex flex-wrap gap-3">
@@ -697,7 +356,7 @@ const SpeciesCard: React.FC<{
             onClick={() => navigate(speciesHref)}
             className="group/btn inline-flex items-center gap-2 px-4 py-2.5 rounded-full bg-[#C9A84C] text-[#14281c] hover:bg-[#e6c763] transition-colors font-mono text-[10px] tracking-[0.2em] uppercase"
           >
-            {neighbor ? 'Genus page' : 'Species card'}
+            Species card
             <ArrowRight className="h-3.5 w-3.5 group-hover/btn:translate-x-1 transition-transform" />
           </button>
           <Link
@@ -711,10 +370,6 @@ const SpeciesCard: React.FC<{
     </div>
   );
 };
-
-// ---------------------------------------------------------------------------
-// Skeleton / empty states
-// ---------------------------------------------------------------------------
 
 const SkeletonCard: React.FC = () => (
   <div className="rounded-2xl border border-white/[0.06] bg-[#16271a] overflow-hidden animate-pulse">
@@ -736,10 +391,10 @@ const EmptyGenus: React.FC<{ genus: string }> = ({ genus }) => (
       <Leaf className="h-7 w-7" />
     </span>
     <p className="mt-5 font-mono text-[11px] tracking-[0.28em] uppercase text-[#C9A84C]">
-      No species available for {genus}
+      No taxonomy-backed binomial species available for {genus}
     </p>
     <p className="mt-2 text-[#cfc8b8]/70 text-sm">
-      Try another genus — e.g. Cattleya, Dendrobium, or Masdevallia.
+      This section now rejects bare species epithets. Check the species search endpoint if this persists.
     </p>
   </div>
 );
