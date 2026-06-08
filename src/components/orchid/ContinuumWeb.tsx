@@ -144,6 +144,13 @@ const ContinuumWeb: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<NodeKey>('fungi');
 
+  // Log the diagnostic to the browser console but never render it publicly.
+  useEffect(() => {
+    if (diagnostic) {
+      console.warn('[ContinuumWeb] Genus-of-day diagnostic:', diagnostic);
+    }
+  }, [diagnostic]);
+
   useEffect(() => {
     const ctrl = new AbortController();
     let mounted = true;
@@ -462,11 +469,7 @@ const ContinuumWeb: React.FC = () => {
                 Showing reference data · live feed unavailable.
               </p>
             )}
-            {diagnostic && (
-              <p className="mt-3 font-mono text-[9px] tracking-[0.1em] uppercase text-[#e08a3c]/80">
-                ⚠ {diagnostic}
-              </p>
-            )}
+            {/* Diagnostic message is suppressed from public UI. Logged to console only. */}
           </div>
         </div>
       </div>

@@ -77,7 +77,7 @@ export interface ContinuumGraphData { genus: string; speciesCount: number | null
 const EMPTY_NODE: WebNodeData = { count: null, summary: 'No data yet', items: [], hasData: false };
 function asArray<T>(data: unknown): T[] {
   if (Array.isArray(data)) return data as T[];
-  if (data && typeof data === 'object') { const o = data as Record<string, unknown>; for (const k of ['results', 'data', 'items', 'records', 'partners']) { if (Array.isArray(o[k])) return o[k] as T[]; } }
+  if (data && typeof data === 'object') { const o = data as Record<string, unknown>; for (const k of ['results', 'data', 'items', 'records', 'partners', 'images']) { if (Array.isArray(o[k])) return o[k] as T[]; } }
   return [];
 }
 function pickNum(o: Record<string, unknown>, keys: string[]): number | null {
@@ -125,6 +125,32 @@ function climateNode(data: unknown): WebNodeData {
 function geographyNode(data: unknown): WebNodeData {
   if (!data || typeof data !== 'object') return EMPTY_NODE;
   const o = data as Record<string, unknown>;
+  // Handle atlas harvester shape: { count: N, occurrences: [...] }
+  const atlasCount = typeof o.count === 'number' ? o.count : null;
+  const atlasOccurrences = Array.isArray(o.occurrences) ? o.occurrences : null;
+  if (atlasCount != null || atlasOccurrences != null) {
+    const total = atlasCount ?? (atlasOccurrences?.length ?? 0);
+    if (total === 0) return EMPTY_NODE;
+    // Derive country list from occurrence records.
+    const countryCounts = new Map<string, number>();
+    for (const pt of (atlasOccurrences ?? [])) {
+      const c = (pt as Record<string, unknown>).country;
+      if (typeof c === 'string' && c.trim()) {
+        countryCounts.set(c, (countryCounts.get(c) ?? 0) + 1);
+      }
+    }
+    const topCountries = [...countryCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([c]) => c);
+    const countryCount = countryCounts.size;
+    const parts: string[] = [];
+    if (countryCount > 0) parts.push(`${countryCount} countries`);
+    parts.push(`${total.toLocaleString()} records`);
+    const items = topCountries.length > 0 ? topCountries : parts;
+    return { count: total, summary: parts.join(' · '), items, hasData: true };
+  }
+  // Legacy summary shape: { countries, records }
   const countries = pickNum(o, ['countries', 'country_count', 'n_countries']); const records = pickNum(o, ['records', 'occurrences', 'count', 'total']);
   if (countries == null && records == null) return EMPTY_NODE;
   const parts: string[] = []; if (countries != null) parts.push(`${countries} countries`); if (records != null) parts.push(`${records.toLocaleString()} records`);
@@ -191,7 +217,7 @@ export async function fetchContinuumGraph(
     getRaw(`/api/species/mycorrhizal?genus=${q}`, signal),
     getRaw(`/api/species/pollinators?genus=${q}`, signal),
     getRaw(`/api/species/climate?genus=${q}`, signal),
-    getRaw(`/api/genus/${q}/occurrences/summary`, signal),
+    getJson<{ count?: number; occurrences?: unknown[] }>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=500`, signal, 8000),
     getRaw(`/api/species/conservation?genus=${q}`, signal),
     getRaw(`/api/species/cultivation?genus=${q}`, signal),
     getRaw(`/api/species/literature?genus=${q}`, signal),

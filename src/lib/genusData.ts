@@ -7,6 +7,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { OC_BACKEND_BASE } from '@/lib/ocBackend';
 import type { FeaturedSpecies } from '@/lib/speciesFeature';
 
 
@@ -1987,7 +1988,10 @@ export async function fetchSpeciesNames(
 ): Promise<string[]> {
   const q = (query || '').trim();
   if (!q) return [];
-  const payload = await ocFetch<unknown>(
+  // IMPORTANT: Use OC_BACKEND_BASE (orchidcontinuum.onrender.com) — NOT BACKEND_BASE_URL
+  // which points to the dead api.orchidcontinuum.org host.
+  const payload = await ocFetchFrom<unknown>(
+    OC_BACKEND_BASE,
     `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`,
     signal,
     12000,
@@ -2049,32 +2053,50 @@ export async function fetchSpeciesImage(
 ): Promise<string | undefined> {
   const name = (scientificName || '').trim();
   if (!name) return undefined;
+
+  // PRIMARY: per-species image endpoint on OC taxonomy backend.
+  //   GET orchidcontinuum.onrender.com/api/species/{name}/images
+  // Shape: { status, data: { species, count, images: [{ image_url, source_name }] } }
+  const speciesPayload = await ocFetchFrom<unknown>(
+    OC_BACKEND_BASE,
+    `/api/species/${encodeURIComponent(name)}/images`,
+    signal,
+    10000,
+  );
+  if (speciesPayload) {
+    const records = extractArray(speciesPayload);
+    for (const r of records) {
+      const url = pickImageUrl(r);
+      if (url) return url;
+    }
+  }
+
+  // FALLBACK: genus image library on the harvester backend.
+  //   GET orchidcontinuumharvester2.onrender.com/images/genus/{genus}?limit=6
   const genus = name.split(/\s+/)[0];
   if (!genus) return undefined;
-  const payload = await ocFetchFrom<unknown>(
+  const genusPayload = await ocFetchFrom<unknown>(
     OC_IMAGES_BACKEND,
     `/images/genus/${encodeURIComponent(genus)}?limit=6`,
     signal,
     12000,
   );
-  if (!payload) return undefined;
-  const records = extractArray(payload);
+  if (!genusPayload) return undefined;
+  const records = extractArray(genusPayload);
   const wanted = name.toLowerCase();
-  // Prefer the record whose scientific name matches the requested species…
+  // Prefer the record whose name matches the requested species…
   for (const r of records) {
-    const recName = (pick(r, [
-      'scientific_name',
-      'scientificName',
-      'canonical_name',
-      'species',
-      'name',
-    ]) || '').toLowerCase();
+    const rawGenus = pick(r, ['genus']);
+    const rawEpithet = pick(r, ['species']);
+    const recName = rawGenus && rawEpithet && !rawEpithet.includes(' ')
+      ? `${rawGenus} ${rawEpithet}`.toLowerCase()
+      : (pick(r, ['scientific_name', 'scientificName', 'canonical_name', 'name']) || '').toLowerCase();
     if (recName && recName === wanted) {
       const url = pickImageUrl(r);
       if (url) return url;
     }
   }
-  // …otherwise fall back to the first usable image the genus returns.
+  // …otherwise first usable image from the genus.
   for (const r of records) {
     const url = pickImageUrl(r);
     if (url) return url;
@@ -2106,8 +2128,11 @@ export async function fetchSpeciesInFocus(
   if (signal?.aborted || names.length === 0) return [];
 
   // Step 2 — one image per species, in parallel.
+  // Pass the FULL binomial to fetchSpeciesImage so it can match the correct
+  // species record; passing only the genus token caused every card to get the
+  // same first-genus-image rather than the per-species photo.
   const images = await Promise.all(
-    names.map((name) => fetchSpeciesImage(name.split(/\s+/)[0], signal, 1)),
+    names.map((name) => fetchSpeciesImage(name, signal, 6)),
   );
   if (signal?.aborted) return [];
 
