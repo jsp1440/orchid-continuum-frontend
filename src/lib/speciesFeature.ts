@@ -10,7 +10,7 @@
  * before it reaches the UI.
  */
 
-import { OC_BACKEND } from './genusData';
+import { OC_BACKEND, IMAGES_BACKEND_BASE_URL } from './backendConfig';
 
 export interface FeaturedSpecies {
   /** Full scientific / canonical name — used for routing + atlas filter. */
@@ -127,7 +127,7 @@ function extractArray(payload: unknown): Record<string, unknown>[] {
   if (!payload || typeof payload !== 'object') return [];
 
   const obj = payload as Record<string, unknown>;
-  for (const key of ['results', 'data', 'species', 'items', 'records', 'rows', 'taxa']) {
+  for (const key of ['results', 'data', 'species', 'images', 'items', 'records', 'rows', 'taxa']) {
     const v = obj[key];
     if (Array.isArray(v)) return v as Record<string, unknown>[];
     if (v && typeof v === 'object') {
@@ -141,7 +141,7 @@ function extractArray(payload: unknown): Record<string, unknown>[] {
 function normalizeGenus(raw?: string): string | undefined {
   const g = (raw || '').trim();
   if (!g) return undefined;
-  return g.charAt(0).toUpperCase() + g.slice(1);
+  return g.charAt(0).toUpperCase() + g.slice(1).toLowerCase();
 }
 
 function normalizeEpithet(raw?: string): string | undefined {
@@ -150,9 +150,13 @@ function normalizeEpithet(raw?: string): string | undefined {
   return e.toLowerCase();
 }
 
+function looksLikeBinomial(name: string): boolean {
+  return /^[A-Z][A-Za-z-]+\s+[a-z][a-z-]+/.test(name.trim());
+}
+
 /**
- * Convert a loosely-shaped taxonomy row into the only species identity we allow
- * the UI to use: a full binomial such as "Oncidium sotoanum".
+ * Convert a loosely-shaped taxonomy/image row into the only species identity we
+ * allow the UI to use: a full binomial such as "Oncidium sotoanum".
  */
 function normalizeBinomial(row: Record<string, unknown>, fallbackGenus?: string): string | undefined {
   const taxon = asObject(row.taxon);
@@ -187,15 +191,12 @@ function normalizeBinomial(row: Record<string, unknown>, fallbackGenus?: string)
 
   const cleaned = (explicit || '').trim().replace(/\s+/g, ' ');
 
-  // Keep an already-complete binomial.
-  if (/^[A-Z][A-Za-z-]+\s+[a-z][a-z-]+/.test(cleaned)) return cleaned;
+  if (looksLikeBinomial(cleaned)) return cleaned;
 
-  // If explicit is only an epithet, combine it with the genus.
   if (genus && cleaned && !/\s/.test(cleaned) && cleaned.toLowerCase() !== genus.toLowerCase()) {
     return `${genus} ${normalizeEpithet(cleaned)}`;
   }
 
-  // If the row follows the common OC schema: genus + species epithet.
   if (genus && epithet && epithet.toLowerCase() !== genus.toLowerCase()) {
     return `${genus} ${epithet}`;
   }
@@ -213,9 +214,11 @@ function imageFrom(row: Record<string, unknown>): string | undefined {
       'hero_image_url',
       'photo_url',
       'photoUrl',
+      'url',
       'image',
       'thumbnail_url',
       'medium_url',
+      'original_url',
     ]) || pick(taxon, ['image_url', 'representative_image_url', 'hero_image_url', 'image'])
   );
 }
@@ -226,7 +229,7 @@ function toFeatured(row: Record<string, unknown>, fallbackGenus?: string): Featu
   const env = asObject(row.oc_env_intel ?? row.env_intel ?? row.environment ?? row.ecology);
 
   const name = normalizeBinomial(row, fallbackGenus);
-  if (!name) return null;
+  if (!name || !looksLikeBinomial(name)) return null;
 
   const genus =
     normalizeGenus(
@@ -239,7 +242,7 @@ function toFeatured(row: Record<string, unknown>, fallbackGenus?: string): Featu
     name,
     genus,
     image: imageFrom(row),
-    family: pick(row, ['family', 'family_name']) || pick(taxon, ['family']),
+    family: pick(row, ['family', 'family_name']) || pick(taxon, ['family']) || 'Orchidaceae',
     conservation:
       pick(row, [
         'conservation_status',
@@ -378,6 +381,31 @@ async function searchSpecies(url: string, limit: number, fallbackGenus: string, 
   return out;
 }
 
+async function searchGenusImageHarvester(genus: string, limit: number, signal?: AbortSignal): Promise<FeaturedSpecies[]> {
+  const g = normalizeGenus(genus);
+  if (!g) return [];
+
+  const payload = await fetchOnce(
+    `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${Math.max(20, limit * 3)}`,
+    12000,
+    signal,
+  );
+  if (!payload) return [];
+
+  const out: FeaturedSpecies[] = [];
+  const seen = new Set<string>();
+  for (const row of extractArray(payload)) {
+    const feature = toFeatured(row, g);
+    if (!feature) continue;
+    const key = feature.name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(feature);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -393,7 +421,8 @@ function shuffle<T>(arr: T[]): T[] {
  * Resolution order:
  *   1. /api/species/search?genus={genus} — taxonomy backbone search.
  *   2. /api/search?q={genus} — legacy search path.
- *   3. Cattleya-only curated fallback.
+ *   3. /images/genus/{genus} — image harvester rows with genus+epithet.
+ *   4. Cattleya-only curated fallback.
  */
 export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
   const g = normalizeGenus(genus) || 'Cattleya';
@@ -417,6 +446,9 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
   );
   if (legacyPool.length > 0) return shuffle(legacyPool).slice(0, requested);
 
+  const harvesterPool = await searchGenusImageHarvester(g, 50, signal);
+  if (harvesterPool.length > 0) return shuffle(harvesterPool).slice(0, requested);
+
   if (signal?.aborted) return [];
   if (g.toLowerCase() === 'cattleya') {
     return shuffle(CATTLEYA_FALLBACK).slice(0, Math.min(requested, CATTLEYA_FALLBACK.length));
@@ -432,8 +464,8 @@ const memoryByGenus = new Map<string, FeaturedSpecies[]>();
 const inFlightByGenus = new Map<string, Promise<FeaturedSpecies[]>>();
 
 function sessionKey(genus: string): string {
-  // v3 invalidates earlier caches that may have stored bare species epithets.
-  return `oc:species-in-focus:v3:${genus.trim().toLowerCase()}`;
+  // v4 invalidates earlier caches before the image-harvester binomial fallback.
+  return `oc:species-in-focus:v4:${genus.trim().toLowerCase()}`;
 }
 
 function readSessionCache(genus: string): FeaturedSpecies[] | null {
@@ -442,7 +474,7 @@ function readSessionCache(genus: string): FeaturedSpecies[] | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
-      const safe = parsed.filter((x) => x && typeof x.name === 'string' && /\s/.test(x.name));
+      const safe = parsed.filter((x) => x && typeof x.name === 'string' && looksLikeBinomial(x.name));
       return safe.length > 0 ? (safe as FeaturedSpecies[]) : null;
     }
   } catch {
