@@ -15,6 +15,7 @@ import {
   type ContinuumGraphData,
   type WebNodeData,
 } from '@/lib/ocBackend';
+import { useDailyGenus } from '@/lib/dailyGenusContext';
 
 /**
  * ContinuumWeb — a LIVE knowledge-graph visualization.
@@ -136,6 +137,9 @@ const STATUS_COLORS: Record<string, string> = {
 
 const ContinuumWeb: React.FC = () => {
   const navigate = useNavigate();
+  // Consume the shared Genus of the Day — same genus as DailyGenusFeature,
+  // SpeciesInFocus, and HomeAtlas. Never independently fetch the genus here.
+  const { genus: dailyGenus, diagnostic } = useDailyGenus();
   const [graph, setGraph] = useState<ContinuumGraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [active, setActive] = useState<NodeKey>('fungi');
@@ -144,7 +148,7 @@ const ContinuumWeb: React.FC = () => {
     const ctrl = new AbortController();
     let mounted = true;
     setLoading(true);
-    fetchContinuumGraph(ctrl.signal)
+    fetchContinuumGraph(dailyGenus, ctrl.signal)
       .then((g) => {
         if (mounted) setGraph(g);
       })
@@ -155,7 +159,7 @@ const ContinuumWeb: React.FC = () => {
       mounted = false;
       ctrl.abort();
     };
-  }, []);
+  }, [dailyGenus]);
 
   const pos = (angle: number) => {
     const rad = (angle * Math.PI) / 180;
@@ -455,7 +459,12 @@ const ContinuumWeb: React.FC = () => {
 
             {graph?.isFallback && (
               <p className="mt-5 font-mono text-[10px] tracking-[0.12em] uppercase text-[#9fb0a2]/70">
-                Showing reference data for Cattleya — live feed unavailable.
+                Showing reference data · live feed unavailable.
+              </p>
+            )}
+            {diagnostic && (
+              <p className="mt-3 font-mono text-[9px] tracking-[0.1em] uppercase text-[#e08a3c]/80">
+                ⚠ {diagnostic}
               </p>
             )}
           </div>
