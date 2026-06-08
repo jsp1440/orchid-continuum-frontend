@@ -1723,13 +1723,24 @@ async function fetchGenusImagesOnce(
   const byName = new Map<string, GenusImage>();
   const order: string[] = [];
   for (const r of arr) {
-    const name = pick(r, [
-      'scientific_name',
-      'scientificName',
-      'canonical_name',
-      'species',
-      'name',
-    ]);
+    // Reconstruct the full binomial when the API returns separate genus +
+    // species epithet fields (e.g. harvester2: { genus:'Cattleya', species:'labiata' })
+    // rather than a pre-joined scientific_name. This is the common shape from
+    // orchidcontinuumharvester2.onrender.com/images/genus/{genus}.
+    const rawGenus = pick(r, ['genus']);
+    const rawEpithet = pick(r, ['species']);
+    const reconstructed =
+      rawGenus && rawEpithet && !rawEpithet.includes(' ')
+        ? `${rawGenus} ${rawEpithet}`
+        : null;
+    const name =
+      reconstructed ??
+      pick(r, [
+        'scientific_name',
+        'scientificName',
+        'canonical_name',
+        'name',
+      ]);
     // Collect every URL-bearing field on the record, in preference order.
     const urls = [
       pick(r, ['image_url']),
