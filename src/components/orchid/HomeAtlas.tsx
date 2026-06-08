@@ -31,7 +31,7 @@ import {
   legendFor,
   type ColorMode,
 } from '@/lib/atlasColor';
-import { featuredGenusName } from '@/lib/featuredGenus';
+import { useDailyGenus } from '@/lib/dailyGenusContext';
 
 /**
  * HomeAtlas
@@ -86,6 +86,9 @@ const TOP_COUNTRIES = 16;
 
 const HomeAtlas: React.FC = () => {
   const { ready, error, L } = useLeaflet();
+  // Consume the shared Genus of the Day — same genus as DailyGenusFeature,
+  // ContinuumWeb, and SpeciesInFocus. Never call featuredGenusName() here.
+  const { genus: dailyGenus } = useDailyGenus();
 
   const [points, setPoints] = useState<AtlasOccurrencePoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -95,11 +98,18 @@ const HomeAtlas: React.FC = () => {
   const [reloadKey, setReloadKey] = useState(0);
 
   // Filters — the map auto-filters to the synchronized "Genus of the Day" on
-  // load (same 12-hour UTC window as the DailyGenusFeature panel + species
-  // cards). The user can deselect that chip or hit Reset to see everything.
+  // load. Seeded from context so it always matches the other homepage sections.
+  // The user can deselect the chip or hit Reset to see everything.
   const [selectedGenera, setSelectedGenera] = useState<Set<string>>(
-    () => new Set([featuredGenusName()]),
+    () => new Set([dailyGenus]),
   );
+
+  // Keep the genus filter seed in sync if the 12-hour window rotates while
+  // the page is open (or if the context resolves from the Supabase snapshot
+  // after mount).
+  useEffect(() => {
+    setSelectedGenera(new Set([dailyGenus]));
+  }, [dailyGenus]);
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
   const [speciesQuery, setSpeciesQuery] = useState('');
   const [pollinatorOnly, setPollinatorOnly] = useState(false);
@@ -368,7 +378,7 @@ const HomeAtlas: React.FC = () => {
               <GitBranch className="h-3 w-3" />
               Showing today&rsquo;s Genus of the Day ·{' '}
               <span className="italic text-[#faf7f2] normal-case tracking-normal">
-                {featuredGenusName()}
+                {dailyGenus}
               </span>
             </div>
           </div>
