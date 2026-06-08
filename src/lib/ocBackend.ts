@@ -1,30 +1,10 @@
-/**
- * ocBackend — direct client for the live Orchid Continuum backend.
- *
- * Unlike src/lib/api.ts (which is env-driven and may be unconfigured in a
- * given deployment), this module talks to the known production backend at a
- * fixed base URL so the homepage widgets, Atlas, and Species dossiers work
- * out of the box on beta.orchidcontinuum.org.
- *
- *   BASE: https://api.orchidcontinuum.org
- *
- * Every helper is timeout-safe and never throws into a render tree; callers
- * receive typed values plus an ok flag and render honest empty states.
- */
-
 import { supabase } from '@/lib/supabase';
 import {
   BACKEND_BASE_URL,
   ATLAS_OCCURRENCES_URL as CONFIG_ATLAS_OCCURRENCES_URL,
 } from '@/lib/backendConfig';
 
-// Canonical Orchid Continuum backend base URL. Re-exported from the single
-// source of truth in backendConfig.ts so every API fetch resolves against the
-// same host. To re-host the app, edit backendConfig.ts — never here.
 export const OC_BACKEND_BASE = BACKEND_BASE_URL;
-
-// Atlas occurrence data endpoint, derived from the central config so it can
-// never drift from OC_BACKEND_BASE.
 export const ATLAS_OCCURRENCES_URL = CONFIG_ATLAS_OCCURRENCES_URL;
 
 const DEFAULT_TIMEOUT = 12_000;
@@ -36,4 +16,72 @@ async function getJson<T>(
 ): Promise<{ ok: boolean; status: number; data: T | null }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+
   if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  try {
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return { ok: false, status: res.status, data: null };
+    return { ok: true, status: res.status, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, status: 0, data: null };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export interface GenusDaily {
+  genus: string;
+  species_count: number;
+  common_name: string | null;
+  conservation_status: string | null;
+  image_url: string | null;
+  date: string;
+  is_demo: boolean;
+}
+
+export async function fetchGenusOfDay(signal?: AbortSignal): Promise<GenusDaily | null> {
+  const { data } = await getJson<GenusDaily>(`${OC_BACKEND_BASE}/api/genus/daily`, signal);
+  return data;
+}
+
+export interface OccurrencePoint {
+  id: string;
+  lat: number;
+  lng: number;
+  species: string;
+  country: string | null;
+  source: 'continuum';
+}
+
+interface BackendOccurrence {
+  id?: string | number;
+  taxonomy_id?: string;
+  decimal_latitude?: number | string;
+  decimal_longitude?: number | string;
+  latitude?: number | string;
+  longitude?: number | string;
+  lat?: number | string;
+  lng?: number | string;
+  species?: string;
+  canonical_name?: string;
+  scientific_name?: string;
+  country?: string | null;
+}
+
+function toNumber(v: unknown): number | null {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
+  return null;
+}
+
+function rowsFrom(data: unknown): BackendOccurrence[] {
+  if (Array.isArray(data)) return data as BackendOccurrence[];
+  if (data && typeof data === 'object') {
+    const o = data as Record
