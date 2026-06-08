@@ -21,5 +21,12 @@ export const IMAGES_BACKEND_BASE_URL = (
   'https://orchid-continuum-api.onrender.com'
 ).replace(/\/$/, '');
 
+/** External Ecuador expedition map/embed origin. */
+export const ECUADOR_EMBED_BASE_URL = (
+  env.VITE_ECUADOR_EMBED_BASE_URL ||
+  env.VITE_ECUADOR_EXPEDITION_EMBED_URL ||
+  'https://orchid-continuum-ecuador-expedition.onrender.com'
+).replace(/\/$/, '');
+
 /** Probe URL for Atlas occurrence health/status checks. */
 export const ATLAS_OCCURRENCES_PROBE_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences?limit=1`;
