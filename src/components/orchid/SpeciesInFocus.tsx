@@ -26,7 +26,7 @@ import {
 
 
 
-import { featuredGenusName } from '@/lib/featuredGenus';
+import { useDailyGenus } from '@/lib/dailyGenusContext';
 
 import {
   getFeaturedSpeciesCached,
@@ -117,8 +117,18 @@ const relationshipFor = (genusName: string, current?: string): string | undefine
 
 
 const SpeciesInFocus: React.FC = () => {
-  const [genus, setGenus] = useState(() => featuredGenusName());
-  const [query, setQuery] = useState(() => featuredGenusName());
+  // Consume the shared Genus of the Day — same genus as DailyGenusFeature,
+  // ContinuumWeb, and HomeAtlas. Never call featuredGenusName() here.
+  const { genus: dailyGenus } = useDailyGenus();
+  const [genus, setGenus] = useState(() => dailyGenus);
+  const [query, setQuery] = useState(() => dailyGenus);
+
+  // Re-sync if the 12-hour window rotates while the page is open, or if the
+  // Supabase snapshot resolves after mount (and the user hasn't searched yet).
+  useEffect(() => {
+    setGenus(dailyGenus);
+    setQuery(dailyGenus);
+  }, [dailyGenus]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [neighborMode, setNeighborMode] = useState(true);
