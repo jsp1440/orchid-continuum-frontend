@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
@@ -45,24 +46,33 @@ const AppLayout: React.FC = () => {
 
       <Navbar topOffset={bannerHeight} />
       <main style={{ paddingTop: bannerHeight }}>
-        {/* ACT 1 — Wonder */}
-        <HomeHero />
-        {/* ACT 2 — Today's Genus */}
-        <DailyGenusFeature />
-        {/* ACT 3 — The Problem and the Solution */}
-        <TheKnowledgeGraph />
-        {/* ACT 4 — What the Knowledge Graph Makes Possible */}
-        <CapabilityGrid />
-        {/* ACT 5 — The hidden web of relationships */}
-        <ContinuumWeb />
-        <SpeciesInFocus />
-        <HomeAtlas />
-        {/* ACT 6 — Understanding & Stewardship */}
-        <WhyOrchidsMatter />
-        <HumanStewardship />
-        <OrchidGallery />
-        {/* ACT 7 — Action */}
-        <OasisConnective />
+        {/*
+         * DailyGenusProvider resolves the Genus of the Day exactly once and
+         * distributes it via React context to every homepage section that
+         * needs it: DailyGenusFeature, ContinuumWeb, SpeciesInFocus, HomeAtlas.
+         * This is the single source of truth — no component below should call
+         * featuredGenusName() or fetchGenusOfDay() to determine the genus.
+         */}
+        <DailyGenusProvider>
+          {/* ACT 1 — Wonder */}
+          <HomeHero />
+          {/* ACT 2 — Today's Genus */}
+          <DailyGenusFeature />
+          {/* ACT 3 — The Problem and the Solution */}
+          <TheKnowledgeGraph />
+          {/* ACT 4 — What the Knowledge Graph Makes Possible */}
+          <CapabilityGrid />
+          {/* ACT 5 — The hidden web of relationships */}
+          <ContinuumWeb />
+          <SpeciesInFocus />
+          <HomeAtlas />
+          {/* ACT 6 — Understanding & Stewardship */}
+          <WhyOrchidsMatter />
+          <HumanStewardship />
+          <OrchidGallery />
+          {/* ACT 7 — Action */}
+          <OasisConnective />
+        </DailyGenusProvider>
       </main>
       <Footer />
       {/* Curator-facing backend data-source diagnostic (bottom-right pill). */}
