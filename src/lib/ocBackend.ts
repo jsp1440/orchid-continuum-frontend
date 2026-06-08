@@ -152,10 +152,41 @@ function knowledgeNode(data: unknown): WebNodeData {
   const titles = rows.map((r) => pickStr(r, ['title', 'reference', 'citation', 'source'])).filter((s): s is string => !!s);
   return { count: n, summary: `${n.toLocaleString()} literature record${n === 1 ? '' : 's'}`, items: titles.slice(0, 3), hasData: true };
 }
-export async function fetchContinuumGraph(signal?: AbortSignal): Promise<ContinuumGraphData> {
-  const daily = await fetchGenusOfDay(signal);
-  if (!daily || !daily.genus) return CATTLEYA_FALLBACK;
-  const g = daily.genus; const q = encodeURIComponent(g);
+/**
+ * Fetch the live knowledge-graph data for a given genus.
+ *
+ * @param genus  The authoritative Genus of the Day — MUST come from
+ *               DailyGenusContext (via useDailyGenus), never independently
+ *               fetched here. Passing an empty string triggers the explicit
+ *               system-unavailable diagnostic path.
+ */
+export async function fetchContinuumGraph(
+  genus: string,
+  signal?: AbortSignal,
+): Promise<ContinuumGraphData> {
+  if (!genus) {
+    // Explicit diagnostic fallback — only reached if caller passes empty string.
+    console.warn(
+      '[ContinuumWeb] fetchContinuumGraph called with empty genus. ' +
+      'Returning Cattleya fallback as a system-unavailable diagnostic.',
+    );
+    return { ...CATTLEYA_FALLBACK, isFallback: true };
+  }
+  const g = genus;
+  const q = encodeURIComponent(g);
+
+  // Fetch supplemental metadata (species_count, description) from /api/genus/daily.
+  // This is OPTIONAL — it does NOT determine the genus, only enriches the label.
+  let speciesCount: number | null = null;
+  let description = `Daily featured orchid genus from the Continuum taxonomy.`;
+  try {
+    const daily = await fetchGenusOfDay(signal);
+    if (daily && daily.genus.toLowerCase() === g.toLowerCase()) {
+      speciesCount = typeof daily.species_count === 'number' ? daily.species_count : null;
+      description = daily.common_name || description;
+    }
+  } catch { /* supplemental only — ignore failures */ }
+
   const [myc, pol, cli, geo, con, cul, lit] = await Promise.all([
     getRaw(`/api/species/mycorrhizal?genus=${q}`, signal),
     getRaw(`/api/species/pollinators?genus=${q}`, signal),
@@ -166,8 +197,9 @@ export async function fetchContinuumGraph(signal?: AbortSignal): Promise<Continu
     getRaw(`/api/species/literature?genus=${q}`, signal),
   ]);
   return {
-    genus: g, speciesCount: typeof daily.species_count === 'number' ? daily.species_count : null,
-    description: daily.common_name || `Daily featured orchid genus from the Continuum taxonomy.`,
+    genus: g,
+    speciesCount,
+    description,
     isFallback: false,
     fungi: myc.ok ? fungiNode(myc.data) : EMPTY_NODE,
     pollinators: pol.ok ? pollinatorNode(pol.data) : EMPTY_NODE,
