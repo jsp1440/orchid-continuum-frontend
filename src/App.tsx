@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
+
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
@@ -41,8 +42,7 @@ import EcuadorExpedition from "./pages/EcuadorExpedition";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
 import SavedOrchids from "./pages/SavedOrchids";
-
-
+import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 
 const queryClient = new QueryClient();
 
@@ -53,8 +53,8 @@ const App = () => (
         <FavoritesSync />
         <TooltipProvider>
           <Toaster />
-
           <Sonner />
+
           <BrowserRouter>
             <AtlasFilterProvider>
               <Routes>
@@ -69,7 +69,8 @@ const App = () => (
                 <Route path="/atlas" element={<Atlas />} />
                 <Route path="/atlas/:species" element={<Atlas />} />
 
-                {/* Canonical biodiversity intelligence routes */}
+                <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
+
                 <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
                 <Route path="/habitats/:biome" element={<HabitatJourney mode="biome" />} />
                 <Route path="/ecosystems/:species" element={<HabitatJourney mode="species" />} />
@@ -81,7 +82,6 @@ const App = () => (
                 <Route path="/climate" element={<Climate />} />
                 <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
 
-                {/* Authenticated routes */}
                 <Route
                   path="/collection"
                   element={
@@ -93,6 +93,7 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+
                 <Route
                   path="/research"
                   element={
@@ -104,6 +105,7 @@ const App = () => (
                     </ProtectedRoute>
                   }
                 />
+
                 <Route path="/account" element={<Account />} />
                 <Route path="/saved" element={<SavedOrchids />} />
 
@@ -114,21 +116,17 @@ const App = () => (
                 <Route path="/partners" element={<Partners />} />
                 <Route path="/get-involved" element={<GetInvolved />} />
 
-                {/* Communities of practice — audience-aware hubs */}
                 <Route path="/ecosystems" element={<Ecosystems />} />
                 <Route path="/conservation" element={<ConservationHub />} />
                 <Route path="/societies" element={<Societies />} />
                 <Route path="/university" element={<OrchidUniversity />} />
                 <Route path="/classroom" element={<Classroom />} />
 
-                {/* Dynamic profiles & workspaces */}
                 <Route path="/org/:slug" element={<OrganizationProfile />} />
                 <Route path="/project/:slug" element={<ProjectWorkspace />} />
 
-                {/* Reusable Coming Soon template for unfinished / off-domain destinations */}
                 <Route path="/coming-soon/:section" element={<ComingSoon />} />
                 <Route path="/coming-soon" element={<ComingSoon />} />
-
 
                 <Route path="*" element={<NotFound />} />
               </Routes>
