@@ -10,7 +10,7 @@
  * before it reaches the UI.
  */
 
-import { OC_BACKEND, IMAGES_BACKEND_BASE_URL } from './backendConfig';
+import { BACKEND_BASE_URL as OC_BACKEND, IMAGES_BACKEND_BASE_URL } from './backendConfig';
 
 export interface FeaturedSpecies {
   /** Full scientific / canonical name — used for routing + atlas filter. */
