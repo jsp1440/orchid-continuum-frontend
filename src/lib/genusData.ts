@@ -6,8 +6,11 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
-import { OC_BACKEND_BASE } from '@/lib/ocBackend';
+import {
+  BACKEND_BASE_URL,
+  IMAGES_BACKEND_BASE_URL,
+  LEGACY_ONRENDER_BASE_URL,
+} from '@/lib/backendConfig';
 import type { FeaturedSpecies } from '@/lib/speciesFeature';
 
 
@@ -303,30 +306,22 @@ export function lookupGenus(name: string): GenusEntry | undefined {
   return Object.values(GENERA).find((g) => g.genus.toLowerCase() === key);
 }
 
-/**
- * Base URL of the Orchid Continuum backend (harvester).
- *
- * ARCHITECTURE RULE: the frontend NEVER talks to iNaturalist, GBIF, or any
- * other external API directly. Every photo / species / genus request goes
- * through this backend, which validates results against the Orchid Continuum
- * taxonomic database before returning them. This guarantees only verified
- * orchid data ever reaches the UI.
- */
-export const OC_BACKEND = BACKEND_BASE_URL;
-
-/**
- * Dedicated images backend host. The trusted genus image library is served by
- * this host — SEPARATE from the main taxonomy/species/search backend above:
- *
- *   GET https://orchid-continuum-api.onrender.com/images/genus/{genus}
- *
- * This host is confirmed to return the full image library (e.g. 3,758 Vanilla
- * and 2,762 Catasetum real images). Only {@link fetchGenusImages} (via
- * {@link fetchGenusImagesOnce}) targets this origin; every other helper
- * continues to resolve against {@link OC_BACKEND}. The actual URL lives in the
- * single source of truth at src/lib/backendConfig.ts — change it there only.
- */
-export const OC_IMAGES_BACKEND = IMAGES_BACKEND_BASE_URL;
+// ---------------------------------------------------------------------------
+// Backend origins
+// ---------------------------------------------------------------------------
+//
+// ARCHITECTURE RULE: the frontend NEVER talks to iNaturalist, GBIF, or any
+// other external API directly. Every photo / species / genus request goes
+// through an Orchid Continuum backend, which validates results against the
+// taxonomic database before returning them. This guarantees only verified
+// orchid data ever reaches the UI.
+//
+// This module imports the named origins it needs directly from the single
+// source of truth in src/lib/backendConfig.ts (no local aliases):
+//
+//   BACKEND_BASE_URL        — taxonomy / genus-photo APIs (api.orchidcontinuum.org)
+//   IMAGES_BACKEND_BASE_URL — trusted genus image library (orchidcontinuumharvester2.onrender.com)
+//   LEGACY_ONRENDER_BASE_URL — legacy search / species-image APIs (orchidcontinuum.onrender.com)
 
 // ---------------------------------------------------------------------------
 // Backend warm-up
@@ -365,9 +360,9 @@ export function warmBackends(): void {
 
   // Hit a lightweight endpoint on each backend. Even a 404 wakes the dyno.
   console.log('[warmBackends] ➜ pinging harvester backends to beat cold start');
-  ping(OC_IMAGES_BACKEND, '/health');
-  ping(OC_IMAGES_BACKEND, '/');
-  ping(OC_BACKEND, '/api/genus/daily');
+  ping(IMAGES_BACKEND_BASE_URL, '/health');
+  ping(IMAGES_BACKEND_BASE_URL, '/');
+  ping(BACKEND_BASE_URL, '/api/genus/daily');
 }
 
 /** Fetch JSON from an arbitrary base origin with a timeout; null on any error. */
@@ -404,7 +399,7 @@ async function ocFetch<T>(
   const onAbort = () => ctrl.abort();
   signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`${OC_BACKEND}${path}`, { signal: ctrl.signal });
+    const res = await fetch(`${BACKEND_BASE_URL}${path}`, { signal: ctrl.signal });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
@@ -1641,7 +1636,7 @@ async function fetchGenusImagesOnce(
   limit = 20,
   timeoutMs = 40000,
 ): Promise<{ images: GenusImage[]; networkError: boolean }> {
-  const url = `${OC_IMAGES_BACKEND}/images/genus/${encodeURIComponent(g)}?limit=${limit}`;
+  const url = `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limit}`;
   console.log(`[fetchGenusImages] ➜ requesting (timeout ${timeoutMs}ms):`, url);
 
 
@@ -1988,10 +1983,11 @@ export async function fetchSpeciesNames(
 ): Promise<string[]> {
   const q = (query || '').trim();
   if (!q) return [];
-  // IMPORTANT: Use OC_BACKEND_BASE (orchidcontinuum.onrender.com) — NOT BACKEND_BASE_URL
-  // which points to the dead api.orchidcontinuum.org host.
+  // IMPORTANT: this legacy search API lives on the legacy onrender host
+  // (orchidcontinuum.onrender.com), NOT on the canonical BACKEND_BASE_URL
+  // (api.orchidcontinuum.org), which does not serve this route.
   const payload = await ocFetchFrom<unknown>(
-    OC_BACKEND_BASE,
+    LEGACY_ONRENDER_BASE_URL,
     `/api/search?q=${encodeURIComponent(q)}&limit=${limit}`,
     signal,
     12000,
@@ -2054,11 +2050,11 @@ export async function fetchSpeciesImage(
   const name = (scientificName || '').trim();
   if (!name) return undefined;
 
-  // PRIMARY: per-species image endpoint on OC taxonomy backend.
+  // PRIMARY: per-species image endpoint on the legacy onrender host.
   //   GET orchidcontinuum.onrender.com/api/species/{name}/images
   // Shape: { status, data: { species, count, images: [{ image_url, source_name }] } }
   const speciesPayload = await ocFetchFrom<unknown>(
-    OC_BACKEND_BASE,
+    LEGACY_ONRENDER_BASE_URL,
     `/api/species/${encodeURIComponent(name)}/images`,
     signal,
     10000,
@@ -2076,7 +2072,7 @@ export async function fetchSpeciesImage(
   const genus = name.split(/\s+/)[0];
   if (!genus) return undefined;
   const genusPayload = await ocFetchFrom<unknown>(
-    OC_IMAGES_BACKEND,
+    IMAGES_BACKEND_BASE_URL,
     `/images/genus/${encodeURIComponent(genus)}?limit=6`,
     signal,
     12000,

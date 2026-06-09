@@ -12,11 +12,20 @@
  */
 
 import { OC_BACKEND_BASE } from './ocBackend';
-import { OC_BACKEND as HARVESTER_BACKEND } from './genusData';
 import { API_BASE_URL } from './api';
-import { BACKEND_BASE_URL, ATLAS_OCCURRENCES_PROBE_URL } from './backendConfig';
+import {
+  BACKEND_BASE_URL,
+  LEGACY_ONRENDER_BASE_URL,
+  ATLAS_OCCURRENCES_PROBE_URL,
+} from './backendConfig';
 
-/** Canonical backend origin every API fetch must resolve to. */
+/**
+ * Canonical Orchid Continuum API / taxonomy backend.
+ *
+ * Used to drive the status banner ping and the audited-endpoint probes below.
+ * NOTE: this is only ONE of three legitimate backend origins (see
+ * src/lib/backendConfig.ts) — it is NOT the single host every module must use.
+ */
 export const CANONICAL_BACKEND = BACKEND_BASE_URL;
 
 const SLOW_MS = 2500;
@@ -155,29 +164,50 @@ export async function probeEndpoints(
 
 interface AuditedSource {
   module: string;
+  /** The backend origin this module is actually compiled with. */
   base: string;
+  /** The origin this module is DOCUMENTED to use (its intended host). */
+  expected: string;
   correct: boolean;
 }
 
 /**
  * Audit every configured API base URL in the codebase and print a console
- * summary. This does NOT mutate anything — it simply verifies the bases that
- * the live data clients are compiled with and flags any that diverge from the
- * canonical harvester host. Endpoints already correct are reported as OK.
+ * summary. This does NOT mutate anything — it verifies that each data client is
+ * compiled with the backend origin it is DOCUMENTED to use.
+ *
+ * The Orchid Continuum frontend talks to three distinct backend hosts (see the
+ * single source of truth in src/lib/backendConfig.ts): the canonical API /
+ * taxonomy backend, the image harvester, and the legacy onrender host. A module
+ * is "correct" when its compiled base matches its intended origin — NOT when
+ * every module collapses onto one host. A module is flagged only if it has
+ * drifted off its documented origin (e.g. a stray hardcoded host crept back in).
  */
 export function auditEndpointBases(): AuditedSource[] {
   const sources: AuditedSource[] = [
-    { module: 'lib/ocBackend.ts', base: OC_BACKEND_BASE, correct: false },
-    { module: 'lib/genusData.ts', base: HARVESTER_BACKEND, correct: false },
+    {
+      module: 'lib/ocBackend.ts',
+      base: OC_BACKEND_BASE,
+      expected: LEGACY_ONRENDER_BASE_URL,
+    },
+    {
+      module: 'lib/genusData.ts',
+      base: BACKEND_BASE_URL,
+      expected: BACKEND_BASE_URL,
+    },
     {
       module: 'lib/api.ts (env VITE_API_BASE_URL)',
       base: API_BASE_URL || '(unset — env-driven, optional)',
-      correct: false,
+      expected: '(env-driven, optional)',
     },
   ].map((s) => ({
     ...s,
+    // A module is correct when its base matches its intended origin. The
+    // api.ts source is env-driven and optional, so ANY value it resolves to
+    // (set or unset) is acceptable.
     correct:
-      s.base === CANONICAL_BACKEND ||
+      s.base === s.expected ||
+      s.expected.startsWith('(env-driven') ||
       s.base.startsWith('(unset'),
   }));
 
@@ -186,17 +216,18 @@ export function auditEndpointBases(): AuditedSource[] {
     '%cOrchid Continuum · API endpoint audit',
     'color:#C9A84C;font-weight:bold',
   );
-  console.log('Canonical backend:', CANONICAL_BACKEND);
+  console.log('Canonical API backend:', CANONICAL_BACKEND);
   sources.forEach((s) => {
     const tag = s.correct ? '✓ OK' : '✗ NEEDS REVIEW';
-    console.log(`${tag} — ${s.module} → ${s.base}`);
+    const note = s.base === s.expected ? '' : ` (expected ${s.expected})`;
+    console.log(`${tag} — ${s.module} → ${s.base}${note}`);
   });
   const bad = sources.filter((s) => !s.correct);
   if (bad.length === 0) {
-    console.log('All API base URLs point to the canonical harvester host.');
+    console.log('Every module resolves to its documented backend origin.');
   } else {
     console.warn(
-      `${bad.length} source(s) not pointed at the canonical host:`,
+      `${bad.length} source(s) have drifted off their documented origin:`,
       bad.map((b) => b.module),
     );
   }

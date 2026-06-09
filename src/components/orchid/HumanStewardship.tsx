@@ -24,8 +24,6 @@ import { BACKEND_BASE_URL } from '@/lib/backendConfig';
  *      with recurring-gift encouragement copy.
  */
 
-const OC_BACKEND = BACKEND_BASE_URL;
-
 interface Steward {
   icon: React.ComponentType<{ className?: string }>;
   title: string;
@@ -97,7 +95,7 @@ async function fetchCampaignStats(signal?: AbortSignal): Promise<CampaignStats> 
   const onAbort = () => ctrl.abort();
   signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`${OC_BACKEND}/api/campaign/stats`, { signal: ctrl.signal });
+    const res = await fetch(`${BACKEND_BASE_URL}/api/campaign/stats`, { signal: ctrl.signal });
     if (!res.ok) throw new Error(String(res.status));
     const data = (await res.json()) as Record<string, unknown>;
     const inner = (data.data as Record<string, unknown>) ?? data;
@@ -157,7 +155,7 @@ const HumanStewardship: React.FC = () => {
     }
     setSignupState('submitting');
     try {
-      const res = await fetch(`${OC_BACKEND}/api/subscribers`, {
+      const res = await fetch(`${BACKEND_BASE_URL}/api/subscribers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

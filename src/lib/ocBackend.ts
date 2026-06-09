@@ -1,5 +1,16 @@
-export const OC_BACKEND_BASE = 'https://orchidcontinuum.onrender.com';
-export const ATLAS_OCCURRENCES_URL = 'https://orchidcontinuumharvester2.onrender.com/atlas/occurrences';
+import { LEGACY_ONRENDER_BASE_URL, ATLAS_OCCURRENCES_URL } from './backendConfig';
+
+/**
+ * Base origin for the live genus/species/mycorrhizal APIs consumed here.
+ *
+ * Alias of {@link LEGACY_ONRENDER_BASE_URL} (the legacy onrender host) — the
+ * actual host lives in the single source of truth at src/lib/backendConfig.ts.
+ * Re-exported under this historical name for existing call sites.
+ */
+export const OC_BACKEND_BASE = LEGACY_ONRENDER_BASE_URL;
+
+/** Atlas occurrences data endpoint — re-exported from backendConfig. */
+export { ATLAS_OCCURRENCES_URL };
 const DEFAULT_TIMEOUT = 12_000;
 async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT): Promise<{ ok: boolean; status: number; data: T | null }> {
   const controller = new AbortController();

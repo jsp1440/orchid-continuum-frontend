@@ -10,7 +10,7 @@
  * before it reaches the UI.
  */
 
-import { BACKEND_BASE_URL as OC_BACKEND, IMAGES_BACKEND_BASE_URL } from './backendConfig';
+import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from './backendConfig';
 
 export interface FeaturedSpecies {
   /** Full scientific / canonical name — used for routing + atlas filter. */
@@ -429,7 +429,7 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
   const requested = Math.max(1, limit);
 
   const taxonomyPool = await searchSpecies(
-    `${OC_BACKEND}/api/species/search?genus=${encodeURIComponent(g)}&limit=50`,
+    `${BACKEND_BASE_URL}/api/species/search?genus=${encodeURIComponent(g)}&limit=50`,
     50,
     g,
     signal,
@@ -438,7 +438,7 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
   if (taxonomyPool.length > 0) return shuffle(taxonomyPool).slice(0, requested);
 
   const legacyPool = await searchSpecies(
-    `${OC_BACKEND}/api/search?q=${encodeURIComponent(g)}&limit=50`,
+    `${BACKEND_BASE_URL}/api/search?q=${encodeURIComponent(g)}&limit=50`,
     50,
     g,
     signal,
