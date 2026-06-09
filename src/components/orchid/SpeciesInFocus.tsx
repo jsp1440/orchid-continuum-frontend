@@ -93,41 +93,56 @@ const SpeciesInFocus: React.FC = () => {
     setFailed(false);
     setSpecies([]);
 
+    const dedupeGuard = (rows: FeaturedSpecies[]): FeaturedSpecies[] => {
+      // Never render bare species epithets even if a backend endpoint regresses.
+      const out: FeaturedSpecies[] = [];
+      const seen = new Set<string>();
+      for (const row of rows) {
+        if (!row?.name || !isFullBinomial(row.name)) continue;
+        const key = cardKey(row);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(row);
+        if (out.length >= TARGET_COUNT) break;
+      }
+      return out;
+    };
+
     // Primary source: different-genus orchids that geographically co-occur with
-    // this genus ("no orchid exists alone"). When no neighbours are available
-    // (honest empty), fall back to featured same-genus species.
-    getNeighborOrchidsCached(genus, TARGET_COUNT, ctrl.signal)
-      .then((neighbors) => {
-        if (ctrl.signal.aborted) return [] as FeaturedSpecies[];
-        if (neighbors.length > 0) return neighbors;
-        return getFeaturedSpeciesCached(TARGET_COUNT, ctrl.signal, genus);
-      })
-      .then((rows) => {
+    // this genus ("no orchid exists alone"). The skeleton stays visible for the
+    // entire load — we never flash same-genus cards while neighbours resolve.
+    // Same-genus featured species are used ONLY when the neighbour endpoint
+    // fails or returns zero valid different-genus results.
+    (async () => {
+      let resolved: FeaturedSpecies[] | null = null;
+      try {
+        const neighbors = await getNeighborOrchidsCached(genus, TARGET_COUNT, ctrl.signal);
         if (ctrl.signal.aborted) return;
+        const differentGenus = neighbors.filter(
+          (n) => n?.name && isFullBinomial(n.name) &&
+            (n.genus ?? '').toLowerCase() !== genus.toLowerCase(),
+        );
+        if (differentGenus.length > 0) resolved = differentGenus;
+      } catch {
+        /* neighbour endpoint failed — fall through to same-genus fallback */
+      }
 
-        // Final UI guard: never render bare species epithets even if a backend
-        // endpoint regresses. The loader should already enforce this, but the
-        // component keeps the contract explicit.
-        const safe: FeaturedSpecies[] = [];
-        const seen = new Set<string>();
-        for (const row of rows) {
-          if (!row?.name || !isFullBinomial(row.name)) continue;
-          const key = cardKey(row);
-          if (seen.has(key)) continue;
-          seen.add(key);
-          safe.push(row);
-          if (safe.length >= TARGET_COUNT) break;
+      if (resolved === null) {
+        try {
+          const featured = await getFeaturedSpeciesCached(TARGET_COUNT, ctrl.signal, genus);
+          if (ctrl.signal.aborted) return;
+          resolved = featured;
+        } catch {
+          resolved = [];
         }
+      }
 
-        setSpecies(safe);
-        setFailed(safe.length === 0);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (ctrl.signal.aborted) return;
-        setFailed(true);
-        setLoading(false);
-      });
+      if (ctrl.signal.aborted) return;
+      const safe = dedupeGuard(resolved ?? []);
+      setSpecies(safe);
+      setFailed(safe.length === 0);
+      setLoading(false);
+    })();
 
     return () => ctrl.abort();
   }, [genus]);

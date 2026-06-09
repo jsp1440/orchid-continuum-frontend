@@ -414,7 +414,11 @@ const ContinuumWeb: React.FC = () => {
 
             {/* expanded top-3 records */}
             <div className="mt-6 max-w-xl">
-              {activeData && activeData.hasData ? (
+              {loading ? (
+                <p className="rounded-lg bg-[#1f3622]/50 border border-[#d4b34a]/15 px-4 py-3 text-[15px] text-[#cfe0cf]/80 italic">
+                  Loading live data for {genusLabel}…
+                </p>
+              ) : activeData && activeData.hasData ? (
                 activeData.items.length > 0 ? (
                   <ul className="space-y-2">
                     {activeData.items.map((item, i) => (
