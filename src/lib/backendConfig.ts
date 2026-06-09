@@ -25,7 +25,7 @@ const env = import.meta.env as Record<string, string | undefined>;
 export const BACKEND_BASE_URL = (
   env.VITE_BACKEND_BASE_URL ||
   env.VITE_API_BASE_URL ||
-  'https://api.orchidcontinuum.org'
+  'https://orchidcontinuumharvester2.onrender.com'
 ).replace(/\/$/, '');
 
 /**

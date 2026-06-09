@@ -1,4 +1,4 @@
-import { LEGACY_ONRENDER_BASE_URL, ATLAS_OCCURRENCES_URL } from './backendConfig';
+import { LEGACY_ONRENDER_BASE_URL, BACKEND_BASE_URL, ATLAS_OCCURRENCES_URL } from './backendConfig';
 
 /**
  * Base origin for the live genus/species/mycorrhizal APIs consumed here.
@@ -42,20 +42,20 @@ function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
   return out;
 }
 export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
-  const primary = await getJson<BackendOccurrence[] | { results?: BackendOccurrence[] }>(`${ATLAS_OCCURRENCES_URL}?limit=${limit}`, signal);
-  if (primary.ok && primary.data) { const rows = Array.isArray(primary.data) ? primary.data : primary.data.results ?? []; return normalizeBackend(rows); }
+  const primary = await getJson<BackendOccurrence[] | { results?: BackendOccurrence[]; occurrences?: BackendOccurrence[] }>(`${ATLAS_OCCURRENCES_URL}?limit=${limit}`, signal);
+  if (primary.ok && primary.data) { const rows = Array.isArray(primary.data) ? primary.data : primary.data.results ?? primary.data.occurrences ?? []; return normalizeBackend(rows); }
   return [];
 }
 export async function fetchGenusOccurrences(genus: string, limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
   if (!genus) return [];
   const q = encodeURIComponent(genus);
-  const res = await getJson<BackendOccurrence[] | { results?: BackendOccurrence[] }>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
-  if (res.ok && res.data) { const rows = Array.isArray(res.data) ? res.data : res.data.results ?? []; return normalizeBackend(rows); }
+  const res = await getJson<BackendOccurrence[] | { results?: BackendOccurrence[]; occurrences?: BackendOccurrence[] }>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
+  if (res.ok && res.data) { const rows = Array.isArray(res.data) ? res.data : res.data.results ?? res.data.occurrences ?? []; return normalizeBackend(rows); }
   return [];
 }
 export interface SpeciesSearchResult { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; family?: string; conservation_status?: string | null; }
 export async function searchSpecies(q: string, limit = 20, signal?: AbortSignal): Promise<SpeciesSearchResult[]> {
-  const { data } = await getJson<SpeciesSearchResult[] | { results?: SpeciesSearchResult[] }>(`${OC_BACKEND_BASE}/api/species/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
+  const { data } = await getJson<SpeciesSearchResult[] | { results?: SpeciesSearchResult[] }>(`${BACKEND_BASE_URL}/api/species/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
   if (!data) return [];
   return Array.isArray(data) ? data : data.results ?? [];
 }
