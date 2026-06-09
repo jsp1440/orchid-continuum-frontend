@@ -14,6 +14,7 @@ import { conservationBadge, binomialOf } from '@/lib/genusData';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import {
   getFeaturedSpeciesCached,
+  getNeighborOrchidsCached,
   isFavorite,
   toggleFavorite,
   subscribeFavorites,
@@ -92,7 +93,15 @@ const SpeciesInFocus: React.FC = () => {
     setFailed(false);
     setSpecies([]);
 
-    getFeaturedSpeciesCached(TARGET_COUNT, ctrl.signal, genus)
+    // Primary source: different-genus orchids that geographically co-occur with
+    // this genus ("no orchid exists alone"). When no neighbours are available
+    // (honest empty), fall back to featured same-genus species.
+    getNeighborOrchidsCached(genus, TARGET_COUNT, ctrl.signal)
+      .then((neighbors) => {
+        if (ctrl.signal.aborted) return [] as FeaturedSpecies[];
+        if (neighbors.length > 0) return neighbors;
+        return getFeaturedSpeciesCached(TARGET_COUNT, ctrl.signal, genus);
+      })
       .then((rows) => {
         if (ctrl.signal.aborted) return;
 
@@ -205,8 +214,8 @@ const SpeciesInFocus: React.FC = () => {
             <EmptyGenus genus={genus} />
           ) : (
             <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {species.map((s) => (
-                <SpeciesCard key={cardKey(s)} data={s} />
+              {species.map((s, i) => (
+                <SpeciesCard key={cardKey(s)} data={s} eager={i < 3} />
               ))}
             </div>
           )}
@@ -238,7 +247,7 @@ const ImagePending: React.FC<{ genus?: string }> = ({ genus }) => (
   </div>
 );
 
-const CardImage: React.FC<{ src?: string; alt: string; genus?: string }> = ({ src, alt, genus }) => {
+const CardImage: React.FC<{ src?: string; alt: string; genus?: string; eager?: boolean }> = ({ src, alt, genus, eager }) => {
   const [errored, setErrored] = useState(false);
   useEffect(() => setErrored(false), [src]);
   return (
@@ -247,7 +256,10 @@ const CardImage: React.FC<{ src?: string; alt: string; genus?: string }> = ({ sr
         <img
           src={src}
           alt={alt}
-          loading="lazy"
+          loading={eager ? 'eager' : 'lazy'}
+          // @ts-expect-error fetchpriority is a valid DOM attribute not yet in this React typings version
+          fetchpriority={eager ? 'high' : 'auto'}
+          decoding="async"
           onError={() => setErrored(true)}
           className="absolute inset-0 h-full w-full object-cover transition-all duration-[1200ms] ease-in-out group-hover:scale-105"
         />
@@ -258,7 +270,7 @@ const CardImage: React.FC<{ src?: string; alt: string; genus?: string }> = ({ sr
   );
 };
 
-const SpeciesCard: React.FC<{ data: FeaturedSpecies }> = ({ data }) => {
+const SpeciesCard: React.FC<{ data: FeaturedSpecies; eager?: boolean }> = ({ data, eager }) => {
   const navigate = useNavigate();
   const favorited = useIsFavorite(data.name);
   const badge = data.conservation ? conservationBadge(data.conservation) : null;
@@ -275,7 +287,7 @@ const SpeciesCard: React.FC<{ data: FeaturedSpecies }> = ({ data }) => {
           className="absolute inset-0 block w-full h-full"
           aria-label={`View ${data.name}`}
         >
-          <CardImage src={data.image} alt={data.name} genus={data.genus} />
+          <CardImage src={data.image} alt={data.name} genus={data.genus} eager={eager} />
           <span className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-[#16271a] to-transparent pointer-events-none" />
         </button>
 

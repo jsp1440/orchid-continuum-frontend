@@ -30,27 +30,49 @@ export async function fetchGenusOfDay(signal?: AbortSignal): Promise<GenusDaily 
   return data;
 }
 export interface OccurrencePoint { id: string; lat: number; lng: number; species: string; country: string | null; source: 'continuum'; }
-interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; }
+interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; decimalLatitude?: number; decimalLongitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; lon?: number; x?: number; y?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; properties?: Record<string, unknown>; }
+function numOf(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
+  return undefined;
+}
+/** Accept any common envelope: bare array, or { results | occurrences | features | data | items | records | rows | points }. */
+function extractRows<T = BackendOccurrence>(payload: unknown): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  if (payload && typeof payload === 'object') {
+    const o = payload as Record<string, unknown>;
+    for (const k of ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points']) {
+      if (Array.isArray(o[k])) return o[k] as T[];
+    }
+  }
+  return [];
+}
 function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
   const out: OccurrencePoint[] = [];
   rows.forEach((r, i) => {
-    const lat = r.decimal_latitude ?? r.latitude ?? r.lat;
-    const lng = r.decimal_longitude ?? r.longitude ?? r.lng;
-    if (typeof lat !== 'number' || typeof lng !== 'number') return;
-    out.push({ id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat, lng, species: r.species || r.canonical_name || r.scientific_name || 'Orchidaceae', country: r.country ?? null, source: 'continuum' });
+    const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
+    const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
+      ?? numOf(p.decimal_latitude) ?? numOf(p.latitude) ?? numOf(p.lat);
+    const lng = numOf(r.decimal_longitude) ?? numOf(r.decimalLongitude) ?? numOf(r.longitude) ?? numOf(r.lng) ?? numOf(r.lon) ?? numOf(r.x)
+      ?? numOf(p.decimal_longitude) ?? numOf(p.longitude) ?? numOf(p.lng);
+    if (lat === undefined || lng === undefined) return;
+    const species = r.species || r.canonical_name || r.scientific_name
+      || (p.species as string) || (p.canonical_name as string) || (p.scientific_name as string) || 'Orchidaceae';
+    const country = (r.country ?? (p.country as string | undefined) ?? null) as string | null;
+    out.push({ id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat, lng, species, country, source: 'continuum' });
   });
   return out;
 }
 export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
-  const primary = await getJson<BackendOccurrence[] | { results?: BackendOccurrence[]; occurrences?: BackendOccurrence[] }>(`${ATLAS_OCCURRENCES_URL}?limit=${limit}`, signal);
-  if (primary.ok && primary.data) { const rows = Array.isArray(primary.data) ? primary.data : primary.data.results ?? primary.data.occurrences ?? []; return normalizeBackend(rows); }
+  const primary = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?limit=${limit}`, signal);
+  if (primary.ok && primary.data) return normalizeBackend(extractRows(primary.data));
   return [];
 }
 export async function fetchGenusOccurrences(genus: string, limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
   if (!genus) return [];
   const q = encodeURIComponent(genus);
-  const res = await getJson<BackendOccurrence[] | { results?: BackendOccurrence[]; occurrences?: BackendOccurrence[] }>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
-  if (res.ok && res.data) { const rows = Array.isArray(res.data) ? res.data : res.data.results ?? res.data.occurrences ?? []; return normalizeBackend(rows); }
+  const res = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
+  if (res.ok && res.data) return normalizeBackend(extractRows(res.data));
   return [];
 }
 export interface SpeciesSearchResult { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; family?: string; conservation_status?: string | null; }
@@ -86,11 +108,6 @@ export async function fetchGeneraCount(signal?: AbortSignal): Promise<number> {
 export interface WebNodeData { count: number | null; summary: string; items: string[]; hasData: boolean; worstStatus?: 'CR' | 'EN' | 'VU' | 'LC' | null; }
 export interface ContinuumGraphData { genus: string; speciesCount: number | null; description: string; isFallback: boolean; fungi: WebNodeData; pollinators: WebNodeData; climate: WebNodeData; geography: WebNodeData; conservation: WebNodeData; cultivation: WebNodeData; knowledge: WebNodeData; }
 const EMPTY_NODE: WebNodeData = { count: null, summary: 'No data yet', items: [], hasData: false };
-function asArray<T>(data: unknown): T[] {
-  if (Array.isArray(data)) return data as T[];
-  if (data && typeof data === 'object') { const o = data as Record<string, unknown>; for (const k of ['results', 'data', 'items', 'records', 'partners', 'images']) { if (Array.isArray(o[k])) return o[k] as T[]; } }
-  return [];
-}
 function pickNum(o: Record<string, unknown>, keys: string[]): number | null {
   for (const k of keys) { const v = o[k]; if (typeof v === 'number' && Number.isFinite(v)) return v; if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v); }
   return null;
@@ -98,10 +115,6 @@ function pickNum(o: Record<string, unknown>, keys: string[]): number | null {
 function pickStr(o: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) { const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); }
   return null;
-}
-async function getRaw<T = unknown>(path: string, signal?: AbortSignal): Promise<{ ok: boolean; data: T | null }> {
-  const { ok, data } = await getJson<T>(`${OC_BACKEND_BASE}${path}`, signal, 8000);
-  return { ok, data };
 }
 const CATTLEYA_FALLBACK: ContinuumGraphData = {
   genus: 'Cattleya', speciesCount: 113, description: 'Showy epiphytic orchids of Central & South America.', isFallback: true,
@@ -113,81 +126,42 @@ const CATTLEYA_FALLBACK: ContinuumGraphData = {
   cultivation: { count: 23, summary: '23 grower records', items: ['Cattleya labiata', 'Cattleya mossiae', 'Cattleya warscewiczii'], hasData: true },
   knowledge: { count: 156, summary: '156 literature records', items: ['Taxonomic revisions', 'Field surveys', 'OREP extractions'], hasData: true },
 };
-function fungiNode(data: unknown): WebNodeData {
-  const rows = asArray<Record<string, unknown>>(data); if (!rows.length) return EMPTY_NODE;
-  const names = Array.from(new Set(rows.map((r) => pickStr(r, ['fungal_taxon', 'fungus', 'genus', 'taxon', 'name'])).filter((s): s is string => !!s)));
-  const n = rows.length; return { count: n, summary: `${n} partnership${n === 1 ? '' : 's'}`, items: names.slice(0, 3), hasData: true };
-}
-function pollinatorNode(data: unknown): WebNodeData {
-  const rows = asArray<Record<string, unknown>>(data); if (!rows.length) return EMPTY_NODE;
-  const guilds = Array.from(new Set(rows.map((r) => pickStr(r, ['pollinator_guild', 'guild', 'pollinator', 'name'])).filter((s): s is string => !!s)));
-  const n = rows.length; return { count: n, summary: `${n} linked`, items: guilds.slice(0, 3), hasData: true };
-}
-function climateNode(data: unknown): WebNodeData {
-  if (!data || typeof data !== 'object') return EMPTY_NODE;
-  const rows = asArray<Record<string, unknown>>(data); const o = (rows[0] ?? data) as Record<string, unknown>;
-  const zone = pickStr(o, ['climate_zone', 'zone', 'biome', 'primary_zone']);
-  const lo = pickNum(o, ['elevation_min', 'min_elevation', 'elev_min']); const hi = pickNum(o, ['elevation_max', 'max_elevation', 'elev_max']);
-  if (!zone && lo == null && hi == null) return EMPTY_NODE;
-  const elev = lo != null && hi != null ? `${lo.toLocaleString()}–${hi.toLocaleString()}m` : '';
-  const summary = [zone, elev].filter(Boolean).join(' · ') || 'Profile available';
-  return { count: null, summary, items: [zone, elev].filter((s): s is string => !!s), hasData: true };
-}
-function geographyNode(data: unknown): WebNodeData {
-  if (!data || typeof data !== 'object') return EMPTY_NODE;
-  const o = data as Record<string, unknown>;
-  // Handle atlas harvester shape: { count: N, occurrences: [...] }
-  const atlasCount = typeof o.count === 'number' ? o.count : null;
-  const atlasOccurrences = Array.isArray(o.occurrences) ? o.occurrences : null;
-  if (atlasCount != null || atlasOccurrences != null) {
-    const total = atlasCount ?? (atlasOccurrences?.length ?? 0);
-    if (total === 0) return EMPTY_NODE;
-    // Derive country list from occurrence records.
-    const countryCounts = new Map<string, number>();
-    for (const pt of (atlasOccurrences ?? [])) {
-      const c = (pt as Record<string, unknown>).country;
-      if (typeof c === 'string' && c.trim()) {
-        countryCounts.set(c, (countryCounts.get(c) ?? 0) + 1);
-      }
+/**
+ * Map one backend graph node ({ status, count, summary, items[] }) into the
+ * compact WebNodeData the radial web renders. `status: 'available'` (or a
+ * positive count / non-empty items) marks the node live; everything else
+ * collapses to the honest "No data yet" empty state.
+ */
+function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}): WebNodeData {
+  if (!raw || typeof raw !== 'object') return EMPTY_NODE;
+  const o = raw as Record<string, unknown>;
+  const status = typeof o.status === 'string' ? o.status.toLowerCase() : '';
+  const count = pickNum(o, ['count', 'total', 'records']);
+  const rawItems = Array.isArray(o.items) ? o.items : [];
+  const items: string[] = [];
+  for (const it of rawItems) {
+    if (items.length >= 6) break;
+    if (typeof it === 'string') { if (it.trim()) items.push(it.trim()); continue; }
+    if (it && typeof it === 'object') {
+      const r = it as Record<string, unknown>;
+      const s = pickStr(r, ['name', 'country', 'title', 'reference', 'citation', 'label', 'species']);
+      if (s) { items.push(s); continue; }
+      const mn = pickNum(r, ['min']); const mx = pickNum(r, ['max']);
+      if (mn != null && mx != null) items.push(`${mn.toLocaleString()}–${mx.toLocaleString()} m`);
     }
-    const topCountries = [...countryCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 3)
-      .map(([c]) => c);
-    const countryCount = countryCounts.size;
-    const parts: string[] = [];
-    if (countryCount > 0) parts.push(`${countryCount} countries`);
-    parts.push(`${total.toLocaleString()} records`);
-    const items = topCountries.length > 0 ? topCountries : parts;
-    return { count: total, summary: parts.join(' · '), items, hasData: true };
   }
-  // Legacy summary shape: { countries, records }
-  const countries = pickNum(o, ['countries', 'country_count', 'n_countries']); const records = pickNum(o, ['records', 'occurrences', 'count', 'total']);
-  if (countries == null && records == null) return EMPTY_NODE;
-  const parts: string[] = []; if (countries != null) parts.push(`${countries} countries`); if (records != null) parts.push(`${records.toLocaleString()} records`);
-  return { count: records ?? countries ?? 0, summary: parts.join(' · '), items: parts, hasData: true };
-}
-function conservationNode(data: unknown): WebNodeData {
-  if (!data || typeof data !== 'object') return EMPTY_NODE;
-  const o = data as Record<string, unknown>; const breakdown = (o.breakdown ?? o.statuses ?? o) as Record<string, unknown>;
-  const cr = pickNum(breakdown, ['CR', 'cr', 'critically_endangered']) ?? 0; const en = pickNum(breakdown, ['EN', 'en', 'endangered']) ?? 0;
-  const vu = pickNum(breakdown, ['VU', 'vu', 'vulnerable']) ?? 0; const lc = pickNum(breakdown, ['LC', 'lc', 'least_concern']) ?? 0;
-  const total = cr + en + vu + lc; if (total === 0) return EMPTY_NODE;
-  const parts: string[] = []; if (cr) parts.push(`${cr} CR`); if (en) parts.push(`${en} EN`); if (vu) parts.push(`${vu} VU`); if (lc) parts.push(`${lc} LC`);
-  const worst: WebNodeData['worstStatus'] = cr ? 'CR' : en ? 'EN' : vu ? 'VU' : 'LC';
-  return { count: total, summary: parts.join(' · '), items: parts, hasData: true, worstStatus: worst };
-}
-function cultivationNode(data: unknown): WebNodeData {
-  const rows = asArray<Record<string, unknown>>(data); const o = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
-  const n = rows.length || pickNum(o, ['count', 'records', 'total']) || 0; if (!n) return EMPTY_NODE;
-  const names = rows.map((r) => pickStr(r, ['species', 'name', 'canonical_name'])).filter((s): s is string => !!s);
-  return { count: n, summary: `${n} grower record${n === 1 ? '' : 's'}`, items: names.slice(0, 3), hasData: true };
-}
-function knowledgeNode(data: unknown): WebNodeData {
-  const rows = asArray<Record<string, unknown>>(data); const o = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
-  const n = rows.length || pickNum(o, ['count', 'records', 'total', 'literature']) || 0; if (!n) return EMPTY_NODE;
-  const titles = rows.map((r) => pickStr(r, ['title', 'reference', 'citation', 'source'])).filter((s): s is string => !!s);
-  return { count: n, summary: `${n.toLocaleString()} literature record${n === 1 ? '' : 's'}`, items: titles.slice(0, 3), hasData: true };
+  const hasData = status === 'available' || (count != null && count > 0) || items.length > 0;
+  if (!hasData) return EMPTY_NODE;
+  let summary: string;
+  if (opts.climate) {
+    summary = items.find((s) => /m$/.test(s)) || (count != null ? `${count.toLocaleString()} records` : 'Profile available');
+  } else if (count != null) {
+    const unit = opts.unit || 'record';
+    summary = `${count.toLocaleString()} ${unit}${count === 1 ? '' : 's'}`;
+  } else {
+    summary = 'Data available';
+  }
+  return { count: count ?? null, summary, items: items.slice(0, 3), hasData: true };
 }
 /**
  * Fetch the live knowledge-graph data for a given genus.
@@ -224,26 +198,34 @@ export async function fetchContinuumGraph(
     }
   } catch { /* supplemental only — ignore failures */ }
 
-  const [myc, pol, cli, geo, con, cul, lit] = await Promise.all([
-    getRaw(`/api/species/mycorrhizal?genus=${q}`, signal),
-    getRaw(`/api/species/pollinators?genus=${q}`, signal),
-    getRaw(`/api/species/climate?genus=${q}`, signal),
-    getJson<{ count?: number; occurrences?: unknown[] }>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=500`, signal, 8000),
-    getRaw(`/api/species/conservation?genus=${q}`, signal),
-    getRaw(`/api/species/cultivation?genus=${q}`, signal),
-    getRaw(`/api/species/literature?genus=${q}`, signal),
-  ]);
+  // Single nodes-shaped endpoint on the public API:
+  //   { genus, hub: { species_count }, nodes: { knowledge, geography, climate,
+  //     pollinators, fungi, conservation, cultivation } }
+  // Each node carries { status, count, summary, items[] }. Nodes without data
+  // in the read-only sources arrive as status:"empty" and render "No data yet".
+  const { ok, data } = await getJson<{
+    genus?: string;
+    hub?: { species_count?: number };
+    nodes?: Record<string, unknown>;
+  }>(`${BACKEND_BASE_URL}/api/continuum/graph?genus=${q}`, signal, 9000);
+
+  const nodes: Record<string, unknown> =
+    ok && data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+  if (speciesCount == null && typeof data?.hub?.species_count === 'number') {
+    speciesCount = data.hub.species_count;
+  }
+
   return {
-    genus: g,
+    genus: ok && data?.genus ? data.genus : g,
     speciesCount,
     description,
     isFallback: false,
-    fungi: myc.ok ? fungiNode(myc.data) : EMPTY_NODE,
-    pollinators: pol.ok ? pollinatorNode(pol.data) : EMPTY_NODE,
-    climate: cli.ok ? climateNode(cli.data) : EMPTY_NODE,
-    geography: geo.ok ? geographyNode(geo.data) : EMPTY_NODE,
-    conservation: con.ok ? conservationNode(con.data) : EMPTY_NODE,
-    cultivation: cul.ok ? cultivationNode(cul.data) : EMPTY_NODE,
-    knowledge: lit.ok ? knowledgeNode(lit.data) : EMPTY_NODE,
+    knowledge: mapNode(nodes.knowledge, { unit: 'species' }),
+    geography: mapNode(nodes.geography, { unit: 'record' }),
+    climate: mapNode(nodes.climate, { climate: true }),
+    pollinators: mapNode(nodes.pollinators, { unit: 'link' }),
+    fungi: mapNode(nodes.fungi, { unit: 'partnership' }),
+    conservation: mapNode(nodes.conservation, { unit: 'record' }),
+    cultivation: mapNode(nodes.cultivation, { unit: 'record' }),
   };
 }

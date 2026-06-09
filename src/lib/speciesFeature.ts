@@ -127,7 +127,7 @@ function extractArray(payload: unknown): Record<string, unknown>[] {
   if (!payload || typeof payload !== 'object') return [];
 
   const obj = payload as Record<string, unknown>;
-  for (const key of ['results', 'data', 'species', 'images', 'items', 'records', 'rows', 'taxa']) {
+  for (const key of ['neighbors', 'results', 'data', 'species', 'images', 'items', 'records', 'rows', 'taxa']) {
     const v = obj[key];
     if (Array.isArray(v)) return v as Record<string, unknown>[];
     if (v && typeof v === 'object') {
@@ -206,20 +206,34 @@ function normalizeBinomial(row: Record<string, unknown>, fallbackGenus?: string)
 
 function imageFrom(row: Record<string, unknown>): string | undefined {
   const taxon = asObject(row.taxon);
+  // Priority: thumbnail → medium → representative → image → original. Smaller,
+  // display-ready derivatives first so cards paint fast; full-res original last.
   return (
     pick(row, [
-      'image_url',
-      'imageUrl',
+      'thumbnail_url',
+      'thumbnailUrl',
+      'medium_url',
+      'mediumUrl',
       'representative_image_url',
       'hero_image_url',
+      'image_url',
+      'imageUrl',
       'photo_url',
       'photoUrl',
       'url',
       'image',
+      'original_url',
+      'originalUrl',
+    ]) ||
+    pick(taxon, [
       'thumbnail_url',
       'medium_url',
+      'representative_image_url',
+      'hero_image_url',
+      'image_url',
+      'image',
       'original_url',
-    ]) || pick(taxon, ['image_url', 'representative_image_url', 'hero_image_url', 'image'])
+    ])
   );
 }
 
@@ -520,5 +534,87 @@ export async function getFeaturedSpeciesCached(limit = 4, signal?: AbortSignal, 
     });
 
   inFlightByGenus.set(key, p);
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+// Neighbour orchids — different-genus species that geographically co-occur
+// with the featured genus. Powered by GET /api/ecology/neighbors.
+// ---------------------------------------------------------------------------
+
+/** Map one /api/ecology/neighbors row into a FeaturedSpecies, or null. */
+function toNeighbor(row: Record<string, unknown>): FeaturedSpecies | null {
+  const name = (pick(row, ['name', 'scientific_name', 'canonical_name']) || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!looksLikeBinomial(name)) return null;
+  const genus =
+    normalizeGenus(pick(row, ['genus']) || name.split(/\s+/)[0]) ||
+    name.split(/\s+/)[0];
+  return {
+    name,
+    genus,
+    family: pick(row, ['family']) || 'Orchidaceae',
+    image: imageFrom(row),
+    distribution: pick(row, ['country', 'region', 'distribution']),
+    relationship: pick(row, ['relationship']),
+  };
+}
+
+export async function fetchNeighborOrchids(
+  genus: string,
+  limit = 6,
+  signal?: AbortSignal,
+): Promise<FeaturedSpecies[]> {
+  const g = normalizeGenus(genus);
+  if (!g) return [];
+  const payload = await fetchOnce(
+    `${BACKEND_BASE_URL}/api/ecology/neighbors?genus=${encodeURIComponent(g)}&limit=${Math.max(1, limit)}`,
+    9000,
+    signal,
+  );
+  if (!payload) return [];
+  const out: FeaturedSpecies[] = [];
+  const seen = new Set<string>();
+  for (const row of extractArray(payload)) {
+    const feature = toNeighbor(row);
+    if (!feature) continue;
+    const dedupe = feature.name.toLowerCase();
+    if (seen.has(dedupe)) continue;
+    seen.add(dedupe);
+    out.push(feature);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+const neighborMemory = new Map<string, FeaturedSpecies[]>();
+const neighborInFlight = new Map<string, Promise<FeaturedSpecies[]>>();
+
+export async function getNeighborOrchidsCached(
+  genus: string,
+  limit = 6,
+  signal?: AbortSignal,
+): Promise<FeaturedSpecies[]> {
+  const g = normalizeGenus(genus);
+  if (!g) return [];
+  const key = g.toLowerCase();
+
+  const mem = neighborMemory.get(key);
+  if (mem && mem.length > 0) return mem;
+
+  const existing = neighborInFlight.get(key);
+  if (existing) return existing;
+
+  const p = fetchNeighborOrchids(g, limit, signal)
+    .then((list) => {
+      if (list.length > 0) neighborMemory.set(key, list);
+      return list;
+    })
+    .finally(() => {
+      neighborInFlight.delete(key);
+    });
+
+  neighborInFlight.set(key, p);
   return p;
 }
