@@ -11,6 +11,7 @@
  */
 
 import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from './backendConfig';
+import { classifyImage, MIN_GALLERY_SCORE, type ImageCategory } from './imageQuality';
 
 export interface FeaturedSpecies {
   /** Full scientific / canonical name — used for routing + atlas filter. */
@@ -25,6 +26,13 @@ export interface FeaturedSpecies {
   distribution?: string;
   climate?: string;
   image?: string;
+  /** Homepage curation metadata. */
+  imageScore?: number;
+  imageCategory?: ImageCategory;
+  /** Literature / story metadata when OREP or source tables provide it. */
+  literatureNote?: string;
+  discoveryNote?: string;
+  sourceCitation?: string;
   /** Neighbour-mode only. */
   relationship?: string;
 }
@@ -118,6 +126,16 @@ function pick(obj: Record<string, unknown> | undefined | null, keys: string[]): 
     const v = obj[k];
     if (typeof v === 'string' && v.trim()) return v.trim();
     if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  }
+  return undefined;
+}
+
+function numPick(obj: Record<string, unknown> | undefined | null, keys: string[]): number | undefined {
+  if (!obj) return undefined;
+  for (const k of keys) {
+    const v = obj[k];
+    if (typeof v === 'number' && Number.isFinite(v)) return v;
+    if (typeof v === 'string' && Number.isFinite(Number(v))) return Number(v);
   }
   return undefined;
 }
@@ -237,10 +255,38 @@ function imageFrom(row: Record<string, unknown>): string | undefined {
   );
 }
 
+function classifyRowImage(row: Record<string, unknown>, image: string | undefined, name: string): {
+  category?: ImageCategory;
+  score?: number;
+} {
+  if (!image) return {};
+  const taxon = asObject(row.taxon);
+  const media = asObject(row.media ?? row.image_meta ?? row.imageMetadata);
+  const classification = classifyImage({
+    url: image,
+    name,
+    title:
+      pick(row, ['title', 'caption', 'image_title', 'common_name']) ||
+      pick(media, ['title', 'caption']) ||
+      pick(taxon, ['title', 'caption']),
+    description:
+      pick(row, ['description', 'image_description', 'notes', 'remarks', 'occurrence_remarks']) ||
+      pick(media, ['description', 'notes']) ||
+      pick(taxon, ['description', 'remarks']),
+    source: pick(row, ['source', 'provider', 'institution', 'dataset', 'rights_holder', 'copyright_owner']) || pick(media, ['source', 'provider']),
+    license: pick(row, ['license', 'licence', 'rights']) || pick(media, ['license', 'rights']),
+    width: numPick(row, ['width', 'image_width']) || numPick(media, ['width']),
+    height: numPick(row, ['height', 'image_height']) || numPick(media, ['height']),
+    isHerbarium: /true|1|yes/i.test(pick(row, ['is_herbarium', 'herbarium', 'is_specimen']) || ''),
+  });
+  return { category: classification.category, score: classification.score };
+}
+
 /** Map one loosely-typed species record into a FeaturedSpecies, or null. */
 function toFeatured(row: Record<string, unknown>, fallbackGenus?: string): FeaturedSpecies | null {
   const taxon = asObject(row.taxon);
   const env = asObject(row.oc_env_intel ?? row.env_intel ?? row.environment ?? row.ecology);
+  const literature = asObject(row.literature ?? row.orep ?? row.research ?? row.evidence);
 
   const name = normalizeBinomial(row, fallbackGenus);
   if (!name || !looksLikeBinomial(name)) return null;
@@ -252,10 +298,15 @@ function toFeatured(row: Record<string, unknown>, fallbackGenus?: string): Featu
         name.split(/\s+/)[0],
     ) || name.split(/\s+/)[0];
 
+  const image = imageFrom(row);
+  const imageQuality = classifyRowImage(row, image, name);
+
   return {
     name,
     genus,
-    image: imageFrom(row),
+    image,
+    imageScore: imageQuality.score,
+    imageCategory: imageQuality.category,
     family: pick(row, ['family', 'family_name']) || pick(taxon, ['family']) || 'Orchidaceae',
     conservation:
       pick(row, [
@@ -284,6 +335,15 @@ function toFeatured(row: Record<string, unknown>, fallbackGenus?: string): Featu
     climate:
       pick(env, ['climate', 'climate_notes', 'climate_adaptation', 'climateAdaptation', 'climate_zone', 'climate_adaptation_notes']) ||
       pick(row, ['climate', 'climate_notes', 'climate_adaptation']),
+    literatureNote:
+      pick(literature, ['story', 'story_caption', 'summary', 'note', 'interesting_fact', 'claim_text', 'excerpt']) ||
+      pick(row, ['literature_note', 'literature_summary', 'story', 'story_caption', 'interesting_fact', 'remarks']),
+    discoveryNote:
+      pick(literature, ['discovery', 'discovered_by', 'taxonomic_history', 'collector', 'protologue_note']) ||
+      pick(row, ['discovery_note', 'discovered_by', 'collector', 'taxonomic_history', 'author', 'authority']),
+    sourceCitation:
+      pick(literature, ['citation', 'source', 'reference', 'doi', 'url']) ||
+      pick(row, ['citation', 'source_citation', 'reference', 'doi', 'source_url']),
   };
 }
 
@@ -400,7 +460,7 @@ async function searchGenusImageHarvester(genus: string, limit: number, signal?: 
   if (!g) return [];
 
   const payload = await fetchOnce(
-    `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${Math.max(20, limit * 3)}`,
+    `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${Math.max(120, limit * 4)}`,
     12000,
     signal,
   );
@@ -410,14 +470,17 @@ async function searchGenusImageHarvester(genus: string, limit: number, signal?: 
   const seen = new Set<string>();
   for (const row of extractArray(payload)) {
     const feature = toFeatured(row, g);
-    if (!feature) continue;
+    if (!feature || !feature.image) continue;
+    if ((feature.imageScore ?? 0) < MIN_GALLERY_SCORE) continue;
     const key = feature.name.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
     out.push(feature);
-    if (out.length >= limit) break;
   }
-  return out;
+
+  return out
+    .sort((a, b) => ((b.imageScore ?? 0) - (a.imageScore ?? 0)) || a.name.localeCompare(b.name))
+    .slice(0, limit);
 }
 
 function shuffle<T>(arr: T[]): T[] {
@@ -470,21 +533,64 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
   return [];
 }
 
+/**
+ * Homepage Genus-of-the-Day queue.
+ *
+ * This feed is intentionally image-first: the public homepage must feel like a
+ * living exhibit, not a raw archive. We therefore prefer the image harvester,
+ * apply imageQuality filtering, reject herbarium/specimen/document records, and
+ * only fall back to taxonomy rows when the image pool is too small.
+ */
+export async function fetchGenusSpeciesQueue(limit = 160, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
+  const g = normalizeGenus(genus) || 'Cattleya';
+  const requested = Math.max(12, limit);
+
+  const imagePool = await searchGenusImageHarvester(g, requested, signal);
+  const seen = new Set(imagePool.map((s) => s.name.toLowerCase()));
+  const merged = imagePool.slice();
+
+  if (merged.length < requested) {
+    const taxonomyPool = await searchSpecies(
+      `${BACKEND_BASE_URL}/api/species/search?genus=${encodeURIComponent(g)}&limit=120`,
+      120,
+      g,
+      signal,
+      true,
+    );
+    for (const row of taxonomyPool) {
+      const key = row.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      merged.push(row);
+      if (merged.length >= requested) break;
+    }
+  }
+
+  if (merged.length === 0 && g.toLowerCase() === 'cattleya') return shuffle(CATTLEYA_FALLBACK);
+  return shuffle(merged).slice(0, requested);
+}
+
 // ---------------------------------------------------------------------------
 // Session-level caching (keyed per genus)
 // ---------------------------------------------------------------------------
 
 const memoryByGenus = new Map<string, FeaturedSpecies[]>();
 const inFlightByGenus = new Map<string, Promise<FeaturedSpecies[]>>();
+const queueMemoryByGenus = new Map<string, FeaturedSpecies[]>();
+const queueInFlightByGenus = new Map<string, Promise<FeaturedSpecies[]>>();
 
 function sessionKey(genus: string): string {
-  // v4 invalidates earlier caches before the image-harvester binomial fallback.
-  return `oc:species-in-focus:v4:${genus.trim().toLowerCase()}`;
+  // v5 invalidates earlier caches before homepage image-quality filtering.
+  return `oc:species-in-focus:v5:${genus.trim().toLowerCase()}`;
 }
 
-function readSessionCache(genus: string): FeaturedSpecies[] | null {
+function queueSessionKey(genus: string): string {
+  return `oc:genus-species-queue:v1:${genus.trim().toLowerCase()}`;
+}
+
+function readSpeciesListCache(key: string): FeaturedSpecies[] | null {
   try {
-    const raw = sessionStorage.getItem(sessionKey(genus));
+    const raw = sessionStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed) && parsed.length > 0) {
@@ -497,12 +603,20 @@ function readSessionCache(genus: string): FeaturedSpecies[] | null {
   return null;
 }
 
-function writeSessionCache(genus: string, list: FeaturedSpecies[]): void {
+function writeSpeciesListCache(key: string, list: FeaturedSpecies[]): void {
   try {
-    sessionStorage.setItem(sessionKey(genus), JSON.stringify(list));
+    sessionStorage.setItem(key, JSON.stringify(list));
   } catch {
     /* quota / privacy mode — non-fatal */
   }
+}
+
+function readSessionCache(genus: string): FeaturedSpecies[] | null {
+  return readSpeciesListCache(sessionKey(genus));
+}
+
+function writeSessionCache(genus: string, list: FeaturedSpecies[]): void {
+  writeSpeciesListCache(sessionKey(genus), list);
 }
 
 export async function getFeaturedSpeciesCached(limit = 4, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
@@ -534,6 +648,38 @@ export async function getFeaturedSpeciesCached(limit = 4, signal?: AbortSignal, 
     });
 
   inFlightByGenus.set(key, p);
+  return p;
+}
+
+export async function getGenusSpeciesQueueCached(limit = 160, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
+  const g = normalizeGenus(genus) || 'Cattleya';
+  const key = g.toLowerCase();
+
+  const mem = queueMemoryByGenus.get(key);
+  if (mem && mem.length >= Math.min(12, limit)) return mem;
+
+  const fromSession = readSpeciesListCache(queueSessionKey(g));
+  if (fromSession) {
+    queueMemoryByGenus.set(key, fromSession);
+    return fromSession;
+  }
+
+  const existing = queueInFlightByGenus.get(key);
+  if (existing) return existing;
+
+  const p = fetchGenusSpeciesQueue(limit, signal, g)
+    .then((list) => {
+      if (list.length > 0) {
+        queueMemoryByGenus.set(key, list);
+        writeSpeciesListCache(queueSessionKey(g), list);
+      }
+      return list;
+    })
+    .finally(() => {
+      queueInFlightByGenus.delete(key);
+    });
+
+  queueInFlightByGenus.set(key, p);
   return p;
 }
 
