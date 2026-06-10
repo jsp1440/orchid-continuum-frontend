@@ -38,6 +38,7 @@ import {
 import { setBackendStatus } from '@/lib/backendStatus';
 import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
+import { filterRankUrls, bestUrlScore } from '@/lib/imageQuality';
 
 
 
@@ -85,8 +86,20 @@ interface Slot {
   imageLicense?: string;
 }
 
-/** Build a prioritised candidate-URL list from a trusted image + legacy photo. */
-function candidateUrls(matchImage?: string, trusted?: GenusImage): string[] {
+/**
+ * Build a prioritised candidate-URL list from a trusted image + legacy photo,
+ * then run it through the homepage image-quality curator: herbarium sheets,
+ * preserved-specimen scans, type vouchers, barcoded records and non-image
+ * documents (score < 60) are dropped entirely, and the survivors are returned
+ * highest-scoring first (flower > whole plant > habitat > pollinator >
+ * botanical illustration). The species name + source/licence are passed as
+ * shared metadata so the classifier has every available signal.
+ */
+function candidateUrls(
+  matchImage?: string,
+  trusted?: GenusImage,
+  name?: string,
+): string[] {
   const arr: string[] = [];
   if (trusted?.image_urls?.length) {
     for (const u of trusted.image_urls) if (u && !arr.includes(u)) arr.push(u);
@@ -94,7 +107,11 @@ function candidateUrls(matchImage?: string, trusted?: GenusImage): string[] {
     arr.push(trusted.image_url);
   }
   if (matchImage && !arr.includes(matchImage)) arr.push(matchImage);
-  return arr;
+  return filterRankUrls(arr, {
+    source: trusted?.image_source,
+    license: trusted?.image_license,
+    name: name ?? trusted?.scientific_name,
+  });
 }
 
 
@@ -329,7 +346,7 @@ const DailyGenusFeature: React.FC = () => {
       const plate = entry.plates.find((p) => binomialOf(p.species) === bin);
       const trusted = imageMap.get(bin);
       if (trusted) usedImages.add(bin);
-      const images = candidateUrls(match?.image, trusted);
+      const images = candidateUrls(match?.image, trusted, name);
       built.push({
         species: name,
         image: images[0],
@@ -348,7 +365,7 @@ const DailyGenusFeature: React.FC = () => {
       used.add(bin);
       const trusted = imageMap.get(bin);
       if (trusted) usedImages.add(bin);
-      const images = candidateUrls(ph.image, trusted);
+      const images = candidateUrls(ph.image, trusted, ph.species);
       built.push({
         ...ph,
         image: images[0],
@@ -360,7 +377,7 @@ const DailyGenusFeature: React.FC = () => {
     for (const [bin, img] of imageMap) {
       if (usedImages.has(bin) || used.has(bin)) continue;
       usedImages.add(bin);
-      const images = candidateUrls(undefined, img);
+      const images = candidateUrls(undefined, img, img.scientific_name);
       built.push({
         species: img.scientific_name,
         image: images[0],
@@ -369,10 +386,28 @@ const DailyGenusFeature: React.FC = () => {
         imageLicense: img.image_license,
       });
     }
-    while (built.length < 9) {
-      built.push({ species: entry.genus, images: [] });
+    // Curate the gallery: rank slots by their best image's curation score so
+    // the most beautiful, story-telling photographs lead (flower > whole plant
+    // > habitat > pollinator > botanical illustration). Slots whose images were
+    // all filtered out as herbarium/specimen/document material fall to the end
+    // as "Image pending" placeholders rather than ever showing a specimen scan.
+    // The sort is stable, preserving the validated-name ordering within a tier.
+    const slotScore = (s: Slot): number =>
+      s.images.length === 0
+        ? -1
+        : bestUrlScore(s.images, {
+            source: s.imageSource,
+            license: s.imageLicense,
+            name: s.species,
+          });
+    const ordered = built
+      .map((s, i) => ({ s, i, score: slotScore(s) }))
+      .sort((a, b) => (b.score - a.score) || (a.i - b.i))
+      .map((x) => x.s);
+    while (ordered.length < 9) {
+      ordered.push({ species: entry.genus, images: [] });
     }
-    return built;
+    return ordered;
   }, [pool, validatedSet, validatedNames, entry, imageMap]);
 
   // Keep live references for the rotation engine (interval reads these).
