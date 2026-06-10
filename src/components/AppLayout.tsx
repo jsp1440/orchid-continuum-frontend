@@ -23,17 +23,20 @@ import BackendStatusBanner from './orchid/BackendStatusBanner';
  * bar); while it is visible the fixed navbar and the page content are shifted
  * down by its height so nothing is occluded.
  *
- * The page tells a story in seven acts:
+ * HOMEPAGE-0001 — Narrative Flow Refactor
  *
- *   ACT 1 — WONDER          → HomeHero
- *   ACT 2 — TODAY'S GENUS   → DailyGenusFeature (immediately after the hero)
- *   ACT 3 — PROBLEM/SOLUTION→ TheKnowledgeGraph (deep navy)
- *   ACT 4 — WHAT'S POSSIBLE → CapabilityGrid (eight cards, forest green)
- *   ACT 5 — THE HIDDEN WEB  → ContinuumWeb (live relationship graph)
- *                             + SpeciesInFocus + HomeAtlas
- *   ACT 6 — UNDERSTANDING / STEWARDSHIP → WhyOrchidsMatter + HumanStewardship
- *                             + OrchidGallery
- *   ACT 7 — ACTION          → OasisConnective (support) + Footer
+ * The page should first explain the Orchid Continuum, then demonstrate it.
+ * Genus-of-the-Day is not the introduction; it is proof that the connected
+ * knowledge graph can turn a genus into a living exhibit.
+ *
+ *   ACT 1 — WELCOME / WONDER       → HomeHero
+ *   ACT 2 — PROBLEM + VISION       → TheKnowledgeGraph
+ *   ACT 3 — WHY IT MATTERS         → CapabilityGrid
+ *   ACT 4 — CONTINUUM IN ACTION    → DailyGenusFeature + SpeciesInFocus
+ *   ACT 5 — NO ORCHID LIVES ALONE  → ContinuumWeb + HomeAtlas
+ *   ACT 6 — SCIENCE TO STEWARDSHIP → WhyOrchidsMatter + HumanStewardship
+ *   ACT 7 — VISUAL EXPLORATION     → OrchidGallery
+ *   ACT 8 — JOIN / SUPPORT         → OasisConnective + Footer
  */
 
 const AppLayout: React.FC = () => {
@@ -47,30 +50,38 @@ const AppLayout: React.FC = () => {
       <Navbar topOffset={bannerHeight} />
       <main style={{ paddingTop: bannerHeight }}>
         {/*
-         * DailyGenusProvider resolves the Genus of the Day exactly once and
-         * distributes it via React context to every homepage section that
-         * needs it: DailyGenusFeature, ContinuumWeb, SpeciesInFocus, HomeAtlas.
-         * This is the single source of truth — no component below should call
-         * featuredGenusName() or fetchGenusOfDay() to determine the genus.
-         */}
+          * DailyGenusProvider resolves the Genus of the Day exactly once and
+          * distributes it via React context to every homepage section that
+          * needs it: DailyGenusFeature, ContinuumWeb, SpeciesInFocus, HomeAtlas.
+          * This is the single source of truth — no component below should call
+          * featuredGenusName() or fetchGenusOfDay() to determine the genus.
+          */}
         <DailyGenusProvider>
-          {/* ACT 1 — Wonder */}
+          {/* ACT 1 — Welcome / Wonder */}
           <HomeHero />
-          {/* ACT 2 — Today's Genus */}
-          <DailyGenusFeature />
-          {/* ACT 3 — The Problem and the Solution */}
+
+          {/* ACT 2 — The problem and the living knowledge-network solution */}
           <TheKnowledgeGraph />
-          {/* ACT 4 — What the Knowledge Graph Makes Possible */}
+
+          {/* ACT 3 — Why the Continuum matters */}
           <CapabilityGrid />
-          {/* ACT 5 — The hidden web of relationships */}
-          <ContinuumWeb />
+
+          {/* ACT 4 — The Continuum in Action */}
+          <DailyGenusFeature />
           <SpeciesInFocus />
+
+          {/* ACT 5 — No Orchid Lives Alone */}
+          <ContinuumWeb />
           <HomeAtlas />
-          {/* ACT 6 — Understanding & Stewardship */}
+
+          {/* ACT 6 — Science leading to stewardship */}
           <WhyOrchidsMatter />
           <HumanStewardship />
+
+          {/* ACT 7 — Visual exploration */}
           <OrchidGallery />
-          {/* ACT 7 — Action */}
+
+          {/* ACT 8 — Join, partner, support */}
           <OasisConnective />
         </DailyGenusProvider>
       </main>
