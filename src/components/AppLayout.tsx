@@ -9,9 +9,11 @@ import ContinuumWeb from './orchid/ContinuumWeb';
 import SpeciesInFocus from './orchid/SpeciesInFocus';
 import HomeAtlas from './orchid/HomeAtlas';
 import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
+import StoriesFromContinuum from './orchid/StoriesFromContinuum';
 import HumanStewardship from './orchid/HumanStewardship';
 import OrchidGallery from './orchid/OrchidGallery';
 import OasisConnective from './orchid/OasisConnective';
+import NewsFromContinuum from './orchid/NewsFromContinuum';
 import Footer from './orchid/Footer';
 import BackendHealthBanner from './orchid/BackendHealthBanner';
 import BackendStatusBanner from './orchid/BackendStatusBanner';
@@ -34,9 +36,9 @@ import BackendStatusBanner from './orchid/BackendStatusBanner';
  *   ACT 3 — WHY IT MATTERS         → CapabilityGrid
  *   ACT 4 — CONTINUUM IN ACTION    → DailyGenusFeature + SpeciesInFocus
  *   ACT 5 — NO ORCHID LIVES ALONE  → ContinuumWeb + HomeAtlas
- *   ACT 6 — SCIENCE TO STEWARDSHIP → WhyOrchidsMatter + HumanStewardship
+ *   ACT 6 — SCIENCE TO STEWARDSHIP → WhyOrchidsMatter + Stories + HumanStewardship
  *   ACT 7 — VISUAL EXPLORATION     → OrchidGallery
- *   ACT 8 — JOIN / SUPPORT         → OasisConnective + Footer
+ *   ACT 8 — JOIN / SUPPORT         → OasisConnective + NewsFromContinuum + Footer
  */
 
 const AppLayout: React.FC = () => {
@@ -70,19 +72,21 @@ const AppLayout: React.FC = () => {
           <DailyGenusFeature />
           <SpeciesInFocus />
 
-          {/* ACT 5 — No Orchid Lives Alone */}
+          {/* ACT 5 — The World of Today's Genus */}
           <ContinuumWeb />
           <HomeAtlas />
 
-          {/* ACT 6 — Science leading to stewardship */}
+          {/* ACT 6 — Science, stories, and stewardship */}
           <WhyOrchidsMatter />
+          <StoriesFromContinuum />
           <HumanStewardship />
 
           {/* ACT 7 — Visual exploration */}
           <OrchidGallery />
 
-          {/* ACT 8 — Join, partner, support */}
+          {/* ACT 8 — Join, partner, support, subscribe */}
           <OasisConnective />
+          <NewsFromContinuum />
         </DailyGenusProvider>
       </main>
       <Footer />
