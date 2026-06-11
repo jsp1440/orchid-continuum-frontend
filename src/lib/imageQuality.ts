@@ -1,24 +1,12 @@
 /**
- * imageQuality — homepage "Genus of the Day" image curation.
+ * imageQuality — homepage image curation.
  *
- * The trusted image library (/images/genus) and the legacy photo pool both
- * contain research-grade material that is inappropriate for the homepage
- * experience: herbarium sheets, preserved-specimen scans, type vouchers,
- * barcoded archival records and non-image documents (PDF/TIFF). These belong
- * on the research/atlas pages, not in the public gallery.
- *
- * This module assigns every candidate image a curation score so the gallery can
- *   1. EXCLUDE herbarium / specimen / document material (score 0),
- *   2. RANK the survivors by how "beautiful & story-telling" they are
- *      (flower > whole plant > habitat > pollinator > botanical illustration),
- *   3. only surface images scoring >= 60, highest first, and
- *   4. prefer botanical illustrations over herbarium records when filling slots.
- *
- * Metadata is best-effort: the backend currently exposes only the URL(s),
- * source/credit and licence strings, plus the scientific name. The classifier
- * also accepts optional title/description/width/height so that richer metadata
- * (labels, rulers, document aspect ratios) downranks automatically the moment
- * the backend starts providing it — no UI change required.
+ * Homepage galleries must show living orchids, habitat, pollinators, or
+ * clearly intentional botanical illustrations. Herbarium sheets, specimen
+ * scans, vouchers, barcode records, labels, collection documents, type sheets,
+ * and archival specimen plates are research assets and should not appear in
+ * public homepage hero/gallery slots. When only specimen material exists, the
+ * homepage should show the approved placeholder instead.
  */
 
 export type ImageCategory =
@@ -29,78 +17,57 @@ export type ImageCategory =
   | 'illustration'
   | 'herbarium';
 
-/** Curation score per category (per product spec). */
 export const CATEGORY_SCORE: Record<ImageCategory, number> = {
   flower: 100,
   plant: 90,
-  habitat: 80,
-  pollinator: 75,
-  illustration: 60,
+  habitat: 82,
+  pollinator: 78,
+  illustration: 55,
   herbarium: 0,
 };
 
-/** Minimum score an image must reach to appear in the homepage gallery. */
-export const MIN_GALLERY_SCORE = 60;
+/** Only living plant / habitat / pollinator images pass the homepage gate. */
+export const MIN_GALLERY_SCORE = 70;
 
 export interface ImageMeta {
   url?: string;
   urls?: string[];
   title?: string;
   description?: string;
-  /** Attribution / credit / institution string. */
   source?: string;
   license?: string;
-  /** Scientific / common name context (rarely carries signal, but cheap). */
   name?: string;
-  /** Pixel dimensions, if the backend ever supplies them. */
   width?: number;
   height?: number;
-  /** Explicit "this is a preserved specimen" flag, if present. */
   isHerbarium?: boolean;
 }
 
-// --- Keyword signals --------------------------------------------------------
-
-/** Preserved-specimen / herbarium vocabulary — anything matching scores 0. */
 const HERBARIUM_RE =
-  /(herbari|preserved[\s_-]*specimen|type[\s_-]*specimen|\bspecimen\b|holotype|isotype|lectotype|syntype|neotype|paratype|voucher|\bsheet\b|barcode|\bherb\.)/i;
+  /(herbari|preserved[\s_-]*specimen|dried[\s_-]*specimen|pressed[\s_-]*specimen|type[\s_-]*specimen|\bspecimen\b|holotype|isotype|lectotype|syntype|neotype|paratype|voucher|exsiccat|exsiccatae|\bsheet\b|barcode|accession|catalog[\s_-]*number|collection[\s_-]*number|determination[\s_-]*label|\bherb\.|herbarium[\s_-]*sheet|specimen[\s_-]*sheet|museum[\s_-]*record|digitized[\s_-]*record)/i;
 
-/**
- * Document-furniture cues — labels, rulers, colour/scale bars and measurement
- * markings are the tell-tale signs of a scanned specimen sheet rather than a
- * living-plant photograph. Matched against any available metadata text so that
- * detected labels/rulers (requirement #2) downrank to score 0.
- */
 const DOCUMENT_FURNITURE_RE =
-  /(specimen[\s_-]*label|herbarium[\s_-]*label|\bruler\b|scale[\s_-]*bar|colou?r[\s_-]*bar|colou?r[\s_-]*chart|measurement[\s_-]*scale|\bdeterminavit\b|accession[\s_-]*label)/i;
+  /(specimen[\s_-]*label|herbarium[\s_-]*label|\bruler\b|scale[\s_-]*bar|colou?r[\s_-]*bar|colou?r[\s_-]*chart|measurement[\s_-]*scale|determinavit|determined[\s_-]*by|collector|collected[\s_-]*by|institution[\s_-]*code|barcode|label[\s_-]*data|annotation[\s_-]*label)/i;
 
-/**
- * Institution / archive URL fragments that reliably indicate a digitised
- * herbarium or type collection rather than a living-plant photograph. Kept
- * deliberately narrow (institution-specific paths only) to avoid zeroing benign
- * CDN URLs.
- */
 const HERBARIUM_URL_RE =
-  /(jstor\.org\/?.*plant|plants\.jstor|sweetgum\.nybg|\/herbarium\/|herbcat|catalogue.*specimen|mnhn\.fr\/.*\/p\/)/i;
+  /(jstor\.org\/?.*plant|plants\.jstor|sweetgum\.nybg|sernecportal|swbiodiversity|biocase|gbif\.org\/occurrence|mediaphoto\.mnhn|mnhn\.fr\/.*\/p\/|\/herbarium\/|herbcat|catalogue.*specimen|specimen|voucher|barcode|harvard.*huh|plants\.usda\.gov.*specimen|plantsystematics|idigbio|reflora|specieslink|virtualherbarium|herbarium.*image)/i;
 
-/** Non-image documents that should never render as a gallery photo. */
-const DOC_EXT_RE = /\.(pdf|tif|tiff|djvu|doc|docx)(\?|#|$)/i;
+const DOC_EXT_RE = /\.(pdf|tif|tiff|djvu|doc|docx|txt|csv)(\?|#|$)/i;
 
 const ILLUSTRATION_RE =
-  /(illustration|botanical[\s_-]*art|\bplate\b|lithograph|engraving|lindenia|reichenbachia|curtis|botanical[\s_-]*magazine|watercolou?r|\bdrawing\b|\bsketch\b|\bfig\.)/i;
+  /(illustration|botanical[\s_-]*art|\bplate\b|lithograph|engraving|lindenia|reichenbachia|curtis|botanical[\s_-]*magazine|watercolou?r|drawing|sketch|\bfig\.)/i;
 const ILLUSTRATION_URL_RE = /(biodiversitylibrary|archive\.org\/.*\/page|\/plates?\/)/i;
 
 const POLLINATOR_RE =
-  /(pollinat|\bbee\b|\bwasp\b|\bmoth\b|hawkmoth|butterfl|\bfly\b|\binsect\b|euglossin|\bant\b)/i;
+  /(pollinat|\bbee\b|\bwasp\b|\bmoth\b|hawkmoth|butterfl|\bfly\b|\binsect\b|euglossin|\bant\b|hummingbird|bird)/i;
 const HABITAT_RE =
-  /(habitat|in[\s_-]*situ|in[\s_-]*the[\s_-]*wild|\bwild\b|epiphyt|lithophyt|\bforest\b|montane|\bcliff\b|landscape|\btrunk\b|on[\s_-]*tree|\brock\b)/i;
+  /(habitat|in[\s_-]*situ|in[\s_-]*the[\s_-]*wild|\bwild\b|epiphyt|lithophyt|forest|montane|cloud[\s_-]*forest|rainforest|grassland|wetland|bog|swamp|savanna|canopy|cliff|landscape|trunk|on[\s_-]*tree|rock|limestone|karst)/i;
 const PLANT_RE =
-  /(whole[\s_-]*plant|\bplant\b|cultivat|\bpot\b|potted|growing|foliage|\bleaves\b|pseudobulb|\bhabit\b)/i;
+  /(whole[\s_-]*plant|\bplant\b|cultivat|\bpot\b|potted|growing|foliage|leaves|pseudobulb|\bhabit\b|inflorescence[\s_-]*plant)/i;
 const FLOWER_RE =
-  /(flower|\bbloom\b|blossom|inflorescen|\blip\b|labellum|close[\s_-]*up|\bfloral\b|\bpetal)/i;
+  /(flower|\bbloom\b|blossom|inflorescen|\blip\b|labellum|close[\s_-]*up|floral|petal|sepal|column)/i;
 
-/** Aspect ratios outside this band look like document scans, not photos. */
-const MIN_PHOTO_RATIO = 0.42; // taller/narrower than this ≈ a scanned sheet
+const MIN_PHOTO_RATIO = 0.42;
+const MAX_PHOTO_RATIO = 2.6;
 
 function haystack(meta: ImageMeta): string {
   return [
@@ -122,16 +89,12 @@ function looksLikeDocument(meta: ImageMeta): boolean {
   const h = meta.height ?? 0;
   if (w > 0 && h > 0) {
     const ratio = w / h;
-    if (ratio > 0 && ratio < MIN_PHOTO_RATIO) return true; // very tall scan
+    if (ratio > 0 && (ratio < MIN_PHOTO_RATIO || ratio > MAX_PHOTO_RATIO)) return true;
+    if (w > 2200 && h > 3000) return true;
   }
   return false;
 }
 
-/**
- * Classify a single image into a category + curation score using whatever
- * metadata is available. Order matters: disqualifying signals (herbarium,
- * documents) are checked before any positive category.
- */
 export function classifyImage(meta: ImageMeta): {
   category: ImageCategory;
   score: number;
@@ -150,34 +113,21 @@ export function classifyImage(meta: ImageMeta): {
     return { category: 'herbarium', score: CATEGORY_SCORE.herbarium };
   }
 
+  if (FLOWER_RE.test(hay)) return { category: 'flower', score: CATEGORY_SCORE.flower };
+  if (PLANT_RE.test(hay)) return { category: 'plant', score: CATEGORY_SCORE.plant };
+  if (HABITAT_RE.test(hay)) return { category: 'habitat', score: CATEGORY_SCORE.habitat };
+  if (POLLINATOR_RE.test(hay)) return { category: 'pollinator', score: CATEGORY_SCORE.pollinator };
   if (ILLUSTRATION_RE.test(hay) || ILLUSTRATION_URL_RE.test(hay)) {
     return { category: 'illustration', score: CATEGORY_SCORE.illustration };
   }
-  if (POLLINATOR_RE.test(hay)) {
-    return { category: 'pollinator', score: CATEGORY_SCORE.pollinator };
-  }
-  if (HABITAT_RE.test(hay)) {
-    return { category: 'habitat', score: CATEGORY_SCORE.habitat };
-  }
-  if (PLANT_RE.test(hay)) {
-    return { category: 'plant', score: CATEGORY_SCORE.plant };
-  }
-  if (FLOWER_RE.test(hay)) {
-    return { category: 'flower', score: CATEGORY_SCORE.flower };
-  }
 
-  // No disqualifying or descriptive signal: a plain orchid photograph from a
-  // trusted source (iNaturalist, Wikimedia, etc.) — treat as a flower photo,
-  // the kind of image the homepage gallery is meant to celebrate.
   return { category: 'flower', score: CATEGORY_SCORE.flower };
 }
 
-/** Curation score (0–100) for one image URL with optional shared metadata. */
 export function scoreImage(url: string, shared?: Omit<ImageMeta, 'url'>): number {
   return classifyImage({ ...shared, url }).score;
 }
 
-/** True when an image must be hidden from the homepage gallery. */
 export function isExcludedImage(
   url: string,
   shared?: Omit<ImageMeta, 'url'>,
@@ -185,13 +135,6 @@ export function isExcludedImage(
   return scoreImage(url, shared) < MIN_GALLERY_SCORE;
 }
 
-/**
- * Filter a candidate-URL list down to gallery-eligible images (score >= 60)
- * and return them highest-scoring first (flowers before illustrations). Order
- * is otherwise stable. Herbarium / specimen / document URLs are dropped, so
- * botanical illustrations naturally fill remaining slots before any herbarium
- * record ever could.
- */
 export function filterRankUrls(
   urls: string[],
   shared?: Omit<ImageMeta, 'url' | 'urls'>,
@@ -203,7 +146,6 @@ export function filterRankUrls(
     .map((x) => x.u);
 }
 
-/** Best (highest) curation score across a list of URLs; 0 if the list is empty. */
 export function bestUrlScore(
   urls: string[],
   shared?: Omit<ImageMeta, 'url' | 'urls'>,
