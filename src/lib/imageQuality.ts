@@ -42,6 +42,8 @@ export interface ImageMeta {
   isHerbarium?: boolean;
 }
 
+// ─── Specimen / herbarium hard-reject patterns ─────────────────────────────
+
 const HERBARIUM_RE =
   /(herbari|preserved[\s_-]*specimen|dried[\s_-]*specimen|pressed[\s_-]*specimen|type[\s_-]*specimen|\bspecimen\b|holotype|isotype|lectotype|syntype|neotype|paratype|voucher|exsiccat|exsiccatae|\bsheet\b|barcode|accession|catalog[\s_-]*number|collection[\s_-]*number|determination[\s_-]*label|\bherb\.|herbarium[\s_-]*sheet|specimen[\s_-]*sheet|museum[\s_-]*record|digitized[\s_-]*record)/i;
 
@@ -49,9 +51,26 @@ const DOCUMENT_FURNITURE_RE =
   /(specimen[\s_-]*label|herbarium[\s_-]*label|\bruler\b|scale[\s_-]*bar|colou?r[\s_-]*bar|colou?r[\s_-]*chart|measurement[\s_-]*scale|determinavit|determined[\s_-]*by|collector|collected[\s_-]*by|institution[\s_-]*code|barcode|label[\s_-]*data|annotation[\s_-]*label)/i;
 
 const HERBARIUM_URL_RE =
-  /(jstor\.org\/?.*plant|plants\.jstor|sweetgum\.nybg|sernecportal|swbiodiversity|biocase|gbif\.org\/occurrence|mediaphoto\.mnhn|mnhn\.fr\/.*\/p\/|\/herbarium\/|herbcat|catalogue.*specimen|specimen|voucher|barcode|harvard.*huh|plants\.usda\.gov.*specimen|plantsystematics|idigbio|reflora|specieslink|virtualherbarium|herbarium.*image)/i;
+  /(jstor\.org\/?.*plant|plants\.jstor|sweetgum\.nybg|sernecportal|swbiodiversity|biocase|gbif\.org\/occurrence|mediaphoto\.mnhn|mnhn\.fr\/.*\/p\/|\/herbarium\/|herbcat|catalogue.*specimen|\/specimen|\/voucher|\/barcode|harvard.*huh|plants\.usda\.gov.*specimen|plantsystematics|idigbio|reflora|specieslink|virtualherbarium|herbarium.*image)/i;
 
 const DOC_EXT_RE = /\.(pdf|tif|tiff|djvu|doc|docx|txt|csv)(\?|#|$)/i;
+
+/**
+ * Botanical plates, archive scans, BHL pages, and line-art illustrations.
+ * These are checked against the full URL (and haystack) before scoring.
+ * An image matching any of these patterns scores 0 — same as herbarium.
+ */
+const PLATE_URL_RE =
+  /(biodiversitylibrary\.org|archive\.org\/(stream|page|download)|botanicus\.org|gallica\.bnf\.fr|\/plates?\/|\/figures?\/|\/illustrations?\/|\/drawings?\/|\/lineart\/|recolnat\.org|jacq\.org|cvh\.ac\.cn|rbge\.org\.uk\/.*image|nhm\.ac\.uk\/.*image|mobot\.org|tropicos\.org\/.*image|mnhn\.fr|digitarium|ala\.org\.au\/.*occurrence|herbariovirtual|col\.pl\/.*image|smns-bw\.org)/i;
+
+/**
+ * Titles / descriptions that indicate line art or plates even without
+ * URL-level evidence. Combined with ILLUSTRATION_RE below.
+ */
+const PLATE_TITLE_RE =
+  /(\bplate\s+\d|\bfig(ure)?\.?\s*\d|line\s+(art|drawing)|botanical\s+(plate|drawing|illustration)|scale\s+bar|\blineart\b|engraving|lithograph|woodcut|watercolou?r\s+illustration)/i;
+
+// ─── Positive-signal patterns ──────────────────────────────────────────────
 
 const ILLUSTRATION_RE =
   /(illustration|botanical[\s_-]*art|\bplate\b|lithograph|engraving|lindenia|reichenbachia|curtis|botanical[\s_-]*magazine|watercolou?r|drawing|sketch|\bfig\.)/i;
@@ -65,6 +84,11 @@ const PLANT_RE =
   /(whole[\s_-]*plant|\bplant\b|cultivat|\bpot\b|potted|growing|foliage|leaves|pseudobulb|\bhabit\b|inflorescence[\s_-]*plant)/i;
 const FLOWER_RE =
   /(flower|\bbloom\b|blossom|inflorescen|\blip\b|labellum|close[\s_-]*up|floral|petal|sepal|column)/i;
+
+// ─── URL patterns that confirm a living-plant photograph ──────────────────
+// iNaturalist observation photos and Flickr are reliable living-plant sources.
+const LIVING_PHOTO_URL_RE =
+  /(inaturalist\.org\/(photos|observations)|static\.inaturalist|flickr\.com\/photos|live\.staticflickr|farm\d+\.staticflickr)/i;
 
 const MIN_PHOTO_RATIO = 0.42;
 const MAX_PHOTO_RATIO = 2.6;
@@ -102,6 +126,7 @@ export function classifyImage(meta: ImageMeta): {
   const hay = haystack(meta);
   const primaryUrl = meta.url ?? meta.urls?.[0] ?? '';
 
+  // ── Hard reject: specimen / herbarium material ──────────────────────────
   if (
     meta.isHerbarium ||
     DOC_EXT_RE.test(primaryUrl) ||
@@ -113,15 +138,47 @@ export function classifyImage(meta: ImageMeta): {
     return { category: 'herbarium', score: CATEGORY_SCORE.herbarium };
   }
 
+  // ── Hard reject: botanical plates, BHL/archive scans, line art ─────────
+  // Check URL first (fast), then haystack (covers title/description too).
+  if (
+    PLATE_URL_RE.test(primaryUrl) ||
+    (meta.urls ?? []).some((u) => PLATE_URL_RE.test(u)) ||
+    PLATE_TITLE_RE.test(hay)
+  ) {
+    return { category: 'herbarium', score: CATEGORY_SCORE.herbarium };
+  }
+
+  // ── Confirmed living-plant photograph ────────────────────────────────────
+  // iNaturalist / Flickr observation photos are always safe; promote to flower
+  // score immediately without needing keyword evidence.
+  if (LIVING_PHOTO_URL_RE.test(primaryUrl)) {
+    // Still check for the more specific positive categories.
+    if (FLOWER_RE.test(hay)) return { category: 'flower', score: CATEGORY_SCORE.flower };
+    if (PLANT_RE.test(hay)) return { category: 'plant', score: CATEGORY_SCORE.plant };
+    if (HABITAT_RE.test(hay)) return { category: 'habitat', score: CATEGORY_SCORE.habitat };
+    if (POLLINATOR_RE.test(hay)) return { category: 'pollinator', score: CATEGORY_SCORE.pollinator };
+    // Default living-photo score: treat as whole plant (safe for homepage).
+    return { category: 'plant', score: CATEGORY_SCORE.plant };
+  }
+
+  // ── Positive keyword signals (non-iNat/Flickr sources) ──────────────────
   if (FLOWER_RE.test(hay)) return { category: 'flower', score: CATEGORY_SCORE.flower };
   if (PLANT_RE.test(hay)) return { category: 'plant', score: CATEGORY_SCORE.plant };
   if (HABITAT_RE.test(hay)) return { category: 'habitat', score: CATEGORY_SCORE.habitat };
   if (POLLINATOR_RE.test(hay)) return { category: 'pollinator', score: CATEGORY_SCORE.pollinator };
+
+  // Illustration: named pattern but not already hard-rejected above.
   if (ILLUSTRATION_RE.test(hay) || ILLUSTRATION_URL_RE.test(hay)) {
     return { category: 'illustration', score: CATEGORY_SCORE.illustration };
   }
 
-  return { category: 'flower', score: CATEGORY_SCORE.flower };
+  // ── Unknown: no positive signal and no rejection signal ─────────────────
+  // Previous code returned flower/100 here, which let plates and archive
+  // images through whenever their URLs and titles had no keywords.
+  // Now we return score 0 so unknown images are treated as unsafe for the
+  // homepage. A "Photo pending" placeholder is always better than a
+  // mis-identified specimen scan.
+  return { category: 'herbarium', score: 0 };
 }
 
 export function scoreImage(url: string, shared?: Omit<ImageMeta, 'url'>): number {
@@ -156,4 +213,17 @@ export function bestUrlScore(
     if (s > best) best = s;
   }
   return best;
+}
+
+/**
+ * Homepage safety gate for a single URL.
+ * Returns the URL if it passes the homepage filter, null if it should be
+ * replaced by the "Photo/Image pending" placeholder.
+ */
+export function homepageSafeUrl(
+  url: string | null | undefined,
+  shared?: Omit<ImageMeta, 'url'>,
+): string | null {
+  if (!url) return null;
+  return scoreImage(url, shared) >= MIN_GALLERY_SCORE ? url : null;
 }
