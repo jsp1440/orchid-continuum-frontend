@@ -20,6 +20,7 @@ import {
   subscribeFavorites,
   type FeaturedSpecies,
 } from '@/lib/speciesFeature';
+import { homepageSafeUrl } from '@/lib/imageQuality';
 
 const TARGET_COUNT = 6;
 
@@ -302,15 +303,20 @@ const CardImage: React.FC<{
   genus?: string;
   eager?: boolean;
 }> = ({ src, alt, genus, eager }) => {
+  // Filter the incoming URL through the homepage image curator before
+  // rendering. Herbarium sheets, specimen scans, botanical plates, archive
+  // pages, and line-art illustrations resolve to null here and fall through
+  // to the ImagePending placeholder — identical behaviour to DailyGenusFeature.
+  const safeSrc = homepageSafeUrl(src, { name: alt });
   const [errored, setErrored] = useState(false);
 
-  useEffect(() => setErrored(false), [src]);
+  useEffect(() => setErrored(false), [safeSrc]);
 
   return (
     <div className="absolute inset-0">
-      {src && !errored ? (
+      {safeSrc && !errored ? (
         <img
-          src={src}
+          src={safeSrc}
           alt={alt}
           loading={eager ? 'eager' : 'lazy'}
           // @ts-expect-error fetchpriority is a valid DOM attribute not yet in this React typings version
