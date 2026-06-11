@@ -4,6 +4,7 @@ import {
   Flower2,
   Bug,
   Sprout,
+  Trees,
   CloudSun,
   Globe2,
   ShieldCheck,
@@ -17,21 +18,10 @@ import {
 } from '@/lib/ocBackend';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 
-/**
- * ContinuumWeb — a LIVE knowledge-graph visualization.
- *
- * The center node is the current day's genus (GET /api/genus/daily). Around it
- * orbit seven satellite nodes, each populated from a live backend endpoint:
- * fungi, pollinators, climate, geography, conservation, cultivation, knowledge.
- * Edge thickness is proportional to record density; nodes with no data dim to a
- * muted gray-green "No data yet" state. Clicking a satellite expands its top-3
- * records; clicking the center navigates to /genus/{dailyGenus}. A traveling
- * dot animates along each edge to suggest live data flow.
- */
-
 type NodeKey =
   | 'pollinators'
   | 'fungi'
+  | 'habitat'
   | 'climate'
   | 'geography'
   | 'conservation'
@@ -55,61 +45,70 @@ const NODES: OrbitNode[] = [
     angle: -90,
     relationship: 'Orchids are connected to pollinators.',
     detail:
-      'Many orchids depend on a single species of bee, moth, or fly. Lose the pollinator, and the orchid cannot reproduce.',
+      'Many orchids depend on particular bees, moths, flies, birds, or other animals. Pollinator relationships help explain where orchids live, when they flower, and how species divide ecological opportunities.',
   },
   {
     key: 'fungi',
     label: 'Fungi',
     icon: Sprout,
-    angle: -38,
-    relationship: 'Every orchid depends on fungi.',
+    angle: -45,
+    relationship: 'Every orchid begins with fungi.',
     detail:
-      'An orchid seed can only germinate by partnering with mycorrhizal fungi that feed the seedling underground.',
+      'Orchid seeds are tiny and depend on mycorrhizal fungi for germination. These fungal relationships continue to shape orchid survival, restoration, and conservation.',
+  },
+  {
+    key: 'habitat',
+    label: 'Habitat',
+    icon: Trees,
+    angle: 0,
+    relationship: 'Every orchid belongs to a habitat.',
+    detail:
+      'Orchids are shaped by the worlds they inhabit: cloud forests, tropical rainforests, dry forests, grasslands, wetlands, canopy branches, mountain ridges, and Mediterranean ecosystems.',
   },
   {
     key: 'climate',
     label: 'Climate',
     icon: CloudSun,
-    angle: 14,
-    relationship: 'Every orchid lives within climate systems.',
+    angle: 45,
+    relationship: 'Climate shapes orchid survival.',
     detail:
-      'Temperature, humidity, and elevation decide where an orchid can survive — narrow bands that are shifting as the world warms.',
+      'Temperature, humidity, rainfall, elevation, fog, seasonality, and day length define where an orchid can live and how vulnerable it may be to change.',
   },
   {
     key: 'geography',
     label: 'Geography',
     icon: Globe2,
-    angle: 66,
+    angle: 90,
     relationship: 'Orchids are written across the map of Earth.',
     detail:
-      'Geography shapes which orchids exist where. Isolation on a single ridge can give rise to species found nowhere else.',
+      'Geography reveals patterns of endemism, isolation, migration, and conservation need. A single mountain ridge or valley can hold species found nowhere else.',
   },
   {
     key: 'conservation',
     label: 'Conservation',
     icon: ShieldCheck,
-    angle: 118,
-    relationship: 'Conservation requires understanding these connections.',
+    angle: 135,
+    relationship: 'Conservation means protecting relationships.',
     detail:
-      'You cannot save an orchid alone — conservation means protecting its pollinator, its fungus, its forest, and its climate together.',
+      'You cannot save an orchid alone. Conservation must consider habitat, pollinators, fungi, climate, land use, and the people who protect these systems.',
   },
   {
     key: 'cultivation',
     label: 'Cultivation',
     icon: Home,
-    angle: 170,
-    relationship: 'Human cultivation can help preserve species.',
+    angle: 180,
+    relationship: 'Cultivation can preserve living diversity.',
     detail:
-      'Greenhouses and growers act as living arks, preserving genetic diversity and supplying seed for reintroduction.',
+      'Growers, seed banks, greenhouses, and conservation collections can serve as living arks, preserving genetic diversity and supporting restoration.',
   },
   {
     key: 'knowledge',
     label: 'Knowledge',
     icon: BookOpen,
-    angle: 222,
-    relationship: 'Human knowledge connects every thread.',
+    angle: 225,
+    relationship: 'Knowledge connects every thread.',
     detail:
-      'Shared records — literature, surveys, OREP extractions — turn scattered observations into a map of the living world.',
+      'Literature, field observations, herbarium records, images, databases, and community knowledge turn scattered facts into a living map of orchid relationships.',
   },
 ];
 
@@ -118,10 +117,10 @@ const CENTER = 280;
 
 function nodeData(graph: ContinuumGraphData | null, key: NodeKey): WebNodeData | null {
   if (!graph) return null;
+  if (key === 'habitat') return null;
   return graph[key];
 }
 
-/** Edge weight 1–7px, scaled logarithmically against the largest node count. */
 function edgeWidth(count: number | null, maxCount: number): number {
   if (!count || count <= 0) return 1;
   const ratio = Math.log(count + 1) / Math.log(maxCount + 1);
@@ -137,14 +136,11 @@ const STATUS_COLORS: Record<string, string> = {
 
 const ContinuumWeb: React.FC = () => {
   const navigate = useNavigate();
-  // Consume the shared Genus of the Day — same genus as DailyGenusFeature,
-  // SpeciesInFocus, and HomeAtlas. Never independently fetch the genus here.
   const { genus: dailyGenus, diagnostic } = useDailyGenus();
   const [graph, setGraph] = useState<ContinuumGraphData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [active, setActive] = useState<NodeKey>('fungi');
+  const [active, setActive] = useState<NodeKey>('habitat');
 
-  // Log the diagnostic to the browser console but never render it publicly.
   useEffect(() => {
     if (diagnostic) {
       console.warn('[ContinuumWeb] Genus-of-day diagnostic:', diagnostic);
@@ -155,6 +151,7 @@ const ContinuumWeb: React.FC = () => {
     const ctrl = new AbortController();
     let mounted = true;
     setLoading(true);
+
     fetchContinuumGraph(dailyGenus, ctrl.signal)
       .then((g) => {
         if (mounted) setGraph(g);
@@ -162,6 +159,7 @@ const ContinuumWeb: React.FC = () => {
       .finally(() => {
         if (mounted) setLoading(false);
       });
+
     return () => {
       mounted = false;
       ctrl.abort();
@@ -184,7 +182,7 @@ const ContinuumWeb: React.FC = () => {
   const activeNode = NODES.find((n) => n.key === active)!;
   const activeData = nodeData(graph, active);
 
-  const genusLabel = graph?.genus ?? 'Orchid';
+  const genusLabel = graph?.genus ?? dailyGenus ?? 'Orchid';
   const speciesCount = graph?.speciesCount ?? null;
 
   const conservationColor = (key: NodeKey, isActive: boolean): string => {
@@ -207,13 +205,15 @@ const ContinuumWeb: React.FC = () => {
             'radial-gradient(ellipse at 50% 40%, rgba(54,102,72,0.28) 0%, transparent 60%)',
         }}
       />
+
       <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 py-20 lg:py-28">
-        <div className="text-center max-w-3xl mx-auto">
+        <div className="text-center max-w-4xl mx-auto">
           <div className="inline-flex items-center gap-3 font-mono text-[10px] tracking-[0.32em] uppercase text-[#c9a24a]">
             <span className="inline-block w-8 h-px bg-[#c9a24a]/60" />
-            The Continuum
+            No Orchid Lives Alone
             <span className="inline-block w-8 h-px bg-[#c9a24a]/60" />
           </div>
+
           <h2
             className="mt-6 text-[#faf7f2] leading-[1.05]"
             style={{
@@ -222,17 +222,25 @@ const ContinuumWeb: React.FC = () => {
               fontWeight: 500,
             }}
           >
-            No orchid exists <span className="italic text-[#d4b34a]">alone</span>.
+            Every orchid is part of a living community.
           </h2>
-          <p className="mt-5 text-[#e7dfd1] font-body text-[16px] md:text-[18px] leading-[1.7]">
-            Today's featured genus sits at the center of a live web of
-            relationships drawn straight from the Orchid Continuum database.
-            Touch a thread to follow the data.
+
+          <p className="mt-5 text-[#e7dfd1] font-body text-[16px] md:text-[18px] leading-[1.8] max-w-3xl mx-auto">
+            Orchids do not live in isolation. They share habitats with other
+            orchids, pollinators, fungi, climate systems, and countless
+            ecological relationships. The Orchid Continuum reveals those
+            connections and helps explain why conserving an orchid means
+            conserving an entire living network.
+          </p>
+
+          <p className="mt-4 text-[#cfc8b8] text-[15px] md:text-[16px] leading-[1.8] max-w-3xl mx-auto">
+            Explore the relationship web below to see how habitat, pollinators,
+            fungi, geography, conservation, cultivation, and human knowledge
+            connect to today’s featured genus.
           </p>
         </div>
 
         <div className="mt-14 grid lg:grid-cols-2 gap-12 items-center">
-          {/* Interactive radial web */}
           <div className="relative flex justify-center">
             <svg
               viewBox="0 0 560 560"
@@ -240,13 +248,13 @@ const ContinuumWeb: React.FC = () => {
               role="img"
               aria-label="Live web of orchid relationships"
             >
-              {/* connecting threads (edge weight ∝ record count) + flow dots */}
               {NODES.map((n) => {
                 const p = pos(n.angle);
                 const d = nodeData(graph, n.key);
                 const isActive = n.key === active;
-                const hasData = !!d?.hasData;
-                const w = hasData ? edgeWidth(d?.count ?? null, maxCount) : 1;
+                const hasData = n.key === 'habitat' ? true : !!d?.hasData;
+                const w = hasData ? edgeWidth(d?.count ?? 1, maxCount) : 1;
+
                 return (
                   <g key={`line-${n.key}`}>
                     <line
@@ -261,14 +269,14 @@ const ContinuumWeb: React.FC = () => {
                     {hasData && (
                       <circle r={isActive ? 4 : 3} fill={isActive ? '#f0d97a' : '#9fc6a4'}>
                         <animateMotion
-                          dur={`${3 + (n.angle % 5) * 0.4}s`}
+                          dur={`${3 + (Math.abs(n.angle) % 5) * 0.4}s`}
                           repeatCount="indefinite"
                           path={`M${CENTER},${CENTER} L${p.x},${p.y}`}
                         />
                         <animate
                           attributeName="opacity"
                           values="0;1;1;0"
-                          dur={`${3 + (n.angle % 5) * 0.4}s`}
+                          dur={`${3 + (Math.abs(n.angle) % 5) * 0.4}s`}
                           repeatCount="indefinite"
                         />
                       </circle>
@@ -277,7 +285,6 @@ const ContinuumWeb: React.FC = () => {
                 );
               })}
 
-              {/* centre genus node (live, pulsing) */}
               <g
                 onClick={() => navigate(`/genus/${encodeURIComponent(genusLabel)}`)}
                 style={{ cursor: 'pointer' }}
@@ -304,6 +311,7 @@ const ContinuumWeb: React.FC = () => {
                     repeatCount="indefinite"
                   />
                 </circle>
+
                 <foreignObject x={CENTER - 60} y={CENTER - 60} width={120} height={120}>
                   <div className="w-full h-full flex flex-col items-center justify-center text-[#d4b34a] px-1 text-center">
                     <Flower2 className="h-6 w-6" />
@@ -327,12 +335,11 @@ const ContinuumWeb: React.FC = () => {
                 </foreignObject>
               </g>
 
-              {/* orbit nodes */}
               {NODES.map((n) => {
                 const p = pos(n.angle);
                 const d = nodeData(graph, n.key);
                 const isActive = n.key === active;
-                const hasData = !!d?.hasData;
+                const hasData = n.key === 'habitat' ? true : !!d?.hasData;
                 const Icon = n.icon;
                 const fill = hasData
                   ? conservationColor(n.key, isActive)
@@ -342,6 +349,7 @@ const ContinuumWeb: React.FC = () => {
                   : hasData
                     ? '#cfe0cf'
                     : '#7e8c80';
+
                 return (
                   <g
                     key={n.key}
@@ -367,7 +375,11 @@ const ContinuumWeb: React.FC = () => {
                           {n.label}
                         </span>
                         <span className="mt-0.5 font-mono text-[7.5px] tracking-[0.04em] leading-tight">
-                          {loading ? '…' : d?.summary ?? 'No data yet'}
+                          {loading && n.key !== 'habitat'
+                            ? '…'
+                            : n.key === 'habitat'
+                              ? 'Ecological home'
+                              : d?.summary ?? 'No data yet'}
                         </span>
                       </div>
                     </foreignObject>
@@ -376,7 +388,6 @@ const ContinuumWeb: React.FC = () => {
               })}
             </svg>
 
-            {/* LIVE DATA badge */}
             <div className="absolute bottom-1 right-1 inline-flex items-center gap-1.5 rounded-full bg-black/40 border border-[#d4b34a]/30 px-2.5 py-1 font-mono text-[8.5px] tracking-[0.18em] uppercase text-[#d4b34a]">
               <span className="relative flex h-1.5 w-1.5">
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#d4b34a] opacity-75" />
@@ -386,7 +397,6 @@ const ContinuumWeb: React.FC = () => {
             </div>
           </div>
 
-          {/* Relationship reading panel */}
           <div className="lg:pl-6">
             <div className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.26em] uppercase text-[#c9a24a]">
               <activeNode.icon className="h-4 w-4" />
@@ -397,6 +407,7 @@ const ContinuumWeb: React.FC = () => {
                 </span>
               )}
             </div>
+
             <h3
               className="mt-4 text-[#faf7f2] leading-snug"
               style={{
@@ -408,13 +419,21 @@ const ContinuumWeb: React.FC = () => {
             >
               {activeNode.relationship}
             </h3>
+
             <p className="mt-5 text-[#e7dfd1] font-body text-[16px] md:text-[17px] leading-[1.7] max-w-xl">
               {activeNode.detail}
             </p>
 
-            {/* expanded top-3 records */}
             <div className="mt-6 max-w-xl">
-              {loading ? (
+              {active === 'habitat' ? (
+                <div className="rounded-lg bg-[#1f3622]/70 border border-[#d4b34a]/20 px-4 py-4 text-[15px] text-[#f0ebe0] leading-[1.7]">
+                  Habitat is the ecological stage where orchid relationships
+                  become visible. Future habitat pages will connect orchids to
+                  cloud forests, rainforests, canopy communities, grasslands,
+                  wetlands, dry forests, montane ecosystems, and Mediterranean
+                  climates.
+                </div>
+              ) : loading ? (
                 <p className="rounded-lg bg-[#1f3622]/50 border border-[#d4b34a]/15 px-4 py-3 text-[15px] text-[#cfe0cf]/80 italic">
                   Loading live data for {genusLabel}…
                 </p>
@@ -448,7 +467,8 @@ const ContinuumWeb: React.FC = () => {
             <div className="mt-8 flex flex-wrap gap-2">
               {NODES.map((n) => {
                 const d = nodeData(graph, n.key);
-                const dim = !d?.hasData;
+                const dim = n.key === 'habitat' ? false : !d?.hasData;
+
                 return (
                   <button
                     key={n.key}
@@ -473,7 +493,6 @@ const ContinuumWeb: React.FC = () => {
                 Showing reference data · live feed unavailable.
               </p>
             )}
-            {/* Diagnostic message is suppressed from public UI. Logged to console only. */}
           </div>
         </div>
       </div>
