@@ -1,10 +1,9 @@
 /**
  * imageQuality — homepage image curation.
  *
- * Homepage galleries must show living orchid photographs only.
- * Herbarium sheets, specimen scans, vouchers, barcode records, labels,
- * collection documents, type sheets, botanical plates, archive scans,
- * diagrams, illustrations, and broken/blank-looking image records are blocked.
+ * Homepage galleries should show living orchid photographs.
+ * Trusted OC backend image URLs are allowed unless they are obvious
+ * herbarium/specimen/document/plate/scan records.
  */
 
 export type ImageCategory =
@@ -45,8 +44,8 @@ const HARD_REJECT_RE =
 const DOCUMENT_RE =
   /(ruler|scale[\s_-]*bar|color[\s_-]*bar|colour[\s_-]*bar|measurement|determinavit|determined[\s_-]*by|collector|collected[\s_-]*by|institution[\s_-]*code|annotation)/i;
 
-const LIVING_PHOTO_URL_RE =
-  /(static\.inaturalist|inaturalist\.org\/photos|inaturalist\.org\/observations|flickr\.com\/photos|live\.staticflickr|farm\d+\.staticflickr|upload\.wikimedia\.org|commons\.wikimedia\.org)/i;
+const TRUSTED_OC_RE =
+  /(orchidcontinuum|orchid-continuum|onrender\.com|supabase|static\.inaturalist|inaturalist\.org\/photos|inaturalist\.org\/observations|flickr\.com\/photos|live\.staticflickr|farm\d+\.staticflickr|upload\.wikimedia\.org|commons\.wikimedia\.org)/i;
 
 const FLOWER_RE =
   /(flower|bloom|blossom|inflorescen|lip|labellum|floral|petal|sepal|column|orchid)/i;
@@ -89,6 +88,16 @@ function looksLikeDocument(meta: ImageMeta): boolean {
   return false;
 }
 
+function isHardRejected(meta: ImageMeta): boolean {
+  const hay = haystack(meta);
+  return (
+    meta.isHerbarium === true ||
+    HARD_REJECT_RE.test(hay) ||
+    DOCUMENT_RE.test(hay) ||
+    looksLikeDocument(meta)
+  );
+}
+
 export function classifyImage(meta: ImageMeta): {
   category: ImageCategory;
   score: number;
@@ -100,27 +109,18 @@ export function classifyImage(meta: ImageMeta): {
     return { category: 'herbarium', score: 0 };
   }
 
-  if (
-    meta.isHerbarium ||
-    HARD_REJECT_RE.test(hay) ||
-    DOCUMENT_RE.test(hay) ||
-    looksLikeDocument(meta)
-  ) {
+  if (isHardRejected(meta)) {
     return { category: 'herbarium', score: 0 };
-  }
-
-  if (LIVING_PHOTO_URL_RE.test(primaryUrl)) {
-    if (FLOWER_RE.test(hay)) return { category: 'flower', score: 100 };
-    if (PLANT_RE.test(hay)) return { category: 'plant', score: 90 };
-    if (HABITAT_RE.test(hay)) return { category: 'habitat', score: 82 };
-    if (POLLINATOR_RE.test(hay)) return { category: 'pollinator', score: 78 };
-    return { category: 'plant', score: 90 };
   }
 
   if (FLOWER_RE.test(hay)) return { category: 'flower', score: 100 };
   if (PLANT_RE.test(hay)) return { category: 'plant', score: 90 };
   if (HABITAT_RE.test(hay)) return { category: 'habitat', score: 82 };
   if (POLLINATOR_RE.test(hay)) return { category: 'pollinator', score: 78 };
+
+  if (TRUSTED_OC_RE.test(primaryUrl) || TRUSTED_OC_RE.test(hay)) {
+    return { category: 'plant', score: 90 };
+  }
 
   return { category: 'herbarium', score: 0 };
 }
@@ -147,7 +147,7 @@ export function filterRankUrls(
       const clean = typeof u === 'string' ? u.trim() : '';
       if (!clean || seen.has(clean)) return false;
       seen.add(clean);
-      return true;
+      return !isHardRejected({ ...shared, url: clean });
     })
     .map((u, i) => ({ u, i, s: scoreImage(u, shared) }))
     .filter((x) => x.s >= MIN_GALLERY_SCORE)
