@@ -57,7 +57,9 @@ function uniqueClean(urls: Array<string | undefined>): string[] {
 
 function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
   const record = trusted as Record<string, unknown> | undefined;
-  const imageUrls = Array.isArray(record?.image_urls) ? record!.image_urls.filter((u): u is string => typeof u === 'string') : [];
+  const imageUrls = Array.isArray(record?.image_urls)
+    ? record!.image_urls.filter((u): u is string => typeof u === 'string')
+    : [];
   return uniqueClean([
     ...imageUrls,
     trusted?.image_url,
@@ -66,6 +68,16 @@ function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
     record?.url as string | undefined,
     fallback,
   ]);
+}
+
+function recordBackendSource(source: ImageSource | null, genus: string): void {
+  const safeSource = typeof source === 'string' && source ? source : 'pending';
+  setBackendStatus({
+    source: safeSource,
+    genus,
+    lastPingTime: Date.now(),
+    cacheWrittenAt: null,
+  });
 }
 
 const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero = false }) => (
@@ -150,12 +162,16 @@ const DailyGenusFeatureV2: React.FC = () => {
         if (!ctrl.signal.aborted) setLoading(false);
       });
 
-    fetchGenusImagesWithSource(base.genus, ctrl.signal, IMAGE_LIMIT).then(({ images, source }) => {
-      if (ctrl.signal.aborted) return;
-      setImageMap(buildImageMap(images));
-      setImageSource(source);
-      if (source) setBackendStatus({ source: source.source, genus: base.genus, lastPingTime: Date.now(), cacheWrittenAt: source.cached_at ?? null });
-    });
+    fetchGenusImagesWithSource(base.genus, ctrl.signal, IMAGE_LIMIT)
+      .then(({ images, source }) => {
+        if (ctrl.signal.aborted) return;
+        setImageMap(buildImageMap(Array.isArray(images) ? images : []));
+        setImageSource(source || 'pending');
+        recordBackendSource(source || 'pending', base.genus);
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) recordBackendSource('pending', base.genus);
+      });
 
     return () => ctrl.abort();
   }, []);
@@ -178,7 +194,7 @@ const DailyGenusFeatureV2: React.FC = () => {
       });
     }
 
-    for (const plate of entry.plates as SpeciesPlate[]) {
+    for (const plate of (entry.plates || []) as SpeciesPlate[]) {
       const key = binomialOf(plate.species).toLowerCase();
       if (byName.has(key)) continue;
       const trusted = imageMap.get(key);
