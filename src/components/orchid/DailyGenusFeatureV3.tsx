@@ -157,7 +157,6 @@ function botanicalName(name: string): string {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '';
   if (parts.length === 1) return titleCaseGenus(parts[0]);
-
   const genus = titleCaseGenus(parts[0]);
   const epithet = parts[1].toLowerCase();
   const remainder = parts.length > 2 ? ` ${parts.slice(2).join(' ')}` : '';
@@ -223,10 +222,10 @@ async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSigna
         image_license: license,
       };
     }
-    return null;
   } catch {
     return null;
   }
+  return null;
 }
 
 async function fetchInaturalistSpeciesBatch(speciesNames: string[], signal?: AbortSignal): Promise<GenusImage[]> {
@@ -273,19 +272,11 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
   const bits: string[] = [];
 
   if (habitat || distribution) {
-    bits.push(
-      `${displayName} is shown here as part of the Orchid Continuum genus feature${
-        distribution ? `, linked to records from ${distribution}` : ''
-      }${habitat ? ` and associated with ${habitat.toLowerCase()}` : ''}.`,
-    );
+    bits.push(`${displayName} is shown here as part of the Orchid Continuum genus feature${distribution ? `, linked to records from ${distribution}` : ''}${habitat ? ` and associated with ${habitat.toLowerCase()}` : ''}.`);
   }
 
   if (elevation || pollinators) {
-    bits.push(
-      `${elevation ? `Known records place it around ${elevation}` : 'Its ecology is still being assembled'}${
-        pollinators ? `, with pollination links involving ${pollinators.toLowerCase()}` : ''
-      }.`,
-    );
+    bits.push(`${elevation ? `Known records place it around ${elevation}` : 'Its ecology is still being assembled'}${pollinators ? `, with pollination links involving ${pollinators.toLowerCase()}` : ''}.`);
   }
 
   if (eco?.mycorrhizal) {
@@ -305,12 +296,26 @@ function recordBackendSource(source: ImageSource | null, genus: string): void {
 }
 
 const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero = false }) => (
-  <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1a2e1a] px-4 text-center text-[#C9A84C]">
+  <div className="absolute inset-0 z-0 flex flex-col items-center justify-center bg-[#1a2e1a] px-4 text-center text-[#C9A84C]">
     <Leaf className={hero ? 'h-12 w-12' : 'h-7 w-7'} strokeWidth={1.25} />
     <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.2em]">Image pending</p>
     <p className="mt-1 font-serif text-sm italic normal-case opacity-80">{label}</p>
   </div>
 );
+
+const ImageLayer: React.FC<{ urls: string[]; alt: string; hover?: boolean }> = ({ urls, alt, hover = false }) => {
+  if (!urls.length) return null;
+  return (
+    <FallbackImage
+      key={`${alt}-${urls.join('|')}`}
+      urls={urls}
+      alt={alt}
+      loading="eager"
+      shimmer={false}
+      className={`absolute inset-0 z-10 block h-full w-full object-cover opacity-100 ${hover ? 'transition duration-500 group-hover:scale-105' : ''}`}
+    />
+  );
+};
 
 const Fact: React.FC<{ icon: React.ReactNode; label: string; value?: string }> = ({ icon, label, value }) => {
   if (!value) return null;
@@ -543,9 +548,7 @@ const DailyGenusFeatureV3: React.FC = () => {
         <div className="lg:col-span-2">
           <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#d7c79c] bg-[#1a2e1a] shadow-inner">
             <Placeholder label={heroLabel} hero />
-            {hero.images.length ? (
-              <FallbackImage urls={hero.images} alt={heroLabel} className="relative z-10 h-full w-full object-cover" />
-            ) : null}
+            <ImageLayer urls={hero.images} alt={heroLabel} />
             <div className="absolute right-3 top-3 z-20">
               <ImageSourceIndicator source={displaySource} />
             </div>
@@ -589,9 +592,7 @@ const DailyGenusFeatureV3: React.FC = () => {
                 }`}
               >
                 <Placeholder label={label} />
-                {s.images.length ? (
-                  <FallbackImage urls={s.images} alt={label} className="relative z-10 h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                ) : null}
+                <ImageLayer urls={s.images} alt={label} hover />
                 <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-2 text-white">
                   <p className="line-clamp-2 font-serif text-sm leading-tight normal-case">
                     <ScientificName name={s.species} />
