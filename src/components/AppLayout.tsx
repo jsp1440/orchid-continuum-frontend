@@ -24,13 +24,23 @@ type SectionBoundaryProps = {
 
 type SectionBoundaryState = {
   hasError: boolean;
+  errorMessage: string;
+  errorStack: string;
 };
 
 class SectionBoundary extends React.Component<SectionBoundaryProps, SectionBoundaryState> {
-  state: SectionBoundaryState = { hasError: false };
+  state: SectionBoundaryState = {
+    hasError: false,
+    errorMessage: '',
+    errorStack: '',
+  };
 
-  static getDerivedStateFromError(): SectionBoundaryState {
-    return { hasError: true };
+  static getDerivedStateFromError(error: Error): SectionBoundaryState {
+    return {
+      hasError: true,
+      errorMessage: error?.message || String(error),
+      errorStack: error?.stack || '',
+    };
   }
 
   componentDidCatch(error: Error) {
@@ -40,14 +50,18 @@ class SectionBoundary extends React.Component<SectionBoundaryProps, SectionBound
   render() {
     if (this.state.hasError) {
       return (
-        <section className="mx-auto my-8 max-w-5xl rounded-2xl border border-amber-300/40 bg-[#fff8e6] px-5 py-4 text-[#3a4630] shadow-sm">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#8a6f2d]">
-            Orchid Continuum
+        <section className="mx-auto my-8 max-w-5xl rounded-2xl border border-red-400 bg-red-50 px-5 py-4 text-red-950 shadow-sm">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-red-700">
+            Orchid Continuum Diagnostic
           </p>
-          <h2 className="mt-1 font-serif text-xl text-[#1a2e1a]">{this.props.name} is temporarily offline.</h2>
-          <p className="mt-1 text-sm text-[#5d684c]">
-            The rest of the site is still available while this live research module is repaired.
-          </p>
+          <h2 className="mt-1 font-serif text-xl font-bold">
+            {this.props.name} crashed
+          </h2>
+          <pre className="mt-3 whitespace-pre-wrap rounded bg-white p-3 text-xs leading-5 text-black">
+            {this.state.errorMessage}
+            {'\n\n'}
+            {this.state.errorStack}
+          </pre>
         </section>
       );
     }
@@ -66,63 +80,27 @@ const AppLayout: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">
       <BackendStatusBanner onHeightChange={setBannerHeight} />
-
       <Navbar topOffset={bannerHeight} />
 
       <main style={{ paddingTop: bannerHeight }}>
         <DailyGenusProvider>
           <HeroSpeciesProvider>
-            <SafeSection name="Home hero">
-              <HomeHero />
-            </SafeSection>
-
-            <SafeSection name="Knowledge graph">
-              <TheKnowledgeGraph />
-            </SafeSection>
-
-            <SafeSection name="Genus of the Day">
-              <DailyGenusFeature />
-            </SafeSection>
-
-            <SafeSection name="Species in Focus">
-              <SpeciesInFocus />
-            </SafeSection>
-
-            <SafeSection name="Orchid Gallery">
-              <OrchidGallery />
-            </SafeSection>
-
-            <SafeSection name="Atlas">
-              <HomeAtlas />
-            </SafeSection>
-
-            <SafeSection name="Continuum Web">
-              <ContinuumWeb />
-            </SafeSection>
-
-            <SafeSection name="Identification matrix">
-              <CapabilityGrid />
-            </SafeSection>
-
-            <SafeSection name="Why Orchids Matter">
-              <WhyOrchidsMatter />
-            </SafeSection>
-
-            <SafeSection name="Human Stewardship">
-              <HumanStewardship />
-            </SafeSection>
-
-            <SafeSection name="News from the Continuum">
-              <NewsFromContinuum />
-            </SafeSection>
+            <SafeSection name="Home hero"><HomeHero /></SafeSection>
+            <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
+            <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+            <SafeSection name="Species in Focus"><SpeciesInFocus /></SafeSection>
+            <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
+            <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
+            <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
+            <SafeSection name="Identification matrix"><CapabilityGrid /></SafeSection>
+            <SafeSection name="Why Orchids Matter"><WhyOrchidsMatter /></SafeSection>
+            <SafeSection name="Human Stewardship"><HumanStewardship /></SafeSection>
+            <SafeSection name="News from the Continuum"><NewsFromContinuum /></SafeSection>
           </HeroSpeciesProvider>
         </DailyGenusProvider>
       </main>
 
-      <SafeSection name="Footer">
-        <Footer />
-      </SafeSection>
-
+      <SafeSection name="Footer"><Footer /></SafeSection>
       <BackendHealthBanner />
     </div>
   );
