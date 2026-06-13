@@ -11,8 +11,9 @@
  *   • Deterministic — derived purely from the current UTC clock, so every
  *     visitor worldwide sees the same genus at the same moment.
  *   • Changes every 12 hours (two distinct genera per UTC day).
- *   • Cycles predictably through a fixed, ordered list of genera that exist in
- *     the Orchid Continuum database.
+ *   • Cycles predictably through curated genera with local fallback species
+ *     plates, so the public homepage never disappears if a live endpoint is
+ *     cold, empty, or temporarily unavailable.
  *
  * The window index is: floor(epochMillis / 12h) mod LIST.length.
  */
@@ -30,10 +31,12 @@ import {
 export const WINDOW_MS = 12 * 60 * 60 * 1000;
 
 /**
- * Fixed, ordered rotation list of genera. The first eight match the curated
- * local {@link GENERA} dataset (so their species counts + ecology are exact);
- * the remainder are additional well-documented orchid genera that exist in the
- * backend taxonomy. Order is intentional and stable so rotation is predictable.
+ * Fixed, ordered rotation list of homepage-safe genera.
+ *
+ * Keep this list restricted to curated local `GENERA` entries until the live
+ * backend guarantees species + image results for every candidate genus. This is
+ * intentional: Genus of the Day should always render, even during backend cold
+ * starts or partial outages.
  */
 export const FEATURED_GENERA: string[] = [
   'Cattleya',
@@ -44,14 +47,6 @@ export const FEATURED_GENERA: string[] = [
   'Catasetum',
   'Vanilla',
   'Phalaenopsis',
-  'Oncidium',
-  'Paphiopedilum',
-  'Vanda',
-  'Cymbidium',
-  'Pleurothallis',
-  'Maxillaria',
-  'Epidendrum',
-  'Stanhopea',
 ];
 
 /** Approximate accepted-species counts for genera NOT in the local GENERA set. */
@@ -91,6 +86,7 @@ export function featuredGenusEntry(now: number = Date.now()): GenusEntry {
   const name = featuredGenusName(now);
   const local = lookupGenus(name);
   if (local) return local;
+
   // Synthesize from a sensible template so the panel always renders fully.
   const template = genusForToday();
   return {
@@ -102,7 +98,7 @@ export function featuredGenusEntry(now: number = Date.now()): GenusEntry {
       `window the Orchid Continuum spotlights a different genus from across ` +
       `the tribe to explore its species, geography, and ecological partners.`,
     regions: template.regions,
-    plates: GENERA[1]?.genus === name ? template.plates : [],
+    plates: template.plates,
   };
 }
 
