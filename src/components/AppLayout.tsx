@@ -3,7 +3,7 @@ import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
-import DailyGenusFeature from './orchid/DailyGenusFeature';
+import DailyGenusFeature from './orchid/DailyGenusFeatureV2';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
 import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
