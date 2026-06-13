@@ -153,6 +153,21 @@ function titleCaseGenus(name: string): string {
   return t ? t.charAt(0).toUpperCase() + t.slice(1).toLowerCase() : t;
 }
 
+function botanicalName(name: string): string {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return titleCaseGenus(parts[0]);
+
+  const genus = titleCaseGenus(parts[0]);
+  const epithet = parts[1].toLowerCase();
+  const remainder = parts.length > 2 ? ` ${parts.slice(2).join(' ')}` : '';
+  return `${genus} ${epithet}${remainder}`;
+}
+
+const ScientificName: React.FC<{ name: string; className?: string }> = ({ name, className = '' }) => (
+  <span className={`italic normal-case ${className}`}>{botanicalName(name)}</span>
+);
+
 function uniqueClean(urls: Array<string | undefined>): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
@@ -254,11 +269,12 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
   const elevation = eco?.elevation || slot.elevation;
   const pollinators = eco?.pollinators || slot.pollinators;
   const distribution = eco?.distribution || eco?.region || slot.place;
+  const displayName = botanicalName(slot.species);
   const bits: string[] = [];
 
   if (habitat || distribution) {
     bits.push(
-      `${slot.species} is shown here as part of the Orchid Continuum genus feature${
+      `${displayName} is shown here as part of the Orchid Continuum genus feature${
         distribution ? `, linked to records from ${distribution}` : ''
       }${habitat ? ` and associated with ${habitat.toLowerCase()}` : ''}.`,
     );
@@ -292,7 +308,7 @@ const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero 
   <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#1a2e1a] px-4 text-center text-[#C9A84C]">
     <Leaf className={hero ? 'h-12 w-12' : 'h-7 w-7'} strokeWidth={1.25} />
     <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.2em]">Image pending</p>
-    <p className="mt-1 font-serif text-sm italic opacity-80">{label}</p>
+    <p className="mt-1 font-serif text-sm italic normal-case opacity-80">{label}</p>
   </div>
 );
 
@@ -497,7 +513,7 @@ const DailyGenusFeatureV3: React.FC = () => {
     return (
       <section className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-8 text-[#3a4630]">
         <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#8a8062]">Genus of the Day</p>
-        <h2 className="mt-2 font-serif text-4xl italic text-[#24321f]">{entry.genus}</h2>
+        <h2 className="mt-2 font-serif text-4xl italic normal-case text-[#24321f]">{titleCaseGenus(entry.genus)}</h2>
         <p className="mt-3 text-sm text-[#5d684c]">The genus feature is waiting for approved living photographs from the Orchid Continuum image library.</p>
       </section>
     );
@@ -505,13 +521,14 @@ const DailyGenusFeatureV3: React.FC = () => {
 
   const caption = speciesCaption(hero, ecology, entry.description);
   const displaySource: ImageSource | null = imageSource || (inatImages.length > 0 ? 'inaturalist' : null);
+  const heroLabel = botanicalName(hero.species);
 
   return (
     <section className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_16px_40px_rgba(30,40,20,0.12)]">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#8a8062]">Genus of the Day</p>
-          <h2 className="font-serif text-4xl italic text-[#24321f]">{entry.genus}</h2>
+          <h2 className="font-serif text-4xl italic normal-case text-[#24321f]">{titleCaseGenus(entry.genus)}</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5d684c]">{entry.description}</p>
         </div>
         <button
@@ -525,19 +542,20 @@ const DailyGenusFeatureV3: React.FC = () => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="lg:col-span-2">
           <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#d7c79c] bg-[#1a2e1a] shadow-inner">
+            <Placeholder label={heroLabel} hero />
             {hero.images.length ? (
-              <FallbackImage urls={hero.images} alt={hero.species} className="h-full w-full object-cover" />
-            ) : (
-              <Placeholder label={hero.species} hero />
-            )}
-            <div className="absolute right-3 top-3">
+              <FallbackImage urls={hero.images} alt={heroLabel} className="relative z-10 h-full w-full object-cover" />
+            ) : null}
+            <div className="absolute right-3 top-3 z-20">
               <ImageSourceIndicator source={displaySource} />
             </div>
           </div>
 
           <div className="mt-4 rounded-2xl border border-[#d9caa8] bg-[#fffaf0] p-5">
             <div className="flex flex-wrap items-center gap-3">
-              <h3 className="font-serif text-3xl leading-tight text-[#24321f] italic">{hero.species}</h3>
+              <h3 className="font-serif text-3xl leading-tight text-[#24321f] normal-case">
+                <ScientificName name={hero.species} />
+              </h3>
               <StatusBadge status={hero.conservation} />
             </div>
             {hero.commonName && <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8a8062]">{hero.commonName}</p>}
@@ -560,6 +578,7 @@ const DailyGenusFeatureV3: React.FC = () => {
             const s = slots[slotIndex % slots.length];
             const selected = s.species === hero.species;
             const place = s.place ? placeToFlag(s.place) : null;
+            const label = botanicalName(s.species);
 
             return (
               <button
@@ -569,13 +588,14 @@ const DailyGenusFeatureV3: React.FC = () => {
                   selected ? 'border-[#8a6f2d] ring-2 ring-[#c9a84c]' : 'border-[#d7c79c] hover:border-[#8a6f2d]'
                 }`}
               >
+                <Placeholder label={label} />
                 {s.images.length ? (
-                  <FallbackImage urls={s.images} alt={s.species} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" />
-                ) : (
-                  <Placeholder label={s.species} />
-                )}
-                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent p-2 text-white">
-                  <p className="line-clamp-2 font-serif text-sm italic leading-tight">{s.species}</p>
+                  <FallbackImage urls={s.images} alt={label} className="relative z-10 h-full w-full object-cover transition duration-500 group-hover:scale-105" />
+                ) : null}
+                <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-2 text-white">
+                  <p className="line-clamp-2 font-serif text-sm leading-tight normal-case">
+                    <ScientificName name={s.species} />
+                  </p>
                   {s.place && <p className="mt-0.5 truncate text-[10px] opacity-85">{place?.flag || '🌍'} {s.place}</p>}
                 </div>
               </button>
