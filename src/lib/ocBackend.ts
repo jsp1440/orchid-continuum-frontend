@@ -1,16 +1,22 @@
-import { BACKEND_BASE_URL, ATLAS_OCCURRENCES_URL } from './backendConfig';
+const env = import.meta.env as Record<string, string | undefined>;
 
 /**
- * Base origin for the live genus/species/mycorrhizal APIs consumed here.
+ * Orchid Continuum Public API.
  *
- * Historically this alias pointed at the old legacy onrender host. The public
- * frontend now uses the current Calyx backend as the single live API origin so
- * homepage modules do not silently call stale endpoints.
+ * Do not route this through VITE_BACKEND_BASE_URL, because that variable may be
+ * used by other services. These OC data calls must point at the Orchid
+ * Continuum backend that serves species, atlas, images, diagnostics, graph,
+ * and mycorrhizal endpoints.
  */
-export const OC_BACKEND_BASE = BACKEND_BASE_URL;
+export const OC_BACKEND_BASE = (
+  env.VITE_ORCHID_CONTINUUM_API_BASE_URL ||
+  env.VITE_OC_API_BASE_URL ||
+  'https://orchid-continuum-public-api.onrender.com'
+).replace(/\/$/, '');
 
-/** Atlas occurrences data endpoint — re-exported from backendConfig. */
-export { ATLAS_OCCURRENCES_URL };
+/** Atlas occurrences data endpoint. */
+export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/atlas/occurrences`;
+
 const DEFAULT_TIMEOUT = 12_000;
 async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT): Promise<{ ok: boolean; status: number; data: T | null }> {
   const controller = new AbortController();
@@ -24,11 +30,13 @@ async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = DEFAULT
   } catch { return { ok: false, status: 0, data: null }; }
   finally { clearTimeout(timer); }
 }
+
 export interface GenusDaily { genus: string; species_count: number; common_name: string | null; conservation_status: string | null; image_url: string | null; date: string; is_demo: boolean; }
 export async function fetchGenusOfDay(signal?: AbortSignal): Promise<GenusDaily | null> {
   const { data } = await getJson<GenusDaily>(`${OC_BACKEND_BASE}/api/genus/daily`, signal);
   return data;
 }
+
 export interface OccurrencePoint { id: string; lat: number; lng: number; species: string; country: string | null; source: 'continuum'; }
 interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; decimalLatitude?: number; decimalLongitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; lon?: number; x?: number; y?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; properties?: Record<string, unknown>; }
 function numOf(v: unknown): number | undefined {
@@ -36,7 +44,6 @@ function numOf(v: unknown): number | undefined {
   if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
   return undefined;
 }
-/** Accept any common envelope: bare array, or { results | occurrences | features | data | items | records | rows | points }. */
 function extractRows<T = BackendOccurrence>(payload: unknown): T[] {
   if (Array.isArray(payload)) return payload as T[];
   if (payload && typeof payload === 'object') {
@@ -63,6 +70,7 @@ function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
   });
   return out;
 }
+
 export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
   const primary = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?limit=${limit}`, signal);
   if (primary.ok && primary.data) return normalizeBackend(extractRows(primary.data));
@@ -75,17 +83,20 @@ export async function fetchGenusOccurrences(genus: string, limit = 500, signal?:
   if (res.ok && res.data) return normalizeBackend(extractRows(res.data));
   return [];
 }
+
 export interface SpeciesSearchResult { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; family?: string; conservation_status?: string | null; }
 export async function searchSpecies(q: string, limit = 20, signal?: AbortSignal): Promise<SpeciesSearchResult[]> {
-  const { data } = await getJson<SpeciesSearchResult[] | { results?: SpeciesSearchResult[] }>(`${BACKEND_BASE_URL}/api/species/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
+  const { data } = await getJson<SpeciesSearchResult[] | { results?: SpeciesSearchResult[] }>(`${OC_BACKEND_BASE}/api/species/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
   if (!data) return [];
   return Array.isArray(data) ? data : data.results ?? [];
 }
+
 export interface SpeciesDossierData { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; specific_epithet?: string; species?: string; family?: string; tribe?: string | null; subfamily?: string | null; authority?: string; common_name?: string | null; conservation_status?: string | null; iucn_code?: string | null; region?: string | null; habitat?: string | null; description?: string | null; representative_image_url?: string | null; hero_image_url?: string | null; }
 export async function fetchSpeciesById(taxonomyId: string, signal?: AbortSignal): Promise<SpeciesDossierData | null> {
   const { data } = await getJson<SpeciesDossierData>(`${OC_BACKEND_BASE}/api/species/${encodeURIComponent(taxonomyId)}`, signal);
   return data;
 }
+
 export interface MycorrhizalPartner { fungal_taxon?: string; family?: string; type?: string; note?: string; }
 export async function fetchMycorrhizal(taxonomyId: string, signal?: AbortSignal): Promise<{ status: number; partners: MycorrhizalPartner[] }> {
   const { ok, status, data } = await getJson<MycorrhizalPartner[] | { partners?: MycorrhizalPartner[] }>(`${OC_BACKEND_BASE}/api/mycorrhizal/${encodeURIComponent(taxonomyId)}`, signal);
@@ -105,6 +116,7 @@ export async function fetchGeneraCount(signal?: AbortSignal): Promise<number> {
   if (ok && data) { const n = data.genera_count ?? data.genus_count ?? data.distinct_genera ?? data.genera ?? data.count; if (typeof n === 'number' && n > 0) return n; }
   return GENERA_FALLBACK_COUNT;
 }
+
 export interface WebNodeData { count: number | null; summary: string; items: string[]; hasData: boolean; worstStatus?: 'CR' | 'EN' | 'VU' | 'LC' | null; }
 export interface ContinuumGraphData { genus: string; speciesCount: number | null; description: string; isFallback: boolean; fungi: WebNodeData; pollinators: WebNodeData; climate: WebNodeData; geography: WebNodeData; conservation: WebNodeData; cultivation: WebNodeData; knowledge: WebNodeData; }
 const EMPTY_NODE: WebNodeData = { count: null, summary: 'No data yet', items: [], hasData: false };
@@ -126,12 +138,6 @@ const CATTLEYA_FALLBACK: ContinuumGraphData = {
   cultivation: { count: 23, summary: '23 grower records', items: ['Cattleya labiata', 'Cattleya mossiae', 'Cattleya warscewiczii'], hasData: true },
   knowledge: { count: 156, summary: '156 literature records', items: ['Taxonomic revisions', 'Field surveys', 'OREP extractions'], hasData: true },
 };
-/**
- * Map one backend graph node ({ status, count, summary, items[] }) into the
- * compact WebNodeData the radial web renders. `status: 'available'` (or a
- * positive count / non-empty items) marks the node live; everything else
- * collapses to the honest "No data yet" empty state.
- */
 function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}): WebNodeData {
   if (!raw || typeof raw !== 'object') return EMPTY_NODE;
   const o = raw as Record<string, unknown>;
@@ -163,31 +169,14 @@ function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}):
   }
   return { count: count ?? null, summary, items: items.slice(0, 3), hasData: true };
 }
-/**
- * Fetch the live knowledge-graph data for a given genus.
- *
- * @param genus  The authoritative Genus of the Day — MUST come from
- *               DailyGenusContext (via useDailyGenus), never independently
- *               fetched here. Passing an empty string triggers the explicit
- *               system-unavailable diagnostic path.
- */
-export async function fetchContinuumGraph(
-  genus: string,
-  signal?: AbortSignal,
-): Promise<ContinuumGraphData> {
+
+export async function fetchContinuumGraph(genus: string, signal?: AbortSignal): Promise<ContinuumGraphData> {
   if (!genus) {
-    // Explicit diagnostic fallback — only reached if caller passes empty string.
-    console.warn(
-      '[ContinuumWeb] fetchContinuumGraph called with empty genus. ' +
-      'Returning Cattleya fallback as a system-unavailable diagnostic.',
-    );
+    console.warn('[ContinuumWeb] fetchContinuumGraph called with empty genus. Returning Cattleya fallback as a diagnostic.');
     return { ...CATTLEYA_FALLBACK, isFallback: true };
   }
   const g = genus;
   const q = encodeURIComponent(g);
-
-  // Fetch supplemental metadata (species_count, description) from /api/genus/daily.
-  // This is OPTIONAL — it does NOT determine the genus, only enriches the label.
   let speciesCount: number | null = null;
   let description = `Daily featured orchid genus from the Continuum taxonomy.`;
   try {
@@ -196,24 +185,16 @@ export async function fetchContinuumGraph(
       speciesCount = typeof daily.species_count === 'number' ? daily.species_count : null;
       description = daily.common_name || description;
     }
-  } catch { /* supplemental only — ignore failures */ }
+  } catch { /* supplemental only */ }
 
-  // Single nodes-shaped endpoint on the public API:
-  //   { genus, hub: { species_count }, nodes: { knowledge, geography, climate,
-  //     pollinators, fungi, conservation, cultivation } }
-  // Each node carries { status, count, summary, items[] }. Nodes without data
-  // in the read-only sources arrive as status:"empty" and render "No data yet".
   const { ok, data } = await getJson<{
     genus?: string;
     hub?: { species_count?: number };
     nodes?: Record<string, unknown>;
-  }>(`${BACKEND_BASE_URL}/api/continuum/graph?genus=${q}`, signal, 9000);
+  }>(`${OC_BACKEND_BASE}/api/continuum/graph?genus=${q}`, signal, 9000);
 
-  const nodes: Record<string, unknown> =
-    ok && data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
-  if (speciesCount == null && typeof data?.hub?.species_count === 'number') {
-    speciesCount = data.hub.species_count;
-  }
+  const nodes: Record<string, unknown> = ok && data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
+  if (speciesCount == null && typeof data?.hub?.species_count === 'number') speciesCount = data.hub.species_count;
 
   return {
     genus: ok && data?.genus ? data.genus : g,
