@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 export interface FallbackImageProps {
   urls: string[];
@@ -9,6 +9,8 @@ export interface FallbackImageProps {
   onSettled?: (success: boolean) => void;
 }
 
+const LOAD_TIMEOUT_MS = 9000;
+
 const FallbackImage: React.FC<FallbackImageProps> = ({
   urls,
   alt,
@@ -17,31 +19,25 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   shimmer = true,
   onSettled,
 }) => {
+  const cleanUrls = useMemo(
+    () => Array.from(new Set((urls || []).map((u) => u?.trim()).filter(Boolean))) as string[],
+    [urls],
+  );
+
   const [index, setIndex] = useState(0);
-  const [exhausted, setExhausted] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [exhausted, setExhausted] = useState(false);
   const settledRef = useRef(false);
   const timerRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    setIndex(0);
-    setExhausted(false);
-    setLoaded(false);
-    settledRef.current = false;
+  const src = cleanUrls[index];
 
-    if (timerRef.current) window.clearTimeout(timerRef.current);
-
-    if (!urls || urls.length === 0) {
-      settledRef.current = true;
-      setExhausted(true);
-      onSettled?.(false);
+  const clearTimer = () => {
+    if (timerRef.current) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
     }
-
-    return () => {
-      if (timerRef.current) window.clearTimeout(timerRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urls.join('|')]);
+  };
 
   const settle = (success: boolean) => {
     if (settledRef.current) return;
@@ -50,21 +46,50 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   };
 
   const advance = () => {
+    clearTimer();
     setLoaded(false);
-    setIndex((i) => {
-      const next = i + 1;
-      if (next >= urls.length) {
+
+    setIndex((current) => {
+      const next = current + 1;
+      if (next >= cleanUrls.length) {
         setExhausted(true);
         settle(false);
-        return i;
+        return current;
       }
       return next;
     });
   };
 
-  if (!urls || urls.length === 0 || exhausted) return null;
+  useEffect(() => {
+    setIndex(0);
+    setLoaded(false);
+    setExhausted(cleanUrls.length === 0);
+    settledRef.current = false;
+    clearTimer();
 
-  const src = urls[Math.min(index, urls.length - 1)];
+    if (cleanUrls.length === 0) {
+      settle(false);
+    }
+
+    return clearTimer;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleanUrls.join('|')]);
+
+  useEffect(() => {
+    clearTimer();
+    setLoaded(false);
+
+    if (!src || exhausted) return;
+
+    timerRef.current = window.setTimeout(() => {
+      advance();
+    }, LOAD_TIMEOUT_MS);
+
+    return clearTimer;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, exhausted]);
+
+  if (!src || exhausted) return null;
 
   return (
     <>
@@ -82,6 +107,7 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
         decoding="async"
         className={className}
         onLoad={() => {
+          clearTimer();
           setLoaded(true);
           settle(true);
         }}
