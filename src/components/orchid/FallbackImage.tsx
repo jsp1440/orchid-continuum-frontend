@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 export interface FallbackImageProps {
   urls: string[];
@@ -14,91 +14,58 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   alt,
   className,
   loading = 'eager',
-  shimmer = true,
+  shimmer = false,
   onSettled,
 }) => {
-  const cleanUrls = useMemo(
-    () => (urls || []).map((u) => u.trim()).filter(Boolean),
-    [urls],
-  );
-
-  const urlsKey = cleanUrls.join('|');
-  const [resolvedSrc, setResolvedSrc] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+  const cleanUrls = (urls || []).filter(Boolean);
+  const [index, setIndex] = useState(0);
+  const [exhausted, setExhausted] = useState(cleanUrls.length === 0);
   const settledRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
     settledRef.current = false;
-    setResolvedSrc(null);
-    setLoaded(false);
-
-    const settle = (success: boolean) => {
-      if (settledRef.current || cancelled) return;
-      settledRef.current = true;
-      onSettled?.(success);
-    };
+    setIndex(0);
+    setExhausted(cleanUrls.length === 0);
 
     if (cleanUrls.length === 0) {
-      settle(false);
-      return () => {
-        cancelled = true;
-      };
+      settledRef.current = true;
+      onSettled?.(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cleanUrls.join('|')]);
 
-    let index = 0;
+  const settle = (success: boolean) => {
+    if (settledRef.current) return;
+    settledRef.current = true;
+    onSettled?.(success);
+  };
 
-    const tryNext = () => {
-      if (cancelled) return;
+  if (exhausted || cleanUrls.length === 0) return null;
 
-      if (index >= cleanUrls.length) {
-        setResolvedSrc(null);
-        setLoaded(false);
-        settle(false);
-        return;
-      }
-
-      const src = cleanUrls[index];
-      const img = new Image();
-
-      img.onload = () => {
-        if (cancelled) return;
-        setResolvedSrc(src);
-        setLoaded(true);
-        settle(true);
-      };
-
-      img.onerror = () => {
-        index += 1;
-        tryNext();
-      };
-
-      img.src = src;
-    };
-
-    tryNext();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [urlsKey]);
-
-  if (!resolvedSrc) {
-    return shimmer ? (
-      <div className="absolute inset-0 overflow-hidden bg-[#e7e0cf]" aria-hidden="true">
-        <div className="oc-shimmer absolute inset-0" />
-      </div>
-    ) : null;
-  }
+  const src = cleanUrls[Math.min(index, cleanUrls.length - 1)];
 
   return (
     <img
-      key={resolvedSrc}
-      src={resolvedSrc}
+      key={src}
+      src={src}
       alt={alt}
       loading={loading}
+      decoding="async"
       className={className}
-      style={{ opacity: loaded ? 1 : 0, transition: 'opacity 600ms ease' }}
+      onLoad={() => settle(true)}
+      onError={() => {
+        setIndex((current) => {
+          const next = current + 1;
+
+          if (next >= cleanUrls.length) {
+            setExhausted(true);
+            settle(false);
+            return current;
+          }
+
+          return next;
+        });
+      }}
     />
   );
 };
