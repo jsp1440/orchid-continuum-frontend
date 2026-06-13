@@ -10,10 +10,8 @@ import ContinuumWeb from './orchid/ContinuumWeb';
 import SpeciesInFocus from './orchid/SpeciesInFocus';
 import HomeAtlas from './orchid/HomeAtlas';
 import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
-import StoriesFromContinuum from './orchid/StoriesFromContinuum';
 import HumanStewardship from './orchid/HumanStewardship';
 import OrchidGallery from './orchid/OrchidGallery';
-import OasisConnective from './orchid/OasisConnective';
 import NewsFromContinuum from './orchid/NewsFromContinuum';
 import Footer from './orchid/Footer';
 import BackendHealthBanner from './orchid/BackendHealthBanner';
@@ -36,7 +34,6 @@ class SectionBoundary extends React.Component<SectionBoundaryProps, SectionBound
   }
 
   componentDidCatch(error: Error) {
-    // Keep the public homepage alive even if one data-heavy section crashes.
     console.error(`[Orchid Continuum] ${this.props.name} failed`, error);
   }
 
@@ -83,10 +80,6 @@ const AppLayout: React.FC = () => {
               <TheKnowledgeGraph />
             </SafeSection>
 
-            <SafeSection name="Capabilities">
-              <CapabilityGrid />
-            </SafeSection>
-
             <SafeSection name="Genus of the Day">
               <DailyGenusFeature />
             </SafeSection>
@@ -95,32 +88,28 @@ const AppLayout: React.FC = () => {
               <SpeciesInFocus />
             </SafeSection>
 
-            <SafeSection name="Continuum Web">
-              <ContinuumWeb />
+            <SafeSection name="Orchid Gallery">
+              <OrchidGallery />
             </SafeSection>
 
             <SafeSection name="Atlas">
               <HomeAtlas />
             </SafeSection>
 
+            <SafeSection name="Continuum Web">
+              <ContinuumWeb />
+            </SafeSection>
+
+            <SafeSection name="Identification matrix">
+              <CapabilityGrid />
+            </SafeSection>
+
             <SafeSection name="Why Orchids Matter">
               <WhyOrchidsMatter />
             </SafeSection>
 
-            <SafeSection name="Stories from the Continuum">
-              <StoriesFromContinuum />
-            </SafeSection>
-
             <SafeSection name="Human Stewardship">
               <HumanStewardship />
-            </SafeSection>
-
-            <SafeSection name="Orchid Gallery">
-              <OrchidGallery />
-            </SafeSection>
-
-            <SafeSection name="Oasis Connective">
-              <OasisConnective />
             </SafeSection>
 
             <SafeSection name="News from the Continuum">
