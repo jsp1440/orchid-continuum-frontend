@@ -1,13 +1,13 @@
-import { LEGACY_ONRENDER_BASE_URL, BACKEND_BASE_URL, ATLAS_OCCURRENCES_URL } from './backendConfig';
+import { BACKEND_BASE_URL, ATLAS_OCCURRENCES_URL } from './backendConfig';
 
 /**
  * Base origin for the live genus/species/mycorrhizal APIs consumed here.
  *
- * Alias of {@link LEGACY_ONRENDER_BASE_URL} (the legacy onrender host) — the
- * actual host lives in the single source of truth at src/lib/backendConfig.ts.
- * Re-exported under this historical name for existing call sites.
+ * Historically this alias pointed at the old legacy onrender host. The public
+ * frontend now uses the current Calyx backend as the single live API origin so
+ * homepage modules do not silently call stale endpoints.
  */
-export const OC_BACKEND_BASE = LEGACY_ONRENDER_BASE_URL;
+export const OC_BACKEND_BASE = BACKEND_BASE_URL;
 
 /** Atlas occurrences data endpoint — re-exported from backendConfig. */
 export { ATLAS_OCCURRENCES_URL };
