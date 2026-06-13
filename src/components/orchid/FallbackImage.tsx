@@ -14,25 +14,34 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   alt,
   className,
   loading = 'eager',
-  shimmer = false,
+  shimmer = true,
   onSettled,
 }) => {
-  const cleanUrls = (urls || []).filter(Boolean);
   const [index, setIndex] = useState(0);
-  const [exhausted, setExhausted] = useState(cleanUrls.length === 0);
+  const [exhausted, setExhausted] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const settledRef = useRef(false);
+  const timerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    settledRef.current = false;
     setIndex(0);
-    setExhausted(cleanUrls.length === 0);
+    setExhausted(false);
+    setLoaded(false);
+    settledRef.current = false;
 
-    if (cleanUrls.length === 0) {
+    if (timerRef.current) window.clearTimeout(timerRef.current);
+
+    if (!urls || urls.length === 0) {
       settledRef.current = true;
+      setExhausted(true);
       onSettled?.(false);
     }
+
+    return () => {
+      if (timerRef.current) window.clearTimeout(timerRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cleanUrls.join('|')]);
+  }, [urls.join('|')]);
 
   const settle = (success: boolean) => {
     if (settledRef.current) return;
@@ -40,33 +49,45 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
     onSettled?.(success);
   };
 
-  if (exhausted || cleanUrls.length === 0) return null;
+  const advance = () => {
+    setLoaded(false);
+    setIndex((i) => {
+      const next = i + 1;
+      if (next >= urls.length) {
+        setExhausted(true);
+        settle(false);
+        return i;
+      }
+      return next;
+    });
+  };
 
-  const src = cleanUrls[Math.min(index, cleanUrls.length - 1)];
+  if (!urls || urls.length === 0 || exhausted) return null;
+
+  const src = urls[Math.min(index, urls.length - 1)];
 
   return (
-    <img
-      key={src}
-      src={src}
-      alt={alt}
-      loading={loading}
-      decoding="async"
-      className={className}
-      onLoad={() => settle(true)}
-      onError={() => {
-        setIndex((current) => {
-          const next = current + 1;
+    <>
+      {shimmer && !loaded && (
+        <div className="absolute inset-0 overflow-hidden bg-[#e7e0cf]" aria-hidden="true">
+          <div className="oc-shimmer absolute inset-0" />
+        </div>
+      )}
 
-          if (next >= cleanUrls.length) {
-            setExhausted(true);
-            settle(false);
-            return current;
-          }
-
-          return next;
-        });
-      }}
-    />
+      <img
+        key={src}
+        src={src}
+        alt={alt}
+        loading={loading}
+        decoding="async"
+        className={className}
+        onLoad={() => {
+          setLoaded(true);
+          settle(true);
+        }}
+        onError={advance}
+      />
+    </>
   );
 };
 
