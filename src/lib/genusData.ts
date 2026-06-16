@@ -584,7 +584,7 @@ interface CachedGenusImages {
 
 /** Storage key for a genus's images on "today" (case-insensitive genus). */
 function genusImagesCacheKey(genus: string): string {
-  return `oc_genus_images_${genus.trim().toLowerCase()}_${todayKey()}`;
+  return `oc_genus_images_v2_${genus.trim().toLowerCase()}_${todayKey()}`;
 }
 
 /** Read today's cached images for a genus, or null if absent/stale/invalid. */
