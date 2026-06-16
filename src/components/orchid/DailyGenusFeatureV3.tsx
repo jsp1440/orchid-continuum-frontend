@@ -17,15 +17,13 @@ import {
 } from '@/lib/genusData';
 import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus';
 import { setBackendStatus } from '@/lib/backendStatus';
+import { filterRankUrls } from '@/lib/imageQuality';
 import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
 
 const ROTATE_MS = 45 * 1000;
 const SPECIES_LIMIT = 200;
 const IMAGE_LIMIT = 200;
-
-const BLOCKED_NON_GALLERY_RE =
-  /(herbari|preserved[\s_-]*specimen|dried[\s_-]*specimen|pressed[\s_-]*specimen|type[\s_-]*specimen|\bspecimen\b|holotype|isotype|lectotype|syntype|neotype|paratype|voucher|exsiccat|exsiccatae|\bsheet\b|barcode|accession|catalog[\s_-]*number|collection[\s_-]*number|determination[\s_-]*label|specimen[\s_-]*label|herbarium[\s_-]*label|gbif\.org\/occurrence|jstor|plants\.jstor|sweetgum\.nybg|sernecportal|swbiodiversity|biocase|mediaphoto\.mnhn|mnhn\.fr|\/herbarium\/|herbcat|catalogue.*specimen|\/specimen|\/voucher|\/barcode|idigbio|reflora|specieslink|virtualherbarium|biodiversitylibrary\.org|archive\.org\/(stream|page|download)|botanicus\.org|gallica\.bnf\.fr|\/plates?\/|\/figures?\/|\/illustrations?\/|\/drawings?\/|\/lineart\/|recolnat\.org|jacq\.org|cvh\.ac\.cn|nhm\.ac\.uk\/.*image|mobot\.org|tropicos\.org\/.*image|digitarium|ala\.org\.au\/.*occurrence|herbariovirtual|\.pdf(\?|#|$)|\.(tif|tiff|djvu|doc|docx|txt|csv)(\?|#|$))/i;
 
 type RichEcology = SpeciesEcology & {
   distribution?: string;
@@ -167,57 +165,64 @@ const ScientificName: React.FC<{ name: string; className?: string }> = ({ name, 
   <span className={`italic normal-case ${className}`}>{botanicalName(name)}</span>
 );
 
-function uniqueClean(urls: Array<string | undefined>): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const raw of urls) {
-    const url = typeof raw === 'string' ? raw.trim() : '';
-    if (!url || seen.has(url) || BLOCKED_NON_GALLERY_RE.test(url)) continue;
-    seen.add(url);
-    out.push(url);
-  }
-  return out;
-}
-
 function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
   const record = trusted as Record<string, unknown> | undefined;
   const imageUrls = Array.isArray(record?.image_urls)
     ? record.image_urls.filter((u): u is string => typeof u === 'string')
     : [];
 
-  return uniqueClean([
+  const rawUrls = [
     ...imageUrls,
     trusted?.image_url,
     record?.original_url as string | undefined,
     record?.media_url as string | undefined,
     record?.url as string | undefined,
     fallback,
-  ]);
+  ].filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+
+  return filterRankUrls(rawUrls, {
+    name: trusted?.scientific_name,
+    source: trusted?.image_source,
+    license: trusted?.image_license,
+  });
 }
 
 async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSignal): Promise<GenusImage | null> {
   const s = (species || '').trim();
   if (!s) return null;
   const url = `https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s)}&rank=species&photos=true`;
+
   try {
     const res = await fetch(url, { signal });
     if (!res.ok) return null;
+
     const payload = (await res.json()) as { results?: Record<string, unknown>[] };
     const results = Array.isArray(payload.results) ? payload.results : [];
     const wanted = s.toLowerCase();
+
     for (const r of results) {
       if (r.iconic_taxon_name !== 'Plantae') continue;
+
       const name = typeof r.name === 'string' ? r.name.trim() : '';
       if (!name || !name.toLowerCase().startsWith(wanted)) continue;
+
       const photo = (r.default_photo as Record<string, unknown>) ?? {};
       const medium = typeof photo.medium_url === 'string' ? photo.medium_url.trim() : '';
-      if (!medium || BLOCKED_NON_GALLERY_RE.test(medium)) continue;
       const attribution = typeof photo.attribution === 'string' ? photo.attribution.trim() : 'iNaturalist';
       const license = typeof photo.license_code === 'string' ? photo.license_code.trim() : undefined;
+
+      const safeUrls = filterRankUrls([medium], {
+        name,
+        source: attribution,
+        license,
+      });
+
+      if (safeUrls.length === 0) continue;
+
       return {
         scientific_name: name,
-        image_url: medium,
-        image_urls: [medium],
+        image_url: safeUrls[0],
+        image_urls: safeUrls,
         image_source: attribution,
         image_license: license,
       };
@@ -225,6 +230,7 @@ async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSigna
   } catch {
     return null;
   }
+
   return null;
 }
 
@@ -235,7 +241,9 @@ async function fetchInaturalistSpeciesBatch(speciesNames: string[], signal?: Abo
   for (const batchStart of [0, 6, 12, 18]) {
     const batch = speciesNames.slice(batchStart, batchStart + 6);
     if (!batch.length || signal?.aborted) break;
+
     const hits = await Promise.all(batch.map((name) => fetchInaturalistSpeciesPhoto(name, signal)));
+
     for (const hit of hits) {
       if (!hit) continue;
       const key = binomialOf(hit.scientific_name) || hit.image_url;
@@ -243,6 +251,7 @@ async function fetchInaturalistSpeciesBatch(speciesNames: string[], signal?: Abo
       seen.add(key);
       out.push(hit);
     }
+
     if (out.length >= 9) break;
   }
 
@@ -305,6 +314,7 @@ const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero 
 
 const ImageLayer: React.FC<{ urls: string[]; alt: string; hover?: boolean }> = ({ urls, alt, hover = false }) => {
   if (!urls.length) return null;
+
   return (
     <FallbackImage
       key={`${alt}-${urls.join('|')}`}
@@ -319,6 +329,7 @@ const ImageLayer: React.FC<{ urls: string[]; alt: string; hover?: boolean }> = (
 
 const Fact: React.FC<{ icon: React.ReactNode; label: string; value?: string }> = ({ icon, label, value }) => {
   if (!value) return null;
+
   return (
     <div className="rounded-xl border border-[#e2d1a2] bg-[#fffaf0] px-3 py-2">
       <div className="flex items-center gap-2 text-[#7b6425]">
@@ -333,6 +344,7 @@ const Fact: React.FC<{ icon: React.ReactNode; label: string; value?: string }> =
 const StatusBadge: React.FC<{ status?: string }> = ({ status }) => {
   if (!status) return null;
   const b = conservationBadge(status);
+
   return (
     <span
       className="rounded px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]"
@@ -359,6 +371,7 @@ const DailyGenusFeatureV3: React.FC = () => {
 
   useEffect(() => {
     warmBackends();
+
     const ctrl = new AbortController();
     const base = featuredGenusEntry();
     const genusKey = base.genus.toLowerCase();
@@ -379,8 +392,10 @@ const DailyGenusFeatureV3: React.FC = () => {
     fetchValidatedSpecies(base.genus, ctrl.signal, SPECIES_LIMIT)
       .then((names) => {
         if (ctrl.signal.aborted) return;
+
         const merged = [...curated, ...(Array.isArray(names) ? names : [])];
         const seen = new Set<string>();
+
         setValidatedNames(
           merged.filter((name) => {
             const key = binomialOf(name);
@@ -432,6 +447,7 @@ const DailyGenusFeatureV3: React.FC = () => {
     for (const name of validatedNames) {
       const key = binomialOf(name);
       const trusted = imageMap.get(key) ?? imageMap.get(name.toLowerCase());
+
       pushSlot({
         species: key,
         images: urlsFor(trusted),
@@ -449,6 +465,7 @@ const DailyGenusFeatureV3: React.FC = () => {
     for (const img of [...trustedImages, ...inatImages]) {
       const key = binomialOf(img.scientific_name);
       if (!key) continue;
+
       pushSlot({
         species: key,
         images: urlsFor(img),
@@ -461,6 +478,7 @@ const DailyGenusFeatureV3: React.FC = () => {
     const all = Array.from(byName.values()).filter((s) => s.species);
     const withPhotos = all.filter((s) => s.images.length > 0);
     const withoutPhotos = all.filter((s) => s.images.length === 0);
+
     return [...withPhotos, ...withoutPhotos].slice(0, Math.max(9, SPECIES_LIMIT));
   }, [entry.plates, inatImages, trustedImages, validatedNames]);
 
@@ -474,23 +492,30 @@ const DailyGenusFeatureV3: React.FC = () => {
 
   useEffect(() => {
     if (slots.length <= 1) return;
+
     const id = window.setInterval(() => {
       setVisibleIndexes((prev) => {
         const current = prev.length ? prev : [0];
         const cell = replaceCell % current.length;
         const promoted = current[cell] ?? 0;
+
         setHeroIndex(promoted);
+
         if (slots.length <= current.length) {
           setReplaceCell((n) => (n + 1) % current.length);
           return current;
         }
+
         const replacement = nextIndex % slots.length;
         const nextVisible = current.map((v, i) => (i === cell ? replacement : v));
+
         setNextIndex((n) => (n + 1) % slots.length);
         setReplaceCell((n) => (n + 1) % current.length);
+
         return nextVisible;
       });
     }, ROTATE_MS);
+
     return () => window.clearInterval(id);
   }, [slots.length, nextIndex, replaceCell]);
 
@@ -498,11 +523,14 @@ const DailyGenusFeatureV3: React.FC = () => {
 
   useEffect(() => {
     if (!hero?.species) return;
+
     const ctrl = new AbortController();
     setEcology(null);
+
     fetchSpeciesEcology(hero.species, ctrl.signal).then((eco) => {
       if (!ctrl.signal.aborted) setEcology((eco || null) as RichEcology | null);
     });
+
     return () => ctrl.abort();
   }, [hero?.species]);
 
@@ -536,6 +564,7 @@ const DailyGenusFeatureV3: React.FC = () => {
           <h2 className="font-serif text-4xl italic normal-case text-[#24321f]">{titleCaseGenus(entry.genus)}</h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5d684c]">{entry.description}</p>
         </div>
+
         <button
           onClick={() => navigate(`/genus/${encodeURIComponent(entry.genus)}`)}
           className="inline-flex items-center gap-2 rounded-full border border-[#c7b27a] bg-[#fff8e6] px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-[#5b4b21] hover:bg-[#f8ecc8]"
@@ -561,7 +590,9 @@ const DailyGenusFeatureV3: React.FC = () => {
               </h3>
               <StatusBadge status={hero.conservation} />
             </div>
+
             {hero.commonName && <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8a8062]">{hero.commonName}</p>}
+
             <p className="mt-4 font-serif text-[1.1rem] leading-8 text-[#3a4630]">{caption}</p>
 
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -593,6 +624,7 @@ const DailyGenusFeatureV3: React.FC = () => {
               >
                 <Placeholder label={label} />
                 <ImageLayer urls={s.images} alt={label} hover />
+
                 <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-2 text-white">
                   <p className="line-clamp-2 font-serif text-sm leading-tight normal-case">
                     <ScientificName name={s.species} />
