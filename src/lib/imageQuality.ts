@@ -45,7 +45,7 @@ const DOCUMENT_RE =
   /(ruler|scale[\s_-]*bar|color[\s_-]*bar|colour[\s_-]*bar|measurement|determinavit|determined[\s_-]*by|collector|collected[\s_-]*by|institution[\s_-]*code|annotation)/i;
 
 const TRUSTED_OC_RE =
-  /(orchidcontinuum|orchid-continuum|onrender\.com|supabase|static\.inaturalist|inaturalist\.org\/photos|inaturalist\.org\/observations|flickr\.com\/photos|live\.staticflickr|farm\d+\.staticflickr|upload\.wikimedia\.org|commons\.wikimedia\.org)/i;
+  /(orchidcontinuum|orchid-continuum|onrender\.com|supabase|static\.inaturalist|inaturalist\.org|inaturalist-open-data\.s3\.amazonaws\.com|flickr\.com\/photos|live\.staticflickr|farm\d+\.staticflickr|upload\.wikimedia\.org|commons\.wikimedia\.org)/i;
 
 const FLOWER_RE =
   /(flower|bloom|blossom|inflorescen|lip|labellum|floral|petal|sepal|column|orchid)/i;
