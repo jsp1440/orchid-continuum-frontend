@@ -11,6 +11,11 @@ export interface FallbackImageProps {
 
 const LOAD_TIMEOUT_MS = 9000;
 
+// Final safety net for stale cached rows: living orchid galleries must not render
+// society logos, badges, placeholders, or document-style assets as plant photos.
+const NON_PHOTO_URL_RE =
+  /(logo|logotipo|emblem|badge|banner|seal|watermark|placeholder|coming[\s_-]*soon|photo[\s_-]*coming[\s_-]*soon|society|club|association|asociaci[oó]n|orqu[ií]deas[\s_-]*del[\s_-]*ecuador|ecuagenera|herbarium|specimen|voucher|plate|illustration|drawing|lineart|\.pdf|\.tif|\.tiff|\.djvu|\.doc|\.docx|\.txt|\.csv)/i;
+
 const FallbackImage: React.FC<FallbackImageProps> = ({
   urls,
   alt,
@@ -20,7 +25,7 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   onSettled,
 }) => {
   const cleanUrls = useMemo(
-    () => Array.from(new Set((urls || []).map((u) => u?.trim()).filter(Boolean))) as string[],
+    () => Array.from(new Set((urls || []).map((u) => u?.trim()).filter((u): u is string => Boolean(u) && !NON_PHOTO_URL_RE.test(u)))),
     [urls],
   );
 
