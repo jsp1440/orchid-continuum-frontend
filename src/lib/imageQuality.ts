@@ -3,7 +3,7 @@
  *
  * Homepage galleries should show living orchid photographs.
  * Trusted OC backend image URLs are allowed unless they are obvious
- * herbarium/specimen/document/plate/scan records.
+ * herbarium/specimen/document/plate/scan/logo records.
  */
 
 export type ImageCategory =
@@ -43,6 +43,11 @@ const HARD_REJECT_RE =
 
 const DOCUMENT_RE =
   /(ruler|scale[\s_-]*bar|color[\s_-]*bar|colour[\s_-]*bar|measurement|determinavit|determined[\s_-]*by|collector|collected[\s_-]*by|institution[\s_-]*code|annotation)/i;
+
+// Non-living-photo assets repeatedly entered the cache as "orchid" images.
+// These must be rejected even when the URL comes from a trusted host.
+const NON_PHOTO_ASSET_RE =
+  /(logo|logotipo|emblem|badge|banner|seal|insignia|watermark|icon|avatar|profile|placeholder|coming[\s_-]*soon|photo[\s_-]*coming[\s_-]*soon|society|club|association|asociaci[oó]n|orqu[ií]deas[\s_-]*del[\s_-]*ecuador|ecuagenera)/i;
 
 const TRUSTED_OC_RE =
   /(orchidcontinuum|orchid-continuum|onrender\.com|supabase|static\.inaturalist|inaturalist\.org|inaturalist-open-data\.s3\.amazonaws\.com|flickr\.com\/photos|live\.staticflickr|farm\d+\.staticflickr|upload\.wikimedia\.org|commons\.wikimedia\.org)/i;
@@ -94,6 +99,7 @@ function isHardRejected(meta: ImageMeta): boolean {
     meta.isHerbarium === true ||
     HARD_REJECT_RE.test(hay) ||
     DOCUMENT_RE.test(hay) ||
+    NON_PHOTO_ASSET_RE.test(hay) ||
     looksLikeDocument(meta)
   );
 }
