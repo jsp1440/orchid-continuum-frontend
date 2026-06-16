@@ -109,7 +109,21 @@ function uniqueClean(urls: Array<string | undefined>): string[] {
 function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
   const record = trusted as Record<string, unknown> | undefined;
   const imageUrls = Array.isArray(record?.image_urls) ? record.image_urls.filter((u): u is string => typeof u === 'string') : [];
-  return uniqueClean([...imageUrls, trusted?.image_url, record?.original_url as string | undefined, record?.media_url as string | undefined, record?.url as string | undefined, fallback]);
+  return uniqueClean([
+    ...imageUrls,
+    trusted?.image_url,
+    record?.representative_image_url as string | undefined,
+    record?.thumbnail_url as string | undefined,
+    record?.medium_url as string | undefined,
+    record?.original_url as string | undefined,
+    record?.media_url as string | undefined,
+    record?.url as string | undefined,
+    fallback,
+  ]);
+}
+
+function mergeImages(a: string[] = [], b: string[] = []): string[] {
+  return uniqueClean([...a, ...b]);
 }
 
 async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSignal): Promise<GenusImage | null> {
@@ -183,7 +197,7 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
   const bits: string[] = [];
 
   if (note) bits.push(note);
-  else if (habitat || distribution) bits.push(`${displayName} is part of today\'s ${titleCaseGenus(slot.species.split(' ')[0])} story${distribution ? `, linked to records from ${distribution}` : ''}${habitat ? ` and associated with ${habitat.toLowerCase()}` : ''}.`);
+  else if (habitat || distribution) bits.push(`${displayName} is part of today's ${titleCaseGenus(slot.species.split(' ')[0])} story${distribution ? `, linked to records from ${distribution}` : ''}${habitat ? ` and associated with ${habitat.toLowerCase()}` : ''}.`);
   else bits.push(`${displayName} is included here as a verified species-level member of the Genus of the Day image rotation.`);
 
   if (elevation || pollinators) bits.push(`${elevation ? `Records place it around ${elevation}` : 'Its species-level ecology is still being assembled'}${pollinators ? `, with pollination links involving ${pollinators.toLowerCase()}` : ''}.`);
@@ -302,8 +316,27 @@ const DailyGenusFeatureV4: React.FC = () => {
     const byName = new Map<string, Slot>();
     const pushSlot = (slot: Slot) => {
       const key = binomialOf(slot.species);
-      if (!key || byName.has(key)) return;
-      byName.set(key, { ...slot, species: key });
+      if (!key) return;
+      const next = { ...slot, species: key, images: uniqueClean(slot.images || []) };
+      const existing = byName.get(key);
+      if (!existing) {
+        byName.set(key, next);
+        return;
+      }
+      const images = mergeImages(existing.images, next.images);
+      byName.set(key, {
+        ...existing,
+        ...next,
+        images,
+        place: existing.place || next.place,
+        conservation: existing.conservation || next.conservation,
+        habitat: existing.habitat || next.habitat,
+        elevation: existing.elevation || next.elevation,
+        pollinators: existing.pollinators || next.pollinators,
+        imageSource: existing.imageSource || next.imageSource,
+        imageLicense: existing.imageLicense || next.imageLicense,
+        photographer: existing.photographer || next.photographer,
+      });
     };
 
     for (const name of validatedNames) {
@@ -326,11 +359,13 @@ const DailyGenusFeatureV4: React.FC = () => {
 
   useEffect(() => {
     if (!slots.length) return;
-    setHeroIndex(0);
-    setVisibleIndexes(Array.from({ length: Math.min(9, slots.length) }, (_, i) => i));
+    const firstWithImage = slots.findIndex((s) => s.images.length > 0);
+    setHeroIndex(firstWithImage >= 0 ? firstWithImage : 0);
+    const imageFirst = slots.map((s, i) => ({ s, i })).sort((a, b) => Number(b.s.images.length > 0) - Number(a.s.images.length > 0)).slice(0, Math.min(9, slots.length)).map(({ i }) => i);
+    setVisibleIndexes(imageFirst);
     setNextIndex(Math.min(9, slots.length));
     setReplaceCell(0);
-  }, [slots.length, entry.genus]);
+  }, [slots, entry.genus]);
 
   useEffect(() => {
     if (slots.length <= 1) return;
