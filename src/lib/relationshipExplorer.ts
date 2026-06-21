@@ -1,9 +1,10 @@
 // src/lib/relationshipExplorer.ts
-// Isolated data access for the Relationship Explorer MVP (BUILD 203A).
-// Tries the preferred backend endpoint first; falls back to internal
-// MOCK_PAYLOADS (Build 202E summary) so the UI is reviewable immediately.
+// BUILD 203D — Safe MVP payload wiring.
+// These fallback payloads mirror oc_api.relationship_explorer_mvp_payload_safe_v1.
+// The live API endpoint is attempted first; the safe payload keeps the UI useful
+// until /api/relationship-explorer/species/{name} is fully deployed.
 
-const API_BASE = "https://orchid-continuum-public-api.onrender.com";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://orchid-continuum-public-api.onrender.com";
 
 export interface CardAvailability {
   species_profile: boolean;
@@ -73,13 +74,14 @@ export interface RelationshipExplorerPayload {
   fungal_dependency: FungalDependency | null;
   reasoning: ReasoningItem[] | null;
   interaction_summary: InteractionRecord[] | null;
-  source: "api" | "mock";
+  source: "api" | "safe-mvp" | "mock";
 }
 
 export const TEST_SPECIES = [
-  "Dracula vampira",
-  "Cattleya maxima",
   "Angraecum sesquipedale",
+  "Dendrobium anosmum",
+  "Cattleya maxima",
+  "Dracula vampira",
 ];
 
 function emptyCards(): CardAvailability {
@@ -95,15 +97,16 @@ function emptyCards(): CardAvailability {
   };
 }
 
-function emptyPayload(name: string, source: "api" | "mock" = "mock"): RelationshipExplorerPayload {
+function emptyPayload(name: string, source: "api" | "safe-mvp" | "mock" = "mock"): RelationshipExplorerPayload {
+  const [genus, speciesEpithet] = name.split(" ");
   return {
     scientific_name: name,
     cards: { ...emptyCards(), species_profile: !!name },
     species_profile: name
       ? {
           scientific_name: name,
-          genus: name.split(" ")[0] || null,
-          species_epithet: name.split(" ")[1] || null,
+          genus: genus || null,
+          species_epithet: speciesEpithet || null,
           author: null,
           common_name: null,
           description: null,
@@ -119,164 +122,63 @@ function emptyPayload(name: string, source: "api" | "mock" = "mock"): Relationsh
   };
 }
 
-// Defensively map an unknown API response into our payload shape.
-function normalizePayload(name: string, raw: any, source: "api" | "mock"): RelationshipExplorerPayload {
-  if (!raw || typeof raw !== "object") return emptyPayload(name, source);
-
-  const cards: CardAvailability =
-    raw.cards && typeof raw.cards === "object"
-      ? { ...emptyCards(), ...raw.cards }
-      : {
-          ...emptyCards(),
-          species_profile: !!(raw.species_profile || name),
-          atlas_summary: !!raw.atlas_summary,
-          image_gallery: Array.isArray(raw.image_gallery) && raw.image_gallery.length > 0,
-          reasoning: Array.isArray(raw.reasoning) && raw.reasoning.length > 0,
-          mycorrhiza_claims: Array.isArray(raw.mycorrhiza_claims) && raw.mycorrhiza_claims.length > 0,
-          fungal_dependency: !!raw.fungal_dependency,
-          interaction_summary: Array.isArray(raw.interaction_summary) && raw.interaction_summary.length > 0,
-          interaction_panel: !!raw.interaction_panel,
-        };
-
-  return {
-    scientific_name: raw.scientific_name || name,
-    cards,
-    species_profile: raw.species_profile ?? emptyPayload(name).species_profile,
-    atlas_summary: raw.atlas_summary ?? null,
-    image_gallery: Array.isArray(raw.image_gallery) ? raw.image_gallery : null,
-    mycorrhiza_claims: Array.isArray(raw.mycorrhiza_claims) ? raw.mycorrhiza_claims : null,
-    fungal_dependency: raw.fungal_dependency ?? null,
-    reasoning: Array.isArray(raw.reasoning) ? raw.reasoning : null,
-    interaction_summary: Array.isArray(raw.interaction_summary) ? raw.interaction_summary : null,
-    source,
-  };
-}
-
-export async function fetchRelationshipExplorerPayload(
-  scientificName: string
-): Promise<RelationshipExplorerPayload> {
-  const name = (scientificName || "").trim();
-  if (!name) return emptyPayload("");
-
-  // 1. Try the preferred backend endpoint (auto-upgrades when wired).
-  try {
-    const res = await fetch(
-      `${API_BASE}/api/relationship-explorer/species/${encodeURIComponent(name)}`,
-      { headers: { Accept: "application/json" } }
-    );
-    if (res.ok) {
-      const raw = await res.json();
-      return normalizePayload(name, raw, "api");
-    }
-  } catch {
-    // Endpoint not available yet — fall through to mock.
-  }
-
-  // 2. Fallback: internal mock payloads for review.
-  const key = name.toLowerCase();
-  if (MOCK_PAYLOADS[key]) return MOCK_PAYLOADS[key];
-
-  // 3. Unknown species — minimal graceful payload.
-  return emptyPayload(name);
-}
-
-// ---------------------------------------------------------------------------
-// MOCK_PAYLOADS — mirrors the Build 202E card-availability summary.
-// Replace with live API once /api/relationship-explorer is deployed.
-// ---------------------------------------------------------------------------
-
 function mockImages(label: string, n: number): GalleryImage[] {
-  const tone = "3b7a57";
-  return Array.from({ length: n }).map((_, i) => ({
-    url: `https://placehold.co/400x300/${tone}/ffffff?text=${encodeURIComponent(label)}+${i + 1}`,
-    caption: `${label} — preview image ${i + 1}`,
-    credit: "Preview placeholder",
+  return Array.from({ length: Math.min(n, 12) }).map((_, index) => ({
+    url: `https://placehold.co/900x650/12351f/f6f0dc?text=${encodeURIComponent(label)}+${index + 1}`,
+    caption: `${label} — image endpoint available (${n.toLocaleString()} images in Continuum)`,
+    credit: "Preview placeholder until live image payload is exposed by API",
   }));
 }
 
-const MOCK_PAYLOADS: Record<string, RelationshipExplorerPayload> = {
-  "dracula vampira": {
-    scientific_name: "Dracula vampira",
-    source: "mock",
-    cards: {
-      species_profile: true,
-      atlas_summary: true,
-      image_gallery: true,
-      interaction_summary: false,
-      interaction_panel: false,
-      reasoning: false,
-      mycorrhiza_claims: false,
-      fungal_dependency: false,
-    },
-    species_profile: {
-      scientific_name: "Dracula vampira",
-      genus: "Dracula",
-      species_epithet: "vampira",
-      author: "(Luer) Luer",
-      common_name: "Vampire orchid",
-      description:
-        "A cloud-forest epiphyte endemic to Ecuador, known for its dramatic dark, near-black flowers and long caudate sepals.",
-    },
-    atlas_summary: {
-      occurrence_count: 142,
-      atlas_readiness: "Moderate",
-      atlas_confidence_score: 0.61,
-      countries: ["Ecuador"],
-      elevation_range: "1,800–2,300 m",
-    },
-    image_gallery: mockImages("Dracula vampira", 6),
-    mycorrhiza_claims: null,
-    fungal_dependency: null,
-    reasoning: null,
-    interaction_summary: null,
-  },
+function normalizePayload(name: string, raw: any): RelationshipExplorerPayload {
+  if (!raw || typeof raw !== "object") return emptyPayload(name);
 
-  "cattleya maxima": {
-    scientific_name: "Cattleya maxima",
-    source: "mock",
-    cards: {
-      species_profile: true,
-      atlas_summary: true,
-      image_gallery: true,
-      interaction_summary: false,
-      interaction_panel: false,
-      reasoning: false,
-      mycorrhiza_claims: true,
-      fungal_dependency: false,
-    },
-    species_profile: {
-      scientific_name: "Cattleya maxima",
-      genus: "Cattleya",
-      species_epithet: "maxima",
-      author: "Lindl.",
-      common_name: "Christmas orchid",
-      description:
-        "A showy epiphytic/lithophytic Cattleya distributed along the Pacific slopes of Ecuador, Colombia, and Peru.",
-    },
-    atlas_summary: {
-      occurrence_count: 1187,
-      atlas_readiness: "High",
-      atlas_confidence_score: 0.84,
-      countries: ["Ecuador", "Colombia", "Peru"],
-      elevation_range: "0–1,500 m",
-    },
-    image_gallery: mockImages("Cattleya maxima", 8),
-    mycorrhiza_claims: [
-      {
-        fungal_taxon: "Tulasnella spp.",
-        relationship_type: "Mycorrhizal association",
-        evidence: "Recovered from root pelotons in cultivated and wild material.",
-        source: "Mock — Build 202E mycorrhiza_claims",
-      },
-    ],
-    fungal_dependency: null,
-    reasoning: null,
-    interaction_summary: null,
-  },
+  const fallback = SAFE_MVP_PAYLOADS[name.toLowerCase()] || emptyPayload(name, "api");
+  const cards: CardAvailability =
+    raw.cards && typeof raw.cards === "object"
+      ? { ...emptyCards(), ...raw.cards }
+      : raw.mvp_card_status && typeof raw.mvp_card_status === "object"
+        ? { ...emptyCards(), ...raw.mvp_card_status }
+        : fallback.cards;
 
+  return {
+    scientific_name: raw.scientific_name || fallback.scientific_name || name,
+    cards,
+    species_profile: raw.species_profile ?? fallback.species_profile,
+    atlas_summary: raw.atlas_summary ?? fallback.atlas_summary,
+    image_gallery: Array.isArray(raw.image_gallery) ? raw.image_gallery : fallback.image_gallery,
+    mycorrhiza_claims: Array.isArray(raw.mycorrhiza_claims) ? raw.mycorrhiza_claims : fallback.mycorrhiza_claims,
+    fungal_dependency: raw.fungal_dependency ?? fallback.fungal_dependency,
+    reasoning: Array.isArray(raw.reasoning) ? raw.reasoning : fallback.reasoning,
+    interaction_summary: Array.isArray(raw.interaction_summary) ? raw.interaction_summary : fallback.interaction_summary,
+    source: "api",
+  };
+}
+
+export async function fetchRelationshipExplorerPayload(scientificName: string): Promise<RelationshipExplorerPayload> {
+  const name = decodeURIComponent(scientificName || "Angraecum sesquipedale").trim();
+  if (!name) return emptyPayload("");
+
+  try {
+    const response = await fetch(
+      `${API_BASE}/api/relationship-explorer/species/${encodeURIComponent(name)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (response.ok) {
+      const raw = await response.json();
+      return normalizePayload(name, raw);
+    }
+  } catch {
+    // The safe MVP fallback below is intentional.
+  }
+
+  return SAFE_MVP_PAYLOADS[name.toLowerCase()] || emptyPayload(name);
+}
+
+const SAFE_MVP_PAYLOADS: Record<string, RelationshipExplorerPayload> = {
   "angraecum sesquipedale": {
     scientific_name: "Angraecum sesquipedale",
-    source: "mock",
+    source: "safe-mvp",
     cards: {
       species_profile: true,
       atlas_summary: true,
@@ -294,38 +196,159 @@ const MOCK_PAYLOADS: Record<string, RelationshipExplorerPayload> = {
       author: "Thouars",
       common_name: "Darwin's orchid / Comet orchid",
       description:
-        "A Madagascan epiphyte famous for its very long nectar spur, which prompted Darwin's prediction of a matching long-tongued pollinator.",
+        "Safe MVP payload from Build 203C: images, atlas signal, reasoning, mycorrhizal claims, and fungal dependency are available.",
     },
     atlas_summary: {
-      occurrence_count: 318,
-      atlas_readiness: "High",
-      atlas_confidence_score: 0.79,
-      countries: ["Madagascar"],
-      elevation_range: "0–100 m",
+      occurrence_count: 1,
+      atlas_readiness: "atlas_seed",
+      atlas_confidence_score: 0.024,
+      countries: null,
+      elevation_range: null,
     },
-    image_gallery: mockImages("Angraecum sesquipedale", 9),
+    image_gallery: mockImages("Angraecum sesquipedale", 101),
     mycorrhiza_claims: [
       {
-        fungal_taxon: "Tulasnellaceae",
-        relationship_type: "Mycorrhizal association",
-        evidence: "Family-level association reported for Angraecoid orchids.",
-        source: "Mock — Build 202E mycorrhiza_claims",
+        fungal_taxon: "fungal partner candidate",
+        relationship_type: "orchid mycorrhiza",
+        evidence: "2 mycorrhizal literature claims are available in the Continuum safe payload.",
+        source: "oc_ecology.literature_mycorrhiza_symbiosis_claims",
       },
     ],
     fungal_dependency: {
-      dependency_level: "High",
-      notes:
-        "Germination and early seedling establishment are fungus-dependent, consistent with epiphytic angraecoids.",
+      dependency_level: "seed/protocorm dependency",
+      notes: "1 fungal dependency evidence record is attached for seed/protocorm orchid mycorrhiza.",
     },
     reasoning: [
       {
         statement:
-          "The exceptionally long nectar spur predicts a long-tongued hawkmoth pollinator.",
-        confidence: "High",
+          "This species represents a high-value reasoning example connecting floral specialization, pollinator prediction, coevolution, and island biogeography.",
+        confidence: "moderate_reasoning_confidence · score 0.567",
         basis:
-          "Morphological spur length matched to Xanthopan morganii praedicta (Darwin/Wallace prediction, later confirmed).",
+          "Build 203C safe payload: reasoning_density=high_reasoning_density; fired_rule_count=5; validation pathway compares spur length, pollinator proboscis length, distribution, and literature evidence.",
       },
     ],
+    interaction_summary: null,
+  },
+
+  "dendrobium anosmum": {
+    scientific_name: "Dendrobium anosmum",
+    source: "safe-mvp",
+    cards: {
+      species_profile: true,
+      atlas_summary: true,
+      image_gallery: true,
+      interaction_summary: true,
+      interaction_panel: true,
+      reasoning: false,
+      mycorrhiza_claims: false,
+      fungal_dependency: false,
+    },
+    species_profile: {
+      scientific_name: "Dendrobium anosmum",
+      genus: "Dendrobium",
+      species_epithet: "anosmum",
+      author: null,
+      common_name: "Fragrant dendrobium",
+      description:
+        "Safe MVP payload from Build 203C: this is the current best pollinator/interaction test species for the Relationship Explorer.",
+    },
+    atlas_summary: {
+      occurrence_count: 0,
+      atlas_readiness: "needs_occurrence_data",
+      atlas_confidence_score: 0,
+      countries: null,
+      elevation_range: null,
+    },
+    image_gallery: mockImages("Dendrobium anosmum", 108),
+    mycorrhiza_claims: null,
+    fungal_dependency: null,
+    reasoning: null,
+    interaction_summary: [
+      {
+        partner: "interaction partner available",
+        interaction_type: "display-ready interaction signal",
+        source:
+          "oc_api.v_species_globi_interaction_summary_v1 · total_display_ready_interactions=1 · distinct_partner_taxa=1",
+      },
+    ],
+  },
+
+  "cattleya maxima": {
+    scientific_name: "Cattleya maxima",
+    source: "safe-mvp",
+    cards: {
+      species_profile: true,
+      atlas_summary: true,
+      image_gallery: true,
+      interaction_summary: false,
+      interaction_panel: false,
+      reasoning: false,
+      mycorrhiza_claims: true,
+      fungal_dependency: false,
+    },
+    species_profile: {
+      scientific_name: "Cattleya maxima",
+      genus: "Cattleya",
+      species_epithet: "maxima",
+      author: "Lindl.",
+      common_name: null,
+      description:
+        "Safe MVP payload from Build 203C: atlas, images, and one mycorrhizal literature claim are available.",
+    },
+    atlas_summary: {
+      occurrence_count: 2,
+      atlas_readiness: "atlas_seed",
+      atlas_confidence_score: 0.048,
+      countries: null,
+      elevation_range: null,
+    },
+    image_gallery: mockImages("Cattleya maxima", 67),
+    mycorrhiza_claims: [
+      {
+        fungal_taxon: "fungal partner candidate",
+        relationship_type: "orchid mycorrhiza",
+        evidence: "1 mycorrhizal literature claim is available in the Continuum safe payload.",
+        source: "oc_ecology.literature_mycorrhiza_symbiosis_claims",
+      },
+    ],
+    fungal_dependency: null,
+    reasoning: null,
+    interaction_summary: null,
+  },
+
+  "dracula vampira": {
+    scientific_name: "Dracula vampira",
+    source: "safe-mvp",
+    cards: {
+      species_profile: true,
+      atlas_summary: true,
+      image_gallery: true,
+      interaction_summary: false,
+      interaction_panel: false,
+      reasoning: false,
+      mycorrhiza_claims: false,
+      fungal_dependency: false,
+    },
+    species_profile: {
+      scientific_name: "Dracula vampira",
+      genus: "Dracula",
+      species_epithet: "vampira",
+      author: "(Luer) Luer",
+      common_name: null,
+      description:
+        "Safe MVP payload from Build 203C: atlas signal and image coverage are available; interaction and fungal layers are not populated yet.",
+    },
+    atlas_summary: {
+      occurrence_count: 7,
+      atlas_readiness: "atlas_partial",
+      atlas_confidence_score: 0.168,
+      countries: null,
+      elevation_range: null,
+    },
+    image_gallery: mockImages("Dracula vampira", 14),
+    mycorrhiza_claims: null,
+    fungal_dependency: null,
+    reasoning: null,
     interaction_summary: null,
   },
 };
