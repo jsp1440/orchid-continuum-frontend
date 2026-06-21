@@ -43,6 +43,7 @@ import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
 import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
+import RelationshipExplorer from "./pages/RelationshipExplorer";
 
 const queryClient = new QueryClient();
 
@@ -81,6 +82,9 @@ const App = () => (
                 <Route path="/gallery" element={<Gallery />} />
                 <Route path="/climate" element={<Climate />} />
                 <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
+
+                <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
+                <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
 
                 <Route
                   path="/collection"
