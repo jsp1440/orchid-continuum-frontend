@@ -7,7 +7,6 @@ import DailyGenusFeature from './orchid/DailyGenusFeature';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
 import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
-import SpeciesInFocus from './orchid/SpeciesInFocus';
 import HomeAtlas from './orchid/HomeAtlas';
 import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
 import HumanStewardship from './orchid/HumanStewardship';
@@ -88,7 +87,6 @@ const AppLayout: React.FC = () => {
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
             <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
-            <SafeSection name="Species in Focus"><SpeciesInFocus /></SafeSection>
             <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
             <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
             <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
