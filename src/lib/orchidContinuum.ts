@@ -231,6 +231,19 @@ interface MycorrhizalRow {
   source: string | null;
 }
 
+interface FrontendOrchidImageRow {
+  image_id: number;
+  scientific_name: string | null;
+  genus: string | null;
+  species: string | null;
+  image_url: string | null;
+  image_source: string | null;
+  license: string | null;
+  country: string | null;
+  photographer: string | null;
+  created_at?: string | null;
+}
+
 const SPECIES_COLUMNS =
   'id, slug, genus, epithet, common_name, authority, family, subfamily, tribe, region, countries, habitat, growth_form, ecology, description, conservation_status, iucn_code, image_url, occurrences, pollinators, traits';
 
@@ -692,6 +705,51 @@ function atlasRowToSpeciesRecord(
 // ---------------------------------------------------------------------------
 
 export async function fetchLivingGalleryRecords(): Promise<LivingGalleryRecord[]> {
+  try {
+    const { data, error } = await supabase
+      .schema('api')
+      .from('v_frontend_orchid_images')
+      .select('image_id, scientific_name, genus, species, image_url, image_source, license, country, photographer, created_at')
+      .not('image_url', 'is', null)
+      .limit(120);
+
+    if (!error && Array.isArray(data) && data.length > 0) {
+      liveStatus = 'live';
+
+      return (data as FrontendOrchidImageRow[])
+        .filter((row) => typeof row.image_url === 'string' && row.image_url.trim().length > 0)
+        .map((row) => {
+          const scientificName =
+            row.scientific_name ||
+            [row.genus, row.species].filter(Boolean).join(' ') ||
+            'Unknown orchid';
+
+          return {
+            id: String(row.image_id),
+            scientificName,
+            nativeRegion: row.country ?? undefined,
+            habitatDescription: row.country
+              ? `Documented orchid image record from ${row.country}.`
+              : 'Documented orchid image record from the Orchid Continuum image library.',
+            sourceCredit:
+              row.photographer ||
+              row.image_source ||
+              'Orchid Continuum approved image library',
+            imageUrl: row.image_url?.trim(),
+            isPlaceholder: false,
+            taxonomyId: scientificName,
+            atlasOccurrenceId: undefined,
+          };
+        });
+    }
+
+    if (error) {
+      console.warn('[orchidContinuum] api.v_frontend_orchid_images fetch failed:', error.message);
+    }
+  } catch (err) {
+    console.warn('[orchidContinuum] api.v_frontend_orchid_images fetch threw:', err);
+  }
+
   const rows = await loadSpeciesRows();
   return rows.filter((r) => !!r.image_url).map(rowToGalleryRecord);
 }
