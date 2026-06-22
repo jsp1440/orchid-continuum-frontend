@@ -9,6 +9,7 @@ import {
   Dna,
   Microscope,
   GraduationCap,
+  ShieldCheck,
   ArrowRight,
   type LucideIcon,
 } from 'lucide-react';
@@ -16,9 +17,9 @@ import {
 /**
  * ACT 4 — WHAT THE KNOWLEDGE GRAPH MAKES POSSIBLE.
  *
- * Eight capability cards in a 2x4 grid on dark forest green. Each card has a
- * gold icon, bold cream title, a two-sentence description, and a gold link
- * that routes into the relevant area of the platform.
+ * Capability cards in a dark forest-green grid. Each card has a gold icon,
+ * bold cream title, a description, and a gold link that routes into the
+ * relevant area of the platform.
  */
 
 interface Capability {
@@ -43,6 +44,13 @@ const CAPABILITIES: Capability[] = [
     body: 'An AI-assisted system that weaves cultivation records, occurrence data, ecological relationships, and climate data into one coherent conservation record for every species.',
     link: 'Explore OASIS',
     href: '/oacs',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Admin Center',
+    body: 'The control panel for database diagnostics, image resolver audits, relationship harvest status, Atlas health, OASIS operations, and future AI agent runs.',
+    link: 'Open Control Panel',
+    href: '/admin',
   },
   {
     icon: Grid3x3,
@@ -77,7 +85,7 @@ const CAPABILITIES: Capability[] = [
     title: 'Ecological Intelligence',
     body: 'Mycorrhizal partnerships, pollinator guilds, and climate envelopes connected into one ecological picture. Understand not just what an orchid is, but everything it depends on to survive.',
     link: 'See the Connections',
-    href: '/intelligence',
+    href: '/intelligence-graph',
   },
   {
     icon: GraduationCap,
@@ -159,11 +167,11 @@ const CapabilityGrid: React.FC = () => {
               lineHeight: 1.18,
             }}
           >
-            Eight ways the knowledge graph changes what we can know about orchids.
+            Nine ways the knowledge graph changes what we can know — and manage — about orchids.
           </h2>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 gap-5 lg:gap-6">
+        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
           {CAPABILITIES.map((cap) => (
             <CapabilityCard key={cap.title} cap={cap} />
           ))}
