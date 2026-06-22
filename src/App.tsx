@@ -44,6 +44,7 @@ import ComingSoon from "./pages/ComingSoon";
 import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
+import AdminCenter from "./pages/AdminCenter";
 
 const queryClient = new QueryClient();
 
@@ -70,6 +71,8 @@ const App = () => (
                 <Route path="/atlas" element={<Atlas />} />
                 <Route path="/atlas/:species" element={<Atlas />} />
 
+                <Route path="/admin" element={<AdminCenter />} />
+                <Route path="/control-center" element={<AdminCenter />} />
                 <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
 
                 <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
