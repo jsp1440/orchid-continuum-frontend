@@ -731,10 +731,14 @@ export async function fetchLivingGalleryRecords(): Promise<LivingGalleryRecord[]
             habitatDescription: row.country
               ? `Documented orchid image record from ${row.country}.`
               : 'Documented orchid image record from the Orchid Continuum image library.',
-            sourceCredit:
-              row.photographer ||
-              row.image_source ||
-              'Orchid Continuum approved image library',
+            sourceCredit: [
+              row.image_source ? `Source: ${row.image_source}` : null,
+              row.photographer ? `Photo: ${row.photographer}` : null,
+              row.license ? `License: ${row.license}` : null,
+              row.country ? `Country: ${row.country}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ') || 'Orchid Continuum approved image library',
             imageUrl: row.image_url?.trim(),
             isPlaceholder: false,
             taxonomyId: scientificName,
