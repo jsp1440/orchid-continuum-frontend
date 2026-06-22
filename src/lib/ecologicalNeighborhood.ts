@@ -1,3 +1,4 @@
+import { homepageSafeUrl } from '@/lib/imageQuality';
 import { supabase } from '@/lib/supabase';
 
 export type EcologicalNeighborType =
@@ -69,6 +70,14 @@ type HarvestRow = {
   harvest_build?: string | null;
 };
 
+type ImageRow = {
+  image_url?: string | null;
+  image_source?: string | null;
+  license?: string | null;
+  country?: string | null;
+  photographer?: string | null;
+};
+
 const PRIORITY: Record<EcologicalNeighborType, number> = {
   species: 10,
   fungal_dependency: 20,
@@ -98,6 +107,11 @@ const ALLOWED_TYPES = new Set<EcologicalNeighborType>([
   'ecological_partner',
   'missing',
 ]);
+
+const BAD_IMAGE_TEXT_RE =
+  /(herbari|specimen|voucher|sheet|barcode|holotype|isotype|lectotype|syntype|neotype|paratype|scan|plate|illustration|drawing|document|jstor|gbif\.org\/occurrence|biodiversitylibrary|archive\.org|botanicus|plants\.jstor|sweetgum\.nybg|sernec|idigbio|mnhn|recolnat|jacq|tropicos|mobot)/i;
+
+const TRUSTED_LIVING_SOURCE_RE = /(inaturalist|flickr|wikimedia|orchid|supabase)/i;
 
 function txt(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
@@ -130,19 +144,71 @@ function sourceView(row: HarvestRow): string | undefined {
   return table || schema;
 }
 
+function livingPhotoUrl(url: unknown, shared?: { title?: string; description?: string; source?: string; license?: string; name?: string }): string | undefined {
+  const clean = txt(url);
+  if (!clean) return undefined;
+  const hay = [clean, shared?.title, shared?.description, shared?.source, shared?.license, shared?.name]
+    .filter(Boolean)
+    .join(' ');
+  if (BAD_IMAGE_TEXT_RE.test(hay)) return undefined;
+  return homepageSafeUrl(clean, shared) ?? undefined;
+}
+
+async function resolveSpeciesImage(scientificName: string): Promise<string | undefined> {
+  const name = cleanSpecies(scientificName);
+  if (!name) return undefined;
+
+  const { data, error } = await supabase
+    .schema('api')
+    .from('v_frontend_orchid_images')
+    .select('image_url, image_source, license, country, photographer')
+    .ilike('scientific_name', name)
+    .not('image_url', 'is', null)
+    .limit(24);
+
+  if (error || !Array.isArray(data)) return undefined;
+
+  const ranked = (data as ImageRow[])
+    .map((row, index) => {
+      const source = txt(row.image_source) || '';
+      const url = livingPhotoUrl(row.image_url, {
+        title: name,
+        description: [row.country, row.photographer].filter(Boolean).join(' '),
+        source,
+        license: txt(row.license),
+        name,
+      });
+      if (!url) return null;
+      const sourceBoost = TRUSTED_LIVING_SOURCE_RE.test(source) ? 100 : 0;
+      return { url, score: sourceBoost - index };
+    })
+    .filter((x): x is { url: string; score: number } => !!x)
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.url;
+}
+
 function mapHarvestRow(row: HarvestRow, focalSpecies: string): EcologicalNeighborhoodCard {
   const type = normalizeType(row.neighbor_type);
   const gap = row.relationship_category?.toLowerCase().includes('gap') || row.evidence_value === 'not yet linked';
   const cardType: EcologicalNeighborType = gap && type !== 'species' ? 'missing' : type;
+  const title = txt(row.title) || txt(row.neighbor_name) || ecologicalTypeLabel(cardType);
+  const relationship = txt(row.relationship_reason) || 'Relationship evidence is being assembled.';
+  const harvestedImage = livingPhotoUrl(row.image_url, {
+    title,
+    description: relationship,
+    source: sourceView(row),
+    name: txt(row.neighbor_name) || focalSpecies,
+  });
 
   return {
     id: cardId(row, cardType, focalSpecies),
     type: cardType,
-    title: txt(row.title) || txt(row.neighbor_name) || ecologicalTypeLabel(cardType),
+    title,
     subtitle: txt(row.subtitle) || txt(row.relationship_category),
     scientificName: cardType === 'species' ? focalSpecies : undefined,
-    imageUrl: txt(row.image_url),
-    relationship: txt(row.relationship_reason) || 'Relationship evidence is being assembled.',
+    imageUrl: harvestedImage,
+    relationship,
     evidenceLabel: txt(row.evidence_label),
     evidenceValue: row.evidence_value ?? row.evidence_score ?? row.source_count ?? undefined,
     sourceView: sourceView(row),
@@ -174,6 +240,17 @@ function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
   ];
 }
 
+async function enrichCardImages(cards: EcologicalNeighborhoodCard[], focalSpecies: string): Promise<EcologicalNeighborhoodCard[]> {
+  const speciesImage = await resolveSpeciesImage(focalSpecies);
+  return cards.map((card) => {
+    if (card.imageUrl) return card;
+    if (card.type === 'species' || card.scientificName === focalSpecies) {
+      return { ...card, imageUrl: speciesImage };
+    }
+    return card;
+  });
+}
+
 export async function fetchSpeciesEcologicalNeighborhood(
   scientificNameInput: string,
   limit = 12,
@@ -190,12 +267,12 @@ export async function fetchSpeciesEcologicalNeighborhood(
     .ilike('focal_species', scientificName)
     .limit(Math.max(limit * 2, 24));
 
-  if (error || !Array.isArray(data) || data.length === 0) {
-    return fallbackCards(scientificName).slice(0, limit);
-  }
+  const cards = error || !Array.isArray(data) || data.length === 0
+    ? fallbackCards(scientificName)
+    : (data as HarvestRow[])
+        .map((row) => mapHarvestRow(row, scientificName))
+        .sort((a, b) => a.priority - b.priority);
 
-  return (data as HarvestRow[])
-    .map((row) => mapHarvestRow(row, scientificName))
-    .sort((a, b) => a.priority - b.priority)
-    .slice(0, limit);
+  const enriched = await enrichCardImages(cards, scientificName);
+  return enriched.slice(0, limit);
 }
