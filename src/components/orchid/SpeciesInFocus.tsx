@@ -1,3 +1,4 @@
+import EcologicalNeighborhood from '@/components/orchid/EcologicalNeighborhood';
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -492,5 +493,40 @@ const EmptyGenus: React.FC<{ genus: string }> = ({ genus }) => (
     </p>
   </div>
 );
+
+
+
+/* BUILD_204H_NEIGHBORHOOD_PLACEHOLDER */
+
+const buildNeighborhoodPlaceholderCards = (scientificName: string) => [
+  {
+    id: `${scientificName}-habitat`,
+    type: 'habitat',
+    title: 'Habitat Context',
+    subtitle: scientificName,
+    description: 'Species-centered habitat neighborhood placeholder.',
+    source: 'BUILD204H',
+    priority: 1,
+  },
+  {
+    id: `${scientificName}-pollinator`,
+    type: 'pollinator',
+    title: 'Pollinator Relationships',
+    subtitle: scientificName,
+    description: 'Pollinator neighborhood placeholder.',
+    source: 'BUILD204H',
+    priority: 2,
+  },
+  {
+    id: `${scientificName}-fungus`,
+    type: 'fungus',
+    title: 'Mycorrhizal Relationships',
+    subtitle: scientificName,
+    description: 'Fungal neighborhood placeholder.',
+    source: 'BUILD204H',
+    priority: 3,
+  },
+];
+
 
 export default SpeciesInFocus;
