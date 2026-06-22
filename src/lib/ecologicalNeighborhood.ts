@@ -47,266 +47,199 @@ export function ecologicalTypeLabel(type: EcologicalNeighborType): string {
 
 type Row = Record<string, unknown>;
 
-function txt(v: unknown): string | undefined {
+const PRIORITY: Record<EcologicalNeighborType, number> = {
+  species: 10,
+  fungal_dependency: 20,
+  fungus: 30,
+  pollinator: 40,
+  habitat: 50,
+  geography: 60,
+  conservation: 70,
+  knowledge: 80,
+  missing: 90,
+  co_occurring_orchid: 110,
+  host_tree: 120,
+};
+
+function textValue(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
 }
 
-function num(v: unknown): number | undefined {
-  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
-}
-
-function id(type: EcologicalNeighborType, name: string): string {
-  return `${type}:${name}`.toLowerCase().replace(/[^a-z0-9:_-]+/g, '-');
+function numberValue(v: unknown): number | undefined {
+  if (typeof v === 'number' && Number.isFinite(v)) return v;
+  if (typeof v === 'string' && Number.isFinite(Number(v))) return Number(v);
+  return undefined;
 }
 
 function cleanSpecies(name: string): string {
-  const p = name.trim().split(/\s+/).filter(Boolean);
-  if (!p.length) return '';
-  return [p[0].charAt(0).toUpperCase() + p[0].slice(1).toLowerCase(), ...p.slice(1).map((x) => x.toLowerCase())].join(' ');
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  return [
+    parts[0].charAt(0).toUpperCase() + parts[0].slice(1).toLowerCase(),
+    ...parts.slice(1).map((p) => p.toLowerCase()),
+  ].join(' ');
 }
 
-async function one(schema: string, table: string, col: string, name: string): Promise<Row | null> {
-  const { data, error } = await supabase.schema(schema).from(table).select('*').ilike(col, name).limit(1);
-  if (error || !Array.isArray(data) || !data.length) return null;
-  return data[0] as Row;
+function cardId(type: EcologicalNeighborType, label: string): string {
+  return `${type}:${label}`.toLowerCase().replace(/[^a-z0-9:_-]+/g, '-');
 }
 
-async function many(schema: string, table: string, col: string, name: string, limit = 6): Promise<Row[]> {
-  const { data, error } = await supabase.schema(schema).from(table).select('*').ilike(col, name).limit(limit);
-  if (error || !Array.isArray(data)) return [];
-  return data as Row[];
+function normalizeType(v: unknown): EcologicalNeighborType {
+  const raw = textValue(v)?.toLowerCase();
+  if (!raw) return 'missing';
+  if (raw in PRIORITY) return raw as EcologicalNeighborType;
+  if (raw.includes('pollinat')) return 'pollinator';
+  if (raw.includes('fung') || raw.includes('mycorrhiza')) return 'fungus';
+  if (raw.includes('habitat')) return 'habitat';
+  if (raw.includes('geo') || raw.includes('atlas')) return 'geography';
+  return 'missing';
 }
 
-async function imageRows(name: string): Promise<Row[]> {
+async function fetchHarvested(name: string, limit: number): Promise<EcologicalNeighborhoodCard[] | null> {
   const { data, error } = await supabase
-    .schema('api')
-    .from('v_frontend_orchid_images')
-    .select('image_id, scientific_name, image_url, image_source, license, country, photographer')
-    .ilike('scientific_name', name)
-    .not('image_url', 'is', null)
-    .limit(8);
-  if (error || !Array.isArray(data)) return [];
-  return data as Row[];
+    .schema('oc_api')
+    .from('species_ecological_neighborhood_v1')
+    .select('*')
+    .ilike('focal_species', name)
+    .order('evidence_score', { ascending: false, nullsFirst: false })
+    .limit(Math.max(limit, 12));
+
+  if (error || !Array.isArray(data) || data.length === 0) return null;
+
+  return (data as Row[])
+    .map((row, index) => {
+      const type = normalizeType(row.neighbor_type);
+      const sourceSchema = textValue(row.source_schema);
+      const sourceTable = textValue(row.source_table);
+      return {
+        id: textValue(row.relationship_id) || cardId(type, `${name}-${index}`),
+        type,
+        title: textValue(row.title) || textValue(row.neighbor_name) || ecologicalTypeLabel(type),
+        subtitle: textValue(row.subtitle) || textValue(row.relationship_category),
+        scientificName: type === 'species' ? name : undefined,
+        imageUrl: textValue(row.image_url),
+        relationship: textValue(row.relationship_reason) || 'Ecological relationship harvested from the Orchid Continuum relationship layer.',
+        evidenceLabel: textValue(row.evidence_label),
+        evidenceValue: textValue(row.evidence_value) || numberValue(row.evidence_score),
+        sourceView: sourceSchema && sourceTable ? `${sourceSchema}.${sourceTable}` : 'oc_api.species_ecological_neighborhood_v1',
+        priority: PRIORITY[type] + index / 100,
+      } satisfies EcologicalNeighborhoodCard;
+    })
+    .sort((a, b) => a.priority - b.priority)
+    .slice(0, limit);
 }
 
-export async function fetchSpeciesEcologicalNeighborhood(
-  scientificNameInput: string,
-  limit = 12,
-): Promise<EcologicalNeighborhoodCard[]> {
-  const name = cleanSpecies(scientificNameInput);
-  if (!name) return [];
+async function rows(schema: string, table: string, col: string, name: string, limit = 6): Promise<Row[]> {
+  const { data, error } = await supabase.schema(schema).from(table).select('*').ilike(col, name).limit(limit);
+  return error || !Array.isArray(data) ? [] : (data as Row[]);
+}
 
-  const [
-    profile,
-    atlas,
-    images,
-    pollinatorSummary,
-    pollinatorPanel,
-    myco,
-    fungalDependency,
-    reasoning,
-    habitat,
-    conservation,
-  ] = await Promise.all([
-    one('oc_api', 'v_relationship_explorer_species_profile_v1', 'scientific_name', name),
-    one('oc_api', 'species_atlas_summary_v1', 'scientific_name', name),
-    imageRows(name),
-    one('oc_api', 'v_species_globi_interaction_summary_v1', 'orchid_name', name),
-    many('oc_api', 'species_page_globi_interaction_panel_v1', 'orchid_name', name, 4),
-    many('oc_ecology', 'literature_mycorrhiza_symbiosis_claims', 'scientific_name', name, 4),
-    many('oc_dependency', 'fungal_dependency_evidence', 'accepted_scientific_name', name, 2),
-    one('oc_api', 'v_species_reasoning_narrative_v1', 'scientific_name', name),
-    one('oc_ecology', 'species_ecology_profile_api_ready', 'scientific_name', name),
-    one('oc_api', 'species_conservation_summary_v1', 'scientific_name', name),
+async function firstRow(schema: string, table: string, col: string, name: string): Promise<Row | null> {
+  const found = await rows(schema, table, col, name, 1);
+  return found[0] || null;
+}
+
+async function fallbackCards(name: string, limit: number): Promise<EcologicalNeighborhoodCard[]> {
+  const [profile, atlas, images, myco, fungalDependency, reasoning] = await Promise.all([
+    firstRow('oc_api', 'v_relationship_explorer_species_profile_v1', 'scientific_name', name),
+    firstRow('oc_api', 'species_atlas_summary_v1', 'scientific_name', name),
+    rows('api', 'v_frontend_orchid_images', 'scientific_name', name, 1),
+    rows('oc_ecology', 'literature_mycorrhiza_symbiosis_claims', 'scientific_name', name, 2),
+    rows('oc_dependency', 'fungal_dependency_evidence', 'accepted_scientific_name', name, 1),
+    firstRow('oc_api', 'v_species_reasoning_narrative_v1', 'scientific_name', name),
   ]);
 
   const cards: EcologicalNeighborhoodCard[] = [];
-  const imageUrl = txt(images[0]?.image_url);
-  const imageCount = num(profile?.image_count) ?? images.length;
+  const imageCount = numberValue(profile?.image_count) ?? images.length;
 
   cards.push({
-    id: id('species', name),
+    id: cardId('species', name),
     type: 'species',
     title: name,
     scientificName: name,
-    imageUrl,
-    relationship: imageCount > 0
-      ? `${name} is represented by ${imageCount.toLocaleString()} image record(s) in the Continuum image layer.`
-      : 'Focal species selected from the active Genus of the Day rotation.',
+    imageUrl: textValue(images[0]?.image_url),
+    relationship: imageCount > 0 ? `${name} is represented by ${imageCount.toLocaleString()} image record(s).` : 'Focal species selected from the active rotation.',
     evidenceLabel: 'Image records',
     evidenceValue: imageCount,
     sourceView: 'api.v_frontend_orchid_images',
-    priority: 10,
+    priority: PRIORITY.species,
   });
 
   if (fungalDependency.length) {
     const r = fungalDependency[0];
     cards.push({
-      id: id('fungal_dependency', name),
+      id: cardId('fungal_dependency', name),
       type: 'fungal_dependency',
-      title: txt(r.fungal_association_type) || 'Fungal dependency',
-      subtitle: txt(r.life_stage),
-      relationship: txt(r.evidence_summary) || `${name} has a fungal dependency evidence record.`,
+      title: textValue(r.fungal_association_type) || 'Fungal dependency',
+      subtitle: textValue(r.life_stage),
+      relationship: textValue(r.evidence_summary) || `${name} has fungal dependency evidence.`,
       evidenceLabel: 'Confidence',
-      evidenceValue: txt(r.confidence) || num(r.fungal_dependency_score),
+      evidenceValue: textValue(r.confidence) || numberValue(r.fungal_dependency_score),
       sourceView: 'oc_dependency.fungal_dependency_evidence',
-      priority: 20,
+      priority: PRIORITY.fungal_dependency,
     });
   }
 
-  if (myco.length) {
-    for (const r of myco.slice(0, 2)) {
-      const partner = txt(r.partner_candidate) || txt(r.symbiosis_signal) || 'Mycorrhizal partner';
-      cards.push({
-        id: id('fungus', `${name}-${partner}`),
-        type: 'fungus',
-        title: partner,
-        subtitle: txt(r.symbiosis_signal),
-        relationship: `${name} has a literature-linked fungal association claim${txt(r.source_title) ? ` from “${txt(r.source_title)}.”` : '.'}`,
-        evidenceLabel: 'Confidence',
-        evidenceValue: num(r.confidence_score) ?? 'literature claim',
-        sourceView: 'oc_ecology.literature_mycorrhiza_symbiosis_claims',
-        priority: 30,
-      });
-    }
-  } else {
-    cards.push({
-      id: id('missing', `${name}-fungus`),
-      type: 'missing',
-      title: 'Fungal partner not yet linked',
-      relationship: 'Future cards can show Tulasnella, Ceratobasidium, Sebacina, culture plates, micrographs, or fruiting-body images when available.',
-      evidenceLabel: 'Status',
-      evidenceValue: 'not yet linked',
-      priority: 90,
-    });
-  }
+  myco.forEach((r, i) => cards.push({
+    id: cardId('fungus', `${name}-${i}`),
+    type: 'fungus',
+    title: textValue(r.partner_candidate) || 'Mycorrhizal association',
+    subtitle: textValue(r.symbiosis_signal),
+    relationship: textValue(r.source_title) || 'Literature-linked orchid mycorrhiza or fungal association claim.',
+    evidenceLabel: 'Confidence',
+    evidenceValue: numberValue(r.confidence_score) ?? 'literature claim',
+    sourceView: 'oc_ecology.literature_mycorrhiza_symbiosis_claims',
+    priority: PRIORITY.fungus + i / 100,
+  }));
 
-  const totalInteractions = num(pollinatorSummary?.total_display_ready_interactions) ?? 0;
-  const firstInteraction = pollinatorPanel[0];
-
-  if (totalInteractions > 0 || pollinatorPanel.length > 0) {
-    cards.push({
-      id: id('pollinator', name),
-      type: 'pollinator',
-      title: txt(firstInteraction?.partner_taxon_name) || 'Ecological interaction partner',
-      subtitle: txt(firstInteraction?.interaction_category) || txt(firstInteraction?.interaction_type_name),
-      relationship: totalInteractions > 0
-        ? `${name} has ${totalInteractions.toLocaleString()} display-ready ecological interaction record(s).`
-        : `${name} has a display-ready interaction record.`,
-      evidenceLabel: 'Distinct partners',
-      evidenceValue: num(pollinatorSummary?.distinct_partner_taxa) ?? pollinatorPanel.length,
-      sourceView: 'oc_api.species_page_globi_interaction_panel_v1',
-      priority: 40,
-    });
-  } else {
-    cards.push({
-      id: id('missing', `${name}-pollinator`),
-      type: 'missing',
-      title: 'Pollinator relationship not yet linked',
-      relationship: 'No species-level pollinator card is linked yet. This prevents fake pollinator claims while highlighting a priority data gap.',
-      evidenceLabel: 'Status',
-      evidenceValue: 'not yet linked',
-      priority: 95,
-    });
-  }
-
-  if (habitat) {
-    cards.push({
-      id: id('habitat', name),
-      type: 'habitat',
-      title: txt(habitat.strongest_syndrome_signal) || 'Habitat / ecology signal',
-      subtitle: txt(habitat.strongest_pollinator_group),
-      relationship: txt(habitat.ecological_summary) || `${name} has a species-level ecology profile that needs narrative enrichment.`,
-      evidenceLabel: 'Confidence',
-      evidenceValue: txt(habitat.confidence_class) || num(habitat.strongest_confidence_score),
-      sourceView: 'oc_ecology.species_ecology_profile_api_ready',
-      priority: 50,
-    });
-  } else {
-    cards.push({
-      id: id('missing', `${name}-habitat`),
-      type: 'missing',
-      title: 'Habitat profile not yet linked',
-      relationship: 'Species-level habitat should show habitat type, elevation band, substrate, climate, and associated community.',
-      evidenceLabel: 'Status',
-      evidenceValue: 'not yet linked',
-      priority: 100,
-    });
-  }
-
-  if (atlas || profile) {
-    const occ = num(atlas?.occurrence_count) ?? num(profile?.occurrence_count) ?? 0;
-    cards.push({
-      id: id('geography', name),
-      type: 'geography',
-      title: 'Geographic neighborhood',
-      subtitle: txt(atlas?.atlas_readiness) || txt(profile?.atlas_readiness),
-      relationship: occ > 0
-        ? `${name} has ${occ.toLocaleString()} mapped occurrence record(s) currently linked.`
-        : `${name} has a sparse or pending occurrence profile.`,
-      evidenceLabel: 'Countries',
-      evidenceValue: num(atlas?.country_count) ?? num(profile?.country_count) ?? 'not yet summarized',
-      sourceView: 'oc_api.species_atlas_summary_v1',
-      priority: 60,
-    });
-  }
-
-  if (conservation) {
-    cards.push({
-      id: id('conservation', name),
-      type: 'conservation',
-      title: txt(conservation.iucn_category) || 'Conservation signal',
-      relationship: txt(conservation.conservation_summary) || `${name} has a conservation summary record attached.`,
-      evidenceLabel: 'Source',
-      evidenceValue: txt(conservation.source) || 'conservation summary',
-      sourceView: 'oc_api.species_conservation_summary_v1',
-      priority: 70,
-    });
-  } else {
-    cards.push({
-      id: id('missing', `${name}-conservation`),
-      type: 'missing',
-      title: 'Conservation card not yet linked',
-      relationship: 'Future cards should show IUCN status, population trend, threat type, and habitat-loss pressure.',
-      evidenceLabel: 'Status',
-      evidenceValue: 'not yet linked',
-      priority: 105,
-    });
-  }
-
-  if (reasoning) {
-    cards.push({
-      id: id('knowledge', name),
-      type: 'knowledge',
-      title: 'Knowledge graph signal',
-      subtitle: txt(reasoning.reasoning_density),
-      relationship: txt(reasoning.reasoning_narrative) || 'The reasoning layer has inferred concepts for this species.',
-      evidenceLabel: 'Rules fired',
-      evidenceValue: num(reasoning.fired_rule_count),
-      sourceView: 'oc_api.v_species_reasoning_narrative_v1',
-      priority: 80,
-    });
-  }
-
-  cards.push({
-    id: id('co_occurring_orchid', name),
-    type: 'co_occurring_orchid',
-    title: 'Co-occurring orchid neighbors',
-    relationship: 'Reserved for species-level co-occurrence: same locality, same habitat, same elevation band, shared pollinator, or documented ecological partitioning.',
-    evidenceLabel: 'Engine status',
-    evidenceValue: 'adapter ready',
-    priority: 110,
+  const occ = numberValue(atlas?.occurrence_count) ?? numberValue(profile?.occurrence_count);
+  if (atlas || profile) cards.push({
+    id: cardId('geography', name),
+    type: 'geography',
+    title: 'Geographic neighborhood',
+    subtitle: textValue(atlas?.atlas_readiness),
+    relationship: occ !== undefined ? `${name} has ${occ.toLocaleString()} mapped occurrence record(s).` : `${name} has a pending occurrence profile.`,
+    evidenceLabel: 'Countries',
+    evidenceValue: numberValue(atlas?.country_count) ?? 'not yet summarized',
+    sourceView: 'oc_api.species_atlas_summary_v1',
+    priority: PRIORITY.geography,
   });
 
-  cards.push({
-    id: id('host_tree', name),
-    type: 'host_tree',
-    title: 'Host tree / substrate',
-    relationship: 'Reserved for epiphyte substrate relationships such as host trees, mossy branches, palms, nurse logs, rock faces, or other documented attachment substrates.',
+  if (reasoning) cards.push({
+    id: cardId('knowledge', name),
+    type: 'knowledge',
+    title: 'Knowledge graph signal',
+    subtitle: textValue(reasoning.reasoning_density),
+    relationship: textValue(reasoning.reasoning_narrative) || 'The reasoning layer has inferred concepts for this species.',
+    evidenceLabel: 'Rules fired',
+    evidenceValue: numberValue(reasoning.fired_rule_count),
+    sourceView: 'oc_api.v_species_reasoning_narrative_v1',
+    priority: PRIORITY.knowledge,
+  });
+
+  [
+    ['pollinator', 'Pollinator relationship not yet linked', 'No species-level pollinator card is linked yet.'],
+    ['habitat', 'Habitat profile not yet linked', 'Species-level habitat should show habitat type, elevation band, substrate, climate, and associated community.'],
+    ['conservation', 'Conservation card not yet linked', 'Future cards should show IUCN status, population trend, threat type, and habitat-loss pressure.'],
+    ['co_occurring_orchid', 'Co-occurring orchid neighbors', 'Reserved for species-level co-occurrence.'],
+    ['host_tree', 'Host tree / substrate', 'Reserved for epiphyte substrate relationships.'],
+  ].forEach(([type, title, relationship], i) => cards.push({
+    id: cardId('missing', `${name}-${type}`),
+    type: type as EcologicalNeighborType,
+    title,
+    subtitle: 'Data needed',
+    relationship,
     evidenceLabel: 'Status',
-    evidenceValue: 'awaiting host substrate source',
-    priority: 120,
-  });
+    evidenceValue: 'not yet linked',
+    priority: PRIORITY[type as EcologicalNeighborType] + i / 100,
+  }));
 
   return cards.sort((a, b) => a.priority - b.priority).slice(0, limit);
+}
+
+export async function fetchSpeciesEcologicalNeighborhood(scientificNameInput: string, limit = 12): Promise<EcologicalNeighborhoodCard[]> {
+  const name = cleanSpecies(scientificNameInput);
+  if (!name) return [];
+  const harvested = await fetchHarvested(name, limit);
+  return harvested?.length ? harvested : fallbackCards(name, limit);
 }
