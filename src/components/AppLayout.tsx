@@ -5,6 +5,7 @@ import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
+import HabitatCards from './orchid/HabitatCards';
 import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
 import HomeAtlas from './orchid/HomeAtlas';
@@ -86,6 +87,7 @@ const AppLayout: React.FC = () => {
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
+            <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
             <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
             <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
