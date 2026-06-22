@@ -60,6 +60,7 @@ const MORE_GROUPS: MoreGroup[] = [
   {
     title: 'Research & support',
     items: [
+      { label: 'Admin Center',    route: '/admin',        description: 'Control panel · diagnostics · harvest status' },
       { label: 'Research Center', route: '/research',     description: 'Queries · traits · networks' },
       { label: 'Partners',        route: '/partners',     description: 'Advisors & institutions' },
       { label: 'Get Involved',    route: '/get-involved', description: 'Volunteer · donate · join' },
