@@ -1433,13 +1433,18 @@ export async function fetchNeighborGenera(
   try {
     const cachedRows = await readGenusPhotoCache(focal);
     if (signal?.aborted) return [];
-    const neighbourRows = cachedRows.filter((r) => r.ecological_relationship);
+    const neighbourRows = cachedRows.filter(
+      (r) =>
+        r.ecological_relationship &&
+        typeof r.image_url === 'string' &&
+        r.image_url.trim().length > 0,
+    );
     if (neighbourRows.length > 0) {
       return neighbourRows.slice(0, limit).map((r) => ({
         genus: r.species_name,
         region: r.region || 'Shared geographic range',
         representativeSpecies: r.species_name,
-        image: r.image_url,
+        image: r.image_url.trim(),
         relationship: r.ecological_relationship || undefined,
       }));
     }
