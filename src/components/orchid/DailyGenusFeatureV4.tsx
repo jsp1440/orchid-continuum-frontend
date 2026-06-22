@@ -19,6 +19,8 @@ import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus'
 import { setBackendStatus } from '@/lib/backendStatus';
 import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
+import EcologicalNeighborhood from '@/components/orchid/EcologicalNeighborhood';
+import { fetchSpeciesEcologicalNeighborhood, type EcologicalNeighborhoodCard } from '@/lib/ecologicalNeighborhood';
 
 const ROTATE_MS = 45 * 1000;
 const SPECIES_LIMIT = 200;
@@ -145,7 +147,7 @@ async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSigna
         scientific_name: name,
         image_url: medium,
         image_urls: [medium],
-        image_source: typeof photo.attribution === 'string' ? photo.attribution.trim() : 'iNaturalist',
+        image_sourceView: typeof photo.attribution === 'string' ? photo.attribution.trim() : 'iNaturalist',
         image_license: typeof photo.license_code === 'string' ? photo.license_code.trim() : undefined,
       };
     }
@@ -206,8 +208,8 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
   return bits.join(' ') || genusDescription;
 }
 
-function recordBackendSource(source: ImageSource | null, genus: string): void {
-  setBackendStatus({ source: source || 'pending', genus, lastPingTime: Date.now(), cacheWrittenAt: null });
+function recordBackendSource(sourceView: ImageSource | null, genus: string): void {
+  setBackendStatus({ sourceView: source || 'pending', genus, lastPingTime: Date.now(), cacheWrittenAt: null });
 }
 
 const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero = false }) => (
@@ -252,6 +254,8 @@ const DailyGenusFeatureV4: React.FC = () => {
   const [replaceCell, setReplaceCell] = useState(0);
   const [loading, setLoading] = useState(true);
   const [ecology, setEcology] = useState<RichEcology | null>(null);
+  const [neighborhoodCards, setNeighborhoodCards] = useState<EcologicalNeighborhoodCard[]>([]);
+  const [neighborhoodLoading, setNeighborhoodLoading] = useState(false);
 
   useEffect(() => {
     warmBackends();
@@ -265,10 +269,10 @@ const DailyGenusFeatureV4: React.FC = () => {
     setInatImages([]);
     setImageSource(null);
     setLoading(true);
-    setBackendStatus({ source: 'live', genus: base.genus, lastPingTime: Date.now(), cacheWrittenAt: null });
+    setBackendStatus({ sourceView: 'live', genus: base.genus, lastPingTime: Date.now(), cacheWrittenAt: null });
 
     fetchFeaturedNarrative(base, ctrl.signal).then((narrative) => {
-      if (!ctrl.signal.aborted && narrative) setEntry((prev) => ({ ...prev, description: narrative }));
+      if (!ctrl.signal.aborted && narrative) setEntry((prev) => ({ ...prev, relationship: narrative }));
     });
 
     fetchValidatedSpecies(base.genus, ctrl.signal, SPECIES_LIMIT)
@@ -401,6 +405,25 @@ const DailyGenusFeatureV4: React.FC = () => {
     return () => ctrl.abort();
   }, [hero?.species]);
 
+  useEffect(() => {
+    if (!hero?.species) return;
+    let alive = true;
+    setNeighborhoodLoading(true);
+    fetchSpeciesEcologicalNeighborhood(hero.species, 12)
+      .then((cards) => {
+        if (alive) setNeighborhoodCards(cards);
+      })
+      .catch(() => {
+        if (alive) setNeighborhoodCards([]);
+      })
+      .finally(() => {
+        if (alive) setNeighborhoodLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [hero?.species]);
+
   if (loading && !slots.length) return <section className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-8 text-[#3a4630]">Loading Genus of the Day…</section>;
 
   if (!hero) {
@@ -418,6 +441,7 @@ const DailyGenusFeatureV4: React.FC = () => {
   const caption = speciesCaption(hero, ecology, entry.description);
 
   return (
+    <>
     <section className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_16px_40px_rgba(30,40,20,0.12)]">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -479,6 +503,12 @@ const DailyGenusFeatureV4: React.FC = () => {
         </div>
       </div>
     </section>
+    <EcologicalNeighborhood
+      scientificName={hero.species}
+      cards={neighborhoodCards}
+      loading={neighborhoodLoading}
+    />
+    </>
   );
 };
 
