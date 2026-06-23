@@ -17,6 +17,7 @@ import {
 } from '@/lib/genusData';
 import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus';
 import { setBackendStatus } from '@/lib/backendStatus';
+import { homepageSafeUrl } from '@/lib/imageQuality';
 import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
 import EcologicalNeighborhood from '@/components/orchid/EcologicalNeighborhood';
@@ -96,12 +97,29 @@ const ScientificName: React.FC<{ name: string; className?: string }> = ({ name, 
   <span className={`italic normal-case ${className}`}>{botanicalName(name)}</span>
 );
 
-function uniqueClean(urls: Array<string | undefined>): string[] {
+function safeLivingPhotoUrl(raw: string | undefined, shared?: { title?: string; description?: string; source?: string; license?: string; name?: string }): string | undefined {
+  const url = typeof raw === 'string' ? raw.trim() : '';
+  if (!url) return undefined;
+  const haystack = [url, shared?.title, shared?.description, shared?.source, shared?.license, shared?.name].filter(Boolean).join(' ');
+  if (BLOCKED_NON_GALLERY_RE.test(haystack)) {
+    console.warn('[DailyGenusFeatureV4] REJECTED IMAGE: non-living-photo keyword', { url, shared });
+    return undefined;
+  }
+  const safe = homepageSafeUrl(url, shared);
+  if (!safe) {
+    console.warn('[DailyGenusFeatureV4] REJECTED IMAGE: imageQuality score below threshold', { url, shared });
+    return undefined;
+  }
+  console.debug('[DailyGenusFeatureV4] ACCEPTED IMAGE', { url: safe, source: shared?.source, name: shared?.name });
+  return safe;
+}
+
+function uniqueClean(urls: Array<string | undefined>, shared?: { title?: string; description?: string; source?: string; license?: string; name?: string }): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of urls) {
-    const url = typeof raw === 'string' ? raw.trim() : '';
-    if (!url || seen.has(url) || BLOCKED_NON_GALLERY_RE.test(url)) continue;
+    const url = safeLivingPhotoUrl(raw, shared);
+    if (!url || seen.has(url)) continue;
     seen.add(url);
     out.push(url);
   }
@@ -111,6 +129,13 @@ function uniqueClean(urls: Array<string | undefined>): string[] {
 function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
   const record = trusted as Record<string, unknown> | undefined;
   const imageUrls = Array.isArray(record?.image_urls) ? record.image_urls.filter((u): u is string => typeof u === 'string') : [];
+  const shared = {
+    title: trusted?.scientific_name,
+    description: [trusted?.scientific_name, trusted?.image_source].filter(Boolean).join(' '),
+    source: trusted?.image_source,
+    license: trusted?.image_license,
+    name: trusted?.scientific_name,
+  };
   return uniqueClean([
     ...imageUrls,
     trusted?.image_url,
@@ -121,7 +146,7 @@ function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
     record?.media_url as string | undefined,
     record?.url as string | undefined,
     fallback,
-  ]);
+  ], shared);
 }
 
 function mergeImages(a: string[] = [], b: string[] = []): string[] {
@@ -142,13 +167,16 @@ async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSigna
       if (!name || !name.toLowerCase().startsWith(wanted)) continue;
       const photo = (r.default_photo as Record<string, unknown>) ?? {};
       const medium = typeof photo.medium_url === 'string' ? photo.medium_url.trim() : '';
-      if (!medium || BLOCKED_NON_GALLERY_RE.test(medium)) continue;
+      const attribution = typeof photo.attribution === 'string' ? photo.attribution.trim() : 'iNaturalist';
+      const license = typeof photo.license_code === 'string' ? photo.license_code.trim() : undefined;
+      const safe = safeLivingPhotoUrl(medium, { title: name, source: attribution, license, name });
+      if (!safe) continue;
       return {
         scientific_name: name,
-        image_url: medium,
-        image_urls: [medium],
-        image_sourceView: typeof photo.attribution === 'string' ? photo.attribution.trim() : 'iNaturalist',
-        image_license: typeof photo.license_code === 'string' ? photo.license_code.trim() : undefined,
+        image_url: safe,
+        image_urls: [safe],
+        image_source: attribution,
+        image_license: license,
       };
     }
   } catch {
@@ -209,7 +237,7 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
 }
 
 function recordBackendSource(sourceView: ImageSource | null, genus: string): void {
-  setBackendStatus({ sourceView: source || 'pending', genus, lastPingTime: Date.now(), cacheWrittenAt: null });
+  setBackendStatus({ sourceView: sourceView || 'pending', genus, lastPingTime: Date.now(), cacheWrittenAt: null });
 }
 
 const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero = false }) => (
@@ -296,7 +324,8 @@ const DailyGenusFeatureV4: React.FC = () => {
     fetchGenusImagesWithSource(base.genus, ctrl.signal, IMAGE_LIMIT)
       .then(({ images, source }) => {
         if (ctrl.signal.aborted) return;
-        setTrustedImages(Array.isArray(images) ? images : []);
+        const filtered = (Array.isArray(images) ? images : []).map((img) => ({ ...img, image_urls: urlsFor(img), image_url: urlsFor(img)[0] || '' })).filter((img) => img.image_url);
+        setTrustedImages(filtered);
         setImageSource(source || 'pending');
         recordBackendSource(source || 'pending', base.genus);
       })
@@ -307,8 +336,9 @@ const DailyGenusFeatureV4: React.FC = () => {
     if (curated.length > 0) {
       fetchInaturalistSpeciesBatch(curated, ctrl.signal).then((images) => {
         if (ctrl.signal.aborted) return;
-        setInatImages(images);
-        if (images.length > 0) setImageSource((prev) => (prev && prev !== 'pending' ? prev : 'inaturalist'));
+        const filtered = images.map((img) => ({ ...img, image_urls: urlsFor(img), image_url: urlsFor(img)[0] || '' })).filter((img) => img.image_url);
+        setInatImages(filtered);
+        if (filtered.length > 0) setImageSource((prev) => (prev && prev !== 'pending' ? prev : 'inaturalist'));
       });
     }
 
@@ -321,7 +351,7 @@ const DailyGenusFeatureV4: React.FC = () => {
     const pushSlot = (slot: Slot) => {
       const key = binomialOf(slot.species);
       if (!key) return;
-      const next = { ...slot, species: key, images: uniqueClean(slot.images || []) };
+      const next = { ...slot, species: key, images: uniqueClean(slot.images || [], { title: key, source: slot.imageSource, license: slot.imageLicense, name: key }) };
       const existing = byName.get(key);
       if (!existing) {
         byName.set(key, next);
