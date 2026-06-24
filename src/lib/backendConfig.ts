@@ -4,8 +4,11 @@
  *
  * CURRENT PRODUCTION HOSTS
  *
- *   API / Species / Atlas / Images:
+ *   API / Species / Atlas:
  *   https://orchid-continuum-public-api.onrender.com
+ *
+ *   Images:
+ *   https://orchidcontinuumharvester2.onrender.com
  *
  * Legacy:
  *   https://orchidcontinuum.onrender.com
@@ -20,7 +23,6 @@ const env = import.meta.env as Record<string, string | undefined>;
  * - species search
  * - species detail
  * - atlas
- * - image endpoints
  * - diagnostics
  * - campaign statistics
  */
@@ -33,12 +35,15 @@ export const BACKEND_BASE_URL = (
 /**
  * Image backend
  *
- * Currently uses the same public API host.
+ * Genus images are currently served by the harvester image backend:
+ *   GET /images/genus/{genus}
+ *
+ * Do not point this at the public API unless that endpoint has been migrated.
  */
 export const IMAGES_BACKEND_BASE_URL = (
   env.VITE_IMAGES_BACKEND_BASE_URL ||
   env.VITE_IMAGE_BACKEND_BASE_URL ||
-  'https://orchid-continuum-public-api.onrender.com'
+  'https://orchidcontinuumharvester2.onrender.com'
 ).replace(/\/$/, '');
 
 /**
