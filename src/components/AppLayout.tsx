@@ -9,6 +9,7 @@ import HabitatCards from './orchid/HabitatCards';
 import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
 import HomeAtlas from './orchid/HomeAtlas';
+import LivePlatformMetrics from './orchid/LivePlatformMetrics';
 import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
 import HumanStewardship from './orchid/HumanStewardship';
 import OrchidGallery from './orchid/OrchidGallery';
@@ -86,6 +87,7 @@ const AppLayout: React.FC = () => {
         <DailyGenusProvider>
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
+            <SafeSection name="Release metrics"><LivePlatformMetrics /></SafeSection>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
             <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
             <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
