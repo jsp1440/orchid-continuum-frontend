@@ -157,46 +157,52 @@ export function buildExplorationContextFromSpeciesCard(
   };
 }
 
+function q(value: string): string {
+  return encodeURIComponent(value);
+}
+
 export function nodeToRoute(
   node: ExplorationNode,
   context?: Partial<ExplorationContextState>
 ): string {
+  const species = context?.species || node.value;
+
   switch (node.type) {
     case "species":
-      return `/species/${encodeURIComponent(node.value)}`;
+      return `/species/${q(node.value)}`;
 
     case "genus":
-      return `/species?genus=${encodeURIComponent(node.value)}`;
+      return `/species?genus=${q(node.value)}`;
 
     case "habitat":
-      return `/atlas?habitat=${encodeURIComponent(node.value)}`;
+      return `/habitats?habitat=${q(node.value)}${species ? `&species=${q(species)}` : ""}`;
 
     case "geography":
-      return `/atlas?country=${encodeURIComponent(node.value)}`;
+      return `/atlas?country=${q(node.value)}${species ? `&species=${q(species)}` : ""}`;
 
     case "pollinator":
-      return `/atlas?pollinator=${encodeURIComponent(node.value)}`;
+      return `/pollinators/${q(node.value)}${species ? `?species=${q(species)}` : ""}`;
 
     case "fungus":
-      return `/atlas?fungus=${encodeURIComponent(node.value)}`;
+      return `/mycorrhizae/${q(node.value)}${species ? `?species=${q(species)}` : ""}`;
 
     case "conservation":
-      return `/conservatory?status=${encodeURIComponent(node.value)}`;
+      return `/conservation?status=${q(node.value)}${species ? `&species=${q(species)}` : ""}`;
 
     case "elevation":
-      return `/atlas?elevation=${encodeURIComponent(node.value)}`;
+      return `/atlas?elevation=${q(node.value)}${species ? `&species=${q(species)}` : ""}`;
 
     case "atlas":
-      return `/atlas?species=${encodeURIComponent(node.value)}`;
+      return `/atlas?species=${q(node.value)}`;
 
     case "knowledge":
-      return `/knowledge?species=${encodeURIComponent(node.value)}`;
+      return `/intelligence-graph?species=${q(node.value)}`;
 
     case "literature":
-      return `/literature?species=${encodeURIComponent(node.value)}`;
+      return `/coming-soon/literature?species=${q(node.value)}`;
 
     case "image":
-      return `/gallery?species=${encodeURIComponent(node.value)}`;
+      return `/gallery?species=${q(node.value)}`;
 
     default:
       return "/";
