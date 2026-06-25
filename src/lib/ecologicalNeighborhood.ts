@@ -93,6 +93,15 @@ const PRIORITY: Record<EcologicalNeighborType, number> = {
   missing: 120,
 };
 
+const CORE_TYPES: EcologicalNeighborType[] = [
+  'species',
+  'habitat',
+  'pollinator',
+  'fungal_dependency',
+  'geography',
+  'conservation',
+];
+
 const ALLOWED_TYPES = new Set<EcologicalNeighborType>([
   'species',
   'geography',
@@ -161,6 +170,15 @@ function livingPhotoUrl(
   return homepageSafeUrl(clean, shared) ?? undefined;
 }
 
+function confidenceFromHarvest(row: HarvestRow, cardType: EcologicalNeighborType): string {
+  if (cardType === 'missing') return 'gap';
+  const score = typeof row.evidence_score === 'number' ? row.evidence_score : undefined;
+  const count = typeof row.source_count === 'number' ? row.source_count : undefined;
+  if ((score !== undefined && score >= 8) || (count !== undefined && count >= 10)) return 'high';
+  if ((score !== undefined && score >= 4) || (count !== undefined && count >= 2)) return 'moderate';
+  return 'emerging';
+}
+
 async function resolveSpeciesImage(scientificName: string): Promise<string | undefined> {
   const name = cleanSpecies(scientificName);
   if (!name) return undefined;
@@ -216,9 +234,10 @@ function mapHarvestRow(row: HarvestRow, focalSpecies: string): EcologicalNeighbo
     scientificName: cardType === 'species' ? focalSpecies : undefined,
     imageUrl: harvestedImage,
     relationship,
-    evidenceLabel: txt(row.evidence_label),
+    evidenceLabel: txt(row.evidence_label) || (row.source_count ? 'Records' : undefined),
     evidenceValue: row.evidence_value ?? row.evidence_score ?? row.source_count ?? undefined,
     sourceView: sourceView(row),
+    confidenceClass: confidenceFromHarvest(row, cardType),
     priority: PRIORITY[cardType] + (row.evidence_score ? -Math.min(Number(row.evidence_score), 10) / 100 : 0),
   };
 }
@@ -226,6 +245,14 @@ function mapHarvestRow(row: HarvestRow, focalSpecies: string): EcologicalNeighbo
 function findPlate(entry: GenusEntry, scientificName: string): SpeciesPlate | undefined {
   const wanted = cleanSpecies(scientificName).toLowerCase();
   return entry.plates.find((p) => cleanSpecies(p.species).toLowerCase() === wanted);
+}
+
+function curatedCard(base: Omit<EcologicalNeighborhoodCard, 'sourceView' | 'confidenceClass'>): EcologicalNeighborhoodCard {
+  return {
+    ...base,
+    sourceView: 'src.lib.genusData.GENERA',
+    confidenceClass: 'curated',
+  };
 }
 
 function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
@@ -237,7 +264,7 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
   const display = plate?.species ? cleanSpecies(plate.species) : scientificName;
 
   const cards: EcologicalNeighborhoodCard[] = [
-    {
+    curatedCard({
       id: `genusdata:${scientificName}:species`,
       type: 'species',
       title: display,
@@ -245,10 +272,9 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `Focal species selected from the active Genus of the Day rotation for ${entry.genus}.`,
       evidenceLabel: 'Source',
       evidenceValue: 'curated genus data',
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.species,
-    },
-    {
+    }),
+    curatedCard({
       id: `genusdata:${scientificName}:habitat`,
       type: 'habitat',
       title: plate?.habitat || entry.ecology.habitat,
@@ -256,10 +282,9 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `${display} is linked to ${plate?.habitat || entry.ecology.habitat}.`,
       evidenceLabel: 'Habitat',
       evidenceValue: plate?.habitat || entry.ecology.habitat,
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.habitat,
-    },
-    {
+    }),
+    curatedCard({
       id: `genusdata:${scientificName}:pollinator`,
       type: 'pollinator',
       title: plate?.pollinators || entry.ecology.pollinatorGuild,
@@ -267,10 +292,9 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `${display} is associated with ${plate?.pollinators || entry.ecology.pollinatorGuild}.`,
       evidenceLabel: 'Pollinator link',
       evidenceValue: plate?.pollinators || entry.ecology.pollinatorGuild,
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.pollinator,
-    },
-    {
+    }),
+    curatedCard({
       id: `genusdata:${scientificName}:mycorrhiza`,
       type: 'fungal_dependency',
       title: entry.ecology.mycorrhizal,
@@ -278,10 +302,9 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `Like other orchids, ${display} depends on compatible mycorrhizal fungi for seed germination and early establishment; this genus is linked to ${entry.ecology.mycorrhizal}.`,
       evidenceLabel: 'Mycorrhizae',
       evidenceValue: entry.ecology.mycorrhizal,
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.fungal_dependency,
-    },
-    {
+    }),
+    curatedCard({
       id: `genusdata:${scientificName}:geography`,
       type: 'geography',
       title: plate?.distribution || entry.regions.join(', '),
@@ -289,13 +312,12 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `${display} is represented in the curated genus profile from ${plate?.distribution || entry.regions.join(', ')}.`,
       evidenceLabel: 'Range',
       evidenceValue: plate?.distribution || entry.regions.join(', '),
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.geography,
-    },
+    }),
   ];
 
   if (plate?.elevation || entry.ecology.elevation) {
-    cards.push({
+    cards.push(curatedCard({
       id: `genusdata:${scientificName}:elevation`,
       type: 'habitat',
       title: plate?.elevation || entry.ecology.elevation,
@@ -303,13 +325,12 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `${display} is associated with the elevation band ${plate?.elevation || entry.ecology.elevation}.`,
       evidenceLabel: 'Elevation',
       evidenceValue: plate?.elevation || entry.ecology.elevation,
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.habitat + 1,
-    });
+    }));
   }
 
   if (plate?.conservation) {
-    cards.push({
+    cards.push(curatedCard({
       id: `genusdata:${scientificName}:conservation`,
       type: 'conservation',
       title: plate.conservation,
@@ -317,13 +338,12 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `${display} carries the curated conservation note: ${plate.conservation}.`,
       evidenceLabel: 'Status',
       evidenceValue: plate.conservation,
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.conservation,
-    });
+    }));
   }
 
   for (const neighbor of entry.plates.filter((p) => cleanSpecies(p.species).toLowerCase() !== scientificName.toLowerCase()).slice(0, 3)) {
-    cards.push({
+    cards.push(curatedCard({
       id: `genusdata:${scientificName}:neighbor:${cleanSpecies(neighbor.species).toLowerCase()}`,
       type: 'co_occurring_orchid',
       title: cleanSpecies(neighbor.species),
@@ -332,9 +352,8 @@ function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: `${cleanSpecies(neighbor.species)} appears with ${display} in the curated ${entry.genus} Genus of the Day profile, giving the page a same-genus ecological comparison point.`,
       evidenceLabel: 'Shared genus',
       evidenceValue: entry.genus,
-      sourceView: 'src.lib.genusData.GENERA',
       priority: PRIORITY.co_occurring_orchid,
-    });
+    }));
   }
 
   return cards.sort((a, b) => a.priority - b.priority);
@@ -350,6 +369,7 @@ function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: 'Focal species selected from the active Genus of the Day rotation.',
       evidenceLabel: 'Status',
       evidenceValue: 'awaiting relationship harvest',
+      confidenceClass: 'gap',
       priority: PRIORITY.species,
     },
     {
@@ -359,9 +379,31 @@ function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
       relationship: 'No harvested species-level relationship rows or curated genus fallback data were returned for this taxon yet.',
       evidenceLabel: 'Status',
       evidenceValue: 'not yet linked',
+      confidenceClass: 'gap',
       priority: PRIORITY.missing,
     },
   ];
+}
+
+function mergeHarvestedWithCurated(
+  harvestedCards: EcologicalNeighborhoodCard[],
+  curatedCards: EcologicalNeighborhoodCard[],
+): EcologicalNeighborhoodCard[] {
+  if (harvestedCards.length === 0) return curatedCards;
+
+  const out = [...harvestedCards];
+  const harvestedTypes = new Set(harvestedCards.map((c) => c.type));
+
+  for (const card of curatedCards) {
+    const isCore = CORE_TYPES.includes(card.type);
+    const alreadyCovered = harvestedTypes.has(card.type);
+    if (isCore && !alreadyCovered) out.push({ ...card, priority: card.priority + 0.5 });
+    if (card.type === 'co_occurring_orchid' && out.filter((c) => c.type === 'co_occurring_orchid').length < 2) {
+      out.push({ ...card, priority: card.priority + 0.5 });
+    }
+  }
+
+  return out.sort((a, b) => a.priority - b.priority);
 }
 
 async function enrichCardImages(cards: EcologicalNeighborhoodCard[], focalSpecies: string): Promise<EcologicalNeighborhoodCard[]> {
@@ -414,7 +456,8 @@ export async function fetchSpeciesEcologicalNeighborhood(
           .map((row) => mapHarvestRow(row, scientificName))
           .sort((a, b) => a.priority - b.priority);
 
-  const cards = harvestedCards.length > 0 ? harvestedCards : genusDataCards(scientificName);
-  const enriched = await enrichCardImages(cards, scientificName);
+  const curatedCards = genusDataCards(scientificName).filter((card) => card.type !== 'missing');
+  const cards = mergeHarvestedWithCurated(harvestedCards, curatedCards);
+  const enriched = await enrichCardImages(cards.length > 0 ? cards : fallbackCards(scientificName), scientificName);
   return enriched.slice(0, limit);
 }
