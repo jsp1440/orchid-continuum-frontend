@@ -721,7 +721,7 @@ export async function fetchGenusImagesWithSource(
 
   // ── 2. Shared server cache / proxy (Supabase edge function) ──
   if (!signal?.aborted) {
-    const server = await readServerImageCache(g);
+const server = await readServerImageCache(g, limit);
     if (server.length > 0) {
       console.log(
         `[fetchGenusImages] ⚡ server cache HIT for "${g}" — ${server.length} image(s)`,
