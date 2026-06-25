@@ -19,6 +19,7 @@ import type {
 } from '@/lib/ecologicalNeighborhood';
 import { ecologicalTypeLabel } from '@/lib/ecologicalNeighborhood';
 import { isEcologicalCardPending, navigationTargetForCard } from '@/lib/ecologicalNavigation';
+import DailyGenusRelationshipChips from '@/components/orchid/DailyGenusRelationshipChips';
 
 const ICONS: Record<EcologicalNeighborType, React.ReactNode> = {
   species: <Camera className="h-4 w-4" />,
@@ -55,11 +56,63 @@ interface Props {
   card: Card;
 }
 
+function text(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
+
+function genusOf(name?: string): string | undefined {
+  const genus = (name || '').trim().split(/\s+/)[0];
+  if (!genus) return undefined;
+  return genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
+}
+
+function cardValue(card: Card): string | undefined {
+  return text(card.evidenceValue) || text(card.title) || text(card.subtitle);
+}
+
+function cardChipProps(card: Card): {
+  species?: string;
+  genus?: string;
+  habitat?: string;
+  geography?: string;
+  pollinator?: string;
+  fungus?: string;
+  conservation?: string;
+} {
+  const value = cardValue(card);
+  const species = card.scientificName;
+  const genus = genusOf(species || card.title);
+
+  switch (card.type) {
+    case 'species':
+    case 'co_occurring_orchid':
+      return { species: species || card.title, genus };
+    case 'habitat':
+    case 'host_tree':
+      return { species, genus, habitat: value };
+    case 'geography':
+      return { species, genus, geography: value };
+    case 'pollinator':
+      return { species, genus, pollinator: value };
+    case 'fungus':
+    case 'fungal_dependency':
+      return { species, genus, fungus: value };
+    case 'conservation':
+      return { species, genus, conservation: value };
+    case 'knowledge':
+    case 'ecological_partner':
+    case 'missing':
+    default:
+      return { species, genus };
+  }
+}
+
 const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
   const navigate = useNavigate();
   const pending = isEcologicalCardPending(card);
   const target = navigationTargetForCard(card);
   const clickable = Boolean(target);
+  const chipProps = cardChipProps(card);
 
   const handleClick = () => {
     if (target) navigate(target.href);
@@ -71,6 +124,10 @@ const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
       event.preventDefault();
       navigate(target.href);
     }
+  };
+
+  const stopCardNavigation: React.MouseEventHandler<HTMLDivElement> = (event) => {
+    event.stopPropagation();
   };
 
   return (
@@ -140,6 +197,18 @@ const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
         <p className="mt-4 text-[13.5px] leading-7 text-[#d8d1c2]/85">
           {card.relationship}
         </p>
+
+        <div
+          className="mt-4 rounded-xl border border-[#c9a24a]/15 bg-[#f6f0df]/95 p-3"
+          onClick={stopCardNavigation}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          <DailyGenusRelationshipChips
+            {...chipProps}
+            sourceView={card.sourceView}
+            className="mt-0"
+          />
+        </div>
 
         {(card.evidenceLabel || card.evidenceValue !== undefined || card.sourceView) && (
           <div className="mt-5 rounded-xl border border-[#c9a24a]/15 bg-black/15 p-3">
