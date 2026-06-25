@@ -2,9 +2,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
+  BarChart3,
   Bug,
   Camera,
+  Database,
   Globe2,
+  Gauge,
   Leaf,
   Microscope,
   Mountain,
@@ -60,6 +63,11 @@ function text(v: unknown): string | undefined {
   return typeof v === 'string' && v.trim() ? v.trim() : undefined;
 }
 
+function displayValue(v: unknown): string | undefined {
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return text(v);
+}
+
 function genusOf(name?: string): string | undefined {
   const genus = (name || '').trim().split(/\s+/)[0];
   if (!genus) return undefined;
@@ -67,7 +75,7 @@ function genusOf(name?: string): string | undefined {
 }
 
 function cardValue(card: Card): string | undefined {
-  return text(card.evidenceValue) || text(card.title) || text(card.subtitle);
+  return displayValue(card.evidenceValue) || text(card.title) || text(card.subtitle);
 }
 
 function cardChipProps(card: Card): {
@@ -107,12 +115,84 @@ function cardChipProps(card: Card): {
   }
 }
 
+type Metric = {
+  label: string;
+  value: string;
+  icon: React.ReactNode;
+};
+
+function confidenceFromPriority(card: Card): string | undefined {
+  if (card.type === 'missing') return undefined;
+  if (typeof card.confidenceClass === 'string' && card.confidenceClass.trim()) {
+    return card.confidenceClass.trim();
+  }
+  if (typeof card.priority === 'number') {
+    if (card.priority < 25) return 'high';
+    if (card.priority < 70) return 'moderate';
+    return 'emerging';
+  }
+  return undefined;
+}
+
+function metricsForCard(card: Card): Metric[] {
+  const metrics: Metric[] = [];
+  const source = text(card.sourceView);
+  const evidenceLabel = text(card.evidenceLabel);
+  const evidenceValue = displayValue(card.evidenceValue);
+  const confidence = confidenceFromPriority(card);
+
+  if (evidenceLabel && evidenceValue) {
+    metrics.push({
+      label: evidenceLabel,
+      value: evidenceValue,
+      icon: <BarChart3 className="h-3.5 w-3.5" />,
+    });
+  } else if (evidenceValue) {
+    metrics.push({
+      label: 'Evidence',
+      value: evidenceValue,
+      icon: <BarChart3 className="h-3.5 w-3.5" />,
+    });
+  }
+
+  if (confidence) {
+    metrics.push({
+      label: 'Confidence',
+      value: confidence,
+      icon: <Gauge className="h-3.5 w-3.5" />,
+    });
+  }
+
+  if (source) {
+    metrics.push({
+      label: 'Source',
+      value: source.replace(/^src\.lib\./, '').replace(/^oc_api\./, ''),
+      icon: <Database className="h-3.5 w-3.5" />,
+    });
+  }
+
+  return metrics.slice(0, 4);
+}
+
+const MetricPill: React.FC<{ metric: Metric }> = ({ metric }) => (
+  <div className="rounded-xl border border-[#c9a24a]/15 bg-black/20 px-3 py-2">
+    <div className="flex items-center gap-1.5 font-mono text-[8px] uppercase tracking-[0.18em] text-[#c9a24a]/75">
+      {metric.icon}
+      {metric.label}
+    </div>
+    <div className="mt-1 line-clamp-2 text-[12px] leading-snug text-[#faf7f2]">
+      {metric.value}
+    </div>
+  </div>
+);
+
 const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
   const navigate = useNavigate();
   const pending = isEcologicalCardPending(card);
   const target = navigationTargetForCard(card);
   const clickable = Boolean(target);
   const chipProps = cardChipProps(card);
+  const metrics = metricsForCard(card);
 
   const handleClick = () => {
     if (target) navigate(target.href);
@@ -198,6 +278,14 @@ const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
           {card.relationship}
         </p>
 
+        {metrics.length > 0 && (
+          <div className="mt-4 grid grid-cols-2 gap-2">
+            {metrics.map((metric) => (
+              <MetricPill key={`${metric.label}:${metric.value}`} metric={metric} />
+            ))}
+          </div>
+        )}
+
         <div
           className="mt-4 rounded-xl border border-[#c9a24a]/15 bg-[#f6f0df]/95 p-3"
           onClick={stopCardNavigation}
@@ -209,26 +297,6 @@ const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
             className="mt-0"
           />
         </div>
-
-        {(card.evidenceLabel || card.evidenceValue !== undefined || card.sourceView) && (
-          <div className="mt-5 rounded-xl border border-[#c9a24a]/15 bg-black/15 p-3">
-            {card.evidenceLabel && (
-              <div className="font-mono text-[8.5px] uppercase tracking-[0.22em] text-[#c9a24a]/75">
-                {card.evidenceLabel}
-              </div>
-            )}
-            {card.evidenceValue !== undefined && (
-              <div className="mt-1 text-sm text-[#faf7f2]">
-                {String(card.evidenceValue)}
-              </div>
-            )}
-            {card.sourceView && (
-              <div className="mt-2 break-all font-mono text-[8px] uppercase tracking-[0.12em] text-[#7d7567]">
-                {card.sourceView}
-              </div>
-            )}
-          </div>
-        )}
 
         {target && (
           <div className="mt-5 inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.24em] text-[#e0bd57] transition-transform group-hover:translate-x-1">
