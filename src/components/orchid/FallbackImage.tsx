@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { filterRankUrls } from '@/lib/imageQuality';
 
 export interface FallbackImageProps {
   urls: string[];
@@ -11,11 +12,16 @@ export interface FallbackImageProps {
 
 const LOAD_TIMEOUT_MS = 9000;
 
-// Final safety net for stale cached rows: living orchid galleries must not render
-// society logos, badges, placeholders, or document-style assets as plant photos.
-const NON_PHOTO_URL_RE =
-  /(logo|logotipo|emblem|badge|banner|seal|watermark|placeholder|coming[\s_-]*soon|photo[\s_-]*coming[\s_-]*soon|society|club|association|asociaci[oó]n|orqu[ií]deas[\s_-]*del[\s_-]*ecuador|ecuagenera|herbarium|specimen|voucher|plate|illustration|drawing|lineart|\.pdf|\.tif|\.tiff|\.djvu|\.doc|\.docx|\.txt|\.csv)/i;
-
+/**
+ * Final safety net for living-orchid image surfaces.
+ *
+ * Upstream components should already send curated image URLs, but cached backend
+ * rows can drift. This component therefore re-runs the central homepage image
+ * quality filter before rendering anything. That keeps herbarium sheets,
+ * specimen labels, scanned plates, logos, document files, placeholders, and
+ * society graphics out of the public photo surfaces even if a stale URL slips
+ * through a feature-specific component.
+ */
 const FallbackImage: React.FC<FallbackImageProps> = ({
   urls,
   alt,
@@ -25,8 +31,8 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   onSettled,
 }) => {
   const cleanUrls = useMemo(
-    () => Array.from(new Set((urls || []).map((u) => u?.trim()).filter((u): u is string => Boolean(u) && !NON_PHOTO_URL_RE.test(u)))),
-    [urls],
+    () => filterRankUrls(urls || [], { title: alt, description: alt }),
+    [urls, alt],
   );
 
   const [index, setIndex] = useState(0);
