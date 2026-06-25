@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Leaf } from 'lucide-react';
 import type { EcologicalNeighborhoodCard as Card } from '@/lib/ecologicalNeighborhood';
 import EcologicalNeighborhoodCard from '@/components/orchid/EcologicalNeighborhoodCard';
+import DailyGenusRelationshipChips from '@/components/orchid/DailyGenusRelationshipChips';
 
 const ScientificName: React.FC<{ name?: string }> = ({ name }) => {
   if (!name) return null;
@@ -15,6 +16,18 @@ interface Props {
   className?: string;
 }
 
+function firstCardValue(cards: Card[], types: Card['type'][]): string | undefined {
+  const hit = cards.find((card) => types.includes(card.type));
+  if (!hit) return undefined;
+  return String(hit.evidenceValue || hit.subtitle || hit.title || '').trim() || undefined;
+}
+
+function genusOf(scientificName: string): string | undefined {
+  const genus = scientificName.trim().split(/\s+/)[0];
+  if (!genus) return undefined;
+  return genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
+}
+
 const EcologicalNeighborhood: React.FC<Props> = ({
   scientificName,
   cards,
@@ -22,6 +35,17 @@ const EcologicalNeighborhood: React.FC<Props> = ({
   className = '',
 }) => {
   const sortedCards = [...cards].sort((a, b) => a.priority - b.priority);
+  const chipValues = useMemo(
+    () => ({
+      genus: genusOf(scientificName),
+      habitat: firstCardValue(cards, ['habitat', 'host_tree']),
+      geography: firstCardValue(cards, ['geography']),
+      pollinator: firstCardValue(cards, ['pollinator']),
+      fungus: firstCardValue(cards, ['fungus', 'fungal_dependency']),
+      conservation: firstCardValue(cards, ['conservation']),
+    }),
+    [cards, scientificName],
+  );
 
   return (
     <section
@@ -61,6 +85,20 @@ const EcologicalNeighborhood: React.FC<Props> = ({
             They can include co-occurring orchids, pollinators, fungi, habitat,
             substrate, conservation pressure, geography, and knowledge-graph signals.
           </p>
+
+          <div className="mt-5 rounded-2xl border border-[#c9a24a]/15 bg-[#13291a]/70 p-4">
+            <DailyGenusRelationshipChips
+              species={scientificName}
+              genus={chipValues.genus}
+              habitat={chipValues.habitat}
+              geography={chipValues.geography}
+              pollinator={chipValues.pollinator}
+              fungus={chipValues.fungus}
+              conservation={chipValues.conservation}
+              sourceView="oc_api.species_ecological_neighborhood_v1"
+              className="mt-0"
+            />
+          </div>
         </div>
 
         {loading ? (
