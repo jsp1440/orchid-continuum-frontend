@@ -1,5 +1,6 @@
 import { homepageSafeUrl } from '@/lib/imageQuality';
 import { supabase } from '@/lib/supabase';
+import { lookupGenus, type GenusEntry, type SpeciesPlate } from '@/lib/genusData';
 
 export type EcologicalNeighborType =
   | 'species'
@@ -45,7 +46,6 @@ export function ecologicalTypeLabel(type: EcologicalNeighborType): string {
     ecological_partner: 'Ecological partner',
     missing: 'Data needed',
   };
-
   return labels[type] ?? 'Relationship';
 }
 
@@ -80,16 +80,16 @@ type ImageRow = {
 
 const PRIORITY: Record<EcologicalNeighborType, number> = {
   species: 10,
-  fungal_dependency: 20,
-  fungus: 30,
-  pollinator: 40,
-  habitat: 50,
-  geography: 60,
-  conservation: 70,
-  knowledge: 80,
+  habitat: 20,
+  pollinator: 30,
+  fungal_dependency: 40,
+  fungus: 45,
+  geography: 50,
+  conservation: 60,
+  co_occurring_orchid: 70,
+  host_tree: 80,
   ecological_partner: 85,
-  co_occurring_orchid: 90,
-  host_tree: 100,
+  knowledge: 90,
   missing: 120,
 };
 
@@ -124,6 +124,10 @@ function cleanSpecies(name: string): string {
   return parts.length === 1 ? genus : `${genus} ${parts.slice(1).join(' ').toLowerCase()}`;
 }
 
+function genusOf(scientificName: string): string {
+  return cleanSpecies(scientificName).split(/\s+/)[0] || '';
+}
+
 function normalizeType(raw: unknown): EcologicalNeighborType {
   const value = txt(raw)?.toLowerCase() as EcologicalNeighborType | undefined;
   if (value && ALLOWED_TYPES.has(value)) return value;
@@ -144,7 +148,10 @@ function sourceView(row: HarvestRow): string | undefined {
   return table || schema;
 }
 
-function livingPhotoUrl(url: unknown, shared?: { title?: string; description?: string; source?: string; license?: string; name?: string }): string | undefined {
+function livingPhotoUrl(
+  url: unknown,
+  shared?: { title?: string; description?: string; source?: string; license?: string; name?: string },
+): string | undefined {
   const clean = txt(url);
   if (!clean) return undefined;
   const hay = [clean, shared?.title, shared?.description, shared?.source, shared?.license, shared?.name]
@@ -216,6 +223,123 @@ function mapHarvestRow(row: HarvestRow, focalSpecies: string): EcologicalNeighbo
   };
 }
 
+function findPlate(entry: GenusEntry, scientificName: string): SpeciesPlate | undefined {
+  const wanted = cleanSpecies(scientificName).toLowerCase();
+  return entry.plates.find((p) => cleanSpecies(p.species).toLowerCase() === wanted);
+}
+
+function genusDataCards(scientificName: string): EcologicalNeighborhoodCard[] {
+  const genus = genusOf(scientificName);
+  const entry = lookupGenus(genus);
+  if (!entry) return fallbackCards(scientificName);
+
+  const plate = findPlate(entry, scientificName);
+  const display = plate?.species ? cleanSpecies(plate.species) : scientificName;
+
+  const cards: EcologicalNeighborhoodCard[] = [
+    {
+      id: `genusdata:${scientificName}:species`,
+      type: 'species',
+      title: display,
+      scientificName,
+      relationship: `Focal species selected from the active Genus of the Day rotation for ${entry.genus}.`,
+      evidenceLabel: 'Source',
+      evidenceValue: 'curated genus data',
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.species,
+    },
+    {
+      id: `genusdata:${scientificName}:habitat`,
+      type: 'habitat',
+      title: plate?.habitat || entry.ecology.habitat,
+      subtitle: 'Habitat association',
+      relationship: `${display} is linked to ${plate?.habitat || entry.ecology.habitat}.`,
+      evidenceLabel: 'Habitat',
+      evidenceValue: plate?.habitat || entry.ecology.habitat,
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.habitat,
+    },
+    {
+      id: `genusdata:${scientificName}:pollinator`,
+      type: 'pollinator',
+      title: plate?.pollinators || entry.ecology.pollinatorGuild,
+      subtitle: 'Pollination guild',
+      relationship: `${display} is associated with ${plate?.pollinators || entry.ecology.pollinatorGuild}.`,
+      evidenceLabel: 'Pollinator link',
+      evidenceValue: plate?.pollinators || entry.ecology.pollinatorGuild,
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.pollinator,
+    },
+    {
+      id: `genusdata:${scientificName}:mycorrhiza`,
+      type: 'fungal_dependency',
+      title: entry.ecology.mycorrhizal,
+      subtitle: 'Seedling dependency',
+      relationship: `Like other orchids, ${display} depends on compatible mycorrhizal fungi for seed germination and early establishment; this genus is linked to ${entry.ecology.mycorrhizal}.`,
+      evidenceLabel: 'Mycorrhizae',
+      evidenceValue: entry.ecology.mycorrhizal,
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.fungal_dependency,
+    },
+    {
+      id: `genusdata:${scientificName}:geography`,
+      type: 'geography',
+      title: plate?.distribution || entry.regions.join(', '),
+      subtitle: 'Geographic range',
+      relationship: `${display} is represented in the curated genus profile from ${plate?.distribution || entry.regions.join(', ')}.`,
+      evidenceLabel: 'Range',
+      evidenceValue: plate?.distribution || entry.regions.join(', '),
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.geography,
+    },
+  ];
+
+  if (plate?.elevation || entry.ecology.elevation) {
+    cards.push({
+      id: `genusdata:${scientificName}:elevation`,
+      type: 'habitat',
+      title: plate?.elevation || entry.ecology.elevation,
+      subtitle: 'Elevation band',
+      relationship: `${display} is associated with the elevation band ${plate?.elevation || entry.ecology.elevation}.`,
+      evidenceLabel: 'Elevation',
+      evidenceValue: plate?.elevation || entry.ecology.elevation,
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.habitat + 1,
+    });
+  }
+
+  if (plate?.conservation) {
+    cards.push({
+      id: `genusdata:${scientificName}:conservation`,
+      type: 'conservation',
+      title: plate.conservation,
+      subtitle: 'Conservation signal',
+      relationship: `${display} carries the curated conservation note: ${plate.conservation}.`,
+      evidenceLabel: 'Status',
+      evidenceValue: plate.conservation,
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.conservation,
+    });
+  }
+
+  for (const neighbor of entry.plates.filter((p) => cleanSpecies(p.species).toLowerCase() !== scientificName.toLowerCase()).slice(0, 3)) {
+    cards.push({
+      id: `genusdata:${scientificName}:neighbor:${cleanSpecies(neighbor.species).toLowerCase()}`,
+      type: 'co_occurring_orchid',
+      title: cleanSpecies(neighbor.species),
+      scientificName: cleanSpecies(neighbor.species),
+      subtitle: `${entry.genus} species in the same curated feature`,
+      relationship: `${cleanSpecies(neighbor.species)} appears with ${display} in the curated ${entry.genus} Genus of the Day profile, giving the page a same-genus ecological comparison point.`,
+      evidenceLabel: 'Shared genus',
+      evidenceValue: entry.genus,
+      sourceView: 'src.lib.genusData.GENERA',
+      priority: PRIORITY.co_occurring_orchid,
+    });
+  }
+
+  return cards.sort((a, b) => a.priority - b.priority);
+}
+
 function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
   return [
     {
@@ -232,7 +356,7 @@ function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
       id: `fallback:${scientificName}:missing`,
       type: 'missing',
       title: 'Ecological neighborhood not yet harvested',
-      relationship: 'No harvested species-level relationship rows were returned for this taxon yet.',
+      relationship: 'No harvested species-level relationship rows or curated genus fallback data were returned for this taxon yet.',
       evidenceLabel: 'Status',
       evidenceValue: 'not yet linked',
       priority: PRIORITY.missing,
@@ -241,13 +365,29 @@ function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
 }
 
 async function enrichCardImages(cards: EcologicalNeighborhoodCard[], focalSpecies: string): Promise<EcologicalNeighborhoodCard[]> {
-  const speciesImage = await resolveSpeciesImage(focalSpecies);
+  const names = Array.from(
+    new Set(
+      cards
+        .map((c) => c.scientificName)
+        .filter((n): n is string => !!n && n.split(/\s+/).length >= 2),
+    ),
+  );
+
+  if (!names.includes(focalSpecies)) names.unshift(focalSpecies);
+
+  const imagePairs = await Promise.all(
+    names.slice(0, 8).map(async (name) => [name, await resolveSpeciesImage(name)] as const),
+  );
+
+  const imageByName = new Map<string, string | undefined>(
+    imagePairs.map(([name, url]) => [cleanSpecies(name).toLowerCase(), url]),
+  );
+
   return cards.map((card) => {
     if (card.imageUrl) return card;
-    if (card.type === 'species' || card.scientificName === focalSpecies) {
-      return { ...card, imageUrl: speciesImage };
-    }
-    return card;
+    const target = cleanSpecies(card.scientificName || (card.type === 'species' ? focalSpecies : '')).toLowerCase();
+    const imageUrl = target ? imageByName.get(target) : undefined;
+    return imageUrl ? { ...card, imageUrl } : card;
   });
 }
 
@@ -267,12 +407,14 @@ export async function fetchSpeciesEcologicalNeighborhood(
     .ilike('focal_species', scientificName)
     .limit(Math.max(limit * 2, 24));
 
-  const cards = error || !Array.isArray(data) || data.length === 0
-    ? fallbackCards(scientificName)
-    : (data as HarvestRow[])
-        .map((row) => mapHarvestRow(row, scientificName))
-        .sort((a, b) => a.priority - b.priority);
+  const harvestedCards =
+    error || !Array.isArray(data) || data.length === 0
+      ? []
+      : (data as HarvestRow[])
+          .map((row) => mapHarvestRow(row, scientificName))
+          .sort((a, b) => a.priority - b.priority);
 
+  const cards = harvestedCards.length > 0 ? harvestedCards : genusDataCards(scientificName);
   const enriched = await enrichCardImages(cards, scientificName);
   return enriched.slice(0, limit);
 }
