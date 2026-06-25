@@ -1,0 +1,31 @@
+route,status,public_nav,notes
+/,release,yes,Homepage is primary v0.1 surface
+/atlas,release,yes,Atlas is release-priority page
+/species,release,yes,Species search is release-priority page
+/species/:slug,release,deep-link,Species detail is release-priority page but reached through search/cards
+/research,release-protected,yes,Research Station landing remains visible but protected
+/about,supporting,yes,Public context page
+/partners,supporting,more,Collaboration and advisor context
+/get-involved,supporting,more-and-cta,Join/support CTA
+/conservation,preview,more,Visible with Preview badge
+/education,preview,more,Visible with Preview badge
+/societies,prototype,more,Visible with Prototype badge only
+/coming-soon/university,coming-soon,more,University path intentionally points to Coming Soon
+/admin,admin-only,no,Removed from public navigation
+/control-center,admin-only,no,Route retained for direct/admin access
+/diagnostics/daily-genus,admin-only,no,Route retained for diagnostics only
+/oacs,prototype,no,Removed from public navigation
+/collection,member-only,account-menu,Removed from primary nav; available after sign-in
+/conservatory,member-only,no,Deep link retained
+/classroom,prototype,no,Removed from public navigation
+/ecosystems,prototype,no,Removed from public navigation
+/university,prototype,no,Route retained but not promoted
+/pollinators,prototype,no,Route retained for direct access
+/mycorrhizae,prototype,no,Route retained for direct access
+/intelligence-graph,prototype,no,Route retained for direct access
+/knowledge,prototype,no,Route retained for direct access
+/relationship-explorer,prototype,no,Route retained for direct access
+/gallery,prototype,no,Route retained for direct access
+/climate,prototype,no,Route retained for direct access
+/widgets,dev-support,no,Route retained for direct access
+/zoo,prototype,no,Route retained for direct access
