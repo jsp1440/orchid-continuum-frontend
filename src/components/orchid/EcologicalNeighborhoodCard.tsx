@@ -1,5 +1,7 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
+  ArrowRight,
   Bug,
   Camera,
   Globe2,
@@ -16,6 +18,7 @@ import type {
   EcologicalNeighborType,
 } from '@/lib/ecologicalNeighborhood';
 import { ecologicalTypeLabel } from '@/lib/ecologicalNeighborhood';
+import { isEcologicalCardPending, navigationTargetForCard } from '@/lib/ecologicalNavigation';
 
 const ICONS: Record<EcologicalNeighborType, React.ReactNode> = {
   species: <Camera className="h-4 w-4" />,
@@ -28,13 +31,9 @@ const ICONS: Record<EcologicalNeighborType, React.ReactNode> = {
   co_occurring_orchid: <Leaf className="h-4 w-4" />,
   host_tree: <Trees className="h-4 w-4" />,
   conservation: <Shield className="h-4 w-4" />,
+  ecological_partner: <Network className="h-4 w-4" />,
   missing: <Leaf className="h-4 w-4" />,
 };
-
-function isPending(card: Card): boolean {
-  const text = `${card.title} ${card.relationship} ${card.evidenceValue ?? ''}`.toLowerCase();
-  return card.type === 'missing' || text.includes('not yet linked') || text.includes('needed') || text.includes('awaiting');
-}
 
 const PlaceholderTile: React.FC<{ type: EcologicalNeighborType }> = ({ type }) => (
   <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#17321f] text-[#c9a24a]">
@@ -57,12 +56,33 @@ interface Props {
 }
 
 const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
-  const pending = isPending(card);
+  const navigate = useNavigate();
+  const pending = isEcologicalCardPending(card);
+  const target = navigationTargetForCard(card);
+  const clickable = Boolean(target);
+
+  const handleClick = () => {
+    if (target) navigate(target.href);
+  };
+
+  const handleKeyDown: React.KeyboardEventHandler<HTMLElement> = (event) => {
+    if (!target) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      navigate(target.href);
+    }
+  };
 
   return (
     <article
+      role={clickable ? 'link' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      aria-label={clickable ? `${target?.label}: ${card.title}` : undefined}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
       className={[
         'group overflow-hidden rounded-2xl border bg-[#13291a] transition-colors',
+        clickable ? 'cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#e0bd57]/70' : '',
         pending
           ? 'border-[#c9a24a]/20 opacity-90'
           : 'border-[#c9a24a]/35 hover:border-[#e0bd57]',
@@ -138,6 +158,13 @@ const EcologicalNeighborhoodCard: React.FC<Props> = ({ card }) => {
                 {card.sourceView}
               </div>
             )}
+          </div>
+        )}
+
+        {target && (
+          <div className="mt-5 inline-flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.24em] text-[#e0bd57] transition-transform group-hover:translate-x-1">
+            {target.label}
+            <ArrowRight className="h-3.5 w-3.5" />
           </div>
         )}
       </div>
