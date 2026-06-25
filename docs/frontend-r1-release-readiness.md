@@ -50,15 +50,36 @@ Initial inspection confirms the non-v2 repository is the broad active surface:
 - `src/lib/ocBackend.ts` already contains several live Orchid Continuum API wrappers for daily genus, atlas occurrences, species search, species detail, mycorrhizal data, stats, and Continuum graph.
 - `src/lib/endpointAudit.ts` already probes several endpoints and drives backend status diagnostics.
 
+## R1-A integration decision
+
+Do not create a second competing low-level API client. Instead, R1-A adds `src/lib/releaseApi.ts` as a release-facing facade that reuses the existing clients and gives v0.1 pages one stable import surface.
+
+`releaseApi.ts` currently provides wrappers for:
+
+- daily genus
+- genus count
+- atlas occurrences
+- atlas stats
+- species search
+- species detail
+- species literature
+- species occurrences
+- mycorrhizal partners
+- mycorrhizal stats
+- literature stats
+- runner summary
+- bundled homepage release data
+
+This lets the release pages move toward one coherent integration layer without immediately rewriting every existing module.
+
 ## Immediate engineering direction
 
-Do not create a second competing API client. Instead:
-
-1. Consolidate `api.ts`, `ocBackend.ts`, `backendConfig.ts`, and `endpointAudit.ts` into a coherent integration layer.
-2. Use `src/lib/releaseEndpointMap.ts` as the declarative checklist for v0.1 endpoint coverage.
-3. Wire missing release-page data through existing client patterns.
-4. Add loading, empty, fallback, and error states for every release-priority page.
-5. Move prototype modules out of main release navigation unless they are stable enough for preview use.
+1. Use `src/lib/releaseEndpointMap.ts` as the declarative checklist for v0.1 endpoint coverage.
+2. Use `src/lib/releaseApi.ts` as the release-facing data facade.
+3. Gradually migrate release-priority pages to `releaseApi.ts` where that improves clarity.
+4. Keep `api.ts`, `ocBackend.ts`, `backendConfig.ts`, and `endpointAudit.ts` intact until each caller is accounted for.
+5. Add loading, empty, fallback, and error states for every release-priority page.
+6. Move prototype modules out of main release navigation unless they are stable enough for preview use.
 
 ## Release endpoint status categories
 
