@@ -14,6 +14,9 @@
     <!-- Pledge It embedded donation widget -->
     <script src="https://assets.pledgeit.org/embed/v1/wc-embed.js"></script>
 
+    <!-- BUILD 209C temporary guard: prevents legacy V4 status code from throwing if it references a global source variable. -->
+    <script>var source = null;</script>
+
     <meta property="og:title" content="Orchid Conservation Platform" />
     <meta property="og:description" content="A global platform for integrating orchid science and conservation, using modern ecological tools and AI." />
     <meta property="og:type" content="website" />
