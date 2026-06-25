@@ -85,6 +85,8 @@ const App = () => (
                 <Route path="/gallery" element={<Gallery />} />
                 <Route path="/climate" element={<Climate />} />
                 <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
+                <Route path="/knowledge" element={<IntelligenceGraph />} />
+                <Route path="/literature" element={<ComingSoon />} />
 
                 <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                 <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
@@ -95,6 +97,18 @@ const App = () => (
                     <ProtectedRoute
                       title="Sign in to view your collection"
                       description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."
+                    >
+                      <MyCollection />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/conservatory"
+                  element={
+                    <ProtectedRoute
+                      title="Sign in to view your conservatory"
+                      description="Your Orchid Continuum conservatory — saved specimens, observations, and field notes — lives behind authentication."
                     >
                       <MyCollection />
                     </ProtectedRoute>
