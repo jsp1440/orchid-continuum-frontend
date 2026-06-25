@@ -28,23 +28,50 @@ function genusOf(scientificName: string): string | undefined {
   return genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
 }
 
+function isCurated(card: Card): boolean {
+  return card.sourceView === 'src.lib.genusData.GENERA' || card.confidenceClass === 'curated';
+}
+
+function sourceSummary(cards: Card[]): string {
+  if (cards.length === 0) return 'oc_api.species_ecological_neighborhood_v1';
+  const harvested = cards.filter((card) => !isCurated(card) && card.type !== 'missing').length;
+  const curated = cards.filter((card) => isCurated(card)).length;
+  if (harvested > 0 && curated > 0) return 'mixed: harvested + curated genus data';
+  if (curated > 0) return 'src.lib.genusData.GENERA';
+  return 'oc_api.species_ecological_neighborhood_v1';
+}
+
+function relationshipCounts(cards: Card[]): { harvested: number; curated: number; gaps: number } {
+  return cards.reduce(
+    (acc, card) => {
+      if (card.type === 'missing') acc.gaps += 1;
+      else if (isCurated(card)) acc.curated += 1;
+      else acc.harvested += 1;
+      return acc;
+    },
+    { harvested: 0, curated: 0, gaps: 0 },
+  );
+}
+
 const EcologicalNeighborhood: React.FC<Props> = ({
   scientificName,
   cards,
   loading = false,
   className = '',
 }) => {
-  const sortedCards = [...cards].sort((a, b) => a.priority - b.priority);
+  const sortedCards = useMemo(() => [...cards].sort((a, b) => a.priority - b.priority), [cards]);
+  const counts = useMemo(() => relationshipCounts(sortedCards), [sortedCards]);
+  const sourceView = useMemo(() => sourceSummary(sortedCards), [sortedCards]);
   const chipValues = useMemo(
     () => ({
       genus: genusOf(scientificName),
-      habitat: firstCardValue(cards, ['habitat', 'host_tree']),
-      geography: firstCardValue(cards, ['geography']),
-      pollinator: firstCardValue(cards, ['pollinator']),
-      fungus: firstCardValue(cards, ['fungus', 'fungal_dependency']),
-      conservation: firstCardValue(cards, ['conservation']),
+      habitat: firstCardValue(sortedCards, ['habitat', 'host_tree']),
+      geography: firstCardValue(sortedCards, ['geography']),
+      pollinator: firstCardValue(sortedCards, ['pollinator']),
+      fungus: firstCardValue(sortedCards, ['fungus', 'fungal_dependency']),
+      conservation: firstCardValue(sortedCards, ['conservation']),
     }),
-    [cards, scientificName],
+    [sortedCards, scientificName],
   );
 
   return (
@@ -86,6 +113,27 @@ const EcologicalNeighborhood: React.FC<Props> = ({
             substrate, conservation pressure, geography, and knowledge-graph signals.
           </p>
 
+          <div className="mt-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#f4df9f]">
+            <span className="rounded-full border border-[#c9a24a]/25 bg-[#13291a]/70 px-3 py-1">
+              {sortedCards.length} relationship cards
+            </span>
+            {counts.harvested > 0 && (
+              <span className="rounded-full border border-[#c9a24a]/25 bg-[#13291a]/70 px-3 py-1">
+                {counts.harvested} harvested
+              </span>
+            )}
+            {counts.curated > 0 && (
+              <span className="rounded-full border border-[#c9a24a]/25 bg-[#13291a]/70 px-3 py-1">
+                {counts.curated} curated fallback
+              </span>
+            )}
+            {counts.gaps > 0 && (
+              <span className="rounded-full border border-[#c9a24a]/25 bg-[#13291a]/70 px-3 py-1">
+                {counts.gaps} gap
+              </span>
+            )}
+          </div>
+
           <div className="mt-5 rounded-2xl border border-[#c9a24a]/15 bg-[#13291a]/70 p-4">
             <DailyGenusRelationshipChips
               species={scientificName}
@@ -95,7 +143,7 @@ const EcologicalNeighborhood: React.FC<Props> = ({
               pollinator={chipValues.pollinator}
               fungus={chipValues.fungus}
               conservation={chipValues.conservation}
-              sourceView="oc_api.species_ecological_neighborhood_v1"
+              sourceView={sourceView}
               className="mt-0"
             />
           </div>
