@@ -118,7 +118,7 @@ export async function fetchGeneraCount(signal?: AbortSignal): Promise<number> {
 }
 
 export interface WebNodeData { count: number | null; summary: string; items: string[]; hasData: boolean; worstStatus?: 'CR' | 'EN' | 'VU' | 'LC' | null; }
-export interface ContinuumGraphData { genus: string; speciesCount: number | null; description: string; isFallback: boolean; fungi: WebNodeData; pollinators: WebNodeData; climate: WebNodeData; geography: WebNodeData; conservation: WebNodeData; cultivation: WebNodeData; knowledge: WebNodeData; }
+export interface ContinuumGraphData { genus: string; speciesCount: number | null; description: string; isFallback: boolean; fungi: WebNodeData; pollinators: WebNodeData; habitat: WebNodeData; climate: WebNodeData; geography: WebNodeData; conservation: WebNodeData; cultivation: WebNodeData; knowledge: WebNodeData; }
 const EMPTY_NODE: WebNodeData = { count: null, summary: 'No data yet', items: [], hasData: false };
 function pickNum(o: Record<string, unknown>, keys: string[]): number | null {
   for (const k of keys) { const v = o[k]; if (typeof v === 'number' && Number.isFinite(v)) return v; if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v); }
@@ -132,6 +132,7 @@ const CATTLEYA_FALLBACK: ContinuumGraphData = {
   genus: 'Cattleya', speciesCount: 113, description: 'Showy epiphytic orchids of Central & South America.', isFallback: true,
   fungi: { count: 14, summary: '14 partnerships', items: ['Tulasnella', 'Rhizoctonia', 'Ceratobasidium'], hasData: true },
   pollinators: { count: 8, summary: '8 linked', items: ['Euglossine bees', 'Bumblebees', 'Carpenter bees'], hasData: true },
+  habitat: { count: 3, summary: '3 habitat signals', items: ['Epiphytic forest', 'Montane forest', 'Canopy habitat'], hasData: true },
   climate: { count: null, summary: 'Montane · 600–2,000m', items: ['Tropical montane', '600–2,000 m elevation'], hasData: true },
   geography: { count: 1202, summary: '21 countries · 1,202 records', items: ['Brazil', 'Colombia', 'Venezuela'], hasData: true },
   conservation: { count: 54, summary: '12 EN · 8 VU · 34 LC', items: ['12 Endangered', '8 Vulnerable', '34 Least Concern'], hasData: true, worstStatus: 'EN' },
@@ -150,7 +151,7 @@ function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}):
     if (typeof it === 'string') { if (it.trim()) items.push(it.trim()); continue; }
     if (it && typeof it === 'object') {
       const r = it as Record<string, unknown>;
-      const s = pickStr(r, ['name', 'country', 'title', 'reference', 'citation', 'label', 'species']);
+      const s = pickStr(r, ['name', 'country', 'title', 'reference', 'citation', 'label', 'species', 'habitat', 'habitat_type', 'biome', 'substrate']);
       if (s) { items.push(s); continue; }
       const mn = pickNum(r, ['min']); const mx = pickNum(r, ['max']);
       if (mn != null && mx != null) items.push(`${mn.toLocaleString()}–${mx.toLocaleString()} m`);
@@ -203,6 +204,7 @@ export async function fetchContinuumGraph(genus: string, signal?: AbortSignal): 
     isFallback: false,
     knowledge: mapNode(nodes.knowledge, { unit: 'species' }),
     geography: mapNode(nodes.geography, { unit: 'record' }),
+    habitat: mapNode(nodes.habitat, { unit: 'signal' }),
     climate: mapNode(nodes.climate, { climate: true }),
     pollinators: mapNode(nodes.pollinators, { unit: 'link' }),
     fungi: mapNode(nodes.fungi, { unit: 'partnership' }),
