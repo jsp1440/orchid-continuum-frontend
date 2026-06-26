@@ -3,6 +3,7 @@ import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
+import ContinuumPhilosophy from './orchid/ContinuumPhilosophy';
 import HomepageHubs from './orchid/HomepageHubs';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import FeaturedRelationshipEvidence from './orchid/FeaturedRelationshipEvidence';
@@ -84,6 +85,7 @@ const AppLayout: React.FC = () => {
         <DailyGenusProvider>
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
+            <SafeSection name="Continuum philosophy"><ContinuumPhilosophy /></SafeSection>
             <SafeSection name="Homepage hubs"><HomepageHubs /></SafeSection>
             <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             <SafeSection name="Featured relationship evidence"><FeaturedRelationshipEvidence /></SafeSection>
