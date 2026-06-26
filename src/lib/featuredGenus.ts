@@ -62,6 +62,19 @@ const SPECIES_COUNT_FALLBACK: Record<string, number> = {
   Stanhopea: 60,
 };
 
+const ECOLOGY_FALLBACK: Record<string, GenusEntry['ecology']> = {
+  Phalaenopsis: {
+    pollinatorGuild: 'Moths and bees, varying by species',
+    mycorrhizal: 'Tulasnella / Ceratobasidium associates reported across Orchidaceae',
+    elevation: 'Lowland to montane forest, species dependent',
+    habitat: 'Humid tropical forest, usually epiphytic on tree branches',
+  },
+};
+
+const REGIONS_FALLBACK: Record<string, string[]> = {
+  Phalaenopsis: ['SE Asia', 'Philippines', 'Indonesia', 'New Guinea'],
+};
+
 /**
  * Index into {@link FEATURED_GENERA} for the current 12-hour UTC window.
  * `now` is injectable for testing; defaults to the live clock.
@@ -87,18 +100,20 @@ export function featuredGenusEntry(now: number = Date.now()): GenusEntry {
   const local = lookupGenus(name);
   if (local) return local;
 
-  // Synthesize from a sensible template so the panel always renders fully.
   const template = genusForToday();
   return {
     ...template,
     genus: name,
     speciesCount: SPECIES_COUNT_FALLBACK[name] ?? template.speciesCount,
     description:
-      `${name} is a genus in the orchid family (Orchidaceae). Each 12-hour ` +
-      `window the Orchid Continuum spotlights a different genus from across ` +
-      `the tribe to explore its species, geography, and ecological partners.`,
-    regions: template.regions,
-    plates: template.plates,
+      `${name} is a genus in the orchid family (Orchidaceae). The Orchid ` +
+      `Continuum spotlights it to connect species, images, geography, and ` +
+      `ecological relationships as those records become available.`,
+    regions: REGIONS_FALLBACK[name] ?? template.regions,
+    ecology: ECOLOGY_FALLBACK[name] ?? template.ecology,
+    // Do not borrow another genus's plates. If the genus lacks local plates,
+    // DailyGenusFeature will use validated species + live image endpoints.
+    plates: [],
   };
 }
 
@@ -129,7 +144,6 @@ export async function fetchFeaturedNarrative(
   } catch {
     /* fall through to local narrative */
   }
-  // Grounded local fallback (native range + a pollinator / fungal partner).
   const local = buildLocalNarrative(entry);
   return local || entry.description;
 }
