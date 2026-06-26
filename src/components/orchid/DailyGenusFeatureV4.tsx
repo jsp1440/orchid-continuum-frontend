@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bug, Camera, CalendarRange, Leaf, MapPin, Mountain, Sprout } from 'lucide-react';
 import {
-  fetchGenusImagesWithSource,
   fetchValidatedSpecies,
   fetchSpeciesEcology,
   buildImageMap,
@@ -15,6 +14,7 @@ import {
   type SpeciesEcology,
   type SpeciesPlate,
 } from '@/lib/genusData';
+import { fetchPublicGenusImages } from '@/lib/publicImageSource';
 import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus';
 import { setBackendStatus } from '@/lib/backendStatus';
 import FallbackImage from '@/components/orchid/FallbackImage';
@@ -114,6 +114,8 @@ function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
   return uniqueClean([
     ...imageUrls,
     trusted?.image_url,
+    record?.storage_uri as string | undefined,
+    record?.public_url as string | undefined,
     record?.representative_image_url as string | undefined,
     record?.thumbnail_url as string | undefined,
     record?.medium_url as string | undefined,
@@ -126,52 +128,6 @@ function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
 
 function mergeImages(a: string[] = [], b: string[] = []): string[] {
   return uniqueClean([...a, ...b]);
-}
-
-async function fetchInaturalistSpeciesPhoto(species: string, signal?: AbortSignal): Promise<GenusImage | null> {
-  const s = species.trim();
-  if (!s) return null;
-  try {
-    const res = await fetch(`https://api.inaturalist.org/v1/taxa?q=${encodeURIComponent(s)}&rank=species&photos=true`, { signal });
-    if (!res.ok) return null;
-    const payload = (await res.json()) as { results?: Record<string, unknown>[] };
-    const wanted = s.toLowerCase();
-    for (const r of Array.isArray(payload.results) ? payload.results : []) {
-      if (r.iconic_taxon_name !== 'Plantae') continue;
-      const name = typeof r.name === 'string' ? r.name.trim() : '';
-      if (!name || !name.toLowerCase().startsWith(wanted)) continue;
-      const photo = (r.default_photo as Record<string, unknown>) ?? {};
-      const medium = typeof photo.medium_url === 'string' ? photo.medium_url.trim() : '';
-      if (!medium || BLOCKED_NON_GALLERY_RE.test(medium)) continue;
-      return {
-        scientific_name: name,
-        image_url: medium,
-        image_urls: [medium],
-        image_sourceView: typeof photo.attribution === 'string' ? photo.attribution.trim() : 'iNaturalist',
-        image_license: typeof photo.license_code === 'string' ? photo.license_code.trim() : undefined,
-      };
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
-async function fetchInaturalistSpeciesBatch(speciesNames: string[], signal?: AbortSignal): Promise<GenusImage[]> {
-  const out: GenusImage[] = [];
-  const seen = new Set<string>();
-  for (let batchStart = 0; batchStart < speciesNames.length; batchStart += 6) {
-    if (signal?.aborted || out.length >= 12) break;
-    const hits = await Promise.all(speciesNames.slice(batchStart, batchStart + 6).map((name) => fetchInaturalistSpeciesPhoto(name, signal)));
-    for (const hit of hits) {
-      if (!hit) continue;
-      const key = binomialOf(hit.scientific_name) || hit.image_url;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push(hit);
-    }
-  }
-  return out;
 }
 
 function plateSlot(plate: SpeciesPlate, trusted?: GenusImage): Slot {
@@ -209,7 +165,7 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
 }
 
 function recordBackendSource(sourceView: ImageSource | null, genus: string): void {
-  setBackendStatus({ sourceView: source || 'pending', genus, lastPingTime: Date.now(), cacheWrittenAt: null });
+  setBackendStatus({ sourceView: sourceView || 'pending', genus, lastPingTime: Date.now(), cacheWrittenAt: null });
 }
 
 const Placeholder: React.FC<{ label: string; hero?: boolean }> = ({ label, hero = false }) => (
@@ -246,7 +202,6 @@ const DailyGenusFeatureV4: React.FC = () => {
   const [entry, setEntry] = useState(() => featuredGenusEntry());
   const [validatedNames, setValidatedNames] = useState<string[]>([]);
   const [trustedImages, setTrustedImages] = useState<GenusImage[]>([]);
-  const [inatImages, setInatImages] = useState<GenusImage[]>([]);
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [visibleIndexes, setVisibleIndexes] = useState<number[]>([]);
@@ -266,10 +221,9 @@ const DailyGenusFeatureV4: React.FC = () => {
     setEntry(base);
     setValidatedNames(curated);
     setTrustedImages([]);
-    setInatImages([]);
     setImageSource(null);
     setLoading(true);
-    setBackendStatus({ sourceView: 'live', genus: base.genus, lastPingTime: Date.now(), cacheWrittenAt: null });
+    setBackendStatus({ sourceView: 'pending', genus: base.genus, lastPingTime: Date.now(), cacheWrittenAt: null });
 
     fetchFeaturedNarrative(base, ctrl.signal).then((narrative) => {
       if (!ctrl.signal.aborted && narrative) setEntry((prev) => ({ ...prev, relationship: narrative }));
@@ -293,30 +247,22 @@ const DailyGenusFeatureV4: React.FC = () => {
         if (!ctrl.signal.aborted) setLoading(false);
       });
 
-    fetchGenusImagesWithSource(base.genus, ctrl.signal, IMAGE_LIMIT)
+    fetchPublicGenusImages(base.genus, ctrl.signal, IMAGE_LIMIT)
       .then(({ images, source }) => {
         if (ctrl.signal.aborted) return;
         setTrustedImages(Array.isArray(images) ? images : []);
-        setImageSource(source || 'pending');
-        recordBackendSource(source || 'pending', base.genus);
+        setImageSource((source || 'pending') as ImageSource);
+        recordBackendSource((source || 'pending') as ImageSource, base.genus);
       })
       .catch(() => {
         if (!ctrl.signal.aborted) recordBackendSource('pending', base.genus);
       });
 
-    if (curated.length > 0) {
-      fetchInaturalistSpeciesBatch(curated, ctrl.signal).then((images) => {
-        if (ctrl.signal.aborted) return;
-        setInatImages(images);
-        if (images.length > 0) setImageSource((prev) => (prev && prev !== 'pending' ? prev : 'inaturalist'));
-      });
-    }
-
     return () => ctrl.abort();
   }, []);
 
   const slots = useMemo<Slot[]>(() => {
-    const imageMap = buildImageMap([...trustedImages, ...inatImages]);
+    const imageMap = buildImageMap(trustedImages);
     const byName = new Map<string, Slot>();
     const pushSlot = (slot: Slot) => {
       const key = binomialOf(slot.species);
@@ -351,7 +297,7 @@ const DailyGenusFeatureV4: React.FC = () => {
 
     for (const plate of (entry.plates || []) as SpeciesPlate[]) pushSlot(plateSlot(plate, imageMap.get(binomialOf(plate.species))));
 
-    for (const img of [...trustedImages, ...inatImages]) {
+    for (const img of trustedImages) {
       const key = binomialOf(img.scientific_name);
       if (!key) continue;
       pushSlot({ species: key, images: urlsFor(img), photographer: img.image_source, imageSource: img.image_source, imageLicense: img.image_license });
@@ -359,7 +305,7 @@ const DailyGenusFeatureV4: React.FC = () => {
 
     const all = Array.from(byName.values()).filter((s) => s.species);
     return [...all.filter((s) => s.images.length > 0), ...all.filter((s) => s.images.length === 0)].slice(0, Math.max(9, SPECIES_LIMIT));
-  }, [entry.plates, inatImages, trustedImages, validatedNames]);
+  }, [entry.plates, trustedImages, validatedNames]);
 
   useEffect(() => {
     if (!slots.length) return;
@@ -436,7 +382,7 @@ const DailyGenusFeatureV4: React.FC = () => {
     );
   }
 
-  const displaySource: ImageSource | null = imageSource || (inatImages.length > 0 ? 'inaturalist' : null);
+  const displaySource: ImageSource | null = imageSource || null;
   const heroLabel = botanicalName(hero.species);
   const caption = speciesCaption(hero, ecology, entry.description);
 
