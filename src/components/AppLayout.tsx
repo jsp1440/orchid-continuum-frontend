@@ -5,6 +5,7 @@ import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
 import HomepageHubs from './orchid/HomepageHubs';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
+import FeaturedRelationshipEvidence from './orchid/FeaturedRelationshipEvidence';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
 import HabitatCards from './orchid/HabitatCards';
 import CapabilityGrid from './orchid/CapabilityGrid';
@@ -52,12 +53,8 @@ class SectionBoundary extends React.Component<SectionBoundaryProps, SectionBound
     if (this.state.hasError) {
       return (
         <section className="mx-auto my-8 max-w-5xl rounded-2xl border border-red-400 bg-red-50 px-5 py-4 text-red-950 shadow-sm">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-red-700">
-            Orchid Continuum Diagnostic
-          </p>
-          <h2 className="mt-1 font-serif text-xl font-bold">
-            {this.props.name} crashed
-          </h2>
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-red-700">Orchid Continuum Diagnostic</p>
+          <h2 className="mt-1 font-serif text-xl font-bold">{this.props.name} crashed</h2>
           <pre className="mt-3 whitespace-pre-wrap rounded bg-white p-3 text-xs leading-5 text-black">
             {this.state.errorMessage}
             {'\n\n'}
@@ -89,6 +86,7 @@ const AppLayout: React.FC = () => {
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
             <SafeSection name="Homepage hubs"><HomepageHubs /></SafeSection>
             <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+            <SafeSection name="Featured relationship evidence"><FeaturedRelationshipEvidence /></SafeSection>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
             <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
             <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
