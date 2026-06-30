@@ -78,8 +78,8 @@ const HomeHero: React.FC = () => {
       </div>
 
 
-      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 pt-32 lg:pt-36 pb-20 lg:pb-24">
-        <div className="grid lg:grid-cols-12 gap-12 items-center">
+      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 pt-24 lg:pt-28 pb-14 lg:pb-16">
+        <div className="grid lg:grid-cols-12 gap-10 items-center">
           {/* Editorial copy — discovery framing */}
           <div className="lg:col-span-8">
             <div className="inline-flex items-center gap-3 font-mono text-[10px] tracking-[0.32em] uppercase text-[#c9a24a]">
@@ -101,7 +101,7 @@ const HomeHero: React.FC = () => {
             </h1>
 
             <p
-              className="mt-8 max-w-3xl text-[#e7dfd1]/90 leading-[1.4]"
+              className="mt-6 max-w-3xl text-[#e7dfd1]/90 leading-[1.4]"
               style={{
                 fontFamily:
                   '"Cormorant Garamond","Playfair Display",Georgia,serif',
@@ -115,7 +115,7 @@ const HomeHero: React.FC = () => {
             </p>
 
             {/* CTAs — invitations to explore, not feature buttons */}
-            <div className="mt-10 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={scrollToWeb}
@@ -135,7 +135,7 @@ const HomeHero: React.FC = () => {
               </button>
             </div>
 
-            <p className="mt-10 font-mono text-[10px] tracking-[0.24em] uppercase text-[#7a7466]">
+            <p className="mt-8 font-mono text-[10px] tracking-[0.24em] uppercase text-[#7a7466]">
               An independent biodiversity and conservation initiative ·
               fiscally sponsored by Ecologistics, 501(c)(3).
             </p>
