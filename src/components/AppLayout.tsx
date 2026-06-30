@@ -5,6 +5,7 @@ import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
+import WhyContinuumExists from './orchid/WhyContinuumExists';
 import HabitatCards from './orchid/HabitatCards';
 import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
@@ -86,13 +87,14 @@ const AppLayout: React.FC = () => {
         <DailyGenusProvider>
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
+            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
+            <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
             <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
-            <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
-            <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
             <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
             <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
             <SafeSection name="Identification matrix"><CapabilityGrid /></SafeSection>
+            <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
             <SafeSection name="Why Orchids Matter"><WhyOrchidsMatter /></SafeSection>
             <SafeSection name="Human Stewardship"><HumanStewardship /></SafeSection>
             <SafeSection name="News from the Continuum"><NewsFromContinuum /></SafeSection>
