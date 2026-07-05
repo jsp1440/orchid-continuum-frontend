@@ -7,22 +7,19 @@ import {
   Brain,
   CheckCircle2,
   Database,
-  Eye,
   FileText,
   GitBranch,
-  Image,
   KeyRound,
   Layers3,
   LockKeyhole,
   MessageSquareText,
   Monitor,
   Network,
-  PlayCircle,
   Radar,
   RefreshCw,
+  Send,
   ShieldCheck,
   Sparkles,
-  Sprout,
   Telescope,
   Workflow,
 } from 'lucide-react';
@@ -41,6 +38,67 @@ type Probe = {
   updatedAt?: string;
 };
 
+type Mission = {
+  mission_id?: string;
+  mission_key?: string;
+  title: string;
+  purpose?: string;
+  status?: string;
+  priority?: number;
+  next_action?: string;
+  safe_autonomy_level?: number | string;
+  success_criteria?: string[];
+};
+
+type Policy = {
+  policy_id?: string;
+  policy_key?: string;
+  title: string;
+  principle?: string;
+  description?: string;
+  max_autonomy_level?: number | string;
+  autonomy_level?: string;
+  protected?: boolean;
+};
+
+type Decision = {
+  decision_id?: string;
+  mission_id?: string;
+  mission_key?: string;
+  action?: string;
+  decision?: string;
+  status?: string;
+  risk_level?: string;
+  confidence?: number;
+  rationale?: string;
+  rollback_checkpoint?: string | null;
+  created_at?: string;
+  timestamp?: string;
+};
+
+type GovernanceQuestion = {
+  question_id?: string;
+  mission_id?: string;
+  mission_key?: string;
+  question: string;
+  reason?: string;
+  status?: string;
+  created_at?: string;
+  timestamp?: string;
+};
+
+type ConstitutionalStatus = {
+  build?: string;
+  status?: string;
+  mode?: string;
+  policy_count?: number;
+  mission_count?: number;
+  decision_count?: number;
+  open_governance_questions?: number;
+  north_star?: string;
+  timestamp?: string;
+};
+
 type ChatMessage = {
   role: 'Jeff' | 'Calyx';
   body: string;
@@ -54,18 +112,25 @@ const OWNER_ACCESS_CODE =
 
 const initialProbes: Probe[] = [
   {
+    key: 'constitutional',
+    title: 'Constitutional Orchestrator',
+    endpoint: '/api/runtime/constitutional/status',
+    status: 'idle',
+    detail: 'Waiting for BUILD-034 constitutional telemetry.',
+  },
+  {
     key: 'runner',
     title: 'Runner Health',
     endpoint: '/api/runner/health',
     status: 'idle',
-    detail: 'Waiting for live telemetry.',
+    detail: 'Waiting for live runner telemetry.',
   },
   {
     key: 'connectors',
     title: 'Connector Health',
     endpoint: '/api/connectors/health',
     status: 'idle',
-    detail: 'Waiting for GitHub and health connector telemetry.',
+    detail: 'Waiting for GitHub and connector telemetry.',
   },
   {
     key: 'summary',
@@ -74,47 +139,40 @@ const initialProbes: Probe[] = [
     status: 'idle',
     detail: 'Waiting for runtime jobs and action summary.',
   },
-  {
-    key: 'autonomous',
-    title: 'Autonomous Status',
-    endpoint: '/api/runner/autonomous-status',
-    status: 'idle',
-    detail: 'Waiting for Calyx runtime engine status.',
-  },
 ];
 
 const quickPrompts = [
-  'Audit the frontend homepage and tell me what needs repair first.',
-  'Show me the status of Calyx, GitHub, and the runner.',
-  'Prepare a Genus of the Day image repair plan.',
-  'Summarize what changed in the Orchid Continuum today.',
-  'Help me organize the grant work due this week.',
+  'Evaluate homepage repair as an engineering mission.',
+  'Evaluate grant preparation as a funding mission.',
+  'Evaluate literature extraction as a science mission.',
+  'Evaluate Orchid University glossary expansion as an education mission.',
+  'Evaluate pollinator and mycorrhizal integration as a science mission.',
 ];
 
 const workspaceCards = [
   {
     title: 'Frontend Workbench',
-    status: 'Build 032 ready',
-    description: 'Homepage repair queue for Genus of the Day, Discovery Trails, image URLs, and Knowledge Layers.',
+    status: 'Repair queue',
+    description: 'Homepage, Genus of the Day, Discovery Trails, image diagnostics, and knowledge-layer wiring.',
     icon: Monitor,
   },
   {
+    title: 'Constitutional Kernel',
+    status: 'BUILD-034 live',
+    description: 'Autonomy levels, policies, decision records, governance questions, and rollback checkpoints.',
+    icon: ShieldCheck,
+  },
+  {
     title: 'Calyx Chat',
-    status: 'Shell active',
-    description: 'Conversational command surface. Current build supports guided local planning; action wiring comes next.',
+    status: 'Action evaluator',
+    description: 'Mission Control now evaluates owner prompts through the constitutional backend before work proceeds.',
     icon: MessageSquareText,
   },
   {
     title: 'Visual Workspace',
-    status: 'Canvas placeholder',
-    description: 'Future home for graphs, mind maps, relationship diagrams, literature maps, and project boards.',
+    status: 'Canvas foundation',
+    description: 'Mission maps, knowledge layers, relationship diagrams, grant boards, and literature maps.',
     icon: Workflow,
-  },
-  {
-    title: 'Founding Charter',
-    status: 'Build 031 preserved',
-    description: 'The project philosophy is now version-controlled in the backend repository and ready for Calyx context loading.',
-    icon: FileText,
   },
 ];
 
@@ -136,8 +194,12 @@ const layerNodes = [
 function summarizePayload(key: string, payload: unknown): string {
   const value = payload as Record<string, unknown>;
 
+  if (key === 'constitutional') {
+    return `${String(value.build ?? 'unknown')} · ${String(value.status ?? 'unknown')} · policies=${String(value.policy_count ?? 'unknown')} · missions=${String(value.mission_count ?? 'unknown')}`;
+  }
+
   if (key === 'runner') {
-    return `Runner ${value.status ?? 'unknown'} · active=${String(value.active_mode ?? 'unknown')} · autoloop=${String(value.autoloop_enabled ?? 'unknown')}`;
+    return `Runner ${value.status ?? 'unknown'} · active=${String(value.active_mode ?? 'unknown')} · autoloop=${String(value.autoloop_enabled ?? 'unknown')} · mode=${String(value.mode ?? 'unknown')}`;
   }
 
   if (key === 'connectors') {
@@ -153,11 +215,17 @@ function summarizePayload(key: string, payload: unknown): string {
     return `Summary loaded · jobs=${jobs} · runtime actions=${actions}`;
   }
 
-  if (key === 'autonomous') {
-    return `Runtime engine loaded · enabled=${String(value.enabled ?? 'unknown')} · running=${String(value.running ?? 'unknown')}`;
-  }
-
   return 'Telemetry loaded.';
+}
+
+function inferMission(prompt: string): string {
+  const lower = prompt.toLowerCase();
+  if (lower.includes('grant') || lower.includes('fund')) return 'funding';
+  if (lower.includes('lesson') || lower.includes('university') || lower.includes('glossary')) return 'education';
+  if (lower.includes('habitat') || lower.includes('conservation') || lower.includes('threat')) return 'conservation';
+  if (lower.includes('literature') || lower.includes('pollinator') || lower.includes('mycorrhiza') || lower.includes('matrix') || lower.includes('vision')) return 'science';
+  if (lower.includes('homepage') || lower.includes('frontend') || lower.includes('deploy') || lower.includes('github')) return 'engineering';
+  return 'institutional_memory';
 }
 
 const MissionControl: React.FC = () => {
@@ -165,11 +233,16 @@ const MissionControl: React.FC = () => {
   const [accessCode, setAccessCode] = useState('');
   const [probes, setProbes] = useState<Probe[]>(initialProbes);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [constitutionalStatus, setConstitutionalStatus] = useState<ConstitutionalStatus | null>(null);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
+  const [decisions, setDecisions] = useState<Decision[]>([]);
+  const [questions, setQuestions] = useState<GovernanceQuestion[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       role: 'Calyx',
       body:
-        'Mission Control is online in protected shell mode. I can help organize frontend repair, runtime checks, grants, knowledge gaps, and the next integration steps. Action execution will be wired in the next build.',
+        'Mission Control is connected to the BUILD-034 constitutional orchestrator. Give me a mission, and I will evaluate it through policy, autonomy level, provenance, and rollback guardrails.',
     },
   ]);
   const [chatText, setChatText] = useState('');
@@ -192,22 +265,21 @@ const MissionControl: React.FC = () => {
     setAccessCode('');
   };
 
+  const getJson = async <T,>(endpoint: string): Promise<T> => {
+    const response = await fetch(`${CALYX_BACKEND_BASE_URL}${endpoint}`);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} from ${endpoint}`);
+    }
+    return response.json() as Promise<T>;
+  };
+
   const refreshTelemetry = async () => {
     setProbes((current) => current.map((probe) => ({ ...probe, status: 'loading', detail: 'Checking live endpoint…' })));
 
     const next = await Promise.all(
       initialProbes.map(async (probe) => {
         try {
-          const response = await fetch(`${CALYX_BACKEND_BASE_URL}${probe.endpoint}`);
-          if (!response.ok) {
-            return {
-              ...probe,
-              status: 'warning' as ProbeState,
-              detail: `HTTP ${response.status} from ${probe.endpoint}`,
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          const payload = await response.json();
+          const payload = await getJson<unknown>(probe.endpoint);
           return {
             ...probe,
             status: 'healthy' as ProbeState,
@@ -226,6 +298,31 @@ const MissionControl: React.FC = () => {
     );
 
     setProbes(next);
+
+    try {
+      const [statusPayload, missionPayload, policyPayload, decisionPayload, questionPayload] = await Promise.all([
+        getJson<ConstitutionalStatus>('/api/runtime/constitutional/status'),
+        getJson<{ missions?: Mission[] }>('/api/runtime/constitutional/missions'),
+        getJson<{ policies?: Policy[] }>('/api/runtime/constitutional/policies'),
+        getJson<{ decisions?: Decision[] }>('/api/runtime/constitutional/decision-ledger'),
+        getJson<{ questions?: GovernanceQuestion[] }>('/api/runtime/constitutional/governance-questions'),
+      ]);
+
+      setConstitutionalStatus(statusPayload);
+      setMissions(missionPayload.missions ?? []);
+      setPolicies(policyPayload.policies ?? []);
+      setDecisions(decisionPayload.decisions ?? []);
+      setQuestions(questionPayload.questions ?? []);
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          role: 'Calyx',
+          body: `Mission Control telemetry partially failed: ${error instanceof Error ? error.message : 'unknown error'}`,
+        },
+      ]);
+    }
+
     setLastRefresh(new Date().toLocaleString());
   };
 
@@ -235,20 +332,57 @@ const MissionControl: React.FC = () => {
     }
   }, [isUnlocked]);
 
-  const sendMessage = (promptOverride?: string) => {
+  const evaluateMission = async (promptOverride?: string) => {
     const prompt = (promptOverride ?? chatText).trim();
     if (!prompt) return;
 
-    setMessages((current) => [
-      ...current,
-      { role: 'Jeff', body: prompt },
-      {
-        role: 'Calyx',
-        body:
-          'I have captured this as a Mission Control instruction. In the current BUILD-033 shell I can organize the task and point to the right workbench; BUILD-034 should connect this chat directly to live Calyx actions, GitHub inspection, frontend audits, and grant workspace generation.',
-      },
-    ]);
+    const missionId = inferMission(prompt);
+    setMessages((current) => [...current, { role: 'Jeff', body: prompt }]);
     setChatText('');
+
+    try {
+      const response = await fetch(`${CALYX_BACKEND_BASE_URL}/api/runtime/constitutional/evaluate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mission_id: missionId,
+          action: prompt,
+          requested_autonomy_level: prompt.toLowerCase().includes('deploy') ? 4 : 2,
+          evidence: ['Owner instruction from Mission Control', 'BUILD-031 Founding Charter', 'BUILD-034 Constitutional Orchestrator'],
+          reversible: true,
+          provenance_available: true,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} from constitutional evaluator`);
+      }
+
+      const payload = await response.json();
+      const decision = (payload.decision ?? payload.decision_record ?? {}) as Decision;
+      const governanceQuestion = (payload.governance_question ?? undefined) as GovernanceQuestion | undefined;
+      const status = decision.status ?? decision.decision ?? 'evaluated';
+      const risk = decision.risk_level ?? 'unknown risk';
+      const checkpoint = decision.rollback_checkpoint ? ` Rollback checkpoint: ${decision.rollback_checkpoint}.` : '';
+      const review = governanceQuestion ? ` Governance question opened: ${governanceQuestion.question}` : '';
+
+      setMessages((current) => [
+        ...current,
+        {
+          role: 'Calyx',
+          body: `Constitutional evaluation complete. Mission: ${missionId}. Status: ${status}. Risk: ${risk}.${checkpoint}${review}`,
+        },
+      ]);
+      await refreshTelemetry();
+    } catch (error) {
+      setMessages((current) => [
+        ...current,
+        {
+          role: 'Calyx',
+          body: `I could not evaluate that mission yet: ${error instanceof Error ? error.message : 'unknown error'}`,
+        },
+      ]);
+    }
   };
 
   if (!isUnlocked) {
@@ -264,7 +398,7 @@ const MissionControl: React.FC = () => {
               Mission Control
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-[#cfc8b8]/85">
-              This private workspace is reserved for the Orchid Continuum owner. The current gate protects the interface shell; server-side role enforcement should be added before exposing write actions or sensitive data.
+              This private workspace is reserved for the Orchid Continuum owner. BUILD-035 connects the interface to the live constitutional orchestrator; server-side owner roles are still required before exposing write controls.
             </p>
             <label className="mt-8 block font-mono text-[10px] tracking-[0.24em] uppercase text-[#c9a24a]">
               Access code
@@ -309,13 +443,13 @@ const MissionControl: React.FC = () => {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] tracking-[0.24em] uppercase text-[#d4b34a]">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Build 033 · Owner Mission Control
+                  <ShieldCheck className="h-3.5 w-3.5" /> Build 035 · Live Mission Control
                 </div>
                 <h1 className="mt-5 max-w-5xl text-5xl md:text-7xl leading-[0.95]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
-                  Orchid Continuum <span className="italic text-[#d4b34a]">headquarters.</span>
+                  Orchid Continuum <span className="italic text-[#d4b34a]">operations center.</span>
                 </h1>
                 <p className="mt-5 max-w-3xl text-[15px] md:text-[17px] leading-relaxed text-[#cfc8b8]/88">
-                  A private operating environment for Calyx, frontend repair, live telemetry, visual thinking, grant work, and institutional memory.
+                  A private interface for Calyx missions, constitutional guardrails, decision ledgers, governance questions, frontend repair, grants, and visual thinking.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -323,7 +457,7 @@ const MissionControl: React.FC = () => {
                   onClick={() => void refreshTelemetry()}
                   className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] tracking-[0.22em] uppercase text-[#12170d] hover:bg-[#e5c85c] transition-colors"
                 >
-                  <RefreshCw className="h-3.5 w-3.5" /> Refresh telemetry
+                  <RefreshCw className="h-3.5 w-3.5" /> Refresh live state
                 </button>
                 <button
                   onClick={lock}
@@ -337,18 +471,18 @@ const MissionControl: React.FC = () => {
         </section>
 
         <section className="max-w-[1500px] mx-auto px-5 lg:px-8 py-6">
-          <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)_320px] gap-5">
+          <div className="grid grid-cols-1 xl:grid-cols-[260px_minmax(0,1fr)_330px] gap-5">
             <aside className="rounded-[1.5rem] border border-white/[0.08] bg-[#0b1c11]/85 p-4 h-fit xl:sticky xl:top-24">
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Navigation</div>
               {[
                 ['Dashboard', Activity],
                 ['Calyx Chat', Bot],
-                ['Frontend Workbench', Monitor],
-                ['Brain Explorer', Brain],
-                ['Knowledge Gaps', Telescope],
+                ['Missions', Radar],
+                ['Policies', ShieldCheck],
+                ['Decision Ledger', FileText],
+                ['Governance Queue', AlertTriangle],
                 ['Visual Canvas', Workflow],
-                ['Grant Workspace', FileText],
-                ['Founding Charter', Sparkles],
+                ['Grant Workspace', Telescope],
               ].map(([label, Icon]) => {
                 const LucideIcon = Icon as typeof Activity;
                 return (
@@ -397,7 +531,7 @@ const MissionControl: React.FC = () => {
                     <div>
                       <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Calyx</div>
                       <h2 className="mt-2 text-3xl text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
-                        Conversation console
+                        Constitutional conversation console
                       </h2>
                     </div>
                     <Bot className="h-7 w-7 text-[#d4b34a]" strokeWidth={1.5} />
@@ -412,7 +546,7 @@ const MissionControl: React.FC = () => {
                   </div>
                   <div className="mt-5 flex flex-wrap gap-2">
                     {quickPrompts.map((prompt) => (
-                      <button key={prompt} onClick={() => sendMessage(prompt)} className="rounded-full border border-white/10 px-3 py-2 text-left text-[11px] text-[#cfc8b8]/80 hover:border-[#d4b34a]/45 hover:text-[#d4b34a]">
+                      <button key={prompt} onClick={() => void evaluateMission(prompt)} className="rounded-full border border-white/10 px-3 py-2 text-left text-[11px] text-[#cfc8b8]/80 hover:border-[#d4b34a]/45 hover:text-[#d4b34a]">
                         {prompt}
                       </button>
                     ))}
@@ -422,32 +556,76 @@ const MissionControl: React.FC = () => {
                       value={chatText}
                       onChange={(event) => setChatText(event.target.value)}
                       className="min-h-[92px] flex-1 rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-[#f5f0e8] outline-none focus:border-[#d4b34a]/60"
-                      placeholder="Talk to Calyx…"
+                      placeholder="Ask Calyx to evaluate a mission…"
                     />
-                    <button onClick={() => sendMessage()} className="rounded-2xl bg-[#d4b34a] px-5 font-mono text-[10px] tracking-[0.18em] uppercase text-[#12170d]">
-                      Send
+                    <button onClick={() => void evaluateMission()} className="rounded-2xl bg-[#d4b34a] px-5 font-mono text-[10px] tracking-[0.18em] uppercase text-[#12170d]">
+                      <Send className="h-4 w-4" />
                     </button>
                   </div>
                 </article>
 
                 <article className="rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5 lg:p-6">
-                  <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Visual monitor</div>
+                  <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Constitution</div>
                   <h2 className="mt-2 text-3xl text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
-                    Knowledge layers map
+                    BUILD-034 live state
                   </h2>
-                  <div className="mt-6 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {layerNodes.map((node, index) => (
-                      <div key={node} className="rounded-2xl border border-[#d4b34a]/18 bg-black/15 p-3 text-center">
-                        <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-full border border-[#d4b34a]/30 bg-[#d4b34a]/10 font-mono text-[10px] text-[#d4b34a]">
-                          {index + 1}
+                  <div className="mt-5 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                    <div className="text-2xl text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>
+                      {constitutionalStatus?.build ?? 'Waiting'}
+                    </div>
+                    <div className="mt-1 font-mono text-[9px] tracking-[0.18em] uppercase text-emerald-200">
+                      {constitutionalStatus?.status ?? 'not loaded'}
+                    </div>
+                    <p className="mt-3 text-[12.5px] leading-relaxed text-[#cfc8b8]/78">
+                      {constitutionalStatus?.north_star ?? 'The Orchid Continuum exists to cultivate understanding by revealing relationships.'}
+                    </p>
+                  </div>
+                  <div className="mt-5 grid grid-cols-3 gap-3">
+                    <div className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center">
+                      <div className="text-2xl text-[#d4b34a]">{constitutionalStatus?.mission_count ?? missions.length}</div>
+                      <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Missions</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center">
+                      <div className="text-2xl text-[#d4b34a]">{constitutionalStatus?.policy_count ?? policies.length}</div>
+                      <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Policies</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center">
+                      <div className="text-2xl text-[#d4b34a]">{constitutionalStatus?.open_governance_questions ?? questions.length}</div>
+                      <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Questions</div>
+                    </div>
+                  </div>
+                </article>
+              </section>
+
+              <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                <article className="rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5">
+                  <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]"><Radar className="h-4 w-4" /> Mission registry</div>
+                  <div className="mt-4 space-y-3">
+                    {missions.slice(0, 7).map((mission) => (
+                      <div key={mission.mission_id ?? mission.mission_key ?? mission.title} className="rounded-2xl border border-white/[0.07] bg-black/15 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{mission.title}</h3>
+                          <span className="rounded-full border border-[#d4b34a]/25 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.16em] text-[#d4b34a]">L{String(mission.safe_autonomy_level ?? mission.status ?? '—')}</span>
                         </div>
-                        <div className="mt-2 text-[12px] text-[#f5f0e8]/85">{node}</div>
+                        <p className="mt-2 text-[12px] leading-relaxed text-[#cfc8b8]/72">{mission.purpose ?? mission.next_action ?? 'Mission lane active.'}</p>
                       </div>
                     ))}
                   </div>
-                  <p className="mt-5 text-[12.5px] leading-relaxed text-[#cfc8b8]/70">
-                    This placeholder becomes the mind-map and relationship-graph canvas in BUILD-035. It is included now so Mission Control is designed around visual thinking from the beginning.
-                  </p>
+                </article>
+
+                <article className="rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5">
+                  <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]"><ShieldCheck className="h-4 w-4" /> Policy registry</div>
+                  <div className="mt-4 space-y-3">
+                    {policies.slice(0, 7).map((policy) => (
+                      <div key={policy.policy_id ?? policy.policy_key ?? policy.title} className="rounded-2xl border border-white/[0.07] bg-black/15 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{policy.title}</h3>
+                          {policy.protected && <span className="rounded-full bg-amber-300/15 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.16em] text-amber-200">protected</span>}
+                        </div>
+                        <p className="mt-2 text-[12px] leading-relaxed text-[#cfc8b8]/72">{policy.principle ?? policy.description ?? 'Constitutional policy active.'}</p>
+                      </div>
+                    ))}
+                  </div>
                 </article>
               </section>
 
@@ -468,40 +646,51 @@ const MissionControl: React.FC = () => {
               </section>
             </div>
 
-            <aside className="rounded-[1.5rem] border border-white/[0.08] bg-[#0b1c11]/85 p-5 h-fit xl:sticky xl:top-24">
-              <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Live state</div>
-              <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
-                <div className="text-4xl text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{healthScore}</div>
-                <div className="mt-1 font-mono text-[9px] tracking-[0.18em] uppercase text-emerald-200">healthy probes</div>
-              </div>
-              <div className="mt-5 space-y-3 text-[12.5px] text-[#cfc8b8]/78">
-                <div className="flex items-start gap-3"><Database className="h-4 w-4 text-[#d4b34a]" /> Backend: {CALYX_BACKEND_BASE_URL}</div>
-                <div className="flex items-start gap-3"><GitBranch className="h-4 w-4 text-[#d4b34a]" /> Frontend workbench: planning queue ready</div>
-                <div className="flex items-start gap-3"><Layers3 className="h-4 w-4 text-[#d4b34a]" /> Knowledge layers: mapped</div>
-                <div className="flex items-start gap-3"><Eye className="h-4 w-4 text-[#d4b34a]" /> Owner gate: client shell only</div>
-              </div>
-              <div className="mt-6 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-[12px] leading-relaxed text-amber-100/85">
-                This page currently avoids secrets and write controls. Server-side owner roles are required before direct GitHub writes, deployment controls, or sensitive logs are exposed.
-              </div>
-              {lastRefresh && (
-                <div className="mt-4 font-mono text-[9px] tracking-[0.16em] uppercase text-[#cfc8b8]/55">
-                  Last refresh: {lastRefresh}
+            <aside className="space-y-5 xl:sticky xl:top-24 h-fit">
+              <section className="rounded-[1.5rem] border border-white/[0.08] bg-[#0b1c11]/85 p-5">
+                <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Live state</div>
+                <div className="mt-4 rounded-2xl border border-emerald-400/20 bg-emerald-400/10 p-4">
+                  <div className="text-4xl text-[#faf7f2]" style={{ fontFamily: "'Playfair Display', Georgia, serif" }}>{healthScore}</div>
+                  <div className="mt-1 font-mono text-[9px] tracking-[0.18em] uppercase text-emerald-200">healthy probes</div>
                 </div>
-              )}
-              <div className="mt-6 grid grid-cols-2 gap-3">
-                <Link to="/diagnostics/daily-genus" className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center text-[11px] text-[#d4b34a]">
-                  Diagnostics
-                </Link>
-                <Link to="/relationship-explorer" className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center text-[11px] text-[#d4b34a]">
-                  Relationships
-                </Link>
-                <Link to="/gallery" className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center text-[11px] text-[#d4b34a]">
-                  Images
-                </Link>
-                <Link to="/university" className="rounded-2xl border border-white/10 bg-black/15 p-3 text-center text-[11px] text-[#d4b34a]">
-                  University
-                </Link>
-              </div>
+                <div className="mt-5 space-y-3 text-[12.5px] text-[#cfc8b8]/78">
+                  <div className="flex items-start gap-3"><Database className="h-4 w-4 text-[#d4b34a]" /> Backend: {CALYX_BACKEND_BASE_URL}</div>
+                  <div className="flex items-start gap-3"><GitBranch className="h-4 w-4 text-[#d4b34a]" /> Constitutional build: {constitutionalStatus?.build ?? 'loading'}</div>
+                  <div className="flex items-start gap-3"><Layers3 className="h-4 w-4 text-[#d4b34a]" /> Knowledge layers: mapped</div>
+                  <div className="flex items-start gap-3"><Network className="h-4 w-4 text-[#d4b34a]" /> Mission registry: {missions.length || 'loading'} lanes</div>
+                </div>
+                <div className="mt-6 rounded-2xl border border-amber-300/20 bg-amber-300/10 p-4 text-[12px] leading-relaxed text-amber-100/85">
+                  Direct write controls remain withheld. Mission Control can evaluate and display governance now; server-side owner roles are required before production mutation controls are exposed.
+                </div>
+                {lastRefresh && (
+                  <div className="mt-4 font-mono text-[9px] tracking-[0.16em] uppercase text-[#cfc8b8]/55">
+                    Last refresh: {lastRefresh}
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-[1.5rem] border border-white/[0.08] bg-[#0b1c11]/85 p-5">
+                <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Decision ledger</div>
+                <div className="mt-4 space-y-3">
+                  {(decisions.length ? decisions : [{ decision_id: 'waiting', action: 'No live decisions yet', status: 'ready', risk_level: 'low' }]).slice(0, 4).map((decision) => (
+                    <div key={decision.decision_id ?? decision.action} className="rounded-2xl border border-white/[0.07] bg-black/15 p-3">
+                      <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#d4b34a]">{decision.status ?? decision.decision ?? 'decision'}</div>
+                      <p className="mt-2 text-[12px] leading-relaxed text-[#cfc8b8]/75">{decision.action ?? decision.rationale ?? decision.decision_id}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-[1.5rem] border border-white/[0.08] bg-[#0b1c11]/85 p-5">
+                <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Visual layers</div>
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {layerNodes.map((node) => (
+                    <div key={node} className="rounded-xl border border-[#d4b34a]/15 bg-black/15 px-3 py-2 text-[11px] text-[#cfc8b8]/78">
+                      {node}
+                    </div>
+                  ))}
+                </div>
+              </section>
             </aside>
           </div>
         </section>
