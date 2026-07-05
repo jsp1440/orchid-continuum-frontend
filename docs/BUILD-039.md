@@ -2,39 +2,68 @@
 
 ## Objective
 
-Repair the homepage experience before adding more features. This build follows the new `docs/trackers/LIVING_HOMEPAGE_MASTER_BACKLOG.md` tracker and reports work by tracker IDs.
+Repair the public homepage experience before adding new features. BUILD-039 focuses on the most visible blockers reported after BUILD-038 deployment:
+
+- unnecessary `IMAGE PENDING` cards
+- overly tall sections
+- public copy that read like internal instructions
+- unclear Mission Control access
+- tracker-based review process
+
+## Tracker source of truth
+
+This build uses:
+
+- `docs/trackers/LIVING_HOMEPAGE_MASTER_BACKLOG.md`
+
+Future build reports should reference tracker IDs instead of relying on screenshot-heavy review.
 
 ## Implemented
 
-### Image resolver hardening
+### Image resolver fallback
 
 Updated:
 
 - `src/lib/publicImageSource.ts`
 
-Tracker items advanced:
+Changes:
 
-- A1 — Featured Genus image pipeline
-- D1 — frontend image parsing/filtering
-- D2 — backend image endpoint audit
-- D3 — trusted backend image URLs
-- D6 — fallback behavior
+- Keeps the approved OC image endpoint first: `/images/genus/{genus}`.
+- If that endpoint is cold, empty, blocked, or returns no usable images, the resolver now falls through to the existing `fetchGenusImagesWithSource` path.
+- That fallback already supports local cache, shared cache/proxy, and a guarded Plantae-only fallback.
+- This should reduce unnecessary `IMAGE PENDING` placeholders without fabricating images.
 
-The public Featured Genus resolver now tries the approved Orchid Continuum image endpoint first, then falls back to the existing `fetchGenusImagesWithSource` pipeline. That secondary resolver already supports local cache, shared server cache/proxy, the Render harvester, and a guarded Plantae-only fallback. This should reduce unnecessary `IMAGE PENDING` cards when the direct endpoint is cold, empty, or blocked by CORS.
+Tracker IDs:
 
-### Featured Genus layout compression
+- A1
+- D1
+- D2
+- D3
+- D6
+
+### Featured Genus layout tightening
 
 Updated:
 
 - `src/components/orchid/DailyGenusFeatureV5.tsx`
 
-Tracker items advanced:
+Changes:
 
-- A4 — one-viewport section integrity
-- E1/E3/E5 — reduce repetition and shorten copy
-- M5/M6 — reduce padding/card height and move secondary detail out of long panels
+- Tightened the wrapper around the Featured Genus section.
+- Compressed Discovery Trails into compact doorway cards.
+- Removed long public-facing explanatory copy from this wrapper.
 
-The wrapper around the working V4 Featured Genus engine has been compressed. Discovery Trails are shorter, relationship chips are tighter, and the section now behaves more like a compact doorway into the genus rather than a second manifesto.
+Tracker IDs:
+
+- A3
+- A4
+- E1
+- E3
+- E5
+- M2
+- M3
+- M5
+- M6
 
 ### Public Calyx copy revision
 
@@ -42,32 +71,95 @@ Updated:
 
 - `src/components/orchid/PublicCalyxGuide.tsx`
 
-Tracker items advanced:
+Changes:
 
-- A3 — remove instruction-like copy
-- K1/K2 — Calyx as quiet public guide
+- Rewrote the section so it reads like a guide, not internal documentation.
+- Reduced vertical height and shortened copy.
+- Changed audience blocks into compact pathways: Grow, Learn, Research, Protect.
+- Replaced `Ask Calyx interface coming online` with `Public Calyx chat is next`.
 
-The Calyx section was rewritten to sound less like internal documentation and more like a museum/research guide. It is shorter, less instructional, and preserves the idea that Calyx is available without interrupting visitors.
+Tracker IDs:
 
-## Known limitations / deferred work
+- A3
+- K1
+- K2
+- M5
 
-This build does not yet complete:
+### Mission Control footer access
 
-- A2/B1/B2 — full hero redesign with orchid image above the fold.
-- A5/L2 — Mission Control access explanation in-page.
-- M1–M4 — verified desktop/iPad/iPhone responsive review. Code was tightened, but post-deploy verification is still required.
-- F2 — knowledge graph label overlap.
-- J1/J2 — homepage Atlas simplification.
+Updated:
+
+- `src/components/orchid/Footer.tsx`
+
+Changes:
+
+- Footer now labels `Mission Control (owner)`.
+- Adds a clear owner access note: use the footer link, then enter the owner access code configured for this deployment.
+- Reduces footer vertical spacing.
+
+Tracker IDs:
+
+- A5
+- L1
+- L2
+- M5
+
+### Viewport rule documentation
+
+Added:
+
+- `docs/architecture/Homepage_Viewport_Rules.md`
+
+This establishes the review rule that major homepage sections should be understandable within one viewport on desktop, iPad, and iPhone.
+
+Tracker IDs:
+
+- A4
+- M1
+- O4
+
+### Tracker update
+
+Updated:
+
+- `docs/trackers/LIVING_HOMEPAGE_MASTER_BACKLOG.md`
+
+The tracker now records BUILD-039 progress and identifies BUILD-040 as the next recommended build.
+
+Tracker IDs:
+
+- O2
+- O3
+- O4
+- O5
+
+## Still open
+
+BUILD-039 does **not** fully complete:
+
+- above-the-fold hero redesign
+- logo reduction
+- full one-viewport refactor for every homepage section
+- graph label overlap fix
+- Atlas control replacement
+- pollinator portal
+- mycorrhizal dossier
+- Featured Genus archive
+- native public Calyx chat
+
+## Next recommended build
+
+BUILD-040 — Hero Orchid + Responsive Story Flow
+
+Target:
+
+- A2
+- B1–B5
+- A4
+- M2–M6
+- E1–E6
+- F2
 
 ## Deployment
 
 Frontend deployment required after merge. Backend deployment is not required for this build.
-
-## Review instructions
-
-After deploy, review with the tracker first:
-
-1. Confirm whether Featured Genus images now load.
-2. Confirm whether Calyx copy no longer reads like instructions.
-3. Confirm whether Discovery Trails/Featured Genus section feels shorter.
-4. Mark tracker items as verified, needs revision, or still blocked.
