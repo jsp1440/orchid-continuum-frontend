@@ -1,9 +1,10 @@
 import { IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
-import type { GenusImage } from '@/lib/genusData';
+import { fetchGenusImagesWithSource } from '@/lib/genusData';
+import type { GenusImage, ImageSource } from '@/lib/genusData';
 
 export type PublicImageSourceResult = {
   images: GenusImage[];
-  source: 'live' | 'pending';
+  source: ImageSource;
   diagnostic?: string;
 };
 
@@ -122,12 +123,12 @@ function extractImages(payload: unknown): GenusImage[] {
 }
 
 /**
- * Orchid Continuum-only image resolver.
+ * Public Featured Genus image resolver.
  *
- * Calls only the OC image backend. It does not query iNaturalist, Wikipedia,
- * Wikimedia, GBIF, or any other public image API from the browser. If the OC
- * backend/database cannot provide a living image, the UI gets a real pending
- * state instead of a fake outside fallback.
+ * BUILD-039 keeps the approved OC image endpoint first, then falls back to the
+ * existing genusData resolver, which already knows how to use local/server cache
+ * and its guarded Plantae-only fallback. This avoids unnecessary IMAGE PENDING
+ * cards when the direct image endpoint is cold, empty, or blocked by CORS.
  */
 export async function fetchPublicGenusImages(
   genus: string,
@@ -141,22 +142,23 @@ export async function fetchPublicGenusImages(
 
   try {
     const response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
-    if (!response.ok) {
-      return { images: [], source: 'pending', diagnostic: `OC image endpoint HTTP ${response.status}` };
+    if (response.ok) {
+      const payload = await response.json();
+      const images = extractImages(payload).slice(0, limit);
+      if (images.length > 0) {
+        return { images, source: 'live' };
+      }
     }
-    const payload = await response.json();
-    const images = extractImages(payload).slice(0, limit);
-    return {
-      images,
-      source: images.length > 0 ? 'live' : 'pending',
-      diagnostic: images.length > 0 ? undefined : 'OC image endpoint returned no usable living-image URLs',
-    };
   } catch (error) {
     if (signal?.aborted) return { images: [], source: 'pending', diagnostic: 'request aborted' };
-    return {
-      images: [],
-      source: 'pending',
-      diagnostic: error instanceof Error ? error.message : 'OC image endpoint failed',
-    };
   }
+
+  const fallback = await fetchGenusImagesWithSource(clean, signal, limit);
+  return {
+    images: fallback.images,
+    source: fallback.source,
+    diagnostic: fallback.images.length > 0
+      ? `direct OC image endpoint missed; resolved via ${fallback.source}`
+      : 'no OC/cache/guarded fallback images returned usable living-image URLs',
+  };
 }
