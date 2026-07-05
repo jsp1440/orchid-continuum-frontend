@@ -7,6 +7,9 @@
  *   API / Species / Atlas:
  *   https://orchid-continuum-public-api.onrender.com
  *
+ *   Calyx Backend / Mission Control:
+ *   https://orchid-calyx-backend.onrender.com
+ *
  *   Images:
  *   https://orchidcontinuumharvester2.onrender.com
  *
@@ -30,6 +33,21 @@ export const BACKEND_BASE_URL = (
   env.VITE_BACKEND_BASE_URL ||
   env.VITE_API_BASE_URL ||
   'https://orchid-continuum-public-api.onrender.com'
+).replace(/\/$/, '');
+
+/**
+ * Calyx backend
+ *
+ * Serves:
+ * - runner health
+ * - connector health
+ * - runtime summary
+ * - mission-control operational telemetry
+ */
+export const CALYX_BACKEND_BASE_URL = (
+  env.VITE_CALYX_BACKEND_BASE_URL ||
+  env.VITE_MISSION_CONTROL_BACKEND_URL ||
+  'https://orchid-calyx-backend.onrender.com'
 ).replace(/\/$/, '');
 
 /**
