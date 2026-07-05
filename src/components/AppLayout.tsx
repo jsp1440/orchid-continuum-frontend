@@ -88,7 +88,9 @@ const AppLayout: React.FC = () => {
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
             <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
-            <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+            <div id="species-in-focus">
+              <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+            </div>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
             <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
             <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
