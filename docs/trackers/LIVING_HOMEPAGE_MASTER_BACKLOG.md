@@ -24,11 +24,11 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 
 | Status | ID | Item | Notes |
 |---|---:|---|---|
-| 🔴 | A1 | Fix Genus of the Day / Featured Genus image pipeline | No more `IMAGE PENDING` for species where usable images exist. |
-| 🔴 | A2 | Restore real hero orchid image above the fold | The first screen should show an orchid, not mostly logo/typography. |
-| 🔴 | A3 | Remove or rewrite public placeholder/instructional copy | Anything that reads like internal instructions must be removed from public view. |
-| 🔴 | A4 | Make every major homepage section fit one viewport | Must work on desktop, iPad, and iPhone. No section should require scrolling just to understand one idea. |
-| 🔴 | A5 | Create a public-facing Mission Control access explanation | Footer link exists, but access pathway is not clear. |
+| 🟡 | A1 | Fix Genus of the Day / Featured Genus image pipeline | BUILD-039 adds cache/guarded fallback into `fetchPublicGenusImages`; requires deployment verification. |
+| 🔴 | A2 | Restore real hero orchid image above the fold | Not addressed in BUILD-039; next hero-specific build. |
+| 🟡 | A3 | Remove or rewrite public placeholder/instructional copy | BUILD-039 rewrites Calyx public copy and tightens Discovery Trails; review after deploy. |
+| 🟡 | A4 | Make every major homepage section fit one viewport | BUILD-039 adds viewport rules and tightens Calyx/Featured Genus wrappers; full section audit still open. |
+| 🟡 | A5 | Create a public-facing Mission Control access explanation | BUILD-039 clarifies Mission Control footer wording; Mission Control page copy still needs owner review. |
 
 ---
 
@@ -49,8 +49,8 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 | Status | ID | Item | Notes |
 |---|---:|---|---|
 | 🟡 | C1 | Maintain Featured Genus 12-hour cadence | Existing text states this, but behavior needs verification. |
-| 🔴 | C2 | Rotate species within Featured Genus | Target cadence: about 45 seconds, adjustable if performance requires. |
-| 🔴 | C3 | Rotate 3×3 grid as species pass through hero slot | One species moves into hero, new species enters grid. |
+| 🟡 | C2 | Rotate species within Featured Genus | Existing V4 rotation remains; needs deployment/browser verification. |
+| 🟡 | C3 | Rotate 3×3 grid as species pass through hero slot | Existing V4 grid rotation remains; needs deployment/browser verification. |
 | 🔴 | C4 | Archive previous Featured Genera | Visitors should be able to browse past genera. |
 | 🔴 | C5 | Make all genus/species cards clickable | Cards should lead to genus/species pages or dossiers. |
 | 🔴 | C6 | Remove species that do not belong to active genus unless explicitly labeled | Example: Vanilla should not appear inside Phalaenopsis grid unless part of a deliberate comparison. |
@@ -61,12 +61,12 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 
 | Status | ID | Item | Notes |
 |---|---:|---|---|
-| 🔴 | D1 | Inspect frontend image parsing/filtering | Determine whether image URLs are missing, rejected, or malformed. |
-| 🔴 | D2 | Inspect backend image endpoint payload | Verify response shape for Featured Genus images. |
-| 🔴 | D3 | Permit trusted backend image URLs | Avoid over-filtering valid orchid images. |
-| 🔴 | D4 | Exclude herbarium/specimen/plate/document images from hero unless intentionally shown | Public hero should prioritize living/studio/habitat photos. |
-| 🔴 | D5 | Keep image attribution/source credit | Real images only; no AI orchid substitutes. |
-| 🔴 | D6 | Add graceful fallback only when no real image exists | Fallback should say why image is unavailable, not dominate the experience. |
+| 🟡 | D1 | Inspect frontend image parsing/filtering | BUILD-039 identified `publicImageSource` as too strict/limited and patched it. |
+| 🟡 | D2 | Inspect backend image endpoint payload | BUILD-039 keeps direct endpoint first and adds fallback when endpoint misses; deeper backend audit still open. |
+| 🟡 | D3 | Permit trusted backend image URLs | BUILD-039 accepts direct endpoint fields and falls back to cache/guarded resolver. |
+| 🔴 | D4 | Exclude herbarium/specimen/plate/document images from hero unless intentionally shown | Existing filters remain; not fully re-audited. |
+| 🟡 | D5 | Keep image attribution/source credit | Existing image source indicator remains; deployment verification needed. |
+| 🟡 | D6 | Add graceful fallback only when no real image exists | BUILD-039 reduces unnecessary pending by using existing guarded fallback source. |
 
 ---
 
@@ -74,11 +74,11 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 
 | Status | ID | Item | Notes |
 |---|---:|---|---|
-| 🔴 | E1 | Reduce homepage length by removing repetition | Current page repeats relationships/connections in multiple sections. |
+| 🟡 | E1 | Reduce homepage length by removing repetition | BUILD-039 compresses Calyx and Discovery Trails only; broader reduction still open. |
 | 🔴 | E2 | Reorder homepage into one story | Wonder → Featured Genus → Relationships → Why Continuum Exists → Atlas/Explore → Conservation → Participation. |
-| 🔴 | E3 | Each section answers one distinct question | No repeated thesis paragraphs. |
-| 🔴 | E4 | Convert explanatory walls into visual demonstrations | Demonstrate, do not over-explain. |
-| 🔴 | E5 | Shorten section copy by about 40–60% | Especially on public homepage. |
+| 🟡 | E3 | Each section answers one distinct question | BUILD-039 begins this in Calyx/Discovery; full audit open. |
+| 🟡 | E4 | Convert explanatory walls into visual demonstrations | BUILD-039 trims text but does not fully redesign demonstrations. |
+| 🟡 | E5 | Shorten section copy by about 40–60% | Calyx and Discovery Trails shortened; broader page still open. |
 | 🔴 | E6 | Add “learn more” links instead of putting everything on homepage | Deeper details belong on dedicated pages. |
 
 ---
@@ -149,8 +149,8 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 
 | Status | ID | Item | Notes |
 |---|---:|---|---|
-| 🔵 | K1 | Rewrite Calyx section so it does not read like instructions | Current section feels too much like documentation. |
-| 🟡 | K2 | Keep Calyx unobtrusive | Public guide added; needs tone refinement. |
+| 🟡 | K1 | Rewrite Calyx section so it does not read like instructions | BUILD-039 rewrote the section; needs user review after deployment. |
+| 🟡 | K2 | Keep Calyx unobtrusive | Public guide remains compact; needs review. |
 | 🔴 | K3 | Build native Ask Calyx interface | No third-party Tawk.to-style overlay. |
 | 🔴 | K4 | Make Calyx page-context aware | If user is viewing Featured Genus, Calyx knows it. |
 | 🔴 | K5 | Separate Public Calyx from Mission Control Calyx | Public guide vs owner/operator. |
@@ -161,8 +161,8 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 
 | Status | ID | Item | Notes |
 |---|---:|---|---|
-| 🟡 | L1 | Mission Control discoverable in footer | Added in BUILD-038; verify usability. |
-| 🔴 | L2 | Mission Control access flow clear to owner | Explain login/admin/permissions. |
+| 🟡 | L1 | Mission Control discoverable in footer | Added in BUILD-038; BUILD-039 labels it as owner access. |
+| 🟡 | L2 | Mission Control access flow clear to owner | Footer now says owner access code is required; page-level copy still should be reviewed. |
 | 🔴 | L3 | Mission Control not exposed as public capability | Public can see link only if appropriate; sensitive controls require permissions. |
 | 🔴 | L4 | Mission Control includes Calyx chat/operator interface | Future build. |
 | 🔴 | L5 | Mission Control shows jobs, builds, governance, runner state, approvals | Future build. |
@@ -173,12 +173,12 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 
 | Status | ID | Item | Notes |
 |---|---:|---|---|
-| 🔴 | M1 | Define section viewport rule in CSS/design docs | Major section should fit within one viewport where practical. |
-| 🔴 | M2 | iPad layout review | User is reviewing on iPad; must work well there. |
-| 🔴 | M3 | Desktop layout review | No giant cut-off sections. |
+| 🟡 | M1 | Define section viewport rule in CSS/design docs | BUILD-039 added `docs/architecture/Homepage_Viewport_Rules.md`; implementation still ongoing. |
+| 🟡 | M2 | iPad layout review | BUILD-039 compresses Calyx/Discovery; needs iPad deployment review. |
+| 🟡 | M3 | Desktop layout review | BUILD-039 compresses selected sections; full audit still open. |
 | 🔴 | M4 | iPhone layout review | Condense sections without losing story. |
-| 🔴 | M5 | Reduce top/bottom padding and card heights | Current sections are too tall. |
-| 🔴 | M6 | Move secondary content behind links/expanders | Avoid long full-screen panels. |
+| 🟡 | M5 | Reduce top/bottom padding and card heights | BUILD-039 reduces Calyx/footer/Discovery vertical space. |
+| 🟡 | M6 | Move secondary content behind links/expanders | Begun in Discovery Trails; broader section work remains. |
 
 ---
 
@@ -200,23 +200,22 @@ The immediate goal is to make the homepage reviewable by checklist instead of re
 | Status | ID | Item | Notes |
 |---|---:|---|---|
 | ✅ | O1 | Create permanent master backlog tracker | Created as this file. |
-| 🔴 | O2 | Each build updates this tracker | Completed items, changed items, new items. |
-| 🔴 | O3 | Each build report references tracker IDs | Example: completed A1, M1, K1. |
-| 🔴 | O4 | Deployment review checks tracker before screenshots | Screenshots become optional evidence, not the main workflow. |
-| 🔴 | O5 | Preserve new ideas without derailing current work | Add ideas to backlog first; pull into current build only if needed. |
+| 🟡 | O2 | Each build updates this tracker | BUILD-039 updates tracker; keep doing this every build. |
+| 🟡 | O3 | Each build report references tracker IDs | BUILD-039 report should reference IDs. |
+| 🟡 | O4 | Deployment review checks tracker before screenshots | Begin with BUILD-039 deployment review. |
+| 🟡 | O5 | Preserve new ideas without derailing current work | Add ideas to backlog first; pull into current build only if needed. |
 
 ---
 
 ## Next recommended build
 
-**BUILD-039 — Homepage Triage: Images, Layout, Public Copy**
+**BUILD-040 — Hero Orchid + Responsive Story Flow**
 
 Target tracker items:
 
-- A1, A2, A3, A4, A5
-- D1, D2, D3, D6
-- K1
-- M1–M6
-- O2–O4
+- A2, B1–B5
+- A4, M2–M6
+- E1–E6
+- F2
 
-This should be a focused repair build, not a new feature build.
+BUILD-039 focused on triage: image resolver fallback, selected copy repair, selected layout compression, Mission Control footer access, viewport rules, and tracker process.
