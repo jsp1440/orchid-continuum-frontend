@@ -45,6 +45,7 @@ import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
 import AdminCenter from "./pages/AdminCenter";
+import MissionControl from "./pages/MissionControl";
 
 const queryClient = new QueryClient();
 
@@ -73,6 +74,8 @@ const App = () => (
 
                 <Route path="/admin" element={<AdminCenter />} />
                 <Route path="/control-center" element={<AdminCenter />} />
+                <Route path="/mission-control" element={<MissionControl />} />
+                <Route path="/orchid-continuum-mission-control" element={<MissionControl />} />
                 <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
 
                 <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
