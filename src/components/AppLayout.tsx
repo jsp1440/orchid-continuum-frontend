@@ -14,6 +14,7 @@ import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
 import HumanStewardship from './orchid/HumanStewardship';
 import OrchidGallery from './orchid/OrchidGallery';
 import NewsFromContinuum from './orchid/NewsFromContinuum';
+import PublicCalyxGuide from './orchid/PublicCalyxGuide';
 import Footer from './orchid/Footer';
 import BackendHealthBanner from './orchid/BackendHealthBanner';
 import BackendStatusBanner from './orchid/BackendStatusBanner';
@@ -92,6 +93,7 @@ const AppLayout: React.FC = () => {
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             </div>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
+            <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
             <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
             <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
             <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
