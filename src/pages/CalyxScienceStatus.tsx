@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BookOpenText, CheckCircle2, Database, FlaskConical, Layers3, Leaf, Network, RefreshCw, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, BookOpenText, CheckCircle2, Database, FlaskConical, KeyRound, Layers3, Leaf, LockKeyhole, Network, RefreshCw, ShieldCheck } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
@@ -11,6 +11,12 @@ import {
 } from '@/lib/calyxScience';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+
+const ACCESS_STORAGE_KEY = 'oc_mission_control_owner_access_v1';
+
+const OWNER_ACCESS_CODE =
+  (import.meta.env.VITE_MISSION_CONTROL_ACCESS_CODE as string | undefined) ||
+  'orchid-continuum-owner';
 
 function formatFlag(value: unknown): string {
   if (value === true) return 'yes';
@@ -82,6 +88,8 @@ function GapRow({ gap }: { gap: ScienceGap }) {
 }
 
 const CalyxScienceStatus: React.FC = () => {
+  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem(ACCESS_STORAGE_KEY) === 'yes');
+  const [accessCode, setAccessCode] = useState('');
   const [state, setState] = useState<LoadState>('idle');
   const [dashboard, setDashboard] = useState<CalyxScienceDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -100,11 +108,27 @@ const CalyxScienceStatus: React.FC = () => {
     }
   };
 
+  const unlock = () => {
+    if (accessCode.trim() === OWNER_ACCESS_CODE) {
+      localStorage.setItem(ACCESS_STORAGE_KEY, 'yes');
+      setIsUnlocked(true);
+    }
+  };
+
+  const lock = () => {
+    localStorage.removeItem(ACCESS_STORAGE_KEY);
+    setIsUnlocked(false);
+    setAccessCode('');
+    setDashboard(null);
+    setState('idle');
+  };
+
   useEffect(() => {
+    if (!isUnlocked) return;
     const controller = new AbortController();
     void load(controller.signal);
     return () => controller.abort();
-  }, []);
+  }, [isUnlocked]);
 
   const topDepartments = useMemo(
     () => (dashboard?.summary.top_priorities?.length ? dashboard.summary.top_priorities : dashboard?.departments ?? []).slice(0, 8),
@@ -117,6 +141,46 @@ const CalyxScienceStatus: React.FC = () => {
   );
 
   const safety = dashboard?.summary.safety ?? dashboard?.status.safety;
+
+  if (!isUnlocked) {
+    return (
+      <div className="min-h-screen bg-[#07140d] text-[#f5f0e8]">
+        <Navbar />
+        <main className="flex min-h-screen items-center justify-center px-6 pt-28">
+          <section className="w-full max-w-xl rounded-[2rem] border border-[#d4b34a]/25 bg-[#0d1d13]/90 p-8 shadow-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
+              <LockKeyhole className="h-3.5 w-3.5" /> Owner-only access
+            </div>
+            <h1 className="mt-6 text-4xl leading-tight md:text-5xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+              Science Mission Status
+            </h1>
+            <p className="mt-4 text-sm leading-relaxed text-[#cfc8b8]/85">
+              Calyx science telemetry is part of Mission Control and remains behind the owner gate until server-side roles are available.
+            </p>
+            <label className="mt-8 block font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">
+              Access code
+            </label>
+            <input
+              value={accessCode}
+              onChange={(event) => setAccessCode(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') unlock();
+              }}
+              type="password"
+              className="mt-3 w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-[#f5f0e8] outline-none focus:border-[#d4b34a]/60"
+              placeholder="Enter owner code"
+            />
+            <button
+              onClick={unlock}
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
+            >
+              <KeyRound className="h-3.5 w-3.5" /> Unlock
+            </button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#06110b] text-[#f5f0e8]">
@@ -136,12 +200,20 @@ const CalyxScienceStatus: React.FC = () => {
                   Read-only visibility into Calyx science priorities, coverage gaps, datasets, harvesters, and dossier queues. This view reports audit readiness only and does not promote unreviewed ecological claims.
                 </p>
               </div>
-              <button
-                onClick={() => void load()}
-                className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
-              >
-                <RefreshCw className={`h-4 w-4 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh
-              </button>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  onClick={() => void load()}
+                  className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
+                >
+                  <RefreshCw className={`h-4 w-4 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh
+                </button>
+                <button
+                  onClick={lock}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+                >
+                  <LockKeyhole className="h-4 w-4" /> Lock
+                </button>
+              </div>
             </div>
           </div>
         </section>
