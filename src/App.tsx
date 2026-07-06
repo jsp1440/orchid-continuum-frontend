@@ -47,6 +47,7 @@ import RelationshipExplorer from "./pages/RelationshipExplorer";
 import AdminCenter from "./pages/AdminCenter";
 import MissionControl from "./pages/MissionControl";
 import AIOrchestration from "./pages/AIOrchestration";
+import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 
 const queryClient = new QueryClient();
 
@@ -77,6 +78,8 @@ const App = () => (
                 <Route path="/control-center" element={<AdminCenter />} />
                 <Route path="/mission-control" element={<MissionControl />} />
                 <Route path="/orchid-continuum-mission-control" element={<MissionControl />} />
+                <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
+                <Route path="/calyx-science" element={<CalyxScienceStatus />} />
                 <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
                 <Route path="/ai-orchestration" element={<AIOrchestration />} />
                 <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
