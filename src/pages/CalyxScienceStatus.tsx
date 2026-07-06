@@ -86,23 +86,24 @@ const CalyxScienceStatus: React.FC = () => {
   const [dashboard, setDashboard] = useState<CalyxScienceDashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = async () => {
-    const controller = new AbortController();
+  const load = async (signal?: AbortSignal) => {
     setState('loading');
     setError(null);
     try {
-      const next = await fetchCalyxScienceDashboard(controller.signal);
+      const next = await fetchCalyxScienceDashboard(signal);
       setDashboard(next);
       setState('ready');
     } catch (err) {
+      if (signal?.aborted) return;
       setError(err instanceof Error ? err.message : 'Unknown Calyx science telemetry error');
       setState('error');
     }
-    return () => controller.abort();
   };
 
   useEffect(() => {
-    void load();
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
   }, []);
 
   const topDepartments = useMemo(
@@ -126,7 +127,7 @@ const CalyxScienceStatus: React.FC = () => {
             <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                  <FlaskConical className="h-3.5 w-3.5" /> BUILD-049 · Calyx science runtime
+                  <FlaskConical className="h-3.5 w-3.5" /> BUILD-049 - Calyx science runtime
                 </div>
                 <h1 className="mt-5 text-4xl leading-tight md:text-6xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
                   Science mission status
@@ -154,9 +155,9 @@ const CalyxScienceStatus: React.FC = () => {
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <Stat label="Runtime mode" value={dashboard?.summary.mode ?? dashboard?.status.mode ?? 'loading'} icon={Network} />
-            <Stat label="Science departments" value={dashboard?.summary.department_count ?? dashboard?.departments.length ?? '—'} icon={Layers3} />
-            <Stat label="Mission types" value={dashboard?.summary.mission_type_count ?? dashboard?.missions.length ?? '—'} icon={Leaf} />
-            <Stat label="Known gaps" value={dashboard?.status.known_gap_count ?? dashboard?.gaps.length ?? '—'} icon={AlertTriangle} />
+            <Stat label="Science departments" value={dashboard?.summary.department_count ?? dashboard?.departments.length ?? '-'} icon={Layers3} />
+            <Stat label="Mission types" value={dashboard?.summary.mission_type_count ?? dashboard?.missions.length ?? '-'} icon={Leaf} />
+            <Stat label="Known gaps" value={dashboard?.status.known_gap_count ?? dashboard?.gaps.length ?? '-'} icon={AlertTriangle} />
           </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
