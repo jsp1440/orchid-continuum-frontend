@@ -4,8 +4,8 @@
 
 1. **Git for Windows:** install from the official Git site and select the option that enables Git from the command line. Open a **new** PowerShell, then run `git --version` and `where.exe git`.
 2. **GitHub CLI:** install `gh`, reopen PowerShell, then run `gh --version`, `gh auth login`, and `gh auth status`. Choose GitHub.com, HTTPS, and browser authentication.
-3. **Node.js:** install current Node LTS, reopen PowerShell, then run `node --version` and `npm --version`.
-4. **pnpm:** run `corepack enable`, `corepack prepare pnpm@latest --activate`, then `pnpm --version`. Use official pnpm Windows instructions if Corepack is unavailable.
+3. **Node.js and npm:** install current Node LTS, reopen PowerShell, then run `node --version` and `npm --version`. This repository uses npm because `package-lock.json` is committed.
+4. **Optional pnpm diagnostic:** if other projects need it, run `corepack enable`, `corepack prepare pnpm@latest --activate`, then `pnpm --version`. Do not use pnpm as the package-manager workflow for this repository unless policy changes and a pnpm lockfile is committed intentionally.
 5. **Python:** install Python 3 with **Add Python to PATH** selected. Reopen PowerShell and run `py --version` or `python --version`.
 
 ## Workspace and clone
