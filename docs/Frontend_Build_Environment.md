@@ -16,33 +16,33 @@ Before dependencies, inspect lockfiles:
 Get-ChildItem -Force package.json, pnpm-lock.yaml, package-lock.json, yarn.lock -ErrorAction SilentlyContinue
 ```
 
-Use the package manager indicated by lockfile and team policy. Do not mix npm and pnpm in the same clone. Typical approved workflow after review:
+This repository currently commits `package-lock.json`, so use **npm** for normal install and validation. Do not mix npm and pnpm in the same clone or create a new pnpm lockfile unless the repository policy changes.
 
 ```powershell
-pnpm install --frozen-lockfile
-pnpm run lint
-pnpm run build
+npm ci
+npm run lint
+npm run build
 ```
 
-## Repair broken node_modules
+## Repair broken `node_modules`
 
 This is manual, never performed by diagnostics:
 
 ```powershell
 git status
 Remove-Item -Recurse -Force .\node_modules
-pnpm store prune
-pnpm install --frozen-lockfile
+npm cache verify
+npm ci
 ```
 
 Confirm repository root and preserve work first. Do not delete lockfiles to make an install pass.
 
-Use local tooling through pnpm:
+Use project-local tooling through npm:
 
 ```powershell
-pnpm exec tsc --version
-pnpm exec vite --version
-pnpm exec esbuild --version
+npx tsc --version
+npx vite --version
+npx esbuild --version
 ```
 
-esbuild may be transitive; a warning is acceptable if Vite builds. Report Node/npm/pnpm versions, detected lockfile, command, and first full error for environment blockers.
+`esbuild` may be transitive; a warning is acceptable if Vite builds. Report Node/npm/pnpm versions, detected lockfile, command, and first full error for environment blockers.
