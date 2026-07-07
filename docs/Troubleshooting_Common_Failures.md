@@ -12,8 +12,11 @@ Confirm exact repository URL and connector installation permission. Then use loc
 ## Push denied
 Run `git remote -v`, `gh auth status`, and `git status`; confirm write access and branch policy. Do not force-push or bypass protection.
 
-## Node/pnpm missing or dependencies broken
-Install Node LTS, reopen PowerShell, enable Corepack, then use the lockfile-compatible install command. For a repair, remove only `node_modules`, prune pnpm store, and reinstall; never delete lockfiles.
+## Node/npm missing or dependencies broken
+Install Node LTS, reopen PowerShell, then use this repository's committed `package-lock.json` with npm. For a repair, confirm `git status`, remove only `node_modules`, run `npm cache verify`, and reinstall with `npm ci`; never delete lockfiles or generate a pnpm lockfile to make an install pass.
+
+## Optional pnpm diagnostic
+`pnpm --version` may be useful as a workstation diagnostic for other projects, but pnpm is not the package-manager workflow for this repository while `package-lock.json` is the committed lockfile.
 
 ## Python or Drive unavailable
 Install Python with Add Python to PATH and reopen PowerShell. For Drive, confirm desktop sign-in or browser access; request sharing from the document owner for private folders.
