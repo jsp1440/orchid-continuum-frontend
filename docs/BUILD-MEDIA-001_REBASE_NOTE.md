@@ -1,0 +1,1 @@
+This replacement branch was created from the current frontend main branch after the earlier PR became non-mergeable. It preserves the active V5 page and replaces only the V4 image gallery block with the Calyx media client.
