@@ -8,7 +8,7 @@ This file is a living registry for Orchid Continuum builds. Add a row when a bui
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | BUILD-INFRA-001 | Orchid Continuum Developer Workstation | `jsp1440/orchid-continuum-frontend` | `build-infra-001-dev-workstation` | [#21](https://github.com/jsp1440/orchid-continuum-frontend/pull/21) | Merged | Yes | No | 2026-07-06 | Foundation workstation docs and read-only diagnostics. |
 | BUILD-INFRA-002 | Continuous Development Workspace | `jsp1440/orchid-continuum-frontend` | `build-infra-002-continuous-development-workspace` | [#22](https://github.com/jsp1440/orchid-continuum-frontend/pull/22) | Merged | Yes | No | 2026-07-06 | Session bootstrap docs and read-only diagnostics. |
-| BUILD-INFRA-003 | Architecture Repository Access and Source Curation Bootstrap | `jsp1440/orchid-continuum-frontend` | `build-infra-003-architecture-source-curation-bootstrap` | TBD | In progress | No | No | TBD | Adds read-only architecture access and source-curation readiness workflow. |
+| BUILD-INFRA-003 | Architecture Repository Access and Source Curation Bootstrap | `jsp1440/orchid-continuum-frontend` | `build-infra-003-architecture-source-curation-bootstrap` | [#25](https://github.com/jsp1440/orchid-continuum-frontend/pull/25) | Merged | Yes | No | 2026-07-06 | Adds read-only architecture access and source-curation readiness workflow. |
 
 ## Status Values
 
