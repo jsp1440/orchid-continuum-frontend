@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 jobs:
   audit-deployed-featured-genus:
@@ -20,8 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Install browser test dependency
-        run: |
+      - run: |
           npm install --no-save --no-package-lock playwright@1.55.0
           npx playwright install --with-deps chromium
       - name: Run deployed browser audit
@@ -33,3 +33,9 @@ jobs:
           name: featured-genus-render-sentinel
           path: artifacts/
           if-no-files-found: warn
+      - name: Open incident on failure
+        if: failure()
+        run: |
+          gh issue create --title "Sentinel: Featured Genus deployment audit failing" --body "The deployed Featured Genus audit failed. See workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID and artifact featured-genus-render-sentinel." || true
+        env:
+          GH_TOKEN: ${{ github.token }}
