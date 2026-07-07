@@ -6,6 +6,9 @@ A reproducible Windows setup for Orchid Continuum development. This build adds d
 ## Safety
 All scripts under `scripts/` only inspect commands, paths, and repository metadata. They never install software, alter PATH, authenticate, delete files, overwrite repositories, run dependency installs, or change application code.
 
+## Repository package manager
+This repository commits `package-lock.json`, so npm is the repository package-manager workflow. Use `npm ci`, `npm run lint`, and `npm run build` for dependency installation and validation. Keep pnpm checks optional and diagnostic only unless repository policy changes and a pnpm lockfile is committed intentionally.
+
 ## Run
 
 ```powershell
@@ -18,8 +21,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 - [ ] Git works in a new PowerShell session.
 - [ ] GitHub CLI authentication works, or HTTPS Git + browser PR fallback is available.
 - [ ] A feature branch can be committed, pushed, and PR’d.
-- [ ] Node, npm, pnpm, Python, and Google Drive workflow are available.
-- [ ] The complete diagnostic suite has no `FAIL` status.
+- [ ] Node and npm are available for this repository's workflow.
+- [ ] Optional pnpm, Python, and Google Drive diagnostics are understood where relevant.
+- [ ] The complete diagnostic suite has no material `FAIL` status.
 
 Read the setup, Git, GitHub, frontend, Codex, Drive, and troubleshooting guides in `docs/` before development.
 
