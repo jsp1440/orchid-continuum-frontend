@@ -22,7 +22,7 @@
  *   GET  /api/zoo/badges/{taxonomy_id}    — reviewed-image confidence badges
  */
 
-import { apiRequest, type ApiResult } from './api';
+import { ApiError, apiRequest, type ApiResult } from './api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -61,6 +61,16 @@ export interface ZooBadge {
   last_reviewed_at?: string;
 }
 
+type RuntimeEnv = Record<string, string | undefined>;
+
+const env: RuntimeEnv =
+  typeof import.meta !== 'undefined'
+    ? ((import.meta as ImportMeta & { env?: RuntimeEnv }).env ?? {})
+    : {};
+
+const errorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
+
 // ---------------------------------------------------------------------------
 // API surface
 // ---------------------------------------------------------------------------
@@ -94,8 +104,6 @@ export const zooApi = {
     payload: ZooContribution,
   ): Promise<ApiResult<{ submission_id: string }>> {
     // We mirror the apiRequest contract for write endpoints.
-    const env =
-      (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
     const base: string =
       env.VITE_API_BASE_URL || env.NEXT_PUBLIC_API_BASE_URL || '';
     if (!base) {
@@ -113,22 +121,24 @@ export const zooApi = {
       if (!res.ok) {
         return {
           data: null,
-          error: Object.assign(
-            new Error(`Submission failed (${res.status})`),
-            { status: res.status, endpoint: '/api/zoo/contribute' },
-          ) as any,
+          error: new ApiError(
+            `Submission failed (${res.status})`,
+            res.status,
+            '/api/zoo/contribute',
+          ),
           unconfigured: false,
         };
       }
       const data = (await res.json()) as { submission_id: string };
       return { data, error: null, unconfigured: false };
-    } catch (e: any) {
+    } catch (e: unknown) {
       return {
         data: null,
-        error: Object.assign(new Error(e?.message || 'Network error'), {
-          status: 0,
-          endpoint: '/api/zoo/contribute',
-        }) as any,
+        error: new ApiError(
+          errorMessage(e, 'Network error'),
+          0,
+          '/api/zoo/contribute',
+        ),
         unconfigured: false,
       };
     }

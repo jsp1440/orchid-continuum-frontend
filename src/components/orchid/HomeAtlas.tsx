@@ -333,7 +333,11 @@ const HomeAtlas: React.FC = () => {
   const toggleSet = (set: Set<string>, value: string, setter: React.Dispatch<React.SetStateAction<Set<string>>>) => {
     setter(() => {
       const next = new Set(set);
-      next.has(value) ? next.delete(value) : next.add(value);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
       return next;
     });
   };

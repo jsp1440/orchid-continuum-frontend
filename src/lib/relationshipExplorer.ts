@@ -80,6 +80,13 @@ export interface RelationshipExplorerPayload {
   source: "api" | "safe-mvp" | "mock";
 }
 
+type RelationshipExplorerApiPayload = Partial<
+  Omit<RelationshipExplorerPayload, "cards" | "source">
+> & {
+  cards?: Partial<CardAvailability>;
+  mvp_card_status?: Partial<CardAvailability>;
+};
+
 export const TEST_SPECIES = [
   "Angraecum sesquipedale",
   "Dendrobium anosmum",
@@ -221,29 +228,30 @@ async function withLiveGallery(payload: RelationshipExplorerPayload): Promise<Re
   }
 }
 
-function normalizePayload(name: string, raw: any): RelationshipExplorerPayload {
+function normalizePayload(name: string, raw: unknown): RelationshipExplorerPayload {
   if (!raw || typeof raw !== "object") return emptyPayload(name);
 
+  const payload = raw as RelationshipExplorerApiPayload;
   const fallback = SAFE_MVP_PAYLOADS[name.toLowerCase()] || emptyPayload(name, "api");
   const cards: CardAvailability =
-    raw.cards && typeof raw.cards === "object"
-      ? { ...emptyCards(), ...raw.cards }
-      : raw.mvp_card_status && typeof raw.mvp_card_status === "object"
-        ? { ...emptyCards(), ...raw.mvp_card_status }
+    payload.cards && typeof payload.cards === "object"
+      ? { ...emptyCards(), ...payload.cards }
+      : payload.mvp_card_status && typeof payload.mvp_card_status === "object"
+        ? { ...emptyCards(), ...payload.mvp_card_status }
         : fallback.cards;
 
-  const imageGallery = cleanGallery(Array.isArray(raw.image_gallery) ? raw.image_gallery : fallback.image_gallery);
+  const imageGallery = cleanGallery(Array.isArray(payload.image_gallery) ? payload.image_gallery : fallback.image_gallery);
 
   return {
-    scientific_name: raw.scientific_name || fallback.scientific_name || name,
+    scientific_name: payload.scientific_name || fallback.scientific_name || name,
     cards: { ...cards, image_gallery: imageGallery.length > 0 },
-    species_profile: raw.species_profile ?? fallback.species_profile,
-    atlas_summary: raw.atlas_summary ?? fallback.atlas_summary,
+    species_profile: payload.species_profile ?? fallback.species_profile,
+    atlas_summary: payload.atlas_summary ?? fallback.atlas_summary,
     image_gallery: imageGallery.length ? imageGallery : null,
-    mycorrhiza_claims: Array.isArray(raw.mycorrhiza_claims) ? raw.mycorrhiza_claims : fallback.mycorrhiza_claims,
-    fungal_dependency: raw.fungal_dependency ?? fallback.fungal_dependency,
-    reasoning: Array.isArray(raw.reasoning) ? raw.reasoning : fallback.reasoning,
-    interaction_summary: Array.isArray(raw.interaction_summary) ? raw.interaction_summary : fallback.interaction_summary,
+    mycorrhiza_claims: Array.isArray(payload.mycorrhiza_claims) ? payload.mycorrhiza_claims : fallback.mycorrhiza_claims,
+    fungal_dependency: payload.fungal_dependency ?? fallback.fungal_dependency,
+    reasoning: Array.isArray(payload.reasoning) ? payload.reasoning : fallback.reasoning,
+    interaction_summary: Array.isArray(payload.interaction_summary) ? payload.interaction_summary : fallback.interaction_summary,
     source: "api",
   };
 }

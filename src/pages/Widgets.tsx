@@ -26,51 +26,49 @@ const WIDGETS: {
   title: string;
   desc: string;
   embed: string;
-  Component: React.FC<any>;
-  props?: Record<string, unknown>;
+  render: () => React.ReactElement;
 }[] = [
   {
     id: 'species-snapshot',
     title: 'Species Snapshot',
     desc: 'Compact species card with thumbnail, taxonomy, and ecological pills. Use it to embed any Orchid Continuum taxon on a partner page.',
     embed: '<oc-widget kind="species-snapshot" taxonomy-id="…" />',
-    Component: SpeciesSnapshotWidget,
+    render: () => <SpeciesSnapshotWidget />,
   },
   {
     id: 'orchid-of-the-day',
     title: 'Orchid of the Day',
     desc: 'A daily-rotating featured species, deterministic per calendar day so partner pages stay in sync.',
     embed: '<oc-widget kind="orchid-of-the-day" />',
-    Component: OrchidOfTheDayWidget,
+    render: () => <OrchidOfTheDayWidget />,
   },
   {
     id: 'atlas-teaser',
     title: 'Atlas Teaser',
     desc: 'Brand-consistent link card for partner sites pointing into the live Atlas with all geospatial layers.',
     embed: '<oc-widget kind="atlas-teaser" />',
-    Component: AtlasTeaserWidget,
+    render: () => <AtlasTeaserWidget />,
   },
   {
     id: 'ecological-interaction-card',
     title: 'Ecological Interaction Card',
     desc: 'Pollinator and visitor counts plus ecological badges, sourced from oc_api.species_page_globi_interaction_panel_v1.',
     embed: '<oc-widget kind="ecological-interaction" taxonomy-id="…" />',
-    Component: EcologicalInteractionCardWidget,
-    props: { taxonomyId: 'demo-taxonomy-id' },
+    render: () => <EcologicalInteractionCardWidget taxonomyId="demo-taxonomy-id" />,
   },
   {
     id: 'orchid-zoo-review-card',
     title: 'Orchid Zoo Review Card',
     desc: 'Queue depth and active reviewers — useful as a citizen-science recruitment widget on partner blogs.',
     embed: '<oc-widget kind="zoo-review" />',
-    Component: ZooReviewCardWidget,
+    render: () => <ZooReviewCardWidget />,
   },
   {
     id: 'oacs-greenhouse-snapshot',
     title: 'OACS Greenhouse Snapshot',
     desc: 'Latest temperature, humidity, and PAR for an OACS site. Falls back to clearly-labeled demo data until /api/oacs is online.',
     embed: '<oc-widget kind="oacs-snapshot" site-id="…" />',
-    Component: OacsGreenhouseSnapshotWidget,
+    render: () => <OacsGreenhouseSnapshotWidget />,
   },
 ];
 
@@ -114,7 +112,6 @@ const Widgets: React.FC = () => {
         <section className="py-16">
           <div className="max-w-7xl mx-auto px-6 lg:px-10 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {WIDGETS.map(w => {
-              const Comp = w.Component;
               return (
                 <div
                   key={w.id}
@@ -125,7 +122,7 @@ const Widgets: React.FC = () => {
                     {w.desc}
                   </p>
                   <div className="rounded-xl bg-[#0d1f17] p-3 border border-white/5">
-                    <Comp {...(w.props || {})} />
+                    {w.render()}
                   </div>
                   <div className="mt-3 flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-white/45">
                     <Code2 className="h-3 w-3" />
