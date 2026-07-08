@@ -58,12 +58,15 @@ import {
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 type MissionControlErrorBoundaryState = { error: Error | null };
+type PanelErrorBoundaryState = { error: Error | null };
 
 const ACCESS_STORAGE_KEY = 'oc_mission_control_owner_access_v1';
 
 const OWNER_ACCESS_CODE =
   (import.meta.env.VITE_MISSION_CONTROL_ACCESS_CODE as string | undefined) ||
   'orchid-continuum-owner';
+
+const INTELLIGENCE_STORAGE_KEY = 'oc_mission_control_intelligence_v1';
 
 const navigationItems = [
   ['Health', Activity],
@@ -107,6 +110,11 @@ function safeRemoveStorage(key: string): void {
   } catch {
     // Non-fatal: locking still clears in-memory state below.
   }
+}
+
+function resetMissionControlLocalData(): void {
+  safeRemoveStorage(ACCESS_STORAGE_KEY);
+  safeRemoveStorage(INTELLIGENCE_STORAGE_KEY);
 }
 
 function safeArray<T>(value: T[] | undefined | null): T[] {
@@ -161,6 +169,48 @@ class MissionControlErrorBoundary extends React.Component<{ children: React.Reac
     if (this.state.error) return <MissionControlCrashFallback error={this.state.error} />;
     return this.props.children;
   }
+}
+
+function PanelUnavailable({ title, error }: { title: string; error: Error | null }) {
+  return (
+    <section className="rounded-lg border border-amber-300/25 bg-amber-300/10 p-5">
+      <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/30 bg-amber-200/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.2em] text-amber-100">
+        <AlertTriangle className="h-3.5 w-3.5" /> Mission Control panel unavailable
+      </div>
+      <h2 className="mt-4 text-2xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+        {title}
+      </h2>
+      <p className="mt-3 text-sm leading-6 text-[#f5f0e8]/78">
+        This panel was isolated so Mission Control can stay visible. Other panels, including Intelligence Inbox, remain available.
+      </p>
+      {error ? (
+        <pre className="mt-3 max-h-32 overflow-auto rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-amber-100/80">
+          {error.message}
+        </pre>
+      ) : null}
+    </section>
+  );
+}
+
+class PanelErrorBoundary extends React.Component<{ title: string; children: React.ReactNode }, PanelErrorBoundaryState> {
+  state: PanelErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): PanelErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error(`[MissionControl] panel crashed: ${this.props.title}`, error);
+  }
+
+  render() {
+    if (this.state.error) return <PanelUnavailable title={this.props.title} error={this.state.error} />;
+    return this.props.children;
+  }
+}
+
+function SafePanel({ title, children }: { title: string; children: React.ReactNode }) {
+  return <PanelErrorBoundary title={title}>{children}</PanelErrorBoundary>;
 }
 
 function statusClass(status: MissionControlStatus): string {
@@ -616,6 +666,7 @@ function IntelligenceWorkspace({
 
   return (
     <>
+      <SafePanel title="Intelligence Triage Snapshot">
       <Panel eyebrow="Daily executive summary" title="Intelligence Triage Snapshot" icon={ClipboardList}>
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="New items" value={summary.newItems} detail="Saved items still awaiting triage." />
@@ -626,7 +677,9 @@ function IntelligenceWorkspace({
           <MetricCard label="Waiting external" value={summary.waitingOnExternal} detail="Waiting items owned by external partner or unassigned." />
         </div>
       </Panel>
+      </SafePanel>
 
+      <SafePanel title="Intelligence Inbox">
       <Panel eyebrow="Intelligence Inbox" title="Paste Twin Daily Brief" icon={Inbox}>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
           <div>
@@ -679,7 +732,9 @@ function IntelligenceWorkspace({
           </div>
         ) : null}
       </Panel>
+      </SafePanel>
 
+      <SafePanel title="Grant Office">
       <Panel eyebrow="Grant Office" title="Urgent Deadlines and Application Pipeline" icon={DollarSign}>
         <div className="grid gap-4 lg:grid-cols-2">
           {grants.length ? grants.map((item) => <GrantOpportunityRow key={item.id} item={item} />) : (
@@ -687,7 +742,9 @@ function IntelligenceWorkspace({
           )}
         </div>
       </Panel>
+      </SafePanel>
 
+      <SafePanel title="Partnership / Research Queue">
       <Panel eyebrow="Partnership / Research Queue" title="Opportunities Needing Follow-up" icon={Handshake}>
         <div className="grid gap-4 lg:grid-cols-2">
           {opportunities.length ? opportunities.map((item) => <OpportunityRow key={item.id} item={item} />) : (
@@ -695,8 +752,10 @@ function IntelligenceWorkspace({
           )}
         </div>
       </Panel>
+      </SafePanel>
 
       {intelligenceItems.length ? (
+        <SafePanel title="Saved Intelligence Records">
         <Panel eyebrow="Triage" title="Saved Intelligence Records" icon={Database}>
           <div className="space-y-4">
             {intelligenceItems.slice(0, 8).map((item) => (
@@ -704,6 +763,7 @@ function IntelligenceWorkspace({
             ))}
           </div>
         </Panel>
+        </SafePanel>
       ) : null}
     </>
   );
@@ -749,6 +809,15 @@ const MissionControlContent: React.FC = () => {
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
+    setState('idle');
+  };
+
+  const resetLocalData = () => {
+    resetMissionControlLocalData();
+    setIsUnlocked(false);
+    setAccessCode('');
+    setDashboard(null);
+    setIntelligenceStore(loadIntelligenceStore());
     setState('idle');
   };
 
@@ -826,6 +895,12 @@ const MissionControlContent: React.FC = () => {
             >
               <KeyRound className="h-3.5 w-3.5" /> Unlock
             </button>
+            <button
+              onClick={resetLocalData}
+              className="ml-3 mt-5 inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+            >
+              Reset local Mission Control data
+            </button>
           </section>
         </main>
       </div>
@@ -844,7 +919,7 @@ const MissionControlContent: React.FC = () => {
                   <ShieldCheck className="h-3.5 w-3.5" /> BUILD-036 - Calyx operations center
                 </div>
                 <h1 className="mt-5 max-w-5xl text-4xl leading-tight md:text-6xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-                  Orchid Continuum <span className="italic text-[#d4b34a]">master operations center.</span>
+                  Mission Control <span className="italic text-[#d4b34a]">master operations center.</span>
                 </h1>
                 <p className="mt-5 max-w-3xl text-[15px] leading-7 text-[#cfc8b8]/88">
                   Mission Control now acts as Calyx's read-only cockpit for global health, harvesters, build status, science completeness, governance, recommendations, and safety boundaries.
@@ -862,6 +937,12 @@ const MissionControlContent: React.FC = () => {
                   className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
                 >
                   <LockKeyhole className="h-3.5 w-3.5" /> Lock
+                </button>
+                <button
+                  onClick={resetLocalData}
+                  className="inline-flex items-center gap-2 rounded-full border border-amber-300/25 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-amber-100 transition-colors hover:border-amber-200/60"
+                >
+                  Reset local Mission Control data
                 </button>
               </div>
             </div>
@@ -897,15 +978,18 @@ const MissionControlContent: React.FC = () => {
               </aside>
 
               <div className="space-y-5">
+                <SafePanel title="Operations Metrics">
                 <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <MetricCard label="Overall health" value={`${stats.average}%`} detail="Average completeness across registered global systems." />
                   <MetricCard label="Healthy systems" value={stats.healthy} detail="Systems currently marked healthy by live or fallback data." />
                   <MetricCard label="Warnings" value={stats.warning} detail="Systems that need follow-up but are partially present." />
                   <MetricCard label="Stub / blocked" value={stats.blocked} detail="Planned or unavailable systems that need backend/data work." />
                 </section>
+                </SafePanel>
 
                 <IntelligenceWorkspace store={intelligenceStore} setStore={setIntelligenceStore} />
 
+                <SafePanel title="Overall Continuum Health">
                 <Panel eyebrow="Global health" title="Overall Continuum Health" icon={Activity}>
                   <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                     {globalHealth.map((subsystem) => (
@@ -913,7 +997,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="System Completeness Matrix">
                 <Panel eyebrow="Audit" title="System Completeness Matrix" icon={SlidersHorizontal}>
                   <div className="space-y-3">
                     {completenessMatrix.slice(0, 18).map((subsystem) => (
@@ -921,7 +1007,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Harvester Operations">
                 <Panel eyebrow="Pipelines" title="Harvester Operations" icon={Radar}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     {harvesters.map((harvester) => (
@@ -929,7 +1017,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Scientific Systems Registry">
                 <Panel eyebrow="Science" title="Scientific Systems Registry" icon={Telescope}>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                     {scientificSystems.map((system) => (
@@ -937,7 +1027,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Build / GitHub / Deployment Status">
                 <Panel eyebrow="Delivery" title="Build / GitHub / Deployment Status" icon={GitBranch}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     {repositories.map((repository) => (
@@ -945,7 +1037,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Constitution and Decision Ledger">
                 <Panel eyebrow="Governance" title="Constitution and Decision Ledger" icon={ShieldCheck}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-4">
@@ -982,9 +1076,11 @@ const MissionControlContent: React.FC = () => {
                     </div>
                   </div>
                 </Panel>
+                </SafePanel>
               </div>
 
               <aside className="h-fit space-y-5 xl:sticky xl:top-24">
+                <SafePanel title="Executive Summary / Self-Audit">
                 <Panel eyebrow="Calyx" title="Executive Summary / Self-Audit" icon={Bot}>
                   <p className="text-sm leading-6 text-[#f5f0e8]/84">{calyxSelfAudit.summary}</p>
                   <div className="mt-4 space-y-3">
@@ -1003,7 +1099,9 @@ const MissionControlContent: React.FC = () => {
                   </div>
                   <p className="mt-4 text-[12px] leading-5 text-[#cfc8b8]/70">Risk: {calyxSelfAudit.riskLevel}</p>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Calyx Recommendations">
                 <Panel eyebrow="Next actions" title="Calyx Recommendations" icon={Sparkles}>
                   <div className="space-y-3">
                     {recommendations.map((recommendation) => (
@@ -1011,7 +1109,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Recent Activity">
                 <Panel eyebrow="Activity" title="Recent Activity" icon={Workflow}>
                   <div className="space-y-3">
                     {recentActivity.slice(0, 7).map((activity) => (
@@ -1025,7 +1125,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Owner Approval Boundaries">
                 <Panel eyebrow="Safety" title="Owner Approval Boundaries" icon={LockKeyhole}>
                   <div className="space-y-3">
                     {safetyBoundaries.map((boundary) => (
@@ -1033,7 +1135,9 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
 
+                <SafePanel title="Endpoint Assumptions">
                 <Panel eyebrow="Diagnostics" title="Endpoint Assumptions" icon={Database}>
                   <div className="space-y-3">
                     {diagnostics.map((diagnostic) => (
@@ -1048,6 +1152,7 @@ const MissionControlContent: React.FC = () => {
                     Generated: {displayTime(dashboard.generatedAt)}
                   </div>
                 </Panel>
+                </SafePanel>
               </aside>
             </div>
           ) : (
