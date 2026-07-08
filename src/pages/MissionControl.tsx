@@ -132,9 +132,12 @@ function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
         <div className="h-full rounded-full bg-[#d4b34a]" style={{ width: `${Math.max(0, Math.min(100, subsystem.completeness))}%` }} />
       </div>
       <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">
-        {subsystem.completeness}% complete
+        {subsystem.completeness}% complete{` · ${subsystem.telemetrySource ?? 'fallback'}`}
       </div>
       <p className="mt-3 text-[12.5px] leading-5 text-[#cfc8b8]/76">{subsystem.summary}</p>
+      {subsystem.completenessEvidence?.length ? (
+        <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/66">Evidence: {subsystem.completenessEvidence.slice(0, 2).join('; ')}</p>
+      ) : null}
       {subsystem.blockers.length ? (
         <p className="mt-3 text-[12px] leading-5 text-amber-100/82">Blocker: {subsystem.blockers[0]}</p>
       ) : null}
@@ -180,6 +183,7 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
         <div>Rows processed: {harvester.rowsProcessed ?? 0}</div>
         <div>Rows inserted: {harvester.rowsInserted ?? 0}</div>
         <div>Checkpoint: {harvester.checkpoint ?? 'not exposed'}</div>
+        <div>Heartbeat: {displayTime(harvester.heartbeatAt) || 'not exposed'}</div>
         <div>Warnings: {harvester.warningCount}</div>
       </div>
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/70">{harvester.logSummary}</p>
@@ -212,6 +216,8 @@ function RepositoryRow({ repository }: { repository: RepositoryStatus }) {
         <div>Open PRs: {repository.openPullRequests ?? 'unknown'}</div>
         <div>Frontend deploy needed: {repository.frontendDeployNeeded ? 'yes' : 'no'}</div>
         <div>Backend deploy needed: {repository.backendDeployNeeded ? 'yes' : 'no'}</div>
+        <div>Latest commit: {repository.latestCommit || 'unknown'}</div>
+        <div>Last deploy: {displayTime(repository.lastDeploy) || 'unknown'}</div>
       </div>
       {repository.knownBlockers.length ? (
         <p className="mt-3 text-[12px] leading-5 text-amber-100/80">{repository.knownBlockers[0]}</p>
@@ -375,7 +381,7 @@ const MissionControl: React.FC = () => {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                  <ShieldCheck className="h-3.5 w-3.5" /> BUILD-036 - Calyx operations center
+                  <ShieldCheck className="h-3.5 w-3.5" /> BUILD-038 - live telemetry
                 </div>
                 <h1 className="mt-5 max-w-5xl text-4xl leading-tight md:text-6xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
                   Orchid Continuum <span className="italic text-[#d4b34a]">master operations center.</span>

@@ -17,6 +17,7 @@ export type ContinuumSubsystem = {
   category: string;
   status: MissionControlStatus;
   completeness: number;
+  completenessEvidence?: string[];
   lastChecked: string;
   summary: string;
   blockers: string[];
@@ -24,6 +25,8 @@ export type ContinuumSubsystem = {
   route?: string;
   dataSource?: string;
   maturity?: string;
+  telemetrySource?: 'live' | 'fallback';
+  metrics?: Record<string, string | number | boolean | null>;
 };
 
 export type HarvesterStatus = {
@@ -40,9 +43,11 @@ export type HarvesterStatus = {
   errors: string[];
   warningCount: number;
   checkpoint?: string;
+  heartbeatAt?: string;
   runNow: ControlState;
   pauseResume: ControlState;
   logSummary: string;
+  telemetrySource?: 'live' | 'fallback';
 };
 
 export type RepositoryStatus = {
@@ -56,6 +61,7 @@ export type RepositoryStatus = {
   frontendDeployNeeded: boolean;
   backendDeployNeeded: boolean;
   knownBlockers: string[];
+  telemetrySource?: 'live' | 'fallback';
 };
 
 export type Recommendation = {
@@ -384,6 +390,49 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+}
+
+function firstArray<T>(payload: unknown, keys: string[]): T[] {
+  const record = asRecord(payload);
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value as T[];
+  }
+  return Array.isArray(payload) ? (payload as T[]) : [];
+}
+
+function clampPercent(value: unknown, fallback: number): number {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return Math.max(0, Math.min(100, fallback));
+  return Math.max(0, Math.min(100, Math.round(numeric)));
+}
+
+function textArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map((item) => String(item)).filter(Boolean) : [];
+}
+
+function stringValue(value: unknown, fallback: string): string {
+  const text = String(value ?? '').trim();
+  return text.length ? text : fallback;
+}
+
+function boolValue(value: unknown, fallback: boolean): boolean {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const lowered = value.toLowerCase();
+    if (['true', 'yes', '1'].includes(lowered)) return true;
+    if (['false', 'no', '0'].includes(lowered)) return false;
+  }
+  return fallback;
+}
+
+function numberValue(value: unknown, fallback = 0): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
 function normalizeStatus(value: unknown): MissionControlStatus {
   const text = String(value ?? '').toLowerCase();
   if (text.includes('healthy') || text.includes('ok') || text.includes('online')) return 'healthy';
@@ -391,6 +440,96 @@ function normalizeStatus(value: unknown): MissionControlStatus {
   if (text.includes('error') || text.includes('fail') || text.includes('down')) return 'error';
   if (text.includes('stub') || text.includes('planned')) return 'stub';
   return 'unknown';
+}
+
+function normalizeHarvesterState(value: unknown): HarvesterStatus['state'] {
+  const text = String(value ?? '').toLowerCase();
+  if (text.includes('running') || text.includes('active')) return 'running';
+  if (text.includes('idle') || text.includes('complete') || text.includes('ready')) return 'idle';
+  if (text.includes('error') || text.includes('fail')) return 'error';
+  if (text.includes('planned') || text.includes('stub')) return 'planned';
+  return 'unknown';
+}
+
+function evidenceScore(seed: number, status: MissionControlStatus, evidence: string[], blockers: string[]): number {
+  let score = seed;
+  if (status === 'healthy') score += 12;
+  if (status === 'warning') score += 6;
+  if (status === 'error') score -= 12;
+  if (status === 'stub') score -= 18;
+  score += Math.min(18, evidence.length * 6);
+  score -= Math.min(24, blockers.length * 8);
+  return clampPercent(score, seed);
+}
+
+function normalizeSubsystem(raw: unknown, fallback?: ContinuumSubsystem): ContinuumSubsystem {
+  const record = asRecord(raw);
+  const status = normalizeStatus(record.status ?? record.health ?? fallback?.status);
+  const blockers = textArray(record.blockers ?? record.risks ?? record.errors ?? fallback?.blockers);
+  const evidence = textArray(record.completenessEvidence ?? record.evidence ?? record.signals);
+  const seed = clampPercent(record.completeness ?? record.percent_complete ?? record.score, fallback?.completeness ?? 0);
+  const metrics = asRecord(record.metrics);
+  const metricEvidence = Object.keys(metrics).map((key) => `${key}: ${String(metrics[key])}`);
+  const completenessEvidence = evidence.length ? evidence : metricEvidence;
+  return {
+    id: stringValue(record.id ?? record.key ?? fallback?.id, fallback?.id ?? 'unknown'),
+    name: stringValue(record.name ?? record.label ?? fallback?.name, fallback?.name ?? 'Unknown system'),
+    category: stringValue(record.category ?? record.layer ?? fallback?.category, fallback?.category ?? 'Telemetry'),
+    status,
+    completeness: evidenceScore(seed, status, completenessEvidence, blockers),
+    completenessEvidence,
+    lastChecked: stringValue(record.lastChecked ?? record.last_checked ?? record.updatedAt ?? record.updated_at, fallback?.lastChecked ?? nowIso()),
+    summary: stringValue(record.summary ?? record.detail ?? record.description, fallback?.summary ?? 'Live telemetry returned without a summary.'),
+    blockers,
+    recommendedNextAction: stringValue(record.recommendedNextAction ?? record.recommended_next_action ?? record.nextAction ?? record.next_action, fallback?.recommendedNextAction ?? 'Review live telemetry contract.'),
+    route: stringValue(record.route, fallback?.route ?? ''),
+    dataSource: stringValue(record.dataSource ?? record.data_source ?? record.source, fallback?.dataSource ?? 'Mission Control telemetry'),
+    maturity: stringValue(record.maturity, fallback?.maturity ?? 'live telemetry'),
+    telemetrySource: 'live',
+    metrics,
+  };
+}
+
+function normalizeHarvester(raw: unknown, fallback?: HarvesterStatus): HarvesterStatus {
+  const record = asRecord(raw);
+  const errors = textArray(record.errors ?? fallback?.errors);
+  return {
+    id: stringValue(record.id ?? record.key ?? fallback?.id, fallback?.id ?? 'unknown'),
+    name: stringValue(record.name ?? record.label ?? fallback?.name, fallback?.name ?? 'Unknown harvester'),
+    source: stringValue(record.source ?? record.provider ?? fallback?.source, fallback?.source ?? 'Mission Control telemetry'),
+    enabled: boolValue(record.enabled, fallback?.enabled ?? false),
+    state: normalizeHarvesterState(record.state ?? record.status ?? fallback?.state),
+    lastRun: stringValue(record.lastRun ?? record.last_run ?? record.lastHeartbeat ?? record.last_heartbeat ?? fallback?.lastRun, fallback?.lastRun ?? 'unknown'),
+    nextRun: stringValue(record.nextRun ?? record.next_run, fallback?.nextRun ?? 'unknown'),
+    duration: stringValue(record.duration ?? record.lastDuration ?? record.last_duration, fallback?.duration ?? 'unknown'),
+    rowsProcessed: numberValue(record.rowsProcessed ?? record.rows_processed, fallback?.rowsProcessed ?? 0),
+    rowsInserted: numberValue(record.rowsInserted ?? record.rows_inserted, fallback?.rowsInserted ?? 0),
+    errors,
+    warningCount: numberValue(record.warningCount ?? record.warning_count ?? record.warnings, fallback?.warningCount ?? 0),
+    checkpoint: stringValue(record.checkpoint ?? record.cursor ?? record.current_cursor, fallback?.checkpoint ?? 'not exposed'),
+    heartbeatAt: stringValue(record.heartbeatAt ?? record.heartbeat_at ?? record.lastHeartbeat ?? record.last_heartbeat, fallback?.heartbeatAt ?? ''),
+    runNow: 'requires_owner_authorization',
+    pauseResume: 'requires_owner_authorization',
+    logSummary: stringValue(record.logSummary ?? record.log_summary ?? record.summary, fallback?.logSummary ?? 'Live harvester telemetry returned. Actions remain disabled.'),
+    telemetrySource: 'live',
+  };
+}
+
+function normalizeRepository(raw: unknown, fallback?: RepositoryStatus): RepositoryStatus {
+  const record = asRecord(raw);
+  return {
+    name: stringValue(record.name ?? record.repository ?? fallback?.name, fallback?.name ?? 'unknown/repository'),
+    defaultBranch: stringValue(record.defaultBranch ?? record.default_branch, fallback?.defaultBranch ?? 'main'),
+    latestCommit: stringValue(record.latestCommit ?? record.latest_commit ?? record.sha, fallback?.latestCommit ?? ''),
+    openPullRequests: numberValue(record.openPullRequests ?? record.open_pull_requests ?? record.prs, fallback?.openPullRequests ?? 0),
+    deploymentTarget: stringValue(record.deploymentTarget ?? record.deployment_target ?? record.target, fallback?.deploymentTarget ?? 'unknown'),
+    deployStatus: normalizeStatus(record.deployStatus ?? record.deploy_status ?? record.status ?? fallback?.deployStatus),
+    lastDeploy: stringValue(record.lastDeploy ?? record.last_deploy ?? record.deployed_at, fallback?.lastDeploy ?? ''),
+    frontendDeployNeeded: boolValue(record.frontendDeployNeeded ?? record.frontend_deploy_needed, fallback?.frontendDeployNeeded ?? false),
+    backendDeployNeeded: boolValue(record.backendDeployNeeded ?? record.backend_deploy_needed, fallback?.backendDeployNeeded ?? false),
+    knownBlockers: textArray(record.knownBlockers ?? record.known_blockers ?? record.blockers ?? fallback?.knownBlockers),
+    telemetrySource: 'live',
+  };
 }
 
 function withGovernance(statusPayload?: Record<string, unknown>, missionsPayload?: Record<string, unknown>, policiesPayload?: Record<string, unknown>, decisionsPayload?: Record<string, unknown>, questionsPayload?: Record<string, unknown>): GovernanceSummary {
@@ -412,8 +551,14 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     auditResult,
     harvestersResult,
     repositoriesResult,
+    buildsResult,
+    deploymentsResult,
+    metricsResult,
+    completenessResult,
     recommendationsResult,
     governanceResult,
+    runnerHealthResult,
+    connectorsHealthResult,
     constitutionalStatusResult,
     missionsResult,
     policiesResult,
@@ -426,8 +571,14 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/audit', 'Operations audit'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/harvesters', 'Harvester status'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/repositories', 'Repository registry'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/builds', 'Build status'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/deployments', 'Deployment status'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/metrics', 'Science and platform metrics'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/completeness', 'Evidence completeness scoring'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/recommendations', 'Calyx recommendations'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/governance', 'Mission Control governance'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runner/health', 'Runner health'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/connectors/health', 'Connector health'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/constitutional/status', 'Constitutional status'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/constitutional/missions', 'Constitutional missions'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/constitutional/policies', 'Constitutional policies'),
@@ -442,8 +593,14 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     auditResult.diagnostic,
     harvestersResult.diagnostic,
     repositoriesResult.diagnostic,
+    buildsResult.diagnostic,
+    deploymentsResult.diagnostic,
+    metricsResult.diagnostic,
+    completenessResult.diagnostic,
     recommendationsResult.diagnostic,
     governanceResult.diagnostic,
+    runnerHealthResult.diagnostic,
+    connectorsHealthResult.diagnostic,
     constitutionalStatusResult.diagnostic,
     missionsResult.diagnostic,
     policiesResult.diagnostic,
@@ -461,8 +618,20 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     decisionsResult.payload,
     questionsResult.payload,
   );
+  const liveSubsystems = firstArray<ContinuumSubsystem>(subsystemsResult.payload, ['subsystems', 'systems', 'globalHealth', 'global_health']);
+  const liveScience = firstArray<ContinuumSubsystem>(metricsResult.payload, ['scientificSystems', 'scientific_systems', 'systems', 'metrics']);
+  const liveCompleteness = firstArray<ContinuumSubsystem>(completenessResult.payload, ['completenessMatrix', 'completeness_matrix', 'systems', 'scores']);
+  const liveHarvesters = firstArray<HarvesterStatus>(harvestersResult.payload, ['harvesters', 'items', 'pipelines']);
+  const liveRepositories = [
+    ...firstArray<RepositoryStatus>(repositoriesResult.payload, ['repositories', 'repos', 'items']),
+    ...firstArray<RepositoryStatus>(buildsResult.payload, ['repositories', 'builds', 'items']),
+    ...firstArray<RepositoryStatus>(deploymentsResult.payload, ['repositories', 'deployments', 'items']),
+  ];
 
+  const normalizedLiveSubsystems = liveSubsystems.map((item) => normalizeSubsystem(item));
   const globalHealth = fallbackGlobalHealth.map((subsystem) => {
+    const live = normalizedLiveSubsystems.find((item) => item.id === subsystem.id || item.name.toLowerCase() === subsystem.name.toLowerCase());
+    if (live) return normalizeSubsystem(live, subsystem);
     if (subsystem.id === 'frontend') return subsystem;
     if (subsystem.id === 'backend') {
       return {
@@ -482,11 +651,34 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     }
     return subsystem;
   });
+  const extraLiveSubsystems = normalizedLiveSubsystems.filter((item) => !globalHealth.some((system) => system.id === item.id));
+  const liveScientificSystems = liveScience.map((item) => normalizeSubsystem(item));
+  const scientificSystems = fallbackScientificSystems.map((system) => {
+    const live = liveScientificSystems.find((item) => item.id === system.id || item.name.toLowerCase() === system.name.toLowerCase());
+    return live ? normalizeSubsystem(live, system) : system;
+  });
+  const extraScience = liveScientificSystems.filter((item) => !scientificSystems.some((system) => system.id === item.id));
+  const completenessMatrix = liveCompleteness.length
+    ? liveCompleteness.map((item) => normalizeSubsystem(item))
+    : [...globalHealth, ...extraLiveSubsystems, ...scientificSystems, ...extraScience].sort((a, b) => a.completeness - b.completeness);
+  const harvesters = liveHarvesters.length
+    ? liveHarvesters.map((item) => {
+      const fallback = fallbackHarvesters.find((harvester) => harvester.id === item.id);
+      return normalizeHarvester(item, fallback);
+    })
+    : fallbackHarvesters;
+  const repositories = liveRepositories.length
+    ? liveRepositories.map((item) => {
+      const raw = asRecord(item);
+      const fallback = fallbackRepositories.find((repository) => repository.name === raw.name || repository.name === raw.repository);
+      return normalizeRepository(item, fallback);
+    })
+    : fallbackRepositories;
 
   const recentActivity: RecentActivity[] = [
     {
-      id: 'build-036-loaded',
-      label: 'BUILD-036 operations adapter loaded',
+      id: 'build-038-loaded',
+      label: 'BUILD-038 live telemetry adapter loaded',
       detail: `Mission Control rendered in ${dataMode} mode with ${liveCount}/${diagnostics.length} live endpoint(s).`,
       timestamp: nowIso(),
       source: dataMode === 'fallback' ? 'fallback' : 'live',
@@ -514,16 +706,16 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     generatedAt: nowIso(),
     dataMode,
     diagnostics,
-    globalHealth,
-    subsystemRegistry: globalHealth,
-    scientificSystems: fallbackScientificSystems,
-    completenessMatrix: [...globalHealth, ...fallbackScientificSystems].sort((a, b) => a.completeness - b.completeness),
-    harvesters: asArray<HarvesterStatus>(harvestersResult.payload?.harvesters).length ? asArray<HarvesterStatus>(harvestersResult.payload?.harvesters) : fallbackHarvesters,
-    repositories: asArray<RepositoryStatus>(repositoriesResult.payload?.repositories).length ? asArray<RepositoryStatus>(repositoriesResult.payload?.repositories) : fallbackRepositories,
+    globalHealth: [...globalHealth, ...extraLiveSubsystems],
+    subsystemRegistry: [...globalHealth, ...extraLiveSubsystems],
+    scientificSystems: [...scientificSystems, ...extraScience],
+    completenessMatrix,
+    harvesters,
+    repositories,
     calyxSelfAudit: {
-      summary: 'Calyx can present the operations center, preserve governance context, explain endpoint failures, and recommend the next build. It cannot execute production actions from this frontend.',
-      canDo: ['Render Mission Control while endpoints fail', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
-      cannotDoYet: ['Run harvesters', 'Pause or resume jobs', 'Deploy services', 'Read credentials', 'Guarantee live GitHub/Render status without backend routes'],
+      summary: stringValue(asRecord(auditResult.payload).summary, 'Calyx can present the operations center, preserve governance context, explain endpoint failures, and recommend the next build. It cannot execute production actions from this frontend.'),
+      canDo: firstArray<string>(auditResult.payload, ['canDo', 'can_do', 'capabilities']).length ? firstArray<string>(auditResult.payload, ['canDo', 'can_do', 'capabilities']).map(String) : ['Render Mission Control while endpoints fail', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
+      cannotDoYet: firstArray<string>(auditResult.payload, ['cannotDoYet', 'cannot_do_yet', 'blocked']).length ? firstArray<string>(auditResult.payload, ['cannotDoYet', 'cannot_do_yet', 'blocked']).map(String) : ['Run harvesters', 'Pause or resume jobs', 'Deploy services', 'Read credentials', 'Guarantee live GitHub/Render status without backend routes'],
       connectedTools: ['Frontend routes', 'Calyx backend base URL', 'Public API base URL', 'Constitutional telemetry probes when available'],
       failingServices: diagnostics.filter((item) => item.status === 'error').map((item) => item.label),
       riskLevel: 'low for read-only frontend visibility; high-risk actions remain disabled.',
