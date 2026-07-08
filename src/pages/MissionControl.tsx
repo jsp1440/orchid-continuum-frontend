@@ -4,8 +4,13 @@ import {
   Activity,
   AlertTriangle,
   Bot,
+  ClipboardList,
   Database,
+  DollarSign,
+  FileText,
   GitBranch,
+  Handshake,
+  Inbox,
   KeyRound,
   LockKeyhole,
   PauseCircle,
@@ -34,6 +39,22 @@ import {
   type RepositoryStatus,
   type SafetyBoundary,
 } from '@/lib/missionControlOps';
+import {
+  createSourceBriefing,
+  grantItems,
+  intelligenceCategories,
+  intelligenceSummary,
+  loadIntelligenceStore,
+  opportunityItems,
+  parseTwinDailyBriefing,
+  saveBriefingWithItems,
+  saveIntelligenceStore,
+  type IntelligenceCategory,
+  type IntelligenceItem,
+  type IntelligencePriority,
+  type IntelligenceStatus,
+  type IntelligenceStore,
+} from '@/lib/missionControlIntelligence';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -51,8 +72,14 @@ const navigationItems = [
   ['Builds', GitBranch],
   ['Governance', ShieldCheck],
   ['Recommendations', Sparkles],
+  ['Intelligence', Inbox],
+  ['Grant Office', DollarSign],
+  ['Partnerships', Handshake],
   ['Safety', LockKeyhole],
 ];
+
+const priorityOptions: IntelligencePriority[] = ['critical', 'high', 'medium', 'low'];
+const statusOptions: IntelligenceStatus[] = ['new', 'triaged', 'active', 'waiting', 'submitted', 'completed', 'declined', 'archived'];
 
 function statusClass(status: MissionControlStatus): string {
   if (status === 'healthy') return 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100';
@@ -272,11 +299,333 @@ function SafetyRow({ boundary }: { boundary: SafetyBoundary }) {
   );
 }
 
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#c9a24a]">{label}</span>
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[12px] text-[#f5f0e8] outline-none focus:border-[#d4b34a]/55"
+      />
+    </label>
+  );
+}
+
+function SelectField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: T[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <label className="block">
+      <span className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#c9a24a]">{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as T)}
+        className="mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[12px] text-[#f5f0e8] outline-none focus:border-[#d4b34a]/55"
+      >
+        {options.map((option) => (
+          <option key={option} value={option} className="bg-[#0d1d13]">
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function CategoryEditor({ item, onChange }: { item: IntelligenceItem; onChange: (categories: IntelligenceCategory[]) => void }) {
+  const toggle = (category: IntelligenceCategory) => {
+    const next = item.category.includes(category)
+      ? item.category.filter((value) => value !== category)
+      : [...item.category.filter((value) => value !== 'Unknown'), category];
+    onChange(next.length ? next : ['Unknown']);
+  };
+
+  return (
+    <div>
+      <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#c9a24a]">Category</div>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {intelligenceCategories.map((category) => (
+          <button
+            key={category}
+            type="button"
+            onClick={() => toggle(category)}
+            className={`rounded-full border px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] ${
+              item.category.includes(category)
+                ? 'border-[#d4b34a]/55 bg-[#d4b34a]/16 text-[#f6dc82]'
+                : 'border-white/10 bg-black/18 text-[#cfc8b8]/62'
+            }`}
+          >
+            {category}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ItemEditor({
+  item,
+  onChange,
+}: {
+  item: IntelligenceItem;
+  onChange: (item: IntelligenceItem) => void;
+}) {
+  const patch = (changes: Partial<IntelligenceItem>) => onChange({ ...item, ...changes, updated_at: new Date().toISOString() });
+
+  return (
+    <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field label="Title" value={item.title} onChange={(title) => patch({ title })} />
+        <Field label="Organization" value={item.organization ?? ''} onChange={(organization) => patch({ organization })} placeholder="Funder, partner, lab, source" />
+        <Field label="Deadline" value={item.deadline_date ?? ''} onChange={(deadline_date) => patch({ deadline_date })} placeholder="YYYY-MM-DD" />
+        <Field label="Funding amount" value={item.funding_amount ?? ''} onChange={(funding_amount) => patch({ funding_amount })} placeholder="$0" />
+        <SelectField label="Priority" value={item.priority} options={priorityOptions} onChange={(priority) => patch({ priority })} />
+        <SelectField label="Status" value={item.status} options={statusOptions} onChange={(status) => patch({ status })} />
+        <Field label="Owner" value={item.owner} onChange={(owner) => patch({ owner })} placeholder="Jeff, partner, team" />
+        <Field label="Source link" value={item.source_link ?? ''} onChange={(source_link) => patch({ source_link })} />
+      </div>
+      <div className="mt-3">
+        <CategoryEditor item={item} onChange={(category) => patch({ category })} />
+      </div>
+      <label className="mt-3 block">
+        <span className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#c9a24a]">Summary</span>
+        <textarea
+          value={item.summary}
+          onChange={(event) => patch({ summary: event.target.value })}
+          className="mt-1 min-h-20 w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[12px] leading-5 text-[#f5f0e8] outline-none focus:border-[#d4b34a]/55"
+        />
+      </label>
+      <label className="mt-3 block">
+        <span className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#c9a24a]">Recommended action</span>
+        <textarea
+          value={item.recommended_action}
+          onChange={(event) => patch({ recommended_action: event.target.value })}
+          className="mt-1 min-h-16 w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-[12px] leading-5 text-[#f5f0e8] outline-none focus:border-[#d4b34a]/55"
+        />
+      </label>
+      <details className="mt-3 rounded-lg border border-white/[0.07] bg-black/15 p-3">
+        <summary className="cursor-pointer font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/70">Original excerpt</summary>
+        <p className="mt-2 whitespace-pre-wrap text-[12px] leading-5 text-[#cfc8b8]/75">{item.source_excerpt}</p>
+      </details>
+    </article>
+  );
+}
+
+function GrantOpportunityRow({ item }: { item: IntelligenceItem }) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base text-[#faf7f2]">{item.title}</h3>
+          <p className="mt-1 text-[12px] leading-5 text-[#cfc8b8]/72">{item.organization ?? 'Funder not detected'}</p>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${item.priority === 'critical' ? 'border-red-300/30 bg-red-300/12 text-red-100' : item.priority === 'high' ? 'border-amber-300/30 bg-amber-300/12 text-amber-100' : 'border-white/10 bg-white/[0.05] text-[#cfc8b8]'}`}>
+          {item.priority}
+        </span>
+      </div>
+      <div className="mt-3 grid gap-2 text-[12px] text-[#cfc8b8]/78 sm:grid-cols-2">
+        <div>Amount: {item.funding_amount ?? 'not detected'}</div>
+        <div>Deadline: {item.deadline_date ?? 'not detected'}</div>
+        <div>Status: {item.status}</div>
+        <div>Progress: {item.application_progress ?? 0}%</div>
+      </div>
+      <p className="mt-3 text-[12px] leading-5 text-[#f5f0e8]/80">Eligibility: {item.eligibility_summary ?? 'Needs review.'}</p>
+      <p className="mt-2 text-[12px] leading-5 text-amber-100/78">Missing: {item.missing_information ?? 'Application owner and source verification.'}</p>
+      <p className="mt-2 text-[12px] leading-5 text-emerald-100/78">Next: {item.recommended_action}</p>
+      {item.source_link ? <a href={item.source_link} className="mt-3 inline-block text-[12px] text-[#d4b34a] underline">Source link</a> : null}
+    </div>
+  );
+}
+
+function OpportunityRow({ item }: { item: IntelligenceItem }) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="text-base text-[#faf7f2]">{item.title}</h3>
+          <p className="mt-1 text-[12px] text-[#cfc8b8]/70">{item.organization ?? item.source}</p>
+        </div>
+        <span className="rounded-full border border-[#d4b34a]/25 bg-[#d4b34a]/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
+          {item.status}
+        </span>
+      </div>
+      <p className="mt-3 text-[12px] leading-5 text-[#f5f0e8]/80">{item.summary}</p>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {item.category.map((category) => (
+          <span key={category} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] text-[#cfc8b8]/70">
+            {category}
+          </span>
+        ))}
+      </div>
+      <p className="mt-3 text-[12px] leading-5 text-emerald-100/78">Next: {item.recommended_action}</p>
+    </div>
+  );
+}
+
+function IntelligenceWorkspace({
+  store,
+  setStore,
+}: {
+  store: IntelligenceStore;
+  setStore: (store: IntelligenceStore) => void;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [source, setSource] = useState('Twin Daily Brief');
+  const [sourceDate, setSourceDate] = useState(today);
+  const [rawText, setRawText] = useState('');
+  const [parsedItems, setParsedItems] = useState<IntelligenceItem[]>([]);
+  const [lastSummary, setLastSummary] = useState<string | null>(null);
+
+  const grants = grantItems(store.intelligenceItems);
+  const opportunities = opportunityItems(store.intelligenceItems);
+  const summary = intelligenceSummary(store.intelligenceItems);
+
+  const parse = () => {
+    const items = parseTwinDailyBriefing(rawText, source, sourceDate);
+    setParsedItems(items);
+    setLastSummary(`Parsed ${items.length} item(s): ${grantItems(items).length} grant/funding and ${opportunityItems(items).length} partnership/research/data lead(s).`);
+  };
+
+  const save = () => {
+    if (!rawText.trim() || parsedItems.length === 0) return;
+    const briefing = createSourceBriefing(rawText, source, sourceDate);
+    const next = saveBriefingWithItems(store, briefing, parsedItems);
+    setStore(next);
+    setParsedItems([]);
+    setRawText('');
+    setLastSummary(`Saved ${parsedItems.length} item(s) from ${source}. Funding/grant items are now visible in Grant Office.`);
+  };
+
+  const updateSavedItem = (item: IntelligenceItem) => {
+    const next = {
+      ...store,
+      intelligenceItems: store.intelligenceItems.map((existing) => (existing.id === item.id ? item : existing)),
+    };
+    saveIntelligenceStore(next);
+    setStore(next);
+  };
+
+  return (
+    <>
+      <Panel eyebrow="Daily executive summary" title="Intelligence Triage Snapshot" icon={ClipboardList}>
+        <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
+          <MetricCard label="New items" value={summary.newItems} detail="Saved items still awaiting triage." />
+          <MetricCard label="Urgent grants" value={summary.urgentGrants} detail="Critical/high funding deadlines surfaced by date." />
+          <MetricCard label="Partnerships" value={summary.partnershipNeedsAction} detail="Partnership, research, dataset, API, or technology leads needing action." />
+          <MetricCard label="Research/data" value={summary.researchDatasetLeads} detail="Research, dataset, and API leads in queue." />
+          <MetricCard label="Waiting Jeff" value={summary.waitingOnJeff} detail="Items marked waiting with Jeff as owner." />
+          <MetricCard label="Waiting external" value={summary.waitingOnExternal} detail="Waiting items owned by external partner or unassigned." />
+        </div>
+      </Panel>
+
+      <Panel eyebrow="Intelligence Inbox" title="Paste Twin Daily Brief" icon={Inbox}>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_360px]">
+          <div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Source" value={source} onChange={setSource} />
+              <Field label="Source date" value={sourceDate} onChange={setSourceDate} placeholder="YYYY-MM-DD" />
+            </div>
+            <textarea
+              value={rawText}
+              onChange={(event) => setRawText(event.target.value)}
+              placeholder="Paste Twin Daily Brief text here. Headings like Funding and Grants, Research and Publications, Partnership Opportunities, or Technology and Infrastructure Opportunities will be used for routing."
+              className="mt-4 min-h-64 w-full rounded-lg border border-white/10 bg-black/25 px-4 py-3 text-sm leading-6 text-[#f5f0e8] outline-none focus:border-[#d4b34a]/55"
+            />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button onClick={parse} disabled={!rawText.trim()} className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c] disabled:cursor-not-allowed disabled:opacity-45">
+                <FileText className="h-3.5 w-3.5" /> Parse brief
+              </button>
+              <button onClick={save} disabled={!rawText.trim() || parsedItems.length === 0} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/70 disabled:cursor-not-allowed disabled:opacity-45">
+                <Inbox className="h-3.5 w-3.5" /> Save items
+              </button>
+            </div>
+            {lastSummary ? <p className="mt-4 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100/84">{lastSummary}</p> : null}
+          </div>
+          <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a]">Source archive</div>
+            <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78">{store.sourceBriefings.length} briefing(s) archived with raw text preserved in browser storage for this owner console.</p>
+            <div className="mt-4 space-y-3">
+              {store.sourceBriefings.slice(0, 5).map((briefing) => (
+                <details key={briefing.id} className="rounded-lg border border-white/[0.07] bg-black/15 p-3">
+                  <summary className="cursor-pointer text-sm text-[#faf7f2]">{briefing.source} - {briefing.source_date}</summary>
+                  <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[#cfc8b8]/70">{briefing.raw_text}</p>
+                </details>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {parsedItems.length ? (
+          <div className="mt-5">
+            <div className="mb-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a]">Parsed items preview - editable before save</div>
+            <div className="space-y-4">
+              {parsedItems.map((item) => (
+                <ItemEditor
+                  key={item.id}
+                  item={item}
+                  onChange={(next) => setParsedItems((items) => items.map((existing) => (existing.id === next.id ? next : existing)))}
+                />
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </Panel>
+
+      <Panel eyebrow="Grant Office" title="Urgent Deadlines and Application Pipeline" icon={DollarSign}>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {grants.length ? grants.map((item) => <GrantOpportunityRow key={item.id} item={item} />) : (
+            <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-sm text-[#cfc8b8]/75">No grant or funding records saved yet. Paste a brief with funding or grant items to populate this view.</div>
+          )}
+        </div>
+      </Panel>
+
+      <Panel eyebrow="Partnership / Research Queue" title="Opportunities Needing Follow-up" icon={Handshake}>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {opportunities.length ? opportunities.map((item) => <OpportunityRow key={item.id} item={item} />) : (
+            <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-sm text-[#cfc8b8]/75">No partnership, research, dataset, API, or technology leads saved yet.</div>
+          )}
+        </div>
+      </Panel>
+
+      {store.intelligenceItems.length ? (
+        <Panel eyebrow="Triage" title="Saved Intelligence Records" icon={Database}>
+          <div className="space-y-4">
+            {store.intelligenceItems.slice(0, 8).map((item) => (
+              <ItemEditor key={item.id} item={item} onChange={updateSavedItem} />
+            ))}
+          </div>
+        </Panel>
+      ) : null}
+    </>
+  );
+}
+
 const MissionControl: React.FC = () => {
   const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem(ACCESS_STORAGE_KEY) === 'yes');
   const [accessCode, setAccessCode] = useState('');
   const [state, setState] = useState<LoadState>('idle');
   const [dashboard, setDashboard] = useState<MissionControlOperations | null>(null);
+  const [intelligenceStore, setIntelligenceStore] = useState<IntelligenceStore>(() => loadIntelligenceStore());
   const [error, setError] = useState<string | null>(null);
 
   const load = async () => {
@@ -294,6 +643,7 @@ const MissionControl: React.FC = () => {
 
   useEffect(() => {
     if (isUnlocked) {
+      setIntelligenceStore(loadIntelligenceStore());
       void load();
     }
   }, [isUnlocked]);
@@ -437,6 +787,8 @@ const MissionControl: React.FC = () => {
                   <MetricCard label="Warnings" value={stats.warning} detail="Systems that need follow-up but are partially present." />
                   <MetricCard label="Stub / blocked" value={stats.blocked} detail="Planned or unavailable systems that need backend/data work." />
                 </section>
+
+                <IntelligenceWorkspace store={intelligenceStore} setStore={setIntelligenceStore} />
 
                 <Panel eyebrow="Global health" title="Overall Continuum Health" icon={Activity}>
                   <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
