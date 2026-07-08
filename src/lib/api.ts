@@ -25,8 +25,18 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-const env =
-  (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
+type RuntimeEnv = Record<string, string | undefined>;
+
+const env: RuntimeEnv =
+  typeof import.meta !== 'undefined'
+    ? ((import.meta as ImportMeta & { env?: RuntimeEnv }).env ?? {})
+    : {};
+
+const errorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
+
+const errorName = (error: unknown): string | undefined =>
+  error instanceof Error ? error.name : undefined;
 
 export const API_BASE_URL: string =
   env.VITE_API_BASE_URL ||
@@ -109,12 +119,12 @@ export async function checkApiHealth(
       latencyMs,
       message: res.ok ? undefined : `HTTP ${res.status}`,
     };
-  } catch (e: any) {
+  } catch (e: unknown) {
     return {
       status: 'offline',
       base: API_BASE_URL,
       checkedAt,
-      message: e?.message || 'Network error',
+      message: errorMessage(e, 'Network error'),
     };
   } finally {
     clearTimeout(timer);
@@ -203,12 +213,12 @@ export async function apiRequest<T>(
     }
     const data = (await res.json()) as T;
     return { data, error: null, unconfigured: false };
-  } catch (e: any) {
-    const status = e?.name === 'AbortError' ? 408 : 0;
+  } catch (e: unknown) {
+    const status = errorName(e) === 'AbortError' ? 408 : 0;
     const message =
-      e?.name === 'AbortError'
+      errorName(e) === 'AbortError'
         ? `Request timed out — ${path}`
-        : (e?.message || 'Network error');
+        : errorMessage(e, 'Network error');
     return {
       data: null,
       error: new ApiError(message, status, path),
