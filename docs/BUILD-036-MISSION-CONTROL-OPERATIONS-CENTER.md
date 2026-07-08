@@ -311,3 +311,151 @@ At the end, report:
 ## Guiding Sentence
 
 Mission Control is not a decorative dashboard. It is the master operations center for Calyx and the Orchid Continuum.
+
+---
+
+## Final Build Report
+
+**Implementation status:** Implemented as a frontend operations-center build with a typed Mission Control data adapter, safe read-only fallback data, endpoint diagnostics, and disabled/planned controls for all actions that require server authorization.
+
+### Files changed
+
+- `src/lib/missionControlOps.ts`
+- `src/pages/MissionControl.tsx`
+- `docs/BUILD-036-MISSION-CONTROL-OPERATIONS-CENTER.md`
+
+### UI panels added
+
+- Overall Continuum Health
+- System Completeness Matrix
+- Harvester Operations
+- Calyx Executive Summary / Self-Audit
+- Calyx Recommendations / Next Actions
+- Build / GitHub / Deployment Status
+- Scientific Systems Registry
+- Governance and Decision Ledger
+- Recent Activity
+- Safety / Owner Approval Boundaries
+- Endpoint Assumptions / Diagnostics
+
+### Data adapter
+
+`src/lib/missionControlOps.ts` is now the single coherent Mission Control operations adapter. It attempts read-only calls to the Calyx backend and falls back to clearly marked repository-local operational data when endpoints fail or are not yet implemented.
+
+The adapter probes:
+
+- `GET /api/mission-control/status`
+- `GET /api/mission-control/subsystems`
+- `GET /api/mission-control/audit`
+- `GET /api/mission-control/harvesters`
+- `GET /api/mission-control/repositories`
+- `GET /api/mission-control/recommendations`
+- `GET /api/mission-control/governance`
+- `GET /api/runtime/constitutional/status`
+- `GET /api/runtime/constitutional/missions`
+- `GET /api/runtime/constitutional/policies`
+- `GET /api/runtime/constitutional/decision-ledger`
+- `GET /api/runtime/constitutional/governance-questions`
+- `GET /health` on the public API backend
+
+Endpoint failures are shown in the UI as diagnostics instead of breaking or emptying the dashboard. Browser-level `Load failed` / `Failed to fetch` errors are described as likely missing backend routes, CORS rejection, or service unavailability.
+
+### Operational systems visible
+
+Mission Control now registers and displays:
+
+- Frontend
+- Backend
+- Database
+- Brain
+- Knowledge Graph
+- Images / Media
+- Harvesters
+- Runners / Jobs
+- AI Services
+- GitHub / Build System
+- Render / Deployment
+- Atlas
+- Species Pages
+- Pollinator System
+- Mycorrhizal System
+- Literature System
+- Conservation System
+- Grants / Funding Intelligence
+- Orchid Continuum University
+- Vision Lab
+- Governance / Constitution
+
+### Required harvesters registered
+
+- iNaturalist
+- GBIF
+- World Plants / Hassler
+- EOL / TraitBank
+- GloBI
+- Pollinator datasets
+- Mycorrhizal literature/data
+- Image/media harvesters
+- Literature harvesters
+- Climate/elevation enrichment
+- Conservation status enrichment
+
+These harvesters are visible as read-only/planned rows until backend status and server-authorized action routes exist.
+
+### Build / GitHub / deployment registry
+
+Mission Control now registers:
+
+- `jsp1440/orchid-continuum-frontend`
+- `jsp1440/orchid-calyx-backend`
+- `jsp1440/orchid-continuum-control-panel`
+- `jsp1440/Orchid-Continuum-Brain`
+
+Deployment controls are disabled. The UI reports whether frontend or backend redeploy is expected, but does not expose deploy actions.
+
+### Governance record
+
+The governance record is preserved in the Mission Control page through the Constitution and Decision Ledger panel. If live constitutional endpoints fail, BUILD-036 provides a fallback governance record documenting:
+
+- BUILD-036 expands Mission Control into the Calyx master operations center.
+- Frontend unlock is a UI gate only.
+- Destructive actions, deployments, credential changes, and production writes require server-side owner authorization.
+- BUILD-037 should add the server-owned operational API.
+
+### Safety controls
+
+The frontend exposes no secrets and no production credentials.
+
+The following controls are rendered disabled, planned, or requiring server authorization:
+
+- run-now
+- pause/resume
+- deploy
+- credential management
+- production writes
+- destructive actions
+
+The existing owner unlock behavior remains, but the UI explicitly states it is not real security.
+
+### Endpoint assumptions
+
+The frontend implementation assumes the Calyx backend should eventually provide the Mission Control read endpoints listed above. If those routes are absent, CORS-blocked, or unavailable, Mission Control still renders using clearly marked fallback data and shows endpoint diagnostics.
+
+No backend code was changed in this PR.
+
+### Deployment requirements
+
+- Frontend redeploy required: **Yes**
+- Backend redeploy required: **No for this PR**
+- Backend work required for full live operations: **Yes, in BUILD-037**
+- Database migration required: **No**
+
+### Remaining blockers for BUILD-037
+
+- Add server-owned Mission Control read endpoints.
+- Add server-side owner/admin authorization for any run-now, pause, resume, deploy, credential, or production-write action.
+- Add live harvester heartbeat, checkpoints, row counts, warning counts, and log summaries.
+- Add GitHub/PR/build/deployment status through a backend connector.
+- Add Render deployment status without exposing deployment credentials.
+- Add Brain status and sync visibility without exposing secrets.
+- Feed real completeness percentages from backend evidence instead of frontend fallback heuristics.
