@@ -384,13 +384,107 @@ function asArray<T>(value: unknown): T[] {
   return Array.isArray(value) ? (value as T[]) : [];
 }
 
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
+}
+
+function pickString(record: Record<string, unknown>, keys: string[], fallback: string): string {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return fallback;
+}
+
+function pickNumber(record: Record<string, unknown>, keys: string[], fallback: number): number {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return fallback;
+}
+
+function pickStringArray(record: Record<string, unknown>, keys: string[]): string[] {
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value.map((item) => String(item));
+    if (typeof value === 'string' && value.trim()) return [value];
+  }
+  return [];
+}
+
+function firstPayloadArray<T>(payload: unknown, keys: string[]): T[] {
+  if (Array.isArray(payload)) return payload as T[];
+  const record = asRecord(payload);
+  if (!record) return [];
+  for (const key of keys) {
+    const value = record[key];
+    if (Array.isArray(value)) return value as T[];
+  }
+  return [];
+}
+
 function normalizeStatus(value: unknown): MissionControlStatus {
-  const text = String(value ?? '').toLowerCase();
-  if (text.includes('healthy') || text.includes('ok') || text.includes('online')) return 'healthy';
-  if (text.includes('warn') || text.includes('partial')) return 'warning';
-  if (text.includes('error') || text.includes('fail') || text.includes('down')) return 'error';
-  if (text.includes('stub') || text.includes('planned')) return 'stub';
+  const text = String(value ?? '').toLowerCase().trim();
+
+  if (!text) return 'unknown';
+
+  if (
+    /\b(not[_\s-]?ok|broken|error|errored|failed|failing|failure|unhealthy|offline|blocked|degraded|critical|down|unavailable|fatal)\b/.test(text)
+  ) {
+    return 'error';
+  }
+
+  if (/\b(warn|warning|partial|attention|caution|limited)\b/.test(text)) return 'warning';
+  if (/\b(stub|planned|todo|not[_\s-]?implemented|placeholder)\b/.test(text)) return 'stub';
+  if (/\b(healthy|ok|online|operational|available|ready|success|passing)\b/.test(text)) return 'healthy';
+
   return 'unknown';
+}
+
+function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsystem | null {
+  const record = asRecord(value);
+  if (!record) return null;
+
+  const id = pickString(record, ['id', 'key', 'slug', 'name'], `subsystem-${index + 1}`);
+  const name = pickString(record, ['name', 'title', 'label', 'id'], id);
+  const category = pickString(record, ['category', 'group', 'domain', 'type'], 'Live Telemetry');
+  const status = normalizeStatus(record.status ?? record.health ?? record.state ?? record.mode);
+  const completeness = Math.max(0, Math.min(100, pickNumber(record, ['completeness', 'percentComplete', 'percentage', 'score'], status === 'healthy' ? 75 : 50)));
+
+  return {
+    id,
+    name,
+    category,
+    status,
+    completeness,
+    lastChecked: pickString(record, ['lastChecked', 'updatedAt', 'updated_at', 'timestamp', 'checkedAt'], nowIso()),
+    summary: pickString(record, ['summary', 'detail', 'description', 'message'], 'Live subsystem telemetry returned by the backend.'),
+    blockers: pickStringArray(record, ['blockers', 'knownBlockers', 'errors', 'risks']),
+    recommendedNextAction: pickString(record, ['recommendedNextAction', 'nextAction', 'next_action', 'recommendation'], 'Review live subsystem telemetry.'),
+    route: typeof record.route === 'string' ? record.route : undefined,
+    dataSource: pickString(record, ['dataSource', 'data_source', 'source'], 'Mission Control backend'),
+    maturity: typeof record.maturity === 'string' ? record.maturity : undefined,
+  };
+}
+
+function readLiveSubsystems(payload: unknown): ContinuumSubsystem[] {
+  const raw = firstPayloadArray<unknown>(payload, [
+    'subsystems',
+    'globalHealth',
+    'global_health',
+    'systems',
+    'registry',
+    'items',
+    'completenessMatrix',
+    'completeness_matrix',
+  ]);
+
+  return raw
+    .map((item, index) => normalizeSubsystemRecord(item, index))
+    .filter((item): item is ContinuumSubsystem => Boolean(item));
 }
 
 function withGovernance(statusPayload?: Record<string, unknown>, missionsPayload?: Record<string, unknown>, policiesPayload?: Record<string, unknown>, decisionsPayload?: Record<string, unknown>, questionsPayload?: Record<string, unknown>): GovernanceSummary {
@@ -453,6 +547,9 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   ];
 
   const liveCount = diagnostics.filter((item) => item.status === 'healthy').length;
+  const liveSubsystems = readLiveSubsystems(subsystemsResult.payload);
+  const auditSubsystems = readLiveSubsystems(auditResult.payload);
+  const subsystemPayload = liveSubsystems.length ? liveSubsystems : auditSubsystems;
   const dataMode = liveCount === 0 ? 'fallback' : liveCount === diagnostics.length ? 'live' : 'mixed';
   const governance = withGovernance(
     constitutionalStatusResult.payload,
@@ -462,7 +559,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     questionsResult.payload,
   );
 
-  const globalHealth = fallbackGlobalHealth.map((subsystem) => {
+  const fallbackEnhancedGlobalHealth = fallbackGlobalHealth.map((subsystem) => {
     if (subsystem.id === 'frontend') return subsystem;
     if (subsystem.id === 'backend') {
       return {
@@ -483,13 +580,16 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     return subsystem;
   });
 
+  const globalHealth = subsystemPayload.length ? subsystemPayload : fallbackEnhancedGlobalHealth;
+  const subsystemRegistry = subsystemPayload.length ? subsystemPayload : globalHealth;
+
   const recentActivity: RecentActivity[] = [
     {
-      id: 'build-036-loaded',
-      label: 'BUILD-036 operations adapter loaded',
-      detail: `Mission Control rendered in ${dataMode} mode with ${liveCount}/${diagnostics.length} live endpoint(s).`,
+      id: 'build-037-review-fixes',
+      label: 'BUILD-037 Mission Control review fixes loaded',
+      detail: `Mission Control rendered in ${dataMode} mode with ${liveCount}/${diagnostics.length} live endpoint(s); ${subsystemPayload.length} live subsystem row(s) consumed.`,
       timestamp: nowIso(),
-      source: dataMode === 'fallback' ? 'fallback' : 'live',
+      source: subsystemPayload.length || dataMode !== 'fallback' ? 'live' : 'fallback',
     },
     {
       id: 'build-036-safety',
@@ -515,16 +615,16 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     dataMode,
     diagnostics,
     globalHealth,
-    subsystemRegistry: globalHealth,
+    subsystemRegistry,
     scientificSystems: fallbackScientificSystems,
-    completenessMatrix: [...globalHealth, ...fallbackScientificSystems].sort((a, b) => a.completeness - b.completeness),
+    completenessMatrix: [...subsystemRegistry, ...fallbackScientificSystems].sort((a, b) => a.completeness - b.completeness),
     harvesters: asArray<HarvesterStatus>(harvestersResult.payload?.harvesters).length ? asArray<HarvesterStatus>(harvestersResult.payload?.harvesters) : fallbackHarvesters,
     repositories: asArray<RepositoryStatus>(repositoriesResult.payload?.repositories).length ? asArray<RepositoryStatus>(repositoriesResult.payload?.repositories) : fallbackRepositories,
     calyxSelfAudit: {
-      summary: 'Calyx can present the operations center, preserve governance context, explain endpoint failures, and recommend the next build. It cannot execute production actions from this frontend.',
-      canDo: ['Render Mission Control while endpoints fail', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
+      summary: 'Calyx can present the operations center, preserve governance context, explain endpoint failures, consume live subsystem telemetry when available, and recommend the next build. It cannot execute production actions from this frontend.',
+      canDo: ['Render Mission Control while endpoints fail', 'Consume live subsystem telemetry before fallback', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
       cannotDoYet: ['Run harvesters', 'Pause or resume jobs', 'Deploy services', 'Read credentials', 'Guarantee live GitHub/Render status without backend routes'],
-      connectedTools: ['Frontend routes', 'Calyx backend base URL', 'Public API base URL', 'Constitutional telemetry probes when available'],
+      connectedTools: ['Frontend routes', 'Calyx backend base URL', 'Public API base URL', 'Mission Control subsystem telemetry when available', 'Constitutional telemetry probes when available'],
       failingServices: diagnostics.filter((item) => item.status === 'error').map((item) => item.label),
       riskLevel: 'low for read-only frontend visibility; high-risk actions remain disabled.',
     },
