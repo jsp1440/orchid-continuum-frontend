@@ -57,6 +57,7 @@ import {
 } from '@/lib/missionControlIntelligence';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
+type MissionControlErrorBoundaryState = { error: Error | null };
 
 const ACCESS_STORAGE_KEY = 'oc_mission_control_owner_access_v1';
 
@@ -80,6 +81,87 @@ const navigationItems = [
 
 const priorityOptions: IntelligencePriority[] = ['critical', 'high', 'medium', 'low'];
 const statusOptions: IntelligenceStatus[] = ['new', 'triaged', 'active', 'waiting', 'submitted', 'completed', 'declined', 'archived'];
+
+function safeGetStorage(key: string): string | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetStorage(key: string, value: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(key, value);
+  } catch {
+    // The owner console must still render when browser storage is unavailable.
+  }
+}
+
+function safeRemoveStorage(key: string): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(key);
+  } catch {
+    // Non-fatal: locking still clears in-memory state below.
+  }
+}
+
+function safeArray<T>(value: T[] | undefined | null): T[] {
+  return Array.isArray(value) ? value : [];
+}
+
+function safeCategories(item: IntelligenceItem): IntelligenceCategory[] {
+  return safeArray(item.category).length ? safeArray(item.category) : ['Unknown'];
+}
+
+function MissionControlCrashFallback({ error }: { error: Error | null }) {
+  return (
+    <div className="min-h-screen bg-[#06110b] text-[#f5f0e8]">
+      <Navbar />
+      <main className="flex min-h-screen items-center justify-center px-6 pt-28">
+        <section className="w-full max-w-2xl rounded-lg border border-red-300/25 bg-red-300/10 p-8">
+          <div className="inline-flex items-center gap-2 rounded-full border border-red-200/30 bg-red-200/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-red-100">
+            <AlertTriangle className="h-3.5 w-3.5" /> Mission Control safe mode
+          </div>
+          <h1 className="mt-5 text-4xl leading-tight" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            Mission Control stayed online, but one panel crashed.
+          </h1>
+          <p className="mt-4 text-sm leading-6 text-[#f5f0e8]/82">
+            The route did not white-screen. Refresh, clear Mission Control browser storage if needed, or continue from the public site while this panel is repaired.
+          </p>
+          {error ? (
+            <pre className="mt-4 max-h-48 overflow-auto rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-red-100/85">
+              {error.message}
+            </pre>
+          ) : null}
+          <Link to="/" className="mt-5 inline-block rounded-full border border-[#d4b34a]/35 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4b34a]">
+            Return to public site
+          </Link>
+        </section>
+      </main>
+    </div>
+  );
+}
+
+class MissionControlErrorBoundary extends React.Component<{ children: React.ReactNode }, MissionControlErrorBoundaryState> {
+  state: MissionControlErrorBoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): MissionControlErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('[MissionControl] render crash caught by safe mode', error);
+  }
+
+  render() {
+    if (this.state.error) return <MissionControlCrashFallback error={this.state.error} />;
+    return this.props.children;
+  }
+}
 
 function statusClass(status: MissionControlStatus): string {
   if (status === 'healthy') return 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100';
@@ -142,6 +224,7 @@ function MetricCard({ label, value, detail }: { label: string; value: React.Reac
 }
 
 function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
+  const blockers = safeArray(subsystem.blockers);
   return (
     <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -162,8 +245,8 @@ function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
         {subsystem.completeness}% complete
       </div>
       <p className="mt-3 text-[12.5px] leading-5 text-[#cfc8b8]/76">{subsystem.summary}</p>
-      {subsystem.blockers.length ? (
-        <p className="mt-3 text-[12px] leading-5 text-amber-100/82">Blocker: {subsystem.blockers[0]}</p>
+      {blockers.length ? (
+        <p className="mt-3 text-[12px] leading-5 text-amber-100/82">Blocker: {blockers[0]}</p>
       ) : null}
       <p className="mt-3 text-[12px] leading-5 text-emerald-100/78">Next: {subsystem.recommendedNextAction}</p>
     </article>
@@ -223,6 +306,7 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
 }
 
 function RepositoryRow({ repository }: { repository: RepositoryStatus }) {
+  const knownBlockers = safeArray(repository.knownBlockers);
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -240,8 +324,8 @@ function RepositoryRow({ repository }: { repository: RepositoryStatus }) {
         <div>Frontend deploy needed: {repository.frontendDeployNeeded ? 'yes' : 'no'}</div>
         <div>Backend deploy needed: {repository.backendDeployNeeded ? 'yes' : 'no'}</div>
       </div>
-      {repository.knownBlockers.length ? (
-        <p className="mt-3 text-[12px] leading-5 text-amber-100/80">{repository.knownBlockers[0]}</p>
+      {knownBlockers.length ? (
+        <p className="mt-3 text-[12px] leading-5 text-amber-100/80">{knownBlockers[0]}</p>
       ) : null}
       <button disabled className="mt-4 inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
         <Rocket className="h-3.5 w-3.5" /> Deploy disabled
@@ -353,10 +437,11 @@ function SelectField<T extends string>({
 }
 
 function CategoryEditor({ item, onChange }: { item: IntelligenceItem; onChange: (categories: IntelligenceCategory[]) => void }) {
+  const categories = safeCategories(item);
   const toggle = (category: IntelligenceCategory) => {
-    const next = item.category.includes(category)
-      ? item.category.filter((value) => value !== category)
-      : [...item.category.filter((value) => value !== 'Unknown'), category];
+    const next = categories.includes(category)
+      ? categories.filter((value) => value !== category)
+      : [...categories.filter((value) => value !== 'Unknown'), category];
     onChange(next.length ? next : ['Unknown']);
   };
 
@@ -370,7 +455,7 @@ function CategoryEditor({ item, onChange }: { item: IntelligenceItem; onChange: 
             type="button"
             onClick={() => toggle(category)}
             className={`rounded-full border px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] ${
-              item.category.includes(category)
+              categories.includes(category)
                 ? 'border-[#d4b34a]/55 bg-[#d4b34a]/16 text-[#f6dc82]'
                 : 'border-white/10 bg-black/18 text-[#cfc8b8]/62'
             }`}
@@ -458,6 +543,7 @@ function GrantOpportunityRow({ item }: { item: IntelligenceItem }) {
 }
 
 function OpportunityRow({ item }: { item: IntelligenceItem }) {
+  const categories = safeCategories(item);
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -471,7 +557,7 @@ function OpportunityRow({ item }: { item: IntelligenceItem }) {
       </div>
       <p className="mt-3 text-[12px] leading-5 text-[#f5f0e8]/80">{item.summary}</p>
       <div className="mt-3 flex flex-wrap gap-1.5">
-        {item.category.map((category) => (
+        {categories.map((category) => (
           <span key={category} className="rounded-full border border-white/10 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.12em] text-[#cfc8b8]/70">
             {category}
           </span>
@@ -490,15 +576,17 @@ function IntelligenceWorkspace({
   setStore: (store: IntelligenceStore) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
+  const sourceBriefings = safeArray(store?.sourceBriefings);
+  const intelligenceItems = safeArray(store?.intelligenceItems);
   const [source, setSource] = useState('Twin Daily Brief');
   const [sourceDate, setSourceDate] = useState(today);
   const [rawText, setRawText] = useState('');
   const [parsedItems, setParsedItems] = useState<IntelligenceItem[]>([]);
   const [lastSummary, setLastSummary] = useState<string | null>(null);
 
-  const grants = grantItems(store.intelligenceItems);
-  const opportunities = opportunityItems(store.intelligenceItems);
-  const summary = intelligenceSummary(store.intelligenceItems);
+  const grants = grantItems(intelligenceItems);
+  const opportunities = opportunityItems(intelligenceItems);
+  const summary = intelligenceSummary(intelligenceItems);
 
   const parse = () => {
     const items = parseTwinDailyBriefing(rawText, source, sourceDate);
@@ -519,7 +607,8 @@ function IntelligenceWorkspace({
   const updateSavedItem = (item: IntelligenceItem) => {
     const next = {
       ...store,
-      intelligenceItems: store.intelligenceItems.map((existing) => (existing.id === item.id ? item : existing)),
+      sourceBriefings,
+      intelligenceItems: intelligenceItems.map((existing) => (existing.id === item.id ? item : existing)),
     };
     saveIntelligenceStore(next);
     setStore(next);
@@ -563,9 +652,9 @@ function IntelligenceWorkspace({
           </div>
           <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a]">Source archive</div>
-            <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78">{store.sourceBriefings.length} briefing(s) archived with raw text preserved in browser storage for this owner console.</p>
+            <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78">{sourceBriefings.length} briefing(s) archived with raw text preserved in browser storage for this owner console.</p>
             <div className="mt-4 space-y-3">
-              {store.sourceBriefings.slice(0, 5).map((briefing) => (
+              {sourceBriefings.slice(0, 5).map((briefing) => (
                 <details key={briefing.id} className="rounded-lg border border-white/[0.07] bg-black/15 p-3">
                   <summary className="cursor-pointer text-sm text-[#faf7f2]">{briefing.source} - {briefing.source_date}</summary>
                   <p className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-[12px] leading-5 text-[#cfc8b8]/70">{briefing.raw_text}</p>
@@ -607,10 +696,10 @@ function IntelligenceWorkspace({
         </div>
       </Panel>
 
-      {store.intelligenceItems.length ? (
+      {intelligenceItems.length ? (
         <Panel eyebrow="Triage" title="Saved Intelligence Records" icon={Database}>
           <div className="space-y-4">
-            {store.intelligenceItems.slice(0, 8).map((item) => (
+            {intelligenceItems.slice(0, 8).map((item) => (
               <ItemEditor key={item.id} item={item} onChange={updateSavedItem} />
             ))}
           </div>
@@ -620,8 +709,8 @@ function IntelligenceWorkspace({
   );
 }
 
-const MissionControl: React.FC = () => {
-  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem(ACCESS_STORAGE_KEY) === 'yes');
+const MissionControlContent: React.FC = () => {
+  const [isUnlocked, setIsUnlocked] = useState(() => safeGetStorage(ACCESS_STORAGE_KEY) === 'yes');
   const [accessCode, setAccessCode] = useState('');
   const [state, setState] = useState<LoadState>('idle');
   const [dashboard, setDashboard] = useState<MissionControlOperations | null>(null);
@@ -650,13 +739,13 @@ const MissionControl: React.FC = () => {
 
   const unlock = () => {
     if (accessCode.trim() === OWNER_ACCESS_CODE) {
-      localStorage.setItem(ACCESS_STORAGE_KEY, 'yes');
+      safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
       setIsUnlocked(true);
     }
   };
 
   const lock = () => {
-    localStorage.removeItem(ACCESS_STORAGE_KEY);
+    safeRemoveStorage(ACCESS_STORAGE_KEY);
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
@@ -664,7 +753,7 @@ const MissionControl: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const health = dashboard?.globalHealth ?? [];
+    const health = safeArray(dashboard?.globalHealth);
     const average = health.length
       ? Math.round(health.reduce((sum, item) => sum + item.completeness, 0) / health.length)
       : 0;
@@ -675,6 +764,33 @@ const MissionControl: React.FC = () => {
       blocked: health.filter((item) => item.status === 'error' || item.status === 'stub').length,
     };
   }, [dashboard]);
+
+  const globalHealth = safeArray(dashboard?.globalHealth);
+  const completenessMatrix = safeArray(dashboard?.completenessMatrix);
+  const harvesters = safeArray(dashboard?.harvesters);
+  const scientificSystems = safeArray(dashboard?.scientificSystems);
+  const repositories = safeArray(dashboard?.repositories);
+  const recommendations = safeArray(dashboard?.recommendations);
+  const recentActivity = safeArray(dashboard?.recentActivity);
+  const safetyBoundaries = safeArray(dashboard?.safetyBoundaries);
+  const diagnostics = safeArray(dashboard?.diagnostics);
+  const governance = dashboard?.governance ?? {
+    build: 'Mission Control',
+    status: 'warning' as MissionControlStatus,
+    northStar: 'Mission Control is running in safe fallback mode.',
+    missions: [],
+    policies: [],
+    decisions: [],
+    questions: [],
+  };
+  const calyxSelfAudit = dashboard?.calyxSelfAudit ?? {
+    summary: 'Mission Control safe fallback is active. Some live telemetry may be unavailable.',
+    canDo: ['Render the owner console', 'Preserve BUILD-050 intake UI'],
+    cannotDoYet: ['Read malformed live telemetry safely without fallback normalization'],
+    connectedTools: [],
+    failingServices: [],
+    riskLevel: 'safe fallback',
+  };
 
   if (!isUnlocked) {
     return (
@@ -792,7 +908,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Global health" title="Overall Continuum Health" icon={Activity}>
                   <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
-                    {dashboard.globalHealth.map((subsystem) => (
+                    {globalHealth.map((subsystem) => (
                       <SubsystemCard key={subsystem.id} subsystem={subsystem} />
                     ))}
                   </div>
@@ -800,7 +916,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Audit" title="System Completeness Matrix" icon={SlidersHorizontal}>
                   <div className="space-y-3">
-                    {dashboard.completenessMatrix.slice(0, 18).map((subsystem) => (
+                    {completenessMatrix.slice(0, 18).map((subsystem) => (
                       <CompletenessRow key={`${subsystem.category}-${subsystem.id}`} subsystem={subsystem} />
                     ))}
                   </div>
@@ -808,7 +924,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Pipelines" title="Harvester Operations" icon={Radar}>
                   <div className="grid gap-4 lg:grid-cols-2">
-                    {dashboard.harvesters.map((harvester) => (
+                    {harvesters.map((harvester) => (
                       <HarvesterRow key={harvester.id} harvester={harvester} />
                     ))}
                   </div>
@@ -816,7 +932,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Science" title="Scientific Systems Registry" icon={Telescope}>
                   <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                    {dashboard.scientificSystems.map((system) => (
+                    {scientificSystems.map((system) => (
                       <SubsystemCard key={system.id} subsystem={system} />
                     ))}
                   </div>
@@ -824,7 +940,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Delivery" title="Build / GitHub / Deployment Status" icon={GitBranch}>
                   <div className="grid gap-4 lg:grid-cols-2">
-                    {dashboard.repositories.map((repository) => (
+                    {repositories.map((repository) => (
                       <RepositoryRow key={repository.name} repository={repository} />
                     ))}
                   </div>
@@ -834,22 +950,22 @@ const MissionControl: React.FC = () => {
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-4">
                       <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">
-                        {dashboard.governance.build} - {dashboard.governance.status}
+                        {governance.build} - {governance.status}
                       </div>
-                      <p className="mt-3 text-sm leading-6 text-[#f5f0e8]/86">{dashboard.governance.northStar}</p>
+                      <p className="mt-3 text-sm leading-6 text-[#f5f0e8]/86">{governance.northStar}</p>
                     </div>
                     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
                       <div className="grid grid-cols-4 gap-3 text-center">
-                        <div><div className="text-2xl text-[#d4b34a]">{dashboard.governance.missions.length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Missions</div></div>
-                        <div><div className="text-2xl text-[#d4b34a]">{dashboard.governance.policies.length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Policies</div></div>
-                        <div><div className="text-2xl text-[#d4b34a]">{dashboard.governance.decisions.length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Decisions</div></div>
-                        <div><div className="text-2xl text-[#d4b34a]">{dashboard.governance.questions.length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Questions</div></div>
+                        <div><div className="text-2xl text-[#d4b34a]">{safeArray(governance.missions).length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Missions</div></div>
+                        <div><div className="text-2xl text-[#d4b34a]">{safeArray(governance.policies).length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Policies</div></div>
+                        <div><div className="text-2xl text-[#d4b34a]">{safeArray(governance.decisions).length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Decisions</div></div>
+                        <div><div className="text-2xl text-[#d4b34a]">{safeArray(governance.questions).length}</div><div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">Questions</div></div>
                       </div>
                     </div>
                   </div>
                   <div className="mt-4 grid gap-4 lg:grid-cols-2">
                     <div className="space-y-3">
-                      {dashboard.governance.policies.slice(0, 5).map((policy, index) => (
+                      {safeArray(governance.policies).slice(0, 5).map((policy, index) => (
                         <div key={policy.policy_id ?? policy.policy_key ?? policy.title ?? `policy-${index}`} className="rounded-lg border border-white/[0.07] bg-black/18 p-3">
                           <div className="text-sm text-[#faf7f2]">{policy.title}</div>
                           <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/74">{policy.principle ?? policy.description ?? 'Policy preserved.'}</p>
@@ -857,7 +973,7 @@ const MissionControl: React.FC = () => {
                       ))}
                     </div>
                     <div className="space-y-3">
-                      {dashboard.governance.decisions.slice(0, 5).map((decision, index) => (
+                      {safeArray(governance.decisions).slice(0, 5).map((decision, index) => (
                         <div key={decision.decision_id ?? decision.action ?? decision.rationale ?? `decision-${index}`} className="rounded-lg border border-white/[0.07] bg-black/18 p-3">
                           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">{decision.status ?? decision.decision ?? 'decision'}</div>
                           <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/74">{decision.action ?? decision.rationale ?? decision.decision_id}</p>
@@ -870,27 +986,27 @@ const MissionControl: React.FC = () => {
 
               <aside className="h-fit space-y-5 xl:sticky xl:top-24">
                 <Panel eyebrow="Calyx" title="Executive Summary / Self-Audit" icon={Bot}>
-                  <p className="text-sm leading-6 text-[#f5f0e8]/84">{dashboard.calyxSelfAudit.summary}</p>
+                  <p className="text-sm leading-6 text-[#f5f0e8]/84">{calyxSelfAudit.summary}</p>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3">
                       <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">Can do</div>
                       <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/80">
-                        {dashboard.calyxSelfAudit.canDo.map((item) => <li key={item}>{item}</li>)}
+                        {safeArray(calyxSelfAudit.canDo).map((item) => <li key={item}>{item}</li>)}
                       </ul>
                     </div>
                     <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-3">
                       <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">Cannot do yet</div>
                       <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/80">
-                        {dashboard.calyxSelfAudit.cannotDoYet.map((item) => <li key={item}>{item}</li>)}
+                        {safeArray(calyxSelfAudit.cannotDoYet).map((item) => <li key={item}>{item}</li>)}
                       </ul>
                     </div>
                   </div>
-                  <p className="mt-4 text-[12px] leading-5 text-[#cfc8b8]/70">Risk: {dashboard.calyxSelfAudit.riskLevel}</p>
+                  <p className="mt-4 text-[12px] leading-5 text-[#cfc8b8]/70">Risk: {calyxSelfAudit.riskLevel}</p>
                 </Panel>
 
                 <Panel eyebrow="Next actions" title="Calyx Recommendations" icon={Sparkles}>
                   <div className="space-y-3">
-                    {dashboard.recommendations.map((recommendation) => (
+                    {recommendations.map((recommendation) => (
                       <RecommendationCard key={recommendation.id} recommendation={recommendation} />
                     ))}
                   </div>
@@ -898,7 +1014,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Activity" title="Recent Activity" icon={Workflow}>
                   <div className="space-y-3">
-                    {dashboard.recentActivity.slice(0, 7).map((activity) => (
+                    {recentActivity.slice(0, 7).map((activity) => (
                       <div key={activity.id} className="rounded-lg border border-white/[0.07] bg-black/18 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="text-sm text-[#faf7f2]">{activity.label}</div>
@@ -912,7 +1028,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Safety" title="Owner Approval Boundaries" icon={LockKeyhole}>
                   <div className="space-y-3">
-                    {dashboard.safetyBoundaries.map((boundary) => (
+                    {safetyBoundaries.map((boundary) => (
                       <SafetyRow key={boundary.id} boundary={boundary} />
                     ))}
                   </div>
@@ -920,7 +1036,7 @@ const MissionControl: React.FC = () => {
 
                 <Panel eyebrow="Diagnostics" title="Endpoint Assumptions" icon={Database}>
                   <div className="space-y-3">
-                    {dashboard.diagnostics.map((diagnostic) => (
+                    {diagnostics.map((diagnostic) => (
                       <DiagnosticRow key={diagnostic.endpoint} diagnostic={diagnostic} />
                     ))}
                   </div>
@@ -946,5 +1062,11 @@ const MissionControl: React.FC = () => {
     </div>
   );
 };
+
+const MissionControl: React.FC = () => (
+  <MissionControlErrorBoundary>
+    <MissionControlContent />
+  </MissionControlErrorBoundary>
+);
 
 export default MissionControl;
