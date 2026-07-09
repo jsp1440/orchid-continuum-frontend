@@ -406,6 +406,19 @@ function pickNumber(record: Record<string, unknown>, keys: string[], fallback: n
   return fallback;
 }
 
+function pickBoolean(record: Record<string, unknown>, keys: string[], fallback: boolean): boolean {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const text = value.toLowerCase().trim();
+      if (['true', 'yes', '1'].includes(text)) return true;
+      if (['false', 'no', '0'].includes(text)) return false;
+    }
+  }
+  return fallback;
+}
+
 function pickStringArray(record: Record<string, unknown>, keys: string[]): string[] {
   for (const key of keys) {
     const value = record[key];
@@ -444,6 +457,15 @@ function normalizeStatus(value: unknown): MissionControlStatus {
   return 'unknown';
 }
 
+function normalizeControlState(value: unknown, fallback: ControlState): ControlState {
+  const text = String(value ?? '').toLowerCase().trim();
+  if (text === 'read_only' || text === 'readonly' || text === 'read-only') return 'read_only';
+  if (text === 'disabled') return 'disabled';
+  if (text === 'planned') return 'planned';
+  if (text === 'requires_owner_authorization' || text === 'requires-owner-authorization') return 'requires_owner_authorization';
+  return fallback;
+}
+
 function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsystem | null {
   const record = asRecord(value);
   if (!record) return null;
@@ -468,6 +490,88 @@ function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsy
     dataSource: pickString(record, ['dataSource', 'data_source', 'source'], 'Mission Control backend'),
     maturity: typeof record.maturity === 'string' ? record.maturity : undefined,
   };
+}
+
+function normalizeHarvesterRecord(value: unknown, index: number): HarvesterStatus | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const id = pickString(record, ['id', 'key', 'slug', 'name'], `harvester-${index + 1}`);
+  const state = pickString(record, ['state', 'status', 'mode'], 'unknown').toLowerCase();
+
+  return {
+    id,
+    name: pickString(record, ['name', 'title', 'label', 'id'], id),
+    source: pickString(record, ['source', 'provider', 'data_source', 'dataSource'], 'Mission Control backend'),
+    enabled: pickBoolean(record, ['enabled', 'active'], false),
+    state: ['running', 'idle', 'error', 'unknown', 'planned'].includes(state)
+      ? (state as HarvesterStatus['state'])
+      : normalizeStatus(state) === 'error'
+        ? 'error'
+        : 'unknown',
+    lastRun: pickString(record, ['lastRun', 'last_run', 'heartbeat_at', 'updatedAt', 'updated_at'], 'not connected'),
+    nextRun: pickString(record, ['nextRun', 'next_run'], 'unknown'),
+    duration: pickString(record, ['duration', 'elapsed'], 'unknown'),
+    rowsProcessed: pickNumber(record, ['rowsProcessed', 'rows_processed', 'processed'], 0),
+    rowsInserted: pickNumber(record, ['rowsInserted', 'rows_inserted', 'inserted'], 0),
+    errors: pickStringArray(record, ['errors', 'failures']),
+    warningCount: pickNumber(record, ['warningCount', 'warning_count', 'warnings'], 0),
+    checkpoint: pickString(record, ['checkpoint', 'cursor'], 'not exposed'),
+    runNow: normalizeControlState(record.runNow ?? record.run_now, 'requires_owner_authorization'),
+    pauseResume: normalizeControlState(record.pauseResume ?? record.pause_resume, 'requires_owner_authorization'),
+    logSummary: pickString(record, ['logSummary', 'log_summary', 'summary', 'detail'], 'Live harvester telemetry returned by the backend.'),
+  };
+}
+
+function normalizeRepositoryRecord(value: unknown, index: number): RepositoryStatus | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const name = pickString(record, ['name', 'repository', 'repo'], `repository-${index + 1}`);
+
+  return {
+    name,
+    defaultBranch: pickString(record, ['defaultBranch', 'default_branch', 'branch'], 'main'),
+    latestCommit: pickString(record, ['latestCommit', 'latest_commit', 'commit'], ''),
+    openPullRequests: pickNumber(record, ['openPullRequests', 'open_pull_requests', 'open_prs'], 0),
+    deploymentTarget: pickString(record, ['deploymentTarget', 'deployment_target', 'target'], 'not configured'),
+    deployStatus: normalizeStatus(record.deployStatus ?? record.deploy_status ?? record.status),
+    lastDeploy: pickString(record, ['lastDeploy', 'last_deploy', 'deployed_at'], ''),
+    frontendDeployNeeded: pickBoolean(record, ['frontendDeployNeeded', 'frontend_deploy_needed'], false),
+    backendDeployNeeded: pickBoolean(record, ['backendDeployNeeded', 'backend_deploy_needed'], false),
+    knownBlockers: pickStringArray(record, ['knownBlockers', 'known_blockers', 'blockers', 'errors']),
+  };
+}
+
+function normalizeRecommendationRecord(value: unknown, index: number): Recommendation | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const priority = pickString(record, ['priority', 'severity'], 'medium').toLowerCase();
+
+  return {
+    id: pickString(record, ['id', 'key', 'recommendation_id', 'title'], `recommendation-${index + 1}`),
+    title: pickString(record, ['title', 'label'], 'Mission Control recommendation'),
+    priority: ['critical', 'high', 'medium', 'low'].includes(priority) ? (priority as Recommendation['priority']) : 'medium',
+    rationale: pickString(record, ['rationale', 'summary', 'detail'], 'Review Mission Control telemetry.'),
+    ownerDecisionNeeded: pickString(record, ['ownerDecisionNeeded', 'owner_decision_needed', 'decision'], 'Review and decide next action.'),
+    nextBuild: pickString(record, ['nextBuild', 'next_build', 'build'], 'TBD'),
+  };
+}
+
+function readLiveHarvesters(payload: unknown): HarvesterStatus[] {
+  return firstPayloadArray<unknown>(payload, ['harvesters', 'items'])
+    .map((item, index) => normalizeHarvesterRecord(item, index))
+    .filter((item): item is HarvesterStatus => Boolean(item));
+}
+
+function readLiveRepositories(payload: unknown): RepositoryStatus[] {
+  return firstPayloadArray<unknown>(payload, ['repositories', 'repos', 'items'])
+    .map((item, index) => normalizeRepositoryRecord(item, index))
+    .filter((item): item is RepositoryStatus => Boolean(item));
+}
+
+function readLiveRecommendations(payload: unknown): Recommendation[] {
+  return firstPayloadArray<unknown>(payload, ['recommendations', 'items'])
+    .map((item, index) => normalizeRecommendationRecord(item, index))
+    .filter((item): item is Recommendation => Boolean(item));
 }
 
 function readLiveSubsystems(payload: unknown): ContinuumSubsystem[] {
@@ -550,6 +654,9 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   const liveSubsystems = readLiveSubsystems(subsystemsResult.payload);
   const auditSubsystems = readLiveSubsystems(auditResult.payload);
   const subsystemPayload = liveSubsystems.length ? liveSubsystems : auditSubsystems;
+  const liveHarvesters = readLiveHarvesters(harvestersResult.payload);
+  const liveRepositories = readLiveRepositories(repositoriesResult.payload);
+  const liveRecommendations = readLiveRecommendations(recommendationsResult.payload);
   const dataMode = liveCount === 0 ? 'fallback' : liveCount === diagnostics.length ? 'live' : 'mixed';
   const governance = withGovernance(
     constitutionalStatusResult.payload,
@@ -618,8 +725,8 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     subsystemRegistry,
     scientificSystems: fallbackScientificSystems,
     completenessMatrix: [...subsystemRegistry, ...fallbackScientificSystems].sort((a, b) => a.completeness - b.completeness),
-    harvesters: asArray<HarvesterStatus>(harvestersResult.payload?.harvesters).length ? asArray<HarvesterStatus>(harvestersResult.payload?.harvesters) : fallbackHarvesters,
-    repositories: asArray<RepositoryStatus>(repositoriesResult.payload?.repositories).length ? asArray<RepositoryStatus>(repositoriesResult.payload?.repositories) : fallbackRepositories,
+    harvesters: liveHarvesters.length ? liveHarvesters : fallbackHarvesters,
+    repositories: liveRepositories.length ? liveRepositories : fallbackRepositories,
     calyxSelfAudit: {
       summary: 'Calyx can present the operations center, preserve governance context, explain endpoint failures, consume live subsystem telemetry when available, and recommend the next build. It cannot execute production actions from this frontend.',
       canDo: ['Render Mission Control while endpoints fail', 'Consume live subsystem telemetry before fallback', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
@@ -628,7 +735,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
       failingServices: diagnostics.filter((item) => item.status === 'error').map((item) => item.label),
       riskLevel: 'low for read-only frontend visibility; high-risk actions remain disabled.',
     },
-    recommendations: asArray<Recommendation>(recommendationsResult.payload?.recommendations).length ? asArray<Recommendation>(recommendationsResult.payload?.recommendations) : fallbackRecommendations,
+    recommendations: liveRecommendations.length ? liveRecommendations : fallbackRecommendations,
     recentActivity,
     safetyBoundaries: fallbackSafety,
     governance,
