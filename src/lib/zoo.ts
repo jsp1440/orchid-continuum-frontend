@@ -22,7 +22,7 @@
  *   GET  /api/zoo/badges/{taxonomy_id}    — reviewed-image confidence badges
  */
 
-import { ApiError, apiRequest, type ApiResult } from './api';
+import { apiRequest, type ApiResult } from './api';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,7 +94,8 @@ export const zooApi = {
     payload: ZooContribution,
   ): Promise<ApiResult<{ submission_id: string }>> {
     // We mirror the apiRequest contract for write endpoints.
-    const env = typeof import.meta !== 'undefined' ? import.meta.env : {};
+    const env =
+      (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
     const base: string =
       env.VITE_API_BASE_URL || env.NEXT_PUBLIC_API_BASE_URL || '';
     if (!base) {
@@ -112,17 +113,22 @@ export const zooApi = {
       if (!res.ok) {
         return {
           data: null,
-          error: new ApiError(`Submission failed (${res.status})`, res.status, '/api/zoo/contribute'),
+          error: Object.assign(
+            new Error(`Submission failed (${res.status})`),
+            { status: res.status, endpoint: '/api/zoo/contribute' },
+          ) as any,
           unconfigured: false,
         };
       }
       const data = (await res.json()) as { submission_id: string };
       return { data, error: null, unconfigured: false };
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : 'Network error';
+    } catch (e: any) {
       return {
         data: null,
-        error: new ApiError(message, 0, '/api/zoo/contribute'),
+        error: Object.assign(new Error(e?.message || 'Network error'), {
+          status: 0,
+          endpoint: '/api/zoo/contribute',
+        }) as any,
         unconfigured: false,
       };
     }

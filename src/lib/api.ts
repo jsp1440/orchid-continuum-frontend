@@ -25,7 +25,8 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-const env = typeof import.meta !== 'undefined' ? import.meta.env : {};
+const env =
+  (typeof import.meta !== 'undefined' && (import.meta as any).env) || {};
 
 export const API_BASE_URL: string =
   env.VITE_API_BASE_URL ||
@@ -108,13 +109,12 @@ export async function checkApiHealth(
       latencyMs,
       message: res.ok ? undefined : `HTTP ${res.status}`,
     };
-  } catch (e: unknown) {
-    const message = e instanceof Error ? e.message : 'Network error';
+  } catch (e: any) {
     return {
       status: 'offline',
       base: API_BASE_URL,
       checkedAt,
-      message,
+      message: e?.message || 'Network error',
     };
   } finally {
     clearTimeout(timer);
@@ -203,14 +203,12 @@ export async function apiRequest<T>(
     }
     const data = (await res.json()) as T;
     return { data, error: null, unconfigured: false };
-  } catch (e: unknown) {
-    const isAbort = e instanceof DOMException && e.name === 'AbortError';
-    const status = isAbort ? 408 : 0;
-    const fallbackMessage = e instanceof Error ? e.message : 'Network error';
+  } catch (e: any) {
+    const status = e?.name === 'AbortError' ? 408 : 0;
     const message =
-      isAbort
+      e?.name === 'AbortError'
         ? `Request timed out — ${path}`
-        : fallbackMessage;
+        : (e?.message || 'Network error');
     return {
       data: null,
       error: new ApiError(message, status, path),

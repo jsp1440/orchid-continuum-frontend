@@ -26,7 +26,7 @@ const WIDGETS: {
   title: string;
   desc: string;
   embed: string;
-  Component: React.ComponentType<Record<string, unknown>>;
+  Component: React.FC<any>;
   props?: Record<string, unknown>;
 }[] = [
   {

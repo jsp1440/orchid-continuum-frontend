@@ -255,11 +255,7 @@ const Atlas: React.FC = () => {
   const toggleLayer = (k: LayerKey) =>
     setActiveLayers((prev) => {
       const next = new Set(prev);
-      if (next.has(k)) {
-        next.delete(k);
-      } else {
-        next.add(k);
-      }
+      next.has(k) ? next.delete(k) : next.add(k);
       return next;
     });
 
