@@ -221,7 +221,7 @@ async function withLiveGallery(payload: RelationshipExplorerPayload): Promise<Re
   }
 }
 
-function normalizePayload(name: string, raw: any): RelationshipExplorerPayload {
+function normalizePayload(name: string, raw: Record<string, unknown>): RelationshipExplorerPayload {
   if (!raw || typeof raw !== "object") return emptyPayload(name);
 
   const fallback = SAFE_MVP_PAYLOADS[name.toLowerCase()] || emptyPayload(name, "api");

@@ -356,8 +356,8 @@ const fallbackSafety: SafetyBoundary[] = [
   { id: 'frontend_unlock', label: 'Frontend owner unlock', state: 'read_only', detail: 'UI gate only. It is not real security and does not authorize production writes.' },
   { id: 'run_now', label: 'Run-now controls', state: 'requires_owner_authorization', detail: 'Rendered disabled until a server-authorized harvester action API exists.' },
   { id: 'pause_resume', label: 'Pause/resume controls', state: 'requires_owner_authorization', detail: 'Rendered disabled until server-side owner authorization is available.' },
-  { id: 'deploy', label: 'Deploy controls', state: 'planned', detail: 'No deploy button is enabled. Deployment must remain explicit and server-authorized.' },
-  { id: 'credentials', label: 'Credential management', state: 'disabled', detail: 'No secrets or credentials are exposed in frontend code.' },
+  { id: 'deploy', label: 'Deploy controls', state: 'requires_owner_authorization', detail: 'Production deploy remains disabled until backend owner authorization exists.' },
+  { id: 'credentials', label: 'Credential management', state: 'requires_owner_authorization', detail: 'Credential modification remains disabled; no secrets or credentials are exposed in frontend code.' },
   { id: 'production_write', label: 'Production writes', state: 'requires_owner_authorization', detail: 'All real writes require backend authorization and explicit owner approval.' },
 ];
 
