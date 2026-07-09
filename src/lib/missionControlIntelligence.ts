@@ -88,6 +88,60 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
+function safeCategories(value: unknown): IntelligenceCategory[] {
+  if (!Array.isArray(value)) return ['Unknown'];
+  const categories = value.filter((item): item is IntelligenceCategory =>
+    intelligenceCategories.includes(item as IntelligenceCategory),
+  );
+  return categories.length ? categories : ['Unknown'];
+}
+
+function safeItems(value: unknown): IntelligenceItem[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Partial<IntelligenceItem> => Boolean(item) && typeof item === 'object')
+    .map((item, index) => {
+      const stamped = nowIso();
+      return {
+        id: String(item.id ?? id(`intel_restored_${index}`)),
+        source_briefing_id: item.source_briefing_id,
+        title: String(item.title ?? 'Untitled intelligence item'),
+        summary: String(item.summary ?? ''),
+        source: String(item.source ?? 'Mission Control'),
+        source_date: String(item.source_date ?? new Date().toISOString().slice(0, 10)),
+        category: safeCategories(item.category),
+        priority: ['critical', 'high', 'medium', 'low'].includes(String(item.priority)) ? item.priority as IntelligencePriority : 'medium',
+        status: ['new', 'triaged', 'active', 'waiting', 'submitted', 'completed', 'declined', 'archived'].includes(String(item.status)) ? item.status as IntelligenceStatus : 'new',
+        deadline_date: item.deadline_date,
+        funding_amount: item.funding_amount,
+        organization: item.organization,
+        recommended_action: String(item.recommended_action ?? 'Triage and assign an owner.'),
+        owner: String(item.owner ?? ''),
+        notes: String(item.notes ?? ''),
+        source_excerpt: String(item.source_excerpt ?? item.summary ?? ''),
+        source_link: item.source_link,
+        eligibility_summary: item.eligibility_summary,
+        missing_information: item.missing_information,
+        application_progress: typeof item.application_progress === 'number' ? item.application_progress : undefined,
+        created_at: String(item.created_at ?? stamped),
+        updated_at: String(item.updated_at ?? stamped),
+      };
+    });
+}
+
+function safeBriefings(value: unknown): SourceBriefing[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is Partial<SourceBriefing> => Boolean(item) && typeof item === 'object')
+    .map((item, index) => ({
+      id: String(item.id ?? id(`briefing_restored_${index}`)),
+      source: String(item.source ?? 'Mission Control'),
+      source_date: String(item.source_date ?? new Date().toISOString().slice(0, 10)),
+      raw_text: String(item.raw_text ?? ''),
+      created_at: String(item.created_at ?? nowIso()),
+    }));
+}
+
 function id(prefix: string): string {
   const random = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return `${prefix}_${random}`;
@@ -254,12 +308,13 @@ export function emptyIntelligenceStore(): IntelligenceStore {
 
 export function loadIntelligenceStore(): IntelligenceStore {
   try {
+    if (typeof localStorage === 'undefined') return emptyIntelligenceStore();
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return emptyIntelligenceStore();
     const parsed = JSON.parse(raw) as Partial<IntelligenceStore>;
     return {
-      sourceBriefings: Array.isArray(parsed.sourceBriefings) ? parsed.sourceBriefings : [],
-      intelligenceItems: Array.isArray(parsed.intelligenceItems) ? parsed.intelligenceItems : [],
+      sourceBriefings: safeBriefings(parsed.sourceBriefings),
+      intelligenceItems: safeItems(parsed.intelligenceItems),
     };
   } catch {
     return emptyIntelligenceStore();
@@ -267,7 +322,15 @@ export function loadIntelligenceStore(): IntelligenceStore {
 }
 
 export function saveIntelligenceStore(store: IntelligenceStore): void {
-  localStorage.setItem(STORE_KEY, JSON.stringify(store));
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.setItem(STORE_KEY, JSON.stringify({
+      sourceBriefings: safeBriefings(store.sourceBriefings),
+      intelligenceItems: safeItems(store.intelligenceItems),
+    }));
+  } catch {
+    // Mission Control must remain visible even when browser storage is blocked or full.
+  }
 }
 
 export function createSourceBriefing(rawText: string, source: string, sourceDate: string): SourceBriefing {
@@ -282,36 +345,37 @@ export function createSourceBriefing(rawText: string, source: string, sourceDate
 
 export function saveBriefingWithItems(store: IntelligenceStore, briefing: SourceBriefing, items: IntelligenceItem[]): IntelligenceStore {
   const stamped = nowIso();
-  const routed = items.map((item) => ({
+  const routed = safeItems(items).map((item) => ({
     ...item,
     source_briefing_id: briefing.id,
     created_at: item.created_at || stamped,
     updated_at: stamped,
   }));
   const next = {
-    sourceBriefings: [briefing, ...store.sourceBriefings],
-    intelligenceItems: [...routed, ...store.intelligenceItems],
+    sourceBriefings: [briefing, ...safeBriefings(store.sourceBriefings)],
+    intelligenceItems: [...routed, ...safeItems(store.intelligenceItems)],
   };
   saveIntelligenceStore(next);
   return next;
 }
 
 export function grantItems(items: IntelligenceItem[]): IntelligenceItem[] {
-  return items.filter((item) => item.category.includes('Funding') || item.category.includes('Grant'));
+  return safeItems(items).filter((item) => item.category.includes('Funding') || item.category.includes('Grant'));
 }
 
 export function opportunityItems(items: IntelligenceItem[]): IntelligenceItem[] {
   const routed: IntelligenceCategory[] = ['Partnership', 'Dataset', 'API', 'Technology', 'Research'];
-  return items.filter((item) => item.category.some((category) => routed.includes(category)));
+  return safeItems(items).filter((item) => item.category.some((category) => routed.includes(category)));
 }
 
 export function intelligenceSummary(items: IntelligenceItem[]) {
+  const safe = safeItems(items);
   return {
-    newItems: items.filter((item) => item.status === 'new').length,
-    urgentGrants: grantItems(items).filter((item) => item.priority === 'critical' || item.priority === 'high').length,
-    partnershipNeedsAction: opportunityItems(items).filter((item) => ['new', 'triaged', 'waiting'].includes(item.status)).length,
-    researchDatasetLeads: items.filter((item) => item.category.some((category) => ['Research', 'Dataset', 'API'].includes(category))).length,
-    waitingOnJeff: items.filter((item) => /jeff/i.test(item.owner) && item.status === 'waiting').length,
-    waitingOnExternal: items.filter((item) => item.status === 'waiting' && !/jeff/i.test(item.owner)).length,
+    newItems: safe.filter((item) => item.status === 'new').length,
+    urgentGrants: grantItems(safe).filter((item) => item.priority === 'critical' || item.priority === 'high').length,
+    partnershipNeedsAction: opportunityItems(safe).filter((item) => ['new', 'triaged', 'waiting'].includes(item.status)).length,
+    researchDatasetLeads: safe.filter((item) => item.category.some((category) => ['Research', 'Dataset', 'API'].includes(category))).length,
+    waitingOnJeff: safe.filter((item) => /jeff/i.test(item.owner) && item.status === 'waiting').length,
+    waitingOnExternal: safe.filter((item) => item.status === 'waiting' && !/jeff/i.test(item.owner)).length,
   };
 }
