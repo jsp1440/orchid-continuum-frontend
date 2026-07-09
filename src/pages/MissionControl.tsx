@@ -4,9 +4,12 @@ import {
   Activity,
   AlertTriangle,
   Bot,
+  Check,
   ClipboardList,
+  Copy,
   Database,
   DollarSign,
+  ExternalLink,
   FileText,
   GitBranch,
   Handshake,
@@ -61,6 +64,7 @@ type MissionControlErrorBoundaryState = { error: Error | null };
 type PanelErrorBoundaryState = { error: Error | null };
 
 const ACCESS_STORAGE_KEY = 'oc_mission_control_owner_access_v1';
+const BACKEND_OWNER_AUTHORIZATION_LABEL = 'Requires backend owner authorization.';
 
 const OWNER_ACCESS_CODE =
   (import.meta.env.VITE_MISSION_CONTROL_ACCESS_CODE as string | undefined) ||
@@ -69,17 +73,17 @@ const OWNER_ACCESS_CODE =
 const INTELLIGENCE_STORAGE_KEY = 'oc_mission_control_intelligence_v1';
 
 const navigationItems = [
-  ['Health', Activity],
-  ['Completeness', SlidersHorizontal],
-  ['Harvesters', Radar],
-  ['Calyx Audit', Bot],
-  ['Builds', GitBranch],
-  ['Governance', ShieldCheck],
-  ['Recommendations', Sparkles],
-  ['Intelligence', Inbox],
-  ['Grant Office', DollarSign],
-  ['Partnerships', Handshake],
-  ['Safety', LockKeyhole],
+  { label: 'Health', targetId: 'mission-control-health', icon: Activity },
+  { label: 'Completeness', targetId: 'mission-control-completeness', icon: SlidersHorizontal },
+  { label: 'Harvesters', targetId: 'mission-control-harvesters', icon: Radar },
+  { label: 'Calyx Audit', targetId: 'mission-control-calyx-audit', icon: Bot },
+  { label: 'Builds', targetId: 'mission-control-builds', icon: GitBranch },
+  { label: 'Governance', targetId: 'mission-control-governance', icon: ShieldCheck },
+  { label: 'Recommendations', targetId: 'mission-control-recommendations', icon: Sparkles },
+  { label: 'Intelligence', targetId: 'mission-control-intelligence', icon: Inbox },
+  { label: 'Grant Office', targetId: 'mission-control-grants', icon: DollarSign },
+  { label: 'Partnerships', targetId: 'mission-control-partnerships', icon: Handshake },
+  { label: 'Safety', targetId: 'mission-control-safety', icon: LockKeyhole },
 ];
 
 const priorityOptions: IntelligencePriority[] = ['critical', 'high', 'medium', 'low'];
@@ -223,8 +227,20 @@ function statusClass(status: MissionControlStatus): string {
 
 function controlLabel(state: ControlState): string {
   if (state === 'read_only') return 'read-only';
-  if (state === 'requires_owner_authorization') return 'requires owner authorization';
+  if (state === 'requires_owner_authorization' || state === 'disabled' || state === 'planned') return BACKEND_OWNER_AUTHORIZATION_LABEL;
   return state;
+}
+
+function isWebUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value);
+}
+
+function repositoryUrl(name: string): string | null {
+  return /^[\w.-]+\/[\w.-]+$/.test(name) ? `https://github.com/${name}` : null;
+}
+
+function scrollToSection(targetId: string) {
+  document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function displayTime(value?: string): string {
@@ -235,18 +251,20 @@ function displayTime(value?: string): string {
 }
 
 function Panel({
+  id,
   eyebrow,
   title,
   icon: Icon,
   children,
 }: {
+  id?: string;
   eyebrow: string;
   title: string;
   icon: typeof Activity;
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-lg border border-white/[0.08] bg-[#0d1d13]/90 p-5">
+    <section id={id} className="scroll-mt-28 rounded-lg border border-white/[0.08] bg-[#0d1d13]/90 p-5">
       <div className="flex items-center justify-between gap-4">
         <div>
           <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">{eyebrow}</div>
@@ -344,10 +362,18 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
       </div>
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/70">{harvester.logSummary}</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button disabled className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+        <button
+          disabled
+          title="Harvester execution requires a backend action endpoint with owner authorization."
+          className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
+        >
           <PlayCircle className="h-3.5 w-3.5" /> Run now: {controlLabel(harvester.runNow)}
         </button>
-        <button disabled className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+        <button
+          disabled
+          title="Pause and resume require backend owner authorization so the browser cannot alter production jobs directly."
+          className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
+        >
           <PauseCircle className="h-3.5 w-3.5" /> Pause/resume: {controlLabel(harvester.pauseResume)}
         </button>
       </div>
@@ -355,8 +381,19 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
   );
 }
 
-function RepositoryRow({ repository }: { repository: RepositoryStatus }) {
+function RepositoryRow({
+  repository,
+  onCopy,
+  copiedKey,
+}: {
+  repository: RepositoryStatus;
+  onCopy: (key: string, value: string) => void;
+  copiedKey: string | null;
+}) {
   const knownBlockers = safeArray(repository.knownBlockers);
+  const githubUrl = repositoryUrl(repository.name);
+  const deploymentUrl = isWebUrl(repository.deploymentTarget) ? repository.deploymentTarget : null;
+
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -377,14 +414,62 @@ function RepositoryRow({ repository }: { repository: RepositoryStatus }) {
       {knownBlockers.length ? (
         <p className="mt-3 text-[12px] leading-5 text-amber-100/80">{knownBlockers[0]}</p>
       ) : null}
-      <button disabled className="mt-4 inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
-        <Rocket className="h-3.5 w-3.5" /> Deploy disabled
-      </button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {githubUrl ? (
+          <a
+            href={githubUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/25 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/60 hover:bg-[#d4b34a]/10"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Open GitHub
+          </a>
+        ) : null}
+        {deploymentUrl ? (
+          <a
+            href={deploymentUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/25 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/60 hover:bg-[#d4b34a]/10"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Open deployment
+          </a>
+        ) : null}
+        <button
+          onClick={() => onCopy(`repo-${repository.name}`, repository.name)}
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+        >
+          {copiedKey === `repo-${repository.name}` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} Copy repo
+        </button>
+        <button
+          disabled
+          title="Production deployment requires backend owner authorization and cannot be triggered from this frontend."
+          className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
+        >
+          <Rocket className="h-3.5 w-3.5" /> Deploy: {BACKEND_OWNER_AUTHORIZATION_LABEL}
+        </button>
+      </div>
     </div>
   );
 }
 
-function RecommendationCard({ recommendation }: { recommendation: Recommendation }) {
+function RecommendationCard({
+  recommendation,
+  onCopy,
+  copiedKey,
+}: {
+  recommendation: Recommendation;
+  onCopy: (key: string, value: string) => void;
+  copiedKey: string | null;
+}) {
+  const copyText = [
+    recommendation.title,
+    `Priority: ${recommendation.priority}`,
+    `Rationale: ${recommendation.rationale}`,
+    `Owner decision: ${recommendation.ownerDecisionNeeded}`,
+    `Next build: ${recommendation.nextBuild}`,
+  ].join('\n');
+
   return (
     <div className="rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/10 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -397,12 +482,28 @@ function RecommendationCard({ recommendation }: { recommendation: Recommendation
       </div>
       <p className="mt-3 text-sm leading-6 text-[#f5f0e8]/84">{recommendation.rationale}</p>
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/78">Owner decision: {recommendation.ownerDecisionNeeded}</p>
-      <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">Next: {recommendation.nextBuild}</p>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">Next: {recommendation.nextBuild}</p>
+        <button
+          onClick={() => onCopy(`recommendation-${recommendation.id}`, copyText)}
+          className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/25 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/60 hover:bg-[#d4b34a]/10"
+        >
+          {copiedKey === `recommendation-${recommendation.id}` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} Copy build
+        </button>
+      </div>
     </div>
   );
 }
 
-function DiagnosticRow({ diagnostic }: { diagnostic: EndpointDiagnostic }) {
+function DiagnosticRow({
+  diagnostic,
+  onCopy,
+  copiedKey,
+}: {
+  diagnostic: EndpointDiagnostic;
+  onCopy: (key: string, value: string) => void;
+  copiedKey: string | null;
+}) {
   return (
     <div className="rounded-lg border border-white/[0.07] bg-black/18 p-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -415,6 +516,12 @@ function DiagnosticRow({ diagnostic }: { diagnostic: EndpointDiagnostic }) {
         </span>
       </div>
       <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/74">{diagnostic.detail}</p>
+      <button
+        onClick={() => onCopy(`endpoint-${diagnostic.endpoint}`, diagnostic.endpoint)}
+        className="mt-3 inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+      >
+        {copiedKey === `endpoint-${diagnostic.endpoint}` ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />} Copy endpoint
+      </button>
     </div>
   );
 }
@@ -735,7 +842,7 @@ function IntelligenceWorkspace({
       </SafePanel>
 
       <SafePanel title="Grant Office">
-      <Panel eyebrow="Grant Office" title="Urgent Deadlines and Application Pipeline" icon={DollarSign}>
+      <Panel id="mission-control-grants" eyebrow="Grant Office" title="Urgent Deadlines and Application Pipeline" icon={DollarSign}>
         <div className="grid gap-4 lg:grid-cols-2">
           {grants.length ? grants.map((item) => <GrantOpportunityRow key={item.id} item={item} />) : (
             <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-sm text-[#cfc8b8]/75">No grant or funding records saved yet. Paste a brief with funding or grant items to populate this view.</div>
@@ -745,7 +852,7 @@ function IntelligenceWorkspace({
       </SafePanel>
 
       <SafePanel title="Partnership / Research Queue">
-      <Panel eyebrow="Partnership / Research Queue" title="Opportunities Needing Follow-up" icon={Handshake}>
+      <Panel id="mission-control-partnerships" eyebrow="Partnership / Research Queue" title="Opportunities Needing Follow-up" icon={Handshake}>
         <div className="grid gap-4 lg:grid-cols-2">
           {opportunities.length ? opportunities.map((item) => <OpportunityRow key={item.id} item={item} />) : (
             <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-sm text-[#cfc8b8]/75">No partnership, research, dataset, API, or technology leads saved yet.</div>
@@ -776,6 +883,7 @@ const MissionControlContent: React.FC = () => {
   const [dashboard, setDashboard] = useState<MissionControlOperations | null>(null);
   const [intelligenceStore, setIntelligenceStore] = useState<IntelligenceStore>(() => loadIntelligenceStore());
   const [error, setError] = useState<string | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   const load = async () => {
     setState('loading');
@@ -819,6 +927,16 @@ const MissionControlContent: React.FC = () => {
     setDashboard(null);
     setIntelligenceStore(loadIntelligenceStore());
     setState('idle');
+  };
+
+  const copyToClipboard = async (key: string, value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopiedKey(key);
+      window.setTimeout(() => setCopiedKey((current) => (current === key ? null : current)), 1800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Clipboard copy failed');
+    }
   };
 
   const stats = useMemo(() => {
@@ -930,7 +1048,7 @@ const MissionControlContent: React.FC = () => {
                   onClick={() => void load()}
                   className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh
+                  <RefreshCw className={`h-3.5 w-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh Mission Control
                 </button>
                 <button
                   onClick={lock}
@@ -960,13 +1078,16 @@ const MissionControlContent: React.FC = () => {
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[260px_minmax(0,1fr)_360px]">
               <aside className="h-fit rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4 xl:sticky xl:top-24">
                 <div className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#c9a24a]">Navigation</div>
-                {navigationItems.map(([label, Icon]) => {
-                  const LucideIcon = Icon as typeof Activity;
+                {navigationItems.map(({ label, targetId, icon: LucideIcon }) => {
                   return (
-                    <div key={String(label)} className="mt-3 flex items-center gap-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3 text-sm text-[#f5f0e8]/85">
+                    <button
+                      key={targetId}
+                      onClick={() => scrollToSection(targetId)}
+                      className="mt-3 flex w-full items-center gap-3 rounded-lg border border-white/[0.06] bg-black/10 px-3 py-3 text-left text-sm text-[#f5f0e8]/85 transition-colors hover:border-[#d4b34a]/40 hover:text-[#d4b34a]"
+                    >
                       <LucideIcon className="h-4 w-4 text-[#d4b34a]" strokeWidth={1.5} />
-                      {label as string}
-                    </div>
+                      {label}
+                    </button>
                   );
                 })}
                 <Link to="/" className="mt-5 block rounded-full border border-[#d4b34a]/25 px-4 py-3 text-center font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">
@@ -987,10 +1108,12 @@ const MissionControlContent: React.FC = () => {
                 </section>
                 </SafePanel>
 
-                <IntelligenceWorkspace store={intelligenceStore} setStore={setIntelligenceStore} />
+                <div id="mission-control-intelligence" className="scroll-mt-28">
+                  <IntelligenceWorkspace store={intelligenceStore} setStore={setIntelligenceStore} />
+                </div>
 
                 <SafePanel title="Overall Continuum Health">
-                <Panel eyebrow="Global health" title="Overall Continuum Health" icon={Activity}>
+                <Panel id="mission-control-health" eyebrow="Global health" title="Overall Continuum Health" icon={Activity}>
                   <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
                     {globalHealth.map((subsystem) => (
                       <SubsystemCard key={subsystem.id} subsystem={subsystem} />
@@ -1000,7 +1123,7 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="System Completeness Matrix">
-                <Panel eyebrow="Audit" title="System Completeness Matrix" icon={SlidersHorizontal}>
+                <Panel id="mission-control-completeness" eyebrow="Audit" title="System Completeness Matrix" icon={SlidersHorizontal}>
                   <div className="space-y-3">
                     {completenessMatrix.slice(0, 18).map((subsystem) => (
                       <CompletenessRow key={`${subsystem.category}-${subsystem.id}`} subsystem={subsystem} />
@@ -1010,7 +1133,7 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="Harvester Operations">
-                <Panel eyebrow="Pipelines" title="Harvester Operations" icon={Radar}>
+                <Panel id="mission-control-harvesters" eyebrow="Pipelines" title="Harvester Operations" icon={Radar}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     {harvesters.map((harvester) => (
                       <HarvesterRow key={harvester.id} harvester={harvester} />
@@ -1030,17 +1153,17 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="Build / GitHub / Deployment Status">
-                <Panel eyebrow="Delivery" title="Build / GitHub / Deployment Status" icon={GitBranch}>
+                <Panel id="mission-control-builds" eyebrow="Delivery" title="Build / GitHub / Deployment Status" icon={GitBranch}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     {repositories.map((repository) => (
-                      <RepositoryRow key={repository.name} repository={repository} />
+                      <RepositoryRow key={repository.name} repository={repository} onCopy={(key, value) => void copyToClipboard(key, value)} copiedKey={copiedKey} />
                     ))}
                   </div>
                 </Panel>
                 </SafePanel>
 
                 <SafePanel title="Constitution and Decision Ledger">
-                <Panel eyebrow="Governance" title="Constitution and Decision Ledger" icon={ShieldCheck}>
+                <Panel id="mission-control-governance" eyebrow="Governance" title="Constitution and Decision Ledger" icon={ShieldCheck}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-4">
                       <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">
@@ -1081,7 +1204,7 @@ const MissionControlContent: React.FC = () => {
 
               <aside className="h-fit space-y-5 xl:sticky xl:top-24">
                 <SafePanel title="Executive Summary / Self-Audit">
-                <Panel eyebrow="Calyx" title="Executive Summary / Self-Audit" icon={Bot}>
+                <Panel id="mission-control-calyx-audit" eyebrow="Calyx" title="Executive Summary / Self-Audit" icon={Bot}>
                   <p className="text-sm leading-6 text-[#f5f0e8]/84">{calyxSelfAudit.summary}</p>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3">
@@ -1102,10 +1225,10 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="Calyx Recommendations">
-                <Panel eyebrow="Next actions" title="Calyx Recommendations" icon={Sparkles}>
+                <Panel id="mission-control-recommendations" eyebrow="Next actions" title="Calyx Recommendations" icon={Sparkles}>
                   <div className="space-y-3">
                     {recommendations.map((recommendation) => (
-                      <RecommendationCard key={recommendation.id} recommendation={recommendation} />
+                      <RecommendationCard key={recommendation.id} recommendation={recommendation} onCopy={(key, value) => void copyToClipboard(key, value)} copiedKey={copiedKey} />
                     ))}
                   </div>
                 </Panel>
@@ -1128,7 +1251,7 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="Owner Approval Boundaries">
-                <Panel eyebrow="Safety" title="Owner Approval Boundaries" icon={LockKeyhole}>
+                <Panel id="mission-control-safety" eyebrow="Safety" title="Owner Approval Boundaries" icon={LockKeyhole}>
                   <div className="space-y-3">
                     {safetyBoundaries.map((boundary) => (
                       <SafetyRow key={boundary.id} boundary={boundary} />
@@ -1139,13 +1262,25 @@ const MissionControlContent: React.FC = () => {
 
                 <SafePanel title="Endpoint Assumptions">
                 <Panel eyebrow="Diagnostics" title="Endpoint Assumptions" icon={Database}>
+                  <button
+                    onClick={() => void load()}
+                    className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/25 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/60 hover:bg-[#d4b34a]/10"
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh telemetry
+                  </button>
                   <div className="space-y-3">
                     {diagnostics.map((diagnostic) => (
-                      <DiagnosticRow key={diagnostic.endpoint} diagnostic={diagnostic} />
+                      <DiagnosticRow key={diagnostic.endpoint} diagnostic={diagnostic} onCopy={(key, value) => void copyToClipboard(key, value)} copiedKey={copiedKey} />
                     ))}
                   </div>
                   <div className="mt-4 rounded-lg border border-white/[0.08] bg-black/18 p-3 text-[12px] leading-5 text-[#cfc8b8]/72">
                     Backend: {CALYX_BACKEND_BASE_URL}
+                    <button
+                      onClick={() => void copyToClipboard('backend-base-url', CALYX_BACKEND_BASE_URL)}
+                      className="ml-2 inline-flex items-center gap-1 rounded-full border border-white/15 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+                    >
+                      {copiedKey === 'backend-base-url' ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />} Copy
+                    </button>
                     <br />
                     Data mode: {dashboard.dataMode}
                     <br />
