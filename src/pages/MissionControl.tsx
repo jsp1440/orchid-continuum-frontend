@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
@@ -72,16 +72,31 @@ import {
   type IntelligenceStore,
 } from '@/lib/missionControlIntelligence';
 import {
-  buildAuditMarkdown,
+  createOwnerSession,
+  createResearchRequest,
   executiveAuditTemplates,
+  fetchOwnerOperationsState,
+  generateOwnerAudit,
+  generatePartnershipPacket,
+  importLocalIntelligenceToBackend,
   lifecycleProjects,
   operationsQueue,
+  OWNER_SESSION_STORAGE_KEY,
   ownerGuides,
   ownerManualTopics,
   partnershipTemplates,
   researchCommands,
   researchInbox,
+  runHarvesterOwnerAction,
+  saveSourceBriefingToBackend,
+  submitOwnerCommand,
+  transitionOwnerQueueItem,
+  updateBackendIntelligenceItem,
+  type BackendOperationsQueueItem,
   type ExecutiveAuditTemplate,
+  type OwnerAllowedActions,
+  type OwnerOperationsState,
+  type OwnerSession,
   type OwnerSubsystemGuide,
   type PartnershipTemplate,
   type ResearchCommandTemplate,
@@ -194,6 +209,33 @@ function safeRemoveStorage(key: string): void {
     localStorage.removeItem(key);
   } catch {
     // Non-fatal: locking still clears in-memory state below.
+  }
+}
+
+function safeGetSessionStorage(key: string): string | null {
+  try {
+    if (typeof sessionStorage === 'undefined') return null;
+    return sessionStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSetSessionStorage(key: string, value: string): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.setItem(key, value);
+  } catch {
+    // Backend authorization is still checked on every privileged request.
+  }
+}
+
+function safeRemoveSessionStorage(key: string): void {
+  try {
+    if (typeof sessionStorage === 'undefined') return;
+    sessionStorage.removeItem(key);
+  } catch {
+    // Non-fatal: locking also clears in-memory owner session state.
   }
 }
 
@@ -330,6 +372,10 @@ function controlLabel(state: ControlState): string {
   if (state === 'read_only') return 'read-only';
   if (state === 'requires_owner_authorization' || state === 'disabled' || state === 'planned') return BACKEND_OWNER_AUTHORIZATION_LABEL;
   return state;
+}
+
+function ownerActionAllowed(actions: OwnerAllowedActions | undefined, action: string): boolean {
+  return Boolean(actions?.[action]?.allowed);
 }
 
 function isWebUrl(value: string): boolean {
@@ -598,8 +644,27 @@ function CompletenessRow({ subsystem }: { subsystem: ContinuumSubsystem }) {
   );
 }
 
-function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
-  const authReason = 'Disabled until the Calyx backend authorizes this exact harvester action for an authenticated owner.';
+function HarvesterRow({
+  harvester,
+  ownerAuthorized,
+  pendingAction,
+  onAction,
+}: {
+  harvester: HarvesterStatus;
+  ownerAuthorized: boolean;
+  pendingAction: string | null;
+  onAction: (harvester: HarvesterStatus, action: 'run-once' | 'pause' | 'resume' | 'retire' | 'restore' | 'reassess') => void;
+}) {
+  const authReason = ownerAuthorized
+    ? 'This action will be sent to the authenticated Calyx backend and logged.'
+    : 'Disabled until the Calyx backend authorizes this exact harvester action for an authenticated owner.';
+  const pauseResumeAction = harvester.state === 'paused' ? 'resume' : 'pause';
+  const retiredAction = harvester.state === 'retired' ? 'restore' : 'retire';
+  const buttonClass = (enabled: boolean) =>
+    enabled
+      ? 'inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-wait disabled:opacity-60'
+      : 'inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55';
+  const isPending = (action: string) => pendingAction === `${harvester.id}:${action}`;
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -637,30 +702,45 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/70">{harvester.logSummary}</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
-          disabled
+          disabled={!ownerAuthorized || isPending('run-once')}
           title={authReason}
-          className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
+          onClick={() => onAction(harvester, 'run-once')}
+          className={buttonClass(ownerAuthorized)}
         >
-          <PlayCircle className="h-3.5 w-3.5" /> Run now: {controlLabel(harvester.runNow)}
+          <PlayCircle className="h-3.5 w-3.5" /> {isPending('run-once') ? 'Running...' : `Run now: ${controlLabel(harvester.runNow)}`}
         </button>
         <button
-          disabled
+          disabled={!ownerAuthorized || isPending(pauseResumeAction)}
           title={authReason}
-          className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
+          onClick={() => onAction(harvester, pauseResumeAction)}
+          className={buttonClass(ownerAuthorized)}
         >
-          <PauseCircle className="h-3.5 w-3.5" /> Pause/resume: {controlLabel(harvester.pauseResume)}
+          <PauseCircle className="h-3.5 w-3.5" /> {isPending(pauseResumeAction) ? 'Updating...' : `${pauseResumeAction}: ${controlLabel(harvester.pauseResume)}`}
         </button>
         <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
-          <SlidersHorizontal className="h-3.5 w-3.5" /> Change target: {controlLabel(harvester.changeTarget)}
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Change target: backend form pending
         </button>
         <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
-          <RefreshCw className="h-3.5 w-3.5" /> Reassess: {controlLabel(harvester.reassess)}
+          <RefreshCw className="h-3.5 w-3.5" /> Schedule: backend form pending
         </button>
-        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
-          <Check className="h-3.5 w-3.5" /> Approve: {controlLabel(harvester.approveRecommendation)}
+        <button
+          disabled={!ownerAuthorized || isPending('reassess')}
+          title={authReason}
+          onClick={() => onAction(harvester, 'reassess')}
+          className={buttonClass(ownerAuthorized)}
+        >
+          <RefreshCw className="h-3.5 w-3.5" /> {isPending('reassess') ? 'Reassessing...' : `Reassess: ${controlLabel(harvester.reassess)}`}
         </button>
-        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
-          <AlertTriangle className="h-3.5 w-3.5" /> Reject/retire: {controlLabel(harvester.rejectRecommendation)}
+        <button disabled title="Recommendation approval requires a selected backend proposal ID." className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <Check className="h-3.5 w-3.5" /> Approve recommendation: needs proposal
+        </button>
+        <button
+          disabled={!ownerAuthorized || isPending(retiredAction)}
+          title={authReason}
+          onClick={() => onAction(harvester, retiredAction)}
+          className={buttonClass(ownerAuthorized)}
+        >
+          <AlertTriangle className="h-3.5 w-3.5" /> {isPending(retiredAction) ? 'Updating...' : `${retiredAction}: logged`}
         </button>
       </div>
     </div>
@@ -890,21 +970,62 @@ function OwnerGuidePanel() {
   );
 }
 
-function CalyxOperationsQueuePanel() {
+function CalyxOperationsQueuePanel({
+  backendItems,
+  ownerAuthorized,
+  onTransition,
+}: {
+  backendItems: BackendOperationsQueueItem[];
+  ownerAuthorized: boolean;
+  onTransition: (item: BackendOperationsQueueItem, transition: 'approve' | 'reject' | 'cancel' | 'retry') => void;
+}) {
   const lanes = ['Now working', 'Queued', 'Waiting for owner', 'Waiting for external partner', 'Completed today'] as const;
+  const laneForBackendStatus = (status?: string): (typeof lanes)[number] => {
+    if (status === 'running') return 'Now working';
+    if (status === 'awaiting_owner' || status === 'proposed' || status === 'approved') return 'Waiting for owner';
+    if (status === 'completed' || status === 'completed_degraded') return 'Completed today';
+    if (status === 'blocked') return 'Waiting for external partner';
+    return 'Queued';
+  };
+  const displayItems = backendItems.length
+    ? backendItems.map((item) => ({
+        ...item,
+        lane: laneForBackendStatus(item.status),
+        subsystem: item.related_subsystem ?? item.task_type ?? 'Mission Control',
+        detail: item.result_summary ?? item.next_required_action ?? 'Backend queue item recorded.',
+        ownerDecision: item.next_required_action,
+      }))
+    : operationsQueue;
   return (
     <Panel id="mission-control-calyx-queue" eyebrow="Calyx Operations" title="Now Working and Decision Queue" icon={ClipboardList}>
+      <div className="mb-4 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-[12px] leading-5 text-emerald-100/82">
+        Operational level: {backendItems.length ? 'Live database queue' : 'Static fallback queue until an owner backend session loads.'}
+      </div>
       <div className="grid gap-4 xl:grid-cols-5">
         {lanes.map((lane) => (
           <div key={lane} className="rounded-lg border border-white/[0.08] bg-black/18 p-3">
             <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">{lane}</div>
             <div className="mt-3 space-y-3">
-              {operationsQueue.filter((item) => item.lane === lane).map((item) => (
+              {displayItems.filter((item) => item.lane === lane).map((item) => (
                 <article key={item.id} className="rounded-lg border border-white/[0.07] bg-[#0d1d13]/80 p-3">
                   <div className="text-sm text-[#faf7f2]">{item.title}</div>
                   <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/58">{item.subsystem}</div>
                   <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/78">{item.detail}</p>
                   {item.ownerDecision ? <p className="mt-2 text-[12px] leading-5 text-amber-100/82">Decision: {item.ownerDecision}</p> : null}
+                  {'status' in item ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {(['approve', 'reject', 'cancel', 'retry'] as const).map((transition) => (
+                        <button
+                          key={transition}
+                          disabled={!ownerAuthorized}
+                          onClick={() => onTransition(item as BackendOperationsQueueItem, transition)}
+                          className="rounded-full border border-white/10 px-2.5 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/75 hover:border-[#d4b34a]/50 hover:text-[#d4b34a] disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          {transition}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -915,7 +1036,7 @@ function CalyxOperationsQueuePanel() {
   );
 }
 
-function ExecutiveAuditPanel({ onDownload }: { onDownload: (template: ExecutiveAuditTemplate) => void }) {
+function ExecutiveAuditPanel({ onDownload, disabled }: { onDownload: (template: ExecutiveAuditTemplate) => void; disabled: boolean }) {
   return (
     <Panel id="mission-control-executive-audits" eyebrow="Executive Audit Engine" title="Downloadable Audit Packages" icon={FileDown}>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -926,8 +1047,8 @@ function ExecutiveAuditPanel({ onDownload }: { onDownload: (template: ExecutiveA
                 <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.title}</h3>
                 <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.scope}</p>
               </div>
-              <button onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10">
-                <Download className="h-3.5 w-3.5" /> Markdown
+              <button disabled={disabled} onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
+                <Download className="h-3.5 w-3.5" /> Live Markdown
               </button>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -941,7 +1062,7 @@ function ExecutiveAuditPanel({ onDownload }: { onDownload: (template: ExecutiveA
   );
 }
 
-function PartnershipGeneratorPanel({ onDownload }: { onDownload: (template: PartnershipTemplate) => void }) {
+function PartnershipGeneratorPanel({ onDownload, disabled }: { onDownload: (template: PartnershipTemplate) => void; disabled: boolean }) {
   return (
     <Panel id="mission-control-partnerships" eyebrow="Partnership Generator" title="Partner-Specific Reports" icon={Handshake}>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -952,7 +1073,7 @@ function PartnershipGeneratorPanel({ onDownload }: { onDownload: (template: Part
                 <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.partner}</h3>
                 <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.mission}</p>
               </div>
-              <button onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10">
+              <button disabled={disabled} onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
                 <Download className="h-3.5 w-3.5" /> Packet
               </button>
             </div>
@@ -965,7 +1086,7 @@ function PartnershipGeneratorPanel({ onDownload }: { onDownload: (template: Part
   );
 }
 
-function ResearchCommandPanel({ onPrepare }: { onPrepare: (template: ResearchCommandTemplate) => void }) {
+function ResearchCommandPanel({ onPrepare, disabled }: { onPrepare: (template: ResearchCommandTemplate) => void; disabled: boolean }) {
   return (
     <Panel id="mission-control-research-command" eyebrow="Research Command Center" title="Owner-Launched Research" icon={Search}>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -976,8 +1097,8 @@ function ResearchCommandPanel({ onPrepare }: { onPrepare: (template: ResearchCom
                 <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.label}</h3>
                 <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.prompt}</p>
               </div>
-              <button onClick={() => onPrepare(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10">
-                <Send className="h-3.5 w-3.5" /> Prepare
+              <button disabled={disabled} onClick={() => onPrepare(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
+                <Send className="h-3.5 w-3.5" /> Save request
               </button>
             </div>
             <div className="mt-3 grid gap-2 text-[12px] text-[#cfc8b8]/78 sm:grid-cols-2">
@@ -1057,10 +1178,14 @@ function CommandBarPanel({
   value,
   onChange,
   onSubmit,
+  disabled,
+  statusMessage,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  disabled: boolean;
+  statusMessage: string | null;
 }) {
   return (
     <Panel id="mission-control-command" eyebrow="Calyx Command Bar" title="Ask Calyx What To Do Next" icon={Send}>
@@ -1077,8 +1202,8 @@ function CommandBarPanel({
             className="mt-2 w-full rounded-lg border border-white/12 bg-black/25 px-4 py-3 text-sm text-[#f5f0e8] outline-none focus:border-[#d4b34a]/70"
           />
         </label>
-        <button onClick={onSubmit} className="inline-flex h-fit items-center justify-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] hover:bg-[#e5c85c] lg:self-end">
-          <Send className="h-3.5 w-3.5" /> Prepare Command
+        <button disabled={disabled} onClick={onSubmit} className="inline-flex h-fit items-center justify-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] hover:bg-[#e5c85c] disabled:cursor-not-allowed disabled:opacity-45 lg:self-end">
+          <Send className="h-3.5 w-3.5" /> Submit Command
         </button>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
@@ -1089,8 +1214,9 @@ function CommandBarPanel({
         ))}
       </div>
       <p className="mt-4 text-[12px] leading-5 text-[#cfc8b8]/70">
-        Commands are prepared for owner review. Production writes still require backend authorization and decision-ledger support.
+        Operational level: {disabled ? 'Requires live backend owner session.' : 'Live backend command record with durable operations queue entry.'}
       </p>
+      {statusMessage ? <p className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100/84">{statusMessage}</p> : null}
     </Panel>
   );
 }
@@ -1589,13 +1715,21 @@ function OpportunityRow({ item }: { item: IntelligenceItem }) {
 function IntelligenceWorkspace({
   store,
   setStore,
+  ownerSessionToken,
+  ownerOperations,
+  onRefreshOwnerOperations,
+  onActionMessage,
 }: {
   store: IntelligenceStore;
   setStore: (store: IntelligenceStore) => void;
+  ownerSessionToken: string | null;
+  ownerOperations: OwnerOperationsState | null;
+  onRefreshOwnerOperations: () => Promise<void>;
+  onActionMessage: (message: string) => void;
 }) {
   const today = new Date().toISOString().slice(0, 10);
-  const sourceBriefings = safeArray(store?.sourceBriefings);
-  const intelligenceItems = safeArray(store?.intelligenceItems);
+  const sourceBriefings = ownerOperations?.sourceBriefings.length ? ownerOperations.sourceBriefings : safeArray(store?.sourceBriefings);
+  const intelligenceItems = ownerOperations?.intelligenceItems.length ? ownerOperations.intelligenceItems : safeArray(store?.intelligenceItems);
   const [source, setSource] = useState('Twin Daily Brief');
   const [sourceDate, setSourceDate] = useState(today);
   const [rawText, setRawText] = useState('');
@@ -1612,17 +1746,44 @@ function IntelligenceWorkspace({
     setLastSummary(`Parsed ${items.length} item(s): ${grantItems(items).length} grant/funding and ${opportunityItems(items).length} partnership/research/data lead(s).`);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!rawText.trim() || parsedItems.length === 0) return;
+    if (ownerSessionToken) {
+      const saved = await saveSourceBriefingToBackend(ownerSessionToken, {
+        source,
+        source_date: sourceDate,
+        raw_text: rawText,
+        provenance: { frontend_preview_count: parsedItems.length, migration_source: INTELLIGENCE_STORAGE_KEY },
+      });
+      await onRefreshOwnerOperations();
+      setParsedItems([]);
+      setRawText('');
+      setLastSummary(`Saved ${saved.items.length} item(s) from ${source} to the Calyx backend. Grant and partnership queues now reload from central persistence.`);
+      return;
+    }
     const briefing = createSourceBriefing(rawText, source, sourceDate);
     const next = saveBriefingWithItems(store, briefing, parsedItems);
     setStore(next);
     setParsedItems([]);
     setRawText('');
-    setLastSummary(`Saved ${parsedItems.length} item(s) from ${source}. Funding/grant items are now visible in Grant Office.`);
+    setLastSummary(`Saved ${parsedItems.length} item(s) locally. Backend owner session is required for central persistence.`);
   };
 
-  const updateSavedItem = (item: IntelligenceItem) => {
+  const importLocalRecords = async () => {
+    if (!ownerSessionToken) return;
+    const localStore = loadIntelligenceStore();
+    const result = await importLocalIntelligenceToBackend(ownerSessionToken, safeArray(localStore.intelligenceItems));
+    await onRefreshOwnerOperations();
+    onActionMessage(`Imported ${result.imported.length} local intelligence record(s); skipped ${result.skipped_duplicates} duplicate(s). Local records were not deleted.`);
+  };
+
+  const updateSavedItem = async (item: IntelligenceItem) => {
+    if (ownerSessionToken && ownerOperations?.intelligenceItems.some((existing) => existing.id === item.id)) {
+      const updated = await updateBackendIntelligenceItem(ownerSessionToken, item);
+      await onRefreshOwnerOperations();
+      onActionMessage(`Updated backend intelligence item ${updated.id}.`);
+      return;
+    }
     const next = {
       ...store,
       sourceBriefings,
@@ -1636,6 +1797,9 @@ function IntelligenceWorkspace({
     <>
       <SafePanel title="Intelligence Triage Snapshot">
       <Panel eyebrow="Daily executive summary" title="Intelligence Triage Snapshot" icon={ClipboardList}>
+        <div className="mb-4 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-[12px] leading-5 text-emerald-100/82">
+          Operational level: {ownerSessionToken ? 'Live database intelligence workspace' : 'Local browser only until backend owner session is active.'}
+        </div>
         <div className="grid gap-4 md:grid-cols-3 xl:grid-cols-6">
           <MetricCard label="New items" value={summary.newItems} detail="Saved items still awaiting triage." />
           <MetricCard label="Urgent grants" value={summary.urgentGrants} detail="Critical/high funding deadlines surfaced by date." />
@@ -1665,15 +1829,18 @@ function IntelligenceWorkspace({
               <button onClick={parse} disabled={!rawText.trim()} className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c] disabled:cursor-not-allowed disabled:opacity-45">
                 <FileText className="h-3.5 w-3.5" /> Parse brief
               </button>
-              <button onClick={save} disabled={!rawText.trim() || parsedItems.length === 0} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/70 disabled:cursor-not-allowed disabled:opacity-45">
-                <Inbox className="h-3.5 w-3.5" /> Save items
+              <button onClick={() => void save()} disabled={!rawText.trim() || parsedItems.length === 0} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/70 disabled:cursor-not-allowed disabled:opacity-45">
+                <Inbox className="h-3.5 w-3.5" /> {ownerSessionToken ? 'Save to Calyx' : 'Save locally'}
+              </button>
+              <button onClick={() => void importLocalRecords()} disabled={!ownerSessionToken || safeArray(loadIntelligenceStore().intelligenceItems).length === 0} className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a] disabled:cursor-not-allowed disabled:opacity-45">
+                <Database className="h-3.5 w-3.5" /> Import local records
               </button>
             </div>
             {lastSummary ? <p className="mt-4 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-sm text-emerald-100/84">{lastSummary}</p> : null}
           </div>
           <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
             <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a]">Source archive</div>
-            <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78">{sourceBriefings.length} briefing(s) archived with raw text preserved in browser storage for this owner console.</p>
+            <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78">{sourceBriefings.length} briefing(s) archived with raw text preserved {ownerSessionToken ? 'in the Calyx backend database.' : 'in browser storage for this owner console.'}</p>
             <div className="mt-4 space-y-3">
               {sourceBriefings.slice(0, 5).map((briefing) => (
                 <details key={briefing.id} className="rounded-lg border border-white/[0.07] bg-black/15 p-3">
@@ -1749,6 +1916,20 @@ const MissionControlContent: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<MissionFilter>('overview');
   const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
   const [commandText, setCommandText] = useState('Audit Orchid Continuum');
+  const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(() => {
+    const raw = safeGetSessionStorage(OWNER_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as OwnerSession;
+    } catch {
+      safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
+      return null;
+    }
+  });
+  const [ownerOperations, setOwnerOperations] = useState<OwnerOperationsState | null>(null);
+  const [ownerSessionStatus, setOwnerSessionStatus] = useState<'missing' | 'authenticated' | 'local_only' | 'error'>(() => (safeGetSessionStorage(OWNER_SESSION_STORAGE_KEY) ? 'authenticated' : 'missing'));
+  const [ownerActionMessage, setOwnerActionMessage] = useState<string | null>(null);
+  const [pendingHarvesterAction, setPendingHarvesterAction] = useState<string | null>(null);
 
   const load = async () => {
     setState('loading');
@@ -1763,37 +1944,85 @@ const MissionControlContent: React.FC = () => {
     }
   };
 
+  const loadOwnerOperations = useCallback(async (token = ownerSession?.token) => {
+    if (!token) return;
+    const next = await fetchOwnerOperationsState(token);
+    setOwnerOperations(next);
+  }, [ownerSession?.token]);
+
   useEffect(() => {
     if (isUnlocked) {
       setIntelligenceStore(loadIntelligenceStore());
       void load();
+      if (ownerSession?.token) void loadOwnerOperations(ownerSession.token);
     }
-  }, [isUnlocked]);
+  }, [isUnlocked, loadOwnerOperations, ownerSession?.token]);
 
   useEffect(() => {
     saveDisplayPreferences(displayPreferences);
   }, [displayPreferences]);
 
-  const unlock = () => {
+  const unlock = async () => {
+    const enteredCode = accessCode.trim();
+    setError(null);
+    setOwnerActionMessage(null);
+    try {
+      const session = await createOwnerSession(enteredCode);
+      safeSetSessionStorage(OWNER_SESSION_STORAGE_KEY, JSON.stringify(session));
+      safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
+      setOwnerSession(session);
+      setOwnerSessionStatus('authenticated');
+      setIsUnlocked(true);
+      await loadOwnerOperations(session.token);
+      setOwnerActionMessage('Backend owner session established. Privileged controls are authorized only where the server allows them.');
+      return;
+    } catch (err) {
+      if (enteredCode === OWNER_ACCESS_CODE) {
+        safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
+        setOwnerSession(null);
+        setOwnerOperations(null);
+        setOwnerSessionStatus('local_only');
+        setOwnerActionMessage(err instanceof Error ? `Local UI unlock only: ${err.message}` : 'Local UI unlock only. Backend owner session unavailable.');
+        safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
+        setIsUnlocked(true);
+        return;
+      }
+      setOwnerSessionStatus('error');
+      setError(err instanceof Error ? err.message : 'Owner session failed');
+    }
+  };
+
+  const unlockLocalOnly = () => {
     if (accessCode.trim() === OWNER_ACCESS_CODE) {
       safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
+      setOwnerSessionStatus('local_only');
       setIsUnlocked(true);
     }
   };
 
   const lock = () => {
     safeRemoveStorage(ACCESS_STORAGE_KEY);
+    safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
+    setOwnerSession(null);
+    setOwnerOperations(null);
+    setOwnerSessionStatus('missing');
+    setOwnerActionMessage(null);
     setState('idle');
   };
 
   const resetLocalData = () => {
     resetMissionControlLocalData();
+    safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
+    setOwnerSession(null);
+    setOwnerOperations(null);
+    setOwnerSessionStatus('missing');
+    setOwnerActionMessage(null);
     setDisplayPreferences(DEFAULT_DISPLAY_PREFERENCES);
     setFocusedItem(null);
     setActiveFilter('overview');
@@ -1812,59 +2041,96 @@ const MissionControlContent: React.FC = () => {
     }
   };
 
-  const prepareCommand = () => {
+  const prepareCommand = async () => {
+    if (!ownerSession?.token) {
+      setOwnerActionMessage('Backend owner session required before Calyx can create a durable command record.');
+      return;
+    }
     const command = commandText.trim() || 'Audit Orchid Continuum';
-    const content = [
-      `# Calyx Owner Command`,
-      '',
-      `Command: ${command}`,
-      '',
-      '## Safety',
-      'This command was prepared in Mission Control for owner review. Production writes require backend authorization and a decision-ledger record.',
-      '',
-      '## Required Calyx Response',
-      '- Explain what subsystem this touches.',
-      '- Explain what the owner can do.',
-      '- Explain what Calyx is doing.',
-      '- List the decision Calyx needs from the owner.',
-      '- Preserve provenance and separate evidence from inference.',
-    ].join('\n');
-    downloadTextFile(`calyx-owner-command-${Date.now()}.md`, content);
+    try {
+      const result = await submitOwnerCommand(ownerSession.token, command, false);
+      await loadOwnerOperations(ownerSession.token);
+      setOwnerActionMessage(`Command ${result.command.id} recorded as ${result.status}; queue item ${result.queue_item.id} was created.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : 'Command submission failed');
+    }
   };
 
-  const downloadAudit = (template: ExecutiveAuditTemplate) => {
-    downloadTextFile(`${template.id}-executive-audit.md`, buildAuditMarkdown(template));
+  const downloadAudit = async (template: ExecutiveAuditTemplate) => {
+    if (!ownerSession?.token) {
+      setOwnerActionMessage('Backend owner session required before Mission Control can generate live audits.');
+      return;
+    }
+    try {
+      const result = await generateOwnerAudit(ownerSession.token, template.id, 'markdown');
+      const content = typeof result.audit.content === 'string' ? result.audit.content : JSON.stringify(result.audit.content, null, 2);
+      downloadTextFile(`${template.id}-executive-audit-${result.audit.id}.md`, content);
+      await loadOwnerOperations(ownerSession.token);
+      setOwnerActionMessage(`Generated live backend audit ${result.audit.id}.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : 'Audit generation failed');
+    }
   };
 
-  const downloadPartnershipPacket = (template: PartnershipTemplate) => {
-    downloadTextFile(`${template.id}-partnership-packet.md`, [
-      `# ${template.partner} Partnership Packet`,
-      '',
-      `Mission: ${template.mission}`,
-      '',
-      `Federation opportunity: ${template.federationOpportunity}`,
-      '',
-      '## Desired Integrations',
-      ...template.desiredIntegrations.map((item) => `- ${item}`),
-      '',
-      '## Research Opportunities',
-      ...template.researchOpportunities.map((item) => `- ${item}`),
-      '',
-      'Owner review is required before external sharing.',
-    ].join('\n'));
+  const downloadPartnershipPacket = async (template: PartnershipTemplate) => {
+    if (!ownerSession?.token) {
+      setOwnerActionMessage('Backend owner session required before Mission Control can generate partner packets.');
+      return;
+    }
+    try {
+      const result = await generatePartnershipPacket(ownerSession.token, template);
+      const content = typeof result.packet.content === 'string' ? result.packet.content : JSON.stringify(result.packet.content, null, 2);
+      downloadTextFile(`${template.id}-partnership-packet-${result.packet.id}.md`, content);
+      setOwnerActionMessage(`Generated backend partnership packet ${result.packet.id}.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : 'Partnership packet generation failed');
+    }
   };
 
-  const prepareResearchCommand = (template: ResearchCommandTemplate) => {
+  const prepareResearchCommand = async (template: ResearchCommandTemplate) => {
+    if (!ownerSession?.token) {
+      setOwnerActionMessage('Backend owner session required before Mission Control can save research requests.');
+      return;
+    }
     setCommandText(template.prompt);
-    downloadTextFile(`${template.id}-research-command.md`, [
-      `# ${template.label}`,
-      '',
-      template.prompt,
-      '',
-      `Output: ${template.output}`,
-      '',
-      `Owner review: ${template.ownerReview}`,
-    ].join('\n'));
+    try {
+      const result = await createResearchRequest(ownerSession.token, template);
+      await loadOwnerOperations(ownerSession.token);
+      setOwnerActionMessage(`Research request saved as ${result.status}.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : 'Research request failed');
+    }
+  };
+
+  const handleHarvesterAction = async (harvester: HarvesterStatus, action: 'run-once' | 'pause' | 'resume' | 'retire' | 'restore' | 'reassess') => {
+    if (!ownerSession?.token) {
+      setOwnerActionMessage('Backend owner session required before harvester mutation.');
+      return;
+    }
+    setPendingHarvesterAction(`${harvester.id}:${action}`);
+    try {
+      await runHarvesterOwnerAction(ownerSession.token, harvester, action);
+      await load();
+      setOwnerActionMessage(`${harvester.name} ${action} accepted by the Calyx backend and logged.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : `${harvester.name} ${action} failed`);
+    } finally {
+      setPendingHarvesterAction(null);
+    }
+  };
+
+  const handleQueueTransition = async (item: BackendOperationsQueueItem, transition: 'approve' | 'reject' | 'cancel' | 'retry') => {
+    if (!ownerSession?.token) {
+      setOwnerActionMessage('Backend owner session required before queue transition.');
+      return;
+    }
+    try {
+      const result = await transitionOwnerQueueItem(ownerSession.token, item.id, transition, `Owner selected ${transition} in Mission Control.`);
+      await loadOwnerOperations(ownerSession.token);
+      setOwnerActionMessage(`Queue item ${item.id} moved to ${result.status}.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : 'Queue transition failed');
+    }
   };
 
   const stats = useMemo(() => {
@@ -1916,6 +2182,12 @@ const MissionControlContent: React.FC = () => {
     failingServices: [],
     riskLevel: 'safe fallback',
   };
+  const ownerPermissions = ownerOperations?.permissions ?? ownerSession?.allowedActions;
+  const ownerAuthorized = ownerSessionStatus === 'authenticated' && Boolean(ownerSession?.token);
+  const canSubmitCommand = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'submitCommand');
+  const canGenerateAudit = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'generateAudit');
+  const canCreateResearch = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'createResearchRequest');
+  const canGeneratePacket = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'generatePartnershipPacket');
 
   if (!isUnlocked) {
     return (
@@ -1939,17 +2211,23 @@ const MissionControlContent: React.FC = () => {
               value={accessCode}
               onChange={(event) => setAccessCode(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === 'Enter') unlock();
+                if (event.key === 'Enter') void unlock();
               }}
               type="password"
               className="mt-3 w-full rounded-2xl border border-white/10 bg-black/25 px-4 py-3 text-[#f5f0e8] outline-none focus:border-[#d4b34a]/60"
               placeholder="Enter owner code"
             />
             <button
-              onClick={unlock}
+              onClick={() => void unlock()}
               className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
             >
-              <KeyRound className="h-3.5 w-3.5" /> Unlock
+              <KeyRound className="h-3.5 w-3.5" /> Unlock backend session
+            </button>
+            <button
+              onClick={unlockLocalOnly}
+              className="ml-3 mt-5 inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+            >
+              Local UI only
             </button>
             <button
               onClick={resetLocalData}
@@ -2012,6 +2290,16 @@ const MissionControlContent: React.FC = () => {
             </div>
           ) : null}
 
+          <div className="mb-5 rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4 text-sm leading-6 text-[#cfc8b8]/84">
+            <span className="mr-3 inline-flex rounded-full border border-[#d4b34a]/30 bg-[#d4b34a]/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
+              {ownerSessionStatus === 'authenticated' ? 'Live backend owner session' : ownerSessionStatus === 'local_only' ? 'Local browser only' : ownerSessionStatus === 'error' ? 'Owner auth error' : 'Backend auth missing'}
+            </span>
+            {ownerSessionStatus === 'authenticated'
+              ? 'Privileged controls require a signed server session and per-action permission. State changes are written to the backend and logged.'
+              : 'Read-only telemetry and local previews remain available; database writes, command records, audits, queue transitions, and harvester mutations are disabled.'}
+            {ownerActionMessage ? <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-emerald-100/84">{ownerActionMessage}</div> : null}
+          </div>
+
           {dashboard ? (
             <div className="grid grid-cols-1 gap-5 xl:grid-cols-[260px_minmax(0,1fr)_360px]">
               <aside className="h-fit rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4 xl:sticky xl:top-24">
@@ -2032,7 +2320,7 @@ const MissionControlContent: React.FC = () => {
                   Return to public site
                 </Link>
                 <div className="mt-5 rounded-lg border border-amber-300/20 bg-amber-300/10 p-3 text-[12px] leading-5 text-amber-100/82">
-                  Frontend unlock is not real security. It only hides this UI until server-side owner roles are available.
+                  Backend authority: {ownerAuthorized ? 'signed owner session active; controls follow server allowedActions.' : 'local/read-only mode; privileged controls remain disabled.'}
                 </div>
               </aside>
 
@@ -2042,7 +2330,7 @@ const MissionControlContent: React.FC = () => {
                 <AttentionSummary items={focusItems} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
 
                 <SafePanel title="Calyx Command Bar">
-                <CommandBarPanel value={commandText} onChange={setCommandText} onSubmit={prepareCommand} />
+                <CommandBarPanel value={commandText} onChange={setCommandText} onSubmit={() => void prepareCommand()} disabled={!canSubmitCommand} statusMessage={ownerActionMessage} />
                 </SafePanel>
 
                 <SafePanel title="Subsystem Owner Guide">
@@ -2050,19 +2338,19 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="Calyx Operations Queue">
-                <CalyxOperationsQueuePanel />
+                <CalyxOperationsQueuePanel backendItems={ownerOperations?.operationsQueue ?? []} ownerAuthorized={ownerAuthorized} onTransition={handleQueueTransition} />
                 </SafePanel>
 
                 <SafePanel title="Executive Audit Engine">
-                <ExecutiveAuditPanel onDownload={downloadAudit} />
+                <ExecutiveAuditPanel onDownload={(template) => void downloadAudit(template)} disabled={!canGenerateAudit} />
                 </SafePanel>
 
                 <SafePanel title="Research Command Center">
-                <ResearchCommandPanel onPrepare={prepareResearchCommand} />
+                <ResearchCommandPanel onPrepare={(template) => void prepareResearchCommand(template)} disabled={!canCreateResearch} />
                 </SafePanel>
 
                 <SafePanel title="Partnership Generator">
-                <PartnershipGeneratorPanel onDownload={downloadPartnershipPacket} />
+                <PartnershipGeneratorPanel onDownload={(template) => void downloadPartnershipPacket(template)} disabled={!canGeneratePacket} />
                 </SafePanel>
 
                 <SafePanel title="Research Inbox">
@@ -2105,7 +2393,14 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <div id="mission-control-intelligence" className="scroll-mt-28">
-                  <IntelligenceWorkspace store={intelligenceStore} setStore={setIntelligenceStore} />
+                  <IntelligenceWorkspace
+                    store={intelligenceStore}
+                    setStore={setIntelligenceStore}
+                    ownerSessionToken={ownerSession?.token ?? null}
+                    ownerOperations={ownerOperations}
+                    onRefreshOwnerOperations={() => loadOwnerOperations()}
+                    onActionMessage={setOwnerActionMessage}
+                  />
                 </div>
 
                 <SafePanel title="Overall Continuum Health">
@@ -2132,7 +2427,13 @@ const MissionControlContent: React.FC = () => {
                 <Panel id="mission-control-harvesters" eyebrow="Pipelines" title="Harvester Operations" icon={Radar}>
                   <div className="grid gap-4 lg:grid-cols-2">
                     {harvesters.map((harvester) => (
-                      <HarvesterRow key={harvester.id} harvester={harvester} />
+                      <HarvesterRow
+                        key={harvester.id}
+                        harvester={harvester}
+                        ownerAuthorized={ownerAuthorized}
+                        pendingAction={pendingHarvesterAction}
+                        onAction={handleHarvesterAction}
+                      />
                     ))}
                   </div>
                 </Panel>

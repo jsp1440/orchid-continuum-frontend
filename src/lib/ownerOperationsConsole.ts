@@ -1,3 +1,257 @@
+import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import type { HarvesterStatus } from '@/lib/missionControlOps';
+import type { IntelligenceItem, SourceBriefing } from '@/lib/missionControlIntelligence';
+
+export const OWNER_SESSION_STORAGE_KEY = 'oc_mission_control_owner_session_v1';
+
+export type OwnerAllowedAction = {
+  allowed: boolean;
+  state: string;
+  auth: string;
+  risk: string;
+  writesDatabase: boolean;
+  requiresConfirmation: boolean;
+  reason: string;
+};
+
+export type OwnerAllowedActions = Record<string, OwnerAllowedAction>;
+
+export type OwnerSession = {
+  status: string;
+  owner: string;
+  token: string;
+  expires_at: string;
+  allowedActions: OwnerAllowedActions;
+  secretDisclosure?: string;
+};
+
+export type OwnerOperationsState = {
+  permissions: OwnerAllowedActions;
+  intelligenceItems: IntelligenceItem[];
+  sourceBriefings: SourceBriefing[];
+  operationsQueue: BackendOperationsQueueItem[];
+  commandHistory: BackendOwnerCommand[];
+};
+
+export type BackendOperationsQueueItem = {
+  id: string;
+  title: string;
+  task_type?: string;
+  source?: string;
+  requested_by?: string;
+  created_at?: string;
+  priority?: string;
+  risk_level?: string;
+  authorization_state?: string;
+  progress?: number;
+  status?: string;
+  result_summary?: string;
+  related_subsystem?: string;
+  logs?: string[];
+  next_required_action?: string;
+  command_id?: string;
+};
+
+export type BackendOwnerCommand = {
+  id: string;
+  command: string;
+  intent: string;
+  status: string;
+  risk_level?: string;
+  authorization_state?: string;
+  result_summary?: string;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type OwnerApiResult<T> = T & {
+  status?: string;
+  allowedActions?: OwnerAllowedActions;
+};
+
+type JsonRecord = Record<string, unknown>;
+
+function ownerHeaders(token: string): HeadersInit {
+  return {
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${token}`,
+    'X-Orchid-Actor': 'mission-control-owner',
+  };
+}
+
+async function requestJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${endpoint}`, options);
+  const text = await response.text();
+  const payload = text ? JSON.parse(text) as T : {} as T;
+  if (!response.ok) {
+    const detail = typeof payload === 'object' && payload && 'detail' in payload
+      ? String((payload as JsonRecord).detail)
+      : response.statusText;
+    throw new Error(`Calyx backend ${response.status}: ${detail}`);
+  }
+  return payload;
+}
+
+function normalizeIntelligenceItem(raw: JsonRecord): IntelligenceItem {
+  const stamped = new Date().toISOString();
+  const category = Array.isArray(raw.category) ? raw.category.map(String) : ['Unknown'];
+  return {
+    id: String(raw.id ?? `backend-${Date.now()}`),
+    source_briefing_id: typeof raw.source_briefing_id === 'string' ? raw.source_briefing_id : undefined,
+    title: String(raw.title ?? 'Untitled backend intelligence item'),
+    summary: String(raw.summary ?? ''),
+    source: String(raw.source ?? 'Calyx backend'),
+    source_date: String(raw.source_date ?? stamped.slice(0, 10)),
+    category: category.filter(Boolean) as IntelligenceItem['category'],
+    priority: ['critical', 'high', 'medium', 'low'].includes(String(raw.priority)) ? String(raw.priority) as IntelligenceItem['priority'] : 'medium',
+    status: ['new', 'triaged', 'active', 'waiting', 'submitted', 'completed', 'declined', 'archived'].includes(String(raw.status)) ? String(raw.status) as IntelligenceItem['status'] : 'new',
+    deadline_date: typeof raw.deadline_date === 'string' ? raw.deadline_date : undefined,
+    funding_amount: typeof raw.funding_amount === 'string' ? raw.funding_amount : undefined,
+    organization: typeof raw.organization === 'string' ? raw.organization : undefined,
+    recommended_action: String(raw.recommended_action ?? 'Owner review required.'),
+    owner: String(raw.owner ?? ''),
+    notes: String(raw.notes ?? ''),
+    source_excerpt: String(raw.source_excerpt ?? raw.summary ?? ''),
+    source_link: typeof raw.source_link === 'string' ? raw.source_link : undefined,
+    eligibility_summary: typeof raw.eligibility_summary === 'string' ? raw.eligibility_summary : undefined,
+    missing_information: Array.isArray(raw.missing_information) ? raw.missing_information.join(', ') : typeof raw.missing_information === 'string' ? raw.missing_information : undefined,
+    application_progress: typeof raw.application_progress === 'number' ? raw.application_progress : undefined,
+    created_at: String(raw.created_at ?? stamped),
+    updated_at: String(raw.updated_at ?? stamped),
+  };
+}
+
+function normalizeSourceBriefing(raw: JsonRecord): SourceBriefing {
+  return {
+    id: String(raw.id ?? `briefing-${Date.now()}`),
+    source: String(raw.source ?? 'Calyx backend'),
+    source_date: String(raw.source_date ?? new Date().toISOString().slice(0, 10)),
+    raw_text: String(raw.raw_text ?? ''),
+    created_at: String(raw.created_at ?? new Date().toISOString()),
+  };
+}
+
+export async function createOwnerSession(accessCode: string, owner = 'owner'): Promise<OwnerSession> {
+  return requestJson<OwnerSession>('/api/mission-control/owner/session', {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ access_code: accessCode, owner }),
+  });
+}
+
+export async function fetchOwnerOperationsState(token: string): Promise<OwnerOperationsState> {
+  const [permissions, intelligence, briefings, queue, commands] = await Promise.all([
+    requestJson<{ allowedActions: OwnerAllowedActions }>('/api/mission-control/owner/permissions', { headers: ownerHeaders(token) }),
+    requestJson<{ items: JsonRecord[] }>('/api/mission-control/owner/intelligence', { headers: ownerHeaders(token) }),
+    requestJson<{ source_briefings: JsonRecord[] }>('/api/mission-control/owner/source-briefings', { headers: ownerHeaders(token) }),
+    requestJson<{ items: BackendOperationsQueueItem[] }>('/api/mission-control/owner/operations-queue', { headers: ownerHeaders(token) }),
+    requestJson<{ commands: BackendOwnerCommand[] }>('/api/mission-control/owner/commands', { headers: ownerHeaders(token) }),
+  ]);
+  return {
+    permissions: permissions.allowedActions,
+    intelligenceItems: (intelligence.items ?? []).map(normalizeIntelligenceItem),
+    sourceBriefings: (briefings.source_briefings ?? []).map(normalizeSourceBriefing),
+    operationsQueue: queue.items ?? [],
+    commandHistory: commands.commands ?? [],
+  };
+}
+
+export async function saveSourceBriefingToBackend(token: string, request: { source: string; source_date: string; raw_text: string; provenance?: JsonRecord }) {
+  const result = await requestJson<{ source_briefing: JsonRecord; items: JsonRecord[] }>('/api/mission-control/owner/source-briefings', {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify(request),
+  });
+  return {
+    sourceBriefing: normalizeSourceBriefing(result.source_briefing),
+    items: (result.items ?? []).map(normalizeIntelligenceItem),
+  };
+}
+
+export async function importLocalIntelligenceToBackend(token: string, records: IntelligenceItem[]) {
+  return requestJson<{ imported: JsonRecord[]; skipped_duplicates: number }>('/api/mission-control/owner/intelligence/import-local', {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({ source: 'oc_mission_control_intelligence_v1', records }),
+  });
+}
+
+export async function updateBackendIntelligenceItem(token: string, item: IntelligenceItem) {
+  const result = await requestJson<{ item: JsonRecord }>(`/api/mission-control/owner/intelligence/${encodeURIComponent(item.id)}`, {
+    method: 'PATCH',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({
+      status: item.status,
+      priority: item.priority,
+      owner: item.owner,
+      notes: item.notes,
+      verification_state: 'owner_reviewed',
+    }),
+  });
+  return normalizeIntelligenceItem(result.item);
+}
+
+export async function generateOwnerAudit(token: string, auditType: string, outputFormat: 'json' | 'markdown' = 'markdown') {
+  return requestJson<{ audit: { id: string; content: string | JsonRecord; output_format: string } }>('/api/mission-control/owner/audits', {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({ audit_type: auditType, output_format: outputFormat }),
+  });
+}
+
+export async function submitOwnerCommand(token: string, command: string, confirm = false) {
+  return requestJson<{ command: BackendOwnerCommand; queue_item: BackendOperationsQueueItem; status: string }>('/api/mission-control/owner/commands', {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({ command, confirm }),
+  });
+}
+
+export async function transitionOwnerQueueItem(token: string, itemId: string, transition: 'approve' | 'reject' | 'cancel' | 'retry', reason?: string) {
+  return requestJson<{ item: BackendOperationsQueueItem; status: string }>(`/api/mission-control/owner/operations-queue/${encodeURIComponent(itemId)}/${transition}`, {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function createResearchRequest(token: string, template: ResearchCommandTemplate) {
+  return requestJson<{ research_request: JsonRecord; status: string }>('/api/mission-control/owner/research-requests', {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({
+      title: template.label,
+      research_question: template.prompt,
+      taxa: [],
+      geography: [],
+      requested_evidence_sources: ['taxonomy', 'literature', 'occurrences', 'media', 'knowledge_graph'],
+      requested_outputs: [template.output],
+      priority: 'medium',
+      provenance: { source: 'Mission Control Research Command Center', template_id: template.id },
+    }),
+  });
+}
+
+export async function generatePartnershipPacket(token: string, template: PartnershipTemplate) {
+  return requestJson<{ packet: { id: string; content: string | JsonRecord } }>('/api/mission-control/owner/partnership-packets', {
+    method: 'POST',
+    headers: ownerHeaders(token),
+    body: JSON.stringify({
+      organization_name: template.partner,
+      partner_type: template.id,
+      output_format: 'markdown',
+    }),
+  });
+}
+
+export async function runHarvesterOwnerAction(token: string, harvester: HarvesterStatus, action: 'run-once' | 'pause' | 'resume' | 'retire' | 'restore' | 'reassess') {
+  return requestJson<JsonRecord>(`/api/harvesters/${encodeURIComponent(harvester.id)}/${action}`, {
+    method: 'POST',
+    headers: ownerHeaders(token),
+  });
+}
+
 export type OwnerSubsystemGuide = {
   id: string;
   name: string;
