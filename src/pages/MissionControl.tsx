@@ -1,18 +1,24 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
   Bot,
   Check,
+  ChevronLeft,
+  ChevronRight,
   ClipboardList,
   Copy,
   Database,
   DollarSign,
+  Eye,
+  EyeOff,
   ExternalLink,
   FileText,
+  Filter,
   GitBranch,
   Handshake,
+  Info,
   Inbox,
   KeyRound,
   LockKeyhole,
@@ -39,6 +45,7 @@ import {
   type MissionControlOperations,
   type MissionControlStatus,
   type Recommendation,
+  type RecentActivity,
   type RepositoryStatus,
   type SafetyBoundary,
 } from '@/lib/missionControlOps';
@@ -62,9 +69,46 @@ import {
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 type MissionControlErrorBoundaryState = { error: Error | null };
 type PanelErrorBoundaryState = { error: Error | null };
+type DisplayTextScale = 'standard' | 'large' | 'extra';
+type MissionFilter = 'overview' | 'needs_attention' | 'waiting_owner' | 'recommendations' | 'recent_changes' | 'healthy' | 'all';
+type PriorityKind = 'urgent' | 'attention' | 'recommendation' | 'info' | 'healthy' | 'inactive';
+type FocusItemKind = 'subsystem' | 'harvester' | 'repository' | 'recommendation' | 'activity' | 'safety';
+
+type DisplayPreferences = {
+  textScale: DisplayTextScale;
+  comfortableSpacing: boolean;
+  highContrast: boolean;
+  reduceMotion: boolean;
+  focusModeDefault: boolean;
+  hideHealthyDefault: boolean;
+};
+
+type FocusItem = {
+  id: string;
+  kind: FocusItemKind;
+  title: string;
+  source: string;
+  statusLabel: string;
+  priority: PriorityKind;
+  interpretation: string;
+  nextAction: string;
+  metric: string;
+  details: string[];
+  calyx: string[];
+};
 
 const ACCESS_STORAGE_KEY = 'oc_mission_control_owner_access_v1';
 const BACKEND_OWNER_AUTHORIZATION_LABEL = 'Requires backend owner authorization.';
+const DISPLAY_PREFS_STORAGE_KEY = 'oc_mission_control_display_preferences_v1';
+
+const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
+  textScale: 'standard',
+  comfortableSpacing: false,
+  highContrast: false,
+  reduceMotion: false,
+  focusModeDefault: true,
+  hideHealthyDefault: false,
+};
 
 const OWNER_ACCESS_CODE =
   (import.meta.env.VITE_MISSION_CONTROL_ACCESS_CODE as string | undefined) ||
@@ -88,6 +132,15 @@ const navigationItems = [
 
 const priorityOptions: IntelligencePriority[] = ['critical', 'high', 'medium', 'low'];
 const statusOptions: IntelligenceStatus[] = ['new', 'triaged', 'active', 'waiting', 'submitted', 'completed', 'declined', 'archived'];
+const missionFilters: { id: MissionFilter; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'needs_attention', label: 'Needs attention' },
+  { id: 'waiting_owner', label: 'Waiting owner' },
+  { id: 'recommendations', label: 'Recommendations' },
+  { id: 'recent_changes', label: 'Recent changes' },
+  { id: 'healthy', label: 'Healthy' },
+  { id: 'all', label: 'All' },
+];
 
 function safeGetStorage(key: string): string | null {
   try {
@@ -116,9 +169,29 @@ function safeRemoveStorage(key: string): void {
   }
 }
 
+function loadDisplayPreferences(): DisplayPreferences {
+  const stored = safeGetStorage(DISPLAY_PREFS_STORAGE_KEY);
+  if (!stored) return DEFAULT_DISPLAY_PREFERENCES;
+  try {
+    const parsed = JSON.parse(stored) as Partial<DisplayPreferences>;
+    return {
+      ...DEFAULT_DISPLAY_PREFERENCES,
+      ...parsed,
+      textScale: parsed.textScale === 'large' || parsed.textScale === 'extra' ? parsed.textScale : 'standard',
+    };
+  } catch {
+    return DEFAULT_DISPLAY_PREFERENCES;
+  }
+}
+
+function saveDisplayPreferences(preferences: DisplayPreferences): void {
+  safeSetStorage(DISPLAY_PREFS_STORAGE_KEY, JSON.stringify(preferences));
+}
+
 function resetMissionControlLocalData(): void {
   safeRemoveStorage(ACCESS_STORAGE_KEY);
   safeRemoveStorage(INTELLIGENCE_STORAGE_KEY);
+  safeRemoveStorage(DISPLAY_PREFS_STORAGE_KEY);
 }
 
 function safeArray<T>(value: T[] | undefined | null): T[] {
@@ -250,6 +323,165 @@ function displayTime(value?: string): string {
   return date.toLocaleString();
 }
 
+function priorityMeta(priority: PriorityKind): { label: string; className: string } {
+  if (priority === 'urgent') return { label: 'Urgent', className: 'border-red-200/35 bg-red-300/15 text-red-100' };
+  if (priority === 'attention') return { label: 'Needs attention', className: 'border-amber-200/35 bg-amber-300/15 text-amber-100' };
+  if (priority === 'recommendation') return { label: 'Recommendation', className: 'border-[#d4b34a]/35 bg-[#d4b34a]/15 text-[#f1d878]' };
+  if (priority === 'healthy') return { label: 'Healthy', className: 'border-emerald-200/35 bg-emerald-300/15 text-emerald-100' };
+  if (priority === 'inactive') return { label: 'Inactive', className: 'border-sky-200/25 bg-sky-300/10 text-sky-100' };
+  return { label: 'Information', className: 'border-white/15 bg-white/[0.06] text-[#f5f0e8]' };
+}
+
+function missionPriorityFromStatus(status: MissionControlStatus): PriorityKind {
+  if (status === 'error') return 'urgent';
+  if (status === 'warning') return 'attention';
+  if (status === 'stub') return 'inactive';
+  if (status === 'healthy') return 'healthy';
+  return 'info';
+}
+
+function harvesterPriority(harvester: HarvesterStatus): PriorityKind {
+  if (harvester.state === 'error' || harvester.state === 'failed' || safeArray(harvester.errors).length) return 'urgent';
+  if (harvester.approvalStatus?.toLowerCase().includes('owner') || harvester.state === 'needs_review' || harvester.state === 'redirect_pending') return 'recommendation';
+  if (harvester.warningCount > 0 || (harvester.sourceExhaustion ?? 0) >= 0.7 || (harvester.duplicateRate ?? 0) >= 0.35) return 'attention';
+  if (harvester.state === 'retired' || harvester.state === 'planned') return 'inactive';
+  return 'healthy';
+}
+
+function repositoryPriority(repository: RepositoryStatus): PriorityKind {
+  if (repository.deployStatus === 'error') return 'urgent';
+  if (repository.backendDeployNeeded || repository.frontendDeployNeeded || safeArray(repository.knownBlockers).length) return 'attention';
+  return missionPriorityFromStatus(repository.deployStatus);
+}
+
+function recommendationPriority(recommendation: Recommendation): PriorityKind {
+  if (recommendation.priority === 'critical') return 'urgent';
+  if (recommendation.priority === 'high') return 'attention';
+  return 'recommendation';
+}
+
+function itemMatchesFilter(item: FocusItem, filter: MissionFilter, hideHealthy: boolean): boolean {
+  if (filter === 'all') return true;
+  if (filter === 'overview') return hideHealthy ? item.priority !== 'healthy' : true;
+  if (filter === 'needs_attention') return item.priority === 'urgent' || item.priority === 'attention';
+  if (filter === 'waiting_owner') return item.details.some((detail) => detail.toLowerCase().includes('owner') || detail.toLowerCase().includes('authorization'));
+  if (filter === 'recommendations') return item.kind === 'recommendation' || item.priority === 'recommendation';
+  if (filter === 'recent_changes') return item.kind === 'activity';
+  if (filter === 'healthy') return item.priority === 'healthy';
+  return true;
+}
+
+function buildFocusItems(dashboard: MissionControlOperations): FocusItem[] {
+  const subsystemItems = safeArray(dashboard.globalHealth).map((subsystem): FocusItem => ({
+    id: `subsystem-${subsystem.id}`,
+    kind: 'subsystem',
+    title: subsystem.name,
+    source: subsystem.category,
+    statusLabel: subsystem.status,
+    priority: missionPriorityFromStatus(subsystem.status),
+    interpretation: subsystem.summary,
+    nextAction: subsystem.recommendedNextAction,
+    metric: `${subsystem.completeness}% complete`,
+    details: [`Last checked: ${displayTime(subsystem.lastChecked)}`, ...safeArray(subsystem.blockers).map((blocker) => `Blocker: ${blocker}`)],
+    calyx: [
+      `Calyx classifies this as ${subsystem.status} from the ${subsystem.category} lane.`,
+      subsystem.blockers.length ? 'Resolve the first blocker before treating this as stable.' : 'No blocker is reported in the current telemetry.',
+    ],
+  }));
+
+  const harvesterItems = safeArray(dashboard.harvesters).map((harvester): FocusItem => ({
+    id: `harvester-${harvester.id}`,
+    kind: 'harvester',
+    title: harvester.name,
+    source: harvester.source,
+    statusLabel: harvester.state,
+    priority: harvesterPriority(harvester),
+    interpretation: harvester.logSummary,
+    nextAction: harvester.recommendation ?? 'Review source freshness and owner approval state.',
+    metric: `${harvester.rowsProcessed ?? 0} rows, ${Math.round((harvester.duplicateRate ?? 0) * 100)}% duplicates`,
+    details: [
+      `Target: ${harvester.target ?? 'unknown'}`,
+      `Schedule: ${harvester.schedule ?? 'unknown'}`,
+      `Freshness: ${harvester.freshness ?? 'unknown'}`,
+      `Approval: ${harvester.approvalStatus ?? BACKEND_OWNER_AUTHORIZATION_LABEL}`,
+      ...safeArray(harvester.errors).map((harvesterError) => `Error: ${harvesterError}`),
+    ],
+    calyx: [
+      'Operational controls stay disabled until the backend returns authenticated action permissions for this harvester.',
+      `Current recommendation signal: ${harvester.recommendation ?? 'none returned'}.`,
+    ],
+  }));
+
+  const repositoryItems = safeArray(dashboard.repositories).map((repository): FocusItem => ({
+    id: `repository-${repository.name}`,
+    kind: 'repository',
+    title: repository.name,
+    source: 'Delivery',
+    statusLabel: repository.deployStatus,
+    priority: repositoryPriority(repository),
+    interpretation: `Deployment target: ${repository.deploymentTarget}`,
+    nextAction: safeArray(repository.knownBlockers)[0] ?? 'Review open pull requests and deploy status before promoting changes.',
+    metric: `${repository.openPullRequests ?? 'unknown'} open PRs`,
+    details: [
+      `Default branch: ${repository.defaultBranch}`,
+      `Frontend deploy needed: ${repository.frontendDeployNeeded ? 'yes' : 'no'}`,
+      `Backend deploy needed: ${repository.backendDeployNeeded ? 'yes' : 'no'}`,
+      ...safeArray(repository.knownBlockers).map((blocker) => `Blocker: ${blocker}`),
+    ],
+    calyx: [
+      'Calyx treats deployment signals as read-only here.',
+      'Production action requires backend owner authorization and a deployment workflow outside this browser gate.',
+    ],
+  }));
+
+  const recommendationItems = safeArray(dashboard.recommendations).map((recommendation): FocusItem => ({
+    id: `recommendation-${recommendation.id}`,
+    kind: 'recommendation',
+    title: recommendation.title,
+    source: 'Calyx recommendation',
+    statusLabel: recommendation.priority,
+    priority: recommendationPriority(recommendation),
+    interpretation: recommendation.rationale,
+    nextAction: recommendation.ownerDecisionNeeded,
+    metric: `Next build: ${recommendation.nextBuild}`,
+    details: [`Owner decision: ${recommendation.ownerDecisionNeeded}`],
+    calyx: [
+      'This is advisory. It does not change repository, backend, or harvester state from the frontend.',
+      `Calyx linked this recommendation to ${recommendation.nextBuild}.`,
+    ],
+  }));
+
+  const activityItems = safeArray(dashboard.recentActivity).slice(0, 10).map((activity: RecentActivity): FocusItem => ({
+    id: `activity-${activity.id}`,
+    kind: 'activity',
+    title: activity.label,
+    source: activity.source,
+    statusLabel: displayTime(activity.timestamp),
+    priority: activity.source === 'planned' ? 'inactive' : 'info',
+    interpretation: activity.detail,
+    nextAction: 'Use this as recent context before changing deployment or harvester state.',
+    metric: activity.source,
+    details: [`Timestamp: ${displayTime(activity.timestamp)}`],
+    calyx: ['Recent activity is context, not proof of a safe action path.', 'Check the related panel before taking owner action.'],
+  }));
+
+  const safetyItems = safeArray(dashboard.safetyBoundaries).map((boundary): FocusItem => ({
+    id: `safety-${boundary.id}`,
+    kind: 'safety',
+    title: boundary.label,
+    source: 'Safety boundary',
+    statusLabel: controlLabel(boundary.state),
+    priority: 'attention',
+    interpretation: boundary.detail,
+    nextAction: 'Keep this boundary enforced until the backend explicitly authorizes the matching owner workflow.',
+    metric: controlLabel(boundary.state),
+    details: [`Boundary state: ${controlLabel(boundary.state)}`],
+    calyx: ['Safety boundaries are intentionally sticky.', 'Mission Control can explain them, but it cannot override them from local UI state.'],
+  }));
+
+  return [...subsystemItems, ...harvesterItems, ...repositoryItems, ...recommendationItems, ...activityItems, ...safetyItems];
+}
+
 function Panel({
   id,
   eyebrow,
@@ -339,6 +571,7 @@ function CompletenessRow({ subsystem }: { subsystem: ContinuumSubsystem }) {
 }
 
 function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
+  const authReason = 'Disabled until the Calyx backend authorizes this exact harvester action for an authenticated owner.';
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -353,29 +586,348 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
         </span>
       </div>
       <div className="mt-4 grid gap-2 text-[12px] text-[#cfc8b8]/78 sm:grid-cols-2">
+        <div>Target: {harvester.target ?? 'unknown'}</div>
+        <div>Schedule: {harvester.schedule ?? 'unknown'}</div>
         <div>Last run: {displayTime(harvester.lastRun)}</div>
         <div>Next run: {harvester.nextRun ?? 'unknown'}</div>
         <div>Rows processed: {harvester.rowsProcessed ?? 0}</div>
         <div>Rows inserted: {harvester.rowsInserted ?? 0}</div>
+        <div>Rows updated: {harvester.rowsUpdated ?? 0}</div>
+        <div>Duplicates: {harvester.duplicatesDetected ?? 0}</div>
+        <div>Duplicate rate: {Math.round((harvester.duplicateRate ?? 0) * 100)}%</div>
+        <div>Novelty/yield: {Math.round((harvester.noveltyRate ?? 0) * 100)}%</div>
+        <div>Freshness: {harvester.freshness ?? 'unknown'}</div>
+        <div>Source exhaustion: {Math.round((harvester.sourceExhaustion ?? 0) * 100)}%</div>
+        <div>Recommendation: {harvester.recommendation ?? 'unknown'}</div>
+        <div>Approval: {harvester.approvalStatus ?? BACKEND_OWNER_AUTHORIZATION_LABEL}</div>
         <div>Checkpoint: {harvester.checkpoint ?? 'not exposed'}</div>
         <div>Warnings: {harvester.warningCount}</div>
       </div>
+      {safeArray(harvester.errors).length ? (
+        <p className="mt-3 text-[12px] leading-5 text-red-100/80">Recent error: {safeArray(harvester.errors)[0]}</p>
+      ) : null}
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/70">{harvester.logSummary}</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           disabled
-          title="Harvester execution requires a backend action endpoint with owner authorization."
+          title={authReason}
           className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
         >
           <PlayCircle className="h-3.5 w-3.5" /> Run now: {controlLabel(harvester.runNow)}
         </button>
         <button
           disabled
-          title="Pause and resume require backend owner authorization so the browser cannot alter production jobs directly."
+          title={authReason}
           className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
         >
           <PauseCircle className="h-3.5 w-3.5" /> Pause/resume: {controlLabel(harvester.pauseResume)}
         </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Change target: {controlLabel(harvester.changeTarget)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <RefreshCw className="h-3.5 w-3.5" /> Reassess: {controlLabel(harvester.reassess)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <Check className="h-3.5 w-3.5" /> Approve: {controlLabel(harvester.approveRecommendation)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <AlertTriangle className="h-3.5 w-3.5" /> Reject/retire: {controlLabel(harvester.rejectRecommendation)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DisplayPreferencesPanel({
+  preferences,
+  onChange,
+}: {
+  preferences: DisplayPreferences;
+  onChange: (preferences: DisplayPreferences) => void;
+}) {
+  const setPreference = <Key extends keyof DisplayPreferences>(key: Key, value: DisplayPreferences[Key]) => {
+    onChange({ ...preferences, [key]: value });
+  };
+
+  return (
+    <section className="rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4" aria-labelledby="mission-display-preferences">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">Display preferences</div>
+          <h2 id="mission-display-preferences" className="mt-1 text-lg text-[#faf7f2]">
+            Accessible reading controls
+          </h2>
+        </div>
+        <Eye className="h-5 w-5 text-[#d4b34a]" strokeWidth={1.5} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-[220px_1fr]">
+        <label className="text-sm text-[#f5f0e8]/84">
+          Text scale
+          <select
+            value={preferences.textScale}
+            onChange={(event) => setPreference('textScale', event.target.value as DisplayTextScale)}
+            className="mt-2 w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2 text-sm text-[#f5f0e8] outline-none focus:border-[#d4b34a]/70"
+          >
+            <option value="standard">Standard</option>
+            <option value="large">Large</option>
+            <option value="extra">Extra large</option>
+          </select>
+        </label>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {[
+            ['comfortableSpacing', 'Comfortable spacing'],
+            ['highContrast', 'Higher contrast'],
+            ['reduceMotion', 'Reduce motion'],
+            ['focusModeDefault', 'Prefer focus mode'],
+            ['hideHealthyDefault', 'Hide healthy in overview'],
+          ].map(([key, label]) => (
+            <label key={key} className="flex items-center gap-3 rounded-lg border border-white/[0.07] bg-black/18 px-3 py-2 text-sm text-[#f5f0e8]/84">
+              <input
+                type="checkbox"
+                checked={Boolean(preferences[key as keyof DisplayPreferences])}
+                onChange={(event) => setPreference(key as keyof DisplayPreferences, event.target.checked as never)}
+                className="h-4 w-4 accent-[#d4b34a]"
+              />
+              {label}
+            </label>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AttentionSummary({
+  items,
+  activeFilter,
+  onFilterChange,
+}: {
+  items: FocusItem[];
+  activeFilter: MissionFilter;
+  onFilterChange: (filter: MissionFilter) => void;
+}) {
+  const counts = {
+    urgent: items.filter((item) => item.priority === 'urgent').length,
+    attention: items.filter((item) => item.priority === 'attention').length,
+    owner: items.filter((item) => item.details.some((detail) => detail.toLowerCase().includes('owner') || detail.toLowerCase().includes('authorization'))).length,
+    recommendations: items.filter((item) => item.kind === 'recommendation' || item.priority === 'recommendation').length,
+  };
+
+  return (
+    <section className="rounded-lg border border-white/[0.08] bg-[#102116]/90 p-4" aria-labelledby="mission-attention-summary">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">Attention summary</div>
+          <h2 id="mission-attention-summary" className="mt-1 text-xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            Prioritized operations queue
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+          <div className="rounded-lg border border-red-200/25 bg-red-300/10 px-3 py-2"><div className="text-xl text-red-100">{counts.urgent}</div><div className="font-mono text-[8px] uppercase tracking-[0.14em] text-red-100/70">Urgent</div></div>
+          <div className="rounded-lg border border-amber-200/25 bg-amber-300/10 px-3 py-2"><div className="text-xl text-amber-100">{counts.attention}</div><div className="font-mono text-[8px] uppercase tracking-[0.14em] text-amber-100/70">Attention</div></div>
+          <div className="rounded-lg border border-sky-200/25 bg-sky-300/10 px-3 py-2"><div className="text-xl text-sky-100">{counts.owner}</div><div className="font-mono text-[8px] uppercase tracking-[0.14em] text-sky-100/70">Owner</div></div>
+          <div className="rounded-lg border border-[#d4b34a]/25 bg-[#d4b34a]/10 px-3 py-2"><div className="text-xl text-[#f1d878]">{counts.recommendations}</div><div className="font-mono text-[8px] uppercase tracking-[0.14em] text-[#f1d878]/70">Calyx</div></div>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Mission Control semantic filters">
+        {missionFilters.map((filter) => (
+          <button
+            key={filter.id}
+            onClick={() => onFilterChange(filter.id)}
+            className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] transition-colors ${
+              activeFilter === filter.id
+                ? 'border-[#d4b34a]/70 bg-[#d4b34a]/18 text-[#f1d878]'
+                : 'border-white/12 bg-black/18 text-[#f5f0e8]/75 hover:border-[#d4b34a]/45 hover:text-[#d4b34a]'
+            }`}
+          >
+            <Filter className="h-3.5 w-3.5" /> {filter.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FocusItemCard({ item, onOpen }: { item: FocusItem; onOpen: (item: FocusItem) => void }) {
+  const meta = priorityMeta(item.priority);
+  return (
+    <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">{item.kind} / {item.source}</div>
+          <h3 className="mt-1 text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            {item.title}
+          </h3>
+        </div>
+        <span className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${meta.className}`}>
+          {meta.label}
+        </span>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-[#f5f0e8]/84">{item.interpretation}</p>
+      <div className="mt-3 grid gap-2 text-[12px] text-[#cfc8b8]/78 sm:grid-cols-2">
+        <div>Status: {item.statusLabel}</div>
+        <div>Metric: {item.metric}</div>
+      </div>
+      <p className="mt-3 text-[12px] leading-5 text-emerald-100/82">Next: {item.nextAction}</p>
+      <details className="mt-3 rounded-lg border border-white/[0.07] bg-black/20 p-3">
+        <summary className="cursor-pointer font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">Calyx explanation</summary>
+        <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/78">
+          {item.calyx.map((line) => <li key={line}>{line}</li>)}
+        </ul>
+      </details>
+      <button
+        onClick={() => onOpen(item)}
+        className="mt-4 inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/25 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/60 hover:bg-[#d4b34a]/10 focus:outline-none focus:ring-2 focus:ring-[#d4b34a]/70"
+      >
+        <Eye className="h-3.5 w-3.5" /> Open focus view
+      </button>
+    </article>
+  );
+}
+
+function FocusModeDialog({
+  items,
+  activeItem,
+  onClose,
+  onChange,
+}: {
+  items: FocusItem[];
+  activeItem: FocusItem | null;
+  onClose: () => void;
+  onChange: (item: FocusItem) => void;
+}) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!activeItem) return;
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    window.setTimeout(() => dialogRef.current?.focus(), 0);
+    return () => {
+      returnFocusRef.current?.focus();
+    };
+  }, [activeItem]);
+
+  useEffect(() => {
+    if (!activeItem) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      const index = items.findIndex((item) => item.id === activeItem.id);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+      }
+      if (event.key === 'ArrowRight' && items.length) {
+        event.preventDefault();
+        onChange(items[(index + 1 + items.length) % items.length]);
+      }
+      if (event.key === 'ArrowLeft' && items.length) {
+        event.preventDefault();
+        onChange(items[(index - 1 + items.length) % items.length]);
+      }
+      if (event.key === 'Tab' && dialogRef.current) {
+        const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>('button, a, input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')).filter(
+          (element) => !element.hasAttribute('disabled') && element.offsetParent !== null,
+        );
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [activeItem, items, onChange, onClose]);
+
+  if (!activeItem) return null;
+
+  const index = Math.max(0, items.findIndex((item) => item.id === activeItem.id));
+  const meta = priorityMeta(activeItem.priority);
+  const previousItem = items[(index - 1 + items.length) % items.length];
+  const nextItem = items[(index + 1) % items.length];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm" role="presentation">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mission-focus-title"
+        tabIndex={-1}
+        className="max-h-[92vh] w-full max-w-4xl overflow-auto rounded-lg border border-[#d4b34a]/30 bg-[#07140d] p-5 text-[#f5f0e8] shadow-2xl outline-none focus:ring-2 focus:ring-[#d4b34a]/70"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">
+              Focus mode {index + 1} of {items.length}
+            </div>
+            <h2 id="mission-focus-title" className="mt-2 text-3xl leading-tight text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+              {activeItem.title}
+            </h2>
+          </div>
+          <button
+            onClick={onClose}
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+          >
+            <EyeOff className="h-3.5 w-3.5" /> Close
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_280px]">
+          <div className="space-y-4">
+            <div className="rounded-lg border border-white/[0.08] bg-black/20 p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${meta.className}`}>{meta.label}</span>
+                <span className="rounded-full border border-white/12 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]">{activeItem.kind}</span>
+                <span className="rounded-full border border-white/12 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]">{activeItem.source}</span>
+              </div>
+              <p className="mt-4 text-base leading-7 text-[#f5f0e8]/88">{activeItem.interpretation}</p>
+              <p className="mt-4 text-sm leading-6 text-emerald-100/84">Next: {activeItem.nextAction}</p>
+            </div>
+
+            <div className="rounded-lg border border-white/[0.08] bg-black/20 p-4">
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#c9a24a]">Operational details</div>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div><dt className="text-[11px] uppercase text-[#cfc8b8]/60">Status</dt><dd className="mt-1 text-sm text-[#f5f0e8]">{activeItem.statusLabel}</dd></div>
+                <div><dt className="text-[11px] uppercase text-[#cfc8b8]/60">Metric</dt><dd className="mt-1 text-sm text-[#f5f0e8]">{activeItem.metric}</dd></div>
+              </dl>
+              <ul className="mt-4 space-y-2 text-sm leading-6 text-[#cfc8b8]/82">
+                {activeItem.details.map((detail) => <li key={detail}>{detail}</li>)}
+              </ul>
+            </div>
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/10 p-4">
+              <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.2em] text-[#f1d878]">
+                <Info className="h-3.5 w-3.5" /> Calyx context
+              </div>
+              <ul className="mt-3 space-y-2 text-sm leading-6 text-[#f5f0e8]/82">
+                {activeItem.calyx.map((line) => <li key={line}>{line}</li>)}
+              </ul>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => onChange(previousItem)}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+              >
+                <ChevronLeft className="h-3.5 w-3.5" /> Previous
+              </button>
+              <button
+                onClick={() => onChange(nextItem)}
+                className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+              >
+                Next <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          </aside>
+        </div>
       </div>
     </div>
   );
@@ -884,6 +1436,9 @@ const MissionControlContent: React.FC = () => {
   const [intelligenceStore, setIntelligenceStore] = useState<IntelligenceStore>(() => loadIntelligenceStore());
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [displayPreferences, setDisplayPreferences] = useState<DisplayPreferences>(() => loadDisplayPreferences());
+  const [activeFilter, setActiveFilter] = useState<MissionFilter>('overview');
+  const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
 
   const load = async () => {
     setState('loading');
@@ -905,6 +1460,10 @@ const MissionControlContent: React.FC = () => {
     }
   }, [isUnlocked]);
 
+  useEffect(() => {
+    saveDisplayPreferences(displayPreferences);
+  }, [displayPreferences]);
+
   const unlock = () => {
     if (accessCode.trim() === OWNER_ACCESS_CODE) {
       safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
@@ -925,6 +1484,9 @@ const MissionControlContent: React.FC = () => {
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
+    setDisplayPreferences(DEFAULT_DISPLAY_PREFERENCES);
+    setFocusedItem(null);
+    setActiveFilter('overview');
     setIntelligenceStore(loadIntelligenceStore());
     setState('idle');
   };
@@ -951,6 +1513,16 @@ const MissionControlContent: React.FC = () => {
       blocked: health.filter((item) => item.status === 'error' || item.status === 'stub').length,
     };
   }, [dashboard]);
+
+  const focusItems = useMemo(() => (dashboard ? buildFocusItems(dashboard) : []), [dashboard]);
+  const filteredFocusItems = useMemo(
+    () => focusItems.filter((item) => itemMatchesFilter(item, activeFilter, displayPreferences.hideHealthyDefault)),
+    [activeFilter, displayPreferences.hideHealthyDefault, focusItems],
+  );
+  const rootTextClass = displayPreferences.textScale === 'extra' ? 'text-[18px]' : displayPreferences.textScale === 'large' ? 'text-[16px]' : '';
+  const contentDensityClass = displayPreferences.comfortableSpacing ? 'space-y-7' : 'space-y-5';
+  const contrastClass = displayPreferences.highContrast ? 'brightness-110 contrast-125' : '';
+  const motionClass = displayPreferences.reduceMotion ? '[&_*]:!transition-none [&_*]:!animate-none' : '';
 
   const globalHealth = safeArray(dashboard?.globalHealth);
   const completenessMatrix = safeArray(dashboard?.completenessMatrix);
@@ -1026,7 +1598,7 @@ const MissionControlContent: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#06110b] text-[#f5f0e8]">
+    <div className={`min-h-screen bg-[#06110b] text-[#f5f0e8] ${rootTextClass} ${contrastClass} ${motionClass}`}>
       <Navbar />
       <main className="pt-20">
         <section className="border-b border-white/[0.08] bg-[#0a170f]">
@@ -1098,7 +1670,29 @@ const MissionControlContent: React.FC = () => {
                 </div>
               </aside>
 
-              <div className="space-y-5">
+              <div className={contentDensityClass}>
+                <DisplayPreferencesPanel preferences={displayPreferences} onChange={setDisplayPreferences} />
+
+                <AttentionSummary items={focusItems} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+
+                <SafePanel title="Accessible Operations Queue">
+                <Panel eyebrow="Focus" title="Accessible Operations Queue" icon={Eye}>
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <p className="max-w-3xl text-sm leading-6 text-[#cfc8b8]/80">
+                      Select any operational item for a single-item focus view with priority, interpretation, next action, and Calyx context.
+                    </p>
+                    <span className="rounded-full border border-white/12 bg-black/20 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]">
+                      {filteredFocusItems.length} visible / {focusItems.length} total
+                    </span>
+                  </div>
+                  <div className="grid gap-4 lg:grid-cols-2">
+                    {filteredFocusItems.slice(0, activeFilter === 'all' ? focusItems.length : 12).map((item) => (
+                      <FocusItemCard key={item.id} item={item} onOpen={setFocusedItem} />
+                    ))}
+                  </div>
+                </Panel>
+                </SafePanel>
+
                 <SafePanel title="Operations Metrics">
                 <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                   <MetricCard label="Overall health" value={`${stats.average}%`} detail="Average completeness across registered global systems." />
@@ -1298,6 +1892,7 @@ const MissionControlContent: React.FC = () => {
           )}
         </section>
       </main>
+      <FocusModeDialog items={filteredFocusItems.length ? filteredFocusItems : focusItems} activeItem={focusedItem} onClose={() => setFocusedItem(null)} onChange={setFocusedItem} />
       <Footer />
     </div>
   );
