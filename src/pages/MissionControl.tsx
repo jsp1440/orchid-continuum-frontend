@@ -92,6 +92,7 @@ import {
   submitOwnerCommand,
   transitionOwnerQueueItem,
   updateBackendIntelligenceItem,
+  validateOwnerSession,
   type BackendOperationsQueueItem,
   type ExecutiveAuditTemplate,
   type OwnerAllowedActions,
@@ -665,6 +666,7 @@ function HarvesterRow({
       ? 'inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-wait disabled:opacity-60'
       : 'inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55';
   const isPending = (action: string) => pendingAction === `${harvester.id}:${action}`;
+  const actionLabel = (state: ControlState) => (ownerAuthorized ? 'owner authorized' : controlLabel(state));
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -707,7 +709,7 @@ function HarvesterRow({
           onClick={() => onAction(harvester, 'run-once')}
           className={buttonClass(ownerAuthorized)}
         >
-          <PlayCircle className="h-3.5 w-3.5" /> {isPending('run-once') ? 'Running...' : `Run now: ${controlLabel(harvester.runNow)}`}
+          <PlayCircle className="h-3.5 w-3.5" /> {isPending('run-once') ? 'Running...' : `Run now: ${actionLabel(harvester.runNow)}`}
         </button>
         <button
           disabled={!ownerAuthorized || isPending(pauseResumeAction)}
@@ -715,7 +717,7 @@ function HarvesterRow({
           onClick={() => onAction(harvester, pauseResumeAction)}
           className={buttonClass(ownerAuthorized)}
         >
-          <PauseCircle className="h-3.5 w-3.5" /> {isPending(pauseResumeAction) ? 'Updating...' : `${pauseResumeAction}: ${controlLabel(harvester.pauseResume)}`}
+          <PauseCircle className="h-3.5 w-3.5" /> {isPending(pauseResumeAction) ? 'Updating...' : `${pauseResumeAction}: ${actionLabel(harvester.pauseResume)}`}
         </button>
         <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
           <SlidersHorizontal className="h-3.5 w-3.5" /> Change target: backend form pending
@@ -729,7 +731,7 @@ function HarvesterRow({
           onClick={() => onAction(harvester, 'reassess')}
           className={buttonClass(ownerAuthorized)}
         >
-          <RefreshCw className="h-3.5 w-3.5" /> {isPending('reassess') ? 'Reassessing...' : `Reassess: ${controlLabel(harvester.reassess)}`}
+          <RefreshCw className="h-3.5 w-3.5" /> {isPending('reassess') ? 'Reassessing...' : `Reassess: ${actionLabel(harvester.reassess)}`}
         </button>
         <button disabled title="Recommendation approval requires a selected backend proposal ID." className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
           <Check className="h-3.5 w-3.5" /> Approve recommendation: needs proposal
@@ -1946,8 +1948,20 @@ const MissionControlContent: React.FC = () => {
 
   const loadOwnerOperations = useCallback(async (token = ownerSession?.token) => {
     if (!token) return;
-    const next = await fetchOwnerOperationsState(token);
-    setOwnerOperations(next);
+    try {
+      const validatedSession = await validateOwnerSession(token);
+      safeSetSessionStorage(OWNER_SESSION_STORAGE_KEY, JSON.stringify(validatedSession));
+      setOwnerSession(validatedSession);
+      setOwnerSessionStatus('authenticated');
+      const next = await fetchOwnerOperationsState(token);
+      setOwnerOperations(next);
+    } catch (err) {
+      safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
+      setOwnerSession(null);
+      setOwnerOperations(null);
+      setOwnerSessionStatus('error');
+      setOwnerActionMessage(err instanceof Error ? `Stored backend owner session rejected: ${err.message}` : 'Stored backend owner session rejected.');
+    }
   }, [ownerSession?.token]);
 
   useEffect(() => {

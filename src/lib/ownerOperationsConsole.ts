@@ -140,6 +140,13 @@ export async function createOwnerSession(accessCode: string, owner = 'owner'): P
   });
 }
 
+export async function validateOwnerSession(token: string): Promise<OwnerSession> {
+  const session = await requestJson<Omit<OwnerSession, 'token'> & { token?: string }>('/api/mission-control/owner/session', {
+    headers: ownerHeaders(token),
+  });
+  return { ...session, token };
+}
+
 export async function fetchOwnerOperationsState(token: string): Promise<OwnerOperationsState> {
   const [permissions, intelligence, briefings, queue, commands] = await Promise.all([
     requestJson<{ allowedActions: OwnerAllowedActions }>('/api/mission-control/owner/permissions', { headers: ownerHeaders(token) }),
