@@ -24,6 +24,15 @@ export type ContinuumSubsystem = {
   route?: string;
   dataSource?: string;
   maturity?: string;
+  dataCoverage?: number;
+  evidenceQuality?: number;
+  automationReadiness?: number;
+  integrationReadiness?: number;
+  operationalReliability?: number;
+  activeJobs?: number;
+  failures?: string[];
+  sourceRecordCounts?: Record<string, number>;
+  telemetryFreshness?: string;
 };
 
 export type HarvesterStatus = {
@@ -516,6 +525,7 @@ function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsy
   const category = pickString(record, ['category', 'group', 'domain', 'type'], 'Live Telemetry');
   const status = normalizeStatus(record.status ?? record.health ?? record.state ?? record.mode);
   const completeness = Math.max(0, Math.min(100, pickNumber(record, ['completeness', 'percentComplete', 'percentage', 'score'], status === 'healthy' ? 75 : 50)));
+  const sourceCounts = asRecord(record.source_record_counts ?? record.sourceRecordCounts) ?? {};
 
   return {
     id,
@@ -530,6 +540,15 @@ function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsy
     route: typeof record.route === 'string' ? record.route : undefined,
     dataSource: pickString(record, ['dataSource', 'data_source', 'source'], 'Mission Control backend'),
     maturity: typeof record.maturity === 'string' ? record.maturity : undefined,
+    dataCoverage: pickNumber(record, ['data_coverage', 'dataCoverage'], 0),
+    evidenceQuality: pickNumber(record, ['evidence_quality', 'evidenceQuality'], 0),
+    automationReadiness: pickNumber(record, ['automation_readiness', 'automationReadiness'], 0),
+    integrationReadiness: pickNumber(record, ['integration_readiness', 'integrationReadiness'], 0),
+    operationalReliability: pickNumber(record, ['operational_reliability', 'operationalReliability'], 0),
+    activeJobs: pickNumber(record, ['active_jobs', 'activeJobs'], 0),
+    failures: pickStringArray(record, ['failures']),
+    sourceRecordCounts: Object.fromEntries(Object.entries(sourceCounts).map(([key, count]) => [key, Number(count) || 0])),
+    telemetryFreshness: pickString(record, ['telemetry_freshness', 'telemetryFreshness'], ''),
   };
 }
 
