@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   Activity,
   AlertTriangle,
+  BookOpen,
   Bot,
   Check,
   ChevronLeft,
@@ -10,11 +11,13 @@ import {
   ClipboardList,
   Copy,
   Database,
+  Download,
   DollarSign,
   Eye,
   EyeOff,
   ExternalLink,
   FileText,
+  FileDown,
   Filter,
   GitBranch,
   Handshake,
@@ -22,11 +25,14 @@ import {
   Inbox,
   KeyRound,
   LockKeyhole,
+  Layers,
   PauseCircle,
   PlayCircle,
   Radar,
   RefreshCw,
   Rocket,
+  Search,
+  Send,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -65,6 +71,21 @@ import {
   type IntelligenceStatus,
   type IntelligenceStore,
 } from '@/lib/missionControlIntelligence';
+import {
+  buildAuditMarkdown,
+  executiveAuditTemplates,
+  lifecycleProjects,
+  operationsQueue,
+  ownerGuides,
+  ownerManualTopics,
+  partnershipTemplates,
+  researchCommands,
+  researchInbox,
+  type ExecutiveAuditTemplate,
+  type OwnerSubsystemGuide,
+  type PartnershipTemplate,
+  type ResearchCommandTemplate,
+} from '@/lib/ownerOperationsConsole';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 type MissionControlErrorBoundaryState = { error: Error | null };
@@ -117,6 +138,11 @@ const OWNER_ACCESS_CODE =
 const INTELLIGENCE_STORAGE_KEY = 'oc_mission_control_intelligence_v1';
 
 const navigationItems = [
+  { label: 'Owner Guide', targetId: 'mission-control-owner-guide', icon: BookOpen },
+  { label: 'Command', targetId: 'mission-control-command', icon: Send },
+  { label: 'Calyx Queue', targetId: 'mission-control-calyx-queue', icon: ClipboardList },
+  { label: 'Audits', targetId: 'mission-control-executive-audits', icon: FileDown },
+  { label: 'Research', targetId: 'mission-control-research-command', icon: Search },
   { label: 'Health', targetId: 'mission-control-health', icon: Activity },
   { label: 'Completeness', targetId: 'mission-control-completeness', icon: SlidersHorizontal },
   { label: 'Harvesters', targetId: 'mission-control-harvesters', icon: Radar },
@@ -127,6 +153,8 @@ const navigationItems = [
   { label: 'Intelligence', targetId: 'mission-control-intelligence', icon: Inbox },
   { label: 'Grant Office', targetId: 'mission-control-grants', icon: DollarSign },
   { label: 'Partnerships', targetId: 'mission-control-partnerships', icon: Handshake },
+  { label: 'Manual', targetId: 'mission-control-owner-manual', icon: BookOpen },
+  { label: 'Lifecycle', targetId: 'mission-control-lifecycle', icon: Layers },
   { label: 'Safety', targetId: 'mission-control-safety', icon: LockKeyhole },
 ];
 
@@ -786,6 +814,287 @@ function FocusItemCard({ item, onOpen }: { item: FocusItem; onOpen: (item: Focus
   );
 }
 
+function downloadTextFile(filename: string, content: string, mime = 'text/markdown'): void {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function OwnerGuideCard({ guide }: { guide: OwnerSubsystemGuide }) {
+  return (
+    <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">{guide.category}</div>
+          <h3 className="mt-1 text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            {guide.name}
+          </h3>
+        </div>
+        <span className="rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f1d878]">
+          {guide.readiness}% ready
+        </span>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-2">
+        <div className="rounded-lg border border-white/[0.07] bg-black/16 p-3">
+          <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#d4b34a]">What is this?</div>
+          <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/82">{guide.purpose}</p>
+        </div>
+        <div className="rounded-lg border border-white/[0.07] bg-black/16 p-3">
+          <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-[#d4b34a]">Why it matters</div>
+          <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/82">{guide.scientificImportance}</p>
+        </div>
+      </div>
+      <div className="mt-4 grid gap-3 text-[12px] leading-5 text-[#cfc8b8]/78 sm:grid-cols-2">
+        <div>Completion: {guide.completion}%</div>
+        <div>Exports: {guide.exportOptions.join(', ')}</div>
+        <div>Sources: {guide.dataSources.join(', ')}</div>
+        <div>Dependencies: {guide.dependencies.join(', ')}</div>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3">
+          <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-emerald-100">What can I do?</div>
+          <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/82">
+            {guide.ownerActions.map((action) => <li key={action}>{action}</li>)}
+          </ul>
+        </div>
+        <div className="rounded-lg border border-sky-300/20 bg-sky-300/10 p-3">
+          <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-sky-100">What is Calyx doing?</div>
+          <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/82">
+            {guide.automaticCalyxActions.map((action) => <li key={action}>{action}</li>)}
+          </ul>
+        </div>
+        <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-3">
+          <div className="font-mono text-[8px] uppercase tracking-[0.16em] text-amber-100">Decision needed</div>
+          <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/82">{guide.limitations[0] ?? 'Choose the next owner-approved capability.'}</p>
+          <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/70">Next: {guide.plannedCapability}</p>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function OwnerGuidePanel() {
+  return (
+    <Panel id="mission-control-owner-guide" eyebrow="Owner Guide" title="Subsystem Owner Guide" icon={BookOpen}>
+      <div className="mb-4 rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/10 p-4 text-sm leading-6 text-[#f5f0e8]/84">
+        Every subsystem answers: what is this, what can I do, what is Calyx doing, and what decision does Calyx need from me.
+      </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        {ownerGuides.map((guide) => <OwnerGuideCard key={guide.id} guide={guide} />)}
+      </div>
+    </Panel>
+  );
+}
+
+function CalyxOperationsQueuePanel() {
+  const lanes = ['Now working', 'Queued', 'Waiting for owner', 'Waiting for external partner', 'Completed today'] as const;
+  return (
+    <Panel id="mission-control-calyx-queue" eyebrow="Calyx Operations" title="Now Working and Decision Queue" icon={ClipboardList}>
+      <div className="grid gap-4 xl:grid-cols-5">
+        {lanes.map((lane) => (
+          <div key={lane} className="rounded-lg border border-white/[0.08] bg-black/18 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">{lane}</div>
+            <div className="mt-3 space-y-3">
+              {operationsQueue.filter((item) => item.lane === lane).map((item) => (
+                <article key={item.id} className="rounded-lg border border-white/[0.07] bg-[#0d1d13]/80 p-3">
+                  <div className="text-sm text-[#faf7f2]">{item.title}</div>
+                  <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/58">{item.subsystem}</div>
+                  <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/78">{item.detail}</p>
+                  {item.ownerDecision ? <p className="mt-2 text-[12px] leading-5 text-amber-100/82">Decision: {item.ownerDecision}</p> : null}
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ExecutiveAuditPanel({ onDownload }: { onDownload: (template: ExecutiveAuditTemplate) => void }) {
+  return (
+    <Panel id="mission-control-executive-audits" eyebrow="Executive Audit Engine" title="Downloadable Audit Packages" icon={FileDown}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {executiveAuditTemplates.map((template) => (
+          <article key={template.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.title}</h3>
+                <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.scope}</p>
+              </div>
+              <button onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10">
+                <Download className="h-3.5 w-3.5" /> Markdown
+              </button>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {template.formats.map((format) => <span key={format} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/75">{format}</span>)}
+            </div>
+            <p className="mt-3 text-[12px] leading-5 text-emerald-100/75">Includes: {template.includes.join(', ')}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function PartnershipGeneratorPanel({ onDownload }: { onDownload: (template: PartnershipTemplate) => void }) {
+  return (
+    <Panel id="mission-control-partnerships" eyebrow="Partnership Generator" title="Partner-Specific Reports" icon={Handshake}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {partnershipTemplates.map((template) => (
+          <article key={template.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.partner}</h3>
+                <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.mission}</p>
+              </div>
+              <button onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10">
+                <Download className="h-3.5 w-3.5" /> Packet
+              </button>
+            </div>
+            <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/82">Federation: {template.federationOpportunity}</p>
+            <p className="mt-3 text-[12px] leading-5 text-sky-100/80">Integrations: {template.desiredIntegrations.join(', ')}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ResearchCommandPanel({ onPrepare }: { onPrepare: (template: ResearchCommandTemplate) => void }) {
+  return (
+    <Panel id="mission-control-research-command" eyebrow="Research Command Center" title="Owner-Launched Research" icon={Search}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {researchCommands.map((template) => (
+          <article key={template.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.label}</h3>
+                <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.prompt}</p>
+              </div>
+              <button onClick={() => onPrepare(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10">
+                <Send className="h-3.5 w-3.5" /> Prepare
+              </button>
+            </div>
+            <div className="mt-3 grid gap-2 text-[12px] text-[#cfc8b8]/78 sm:grid-cols-2">
+              <div>Output: {template.output}</div>
+              <div>Review: {template.ownerReview}</div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function ResearchInboxPanel() {
+  return (
+    <Panel eyebrow="Research Inbox" title="Daily Owner Workflow" icon={Inbox}>
+      <div className="grid gap-3 md:grid-cols-2">
+        {researchInbox.map((item) => (
+          <article key={item.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm text-[#faf7f2]">{item.title}</h3>
+                <p className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#c9a24a]">{item.source}</p>
+              </div>
+              <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/75">{item.status}</span>
+            </div>
+            <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/78">{item.detail}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function OwnerManualPanel() {
+  return (
+    <Panel id="mission-control-owner-manual" eyebrow="Owner Manual" title="Operating Manual" icon={BookOpen}>
+      <div className="grid gap-4 lg:grid-cols-2">
+        {ownerManualTopics.map((topic) => (
+          <article key={topic.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{topic.title}</h3>
+            <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/80">{topic.workflow}</p>
+            <ol className="mt-3 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/72">
+              {topic.steps.map((step, index) => <li key={step}>{index + 1}. {step}</li>)}
+            </ol>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function LifecyclePanel() {
+  const stages = ['Dream', 'Specification', 'Building', 'Validation', 'Production', 'Maintenance'] as const;
+  return (
+    <Panel id="mission-control-lifecycle" eyebrow="Development Lifecycle" title="Official Continuum Roadmap" icon={Layers}>
+      <div className="grid gap-3 xl:grid-cols-6">
+        {stages.map((stage) => (
+          <div key={stage} className="rounded-lg border border-white/[0.08] bg-black/18 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">{stage}</div>
+            <div className="mt-3 space-y-3">
+              {lifecycleProjects.filter((project) => project.stage === stage).map((project) => (
+                <article key={project.id} className="rounded-lg border border-white/[0.07] bg-[#0d1d13]/80 p-3">
+                  <div className="text-sm text-[#faf7f2]">{project.name}</div>
+                  <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/72">{project.nextCheckpoint}</p>
+                </article>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+function CommandBarPanel({
+  value,
+  onChange,
+  onSubmit,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  return (
+    <Panel id="mission-control-command" eyebrow="Calyx Command Bar" title="Ask Calyx What To Do Next" icon={Send}>
+      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
+        <label className="block">
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">Natural language command</span>
+          <input
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') onSubmit();
+            }}
+            placeholder="Audit Orchid Continuum, compare Lycaste, generate grant report..."
+            className="mt-2 w-full rounded-lg border border-white/12 bg-black/25 px-4 py-3 text-sm text-[#f5f0e8] outline-none focus:border-[#d4b34a]/70"
+          />
+        </label>
+        <button onClick={onSubmit} className="inline-flex h-fit items-center justify-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] hover:bg-[#e5c85c] lg:self-end">
+          <Send className="h-3.5 w-3.5" /> Prepare Command
+        </button>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {['Audit Orchid Continuum', 'Compare Lycaste', 'Build Habitat Cards', 'Generate Grant Report'].map((sample) => (
+          <button key={sample} onClick={() => onChange(sample)} className="rounded-lg border border-white/[0.08] bg-black/18 px-3 py-2 text-left text-[12px] text-[#cfc8b8]/82 hover:border-[#d4b34a]/45 hover:text-[#d4b34a]">
+            {sample}
+          </button>
+        ))}
+      </div>
+      <p className="mt-4 text-[12px] leading-5 text-[#cfc8b8]/70">
+        Commands are prepared for owner review. Production writes still require backend authorization and decision-ledger support.
+      </p>
+    </Panel>
+  );
+}
+
 function FocusModeDialog({
   items,
   activeItem,
@@ -1404,7 +1713,7 @@ function IntelligenceWorkspace({
       </SafePanel>
 
       <SafePanel title="Partnership / Research Queue">
-      <Panel id="mission-control-partnerships" eyebrow="Partnership / Research Queue" title="Opportunities Needing Follow-up" icon={Handshake}>
+      <Panel id="mission-control-opportunities" eyebrow="Partnership / Research Queue" title="Opportunities Needing Follow-up" icon={Handshake}>
         <div className="grid gap-4 lg:grid-cols-2">
           {opportunities.length ? opportunities.map((item) => <OpportunityRow key={item.id} item={item} />) : (
             <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-sm text-[#cfc8b8]/75">No partnership, research, dataset, API, or technology leads saved yet.</div>
@@ -1439,6 +1748,7 @@ const MissionControlContent: React.FC = () => {
   const [displayPreferences, setDisplayPreferences] = useState<DisplayPreferences>(() => loadDisplayPreferences());
   const [activeFilter, setActiveFilter] = useState<MissionFilter>('overview');
   const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
+  const [commandText, setCommandText] = useState('Audit Orchid Continuum');
 
   const load = async () => {
     setState('loading');
@@ -1487,6 +1797,7 @@ const MissionControlContent: React.FC = () => {
     setDisplayPreferences(DEFAULT_DISPLAY_PREFERENCES);
     setFocusedItem(null);
     setActiveFilter('overview');
+    setCommandText('Audit Orchid Continuum');
     setIntelligenceStore(loadIntelligenceStore());
     setState('idle');
   };
@@ -1499,6 +1810,61 @@ const MissionControlContent: React.FC = () => {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Clipboard copy failed');
     }
+  };
+
+  const prepareCommand = () => {
+    const command = commandText.trim() || 'Audit Orchid Continuum';
+    const content = [
+      `# Calyx Owner Command`,
+      '',
+      `Command: ${command}`,
+      '',
+      '## Safety',
+      'This command was prepared in Mission Control for owner review. Production writes require backend authorization and a decision-ledger record.',
+      '',
+      '## Required Calyx Response',
+      '- Explain what subsystem this touches.',
+      '- Explain what the owner can do.',
+      '- Explain what Calyx is doing.',
+      '- List the decision Calyx needs from the owner.',
+      '- Preserve provenance and separate evidence from inference.',
+    ].join('\n');
+    downloadTextFile(`calyx-owner-command-${Date.now()}.md`, content);
+  };
+
+  const downloadAudit = (template: ExecutiveAuditTemplate) => {
+    downloadTextFile(`${template.id}-executive-audit.md`, buildAuditMarkdown(template));
+  };
+
+  const downloadPartnershipPacket = (template: PartnershipTemplate) => {
+    downloadTextFile(`${template.id}-partnership-packet.md`, [
+      `# ${template.partner} Partnership Packet`,
+      '',
+      `Mission: ${template.mission}`,
+      '',
+      `Federation opportunity: ${template.federationOpportunity}`,
+      '',
+      '## Desired Integrations',
+      ...template.desiredIntegrations.map((item) => `- ${item}`),
+      '',
+      '## Research Opportunities',
+      ...template.researchOpportunities.map((item) => `- ${item}`),
+      '',
+      'Owner review is required before external sharing.',
+    ].join('\n'));
+  };
+
+  const prepareResearchCommand = (template: ResearchCommandTemplate) => {
+    setCommandText(template.prompt);
+    downloadTextFile(`${template.id}-research-command.md`, [
+      `# ${template.label}`,
+      '',
+      template.prompt,
+      '',
+      `Output: ${template.output}`,
+      '',
+      `Owner review: ${template.ownerReview}`,
+    ].join('\n'));
   };
 
   const stats = useMemo(() => {
@@ -1674,6 +2040,42 @@ const MissionControlContent: React.FC = () => {
                 <DisplayPreferencesPanel preferences={displayPreferences} onChange={setDisplayPreferences} />
 
                 <AttentionSummary items={focusItems} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
+
+                <SafePanel title="Calyx Command Bar">
+                <CommandBarPanel value={commandText} onChange={setCommandText} onSubmit={prepareCommand} />
+                </SafePanel>
+
+                <SafePanel title="Subsystem Owner Guide">
+                <OwnerGuidePanel />
+                </SafePanel>
+
+                <SafePanel title="Calyx Operations Queue">
+                <CalyxOperationsQueuePanel />
+                </SafePanel>
+
+                <SafePanel title="Executive Audit Engine">
+                <ExecutiveAuditPanel onDownload={downloadAudit} />
+                </SafePanel>
+
+                <SafePanel title="Research Command Center">
+                <ResearchCommandPanel onPrepare={prepareResearchCommand} />
+                </SafePanel>
+
+                <SafePanel title="Partnership Generator">
+                <PartnershipGeneratorPanel onDownload={downloadPartnershipPacket} />
+                </SafePanel>
+
+                <SafePanel title="Research Inbox">
+                <ResearchInboxPanel />
+                </SafePanel>
+
+                <SafePanel title="Owner Manual">
+                <OwnerManualPanel />
+                </SafePanel>
+
+                <SafePanel title="Development Lifecycle">
+                <LifecyclePanel />
+                </SafePanel>
 
                 <SafePanel title="Accessible Operations Queue">
                 <Panel eyebrow="Focus" title="Accessible Operations Queue" icon={Eye}>
