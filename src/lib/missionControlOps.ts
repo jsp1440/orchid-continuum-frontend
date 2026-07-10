@@ -31,17 +31,35 @@ export type HarvesterStatus = {
   name: string;
   source: string;
   enabled: boolean;
-  state: 'running' | 'idle' | 'error' | 'unknown' | 'planned';
+  state: 'running' | 'idle' | 'error' | 'unknown' | 'planned' | 'active' | 'paused' | 'run_once' | 'draining' | 'exhausted' | 'needs_review' | 'redirect_pending' | 'failed' | 'retired';
+  target?: string;
+  schedule?: string;
   lastRun: string;
   nextRun?: string;
   duration?: string;
   rowsProcessed?: number;
   rowsInserted?: number;
+  rowsUpdated?: number;
+  duplicatesDetected?: number;
+  rowsRejected?: number;
+  noveltyRate?: number;
+  duplicateRate?: number;
+  freshness?: string;
+  sourceExhaustion?: number;
+  recommendation?: string;
+  approvalStatus?: string;
+  runHistoryEndpoint?: string;
   errors: string[];
   warningCount: number;
   checkpoint?: string;
   runNow: ControlState;
   pauseResume: ControlState;
+  changeTarget: ControlState;
+  changeSchedule: ControlState;
+  retire: ControlState;
+  approveRecommendation: ControlState;
+  rejectRecommendation: ControlState;
+  reassess: ControlState;
   logSummary: string;
 };
 
@@ -251,8 +269,20 @@ const fallbackHarvesters: HarvesterStatus[] = [
   errors: [],
   warningCount: 1,
   checkpoint: 'not exposed',
+  target: 'unknown',
+  schedule: 'unknown',
+  freshness: 'unknown',
+  recommendation: 'backend authorization unavailable',
+  approvalStatus: 'requires backend owner authorization',
+  runHistoryEndpoint: `/api/harvesters/${id}/runs`,
   runNow: 'requires_owner_authorization',
   pauseResume: 'requires_owner_authorization',
+  changeTarget: 'requires_owner_authorization',
+  changeSchedule: 'requires_owner_authorization',
+  retire: 'requires_owner_authorization',
+  approveRecommendation: 'requires_owner_authorization',
+  rejectRecommendation: 'requires_owner_authorization',
+  reassess: 'requires_owner_authorization',
   logSummary: 'Registered for BUILD-036 visibility; safe backend status endpoint still required.',
 }));
 
@@ -497,27 +527,51 @@ function normalizeHarvesterRecord(value: unknown, index: number): HarvesterStatu
   if (!record) return null;
   const id = pickString(record, ['id', 'key', 'slug', 'name'], `harvester-${index + 1}`);
   const state = pickString(record, ['state', 'status', 'mode'], 'unknown').toLowerCase();
+  const targetRecord = asRecord(record.target);
+  const target = targetRecord
+    ? `${pickString(targetRecord, ['target_type', 'targetType'], 'target')}: ${pickString(targetRecord, ['target_value', 'targetValue'], 'unknown')}`
+    : pickString(record, ['target', 'current_target', 'currentTarget'], 'unknown');
+  const rowsProcessed = pickNumber(record, ['rowsProcessed', 'rows_processed', 'rows_examined', 'processed'], 0);
+  const duplicatesDetected = pickNumber(record, ['duplicatesDetected', 'duplicates_detected', 'duplicated'], 0);
 
   return {
     id,
     name: pickString(record, ['name', 'title', 'label', 'id'], id),
     source: pickString(record, ['source', 'provider', 'data_source', 'dataSource'], 'Mission Control backend'),
     enabled: pickBoolean(record, ['enabled', 'active'], false),
-    state: ['running', 'idle', 'error', 'unknown', 'planned'].includes(state)
+    state: ['running', 'idle', 'error', 'unknown', 'planned', 'active', 'paused', 'run_once', 'draining', 'exhausted', 'needs_review', 'redirect_pending', 'failed', 'retired'].includes(state)
       ? (state as HarvesterStatus['state'])
       : normalizeStatus(state) === 'error'
         ? 'error'
         : 'unknown',
+    target,
+    schedule: pickString(record, ['schedule'], 'unknown'),
     lastRun: pickString(record, ['lastRun', 'last_run', 'heartbeat_at', 'updatedAt', 'updated_at'], 'not connected'),
     nextRun: pickString(record, ['nextRun', 'next_run'], 'unknown'),
     duration: pickString(record, ['duration', 'elapsed'], 'unknown'),
-    rowsProcessed: pickNumber(record, ['rowsProcessed', 'rows_processed', 'processed'], 0),
+    rowsProcessed,
     rowsInserted: pickNumber(record, ['rowsInserted', 'rows_inserted', 'inserted'], 0),
+    rowsUpdated: pickNumber(record, ['rowsUpdated', 'rows_updated', 'updated'], 0),
+    duplicatesDetected,
+    rowsRejected: pickNumber(record, ['rowsRejected', 'rows_rejected', 'rejected'], 0),
+    noveltyRate: pickNumber(record, ['noveltyRate', 'novelty_rate', 'novelty_yield_rate'], 0),
+    duplicateRate: rowsProcessed > 0 ? duplicatesDetected / rowsProcessed : pickNumber(record, ['duplicateRate', 'duplicate_rate'], 0),
+    freshness: pickString(record, ['freshness'], 'unknown'),
+    sourceExhaustion: pickNumber(record, ['sourceExhaustion', 'source_exhaustion', 'source_exhaustion_score'], 0),
+    recommendation: pickString(record, ['recommendation', 'current_recommendation'], 'unknown'),
+    approvalStatus: pickString(record, ['approvalStatus', 'approval_status', 'required_approval_level'], 'requires backend owner authorization'),
+    runHistoryEndpoint: `/api/harvesters/${id}/runs`,
     errors: pickStringArray(record, ['errors', 'failures']),
     warningCount: pickNumber(record, ['warningCount', 'warning_count', 'warnings'], 0),
     checkpoint: pickString(record, ['checkpoint', 'cursor'], 'not exposed'),
     runNow: normalizeControlState(record.runNow ?? record.run_now, 'requires_owner_authorization'),
     pauseResume: normalizeControlState(record.pauseResume ?? record.pause_resume, 'requires_owner_authorization'),
+    changeTarget: normalizeControlState(record.changeTarget ?? record.change_target, 'requires_owner_authorization'),
+    changeSchedule: normalizeControlState(record.changeSchedule ?? record.change_schedule, 'requires_owner_authorization'),
+    retire: normalizeControlState(record.retire, 'requires_owner_authorization'),
+    approveRecommendation: normalizeControlState(record.approveRecommendation ?? record.approve_recommendation, 'requires_owner_authorization'),
+    rejectRecommendation: normalizeControlState(record.rejectRecommendation ?? record.reject_recommendation, 'requires_owner_authorization'),
+    reassess: normalizeControlState(record.reassess, 'requires_owner_authorization'),
     logSummary: pickString(record, ['logSummary', 'log_summary', 'summary', 'detail'], 'Live harvester telemetry returned by the backend.'),
   };
 }

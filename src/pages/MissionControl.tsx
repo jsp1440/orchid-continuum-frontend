@@ -339,6 +339,7 @@ function CompletenessRow({ subsystem }: { subsystem: ContinuumSubsystem }) {
 }
 
 function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
+  const authReason = 'Disabled until the Calyx backend authorizes this exact harvester action for an authenticated owner.';
   return (
     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -353,28 +354,53 @@ function HarvesterRow({ harvester }: { harvester: HarvesterStatus }) {
         </span>
       </div>
       <div className="mt-4 grid gap-2 text-[12px] text-[#cfc8b8]/78 sm:grid-cols-2">
+        <div>Target: {harvester.target ?? 'unknown'}</div>
+        <div>Schedule: {harvester.schedule ?? 'unknown'}</div>
         <div>Last run: {displayTime(harvester.lastRun)}</div>
         <div>Next run: {harvester.nextRun ?? 'unknown'}</div>
         <div>Rows processed: {harvester.rowsProcessed ?? 0}</div>
         <div>Rows inserted: {harvester.rowsInserted ?? 0}</div>
+        <div>Rows updated: {harvester.rowsUpdated ?? 0}</div>
+        <div>Duplicates: {harvester.duplicatesDetected ?? 0}</div>
+        <div>Duplicate rate: {Math.round((harvester.duplicateRate ?? 0) * 100)}%</div>
+        <div>Novelty/yield: {Math.round((harvester.noveltyRate ?? 0) * 100)}%</div>
+        <div>Freshness: {harvester.freshness ?? 'unknown'}</div>
+        <div>Source exhaustion: {Math.round((harvester.sourceExhaustion ?? 0) * 100)}%</div>
+        <div>Recommendation: {harvester.recommendation ?? 'unknown'}</div>
+        <div>Approval: {harvester.approvalStatus ?? BACKEND_OWNER_AUTHORIZATION_LABEL}</div>
         <div>Checkpoint: {harvester.checkpoint ?? 'not exposed'}</div>
         <div>Warnings: {harvester.warningCount}</div>
       </div>
+      {safeArray(harvester.errors).length ? (
+        <p className="mt-3 text-[12px] leading-5 text-red-100/80">Recent error: {safeArray(harvester.errors)[0]}</p>
+      ) : null}
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/70">{harvester.logSummary}</p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           disabled
-          title="Harvester execution requires a backend action endpoint with owner authorization."
+          title={authReason}
           className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
         >
           <PlayCircle className="h-3.5 w-3.5" /> Run now: {controlLabel(harvester.runNow)}
         </button>
         <button
           disabled
-          title="Pause and resume require backend owner authorization so the browser cannot alter production jobs directly."
+          title={authReason}
           className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55"
         >
           <PauseCircle className="h-3.5 w-3.5" /> Pause/resume: {controlLabel(harvester.pauseResume)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <SlidersHorizontal className="h-3.5 w-3.5" /> Change target: {controlLabel(harvester.changeTarget)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <RefreshCw className="h-3.5 w-3.5" /> Reassess: {controlLabel(harvester.reassess)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <Check className="h-3.5 w-3.5" /> Approve: {controlLabel(harvester.approveRecommendation)}
+        </button>
+        <button disabled title={authReason} className="inline-flex cursor-not-allowed items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/55">
+          <AlertTriangle className="h-3.5 w-3.5" /> Reject/retire: {controlLabel(harvester.rejectRecommendation)}
         </button>
       </div>
     </div>
