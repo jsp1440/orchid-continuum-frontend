@@ -173,6 +173,17 @@ export type MissionControlOperations = {
   governance: GovernanceSummary;
 };
 
+type ExecutiveStatePayload = {
+  build?: string;
+  generated_at?: string;
+  subsystems?: unknown[];
+  priorities?: unknown[];
+  recommendations?: unknown[];
+  changes?: unknown[];
+  summary?: Record<string, unknown>;
+  briefing?: Record<string, unknown>;
+};
+
 const nowIso = () => new Date().toISOString();
 
 function diagnostic(label: string, endpoint: string, status: MissionControlStatus, detail: string): EndpointDiagnostic {
@@ -604,9 +615,9 @@ function normalizeRecommendationRecord(value: unknown, index: number): Recommend
     id: pickString(record, ['id', 'key', 'recommendation_id', 'title'], `recommendation-${index + 1}`),
     title: pickString(record, ['title', 'label'], 'Mission Control recommendation'),
     priority: ['critical', 'high', 'medium', 'low'].includes(priority) ? (priority as Recommendation['priority']) : 'medium',
-    rationale: pickString(record, ['rationale', 'summary', 'detail'], 'Review Mission Control telemetry.'),
-    ownerDecisionNeeded: pickString(record, ['ownerDecisionNeeded', 'owner_decision_needed', 'decision'], 'Review and decide next action.'),
-    nextBuild: pickString(record, ['nextBuild', 'next_build', 'build'], 'TBD'),
+    rationale: pickString(record, ['rationale', 'reason', 'summary', 'detail', 'expected_benefit'], 'Review Mission Control telemetry.'),
+    ownerDecisionNeeded: pickString(record, ['ownerDecisionNeeded', 'owner_decision_needed', 'owner_action', 'decision'], 'Review and decide next action.'),
+    nextBuild: pickString(record, ['nextBuild', 'next_build', 'build', 'subsystem_id'], 'TBD'),
   };
 }
 
@@ -645,6 +656,48 @@ function readLiveSubsystems(payload: unknown): ContinuumSubsystem[] {
     .filter((item): item is ContinuumSubsystem => Boolean(item));
 }
 
+function readExecutivePayload(payload: unknown) {
+  const record = asRecord(payload) as ExecutiveStatePayload | undefined;
+  if (!record) {
+    return {
+      subsystems: [] as ContinuumSubsystem[],
+      recommendations: [] as Recommendation[],
+      recentActivity: [] as RecentActivity[],
+      summary: null as Record<string, unknown> | null,
+      briefing: null as Record<string, unknown> | null,
+      generatedAt: nowIso(),
+    };
+  }
+  const subsystems = asArray<unknown>(record.subsystems)
+    .map((item, index) => normalizeSubsystemRecord(item, index))
+    .filter((item): item is ContinuumSubsystem => Boolean(item));
+  const recommendations = asArray<unknown>(record.recommendations)
+    .map((item, index) => normalizeRecommendationRecord(item, index))
+    .filter((item): item is Recommendation => Boolean(item));
+  const priorities = asArray<unknown>(record.priorities)
+    .map((item, index) => normalizeRecommendationRecord(item, index))
+    .filter((item): item is Recommendation => Boolean(item));
+  const recentActivity = asArray<unknown>(record.changes).map((item, index) => {
+    const change = asRecord(item) ?? {};
+    const severity = pickString(change, ['severity'], 'info');
+    return {
+      id: pickString(change, ['system_id', 'type'], `executive-change-${index + 1}`),
+      label: pickString(change, ['type'], 'Executive state change'),
+      detail: pickString(change, ['summary'], 'Executive state changed.'),
+      timestamp: String(record.generated_at ?? nowIso()),
+      source: severity === 'warning' ? 'live' : 'live',
+    } satisfies RecentActivity;
+  });
+  return {
+    subsystems,
+    recommendations: recommendations.length ? recommendations : priorities,
+    recentActivity,
+    summary: record.summary ?? null,
+    briefing: record.briefing ?? null,
+    generatedAt: String(record.generated_at ?? nowIso()),
+  };
+}
+
 function withGovernance(statusPayload?: Record<string, unknown>, missionsPayload?: Record<string, unknown>, policiesPayload?: Record<string, unknown>, decisionsPayload?: Record<string, unknown>, questionsPayload?: Record<string, unknown>): GovernanceSummary {
   return {
     build: String(statusPayload?.build ?? fallbackGovernance.build),
@@ -659,6 +712,7 @@ function withGovernance(statusPayload?: Record<string, unknown>, missionsPayload
 
 export async function fetchMissionControlOperations(): Promise<MissionControlOperations> {
   const [
+    executiveResult,
     statusResult,
     subsystemsResult,
     auditResult,
@@ -673,6 +727,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     questionsResult,
     publicApiResult,
   ] = await Promise.all([
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/executive/state', 'Executive state'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/status', 'Mission Control status'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/subsystems', 'Subsystem registry'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/mission-control/audit', 'Operations audit'),
@@ -689,6 +744,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   ]);
 
   const diagnostics = [
+    executiveResult.diagnostic,
     statusResult.diagnostic,
     subsystemsResult.diagnostic,
     auditResult.diagnostic,
@@ -705,12 +761,13 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   ];
 
   const liveCount = diagnostics.filter((item) => item.status === 'healthy').length;
+  const executive = readExecutivePayload(executiveResult.payload);
   const liveSubsystems = readLiveSubsystems(subsystemsResult.payload);
   const auditSubsystems = readLiveSubsystems(auditResult.payload);
-  const subsystemPayload = liveSubsystems.length ? liveSubsystems : auditSubsystems;
+  const subsystemPayload = executive.subsystems.length ? executive.subsystems : liveSubsystems.length ? liveSubsystems : auditSubsystems;
   const liveHarvesters = readLiveHarvesters(harvestersResult.payload);
   const liveRepositories = readLiveRepositories(repositoriesResult.payload);
-  const liveRecommendations = readLiveRecommendations(recommendationsResult.payload);
+  const liveRecommendations = executive.recommendations.length ? executive.recommendations : readLiveRecommendations(recommendationsResult.payload);
   const dataMode = liveCount === 0 ? 'fallback' : liveCount === diagnostics.length ? 'live' : 'mixed';
   const governance = withGovernance(
     constitutionalStatusResult.payload,
@@ -745,6 +802,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   const subsystemRegistry = subsystemPayload.length ? subsystemPayload : globalHealth;
 
   const recentActivity: RecentActivity[] = [
+    ...executive.recentActivity.slice(0, 8),
     {
       id: 'build-037-review-fixes',
       label: 'BUILD-037 Mission Control review fixes loaded',
@@ -772,22 +830,22 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   ];
 
   return {
-    generatedAt: nowIso(),
+    generatedAt: executive.generatedAt,
     dataMode,
     diagnostics,
     globalHealth,
     subsystemRegistry,
-    scientificSystems: fallbackScientificSystems,
+    scientificSystems: executive.subsystems.length ? executive.subsystems.filter((item) => ['Science', 'Ecology', 'Media', 'Relationships'].includes(item.category)) : fallbackScientificSystems,
     completenessMatrix: [...subsystemRegistry, ...fallbackScientificSystems].sort((a, b) => a.completeness - b.completeness),
     harvesters: liveHarvesters.length ? liveHarvesters : fallbackHarvesters,
     repositories: liveRepositories.length ? liveRepositories : fallbackRepositories,
     calyxSelfAudit: {
-      summary: 'Calyx can present the operations center, preserve governance context, explain endpoint failures, consume live subsystem telemetry when available, and recommend the next build. It cannot execute production actions from this frontend.',
-      canDo: ['Render Mission Control while endpoints fail', 'Consume live subsystem telemetry before fallback', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
-      cannotDoYet: ['Run harvesters', 'Pause or resume jobs', 'Deploy services', 'Read credentials', 'Guarantee live GitHub/Render status without backend routes'],
-      connectedTools: ['Frontend routes', 'Calyx backend base URL', 'Public API base URL', 'Mission Control subsystem telemetry when available', 'Constitutional telemetry probes when available'],
+      summary: String(executive.briefing?.executive_summary ?? 'Calyx can present the operations center, preserve governance context, explain endpoint failures, consume live subsystem telemetry when available, and recommend the next build. It cannot execute production actions from this frontend.'),
+      canDo: ['Consume /api/executive/state as the Mission Control source of truth', 'Render Mission Control while endpoints fail', 'Preserve Constitution and decision ledger visibility', 'Register harvesters and scientific systems', 'Explain safety boundaries and next actions'],
+      cannotDoYet: ['Run harvesters without owner session', 'Pause or resume jobs without owner session', 'Deploy services', 'Read credentials', 'Guarantee live GitHub/Render status without backend routes'],
+      connectedTools: ['Executive Intelligence Engine', 'Frontend routes', 'Calyx backend base URL', 'Public API base URL', 'Mission Control subsystem telemetry when available', 'Constitutional telemetry probes when available'],
       failingServices: diagnostics.filter((item) => item.status === 'error').map((item) => item.label),
-      riskLevel: 'low for read-only frontend visibility; high-risk actions remain disabled.',
+      riskLevel: String(executive.summary?.confidence ? `read-only confidence ${executive.summary.confidence}` : 'low for read-only frontend visibility; high-risk actions remain disabled.'),
     },
     recommendations: liveRecommendations.length ? liveRecommendations : fallbackRecommendations,
     recentActivity,
