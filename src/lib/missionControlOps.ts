@@ -621,6 +621,16 @@ function normalizeRecommendationRecord(value: unknown, index: number): Recommend
   };
 }
 
+function mergeRecommendations(...groups: Recommendation[][]): Recommendation[] {
+  const seen = new Set<string>();
+  return groups.flat().filter((item) => {
+    const key = item.id || item.title;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function readLiveHarvesters(payload: unknown): HarvesterStatus[] {
   return firstPayloadArray<unknown>(payload, ['harvesters', 'items'])
     .map((item, index) => normalizeHarvesterRecord(item, index))
@@ -690,7 +700,7 @@ function readExecutivePayload(payload: unknown) {
   });
   return {
     subsystems,
-    recommendations: recommendations.length ? recommendations : priorities,
+    recommendations: mergeRecommendations(recommendations, priorities),
     recentActivity,
     summary: record.summary ?? null,
     briefing: record.briefing ?? null,
@@ -835,7 +845,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     diagnostics,
     globalHealth,
     subsystemRegistry,
-    scientificSystems: executive.subsystems.length ? executive.subsystems.filter((item) => ['Science', 'Ecology', 'Media', 'Relationships'].includes(item.category)) : fallbackScientificSystems,
+    scientificSystems: executive.subsystems.length ? executive.subsystems.filter((item) => ['Science', 'Scientific Systems', 'Ecology', 'Media', 'Relationships'].includes(item.category)) : fallbackScientificSystems,
     completenessMatrix: [...subsystemRegistry, ...fallbackScientificSystems].sort((a, b) => a.completeness - b.completeness),
     harvesters: liveHarvesters.length ? liveHarvesters : fallbackHarvesters,
     repositories: liveRepositories.length ? liveRepositories : fallbackRepositories,
