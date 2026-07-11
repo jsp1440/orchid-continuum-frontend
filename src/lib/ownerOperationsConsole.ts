@@ -2,8 +2,6 @@ import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import type { HarvesterStatus } from '@/lib/missionControlOps';
 import type { IntelligenceItem, SourceBriefing } from '@/lib/missionControlIntelligence';
 
-export const OWNER_SESSION_STORAGE_KEY = 'oc_mission_control_owner_session_v1';
-
 export type OwnerAllowedAction = {
   allowed: boolean;
   state: string;
@@ -17,12 +15,14 @@ export type OwnerAllowedAction = {
 export type OwnerAllowedActions = Record<string, OwnerAllowedAction>;
 
 export type OwnerSession = {
+  authenticated: boolean;
   status: string;
   owner: string;
-  token: string;
-  expires_at: string;
+  token?: 'cookie';
+  expires_at: string | number | null;
   allowedActions: OwnerAllowedActions;
-  secretDisclosure?: string;
+  reason?: string | null;
+  credential_transport?: string;
 };
 
 export type OwnerOperationsState = {
@@ -71,17 +71,16 @@ export type OwnerApiResult<T> = T & {
 
 type JsonRecord = Record<string, unknown>;
 
-function ownerHeaders(token: string): HeadersInit {
+function ownerHeaders(_token?: string): HeadersInit {
   return {
     Accept: 'application/json',
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
     'X-Orchid-Actor': 'mission-control-owner',
   };
 }
 
 async function requestJson<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${endpoint}`, options);
+  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${endpoint}`, { ...options, credentials: 'include' });
   const text = await response.text();
   const payload = text ? JSON.parse(text) as T : {} as T;
   if (!response.ok) {
@@ -133,18 +132,23 @@ function normalizeSourceBriefing(raw: JsonRecord): SourceBriefing {
 }
 
 export async function createOwnerSession(accessCode: string, owner = 'owner'): Promise<OwnerSession> {
-  return requestJson<OwnerSession>('/api/mission-control/owner/session', {
+  const session = await requestJson<OwnerSession>('/api/mission-control/owner/session', {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ access_code: accessCode, owner }),
   });
+  return { ...session, token: 'cookie' };
 }
 
-export async function validateOwnerSession(token: string): Promise<OwnerSession> {
+export async function validateOwnerSession(_token?: string): Promise<OwnerSession> {
   const session = await requestJson<Omit<OwnerSession, 'token'> & { token?: string }>('/api/mission-control/owner/session', {
-    headers: ownerHeaders(token),
+    headers: ownerHeaders(),
   });
-  return { ...session, token };
+  return { ...session, token: session.authenticated ? 'cookie' : undefined };
+}
+
+export async function endOwnerSession(): Promise<void> {
+  await requestJson('/api/mission-control/owner/session', { method: 'DELETE', headers: ownerHeaders() });
 }
 
 export async function fetchOwnerOperationsState(token: string): Promise<OwnerOperationsState> {
@@ -256,6 +260,14 @@ export async function runHarvesterOwnerAction(token: string, harvester: Harveste
   return requestJson<JsonRecord>(`/api/harvesters/${encodeURIComponent(harvester.id)}/${action}`, {
     method: 'POST',
     headers: ownerHeaders(token),
+  });
+}
+
+export async function runRuntimeOwnerAction(action: 'cycle' | 'start' | 'stop' | 'restart') {
+  const endpoint = action === 'cycle' ? 'autonomous-cycle' : `autonomous-${action}`;
+  return requestJson<JsonRecord>(`/api/runner/${endpoint}`, {
+    method: 'POST',
+    headers: ownerHeaders(),
   });
 }
 

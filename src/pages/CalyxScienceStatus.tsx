@@ -3,6 +3,7 @@ import { AlertTriangle, BookOpenText, CheckCircle2, Database, FlaskConical, KeyR
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { createOwnerSession, endOwnerSession, validateOwnerSession } from '@/lib/ownerOperationsConsole';
 import {
   fetchCalyxScienceDashboard,
   type CalyxScienceDashboard,
@@ -11,12 +12,6 @@ import {
 } from '@/lib/calyxScience';
 
 type LoadState = 'idle' | 'loading' | 'ready' | 'error';
-
-const ACCESS_STORAGE_KEY = 'oc_mission_control_owner_access_v1';
-
-const OWNER_ACCESS_CODE =
-  (import.meta.env.VITE_MISSION_CONTROL_ACCESS_CODE as string | undefined) ||
-  'orchid-continuum-owner';
 
 function formatFlag(value: unknown): string {
   if (value === true) return 'yes';
@@ -88,7 +83,7 @@ function GapRow({ gap }: { gap: ScienceGap }) {
 }
 
 const CalyxScienceStatus: React.FC = () => {
-  const [isUnlocked, setIsUnlocked] = useState(() => localStorage.getItem(ACCESS_STORAGE_KEY) === 'yes');
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [accessCode, setAccessCode] = useState('');
   const [state, setState] = useState<LoadState>('idle');
   const [dashboard, setDashboard] = useState<CalyxScienceDashboard | null>(null);
@@ -108,20 +103,27 @@ const CalyxScienceStatus: React.FC = () => {
     }
   };
 
-  const unlock = () => {
-    if (accessCode.trim() === OWNER_ACCESS_CODE) {
-      localStorage.setItem(ACCESS_STORAGE_KEY, 'yes');
+  const unlock = async () => {
+    try {
+      await createOwnerSession(accessCode.trim());
+      setAccessCode('');
       setIsUnlocked(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Owner session failed');
     }
   };
 
-  const lock = () => {
-    localStorage.removeItem(ACCESS_STORAGE_KEY);
+  const lock = async () => {
+    await endOwnerSession().catch(() => undefined);
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
     setState('idle');
   };
+
+  useEffect(() => {
+    void validateOwnerSession().then((session) => setIsUnlocked(session.authenticated)).catch(() => setIsUnlocked(false));
+  }, []);
 
   useEffect(() => {
     if (!isUnlocked) return;
