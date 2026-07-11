@@ -24,7 +24,8 @@ const BASE_VALID_SESSION = {
 function mockFetch(responses: Array<{ ok: boolean; status?: number; body: unknown }>) {
   let callIndex = 0;
   return vi.fn(() => {
-    const resp = responses[callIndex++] ?? responses[responses.length - 1];
+    const resp = responses[callIndex++];
+    if (!resp) throw new Error(`mockFetch: unexpected call (no response at index ${callIndex - 1})`);
     return Promise.resolve({
       ok: resp.ok,
       status: resp.status ?? (resp.ok ? 200 : 401),
