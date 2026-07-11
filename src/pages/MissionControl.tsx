@@ -1974,6 +1974,10 @@ const MissionControlContent: React.FC = () => {
     setError(null);
     setOwnerActionMessage(null);
     try {
+      // createOwnerSession performs the login POST then immediately inspects the
+      // cookie session (BUILD-057). It throws if inspection does not explicitly
+      // confirm authenticated === true and owner permissions are present.
+      // Privileged state is only set after that inspection succeeds.
       const session = await createOwnerSession(enteredCode);
       setAccessCode('');
       setOwnerSession(session);
@@ -1983,6 +1987,8 @@ const MissionControlContent: React.FC = () => {
       setOwnerActionMessage('Backend owner session established. Privileged controls are authorized only where the server allows them.');
       return;
     } catch (err) {
+      // Clear any in-memory auth state if login or inspection fails.
+      setOwnerSession(null);
       setOwnerSessionStatus('error');
       setError(err instanceof Error ? err.message : 'Owner session failed');
     }
