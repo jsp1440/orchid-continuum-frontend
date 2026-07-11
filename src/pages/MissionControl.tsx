@@ -73,6 +73,7 @@ import {
 } from '@/lib/missionControlIntelligence';
 import {
   createOwnerSession,
+  endOwnerSession,
   createResearchRequest,
   executiveAuditTemplates,
   fetchOwnerOperationsState,
@@ -81,13 +82,13 @@ import {
   importLocalIntelligenceToBackend,
   lifecycleProjects,
   operationsQueue,
-  OWNER_SESSION_STORAGE_KEY,
   ownerGuides,
   ownerManualTopics,
   partnershipTemplates,
   researchCommands,
   researchInbox,
   runHarvesterOwnerAction,
+  runRuntimeOwnerAction,
   saveSourceBriefingToBackend,
   submitOwnerCommand,
   transitionOwnerQueueItem,
@@ -146,10 +147,6 @@ const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
   focusModeDefault: true,
   hideHealthyDefault: false,
 };
-
-const OWNER_ACCESS_CODE =
-  (import.meta.env.VITE_MISSION_CONTROL_ACCESS_CODE as string | undefined) ||
-  'orchid-continuum-owner';
 
 const INTELLIGENCE_STORAGE_KEY = 'oc_mission_control_intelligence_v1';
 
@@ -210,33 +207,6 @@ function safeRemoveStorage(key: string): void {
     localStorage.removeItem(key);
   } catch {
     // Non-fatal: locking still clears in-memory state below.
-  }
-}
-
-function safeGetSessionStorage(key: string): string | null {
-  try {
-    if (typeof sessionStorage === 'undefined') return null;
-    return sessionStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSetSessionStorage(key: string, value: string): void {
-  try {
-    if (typeof sessionStorage === 'undefined') return;
-    sessionStorage.setItem(key, value);
-  } catch {
-    // Backend authorization is still checked on every privileged request.
-  }
-}
-
-function safeRemoveSessionStorage(key: string): void {
-  try {
-    if (typeof sessionStorage === 'undefined') return;
-    sessionStorage.removeItem(key);
-  } catch {
-    // Non-fatal: locking also clears in-memory owner session state.
   }
 }
 
@@ -1927,7 +1897,7 @@ function IntelligenceWorkspace({
 }
 
 const MissionControlContent: React.FC = () => {
-  const [isUnlocked, setIsUnlocked] = useState(() => safeGetStorage(ACCESS_STORAGE_KEY) === 'yes');
+  const [isUnlocked, setIsUnlocked] = useState(false);
   const [accessCode, setAccessCode] = useState('');
   const [state, setState] = useState<LoadState>('idle');
   const [dashboard, setDashboard] = useState<MissionControlOperations | null>(null);
@@ -1938,19 +1908,11 @@ const MissionControlContent: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<MissionFilter>('overview');
   const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
   const [commandText, setCommandText] = useState('Audit Orchid Continuum');
-  const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(() => {
-    const raw = safeGetSessionStorage(OWNER_SESSION_STORAGE_KEY);
-    if (!raw) return null;
-    try {
-      return JSON.parse(raw) as OwnerSession;
-    } catch {
-      safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
-      return null;
-    }
-  });
+  const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(null);
   const [ownerOperations, setOwnerOperations] = useState<OwnerOperationsState | null>(null);
-  const [ownerSessionStatus, setOwnerSessionStatus] = useState<'missing' | 'authenticated' | 'local_only' | 'error'>(() => (safeGetSessionStorage(OWNER_SESSION_STORAGE_KEY) ? 'authenticated' : 'missing'));
+  const [ownerSessionStatus, setOwnerSessionStatus] = useState<'missing' | 'authenticated' | 'error'>('missing');
   const [ownerActionMessage, setOwnerActionMessage] = useState<string | null>(null);
+  const [lastSessionCheck, setLastSessionCheck] = useState<string | null>(null);
   const [pendingHarvesterAction, setPendingHarvesterAction] = useState<string | null>(null);
 
   const load = async () => {
@@ -1967,22 +1929,33 @@ const MissionControlContent: React.FC = () => {
   };
 
   const loadOwnerOperations = useCallback(async (token = ownerSession?.token) => {
-    if (!token) return;
     try {
       const validatedSession = await validateOwnerSession(token);
-      safeSetSessionStorage(OWNER_SESSION_STORAGE_KEY, JSON.stringify(validatedSession));
+      setLastSessionCheck(new Date().toISOString());
+      if (!validatedSession.authenticated) throw new Error(validatedSession.reason || 'Owner session is not active');
       setOwnerSession(validatedSession);
       setOwnerSessionStatus('authenticated');
-      const next = await fetchOwnerOperationsState(token);
+      const next = await fetchOwnerOperationsState(token || 'cookie');
       setOwnerOperations(next);
     } catch (err) {
-      safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
+      setLastSessionCheck(new Date().toISOString());
       setOwnerSession(null);
       setOwnerOperations(null);
       setOwnerSessionStatus('error');
       setOwnerActionMessage(err instanceof Error ? `Stored backend owner session rejected: ${err.message}` : 'Stored backend owner session rejected.');
     }
   }, [ownerSession?.token]);
+
+  useEffect(() => {
+    void validateOwnerSession().then((session) => {
+      setLastSessionCheck(new Date().toISOString());
+      if (session.authenticated) {
+        setOwnerSession(session);
+        setOwnerSessionStatus('authenticated');
+        setIsUnlocked(true);
+      }
+    }).catch(() => setLastSessionCheck(new Date().toISOString()));
+  }, []);
 
   useEffect(() => {
     if (isUnlocked) {
@@ -2002,8 +1975,7 @@ const MissionControlContent: React.FC = () => {
     setOwnerActionMessage(null);
     try {
       const session = await createOwnerSession(enteredCode);
-      safeSetSessionStorage(OWNER_SESSION_STORAGE_KEY, JSON.stringify(session));
-      safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
+      setAccessCode('');
       setOwnerSession(session);
       setOwnerSessionStatus('authenticated');
       setIsUnlocked(true);
@@ -2011,32 +1983,14 @@ const MissionControlContent: React.FC = () => {
       setOwnerActionMessage('Backend owner session established. Privileged controls are authorized only where the server allows them.');
       return;
     } catch (err) {
-      if (enteredCode === OWNER_ACCESS_CODE) {
-        safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
-        setOwnerSession(null);
-        setOwnerOperations(null);
-        setOwnerSessionStatus('local_only');
-        setOwnerActionMessage(err instanceof Error ? `Local UI unlock only: ${err.message}` : 'Local UI unlock only. Backend owner session unavailable.');
-        safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
-        setIsUnlocked(true);
-        return;
-      }
       setOwnerSessionStatus('error');
       setError(err instanceof Error ? err.message : 'Owner session failed');
     }
   };
 
-  const unlockLocalOnly = () => {
-    if (accessCode.trim() === OWNER_ACCESS_CODE) {
-      safeSetStorage(ACCESS_STORAGE_KEY, 'yes');
-      setOwnerSessionStatus('local_only');
-      setIsUnlocked(true);
-    }
-  };
-
-  const lock = () => {
+  const lock = async () => {
+    await endOwnerSession().catch(() => undefined);
     safeRemoveStorage(ACCESS_STORAGE_KEY);
-    safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
@@ -2049,7 +2003,6 @@ const MissionControlContent: React.FC = () => {
 
   const resetLocalData = () => {
     resetMissionControlLocalData();
-    safeRemoveSessionStorage(OWNER_SESSION_STORAGE_KEY);
     setIsUnlocked(false);
     setAccessCode('');
     setDashboard(null);
@@ -2153,6 +2106,17 @@ const MissionControlContent: React.FC = () => {
     }
   };
 
+  const handleRuntimeAction = async (action: 'cycle' | 'start' | 'stop' | 'restart') => {
+    if (!ownerAuthorized) return;
+    try {
+      await runRuntimeOwnerAction(action);
+      await load();
+      setOwnerActionMessage(`Runtime ${action} accepted by the authenticated backend session.`);
+    } catch (err) {
+      setOwnerActionMessage(err instanceof Error ? err.message : `Runtime ${action} failed`);
+    }
+  };
+
   const handleQueueTransition = async (item: BackendOperationsQueueItem, transition: 'approve' | 'reject' | 'cancel' | 'retry') => {
     if (!ownerSession?.token) {
       setOwnerActionMessage('Backend owner session required before queue transition.');
@@ -2236,7 +2200,7 @@ const MissionControlContent: React.FC = () => {
               Mission Control
             </h1>
             <p className="mt-4 text-sm leading-relaxed text-[#cfc8b8]/85">
-              This unlock preserves the existing owner workflow, but it is only a frontend UI gate. Real actions still require server-side owner authorization.
+              Sign in directly with the Calyx backend. The access code is submitted once and is never stored by Mission Control.
             </p>
             <label className="mt-8 block font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">
               Access code
@@ -2256,12 +2220,6 @@ const MissionControlContent: React.FC = () => {
               className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
             >
               <KeyRound className="h-3.5 w-3.5" /> Unlock backend session
-            </button>
-            <button
-              onClick={unlockLocalOnly}
-              className="ml-3 mt-5 inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#f5f0e8] transition-colors hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
-            >
-              Local UI only
             </button>
             <button
               onClick={resetLocalData}
@@ -2326,12 +2284,29 @@ const MissionControlContent: React.FC = () => {
 
           <div className="mb-5 rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4 text-sm leading-6 text-[#cfc8b8]/84">
             <span className="mr-3 inline-flex rounded-full border border-[#d4b34a]/30 bg-[#d4b34a]/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
-              {ownerSessionStatus === 'authenticated' ? 'Live backend owner session' : ownerSessionStatus === 'local_only' ? 'Local browser only' : ownerSessionStatus === 'error' ? 'Owner auth error' : 'Backend auth missing'}
+              {ownerSessionStatus === 'authenticated' ? 'Owner Session Active' : ownerSessionStatus === 'error' ? 'Owner auth error' : 'Backend auth missing'}
             </span>
             {ownerSessionStatus === 'authenticated'
               ? 'Privileged controls require a signed server session and per-action permission. State changes are written to the backend and logged.'
               : 'Read-only telemetry and local previews remain available; database writes, command records, audits, queue transitions, and harvester mutations are disabled.'}
             {ownerActionMessage ? <div className="mt-3 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3 text-emerald-100/84">{ownerActionMessage}</div> : null}
+            <div className="mt-4 grid gap-2 rounded-lg border border-white/10 bg-black/15 p-3 font-mono text-[10px] sm:grid-cols-2 lg:grid-cols-4">
+              <div>Authenticated: {ownerAuthorized ? 'yes' : 'no'}</div>
+              <div>Status: {ownerSessionStatus}</div>
+              <div>Expires: {ownerSession?.expires_at ? new Date(Number(ownerSession.expires_at) * 1000).toLocaleString() : 'not active'}</div>
+              <div>Transport: {ownerSession?.credential_transport ?? 'HttpOnly cookie pending'}</div>
+              <div className="sm:col-span-2">Backend: {CALYX_BACKEND_BASE_URL}</div>
+              <div>Last check: {lastSessionCheck ? new Date(lastSessionCheck).toLocaleString() : 'pending'}</div>
+              <div>Reason: {ownerSession?.reason ?? (ownerSessionStatus === 'error' ? ownerActionMessage ?? 'session rejected' : 'none')}</div>
+              <div className="sm:col-span-2 lg:col-span-4">Permissions: {ownerPermissions ? Object.entries(ownerPermissions).filter(([, value]) => value.allowed).map(([key]) => key).join(', ') || 'none' : 'none'}</div>
+              <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
+                {(['cycle', 'start', 'stop', 'restart'] as const).map((action) => (
+                  <button key={action} disabled={!ownerAuthorized || !ownerActionAllowed(ownerPermissions, action === 'cycle' ? 'autonomousCycle' : `runtime${action[0].toUpperCase()}${action.slice(1)}`)} onClick={() => void handleRuntimeAction(action)} className="rounded-full border border-[#d4b34a]/30 px-3 py-1.5 uppercase text-[#d4b34a] disabled:cursor-not-allowed disabled:opacity-40">
+                    Runtime {action}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {dashboard ? (
