@@ -1932,7 +1932,11 @@ const MissionControlContent: React.FC = () => {
     try {
       const validatedSession = await validateOwnerSession(token);
       setLastSessionCheck(new Date().toISOString());
-      if (!validatedSession.authenticated) throw new Error(validatedSession.reason || 'Owner session is not active');
+      // BUILD-058: use the shared validated result — token is only set when both
+      // authenticated === true and owner identity are confirmed. Checking token
+      // prevents privileged state from being set when authenticated is true but
+      // owner is absent.
+      if (!validatedSession.token) throw new Error(validatedSession.reason || 'Owner session is not active or owner identity absent');
       setOwnerSession(validatedSession);
       setOwnerSessionStatus('authenticated');
       const next = await fetchOwnerOperationsState(token || 'cookie');
@@ -1947,9 +1951,13 @@ const MissionControlContent: React.FC = () => {
   }, [ownerSession?.token]);
 
   useEffect(() => {
+    // BUILD-058: rely on the shared validated result (session.token) which is
+    // only set when validateOwnerSession confirms both authenticated === true
+    // AND a non-empty owner identity. Never activate privileged controls from
+    // session.authenticated alone.
     void validateOwnerSession().then((session) => {
       setLastSessionCheck(new Date().toISOString());
-      if (session.authenticated) {
+      if (session.token) {
         setOwnerSession(session);
         setOwnerSessionStatus('authenticated');
         setIsUnlocked(true);
