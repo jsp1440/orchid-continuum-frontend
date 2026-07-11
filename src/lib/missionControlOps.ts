@@ -720,6 +720,38 @@ function withGovernance(statusPayload?: Record<string, unknown>, missionsPayload
   };
 }
 
+function runtimeSubsystemFrom(statusPayload?: Record<string, unknown>, configurationPayload?: Record<string, unknown>): ContinuumSubsystem | null {
+  if (!statusPayload && !configurationPayload) return null;
+  const engine = asRecord(statusPayload?.runtime_engine) ?? statusPayload ?? {};
+  const configuration = configurationPayload ?? asRecord(statusPayload?.configuration) ?? {};
+  const configured = Boolean(configuration.runtime_enabled ?? statusPayload?.runtime_configured);
+  const running = Boolean(engine.running ?? statusPayload?.running);
+  const threadAlive = Boolean(engine.thread_alive ?? statusPayload?.thread_alive);
+  const blockers = pickStringArray(configuration, ['blockers']);
+  const lastHeartbeat = pickString(engine, ['last_heartbeat_status'], 'unknown');
+  const cycleCount = pickNumber(engine, ['cycle_count'], 0);
+  const queueDepth = pickNumber(engine, ['queue_depth'], 0);
+  const completedCount = pickNumber(engine, ['completed_count'], 0);
+  const failedCount = pickNumber(engine, ['failed_count'], 0);
+  const currentBlocker = pickString(engine, ['current_blocker', 'last_error'], '');
+  if (currentBlocker) blockers.push(currentBlocker);
+
+  return {
+    id: 'runners_jobs',
+    name: 'Runners / Jobs',
+    category: 'Runtime',
+    status: running && threadAlive ? 'healthy' : configured ? 'warning' : 'error',
+    completeness: running && threadAlive ? 82 : configured ? 58 : 32,
+    lastChecked: nowIso(),
+    summary: `Configured: ${configured ? 'yes' : 'no'}; running: ${running ? 'yes' : 'no'}; thread alive: ${threadAlive ? 'yes' : 'no'}; cycles: ${cycleCount}; queue depth: ${queueDepth}; completed: ${completedCount}; failed: ${failedCount}; heartbeat: ${lastHeartbeat}.`,
+    blockers,
+    recommendedNextAction: blockers.length ? 'Resolve runtime configuration blockers in Render, then smoke test owner-authorized runtime controls.' : 'Start or monitor the owner-authorized autonomous loop.',
+    route: '/mission-control',
+    dataSource: '/api/runner/autonomous-status + /api/runtime/configuration',
+    maturity: pickString(configuration, ['worker_mode'], 'runtime_status'),
+  };
+}
+
 export async function fetchMissionControlOperations(): Promise<MissionControlOperations> {
   const [
     executiveResult,
@@ -735,6 +767,8 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     policiesResult,
     decisionsResult,
     questionsResult,
+    runtimeConfigurationResult,
+    runtimeStatusResult,
     publicApiResult,
   ] = await Promise.all([
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/executive/state', 'Executive state'),
@@ -750,6 +784,8 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/constitutional/policies', 'Constitutional policies'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/constitutional/decision-ledger', 'Decision ledger'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/constitutional/governance-questions', 'Governance questions'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/configuration', 'Runtime configuration'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runner/autonomous-status', 'Runtime autonomous status'),
     getJson<Record<string, unknown>>(BACKEND_BASE_URL, '/health', 'Public API health'),
   ]);
 
@@ -767,6 +803,8 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     policiesResult.diagnostic,
     decisionsResult.diagnostic,
     questionsResult.diagnostic,
+    runtimeConfigurationResult.diagnostic,
+    runtimeStatusResult.diagnostic,
     publicApiResult.diagnostic,
   ];
 
@@ -786,6 +824,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     decisionsResult.payload,
     questionsResult.payload,
   );
+  const runtimeSubsystem = runtimeSubsystemFrom(runtimeStatusResult.payload, runtimeConfigurationResult.payload);
 
   const fallbackEnhancedGlobalHealth = fallbackGlobalHealth.map((subsystem) => {
     if (subsystem.id === 'frontend') return subsystem;
@@ -805,11 +844,17 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
         summary: `${governance.build} governance status: ${governance.status}.`,
       };
     }
+    if (subsystem.id === 'runners_jobs' && runtimeSubsystem) {
+      return runtimeSubsystem;
+    }
     return subsystem;
   });
 
-  const globalHealth = subsystemPayload.length ? subsystemPayload : fallbackEnhancedGlobalHealth;
-  const subsystemRegistry = subsystemPayload.length ? subsystemPayload : globalHealth;
+  const executiveWithRuntime = runtimeSubsystem && !subsystemPayload.some((item) => item.id === runtimeSubsystem.id)
+    ? [...subsystemPayload, runtimeSubsystem]
+    : subsystemPayload;
+  const globalHealth = executiveWithRuntime.length ? executiveWithRuntime : fallbackEnhancedGlobalHealth;
+  const subsystemRegistry = executiveWithRuntime.length ? executiveWithRuntime : globalHealth;
 
   const recentActivity: RecentActivity[] = [
     ...executive.recentActivity.slice(0, 8),
