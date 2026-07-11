@@ -600,6 +600,7 @@ function MetricCard({ label, value, detail }: { label: string; value: React.Reac
 
 function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
   const blockers = safeArray(subsystem.blockers);
+  const sourceCounts = Object.entries(subsystem.sourceRecordCounts ?? {});
   return (
     <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -620,8 +621,27 @@ function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
         {subsystem.completeness}% complete
       </div>
       <p className="mt-3 text-[12.5px] leading-5 text-[#cfc8b8]/76">{subsystem.summary}</p>
+      <div className="mt-3 grid gap-2 text-[11px] text-[#cfc8b8]/72 sm:grid-cols-2">
+        <div>Data coverage: {subsystem.dataCoverage ?? 0}%</div>
+        <div>Evidence quality: {subsystem.evidenceQuality ?? 0}%</div>
+        <div>Integration: {subsystem.integrationReadiness ?? 0}%</div>
+        <div>Automation: {subsystem.automationReadiness ?? 0}%</div>
+        <div>Reliability: {subsystem.operationalReliability ?? 0}%</div>
+        <div>Active jobs: {subsystem.activeJobs ?? 0}</div>
+      </div>
+      {sourceCounts.length ? (
+        <p className="mt-3 break-all font-mono text-[9px] leading-4 text-[#cfc8b8]/62">
+          Source count: {sourceCounts.slice(0, 2).map(([table, count]) => `${table}=${count.toLocaleString()}`).join('; ')}
+        </p>
+      ) : null}
+      {subsystem.telemetryFreshness ? (
+        <p className="mt-2 text-[11px] leading-4 text-[#cfc8b8]/62">Freshness: {subsystem.telemetryFreshness}</p>
+      ) : null}
       {blockers.length ? (
         <p className="mt-3 text-[12px] leading-5 text-amber-100/82">Blocker: {blockers[0]}</p>
+      ) : null}
+      {safeArray(subsystem.failures).length ? (
+        <p className="mt-2 text-[12px] leading-5 text-red-100/78">Failure: {safeArray(subsystem.failures)[0]}</p>
       ) : null}
       <p className="mt-3 text-[12px] leading-5 text-emerald-100/78">Next: {subsystem.recommendedNextAction}</p>
     </article>
