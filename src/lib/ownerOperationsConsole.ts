@@ -189,13 +189,11 @@ export async function validateOwnerSession(_token?: string): Promise<OwnerSessio
   // Shared validation (BUILD-058): token: 'cookie' is returned ONLY when ALL
   // required conditions are explicitly verified:
   //   1. authenticated === true (strict equality, not merely truthy)
-  //   2. owner identity is a non-null, non-undefined, non-empty string after trimming
+  //   2. owner identity is a non-empty, non-whitespace string
+  //      (typeof guards against null/'object' and undefined/'undefined' too)
   // Any other combination — including authenticated: true with null/empty/whitespace
   // owner — must not produce a truthy token or activate privileged controls.
-  const ownerValue =
-    session.owner !== null && session.owner !== undefined && typeof session.owner === 'string'
-      ? session.owner.trim()
-      : '';
+  const ownerValue = typeof session.owner === 'string' ? session.owner.trim() : '';
   const fullyVerified = session.authenticated === true && ownerValue.length > 0;
   return {
     ...session,
