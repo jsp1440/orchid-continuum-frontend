@@ -132,12 +132,28 @@ function normalizeSourceBriefing(raw: JsonRecord): SourceBriefing {
 }
 
 export async function createOwnerSession(accessCode: string, owner = 'owner'): Promise<OwnerSession> {
-  const session = await requestJson<OwnerSession>('/api/mission-control/owner/session', {
+  // Step 1: POST login credentials — backend sets an HttpOnly session cookie.
+  await requestJson<OwnerSession>('/api/mission-control/owner/session', {
     method: 'POST',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: JSON.stringify({ access_code: accessCode, owner }),
   });
-  return { ...session, token: 'cookie' };
+  // Step 2: Immediately inspect the cookie session with credentials: "include".
+  // A truthy session is only returned when the inspection explicitly confirms
+  // authenticated === true and owner permissions are present.
+  // This eliminates any code path where a successful login POST alone implies
+  // authenticated state (BUILD-057).
+  const inspected = await validateOwnerSession();
+  if (!inspected.authenticated) {
+    throw new Error(inspected.reason ?? 'Owner session inspection did not confirm authentication');
+  }
+  if (!inspected.owner) {
+    throw new Error('Owner session inspection: required owner permissions absent');
+  }
+  // validateOwnerSession already sets token: 'cookie' when authenticated, but
+  // we assert it explicitly here so callers always receive a truthy token after
+  // inspection succeeds.
+  return { ...inspected, token: 'cookie' as const };
 }
 
 export async function validateOwnerSession(_token?: string): Promise<OwnerSession> {
