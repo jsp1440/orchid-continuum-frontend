@@ -434,6 +434,10 @@ export type ScientificIntelligenceBundle = {
   grants?: GrantsIntelligence
 }
 
+function matchesSubsystem(id: string, name: string, keywords: string[]): boolean {
+  return keywords.some((k) => id.includes(k) || name.includes(k))
+}
+
 export function scoreSubsystemsWithScientificIntelligence(
   subsystems: ContinuumSubsystem[],
   bundle: Partial<ScientificIntelligenceBundle>,
@@ -444,14 +448,14 @@ export function scoreSubsystemsWithScientificIntelligence(
       const id = (s.id ?? '').toLowerCase()
       const name = (s.name ?? '').toLowerCase()
 
-      if ((id.includes('atlas') || name.includes('atlas')) && bundle.atlas?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['atlas']) && bundle.atlas?.mode !== 'unavailable') {
         const atlas = bundle.atlas
         if (atlas) {
           factors.dataCompleteness = Math.max(0, Math.min(1, atlas.coverage ?? factors.dataCompleteness))
           factors.backendHealth = atlas.connectionState === 'connected' ? 1 : 0.3
         }
       }
-      if ((id.includes('knowledge') || id.includes('graph') || name.includes('knowledge')) && bundle.knowledgeGraph?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['knowledge', 'graph']) && bundle.knowledgeGraph?.mode !== 'unavailable') {
         const kg = bundle.knowledgeGraph
         if (kg) {
           factors.dataCompleteness = Math.max(0, Math.min(1, kg.graphCompleteness ?? factors.dataCompleteness))
@@ -459,35 +463,35 @@ export function scoreSubsystemsWithScientificIntelligence(
           factors.relationshipImpact = kg.connectedEntities > 0 ? 0.9 : 0.3
         }
       }
-      if ((id.includes('literature') || name.includes('literature')) && bundle.literature?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['literature']) && bundle.literature?.mode !== 'unavailable') {
         const lit = bundle.literature
         if (lit) {
           factors.dataCompleteness = Math.max(0, Math.min(1, lit.coverage ?? factors.dataCompleteness))
           factors.backendHealth = lit.connectionState === 'connected' ? 1 : 0.3
         }
       }
-      if ((id.includes('pollinator') || name.includes('pollinator')) && bundle.pollinators?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['pollinator']) && bundle.pollinators?.mode !== 'unavailable') {
         const pol = bundle.pollinators
         if (pol) {
           factors.dataCompleteness = Math.max(0, Math.min(1, pol.coverage ?? factors.dataCompleteness))
           factors.backendHealth = pol.connectionState === 'connected' ? 1 : 0.3
         }
       }
-      if ((id.includes('mycorrhiza') || name.includes('mycorrhiza') || name.includes('fungal')) && bundle.mycorrhiza?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['mycorrhiza', 'fungal']) && bundle.mycorrhiza?.mode !== 'unavailable') {
         const myco = bundle.mycorrhiza
         if (myco) {
           factors.dataCompleteness = Math.max(0, Math.min(1, myco.coverage ?? factors.dataCompleteness))
           factors.backendHealth = myco.connectionState === 'connected' ? 1 : 0.3
         }
       }
-      if ((id.includes('vision') || id.includes('image') || name.includes('vision')) && bundle.vision?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['vision', 'image']) && bundle.vision?.mode !== 'unavailable') {
         const vis = bundle.vision
         if (vis) {
           factors.dataCompleteness = Math.max(0, Math.min(1, vis.coverage ?? factors.dataCompleteness))
           factors.backendHealth = vis.connectionState === 'connected' ? 1 : 0.3
         }
       }
-      if ((id.includes('grant') || name.includes('grant')) && bundle.grants?.mode !== 'unavailable') {
+      if (matchesSubsystem(id, name, ['grant']) && bundle.grants?.mode !== 'unavailable') {
         const gr = bundle.grants
         if (gr) {
           factors.grantRelevance = gr.urgentDeadlines > 0 ? 0.95 : 0.75

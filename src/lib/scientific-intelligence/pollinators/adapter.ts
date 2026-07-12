@@ -72,6 +72,7 @@ function buildFromResponse(raw: unknown, endpoint: string, timestamp: string): P
     unresolvedMatching,
     relationshipClassification: {
       confirmed: safeNumber(record.confirmed, 0),
+      // Backend may return snake_case (literature_supported) or kebab-case (literature-supported)
       'literature-supported': safeNumber(record.literature_supported ?? record['literature-supported'], 0),
       inferred: safeNumber(record.inferred, 0),
       unverified: safeNumber(record.unverified, 0),
