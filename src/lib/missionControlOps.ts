@@ -1,6 +1,6 @@
 import { BACKEND_BASE_URL, CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 
-export type MissionControlStatus = 'healthy' | 'warning' | 'error' | 'unknown' | 'stub';
+export type MissionControlStatus = 'healthy' | 'warning' | 'critical' | 'offline' | 'loading' | 'stale' | 'error' | 'unknown' | 'stub';
 export type ControlState = 'read_only' | 'disabled' | 'planned' | 'requires_owner_authorization';
 
 export type EndpointDiagnostic = {

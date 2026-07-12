@@ -260,7 +260,7 @@ export async function updateBackendIntelligenceItem(token: string, item: Intelli
   return normalizeIntelligenceItem(result.item);
 }
 
-export async function generateOwnerAudit(token: string, auditType: string, outputFormat: 'json' | 'markdown' = 'markdown') {
+export async function generateOwnerAudit(token: string, auditType: string, outputFormat: 'json' | 'markdown' | 'pdf' = 'markdown') {
   return requestJson<{ audit: { id: string; content: string | JsonRecord; output_format: string } }>('/api/mission-control/owner/audits', {
     method: 'POST',
     headers: ownerHeaders(token),
@@ -348,7 +348,7 @@ export type OwnerSubsystemGuide = {
 
 export type OperationsQueueItem = {
   id: string;
-  lane: 'Now working' | 'Queued' | 'Waiting for owner' | 'Waiting for external partner' | 'Completed today';
+  lane: 'Now Working' | 'Queued' | 'Waiting Owner' | 'Waiting External' | 'Completed Today';
   title: string;
   subsystem: string;
   detail: string;
@@ -510,11 +510,11 @@ export const ownerGuides: OwnerSubsystemGuide[] = [
 ];
 
 export const operationsQueue: OperationsQueueItem[] = [
-  { id: 'image-qa', lane: 'Now working', title: 'Image QA', subsystem: 'Vision Lab', detail: 'Calyx is checking image coverage and provenance gaps for media readiness.' },
+  { id: 'image-qa', lane: 'Now Working', title: 'Image QA', subsystem: 'Vision Lab', detail: 'Calyx is checking image coverage and provenance gaps for media readiness.' },
   { id: 'taxonomy-reconciliation', lane: 'Queued', title: 'Taxonomy reconciliation', subsystem: 'Species Explorer', detail: 'Synonym and accepted-name differences are queued for review.' },
-  { id: 'presentation-processing', lane: 'Waiting for owner', title: 'Presentation processing', subsystem: 'Personal Knowledge Harvester', detail: 'New folder sources need owner confirmation before ingestion.', ownerDecision: 'Choose the first presentation folder source.' },
-  { id: 'partner-gbif', lane: 'Waiting for external partner', title: 'GBIF collaboration packet', subsystem: 'Partnerships', detail: 'A partner-ready report can describe federation opportunities and desired APIs.' },
-  { id: 'grant-research', lane: 'Completed today', title: 'Grant research triage', subsystem: 'Grant Office', detail: 'Current opportunities were organized into active, waiting, and archived lanes.' },
+  { id: 'presentation-processing', lane: 'Waiting Owner', title: 'Presentation processing', subsystem: 'Personal Knowledge Harvester', detail: 'New folder sources need owner confirmation before ingestion.', ownerDecision: 'Choose the first presentation folder source.' },
+  { id: 'partner-gbif', lane: 'Waiting External', title: 'GBIF collaboration packet', subsystem: 'Partnerships', detail: 'A partner-ready report can describe federation opportunities and desired APIs.' },
+  { id: 'grant-research', lane: 'Completed Today', title: 'Grant research triage', subsystem: 'Grant Office', detail: 'Current opportunities were organized into active, waiting, and archived lanes.' },
 ];
 
 export const executiveAuditTemplates: ExecutiveAuditTemplate[] = [
