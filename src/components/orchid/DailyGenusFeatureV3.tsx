@@ -380,21 +380,19 @@ const DailyGenusFeatureV3: React.FC = () => {
 
     let mql: MediaQueryList | null = null;
     const onMotion = (event?: MediaQueryListEvent) => {
-      setReducedMotion(event?.matches ?? mql?.matches ?? false);
+      setReducedMotion(event ? event.matches : mql?.matches ?? false);
     };
 
     if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
       mql = window.matchMedia('(prefers-reduced-motion: reduce)');
-      onMotion();
+      setReducedMotion(mql.matches);
       if (typeof mql.addEventListener === 'function') mql.addEventListener('change', onMotion);
-      else if (typeof mql.addListener === 'function') mql.addListener(onMotion);
     }
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       if (!mql) return;
       if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onMotion);
-      else if (typeof mql.removeListener === 'function') mql.removeListener(onMotion);
     };
   }, []);
 
@@ -624,11 +622,24 @@ const DailyGenusFeatureV3: React.FC = () => {
               <StatusBadge status={hero.conservation} />
             </div>
 
-            <p className="mt-2 text-xs text-[#6b664f]">
-               Genus: {titleCaseGenus(entry.genus)}
-               {(hero.imageSource || displaySource) ? ` · Source: ${hero.imageSource || displaySource}` : ''}
-               {hero.imageLicense ? ` · ${hero.imageLicense}` : ''}
-            </p>
+            <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6b664f]">
+              <div className="flex items-baseline gap-1">
+                <dt className="font-medium text-[#5d684c]">Genus</dt>
+                <dd>{titleCaseGenus(entry.genus)}</dd>
+              </div>
+              {(hero.imageSource || displaySource) && (
+                <div className="flex items-baseline gap-1">
+                  <dt className="font-medium text-[#5d684c]">Source</dt>
+                  <dd>{hero.imageSource || displaySource}</dd>
+                </div>
+              )}
+              {hero.imageLicense && (
+                <div className="flex items-baseline gap-1">
+                  <dt className="font-medium text-[#5d684c]">License</dt>
+                  <dd>{hero.imageLicense}</dd>
+                </div>
+              )}
+            </dl>
 
             {hero.commonName && <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8a8062]">{hero.commonName}</p>}
 

@@ -148,7 +148,7 @@ const DailyGenusFeatureV5: React.FC = () => {
           className="mt-0"
         />
         <p className="mt-3 text-xs leading-5 text-[#5d684c]">
-          Nearby orchids, pollinators, fungi, and habitats form the living network around today&rsquo;s genus.
+          Nearby orchids, pollinators, fungi, and habitats form the living network around today's genus.
         </p>
       </section>
 
