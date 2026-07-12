@@ -157,10 +157,51 @@ export async function createOwnerSession(accessCode: string, owner = 'owner'): P
 }
 
 export async function validateOwnerSession(_token?: string): Promise<OwnerSession> {
-  const session = await requestJson<Omit<OwnerSession, 'token'> & { token?: string }>('/api/mission-control/owner/session', {
-    headers: ownerHeaders(),
-  });
-  return { ...session, token: session.authenticated ? 'cookie' : undefined };
+  let raw: Record<string, unknown>;
+  try {
+    raw = await requestJson<Record<string, unknown>>('/api/mission-control/owner/session', {
+      headers: ownerHeaders(),
+    });
+  } catch (err) {
+    return {
+      authenticated: false,
+      status: 'error',
+      owner: '',
+      token: undefined,
+      expires_at: null,
+      allowedActions: {},
+      reason: err instanceof Error ? err.message : 'Session inspection request failed',
+    };
+  }
+  // Guard against malformed responses: require a proper object.
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return {
+      authenticated: false,
+      status: 'error',
+      owner: '',
+      token: undefined,
+      expires_at: null,
+      allowedActions: {},
+      reason: 'Malformed session inspection response',
+    };
+  }
+  const session = raw as Omit<OwnerSession, 'token'> & { token?: string };
+  // Shared validation (BUILD-058): token: 'cookie' is returned ONLY when ALL
+  // required conditions are explicitly verified:
+  //   1. authenticated === true (strict equality, not merely truthy)
+  //   2. owner identity is a non-empty, non-whitespace string
+  //      (typeof guards against null/'object' and undefined/'undefined' too)
+  // Any other combination — including authenticated: true with null/empty/whitespace
+  // owner — must not produce a truthy token or activate privileged controls.
+  const ownerValue = typeof session.owner === 'string' ? session.owner.trim() : '';
+  const fullyVerified = session.authenticated === true && ownerValue.length > 0;
+  return {
+    ...session,
+    token: fullyVerified ? 'cookie' : undefined,
+    reason: !fullyVerified && session.authenticated
+      ? (session.reason ?? 'Owner session inspection: required owner identity absent')
+      : session.reason,
+  };
 }
 
 export async function endOwnerSession(): Promise<void> {

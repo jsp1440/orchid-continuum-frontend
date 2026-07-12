@@ -1,5 +1,8 @@
+import { describe, it, expect } from 'vitest';
 import { fetchCalyxGenusMedia } from './genusMediaResolver';
 
-// Contract placeholder: the repository currently has no frontend unit-test runner.
-// Retained so the Calyx-only resolver remains an explicit test target.
-void fetchCalyxGenusMedia;
+describe('genusMediaResolver', () => {
+  it('exports fetchCalyxGenusMedia as a function', () => {
+    expect(typeof fetchCalyxGenusMedia).toBe('function');
+  });
+});
