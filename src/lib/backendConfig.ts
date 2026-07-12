@@ -50,6 +50,90 @@ export const CALYX_BACKEND_BASE_URL = (
   'https://orchid-calyx-backend.onrender.com'
 ).replace(/\/$/, '');
 
+const OWNER_SESSION_STORAGE_KEY = 'calyx_owner_session_bearer_v1';
+const OWNER_SESSION_PATH = '/api/mission-control/owner/session';
+const OWNER_TOKEN_SESSION_PATH = '/api/mission-control/owner/session-token';
+
+type OwnerTokenResponse = { token?: unknown };
+
+function readOwnerBearerToken(): string | null {
+  try {
+    return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(OWNER_SESSION_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function storeOwnerBearerToken(token: string): void {
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(OWNER_SESSION_STORAGE_KEY, token);
+  } catch {
+    // The HttpOnly cookie remains available in browsers that permit it.
+  }
+}
+
+function clearOwnerBearerToken(): void {
+  try {
+    if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(OWNER_SESSION_STORAGE_KEY);
+  } catch {
+    // Non-fatal.
+  }
+}
+
+/**
+ * Safari and other privacy-focused browsers may block the Calyx backend's
+ * cross-site HttpOnly cookie. Install a narrow fetch transport shim that uses
+ * the backend's signed session token as a same-tab Bearer fallback.
+ */
+function installOwnerSessionTransport(): void {
+  if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
+  const marker = '__calyxOwnerSessionTransportInstalled';
+  const markedWindow = window as Window & Record<string, unknown>;
+  if (markedWindow[marker]) return;
+  markedWindow[marker] = true;
+
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+    const originalUrl = input instanceof Request ? input.url : String(input);
+    const originalMethod = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    const isCalyxRequest = originalUrl.startsWith(CALYX_BACKEND_BASE_URL);
+    const originalPath = isCalyxRequest ? originalUrl.slice(CALYX_BACKEND_BASE_URL.length).split('?')[0] : '';
+    const isOwnerLogin = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'POST';
+    const isOwnerLogout = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'DELETE';
+
+    let requestInput: RequestInfo | URL = input;
+    if (isOwnerLogin) {
+      requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;
+    }
+
+    const headers = new Headers(input instanceof Request ? input.headers : undefined);
+    new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+
+    const bearer = readOwnerBearerToken();
+    if (isCalyxRequest && bearer && !isOwnerLogin && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${bearer}`);
+    }
+
+    const response = await nativeFetch(requestInput, { ...init, headers });
+
+    if (isOwnerLogin && response.ok) {
+      try {
+        const payload = await response.clone().json() as OwnerTokenResponse;
+        if (typeof payload.token === 'string' && payload.token && payload.token !== 'cookie') {
+          storeOwnerBearerToken(payload.token);
+        }
+      } catch {
+        // createOwnerSession will reject the follow-up inspection if no valid transport exists.
+      }
+    }
+
+    if (isOwnerLogout) clearOwnerBearerToken();
+    return response;
+  };
+}
+
+installOwnerSessionTransport();
+
 /**
  * Image backend
  *
