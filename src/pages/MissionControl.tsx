@@ -1866,7 +1866,7 @@ function RecommendationCard({
     <div className="rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/10 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-          {isNarrative ? recommendation.title : recommendation.title}
+          {recommendation.title}
         </h3>
         <span className="rounded-full border border-[#d4b34a]/30 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
           {recommendation.priority}

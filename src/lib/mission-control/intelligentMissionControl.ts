@@ -179,12 +179,6 @@ export function getGreeting(): string {
 
 // ─── Live Activity Feed ───────────────────────────────────────────────────────
 
-function fmt(offsetMinutes: number): string {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - offsetMinutes);
-  return now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
 export const FALLBACK_ACTIVITY_EVENTS: RecentActivity[] = [
   {
     id: 'fallback-1',
@@ -243,9 +237,6 @@ export const FALLBACK_ACTIVITY_EVENTS: RecentActivity[] = [
     source: 'fallback',
   },
 ];
-
-// Suppress unused warning for fmt — it is used above in definitions
-void fmt;
 
 // ─── Scientific Insights ─────────────────────────────────────────────────────
 
