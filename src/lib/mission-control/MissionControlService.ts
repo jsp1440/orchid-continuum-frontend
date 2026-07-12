@@ -1,9 +1,12 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
-import { grantItems } from '@/lib/missionControlIntelligence';
+import { grantItems, loadIntelligenceStore } from '@/lib/missionControlIntelligence';
 import {
   fetchMissionControlOperations,
+  type ContinuumSubsystem,
+  type EndpointDiagnostic,
   type MissionControlOperations,
   type Recommendation,
+  type RepositoryStatus,
 } from '@/lib/missionControlOps';
 import { researchInbox } from '@/lib/ownerOperationsConsole';
 import type { MissionControlSnapshot } from '@/lib/mission-control/MissionControlTypes';
@@ -15,8 +18,27 @@ const PRIORITY_HIGH_SCORE = 1;
 const PRIORITY_MEDIUM_SCORE = 2;
 const PRIORITY_LOW_SCORE = 3;
 
+/**
+ * Safely coerce any backend value into a typed array.
+ * Supports direct arrays, { items }, { data }, { results } wrappers, and
+ * falls back to an empty array for null / undefined / non-array scalars.
+ * This prevents `.slice / .map / .filter / .find / .some is not a function`
+ * runtime errors when the backend returns an unexpected shape.
+ */
+function safeArr<T>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (value !== null && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    for (const key of ['items', 'data', 'results']) {
+      if (Array.isArray(record[key])) return record[key] as T[];
+    }
+  }
+  return [];
+}
+
 function buildRepositoryRevision(dashboard: MissionControlOperations): string {
-  return dashboard.repositories.find((repository) => repository.latestCommit)?.latestCommit ?? 'unknown';
+  return safeArr<RepositoryStatus>(dashboard.repositories)
+    .find((repository) => repository.latestCommit)?.latestCommit ?? 'unknown';
 }
 
 function resolveApiVersion(): string {
@@ -32,7 +54,7 @@ function recommendationPriorityScore(priority: Recommendation['priority']): numb
 }
 
 function mergeLiveRecommendations(dashboard: MissionControlOperations): Recommendation[] {
-  const subsystemDriven = dashboard.globalHealth
+  const subsystemDriven = safeArr<ContinuumSubsystem>(dashboard.globalHealth)
     .filter((item) => item.status === 'critical' || item.status === 'error' || item.status === 'warning')
     .slice(0, 4)
     .map((item): Recommendation => ({
@@ -44,16 +66,21 @@ function mergeLiveRecommendations(dashboard: MissionControlOperations): Recommen
       nextBuild: item.route ?? '/mission-control',
     }));
 
-  const grantDriven = grantItems.slice(0, 1).map((item): Recommendation => ({
+  // grantItems is a filter function — call it with loaded intelligence items.
+  // Prior to BUILD-059A this was incorrectly used as `grantItems.slice(0,1)`,
+  // treating the function reference as an array and causing the production
+  // runtime error: "Ju.slice is not a function".
+  const loadedGrantItems = grantItems(loadIntelligenceStore().intelligenceItems);
+  const grantDriven = safeArr(loadedGrantItems).slice(0, 1).map((item): Recommendation => ({
     id: `grant-${item.id}`,
-    title: `${item.organization}: evidence package readiness`,
+    title: `${item.organization ?? item.title ?? 'Unknown'}: evidence package readiness`,
     priority: item.priority === 'critical' ? 'critical' : 'high',
     rationale: item.summary,
     ownerDecisionNeeded: item.recommended_action,
     nextBuild: '/mission-control#mission-control-grants',
   }));
 
-  const inboxDriven = researchInbox.slice(0, 1).map((item): Recommendation => ({
+  const inboxDriven = safeArr(researchInbox).slice(0, 1).map((item): Recommendation => ({
     id: `inbox-${item.id}`,
     title: `${item.title}: owner triage`,
     priority: item.status === 'waiting_owner' ? 'high' : 'medium',
@@ -62,15 +89,21 @@ function mergeLiveRecommendations(dashboard: MissionControlOperations): Recommen
     nextBuild: '/mission-control#mission-control-research-command',
   }));
 
-  return [...dashboard.recommendations, ...subsystemDriven, ...grantDriven, ...inboxDriven]
+  return [
+    ...safeArr<Recommendation>(dashboard.recommendations),
+    ...subsystemDriven,
+    ...grantDriven,
+    ...inboxDriven,
+  ]
     .sort((a, b) => recommendationPriorityScore(a.priority) - recommendationPriorityScore(b.priority))
     .slice(0, MAX_RECOMMENDATIONS);
 }
 
 function hasLiveExecutiveState(dashboard: MissionControlOperations): boolean {
-  const executiveDiagnostic = dashboard.diagnostics.find((diagnostic) => diagnostic.endpoint.includes(EXECUTIVE_STATE_PATH));
+  const diagnostics = safeArr<EndpointDiagnostic>(dashboard.diagnostics);
+  const executiveDiagnostic = diagnostics.find((diagnostic) => diagnostic.endpoint.includes(EXECUTIVE_STATE_PATH));
   if (executiveDiagnostic) return executiveDiagnostic.status === 'healthy';
-  return dashboard.diagnostics.some((diagnostic) => diagnostic.status === 'healthy');
+  return diagnostics.some((diagnostic) => diagnostic.status === 'healthy');
 }
 
 function withLiveRecommendationEngine(dashboard: MissionControlOperations): MissionControlOperations {
