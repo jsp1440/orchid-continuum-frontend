@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   BookOpen,
   Bot,
+  Brain,
   Check,
   ChevronLeft,
   ChevronRight,
@@ -37,7 +38,9 @@ import {
   SlidersHorizontal,
   Sparkles,
   Telescope,
+  TrendingUp,
   Workflow,
+  Zap,
 } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
@@ -56,6 +59,18 @@ import {
 } from '@/lib/missionControlOps';
 import { MissionControlProvider } from '@/lib/mission-control/MissionControlProvider';
 import { missionStatusToCardState, useMissionControl } from '@/lib/mission-control/MissionControlHooks';
+import {
+  deriveDailyMetrics,
+  deriveScientificInsights,
+  scoreSubsystems,
+  getGreeting,
+  toNarrativeTitle,
+  buildExecutivePlatformStatus,
+  priorityBandMeta,
+  FALLBACK_ACTIVITY_EVENTS,
+  type PriorityBand,
+  type ScoredSubsystem,
+} from '@/lib/mission-control/intelligentMissionControl';
 import {
   createSourceBriefing,
   grantItems,
@@ -151,6 +166,7 @@ const DEFAULT_DISPLAY_PREFERENCES: DisplayPreferences = {
 const INTELLIGENCE_STORAGE_KEY = 'oc_mission_control_intelligence_v1';
 
 const navigationItems = [
+  { label: 'Daily Brief', targetId: 'mission-control-daily-brief', icon: Zap },
   { label: 'Owner Guide', targetId: 'mission-control-owner-guide', icon: BookOpen },
   { label: 'Command', targetId: 'mission-control-command', icon: Send },
   { label: 'Calyx Queue', targetId: 'mission-control-calyx-queue', icon: ClipboardList },
@@ -163,6 +179,8 @@ const navigationItems = [
   { label: 'Builds', targetId: 'mission-control-builds', icon: GitBranch },
   { label: 'Governance', targetId: 'mission-control-governance', icon: ShieldCheck },
   { label: 'Recommendations', targetId: 'mission-control-recommendations', icon: Sparkles },
+  { label: 'Insights', targetId: 'mission-control-insights', icon: Brain },
+  { label: 'Activity Feed', targetId: 'mission-control-activity-feed', icon: TrendingUp },
   { label: 'Intelligence', targetId: 'mission-control-intelligence', icon: Inbox },
   { label: 'Grant Office', targetId: 'mission-control-grants', icon: DollarSign },
   { label: 'Partnerships', targetId: 'mission-control-partnerships', icon: Handshake },
@@ -573,6 +591,9 @@ function MetricCard({ label, value, detail }: { label: string; value: React.Reac
 function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
   const blockers = safeArray(subsystem.blockers);
   const sourceCounts = Object.entries(subsystem.sourceRecordCounts ?? {});
+  // BUILD-059: compute priority band for this subsystem
+  const scored = useMemo(() => scoreSubsystems([subsystem])[0], [subsystem]);
+  const band = priorityBandMeta(scored.priorityBand);
   return (
     <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -582,16 +603,16 @@ function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
             {subsystem.name}
           </h3>
         </div>
-        <span className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${statusClass(subsystem.status)}`}>
-          {subsystem.status}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${band.className}`}>
+            {band.label}
+          </span>
+          <span className={`rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] ${statusClass(subsystem.status)}`}>
+            {subsystem.status}
+          </span>
+        </div>
       </div>
-      <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-[#d4b34a]" style={{ width: `${Math.max(0, Math.min(100, subsystem.completeness))}%` }} />
-      </div>
-      <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#cfc8b8]/60">
-        {subsystem.completeness}% complete
-      </div>
+      <p className="mt-3 text-[13px] font-medium leading-5 text-emerald-100/90">→ {subsystem.recommendedNextAction}</p>
       <p className="mt-3 text-[12.5px] leading-5 text-[#cfc8b8]/76">{subsystem.summary}</p>
       <div className="mt-3 grid gap-2 text-[11px] text-[#cfc8b8]/72 sm:grid-cols-2">
         <div>Data coverage: {subsystem.dataCoverage ?? 0}%</div>
@@ -601,6 +622,12 @@ function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
         <div>Reliability: {subsystem.operationalReliability ?? 0}%</div>
         <div>Active jobs: {subsystem.activeJobs ?? 0}</div>
       </div>
+      <details className="mt-3 rounded-lg border border-white/[0.06] bg-black/15 p-2">
+        <summary className="cursor-pointer font-mono text-[9px] uppercase tracking-[0.14em] text-[#cfc8b8]/55">Completeness: {subsystem.completeness}%</summary>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full rounded-full bg-[#d4b34a]/60" style={{ width: `${Math.max(0, Math.min(100, subsystem.completeness))}%` }} />
+        </div>
+      </details>
       {sourceCounts.length ? (
         <p className="mt-3 break-all font-mono text-[9px] leading-4 text-[#cfc8b8]/62">
           Source count: {sourceCounts.slice(0, 2).map(([table, count]) => `${table}=${count.toLocaleString()}`).join('; ')}
@@ -615,24 +642,26 @@ function SubsystemCard({ subsystem }: { subsystem: ContinuumSubsystem }) {
       {safeArray(subsystem.failures).length ? (
         <p className="mt-2 text-[12px] leading-5 text-red-100/78">Failure: {safeArray(subsystem.failures)[0]}</p>
       ) : null}
-      <p className="mt-3 text-[12px] leading-5 text-emerald-100/78">Next: {subsystem.recommendedNextAction}</p>
     </article>
   );
 }
 
 function CompletenessRow({ subsystem }: { subsystem: ContinuumSubsystem }) {
+  const scored = useMemo(() => scoreSubsystems([subsystem])[0], [subsystem]);
+  const band = priorityBandMeta(scored.priorityBand);
   return (
-    <div className="grid gap-3 rounded-lg border border-white/[0.07] bg-black/18 p-3 sm:grid-cols-[190px_1fr_96px] sm:items-center">
+    <div className="grid gap-3 rounded-lg border border-white/[0.07] bg-black/18 p-3 sm:grid-cols-[190px_1fr_120px_80px] sm:items-center">
       <div>
         <div className="text-sm text-[#faf7f2]">{subsystem.name}</div>
         <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.16em] text-[#c9a24a]">{subsystem.category}</div>
       </div>
-      <div className="h-2 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full rounded-full bg-[#d4b34a]" style={{ width: `${subsystem.completeness}%` }} />
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <div className="h-full rounded-full bg-[#d4b34a]/60" style={{ width: `${subsystem.completeness}%` }} />
       </div>
-      <span className={`rounded-full border px-2.5 py-1 text-center font-mono text-[9px] uppercase tracking-[0.16em] ${statusClass(subsystem.status)}`}>
-        {subsystem.completeness}%
+      <span className={`rounded-full border px-2.5 py-1 text-center font-mono text-[9px] uppercase tracking-[0.16em] ${band.className}`}>
+        {band.label}
       </span>
+      <span className="text-center font-mono text-[9px] text-[#cfc8b8]/50">{subsystem.completeness}%</span>
     </div>
   );
 }
@@ -975,6 +1004,335 @@ function OwnerGuidePanel() {
   );
 }
 
+// ─── BUILD-059: Daily Brief ───────────────────────────────────────────────────
+
+function DailyBriefPanel({
+  dashboard,
+  focusModeActive,
+  onToggleFocusMode,
+}: {
+  dashboard: MissionControlOperations | null;
+  focusModeActive: boolean;
+  onToggleFocusMode: () => void;
+}) {
+  const greeting = useMemo(() => getGreeting(), []);
+  const metrics = useMemo(() => deriveDailyMetrics(dashboard), [dashboard]);
+  const scoredSystems = useMemo(
+    () => scoreSubsystems([...(dashboard?.globalHealth ?? []), ...(dashboard?.scientificSystems ?? [])]).slice(0, 5),
+    [dashboard],
+  );
+  const healthLabel = (h: typeof metrics.runtimeHealth) =>
+    h === 'healthy' ? '✓ Healthy' : h === 'degraded' ? '⚠ Degraded' : h === 'offline' ? '✗ Offline' : '— Unknown';
+
+  return (
+    <section id="mission-control-daily-brief" className="scroll-mt-28 rounded-lg border border-[#d4b34a]/30 bg-gradient-to-br from-[#0d1d13]/95 to-[#0b1a10]/90 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#c9a24a]">BUILD-059 — Intelligent Mission Control</div>
+          <h2 className="mt-2 text-3xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            {greeting}
+          </h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <Zap className="h-5 w-5 text-[#d4b34a]" strokeWidth={1.5} />
+          <button
+            onClick={onToggleFocusMode}
+            className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 font-mono text-[9px] uppercase tracking-[0.18em] transition-colors ${
+              focusModeActive
+                ? 'border-[#d4b34a]/70 bg-[#d4b34a]/18 text-[#f1d878]'
+                : 'border-white/15 text-[#f5f0e8]/80 hover:border-[#d4b34a]/50 hover:text-[#d4b34a]'
+            }`}
+          >
+            <Eye className="h-3.5 w-3.5" /> {focusModeActive ? 'Focus mode on' : 'Focus mode'}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1fr]">
+        {/* Today's activity */}
+        <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a]">Today's activity</div>
+          <ul className="mt-4 space-y-2 text-sm leading-6 text-[#f5f0e8]/86">
+            <li className="flex items-center justify-between gap-3">
+              <span>New observations processed</span>
+              <span className="font-mono text-[#d4b34a]">{metrics.observationsProcessed || '—'}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span>Images processed</span>
+              <span className="font-mono text-[#d4b34a]">{metrics.imagesProcessed || '—'}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span>Literature added</span>
+              <span className="font-mono text-[#d4b34a]">{metrics.literatureAdded || '—'}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span>Taxonomy conflicts</span>
+              <span className={`font-mono ${metrics.taxonomyConflicts > 0 ? 'text-amber-300' : 'text-[#d4b34a]'}`}>{metrics.taxonomyConflicts || '—'}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span>Knowledge graph changes</span>
+              <span className="font-mono text-[#d4b34a]">{metrics.knowledgeGraphChanges || '—'}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span>New grants</span>
+              <span className="font-mono text-[#d4b34a]">{metrics.newGrants || '—'}</span>
+            </li>
+            <li className="flex items-center justify-between gap-3">
+              <span>Runtime health</span>
+              <span className={`font-mono ${metrics.runtimeHealth === 'healthy' ? 'text-emerald-300' : metrics.runtimeHealth === 'degraded' ? 'text-amber-300' : 'text-red-300'}`}>
+                {healthLabel(metrics.runtimeHealth)}
+              </span>
+            </li>
+          </ul>
+        </div>
+
+        {/* Top 5 priorities */}
+        <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+          <div className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a]">Top 5 priorities</div>
+          <p className="mt-1 text-[11px] text-[#cfc8b8]/60">Ordered by urgency · scientific value · grant impact · system dependency</p>
+          {scoredSystems.length ? (
+            <ol className="mt-4 space-y-3">
+              {scoredSystems.map((sys, index) => {
+                const band = priorityBandMeta(sys.priorityBand);
+                return (
+                  <li key={sys.id} className="flex items-start gap-3">
+                    <span className="mt-0.5 font-mono text-[10px] text-[#c9a24a]">{index + 1}.</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-[#faf7f2]">{sys.name}</span>
+                        <span className={`rounded-full border px-2 py-0.5 font-mono text-[8px] uppercase tracking-[0.14em] ${band.className}`}>{band.label}</span>
+                      </div>
+                      <p className="mt-1 text-[11px] leading-4 text-emerald-100/80">{sys.recommendedNextAction}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <p className="mt-4 text-sm text-[#cfc8b8]/65">Loading priority data...</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── BUILD-059: Live Activity Feed ────────────────────────────────────────────
+
+function LiveActivityFeedPanel({ activities }: { activities: RecentActivity[] }) {
+  const feedRef = useRef<HTMLDivElement>(null);
+  const events = activities.length ? activities : FALLBACK_ACTIVITY_EVENTS;
+  const isFallback = activities.length === 0;
+
+  return (
+    <Panel id="mission-control-activity-feed" eyebrow="Live activity" title="Activity Timeline" icon={TrendingUp}>
+      {isFallback && (
+        <div className="mb-4 rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/08 p-3 text-[11px] leading-5 text-[#f5f0e8]/70">
+          Showing demo events — live backend events will appear here when connected.
+        </div>
+      )}
+      <div ref={feedRef} className="max-h-96 space-y-2 overflow-y-auto pr-1">
+        {events.map((event) => {
+          const time = (() => {
+            try {
+              return new Date(event.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch {
+              return '';
+            }
+          })();
+          return (
+            <div key={event.id} className="flex gap-3 rounded-lg border border-white/[0.06] bg-black/15 p-3">
+              <span className="mt-0.5 shrink-0 font-mono text-[9px] text-[#c9a24a]">{time}</span>
+              <div className="min-w-0">
+                <div className="text-sm text-[#faf7f2]">{event.label}</div>
+                <p className="mt-1 text-[11px] leading-4 text-[#cfc8b8]/72">{event.detail}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+// ─── BUILD-059: Scientific Insights ──────────────────────────────────────────
+
+function ScientificInsightsPanel({ dashboard }: { dashboard: MissionControlOperations | null }) {
+  const insights = useMemo(() => deriveScientificInsights(dashboard), [dashboard]);
+  const categoryIcon = (cat: string) => {
+    if (cat === 'gap') return '◌';
+    if (cat === 'discovery') return '✦';
+    if (cat === 'opportunity') return '→';
+    if (cat === 'relationship') return '⟷';
+    if (cat === 'grant') return '$';
+    return '·';
+  };
+
+  return (
+    <Panel id="mission-control-insights" eyebrow="Scientific intelligence" title="Today's Scientific Insights" icon={Brain}>
+      <div className="mb-4 rounded-lg border border-[#d4b34a]/15 bg-[#d4b34a]/08 p-3 text-[12px] leading-5 text-[#f5f0e8]/78">
+        Gaps, discoveries, opportunities, and relationships surfaced from the current platform state.
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {insights.map((insight) => (
+          <article key={insight.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 text-lg text-[#d4b34a]">{categoryIcon(insight.category)}</span>
+              <div>
+                <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">{insight.category}</div>
+                <h3 className="mt-1 text-base text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+                  {insight.label}
+                </h3>
+              </div>
+            </div>
+            <p className="mt-3 text-[12.5px] leading-5 text-[#cfc8b8]/82">{insight.detail}</p>
+            <p className="mt-3 text-[12px] leading-5 text-emerald-100/82">→ {insight.actionHint}</p>
+          </article>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+// ─── BUILD-059: Owner Focus Mode Widget ───────────────────────────────────────
+
+function OwnerFocusModeWidget({
+  scoredSystems,
+  ownerDecisionItems,
+  waitingExternalItems,
+  onClose,
+}: {
+  scoredSystems: ScoredSubsystem[];
+  ownerDecisionItems: string[];
+  waitingExternalItems: string[];
+  onClose: () => void;
+}) {
+  const top = scoredSystems[0];
+  const band = top ? priorityBandMeta(top.priorityBand) : null;
+
+  return (
+    <section className="rounded-lg border border-[#d4b34a]/40 bg-gradient-to-br from-[#0e1f14]/95 to-[#0a1910]/90 p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#d4b34a]">Owner focus mode</div>
+          <h2 className="mt-1 text-2xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
+            What needs your attention now
+          </h2>
+        </div>
+        <button
+          onClick={onClose}
+          className="inline-flex items-center gap-2 rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#f5f0e8] hover:border-[#d4b34a]/60 hover:text-[#d4b34a]"
+        >
+          <EyeOff className="h-3.5 w-3.5" /> Exit focus
+        </button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        {/* Current priority */}
+        <div className="rounded-lg border border-white/[0.08] bg-black/20 p-4">
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">Current priority</div>
+          {top ? (
+            <>
+              <h3 className="mt-2 text-base text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{top.name}</h3>
+              {band && <span className={`mt-2 inline-block rounded-full border px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.14em] ${band.className}`}>{band.label}</span>}
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-[#cfc8b8]/65">No critical items found.</p>
+          )}
+        </div>
+
+        {/* Next action */}
+        <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/08 p-4">
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">Next action</div>
+          <p className="mt-2 text-sm leading-6 text-[#f5f0e8]/90">
+            {top?.recommendedNextAction ?? 'All priorities resolved.'}
+          </p>
+        </div>
+
+        {/* Owner decisions */}
+        <div className="rounded-lg border border-amber-300/20 bg-amber-300/08 p-4">
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">Required owner decisions</div>
+          {ownerDecisionItems.length ? (
+            <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/84">
+              {ownerDecisionItems.slice(0, 4).map((item) => <li key={item}>· {item}</li>)}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[12px] text-[#cfc8b8]/60">No owner decisions pending.</p>
+          )}
+        </div>
+
+        {/* Waiting external */}
+        <div className="rounded-lg border border-sky-300/20 bg-sky-300/08 p-4">
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-sky-200">Waiting external</div>
+          {waitingExternalItems.length ? (
+            <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/84">
+              {waitingExternalItems.slice(0, 4).map((item) => <li key={item}>· {item}</li>)}
+            </ul>
+          ) : (
+            <p className="mt-2 text-[12px] text-[#cfc8b8]/60">No external dependencies pending.</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── BUILD-059: Executive Platform Status Panel ───────────────────────────────
+
+function ExecutivePlatformStatusPanel({ dashboard }: { dashboard: MissionControlOperations | null }) {
+  const status = useMemo(() => buildExecutivePlatformStatus(dashboard), [dashboard]);
+  return (
+    <Panel id="mission-control-calyx-audit" eyebrow="Calyx" title="Current Platform Status" icon={Bot}>
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-200">Healthy systems</div>
+            {status.healthySystems.length ? (
+              <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/84">
+                {status.healthySystems.map((s) => <li key={s}>✓ {s}</li>)}
+              </ul>
+            ) : (
+              <p className="mt-2 text-[12px] text-[#cfc8b8]/60">No systems confirmed healthy.</p>
+            )}
+          </div>
+          <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-amber-200">Systems needing attention</div>
+            {status.needsAttentionSystems.length ? (
+              <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/84">
+                {status.needsAttentionSystems.map((s) => <li key={s}>⚠ {s}</li>)}
+              </ul>
+            ) : (
+              <p className="mt-2 text-[12px] text-[#cfc8b8]/60">No attention items.</p>
+            )}
+          </div>
+        </div>
+        {status.criticalBlockers.length > 0 && (
+          <div className="rounded-lg border border-red-300/20 bg-red-300/10 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-red-200">Critical blockers</div>
+            <ul className="mt-2 space-y-1 text-[12px] leading-5 text-[#cfc8b8]/84">
+              {status.criticalBlockers.map((s) => <li key={s}>✗ {s}</li>)}
+            </ul>
+          </div>
+        )}
+        <div className="rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/08 p-3">
+          <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">Recommended build</div>
+          <p className="mt-2 text-[12px] leading-5 text-[#f5f0e8]/84">{status.recommendedBuild}</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg border border-white/[0.08] bg-black/18 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">Scientific readiness</div>
+            <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/84">{status.estimatedScientificReadiness}</p>
+          </div>
+          <div className="rounded-lg border border-white/[0.08] bg-black/18 p-3">
+            <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">Grant readiness</div>
+            <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/84">{status.estimatedGrantReadiness}</p>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
 function CalyxOperationsQueuePanel({
   backendItems,
   ownerAuthorized,
@@ -1217,27 +1575,41 @@ function CommandBarPanel({
   disabled: boolean;
   statusMessage: string | null;
 }) {
+  // BUILD-059: natural language prompts for conversational CALYX
+  const nlPrompts = [
+    'What should I work on tonight?',
+    'Prepare a grant.',
+    'Audit pollinators.',
+    'Review Atlas.',
+    'Generate today\'s executive report.',
+    'Find missing habitat data.',
+    'Audit Orchid Continuum',
+    'Generate Grant Report',
+  ];
   return (
-    <Panel id="mission-control-command" eyebrow="Calyx Command Bar" title="Ask Calyx What To Do Next" icon={Send}>
+    <Panel id="mission-control-command" eyebrow="Conversational Calyx" title="Ask Calyx What To Do Next" icon={Send}>
+      <div className="mb-4 rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/08 p-3 text-[12px] leading-5 text-[#f5f0e8]/80">
+        Use natural language. Ask what to work on, request a grant package, audit a system, or generate a report.
+      </div>
       <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
         <label className="block">
-          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">Natural language command</span>
+          <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#c9a24a]">Natural language prompt</span>
           <input
             value={value}
             onChange={(event) => onChange(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter') onSubmit();
             }}
-            placeholder="Audit Orchid Continuum, compare Lycaste, generate grant report..."
+            placeholder="What should I work on tonight?"
             className="mt-2 w-full rounded-lg border border-white/12 bg-black/25 px-4 py-3 text-sm text-[#f5f0e8] outline-none focus:border-[#d4b34a]/70"
           />
         </label>
         <button disabled={disabled} onClick={onSubmit} className="inline-flex h-fit items-center justify-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] hover:bg-[#e5c85c] disabled:cursor-not-allowed disabled:opacity-45 lg:self-end">
-          <Send className="h-3.5 w-3.5" /> Submit Command
+          <Send className="h-3.5 w-3.5" /> Submit
         </button>
       </div>
       <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-        {['Audit Orchid Continuum', 'Compare Lycaste', 'Build Habitat Cards', 'Generate Grant Report'].map((sample) => (
+        {nlPrompts.slice(0, 8).map((sample) => (
           <button key={sample} onClick={() => onChange(sample)} className="rounded-lg border border-white/[0.08] bg-black/18 px-3 py-2 text-left text-[12px] text-[#cfc8b8]/82 hover:border-[#d4b34a]/45 hover:text-[#d4b34a]">
             {sample}
           </button>
@@ -1479,6 +1851,9 @@ function RecommendationCard({
   onCopy: (key: string, value: string) => void;
   copiedKey: string | null;
 }) {
+  // BUILD-059: convert terse labels to narrative guidance
+  const narrativeTitle = toNarrativeTitle(recommendation.title);
+  const isNarrative = narrativeTitle !== recommendation.title;
   const copyText = [
     recommendation.title,
     `Priority: ${recommendation.priority}`,
@@ -1491,12 +1866,15 @@ function RecommendationCard({
     <div className="rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/10 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-          {recommendation.title}
+          {isNarrative ? recommendation.title : recommendation.title}
         </h3>
         <span className="rounded-full border border-[#d4b34a]/30 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
           {recommendation.priority}
         </span>
       </div>
+      {isNarrative && (
+        <p className="mt-3 text-base leading-7 text-[#f5f0e8]/90 italic">{narrativeTitle}</p>
+      )}
       <p className="mt-3 text-sm leading-6 text-[#f5f0e8]/84">{recommendation.rationale}</p>
       <p className="mt-3 text-[12px] leading-5 text-[#cfc8b8]/78">Owner decision: {recommendation.ownerDecisionNeeded}</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1951,13 +2329,15 @@ const MissionControlContent: React.FC = () => {
   const [displayPreferences, setDisplayPreferences] = useState<DisplayPreferences>(() => loadDisplayPreferences());
   const [activeFilter, setActiveFilter] = useState<MissionFilter>('overview');
   const [focusedItem, setFocusedItem] = useState<FocusItem | null>(null);
-  const [commandText, setCommandText] = useState('Audit Orchid Continuum');
+  const [commandText, setCommandText] = useState('What should I work on tonight?');
   const [ownerSession, setOwnerSession] = useState<OwnerSession | null>(null);
   const [ownerOperations, setOwnerOperations] = useState<OwnerOperationsState | null>(null);
   const [ownerSessionStatus, setOwnerSessionStatus] = useState<'missing' | 'authenticated' | 'error'>('missing');
   const [ownerActionMessage, setOwnerActionMessage] = useState<string | null>(null);
   const [lastSessionCheck, setLastSessionCheck] = useState<string | null>(null);
   const [pendingHarvesterAction, setPendingHarvesterAction] = useState<string | null>(null);
+  // BUILD-059: Owner Focus Mode toggle
+  const [focusModeActive, setFocusModeActive] = useState(false);
 
   const loadOwnerOperations = useCallback(async (token = ownerSession?.token) => {
     try {
@@ -2055,8 +2435,9 @@ const MissionControlContent: React.FC = () => {
     setDisplayPreferences(DEFAULT_DISPLAY_PREFERENCES);
     setFocusedItem(null);
     setActiveFilter('overview');
-    setCommandText('Audit Orchid Continuum');
+    setCommandText('What should I work on tonight?');
     setIntelligenceStore(loadIntelligenceStore());
+    setFocusModeActive(false);
   };
 
   const copyToClipboard = async (key: string, value: string) => {
@@ -2208,6 +2589,31 @@ const MissionControlContent: React.FC = () => {
     };
   }, [dashboard]);
 
+  // BUILD-059: scored subsystems for Daily Brief, Focus Mode, and Priority Engine
+  const scoredSubsystems = useMemo(
+    () => scoreSubsystems([...(dashboard?.globalHealth ?? []), ...(dashboard?.scientificSystems ?? [])]),
+    [dashboard],
+  );
+
+  // BUILD-059: owner decision items from queue + blockers for Focus Mode
+  const ownerDecisionItems = useMemo(() => {
+    const queueDecisions = (ownerOperations?.operationsQueue ?? [])
+      .filter((item) => item.status === 'awaiting_owner' || item.status === 'proposed')
+      .map((item) => item.next_required_action ?? item.title)
+      .filter(Boolean);
+    const blockerDecisions = safeArray(dashboard?.globalHealth)
+      .filter((s) => s.blockers.length > 0)
+      .map((s) => `${s.name}: ${s.blockers[0]}`);
+    return [...queueDecisions, ...blockerDecisions].slice(0, 6) as string[];
+  }, [dashboard, ownerOperations]);
+
+  const waitingExternalItems = useMemo(() => {
+    return (ownerOperations?.operationsQueue ?? [])
+      .filter((item) => item.status === 'blocked')
+      .map((item) => item.title)
+      .slice(0, 4);
+  }, [ownerOperations]);
+
   const focusItems = useMemo(() => (dashboard ? buildFocusItems(dashboard) : []), [dashboard]);
   const filteredFocusItems = useMemo(
     () => focusItems.filter((item) => itemMatchesFilter(item, activeFilter, displayPreferences.hideHealthyDefault)),
@@ -2315,13 +2721,13 @@ const MissionControlContent: React.FC = () => {
             <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
               <div>
                 <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                  <ShieldCheck className="h-3.5 w-3.5" /> BUILD-036 - Calyx operations center
+                  <ShieldCheck className="h-3.5 w-3.5" /> BUILD-059 - Calyx intelligent mission control
                 </div>
                 <h1 className="mt-5 max-w-5xl text-4xl leading-tight md:text-6xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-                  Mission Control <span className="italic text-[#d4b34a]">master operations center.</span>
+                  Mission Control <span className="italic text-[#d4b34a]">intelligent operations center.</span>
                 </h1>
                 <p className="mt-5 max-w-3xl text-[15px] leading-7 text-[#cfc8b8]/88">
-                  Mission Control now acts as Calyx's read-only cockpit for global health, harvesters, build status, science completeness, governance, recommendations, and safety boundaries.
+                  Calyx actively guides you through scientific priorities, next actions, grant opportunities, and system health — backed by the live executive intelligence engine.
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
@@ -2425,6 +2831,27 @@ const MissionControlContent: React.FC = () => {
 
               <div className={contentDensityClass}>
                 <DisplayPreferencesPanel preferences={displayPreferences} onChange={setDisplayPreferences} />
+
+                {/* BUILD-059: Daily Brief */}
+                <SafePanel title="Daily Brief">
+                <DailyBriefPanel
+                  dashboard={dashboard}
+                  focusModeActive={focusModeActive}
+                  onToggleFocusMode={() => setFocusModeActive((v) => !v)}
+                />
+                </SafePanel>
+
+                {/* BUILD-059: Owner Focus Mode Widget — shown only when focus mode is on */}
+                {focusModeActive && (
+                  <SafePanel title="Owner Focus Mode">
+                  <OwnerFocusModeWidget
+                    scoredSystems={scoredSubsystems}
+                    ownerDecisionItems={ownerDecisionItems}
+                    waitingExternalItems={waitingExternalItems}
+                    onClose={() => setFocusModeActive(false)}
+                  />
+                  </SafePanel>
+                )}
 
                 <AttentionSummary items={focusItems} activeFilter={activeFilter} onFilterChange={setActiveFilter} />
 
@@ -2599,8 +3026,14 @@ const MissionControlContent: React.FC = () => {
               </div>
 
               <aside className="h-fit space-y-5 xl:sticky xl:top-24">
-                <SafePanel title="Executive Summary / Self-Audit">
-                <Panel id="mission-control-calyx-audit" eyebrow="Calyx" title="Executive Summary / Self-Audit" icon={Bot}>
+                {/* BUILD-059: Executive Platform Status (replaces terse self-audit summary) */}
+                <SafePanel title="Current Platform Status">
+                <ExecutivePlatformStatusPanel dashboard={dashboard} />
+                </SafePanel>
+
+                {/* Keep the legacy self-audit detail under a details element */}
+                <SafePanel title="Calyx Self-Audit Detail">
+                <Panel eyebrow="Calyx" title="Calyx Self-Audit Detail" icon={Bot}>
                   <p className="text-sm leading-6 text-[#f5f0e8]/84">{calyxSelfAudit.summary}</p>
                   <div className="mt-4 space-y-3">
                     <div className="rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-3">
@@ -2628,6 +3061,16 @@ const MissionControlContent: React.FC = () => {
                     ))}
                   </div>
                 </Panel>
+                </SafePanel>
+
+                {/* BUILD-059: Scientific Insights */}
+                <SafePanel title="Today's Scientific Insights">
+                <ScientificInsightsPanel dashboard={dashboard} />
+                </SafePanel>
+
+                {/* BUILD-059: Live Activity Feed */}
+                <SafePanel title="Activity Timeline">
+                <LiveActivityFeedPanel activities={recentActivity} />
                 </SafePanel>
 
                 <SafePanel title="Recent Activity">
