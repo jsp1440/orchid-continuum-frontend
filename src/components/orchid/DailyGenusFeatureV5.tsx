@@ -14,7 +14,7 @@ import {
   ShieldCheck,
   Sprout,
 } from 'lucide-react';
-import DailyGenusFeatureV4 from '@/components/orchid/DailyGenusFeatureV4';
+import DailyGenusFeatureV3 from '@/components/orchid/DailyGenusFeatureV3';
 import DailyGenusRelationshipChips from '@/components/orchid/DailyGenusRelationshipChips';
 import { featuredGenusEntry } from '@/lib/featuredGenus';
 import type { GenusEntry, SpeciesPlate } from '@/lib/genusData';
@@ -134,7 +134,7 @@ const DailyGenusFeatureV5: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <DailyGenusFeatureV4 />
+      <DailyGenusFeatureV3 />
 
       <section className="rounded-lg border border-[#d9caa8] bg-[#f6f0df]/95 p-3 shadow-[0_10px_24px_rgba(30,40,20,0.06)]">
         <DailyGenusRelationshipChips
@@ -147,6 +147,9 @@ const DailyGenusFeatureV5: React.FC = () => {
           sourceView="featuredGenusEntry"
           className="mt-0"
         />
+        <p className="mt-3 text-xs leading-5 text-[#5d684c]">
+          Nearby orchids, pollinators, fungi, and habitats form the living network around today&rsquo;s genus.
+        </p>
       </section>
 
       <section className="rounded-lg border border-[#d9caa8] bg-[#fffaf0]/95 p-5 shadow-[0_10px_24px_rgba(30,40,20,0.06)]">
