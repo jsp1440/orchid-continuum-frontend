@@ -412,3 +412,141 @@ export function buildExecutivePlatformStatus(ops: MissionControlOperations | nul
       `Not yet ready — foundational data incomplete`,
   };
 }
+
+
+// ─── Scientific Intelligence Integration (BUILD-061) ─────────────────────────
+
+import type { KnowledgeGraphIntelligence } from '@/lib/scientific-intelligence/knowledge-graph/adapter'
+import type { AtlasIntelligence } from '@/lib/scientific-intelligence/atlas/adapter'
+import type { LiteratureIntelligence } from '@/lib/scientific-intelligence/literature/adapter'
+import type { PollinatorIntelligence } from '@/lib/scientific-intelligence/pollinators/adapter'
+import type { MycorrhizaIntelligence } from '@/lib/scientific-intelligence/mycorrhiza/adapter'
+import type { VisionIntelligence } from '@/lib/scientific-intelligence/vision/adapter'
+import type { GrantsIntelligence } from '@/lib/scientific-intelligence/grants/adapter'
+
+export type ScientificIntelligenceBundle = {
+  knowledgeGraph?: KnowledgeGraphIntelligence
+  atlas?: AtlasIntelligence
+  literature?: LiteratureIntelligence
+  pollinators?: PollinatorIntelligence
+  mycorrhiza?: MycorrhizaIntelligence
+  vision?: VisionIntelligence
+  grants?: GrantsIntelligence
+}
+
+function matchesSubsystem(id: string, name: string, keywords: string[]): boolean {
+  return keywords.some((k) => id.includes(k) || name.includes(k))
+}
+
+export function scoreSubsystemsWithScientificIntelligence(
+  subsystems: ContinuumSubsystem[],
+  bundle: Partial<ScientificIntelligenceBundle>,
+): ScoredSubsystem[] {
+  return subsystems
+    .map((s): ScoredSubsystem => {
+      const factors = subsystemToFactors(s)
+      const id = (s.id ?? '').toLowerCase()
+      const name = (s.name ?? '').toLowerCase()
+
+      if (matchesSubsystem(id, name, ['atlas']) && bundle.atlas?.mode !== 'unavailable') {
+        const atlas = bundle.atlas
+        if (atlas) {
+          factors.dataCompleteness = Math.max(0, Math.min(1, atlas.coverage ?? factors.dataCompleteness))
+          factors.backendHealth = atlas.connectionState === 'connected' ? 1 : 0.3
+        }
+      }
+      if (matchesSubsystem(id, name, ['knowledge', 'graph']) && bundle.knowledgeGraph?.mode !== 'unavailable') {
+        const kg = bundle.knowledgeGraph
+        if (kg) {
+          factors.dataCompleteness = Math.max(0, Math.min(1, kg.graphCompleteness ?? factors.dataCompleteness))
+          factors.backendHealth = kg.connectionState === 'connected' ? 1 : 0.3
+          factors.relationshipImpact = kg.connectedEntities > 0 ? 0.9 : 0.3
+        }
+      }
+      if (matchesSubsystem(id, name, ['literature']) && bundle.literature?.mode !== 'unavailable') {
+        const lit = bundle.literature
+        if (lit) {
+          factors.dataCompleteness = Math.max(0, Math.min(1, lit.coverage ?? factors.dataCompleteness))
+          factors.backendHealth = lit.connectionState === 'connected' ? 1 : 0.3
+        }
+      }
+      if (matchesSubsystem(id, name, ['pollinator']) && bundle.pollinators?.mode !== 'unavailable') {
+        const pol = bundle.pollinators
+        if (pol) {
+          factors.dataCompleteness = Math.max(0, Math.min(1, pol.coverage ?? factors.dataCompleteness))
+          factors.backendHealth = pol.connectionState === 'connected' ? 1 : 0.3
+        }
+      }
+      if (matchesSubsystem(id, name, ['mycorrhiza', 'fungal']) && bundle.mycorrhiza?.mode !== 'unavailable') {
+        const myco = bundle.mycorrhiza
+        if (myco) {
+          factors.dataCompleteness = Math.max(0, Math.min(1, myco.coverage ?? factors.dataCompleteness))
+          factors.backendHealth = myco.connectionState === 'connected' ? 1 : 0.3
+        }
+      }
+      if (matchesSubsystem(id, name, ['vision', 'image']) && bundle.vision?.mode !== 'unavailable') {
+        const vis = bundle.vision
+        if (vis) {
+          factors.dataCompleteness = Math.max(0, Math.min(1, vis.coverage ?? factors.dataCompleteness))
+          factors.backendHealth = vis.connectionState === 'connected' ? 1 : 0.3
+        }
+      }
+      if (matchesSubsystem(id, name, ['grant']) && bundle.grants?.mode !== 'unavailable') {
+        const gr = bundle.grants
+        if (gr) {
+          factors.grantRelevance = gr.urgentDeadlines > 0 ? 0.95 : 0.75
+          factors.ownerDependency = gr.ownerDecisions.length > 0 ? 0.9 : 0.3
+        }
+      }
+
+      const score = computePriorityScore(factors)
+      return { ...s, priorityScore: score, priorityBand: scoreToPriorityBand(score) }
+    })
+    .sort((a, b) => b.priorityScore - a.priorityScore)
+}
+
+export function deriveScientificInsightsWithIntelligence(
+  ops: MissionControlOperations | null,
+  bundle: Partial<ScientificIntelligenceBundle>,
+): ScientificInsight[] {
+  const base = deriveScientificInsights(ops)
+  const enhanced: ScientificInsight[] = []
+
+  if (bundle.atlas && bundle.atlas.mode !== 'unavailable' && bundle.atlas.mode !== 'error') {
+    enhanced.push({
+      id: 'insight-atlas-live',
+      label: 'Atlas occurrence coverage',
+      detail: `${bundle.atlas.occurrenceCount.toLocaleString()} occurrences indexed. ${bundle.atlas.missingCoordinates} missing coordinates.`,
+      actionHint: bundle.atlas.recommendedNextAction,
+      category: 'gap',
+    })
+  }
+
+  if (bundle.knowledgeGraph && bundle.knowledgeGraph.mode !== 'unavailable' && bundle.knowledgeGraph.mode !== 'error') {
+    enhanced.push({
+      id: 'insight-kg-live',
+      label: 'Knowledge Graph relationships',
+      detail: `${bundle.knowledgeGraph.connectedEntities} connected entities and ${bundle.knowledgeGraph.relationshipCount} relationships. Graph completeness: ${Math.round(bundle.knowledgeGraph.graphCompleteness * 100)}%.`,
+      actionHint: bundle.knowledgeGraph.repairAction,
+      category: 'relationship',
+    })
+  }
+
+  if (bundle.grants && bundle.grants.activeOpportunities > 0) {
+    enhanced.push({
+      id: 'insight-grants-live',
+      label: 'Grant opportunities',
+      detail: `${bundle.grants.activeOpportunities} active grant opportunities. ${bundle.grants.urgentDeadlines} urgent deadline(s).`,
+      actionHint: bundle.grants.nextAction,
+      category: 'grant',
+    })
+  }
+
+  const used = enhanced.map((i) => i.id)
+  for (const insight of base) {
+    if (!used.includes(insight.id)) enhanced.push(insight)
+    if (enhanced.length >= 6) break
+  }
+
+  return enhanced.slice(0, 6)
+}
