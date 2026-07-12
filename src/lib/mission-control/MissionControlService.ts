@@ -73,7 +73,7 @@ function mergeLiveRecommendations(dashboard: MissionControlOperations): Recommen
   const loadedGrantItems = grantItems(loadIntelligenceStore().intelligenceItems);
   const grantDriven = safeArr(loadedGrantItems).slice(0, 1).map((item): Recommendation => ({
     id: `grant-${item.id}`,
-    title: `${item.organization ?? item.title}: evidence package readiness`,
+    title: `${item.organization ?? item.title ?? 'Unknown'}: evidence package readiness`,
     priority: item.priority === 'critical' ? 'critical' : 'high',
     rationale: item.summary,
     ownerDecisionNeeded: item.recommended_action,

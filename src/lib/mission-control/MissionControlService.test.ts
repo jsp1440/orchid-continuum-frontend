@@ -20,9 +20,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // We import the private helpers indirectly by exercising fetchMissionControlSnapshot.
 // The module is re-imported after each mock reset so the mocks take effect.
 
-type MocKPayload = Record<string, unknown>;
+type MockPayload = Record<string, unknown>;
 
-function buildMinimalOps(overrides: Partial<MocKPayload> = {}): MocKPayload {
+function buildMinimalOps(overrides: Partial<MockPayload> = {}): MockPayload {
   return {
     generatedAt: new Date().toISOString(),
     dataMode: 'fallback',
