@@ -584,7 +584,7 @@ interface CachedGenusImages {
 
 /** Storage key for a genus's images on "today" (case-insensitive genus). */
 function genusImagesCacheKey(genus: string): string {
-  return `oc_genus_images_v2_${genus.trim().toLowerCase()}_${todayKey()}`;
+  return `oc_genus_images_v3_${genus.trim().toLowerCase()}_${todayKey()}`;
 }
 
 /** Read today's cached images for a genus, or null if absent/stale/invalid. */
@@ -639,10 +639,10 @@ function writeGenusImagesCache(genus: string, images: GenusImage[]): void {
 // external harvester), then it writes the result back via 'put'.
 
 /** Read a genus's images from the shared server cache; [] on miss/error. */
-async function readServerImageCache(genus: string): Promise<GenusImage[]> {
+async function readServerImageCache(genus: string, limit = 200): Promise<GenusImage[]> {
   try {
     const { data, error } = await supabase.functions.invoke('genus-images', {
-      body: { action: 'get', genus, limit: 20 },
+      body: { action: 'get', genus, limit },
     });
     if (error) return [];
     const imgs = (data as { images?: GenusImage[] } | null)?.images;
@@ -721,7 +721,7 @@ export async function fetchGenusImagesWithSource(
 
   // ── 2. Shared server cache / proxy (Supabase edge function) ──
   if (!signal?.aborted) {
-    const server = await readServerImageCache(g);
+const server = await readServerImageCache(g, limit);
     if (server.length > 0) {
       console.log(
         `[fetchGenusImages] ⚡ server cache HIT for "${g}" — ${server.length} image(s)`,

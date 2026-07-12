@@ -1,26 +1,14 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Compass, Leaf } from 'lucide-react';
+import { ArrowRight, Compass, Leaf, ShieldCheck } from 'lucide-react';
 import BotanicalLineArt from './BotanicalLineArt';
 
 /**
  * HomeHero — Orchid Continuum scientific landing hero.
  *
- * Purpose:
- *   Make the platform's intent legible to a first-time visitor within
- *   ten seconds. No slogans, no startup language, no invented acronyms.
- *
- * Tone:
- *   Scientific · botanical · conservation-centered. Museum / ecological
- *   atlas aesthetic — restrained typography, deep ink ground, a single
- *   botanical line drawing, gold and forest accents.
- *
- * Copy is fixed verbatim per the editorial brief:
- *   Title    — "Orchid Continuum"
- *   Subtitle — "A living platform for orchid biodiversity, ecological
- *              relationships, conservation, and discovery."
- *   Body     — Hidden-relationships paragraph (orchids · fungi ·
- *              pollinators · climate · conservation).
+ * BUILD-036 keeps the museum / ecological-atlas aesthetic while making the
+ * first screen explicitly grant-ready: beauty leads to discovery, discovery
+ * leads to relationships, and relationships lead to stewardship.
  */
 
 const HomeHero: React.FC = () => {
@@ -39,7 +27,6 @@ const HomeHero: React.FC = () => {
   return (
 
     <section className="relative overflow-hidden bg-[#1a2e1a] text-[#f5f0e8] border-b border-white/[0.06]">
-      {/* Ecological atmosphere — forest emerald at dusk */}
       <div
         className="absolute inset-0 pointer-events-none"
         style={{
@@ -50,7 +37,6 @@ const HomeHero: React.FC = () => {
         }}
       />
 
-      {/* Ghost logo watermark — barely visible texture behind hero text */}
       <div
         className="pointer-events-none absolute inset-0 flex items-center justify-center"
         aria-hidden="true"
@@ -64,7 +50,6 @@ const HomeHero: React.FC = () => {
         }}
       />
 
-      {/* Botanical line-art watermark — Dracula silhouette, low opacity */}
       <div
         className="pointer-events-none absolute -right-24 top-12 w-[640px] opacity-[0.07] hidden md:block"
         aria-hidden="true"
@@ -78,13 +63,12 @@ const HomeHero: React.FC = () => {
       </div>
 
 
-      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 pt-32 lg:pt-36 pb-20 lg:pb-24">
-        <div className="grid lg:grid-cols-12 gap-12 items-center">
-          {/* Editorial copy — discovery framing */}
+      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 pt-24 lg:pt-28 pb-14 lg:pb-16">
+        <div className="grid lg:grid-cols-12 gap-10 items-center">
           <div className="lg:col-span-8">
             <div className="inline-flex items-center gap-3 font-mono text-[10px] tracking-[0.32em] uppercase text-[#c9a24a]">
               <span className="inline-block w-8 h-px bg-[#c9a24a]/60" />
-              Orchids · Pollinators · Fungi · Climate · Conservation
+              Biodiversity · Relationships · Education · Conservation
             </div>
 
             <h1
@@ -93,7 +77,7 @@ const HomeHero: React.FC = () => {
                 fontFamily:
                   '"Playfair Display","Cormorant Garamond",Georgia,serif',
                 fontWeight: 500,
-                fontSize: 'clamp(2.4rem, 5.4vw, 4.6rem)',
+                fontSize: 'clamp(2.4rem, 5.4vw, 4.7rem)',
               }}
             >
               Discover the hidden relationships that connect orchids to the{' '}
@@ -101,48 +85,54 @@ const HomeHero: React.FC = () => {
             </h1>
 
             <p
-              className="mt-8 max-w-3xl text-[#e7dfd1]/90 leading-[1.4]"
+              className="mt-6 max-w-3xl text-[#e7dfd1]/90 leading-[1.4]"
               style={{
                 fontFamily:
                   '"Cormorant Garamond","Playfair Display",Georgia,serif',
                 fontSize: 'clamp(1.15rem, 1.7vw, 1.55rem)',
               }}
             >
-              No orchid exists alone. Each one is bound to a pollinator, a
-              fungus, a climate, and a place on Earth. The Orchid Continuum is
-              a living map of those relationships — an invitation to explore
-              the web of life behind every flower.
+              The Orchid Continuum connects orchids with pollinators, fungi,
+              habitats, climate, images, maps, literature, education, and
+              conservation action — so beauty becomes understanding, and
+              understanding becomes stewardship.
             </p>
 
-            {/* CTAs — invitations to explore, not feature buttons */}
-            <div className="mt-10 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={scrollToWeb}
+                onClick={scrollToStory}
                 className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-[#d4b34a] text-[#14281c] hover:bg-[#e6c763] transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
               >
-                <Compass className="h-4 w-4" />
-                Explore the Continuum
+                <Leaf className="h-4 w-4" />
+                Follow today's orchid
                 <ArrowRight className="h-4 w-4 opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all" />
               </button>
               <button
                 type="button"
-                onClick={scrollToStory}
+                onClick={scrollToWeb}
                 className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-[#d4b34a]/40 text-[#faf7f2] hover:bg-[#d4b34a]/10 hover:border-[#d4b34a] transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
               >
-                <Leaf className="h-4 w-4" />
-                Follow an Orchid's Story
+                <Compass className="h-4 w-4" />
+                Explore the Continuum
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/get-involved')}
+                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-emerald-300/30 text-[#faf7f2] hover:bg-emerald-300/10 hover:border-emerald-300/60 transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                Support conservation
               </button>
             </div>
 
-            <p className="mt-10 font-mono text-[10px] tracking-[0.24em] uppercase text-[#7a7466]">
+            <p className="mt-8 font-mono text-[10px] tracking-[0.24em] uppercase text-[#7a7466]">
               An independent biodiversity and conservation initiative ·
               fiscally sponsored by Ecologistics, 501(c)(3).
             </p>
           </div>
 
 
-          {/* Right column — Orchid Continuum logo as hero graphic */}
           <div className="lg:col-span-4 hidden lg:block">
             <div className="relative">
               <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

@@ -5,6 +5,11 @@ import {
   RelationshipExplorerPayload,
   TEST_SPECIES,
 } from "@/lib/relationshipExplorer";
+import {
+  fetchSpeciesEcologicalNeighborhood,
+  type EcologicalNeighborhoodCard as NeighborhoodCard,
+} from "@/lib/ecologicalNeighborhood";
+import EcologicalNeighborhood from "@/components/orchid/EcologicalNeighborhood";
 
 function valueText(value: unknown, fallback = "Not available") {
   if (value === null || value === undefined || value === "") return fallback;
@@ -62,6 +67,17 @@ function StatusPill({ label, active }: { label: string; active: boolean }) {
   );
 }
 
+function countNeighborhoodCards(cards: NeighborhoodCard[]) {
+  return {
+    total: cards.length,
+    pollinators: cards.filter((card) => card.type === "pollinator").length,
+    fungi: cards.filter((card) => card.type === "fungus" || card.type === "fungal_dependency").length,
+    habitat: cards.filter((card) => card.type === "habitat" || card.type === "host_tree").length,
+    geography: cards.filter((card) => card.type === "geography").length,
+    conservation: cards.filter((card) => card.type === "conservation").length,
+  };
+}
+
 export default function RelationshipExplorer() {
   const { species } = useParams();
   const navigate = useNavigate();
@@ -72,12 +88,17 @@ export default function RelationshipExplorer() {
 
   const [query, setQuery] = useState(initialSpecies);
   const [payload, setPayload] = useState<RelationshipExplorerPayload | null>(null);
+  const [neighborhoodCards, setNeighborhoodCards] = useState<NeighborhoodCard[]>([]);
   const [loading, setLoading] = useState(false);
+  const [neighborhoodLoading, setNeighborhoodLoading] = useState(false);
 
   useEffect(() => {
     let alive = true;
     setQuery(initialSpecies);
     setLoading(true);
+    setNeighborhoodLoading(true);
+    setNeighborhoodCards([]);
+
     fetchRelationshipExplorerPayload(initialSpecies)
       .then((result) => {
         if (alive) setPayload(result);
@@ -85,6 +106,18 @@ export default function RelationshipExplorer() {
       .finally(() => {
         if (alive) setLoading(false);
       });
+
+    fetchSpeciesEcologicalNeighborhood(initialSpecies, 12)
+      .then((cards) => {
+        if (alive) setNeighborhoodCards(cards);
+      })
+      .catch(() => {
+        if (alive) setNeighborhoodCards([]);
+      })
+      .finally(() => {
+        if (alive) setNeighborhoodLoading(false);
+      });
+
     return () => {
       alive = false;
     };
@@ -99,6 +132,7 @@ export default function RelationshipExplorer() {
   const profile = payload?.species_profile;
   const atlas = payload?.atlas_summary;
   const cards = payload?.cards;
+  const neighborhoodCounts = countNeighborhoodCards(neighborhoodCards);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-white px-4 py-10 text-slate-900 sm:px-6 lg:px-10">
@@ -180,7 +214,7 @@ export default function RelationshipExplorer() {
                 ) : null}
               </Card>
 
-              <Card title="MVP card status" eyebrow="Build 203A">
+              <Card title="Living explorer status" eyebrow="Build 209A">
                 <div className="flex flex-wrap gap-2">
                   <StatusPill label="Species" active={!!cards?.species_profile} />
                   <StatusPill label="Atlas" active={!!cards?.atlas_summary} />
@@ -188,7 +222,26 @@ export default function RelationshipExplorer() {
                   <StatusPill label="Interactions" active={!!cards?.interaction_summary} />
                   <StatusPill label="Reasoning" active={!!cards?.reasoning} />
                   <StatusPill label="Mycorrhiza" active={!!cards?.mycorrhiza_claims} />
-                  <StatusPill label="Fungal dependency" active={!!cards?.fungal_dependency} />
+                  <StatusPill label="Neighborhood" active={neighborhoodCards.length > 0} />
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-2 text-sm">
+                  <div className="rounded-2xl bg-emerald-50 p-3">
+                    <div className="text-2xl font-bold text-emerald-800">{neighborhoodCounts.total}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Relationship cards</div>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 p-3">
+                    <div className="text-2xl font-bold text-emerald-800">{neighborhoodCounts.habitat}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Habitat signals</div>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 p-3">
+                    <div className="text-2xl font-bold text-emerald-800">{neighborhoodCounts.pollinators}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Pollinator signals</div>
+                  </div>
+                  <div className="rounded-2xl bg-emerald-50 p-3">
+                    <div className="text-2xl font-bold text-emerald-800">{neighborhoodCounts.fungi}</div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Fungal signals</div>
+                  </div>
                 </div>
               </Card>
             </section>
@@ -250,11 +303,19 @@ export default function RelationshipExplorer() {
                     <div className="rounded-full bg-white px-3 py-2">Atlas</div>
                     <div className="rounded-full bg-white px-3 py-2">Images</div>
                     <div className="rounded-full bg-white px-3 py-2">Mycorrhiza</div>
-                    <div className="rounded-full bg-white px-3 py-2">Reasoning</div>
+                    <div className="rounded-full bg-white px-3 py-2">Neighborhood</div>
                   </div>
                 </div>
               </Card>
             </section>
+
+            <div className="overflow-hidden rounded-[2rem] border border-emerald-100 shadow-sm">
+              <EcologicalNeighborhood
+                scientificName={payload.scientific_name}
+                cards={neighborhoodCards}
+                loading={neighborhoodLoading}
+              />
+            </div>
 
             <Card title="Image gallery" eyebrow="Visual evidence">
               {payload.image_gallery?.length ? (

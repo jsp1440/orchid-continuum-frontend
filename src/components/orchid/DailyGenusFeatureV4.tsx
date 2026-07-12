@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+<<<<<<< HEAD
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bug, Camera, CalendarRange, Leaf, MapPin, Mountain, Sprout } from 'lucide-react';
 import {
@@ -22,21 +23,24 @@ import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
 import EcologicalNeighborhood from '@/components/orchid/EcologicalNeighborhood';
 import { fetchSpeciesEcologicalNeighborhood, type EcologicalNeighborhoodCard } from '@/lib/ecologicalNeighborhood';
+=======
+import { Link } from 'react-router-dom';
+import { ArrowRight, Camera, Database, Leaf, ShieldCheck } from 'lucide-react';
+>>>>>>> origin/main
 
-const ROTATE_MS = 45 * 1000;
-const SPECIES_LIMIT = 200;
-const IMAGE_LIMIT = 200;
+import { featuredGenusEntry } from '@/lib/featuredGenus';
+import { fetchCalyxGenusMedia, type GenusMediaResponse } from '@/lib/genusMediaResolver';
 
-const BLOCKED_NON_GALLERY_RE =
-  /(herbari|preserved[\s_-]*specimen|dried[\s_-]*specimen|pressed[\s_-]*specimen|type[\s_-]*specimen|\bspecimen\b|holotype|isotype|lectotype|syntype|neotype|paratype|voucher|exsiccat|exsiccatae|\bsheet\b|barcode|accession|catalog[\s_-]*number|collection[\s_-]*number|determination[\s_-]*label|specimen[\s_-]*label|herbarium[\s_-]*label|gbif\.org\/occurrence|jstor|plants\.jstor|sweetgum\.nybg|sernecportal|swbiodiversity|biocase|mediaphoto\.mnhn|mnhn\.fr|\/herbarium\/|herbcat|catalogue.*specimen|\/specimen|\/voucher|\/barcode|idigbio|reflora|specieslink|virtualherbarium|biodiversitylibrary\.org|archive\.org\/(stream|page|download)|botanicus\.org|gallica\.bnf\.fr|\/plates?\/|\/figures?\/|\/illustrations?\/|\/drawings?\/|\/lineart\/|recolnat\.org|jacq\.org|cvh\.ac\.cn|nhm\.ac\.uk\/.*image|mobot\.org|tropicos\.org\/.*image|digitarium|ala\.org\.au\/.*occurrence|herbariovirtual|\.pdf(\?|#|$)|\.(tif|tiff|djvu|doc|docx|txt|csv)(\?|#|$))/i;
-
-type RichEcology = SpeciesEcology & {
-  distribution?: string;
-  elevation?: string;
-  pollinators?: string;
-  mycorrhizal?: string;
+const EMPTY: GenusMediaResponse = {
+  status: 'service_error',
+  requested_genus: '',
+  accepted_genus: null,
+  generated_at: null,
+  items: [],
+  summary: { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
 };
 
+<<<<<<< HEAD
 type Slot = {
   species: string;
   images: string[];
@@ -268,37 +272,26 @@ const StatusBadge: React.FC<{ status?: string }> = ({ status }) => {
   const b = conservationBadge(status);
   return <span className="rounded px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em]" style={{ background: b.bg, color: b.color }}>{b.code}</span>;
 };
+=======
+const ScientificName: React.FC<{ name: string }> = ({ name }) => <span className="italic">{name}</span>;
+>>>>>>> origin/main
 
 const DailyGenusFeatureV4: React.FC = () => {
-  const navigate = useNavigate();
-  const [entry, setEntry] = useState(() => featuredGenusEntry());
-  const [validatedNames, setValidatedNames] = useState<string[]>([]);
-  const [trustedImages, setTrustedImages] = useState<GenusImage[]>([]);
-  const [inatImages, setInatImages] = useState<GenusImage[]>([]);
-  const [imageSource, setImageSource] = useState<ImageSource | null>(null);
-  const [heroIndex, setHeroIndex] = useState(0);
-  const [visibleIndexes, setVisibleIndexes] = useState<number[]>([]);
-  const [nextIndex, setNextIndex] = useState(9);
-  const [replaceCell, setReplaceCell] = useState(0);
+  const entry = useMemo(() => featuredGenusEntry(), []);
+  const [media, setMedia] = useState<GenusMediaResponse>(EMPTY);
   const [loading, setLoading] = useState(true);
-  const [ecology, setEcology] = useState<RichEcology | null>(null);
-  const [neighborhoodCards, setNeighborhoodCards] = useState<EcologicalNeighborhoodCard[]>([]);
-  const [neighborhoodLoading, setNeighborhoodLoading] = useState(false);
 
   useEffect(() => {
-    warmBackends();
-    const ctrl = new AbortController();
-    const base = featuredGenusEntry();
-    const curated = CURATED_SPECIES_BY_GENUS[base.genus.toLowerCase()] ?? [];
-
-    setEntry(base);
-    setValidatedNames(curated);
-    setTrustedImages([]);
-    setInatImages([]);
-    setImageSource(null);
+    const controller = new AbortController();
     setLoading(true);
-    setBackendStatus({ sourceView: 'live', genus: base.genus, lastPingTime: Date.now(), cacheWrittenAt: null });
+    void fetchCalyxGenusMedia(entry.genus, controller.signal)
+      .then(setMedia)
+      .catch(() => setMedia({ ...EMPTY, requested_genus: entry.genus }))
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [entry.genus]);
 
+<<<<<<< HEAD
     fetchFeaturedNarrative(base, ctrl.signal).then((narrative) => {
       if (!ctrl.signal.aborted && narrative) setEntry((prev) => ({ ...prev, relationship: narrative }));
     });
@@ -469,76 +462,59 @@ const DailyGenusFeatureV4: React.FC = () => {
   const displaySource: ImageSource | null = imageSource || (inatImages.length > 0 ? 'inaturalist' : null);
   const heroLabel = botanicalName(hero.species);
   const caption = speciesCaption(hero, ecology, entry.description);
+=======
+  const hero = media.items[0];
+  const gallery = media.items.slice(1, 9);
+>>>>>>> origin/main
 
   return (
-    <>
-    <section className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_16px_40px_rgba(30,40,20,0.12)]">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#8a8062]">Genus of the Day</p>
-          <h2 className="font-serif text-4xl italic normal-case text-[#24321f]">{titleCaseGenus(entry.genus)}</h2>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-[#5d684c]">{entry.description}</p>
+    <section className="rounded-xl border border-[#d9caa8] bg-[#fffaf0]/95 p-5 shadow-[0_10px_24px_rgba(30,40,20,0.06)]">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="max-w-2xl">
+          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#8a8062]">Featured Genus</p>
+          <h2 className="mt-1 font-serif text-4xl leading-tight text-[#24321f] italic">{entry.genus}</h2>
+          <p className="mt-2 text-sm leading-6 text-[#5d684c]">{entry.description}</p>
         </div>
-        <button onClick={() => navigate(`/genus/${encodeURIComponent(entry.genus)}`)} className="inline-flex items-center gap-2 rounded-full border border-[#c7b27a] bg-[#fff8e6] px-4 py-2 text-xs font-mono uppercase tracking-[0.18em] text-[#5b4b21] hover:bg-[#f8ecc8]">
-          Explore Genus <ArrowRight className="h-3.5 w-3.5" />
-        </button>
+        <Link
+          to={`/genus/${encodeURIComponent(entry.genus)}`}
+          className="inline-flex items-center gap-2 rounded-lg border border-[#c7b27a] bg-[#f8ecc8] px-4 py-2 font-mono text-[11px] uppercase tracking-[0.18em] text-[#5b4b21] hover:bg-[#efdca7]"
+        >
+          Open research profile <ArrowRight className="h-3.5 w-3.5" />
+        </Link>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-2">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-[#d7c79c] bg-[#1a2e1a] shadow-inner">
-            <Placeholder label={heroLabel} hero />
-            <ImageLayer urls={hero.images} alt={heroLabel} />
-            <div className="absolute right-3 top-3 z-20"><ImageSourceIndicator source={displaySource} /></div>
-          </div>
-
-          <div className="mt-4 rounded-2xl border border-[#d9caa8] bg-[#fffaf0] p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <h3 className="font-serif text-3xl leading-tight text-[#24321f] normal-case"><ScientificName name={hero.species} /></h3>
-              <StatusBadge status={hero.conservation} />
-            </div>
-            {hero.commonName && <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8a8062]">{hero.commonName}</p>}
-            <p className="mt-4 font-serif text-[1.1rem] leading-8 text-[#3a4630]">{caption}</p>
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              <Fact icon={<MapPin className="h-4 w-4" />} label="Distribution" value={ecology?.distribution || ecology?.region || hero.place || entry.regions.join(', ')} />
-              <Fact icon={<Mountain className="h-4 w-4" />} label="Elevation" value={ecology?.elevation || hero.elevation || entry.ecology.elevation} />
-              <Fact icon={<Leaf className="h-4 w-4" />} label="Habitat" value={ecology?.habitat || hero.habitat || entry.ecology.habitat} />
-              <Fact icon={<Bug className="h-4 w-4" />} label="Pollinators" value={ecology?.pollinators || hero.pollinators || entry.ecology.pollinatorGuild} />
-              <Fact icon={<Sprout className="h-4 w-4" />} label="Mycorrhizae" value={ecology?.mycorrhizal || entry.ecology.mycorrhizal} />
-              <Fact icon={<Camera className="h-4 w-4" />} label="Photographer" value={hero.photographer} />
-              <Fact icon={<CalendarRange className="h-4 w-4" />} label="Conservation" value={hero.conservation} />
-            </div>
-          </div>
+      {loading && (
+        <div className="mt-5 flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-[#c7b27a] bg-[#f6f0df] text-center">
+          <div><Camera className="mx-auto h-8 w-8 text-[#8a6f2d]" /><p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-[#6b664f]">Loading verified Orchid Continuum media</p></div>
         </div>
+      )}
 
-        <div className="lg:col-span-3">
-          <div className="grid grid-cols-3 gap-3 rounded-2xl bg-[#efe6cf] p-3">
-            {visibleIndexes.slice(0, 9).map((slotIndex, cell) => {
-              const s = slots[slotIndex % slots.length];
-              const selected = s.species === hero.species;
-              const place = s.place ? placeToFlag(s.place) : null;
-              const label = botanicalName(s.species);
-              return (
-                <button key={`${s.species}-${slotIndex}-${cell}`} onClick={() => setHeroIndex(slotIndex)} className={`group relative aspect-square overflow-hidden rounded-xl border bg-[#1a2e1a] text-left shadow-sm transition ${selected ? 'border-[#8a6f2d] ring-2 ring-[#c9a84c]' : 'border-[#d7c79c] hover:border-[#8a6f2d]'}`}>
-                  <Placeholder label={label} />
-                  <ImageLayer urls={s.images} alt={label} hover />
-                  <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-2 text-white">
-                    <p className="line-clamp-2 font-serif text-sm leading-tight normal-case"><ScientificName name={s.species} /></p>
-                    {s.place && <p className="mt-0.5 truncate text-[10px] opacity-85">{place?.flag || '🌍'} {s.place}</p>}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {!loading && media.status === 'ok' && hero && (
+        <>
+          <figure className="mt-5 overflow-hidden rounded-lg border border-[#d9caa8] bg-[#1a2e1a]">
+            <img src={hero.image_url} alt={hero.scientific_name} className="h-[360px] w-full object-cover" loading="eager" />
+            <figcaption className="bg-[#fffaf0] px-4 py-3 text-sm text-[#4c5841]">
+              <p className="font-serif text-lg text-[#24321f]"><ScientificName name={hero.scientific_name} /></p>
+              <p className="mt-1 text-xs">Source: {hero.source_name}{hero.attribution ? ` · ${hero.attribution}` : ''}{hero.license ? ` · ${hero.license}` : ''}</p>
+            </figcaption>
+          </figure>
+          {gallery.length > 0 && <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {gallery.map((item) => (
+              <figure key={item.media_id} className="overflow-hidden rounded-lg border border-[#d9caa8] bg-[#fffaf0]">
+                <img src={item.thumbnail_url || item.image_url} alt={item.scientific_name} className="h-44 w-full object-cover" loading="lazy" />
+                <figcaption className="p-3"><p className="font-serif text-base text-[#24321f]"><ScientificName name={item.scientific_name} /></p><p className="mt-1 text-[10px] text-[#6b664f]">{item.source_name}</p></figcaption>
+              </figure>
+            ))}
+          </div>}
+        </>
+      )}
+
+      {!loading && media.status === 'no_approved_media' && <div className="mt-5 flex min-h-[260px] items-center justify-center rounded-lg border border-dashed border-[#c7b27a] bg-[#f6f0df] p-6 text-center"><div className="max-w-md"><Leaf className="mx-auto h-9 w-9 text-[#8a6f2d]" /><p className="mt-3 font-serif text-xl text-[#24321f]">No verified Orchid Continuum photograph is available yet for {entry.genus}.</p><p className="mt-2 text-sm leading-6 text-[#5d684c]">The site will not substitute an unrelated orchid, herbarium sheet, or external fallback image.</p></div></div>}
+      {!loading && media.status === 'invalid_genus' && <div className="mt-5 rounded-lg border border-[#d9caa8] bg-[#f6f0df] p-5 text-center text-sm text-[#5d684c]">The current Featured Genus could not be resolved by Calyx.</div>}
+      {!loading && media.status === 'service_error' && <div className="mt-5 rounded-lg border border-[#d9caa8] bg-[#f6f0df] p-5 text-center"><Database className="mx-auto h-7 w-7 text-[#8a6f2d]" /><p className="mt-2 font-serif text-lg text-[#24321f]">Calyx media service is temporarily unavailable.</p><p className="mt-1 text-sm text-[#5d684c]">No external image fallback is used.</p></div>}
+
+      <div className="mt-5 flex items-center gap-2 text-[10px] text-[#6b664f]"><ShieldCheck className="h-3.5 w-3.5 text-[#8a6f2d]" /><span>Featured Genus media is resolved by Calyx from Orchid Continuum-linked taxon records.</span></div>
     </section>
-    <EcologicalNeighborhood
-      scientificName={hero.species}
-      cards={neighborhoodCards}
-      loading={neighborhoodLoading}
-    />
-    </>
   );
 };
 
