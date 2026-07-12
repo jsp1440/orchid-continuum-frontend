@@ -43,7 +43,6 @@ import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import {
-  fetchMissionControlOperations,
   type ContinuumSubsystem,
   type ControlState,
   type EndpointDiagnostic,
@@ -55,6 +54,8 @@ import {
   type RepositoryStatus,
   type SafetyBoundary,
 } from '@/lib/missionControlOps';
+import { MissionControlProvider } from '@/lib/mission-control/MissionControlProvider';
+import { missionStatusToCardState, useMissionControl } from '@/lib/mission-control/MissionControlHooks';
 import {
   createSourceBriefing,
   grantItems,
@@ -104,7 +105,6 @@ import {
   type ResearchCommandTemplate,
 } from '@/lib/ownerOperationsConsole';
 
-type LoadState = 'idle' | 'loading' | 'ready' | 'error';
 type MissionControlErrorBoundaryState = { error: Error | null };
 type PanelErrorBoundaryState = { error: Error | null };
 type DisplayTextScale = 'standard' | 'large' | 'extra';
@@ -332,10 +332,12 @@ function SafePanel({ title, children }: { title: string; children: React.ReactNo
 }
 
 function statusClass(status: MissionControlStatus): string {
-  if (status === 'healthy') return 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100';
-  if (status === 'warning') return 'border-amber-300/25 bg-amber-300/10 text-amber-100';
-  if (status === 'error') return 'border-red-300/25 bg-red-300/10 text-red-100';
-  if (status === 'stub') return 'border-sky-300/20 bg-sky-300/10 text-sky-100';
+  const cardState = missionStatusToCardState(status);
+  if (cardState === 'healthy') return 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100';
+  if (cardState === 'warning') return 'border-amber-300/25 bg-amber-300/10 text-amber-100';
+  if (cardState === 'critical') return 'border-red-300/25 bg-red-300/10 text-red-100';
+  if (cardState === 'stale') return 'border-[#d4b34a]/35 bg-[#d4b34a]/15 text-[#f1d878]';
+  if (cardState === 'offline') return 'border-sky-300/20 bg-sky-300/10 text-sky-100';
   return 'border-white/10 bg-white/[0.05] text-[#cfc8b8]';
 }
 
@@ -378,9 +380,9 @@ function priorityMeta(priority: PriorityKind): { label: string; className: strin
 }
 
 function missionPriorityFromStatus(status: MissionControlStatus): PriorityKind {
-  if (status === 'error') return 'urgent';
+  if (status === 'critical' || status === 'error') return 'urgent';
   if (status === 'warning') return 'attention';
-  if (status === 'stub') return 'inactive';
+  if (status === 'stub' || status === 'offline' || status === 'stale') return 'inactive';
   if (status === 'healthy') return 'healthy';
   return 'info';
 }
@@ -896,6 +898,17 @@ function downloadTextFile(filename: string, content: string, mime = 'text/markdo
   URL.revokeObjectURL(url);
 }
 
+function buildPdfAuditPlaceholder(sourceEndpoint: string, missingEvidence: string): string {
+  return [
+    'Mission Control Audit Placeholder (PDF fallback)',
+    `Timestamp: ${new Date().toISOString()}`,
+    'Confidence: medium',
+    `Evidence source: ${sourceEndpoint}`,
+    'Subsystem coverage: live/cached Mission Control telemetry',
+    `Missing evidence: ${missingEvidence}`,
+  ].join('\n');
+}
+
 function OwnerGuideCard({ guide }: { guide: OwnerSubsystemGuide }) {
   return (
     <article className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
@@ -971,12 +984,19 @@ function CalyxOperationsQueuePanel({
   ownerAuthorized: boolean;
   onTransition: (item: BackendOperationsQueueItem, transition: 'approve' | 'reject' | 'cancel' | 'retry') => void;
 }) {
-  const lanes = ['Now working', 'Queued', 'Waiting for owner', 'Waiting for external partner', 'Completed today'] as const;
+  const lanes = ['Now Working', 'Queued', 'Waiting Owner', 'Waiting External', 'Completed Today'] as const;
+  const commandStateLabel = (status?: string, authorizationState?: string): string => {
+    if (authorizationState === 'pending_owner' || status === 'awaiting_owner' || status === 'proposed' || status === 'approved') return 'Pending Owner Approval';
+    if (status === 'running') return 'Running';
+    if (status === 'completed' || status === 'completed_degraded') return 'Completed';
+    if (status === 'failed' || status === 'blocked') return 'Failed';
+    return 'Queued';
+  };
   const laneForBackendStatus = (status?: string): (typeof lanes)[number] => {
-    if (status === 'running') return 'Now working';
-    if (status === 'awaiting_owner' || status === 'proposed' || status === 'approved') return 'Waiting for owner';
-    if (status === 'completed' || status === 'completed_degraded') return 'Completed today';
-    if (status === 'blocked') return 'Waiting for external partner';
+    if (status === 'running') return 'Now Working';
+    if (status === 'awaiting_owner' || status === 'proposed' || status === 'approved') return 'Waiting Owner';
+    if (status === 'completed' || status === 'completed_degraded') return 'Completed Today';
+    if (status === 'blocked') return 'Waiting External';
     return 'Queued';
   };
   const displayItems = backendItems.length
@@ -986,6 +1006,7 @@ function CalyxOperationsQueuePanel({
         subsystem: item.related_subsystem ?? item.task_type ?? 'Mission Control',
         detail: item.result_summary ?? item.next_required_action ?? 'Backend queue item recorded.',
         ownerDecision: item.next_required_action,
+        commandState: commandStateLabel(item.status, item.authorization_state),
       }))
     : operationsQueue;
   return (
@@ -1004,6 +1025,9 @@ function CalyxOperationsQueuePanel({
                   <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/58">{item.subsystem}</div>
                   <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/78">{item.detail}</p>
                   {item.ownerDecision ? <p className="mt-2 text-[12px] leading-5 text-amber-100/82">Decision: {item.ownerDecision}</p> : null}
+                  {'commandState' in item ? (
+                    <div className="mt-2 font-mono text-[8px] uppercase tracking-[0.14em] text-[#d4b34a]">{item.commandState}</div>
+                  ) : null}
                   {'status' in item ? (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(['approve', 'reject', 'cancel', 'retry'] as const).map((transition) => (
@@ -1028,7 +1052,13 @@ function CalyxOperationsQueuePanel({
   );
 }
 
-function ExecutiveAuditPanel({ onDownload, disabled }: { onDownload: (template: ExecutiveAuditTemplate) => void; disabled: boolean }) {
+function ExecutiveAuditPanel({
+  onDownload,
+  disabled,
+}: {
+  onDownload: (template: ExecutiveAuditTemplate, format: 'markdown' | 'json' | 'pdf') => void;
+  disabled: boolean;
+}) {
   return (
     <Panel id="mission-control-executive-audits" eyebrow="Executive Audit Engine" title="Downloadable Audit Packages" icon={FileDown}>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -1039,9 +1069,17 @@ function ExecutiveAuditPanel({ onDownload, disabled }: { onDownload: (template: 
                 <h3 className="text-lg text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{template.title}</h3>
                 <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/76">{template.scope}</p>
               </div>
-              <button disabled={disabled} onClick={() => onDownload(template)} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
-                <Download className="h-3.5 w-3.5" /> Live Markdown
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button disabled={disabled} onClick={() => onDownload(template, 'markdown')} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
+                  <Download className="h-3.5 w-3.5" /> Markdown
+                </button>
+                <button disabled={disabled} onClick={() => onDownload(template, 'json')} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
+                  <FileText className="h-3.5 w-3.5" /> JSON
+                </button>
+                <button disabled={disabled} onClick={() => onDownload(template, 'pdf')} className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] hover:bg-[#d4b34a]/10 disabled:cursor-not-allowed disabled:opacity-45">
+                  <FileDown className="h-3.5 w-3.5" /> PDF
+                </button>
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2">
               {template.formats.map((format) => <span key={format} className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/75">{format}</span>)}
@@ -1897,10 +1935,16 @@ function IntelligenceWorkspace({
 }
 
 const MissionControlContent: React.FC = () => {
+  const {
+    status: missionControlLoadState,
+    data: dashboard,
+    error: missionControlError,
+    meta: missionControlMeta,
+    refresh,
+    dataAgeMs,
+  } = useMissionControl();
   const [isUnlocked, setIsUnlocked] = useState(false);
   const [accessCode, setAccessCode] = useState('');
-  const [state, setState] = useState<LoadState>('idle');
-  const [dashboard, setDashboard] = useState<MissionControlOperations | null>(null);
   const [intelligenceStore, setIntelligenceStore] = useState<IntelligenceStore>(() => loadIntelligenceStore());
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -1914,19 +1958,6 @@ const MissionControlContent: React.FC = () => {
   const [ownerActionMessage, setOwnerActionMessage] = useState<string | null>(null);
   const [lastSessionCheck, setLastSessionCheck] = useState<string | null>(null);
   const [pendingHarvesterAction, setPendingHarvesterAction] = useState<string | null>(null);
-
-  const load = async () => {
-    setState('loading');
-    setError(null);
-    try {
-      const next = await fetchMissionControlOperations();
-      setDashboard(next);
-      setState('ready');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown Mission Control load failure');
-      setState('error');
-    }
-  };
 
   const loadOwnerOperations = useCallback(async (token = ownerSession?.token) => {
     try {
@@ -1968,10 +1999,10 @@ const MissionControlContent: React.FC = () => {
   useEffect(() => {
     if (isUnlocked) {
       setIntelligenceStore(loadIntelligenceStore());
-      void load();
+      void refresh();
       if (ownerSession?.token) void loadOwnerOperations(ownerSession.token);
     }
-  }, [isUnlocked, loadOwnerOperations, ownerSession?.token]);
+  }, [isUnlocked, loadOwnerOperations, ownerSession?.token, refresh]);
 
   useEffect(() => {
     saveDisplayPreferences(displayPreferences);
@@ -2007,19 +2038,16 @@ const MissionControlContent: React.FC = () => {
     safeRemoveStorage(ACCESS_STORAGE_KEY);
     setIsUnlocked(false);
     setAccessCode('');
-    setDashboard(null);
     setOwnerSession(null);
     setOwnerOperations(null);
     setOwnerSessionStatus('missing');
     setOwnerActionMessage(null);
-    setState('idle');
   };
 
   const resetLocalData = () => {
     resetMissionControlLocalData();
     setIsUnlocked(false);
     setAccessCode('');
-    setDashboard(null);
     setOwnerSession(null);
     setOwnerOperations(null);
     setOwnerSessionStatus('missing');
@@ -2029,7 +2057,6 @@ const MissionControlContent: React.FC = () => {
     setActiveFilter('overview');
     setCommandText('Audit Orchid Continuum');
     setIntelligenceStore(loadIntelligenceStore());
-    setState('idle');
   };
 
   const copyToClipboard = async (key: string, value: string) => {
@@ -2057,18 +2084,41 @@ const MissionControlContent: React.FC = () => {
     }
   };
 
-  const downloadAudit = async (template: ExecutiveAuditTemplate) => {
-    if (!ownerSession?.token) {
+  const downloadAudit = async (template: ExecutiveAuditTemplate, format: 'markdown' | 'json' | 'pdf') => {
+    if (!ownerSession?.token && format !== 'pdf') {
       setOwnerActionMessage('Backend owner session required before Mission Control can generate live audits.');
       return;
     }
     try {
-      const result = await generateOwnerAudit(ownerSession.token, template.id, 'markdown');
+      if (format === 'pdf' && !ownerSession?.token) {
+        const placeholder = buildPdfAuditPlaceholder(
+          missionControlMeta.sourceEndpoint,
+          'backend PDF generator unavailable in current session',
+        );
+        downloadTextFile(`${template.id}-executive-audit-placeholder.pdf.txt`, placeholder);
+        setOwnerActionMessage('PDF placeholder generated because backend owner audit session is unavailable.');
+        return;
+      }
+      if (!ownerSession?.token) {
+        setOwnerActionMessage('Backend owner session required before Mission Control can generate live audits.');
+        return;
+      }
+      const result = await generateOwnerAudit(ownerSession.token, template.id, format);
       const content = typeof result.audit.content === 'string' ? result.audit.content : JSON.stringify(result.audit.content, null, 2);
-      downloadTextFile(`${template.id}-executive-audit-${result.audit.id}.md`, content);
+      const extension = format === 'json' ? 'json' : format === 'pdf' ? 'pdf.txt' : 'md';
+      downloadTextFile(`${template.id}-executive-audit-${result.audit.id}.${extension}`, content);
       await loadOwnerOperations(ownerSession.token);
-      setOwnerActionMessage(`Generated live backend audit ${result.audit.id}.`);
+      setOwnerActionMessage(`Generated live backend audit ${result.audit.id} (${format.toUpperCase()}).`);
     } catch (err) {
+      if (format === 'pdf') {
+        const placeholder = buildPdfAuditPlaceholder(
+          missionControlMeta.sourceEndpoint,
+          err instanceof Error ? err.message : 'backend PDF response unavailable',
+        );
+        downloadTextFile(`${template.id}-executive-audit-placeholder.pdf.txt`, placeholder);
+        setOwnerActionMessage('Backend PDF export unavailable; generated PDF placeholder with missing evidence summary.');
+        return;
+      }
       setOwnerActionMessage(err instanceof Error ? err.message : 'Audit generation failed');
     }
   };
@@ -2111,7 +2161,7 @@ const MissionControlContent: React.FC = () => {
     setPendingHarvesterAction(`${harvester.id}:${action}`);
     try {
       await runHarvesterOwnerAction(ownerSession.token, harvester, action);
-      await load();
+      await refresh();
       setOwnerActionMessage(`${harvester.name} ${action} accepted by the Calyx backend and logged.`);
     } catch (err) {
       setOwnerActionMessage(err instanceof Error ? err.message : `${harvester.name} ${action} failed`);
@@ -2124,7 +2174,7 @@ const MissionControlContent: React.FC = () => {
     if (!ownerAuthorized) return;
     try {
       await runRuntimeOwnerAction(action);
-      await load();
+      await refresh();
       setOwnerActionMessage(`Runtime ${action} accepted by the authenticated backend session.`);
     } catch (err) {
       setOwnerActionMessage(err instanceof Error ? err.message : `Runtime ${action} failed`);
@@ -2168,10 +2218,16 @@ const MissionControlContent: React.FC = () => {
   const contrastClass = displayPreferences.highContrast ? 'brightness-110 contrast-125' : '';
   const motionClass = displayPreferences.reduceMotion ? '[&_*]:!transition-none [&_*]:!animate-none' : '';
 
-  const globalHealth = safeArray(dashboard?.globalHealth);
-  const completenessMatrix = safeArray(dashboard?.completenessMatrix);
+  const globalHealth = safeArray(dashboard?.globalHealth).map((subsystem) => (
+    missionControlMeta.usingCachedData ? { ...subsystem, status: 'stale' as MissionControlStatus } : subsystem
+  ));
+  const completenessMatrix = safeArray(dashboard?.completenessMatrix).map((subsystem) => (
+    missionControlMeta.usingCachedData ? { ...subsystem, status: 'stale' as MissionControlStatus } : subsystem
+  ));
   const harvesters = safeArray(dashboard?.harvesters);
-  const scientificSystems = safeArray(dashboard?.scientificSystems);
+  const scientificSystems = safeArray(dashboard?.scientificSystems).map((system) => (
+    missionControlMeta.usingCachedData ? { ...system, status: 'stale' as MissionControlStatus } : system
+  ));
   const repositories = safeArray(dashboard?.repositories);
   const recommendations = safeArray(dashboard?.recommendations);
   const recentActivity = safeArray(dashboard?.recentActivity);
@@ -2200,6 +2256,9 @@ const MissionControlContent: React.FC = () => {
   const canGenerateAudit = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'generateAudit');
   const canCreateResearch = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'createResearchRequest');
   const canGeneratePacket = ownerAuthorized && ownerActionAllowed(ownerPermissions, 'generatePartnershipPacket');
+  const dataAgeSeconds = dataAgeMs == null ? null : Math.floor(dataAgeMs / 1000);
+  const dataAgeLabel = dataAgeSeconds == null ? 'unknown' : dataAgeSeconds < 0 ? `${dataAgeSeconds}s (clock skew)` : `${dataAgeSeconds}s`;
+  const repositoryRevision = missionControlMeta.repositoryRevision;
 
   if (!isUnlocked) {
     return (
@@ -2267,10 +2326,10 @@ const MissionControlContent: React.FC = () => {
               </div>
               <div className="flex flex-wrap gap-3">
                 <button
-                  onClick={() => void load()}
+                  onClick={() => void refresh()}
                   className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.22em] text-[#12170d] transition-colors hover:bg-[#e5c85c]"
                 >
-                  <RefreshCw className={`h-3.5 w-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh Mission Control
+                  <RefreshCw className={`h-3.5 w-3.5 ${missionControlLoadState === 'loading' ? 'animate-spin' : ''}`} /> Refresh Mission Control
                 </button>
                 <button
                   onClick={lock}
@@ -2290,13 +2349,21 @@ const MissionControlContent: React.FC = () => {
         </section>
 
         <section className="mx-auto max-w-[1540px] px-5 py-6 lg:px-8">
-          {state === 'error' ? (
+          {missionControlLoadState === 'error' ? (
             <div className="mb-5 rounded-lg border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">
-              <AlertTriangle className="mr-2 inline h-4 w-4" /> {error}
+              <AlertTriangle className="mr-2 inline h-4 w-4" /> {missionControlError ?? error}
             </div>
           ) : null}
 
           <div className="mb-5 rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4 text-sm leading-6 text-[#cfc8b8]/84">
+            <div className="mb-4 grid gap-2 rounded-lg border border-white/10 bg-black/15 p-3 font-mono text-[10px] sm:grid-cols-2 lg:grid-cols-3">
+              <div>Backend connected: {missionControlMeta.backendAvailable ? 'yes' : 'no'}</div>
+              <div>Owner authenticated: {ownerAuthorized ? 'yes' : 'no'}</div>
+              <div>Repository revision: {repositoryRevision}</div>
+              <div>Frontend build number: {missionControlMeta.frontendBuildNumber}</div>
+              <div>API version: {missionControlMeta.apiVersion}</div>
+              <div>Last synchronization: {displayTime(missionControlMeta.lastSuccessfulSync ?? missionControlMeta.liveTimestamp ?? undefined)}</div>
+            </div>
             <span className="mr-3 inline-flex rounded-full border border-[#d4b34a]/30 bg-[#d4b34a]/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
               {ownerSessionStatus === 'authenticated' ? 'Owner Session Active' : ownerSessionStatus === 'error' ? 'Owner auth error' : 'Backend auth missing'}
             </span>
@@ -2312,6 +2379,15 @@ const MissionControlContent: React.FC = () => {
               <div className="sm:col-span-2">Backend: {CALYX_BACKEND_BASE_URL}</div>
               <div>Last check: {lastSessionCheck ? new Date(lastSessionCheck).toLocaleString() : 'pending'}</div>
               <div>Reason: {ownerSession?.reason ?? (ownerSessionStatus === 'error' ? ownerActionMessage ?? 'session rejected' : 'none')}</div>
+              <div>Live timestamp: {displayTime(missionControlMeta.liveTimestamp ?? undefined)}</div>
+              <div>Data age: {dataAgeLabel}</div>
+              <div>Source endpoint: {missionControlMeta.sourceEndpoint}</div>
+              <div>
+                Data source: {missionControlMeta.usingCachedData ? 'cached' : 'live'}
+                {missionControlMeta.usingCachedData ? (
+                  <span className="ml-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-2 py-0.5 text-[8px] uppercase tracking-[0.12em] text-[#f1d878]">stale</span>
+                ) : null}
+              </div>
               <div className="sm:col-span-2 lg:col-span-4">Permissions: {ownerPermissions ? Object.entries(ownerPermissions).filter(([, value]) => value.allowed).map(([key]) => key).join(', ') || 'none' : 'none'}</div>
               <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-4">
                 {(['cycle', 'start', 'stop', 'restart'] as const).map((action) => (
@@ -2365,7 +2441,7 @@ const MissionControlContent: React.FC = () => {
                 </SafePanel>
 
                 <SafePanel title="Executive Audit Engine">
-                <ExecutiveAuditPanel onDownload={(template) => void downloadAudit(template)} disabled={!canGenerateAudit} />
+                <ExecutiveAuditPanel onDownload={(template, format) => void downloadAudit(template, format)} disabled={!canGenerateAudit} />
                 </SafePanel>
 
                 <SafePanel title="Research Command Center">
@@ -2583,10 +2659,10 @@ const MissionControlContent: React.FC = () => {
                 <SafePanel title="Endpoint Assumptions">
                 <Panel eyebrow="Diagnostics" title="Endpoint Assumptions" icon={Database}>
                   <button
-                    onClick={() => void load()}
+                    onClick={() => void refresh()}
                     className="mb-4 inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/25 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:border-[#d4b34a]/60 hover:bg-[#d4b34a]/10"
                   >
-                    <RefreshCw className={`h-3.5 w-3.5 ${state === 'loading' ? 'animate-spin' : ''}`} /> Refresh telemetry
+                    <RefreshCw className={`h-3.5 w-3.5 ${missionControlLoadState === 'loading' ? 'animate-spin' : ''}`} /> Refresh telemetry
                   </button>
                   <div className="space-y-3">
                     {diagnostics.map((diagnostic) => (
@@ -2605,6 +2681,12 @@ const MissionControlContent: React.FC = () => {
                     Data mode: {dashboard.dataMode}
                     <br />
                     Generated: {displayTime(dashboard.generatedAt)}
+                    <br />
+                    Source endpoint: {missionControlMeta.sourceEndpoint}
+                    <br />
+                    Backend available: {missionControlMeta.backendAvailable ? 'yes' : 'no'}
+                    <br />
+                    Data age: {dataAgeLabel}
                   </div>
                 </Panel>
                 </SafePanel>
@@ -2612,7 +2694,7 @@ const MissionControlContent: React.FC = () => {
             </div>
           ) : (
             <div className="rounded-lg border border-white/[0.08] bg-[#0d1d13]/90 p-8 text-center">
-              <RefreshCw className={`mx-auto h-6 w-6 text-[#d4b34a] ${state === 'loading' ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`mx-auto h-6 w-6 text-[#d4b34a] ${missionControlLoadState === 'loading' ? 'animate-spin' : ''}`} />
               <p className="mt-4 text-sm text-[#cfc8b8]/80">Loading Mission Control operations center...</p>
             </div>
           )}
@@ -2626,7 +2708,9 @@ const MissionControlContent: React.FC = () => {
 
 const MissionControl: React.FC = () => (
   <MissionControlErrorBoundary>
-    <MissionControlContent />
+    <MissionControlProvider>
+      <MissionControlContent />
+    </MissionControlProvider>
   </MissionControlErrorBoundary>
 );
 
