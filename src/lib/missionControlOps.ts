@@ -245,7 +245,7 @@ async function getJson<T>(baseUrl: string, endpoint: string, label: string): Pro
 }
 
 const fallbackGlobalHealth: ContinuumSubsystem[] = [
-  ['frontend', 'Frontend', 'Experience', 'healthy', 82, 'React/Vite shell renders Mission Control and public site routes.', [], 'Confirm frontend is deployed after each release; latest merged build is BUILD-061.'],
+  ['frontend', 'Frontend', 'Experience', 'healthy', 82, 'React/Vite shell renders Mission Control and public site routes.', [], 'Confirm frontend is deployed after each release.'],
   ['backend', 'Backend', 'Runtime', 'unknown', 45, 'Calyx backend host is configured, but mission-control read endpoints are not confirmed.', ['Mission Control API endpoints may be absent or blocked by CORS.'], 'Add server-owned read endpoints for operations telemetry.'],
   ['database', 'Database', 'Data', 'unknown', 35, 'Frontend cannot verify database health directly without a backend status route.', ['No safe browser-readable DB health endpoint confirmed.'], 'Expose read-only database summary through Calyx backend.'],
   ['brain', 'Brain', 'Intelligence', 'warning', 40, 'Brain repository is registered; live sync/runtime state is not visible here yet.', ['No Brain status endpoint connected to Mission Control.'], 'Create Brain status adapter with no secret exposure.'],
@@ -318,7 +318,7 @@ const fallbackHarvesters: HarvesterStatus[] = [
   approveRecommendation: 'requires_owner_authorization',
   rejectRecommendation: 'requires_owner_authorization',
   reassess: 'requires_owner_authorization',
-  logSummary: 'Registered through BUILD-061; safe backend status endpoint required.',
+  logSummary: 'Registered; safe backend status endpoint required.',
 }));
 
 const fallbackRepositories: RepositoryStatus[] = [
@@ -329,7 +329,7 @@ const fallbackRepositories: RepositoryStatus[] = [
     deployStatus: 'warning',
     frontendDeployNeeded: true,
     backendDeployNeeded: false,
-    knownBlockers: ['Frontend redeploy needed after each release; latest merged build is BUILD-061.'],
+    knownBlockers: ['Frontend redeploy needed after each release.'],
   },
   {
     name: 'jsp1440/orchid-calyx-backend',
@@ -749,6 +749,9 @@ function readExecutivePayload(payload: unknown) {
     .map((item) => {
       const s = asRecord(item);
       if (!s) return null;
+      // Canonical backend field names (BUILD-064 contract) are listed first.
+      // Fallback names support earlier payload shapes so the parser is forward-
+      // and backward-compatible as the backend contract evolves.
       return {
         id: pickString(s, ['id', 'section_id', 'key'], ''),
         title: pickString(s, ['title', 'name', 'label'], ''),
