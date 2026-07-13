@@ -9,6 +9,14 @@
 // above error.  BUILD-059A repairs the call and adds `safeArr()` guards around
 // all unvalidated backend collection fields so that a malformed response can
 // never crash the provider.
+//
+// BUILD-064 — Forensic Regression Audit additions
+//
+// Additional tests verifying:
+//   - mission_control.sections from the backend are parsed and forwarded as `sections`.
+//   - The `sections` field is always present in the snapshot (never undefined).
+//   - Fallback governance build label is current (BUILD-064), not the stale BUILD-036.
+//   - Fallback recommendations do not reference the obsolete BUILD-037 target.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -53,6 +61,7 @@ function buildMinimalOps(overrides: Partial<MockPayload> = {}): MockPayload {
       decisions: [],
       questions: [],
     },
+    sections: [],
     ...overrides,
   };
 }
@@ -403,5 +412,111 @@ describe('MissionControlService — safeArr / collection normalization', () => {
     const result = await fetchMissionControlSnapshot();
 
     expect(result.dashboard.recommendations.length).toBeLessThanOrEqual(12);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUILD-064 — Forensic Regression Audit: sections contract + stale data guards
+// ---------------------------------------------------------------------------
+
+describe('MissionControlService — BUILD-064 sections and stale-data regression', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubGlobal('localStorage', {
+      getItem: () => null,
+      setItem: () => undefined,
+      removeItem: () => undefined,
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  // -------------------------------------------------------------------------
+  // 15. sections field always present in snapshot — never undefined.
+  // -------------------------------------------------------------------------
+  it('snapshot always contains a sections array even when payload omits it', async () => {
+    vi.doMock('@/lib/missionControlOps', async () => ({
+      ...(await vi.importActual<typeof import('@/lib/missionControlOps')>('@/lib/missionControlOps')),
+      fetchMissionControlOperations: vi.fn().mockResolvedValue(
+        buildMinimalOps({ sections: undefined }),
+      ),
+    }));
+
+    const { fetchMissionControlSnapshot } = await import('@/lib/mission-control/MissionControlService');
+    const result = await fetchMissionControlSnapshot();
+
+    expect(result.dashboard).toHaveProperty('sections');
+    expect(Array.isArray(result.dashboard.sections)).toBe(true);
+  });
+
+  // -------------------------------------------------------------------------
+  // 16. sections forwarded from backend payload.
+  // -------------------------------------------------------------------------
+  it('passes through backend sections from the dashboard payload', async () => {
+    const section = {
+      id: 'builds',
+      title: 'Builds',
+      description: 'Build and deployment status',
+      endpoint: '/api/mission-control/builds',
+      auth: 'owner',
+      status: 'active',
+    };
+
+    vi.doMock('@/lib/missionControlOps', async () => ({
+      ...(await vi.importActual<typeof import('@/lib/missionControlOps')>('@/lib/missionControlOps')),
+      fetchMissionControlOperations: vi.fn().mockResolvedValue(
+        buildMinimalOps({ sections: [section] }),
+      ),
+    }));
+
+    const { fetchMissionControlSnapshot } = await import('@/lib/mission-control/MissionControlService');
+    const result = await fetchMissionControlSnapshot();
+
+    const found = result.dashboard.sections.find((s) => s.id === 'builds');
+    expect(found).toBeDefined();
+    expect(found?.title).toBe('Builds');
+  });
+
+  // -------------------------------------------------------------------------
+  // 17. fallback governance build is current — not the stale BUILD-036 era.
+  // -------------------------------------------------------------------------
+  it('fallback governance build label reflects BUILD-064, not stale BUILD-036', async () => {
+    // When the backend is unreachable fetchMissionControlOperations falls back
+    // to its internal fallback data. We exercise that path by using the real
+    // implementation with a globally stubbed fetch that always rejects.
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('network unavailable')));
+
+    // Use the actual (non-mocked) implementation so the fallback data is exercised.
+    vi.doMock('@/lib/missionControlOps', async () =>
+      vi.importActual<typeof import('@/lib/missionControlOps')>('@/lib/missionControlOps'),
+    );
+
+    const { fetchMissionControlOperations } = await import('@/lib/missionControlOps');
+    const result = await fetchMissionControlOperations();
+
+    // The fallback governance build must NOT be the stale BUILD-036 value.
+    expect(result.governance.build).not.toBe('BUILD-036');
+    // It must be the current BUILD-064 value.
+    expect(result.governance.build).toBe('BUILD-064');
+  });
+
+  // -------------------------------------------------------------------------
+  // 18. fallback recommendations do not reference obsolete BUILD-037 target.
+  // -------------------------------------------------------------------------
+  it('fallback recommendations do not reference the obsolete BUILD-037 next-build target', async () => {
+    vi.stubGlobal('fetch', () => Promise.reject(new Error('network unavailable')));
+
+    vi.doMock('@/lib/missionControlOps', async () =>
+      vi.importActual<typeof import('@/lib/missionControlOps')>('@/lib/missionControlOps'),
+    );
+
+    const { fetchMissionControlOperations } = await import('@/lib/missionControlOps');
+    const result = await fetchMissionControlOperations();
+
+    const staleRef = result.recommendations.some((r) => r.nextBuild === 'BUILD-037');
+    expect(staleRef).toBe(false);
   });
 });

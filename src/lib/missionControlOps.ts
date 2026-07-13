@@ -158,6 +158,15 @@ export type GovernanceQuestion = {
   timestamp?: string;
 };
 
+export type MissionControlSection = {
+  id: string;
+  title: string;
+  description: string;
+  endpoint: string;
+  auth: string;
+  status: string;
+};
+
 export type MissionControlOperations = {
   generatedAt: string;
   dataMode: 'live' | 'mixed' | 'fallback';
@@ -180,6 +189,8 @@ export type MissionControlOperations = {
   recentActivity: RecentActivity[];
   safetyBoundaries: SafetyBoundary[];
   governance: GovernanceSummary;
+  /** Backend-declared section manifest from mission_control.sections (BUILD-064+). */
+  sections: MissionControlSection[];
 };
 
 type ExecutiveStatePayload = {
@@ -191,6 +202,10 @@ type ExecutiveStatePayload = {
   changes?: unknown[];
   summary?: Record<string, unknown>;
   briefing?: Record<string, unknown>;
+  /** BUILD-064: backend-declared section manifest */
+  mission_control?: { sections?: unknown[]; navigation?: unknown };
+  /** BUILD-064: top-level navigation contract from owner_operations */
+  navigation?: unknown;
 };
 
 const nowIso = () => new Date().toISOString();
@@ -230,7 +245,7 @@ async function getJson<T>(baseUrl: string, endpoint: string, label: string): Pro
 }
 
 const fallbackGlobalHealth: ContinuumSubsystem[] = [
-  ['frontend', 'Frontend', 'Experience', 'healthy', 82, 'React/Vite shell renders Mission Control and public site routes.', [], 'Redeploy frontend after BUILD-036 merge.'],
+  ['frontend', 'Frontend', 'Experience', 'healthy', 82, 'React/Vite shell renders Mission Control and public site routes.', [], 'Confirm frontend is deployed after each release; latest merged build is BUILD-061.'],
   ['backend', 'Backend', 'Runtime', 'unknown', 45, 'Calyx backend host is configured, but mission-control read endpoints are not confirmed.', ['Mission Control API endpoints may be absent or blocked by CORS.'], 'Add server-owned read endpoints for operations telemetry.'],
   ['database', 'Database', 'Data', 'unknown', 35, 'Frontend cannot verify database health directly without a backend status route.', ['No safe browser-readable DB health endpoint confirmed.'], 'Expose read-only database summary through Calyx backend.'],
   ['brain', 'Brain', 'Intelligence', 'warning', 40, 'Brain repository is registered; live sync/runtime state is not visible here yet.', ['No Brain status endpoint connected to Mission Control.'], 'Create Brain status adapter with no secret exposure.'],
@@ -303,7 +318,7 @@ const fallbackHarvesters: HarvesterStatus[] = [
   approveRecommendation: 'requires_owner_authorization',
   rejectRecommendation: 'requires_owner_authorization',
   reassess: 'requires_owner_authorization',
-  logSummary: 'Registered for BUILD-036 visibility; safe backend status endpoint still required.',
+  logSummary: 'Registered through BUILD-061; safe backend status endpoint required.',
 }));
 
 const fallbackRepositories: RepositoryStatus[] = [
@@ -314,7 +329,7 @@ const fallbackRepositories: RepositoryStatus[] = [
     deployStatus: 'warning',
     frontendDeployNeeded: true,
     backendDeployNeeded: false,
-    knownBlockers: ['BUILD-036 needs frontend redeploy after merge.'],
+    knownBlockers: ['Frontend redeploy needed after each release; latest merged build is BUILD-061.'],
   },
   {
     name: 'jsp1440/orchid-calyx-backend',
@@ -377,12 +392,12 @@ const fallbackScientificSystems: ContinuumSubsystem[] = [
 
 const fallbackRecommendations: Recommendation[] = [
   {
-    id: 'build-037',
-    title: 'Add server-owned Mission Control operations API',
+    id: 'build-064-sections',
+    title: 'Consume mission_control.sections from backend contract',
     priority: 'critical',
-    rationale: 'BUILD-036 can render the cockpit, but live health, harvesters, repositories, and deployment state need safe backend routes.',
-    ownerDecisionNeeded: 'Approve backend BUILD-037 scope for read-only operations endpoints and server-side action authorization.',
-    nextBuild: 'BUILD-037',
+    rationale: 'Backend BUILD-064 now exposes mission_control.sections (10 panel definitions) via executive-session. Frontend navigation is still hardcoded; adopting the backend contract will keep sections in sync automatically.',
+    ownerDecisionNeeded: 'Approve BUILD-065 scope to wire mission_control.sections into the frontend navigation and panel renderer.',
+    nextBuild: 'BUILD-065',
   },
   {
     id: 'harvester-heartbeat',
@@ -390,7 +405,7 @@ const fallbackRecommendations: Recommendation[] = [
     priority: 'high',
     rationale: 'Harvesters are registered but currently shown as planned because run-state telemetry is not available to the frontend.',
     ownerDecisionNeeded: 'Confirm which harvester sources get first-class heartbeat support first.',
-    nextBuild: 'BUILD-037',
+    nextBuild: 'BUILD-065',
   },
   {
     id: 'deployment-registry',
@@ -398,7 +413,7 @@ const fallbackRecommendations: Recommendation[] = [
     priority: 'high',
     rationale: 'Deployment buttons remain disabled until backend authorization and deployment status exist.',
     ownerDecisionNeeded: 'Approve read-only GitHub/Render connector integration before action buttons.',
-    nextBuild: 'BUILD-037',
+    nextBuild: 'BUILD-065',
   },
 ];
 
@@ -412,21 +427,29 @@ const fallbackSafety: SafetyBoundary[] = [
 ];
 
 const fallbackGovernance: GovernanceSummary = {
-  build: 'BUILD-036',
+  build: 'BUILD-064',
   status: 'warning',
   northStar: 'The Orchid Continuum exists to cultivate understanding by revealing relationships.',
   missions: [
-    { mission_key: 'build-036', title: 'Mission Control Operations Center', status: 'implemented_frontend', next_action: 'Add backend operations API in BUILD-037.', safe_autonomy_level: 1 },
+    { mission_key: 'build-033', title: 'Mission Control Owner Workspace', status: 'implemented_frontend', next_action: 'Maintain owner cockpit parity with backend contract.', safe_autonomy_level: 1 },
+    { mission_key: 'build-036', title: 'Mission Control Operations Center', status: 'implemented_frontend', next_action: 'Keep section definitions in sync with backend mission_control.sections.', safe_autonomy_level: 1 },
+    { mission_key: 'build-059', title: 'Live Integration Framework and Intelligent Mission Control', status: 'implemented_frontend', next_action: 'Confirm /api/executive/state feeds all panels when backend is available.', safe_autonomy_level: 2 },
+    { mission_key: 'build-061', title: 'Scientific Intelligence Integration Suite', status: 'implemented_frontend', next_action: 'Expand scientific adapters as data sources mature.', safe_autonomy_level: 2 },
+    { mission_key: 'build-064', title: 'Mission Control Forensic Regression Audit', status: 'in_progress', next_action: 'Complete frontend parity with backend BUILD-064 mission_control.sections contract.', safe_autonomy_level: 1 },
   ],
   policies: [
     { policy_key: 'owner_authorization', title: 'Owner authorization required', principle: 'Destructive actions, deploys, credential changes, and production writes require server-side owner authorization.', protected: true },
     { policy_key: 'frontend_unlock_is_not_security', title: 'Frontend unlock is only a UI gate', principle: 'The Mission Control access code hides the interface; it is not an authorization layer.', protected: true },
+    { policy_key: 'backend_contract_source_of_truth', title: 'Backend contract is the source of truth', principle: 'mission_control.sections from the backend defines the canonical section set; frontend fallback must stay synchronized.', protected: true },
   ],
   decisions: [
     { decision_id: 'build-036-decision', action: 'Expand Mission Control into Calyx master operations center using read-only data first.', status: 'recorded', risk_level: 'low' },
+    { decision_id: 'build-059-decision', action: 'Introduce MissionControlProvider and live integration framework; migrate to /api/executive/state as primary source.', status: 'recorded', risk_level: 'low' },
+    { decision_id: 'build-064-decision', action: 'Add MissionControlSection type and wire mission_control.sections from backend payload; update stale BUILD-036-era fallback data.', status: 'recorded', risk_level: 'low' },
   ],
   questions: [
-    { question_id: 'build-037-scope', question: 'Which backend operational endpoints should BUILD-037 prioritize first: harvesters, deployment registry, or repository status?', status: 'open' },
+    { question_id: 'build-065-sections-ui', question: 'Should the frontend navigation sidebar be dynamically driven by mission_control.sections from the backend, or should it remain a superset of known panels with backend sections providing supplemental metadata?', status: 'open' },
+    { question_id: 'build-065-executive-session', question: 'Should the frontend call the executive-session combined endpoint to receive mission_control.sections + navigation in a single request?', status: 'open' },
   ],
 };
 
@@ -695,6 +718,7 @@ function readExecutivePayload(payload: unknown) {
       summary: null as Record<string, unknown> | null,
       briefing: null as Record<string, unknown> | null,
       generatedAt: nowIso(),
+      sections: [] as MissionControlSection[],
     };
   }
   const subsystems = asArray<unknown>(record.subsystems)
@@ -717,6 +741,24 @@ function readExecutivePayload(payload: unknown) {
       source: severity === 'warning' ? 'live' : 'live',
     } satisfies RecentActivity;
   });
+  // BUILD-064: extract mission_control.sections if backend exposes them.
+  const rawSections = asArray<unknown>(
+    asRecord(record.mission_control)?.sections ?? record.navigation ?? [],
+  );
+  const sections: MissionControlSection[] = rawSections
+    .map((item) => {
+      const s = asRecord(item);
+      if (!s) return null;
+      return {
+        id: pickString(s, ['id', 'section_id', 'key'], ''),
+        title: pickString(s, ['title', 'name', 'label'], ''),
+        description: pickString(s, ['description', 'summary', 'detail'], ''),
+        endpoint: pickString(s, ['endpoint', 'url', 'path'], ''),
+        auth: pickString(s, ['auth', 'authorization', 'access'], 'owner'),
+        status: pickString(s, ['status', 'state'], 'unknown'),
+      } satisfies MissionControlSection;
+    })
+    .filter((s): s is MissionControlSection => Boolean(s?.id));
   return {
     subsystems,
     recommendations: mergeRecommendations(recommendations, priorities),
@@ -724,6 +766,7 @@ function readExecutivePayload(payload: unknown) {
     summary: record.summary ?? null,
     briefing: record.briefing ?? null,
     generatedAt: String(record.generated_at ?? nowIso()),
+    sections,
   };
 }
 
@@ -878,8 +921,8 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
   const recentActivity: RecentActivity[] = [
     ...executive.recentActivity.slice(0, 8),
     {
-      id: 'build-037-review-fixes',
-      label: 'BUILD-037 Mission Control review fixes loaded',
+      id: 'build-064-mc-load',
+      label: 'Mission Control loaded',
       detail: `Mission Control rendered in ${dataMode} mode with ${liveCount}/${diagnostics.length} live endpoint(s); ${subsystemPayload.length} live subsystem row(s) consumed.`,
       timestamp: nowIso(),
       source: subsystemPayload.length || dataMode !== 'fallback' ? 'live' : 'fallback',
@@ -925,5 +968,6 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     recentActivity,
     safetyBoundaries: fallbackSafety,
     governance,
+    sections: executive.sections,
   };
 }
