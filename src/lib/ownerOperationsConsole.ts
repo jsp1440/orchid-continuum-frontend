@@ -71,6 +71,18 @@ export type OwnerApiResult<T> = T & {
 
 type JsonRecord = Record<string, unknown>;
 
+// Read headers (GET/DELETE without body): no Content-Type or X-Orchid-Actor.
+// Omitting these two headers removes them from the CORS preflight
+// Access-Control-Request-Headers list, so the backend only needs to allow
+// Accept and Authorization — common for any authenticated API.
+function ownerReadHeaders(): HeadersInit {
+  return {
+    Accept: 'application/json',
+  };
+}
+
+// Write headers (POST/PATCH with a JSON body): full set including Content-Type
+// and X-Orchid-Actor so the backend can identify the actor on mutations.
 function ownerHeaders(_token?: string): HeadersInit {
   return {
     Accept: 'application/json',
@@ -159,8 +171,12 @@ export async function createOwnerSession(accessCode: string, owner = 'owner'): P
 export async function validateOwnerSession(_token?: string): Promise<OwnerSession> {
   let raw: Record<string, unknown>;
   try {
+    // Use read-only headers (no Content-Type / X-Orchid-Actor) so the CORS
+    // preflight only requires Accept and Authorization — headers that most
+    // deployed backends already allow.  The Authorization: ******
+    // added by installOwnerSessionTransport (backendConfig.ts) carries the auth.
     raw = await requestJson<Record<string, unknown>>('/api/mission-control/owner/session', {
-      headers: ownerHeaders(),
+      headers: ownerReadHeaders(),
     });
   } catch (err) {
     return {
@@ -205,16 +221,16 @@ export async function validateOwnerSession(_token?: string): Promise<OwnerSessio
 }
 
 export async function endOwnerSession(): Promise<void> {
-  await requestJson('/api/mission-control/owner/session', { method: 'DELETE', headers: ownerHeaders() });
+  await requestJson('/api/mission-control/owner/session', { method: 'DELETE', headers: ownerReadHeaders() });
 }
 
-export async function fetchOwnerOperationsState(token: string): Promise<OwnerOperationsState> {
+export async function fetchOwnerOperationsState(_token?: string): Promise<OwnerOperationsState> {
   const [permissions, intelligence, briefings, queue, commands] = await Promise.all([
-    requestJson<{ allowedActions: OwnerAllowedActions }>('/api/mission-control/owner/permissions', { headers: ownerHeaders(token) }),
-    requestJson<{ items: JsonRecord[] }>('/api/mission-control/owner/intelligence', { headers: ownerHeaders(token) }),
-    requestJson<{ source_briefings: JsonRecord[] }>('/api/mission-control/owner/source-briefings', { headers: ownerHeaders(token) }),
-    requestJson<{ items: BackendOperationsQueueItem[] }>('/api/mission-control/owner/operations-queue', { headers: ownerHeaders(token) }),
-    requestJson<{ commands: BackendOwnerCommand[] }>('/api/mission-control/owner/commands', { headers: ownerHeaders(token) }),
+    requestJson<{ allowedActions: OwnerAllowedActions }>('/api/mission-control/owner/permissions', { headers: ownerReadHeaders() }),
+    requestJson<{ items: JsonRecord[] }>('/api/mission-control/owner/intelligence', { headers: ownerReadHeaders() }),
+    requestJson<{ source_briefings: JsonRecord[] }>('/api/mission-control/owner/source-briefings', { headers: ownerReadHeaders() }),
+    requestJson<{ items: BackendOperationsQueueItem[] }>('/api/mission-control/owner/operations-queue', { headers: ownerReadHeaders() }),
+    requestJson<{ commands: BackendOwnerCommand[] }>('/api/mission-control/owner/commands', { headers: ownerReadHeaders() }),
   ]);
   return {
     permissions: permissions.allowedActions,
@@ -326,6 +342,52 @@ export async function runRuntimeOwnerAction(action: 'cycle' | 'start' | 'stop' |
     method: 'POST',
     headers: ownerHeaders(),
   });
+}
+
+// ---------------------------------------------------------------------------
+// Owner Control Verification (BUILD-065A)
+//
+// A minimal authenticated write/read-back path that verifies end-to-end owner
+// control without touching scientific data, harvesters, or external services.
+// ---------------------------------------------------------------------------
+
+export type ControlVerificationRecord = {
+  id: string;
+  label: string;
+  created_at: string;
+  session_owner: string;
+  read_back_confirmed: boolean;
+};
+
+/**
+ * POST /api/mission-control/owner/control-verification
+ *
+ * Creates a clearly-labeled test record that requires a real owner session.
+ * The record is harmless and reversible; it does not invoke harvesters,
+ * delete data, change scientific records, or send messages.
+ *
+ * Returns the persisted record with a stable id and server timestamp so the
+ * caller can immediately read it back.
+ */
+export async function createOwnerControlVerification(): Promise<ControlVerificationRecord> {
+  return requestJson<ControlVerificationRecord>('/api/mission-control/owner/control-verification', {
+    method: 'POST',
+    headers: ownerHeaders(),
+    body: JSON.stringify({ label: 'owner-control-verification', source: 'mission-control' }),
+  });
+}
+
+/**
+ * GET /api/mission-control/owner/control-verification/:id
+ *
+ * Reads back the test record created by createOwnerControlVerification.
+ * Uses read-only headers so the preflight only needs Accept + Authorization.
+ */
+export async function readOwnerControlVerification(id: string): Promise<ControlVerificationRecord> {
+  return requestJson<ControlVerificationRecord>(
+    `/api/mission-control/owner/control-verification/${encodeURIComponent(id)}`,
+    { headers: ownerReadHeaders() },
+  );
 }
 
 export type OwnerSubsystemGuide = {
