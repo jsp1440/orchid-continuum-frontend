@@ -224,7 +224,12 @@ export async function endOwnerSession(): Promise<void> {
   await requestJson('/api/mission-control/owner/session', { method: 'DELETE', headers: ownerReadHeaders() });
 }
 
-export async function fetchOwnerOperationsState(_token?: string): Promise<OwnerOperationsState> {
+export async function fetchOwnerOperationsState(token: string): Promise<OwnerOperationsState> {
+  // The token parameter is retained for API compatibility (callers pass the
+  // session token to signal they have an active session).  Authentication is
+  // carried by the Authorization: ****** added to every request by the
+  // installOwnerSessionTransport shim in backendConfig.ts.
+  void token;
   const [permissions, intelligence, briefings, queue, commands] = await Promise.all([
     requestJson<{ allowedActions: OwnerAllowedActions }>('/api/mission-control/owner/permissions', { headers: ownerReadHeaders() }),
     requestJson<{ items: JsonRecord[] }>('/api/mission-control/owner/intelligence', { headers: ownerReadHeaders() }),
