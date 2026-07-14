@@ -54,13 +54,27 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
     if (payload.status !== 'ok' && payload.status !== 'no_approved_media' && payload.status !== 'invalid_genus') {
       return empty(requested, 'service_error');
     }
+    // Deduplicate by image_url so the same photograph never appears in both the
+    // hero slot and the gallery (which would look like a duplicate on the page).
+    const seenUrls = new Set<string>();
     return {
       status: payload.status,
       requested_genus: typeof payload.requested_genus === 'string' ? payload.requested_genus : requested,
       accepted_genus: typeof payload.accepted_genus === 'string' ? payload.accepted_genus : null,
       generated_at: typeof payload.generated_at === 'string' ? payload.generated_at : null,
       items: Array.isArray(payload.items)
-        ? payload.items.filter((item): item is GenusMediaItem => !!item && typeof item.scientific_name === 'string' && typeof item.image_url === 'string' && /^https?:\/\//i.test(item.image_url))
+        ? payload.items
+            .filter((item): item is GenusMediaItem =>
+              !!item &&
+              typeof item.scientific_name === 'string' &&
+              typeof item.image_url === 'string' &&
+              /^https?:\/\//i.test(item.image_url),
+            )
+            .filter((item) => {
+              if (seenUrls.has(item.image_url)) return false;
+              seenUrls.add(item.image_url);
+              return true;
+            })
         : [],
       summary: payload.summary && typeof payload.summary.returned_count === 'number'
         ? payload.summary
