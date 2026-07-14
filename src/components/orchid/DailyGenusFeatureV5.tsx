@@ -153,12 +153,13 @@ const DailyGenusFeatureV5: React.FC = () => {
       })
       .catch(() => {
         // Backend offline — species grid falls back to static plates below.
+        console.warn('[DailyGenusFeatureV5] Calyx media fetch failed for genus:', contextGenus);
       });
     return () => controller.abort();
   }, [contextGenus]);
   const trails = useMemo(() => buildDiscoveryTrails(entry), [entry]);
   const summaryCards = useMemo(() => buildSummaryCards(entry), [entry]);
-  const evidenceRows = useMemo(() => buildEvidenceRows(entry, mediaItems.length || undefined), [entry, mediaItems.length]);
+  const evidenceRows = useMemo(() => buildEvidenceRows(entry, mediaItems.length > 0 ? mediaItems.length : undefined), [entry, mediaItems.length]);
   const floweringMonths = useMemo(() => activeFloweringMonths(entry), [entry]);
   // Static plates serve as the offline fallback for the species gallery.
   const staticPlates = useMemo(() => entry.plates.slice(0, 12), [entry.plates]);
