@@ -1,4 +1,5 @@
-import { useSearchParams } from 'react-router-dom';
+import { Inbox } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
 import IntelligenceCenter from './IntelligenceCenter';
 import MissionControl from './MissionControl';
 
@@ -15,5 +16,16 @@ export default function MissionControlEntry() {
     return <IntelligenceCenter />;
   }
 
-  return <MissionControl />;
+  return (
+    <>
+      <MissionControl />
+      <Link
+        to="/mission-control?view=intelligence-center"
+        className="fixed bottom-5 right-5 z-[70] inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/50 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f6dc82] shadow-2xl transition hover:bg-[#173823]"
+        aria-label="Open BUILD-071 Intelligence Center"
+      >
+        <Inbox className="h-4 w-4" /> Intelligence Center
+      </Link>
+    </>
+  );
 }
