@@ -36,5 +36,7 @@ unchanged when the flag is off.
   including evidence counts, explicit zero-evidence domains, partial-response
   disclosure, and the scientific-completeness caveat.
 
-No production endpoint was called during the browser sentinel. No deployment or
-feature enablement was performed.
+No production Knowledge Graph endpoint was called: the flag-on graph request
+used the localhost mock. The flag-off page used the app's default configuration,
+so unrelated existing public page reads were not intercepted. No production
+write, deployment, or feature enablement was performed.
