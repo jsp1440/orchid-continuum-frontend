@@ -50,6 +50,15 @@ export const CALYX_BACKEND_BASE_URL = (
   'https://orchid-calyx-backend.onrender.com'
 ).replace(/\/$/, '');
 
+/**
+ * BUILD-069 public Knowledge Graph consumer gate.
+ *
+ * The panel stays absent unless explicitly enabled at build time. This keeps
+ * publication and deployment decisions outside the implementation branch.
+ */
+export const KNOWLEDGE_GRAPH_ENABLED =
+  (env.VITE_ENABLE_KNOWLEDGE_GRAPH || '').trim().toLowerCase() === 'true';
+
 const OWNER_SESSION_STORAGE_KEY = 'calyx_owner_session_bearer_v1';
 const OWNER_SESSION_PATH = '/api/mission-control/owner/session';
 const OWNER_TOKEN_SESSION_PATH = '/api/mission-control/owner/session-token';
