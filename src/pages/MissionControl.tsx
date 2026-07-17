@@ -89,6 +89,7 @@ import {
 } from '@/lib/missionControlIntelligence';
 import {
   createOwnerSession,
+  createOwnerControlVerification,
   endOwnerSession,
   createResearchRequest,
   executiveAuditTemplates,
@@ -101,6 +102,7 @@ import {
   ownerGuides,
   ownerManualTopics,
   partnershipTemplates,
+  readOwnerControlVerification,
   researchCommands,
   researchInbox,
   runHarvesterOwnerAction,
@@ -111,6 +113,7 @@ import {
   updateBackendIntelligenceItem,
   validateOwnerSession,
   type BackendOperationsQueueItem,
+  type ControlVerificationRecord,
   type ExecutiveAuditTemplate,
   type OwnerAllowedActions,
   type OwnerOperationsState,
@@ -2338,6 +2341,10 @@ const MissionControlContent: React.FC = () => {
   const [pendingHarvesterAction, setPendingHarvesterAction] = useState<string | null>(null);
   // BUILD-059: Owner Focus Mode toggle
   const [focusModeActive, setFocusModeActive] = useState(false);
+  // BUILD-065A: owner control verification state
+  const [verifyControlStatus, setVerifyControlStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [verifyControlRecord, setVerifyControlRecord] = useState<ControlVerificationRecord | null>(null);
+  const [verifyControlError, setVerifyControlError] = useState<string | null>(null);
 
   const loadOwnerOperations = useCallback(async (token = ownerSession?.token) => {
     try {
@@ -2559,6 +2566,24 @@ const MissionControlContent: React.FC = () => {
       setOwnerActionMessage(`Runtime ${action} accepted by the authenticated backend session.`);
     } catch (err) {
       setOwnerActionMessage(err instanceof Error ? err.message : `Runtime ${action} failed`);
+    }
+  };
+
+  // BUILD-065A: owner control verification — requires real owner session, writes
+  // a clearly-labeled test record and reads it back to confirm end-to-end control.
+  const handleVerifyControl = async () => {
+    if (!ownerAuthorized) return;
+    setVerifyControlStatus('running');
+    setVerifyControlRecord(null);
+    setVerifyControlError(null);
+    try {
+      const record = await createOwnerControlVerification();
+      const readBack = await readOwnerControlVerification(record.id);
+      setVerifyControlRecord(readBack);
+      setVerifyControlStatus('success');
+    } catch (err) {
+      setVerifyControlError(err instanceof Error ? err.message : 'Control verification failed');
+      setVerifyControlStatus('error');
     }
   };
 
@@ -2801,6 +2826,30 @@ const MissionControlContent: React.FC = () => {
                     Runtime {action}
                   </button>
                 ))}
+              </div>
+              {/* BUILD-065A: Verify Owner Control */}
+              <div className="sm:col-span-2 lg:col-span-4">
+                <button
+                  disabled={!ownerAuthorized || verifyControlStatus === 'running'}
+                  onClick={() => void handleVerifyControl()}
+                  className="rounded-full border border-emerald-400/40 px-4 py-1.5 font-mono text-[10px] uppercase tracking-[0.16em] text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {verifyControlStatus === 'running' ? 'Verifying…' : 'Verify Owner Control'}
+                </button>
+                {verifyControlStatus === 'success' && verifyControlRecord ? (
+                  <div className="mt-2 rounded-lg border border-emerald-300/20 bg-emerald-300/10 p-2 text-emerald-100/84">
+                    <div>Authentication confirmed: yes</div>
+                    <div>Write confirmed: yes</div>
+                    <div>Read-back confirmed: yes</div>
+                    <div>Record id: {verifyControlRecord.id}</div>
+                    <div>Server timestamp: {verifyControlRecord.created_at}</div>
+                  </div>
+                ) : null}
+                {verifyControlStatus === 'error' ? (
+                  <div className="mt-2 rounded-lg border border-red-300/20 bg-red-300/10 p-2 text-red-100/84">
+                    Control verification failed: {verifyControlError}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

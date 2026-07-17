@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Camera, Database, Leaf, ShieldCheck } from 'lucide-react';
 
+import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { featuredGenusEntry } from '@/lib/featuredGenus';
+import { lookupGenus } from '@/lib/genusData';
 import { fetchCalyxGenusMedia, type GenusMediaResponse } from '@/lib/genusMediaResolver';
 
 const EMPTY: GenusMediaResponse = {
@@ -17,7 +19,13 @@ const EMPTY: GenusMediaResponse = {
 const ScientificName: React.FC<{ name: string }> = ({ name }) => <span className="italic">{name}</span>;
 
 const DailyGenusFeatureV4: React.FC = () => {
-  const entry = useMemo(() => featuredGenusEntry(), []);
+  // Use the context-driven genus so all homepage sections stay in sync,
+  // including when the curator overrides via the daily_genus_snapshot table.
+  const { genus: contextGenus } = useDailyGenus();
+  const entry = useMemo(() => {
+    const local = lookupGenus(contextGenus);
+    return local ?? featuredGenusEntry();
+  }, [contextGenus]);
   const [media, setMedia] = useState<GenusMediaResponse>(EMPTY);
   const [loading, setLoading] = useState(true);
 

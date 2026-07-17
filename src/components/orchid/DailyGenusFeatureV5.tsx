@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -15,9 +15,14 @@ import {
   Sprout,
 } from 'lucide-react';
 import DailyGenusFeatureV3 from '@/components/orchid/DailyGenusFeatureV3';
+import DailyGenusGraphEvidence from '@/components/orchid/DailyGenusGraphEvidence';
 import DailyGenusRelationshipChips from '@/components/orchid/DailyGenusRelationshipChips';
+import { KNOWLEDGE_GRAPH_ENABLED } from '@/lib/backendConfig';
+import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { featuredGenusEntry } from '@/lib/featuredGenus';
+import { lookupGenus } from '@/lib/genusData';
 import type { GenusEntry, SpeciesPlate } from '@/lib/genusData';
+import { fetchCalyxGenusMedia, type GenusMediaItem } from '@/lib/genusMediaResolver';
 
 type DiscoveryTrail = {
   label: string;
@@ -106,10 +111,13 @@ function buildSummaryCards(entry: GenusEntry): SummaryCard[] {
   ];
 }
 
-function buildEvidenceRows(entry: GenusEntry): EvidenceRow[] {
+function buildEvidenceRows(entry: GenusEntry, liveCount?: number): EvidenceRow[] {
+  const speciesNote = liveCount != null && liveCount > 0
+    ? `${liveCount} live media records from the Calyx backend on this page`
+    : `${entry.plates.length} curated reference species cards on this page`;
   return [
     { label: 'Taxonomic scope', value: `${entry.family} / ${entry.tribe}` },
-    { label: 'Species represented', value: `${entry.plates.length} curated species cards on this page` },
+    { label: 'Species represented', value: speciesNote },
     { label: 'Genus estimate', value: `${entry.speciesCount.toLocaleString()} described or accepted species in the working profile` },
     { label: 'Provenance state', value: 'Public summary; source-linked research view remains available through deeper pages' },
   ];
@@ -125,16 +133,44 @@ const MiniCard: React.FC<{ children: React.ReactNode; className?: string }> = ({
 );
 
 const DailyGenusFeatureV5: React.FC = () => {
-  const entry = useMemo(() => featuredGenusEntry(), []);
+  // Use the context-driven genus so all homepage sections display the same genus,
+  // including when the curator overrides via the daily_genus_snapshot table.
+  const { genus: contextGenus } = useDailyGenus();
+
+  // Resolve the full genus entry (ecology, regions, etc.) from the context genus.
+  const entry = useMemo(() => {
+    const local = lookupGenus(contextGenus);
+    return local ?? featuredGenusEntry();
+  }, [contextGenus]);
+
+  // Fetch live species media from the Calyx backend. When the response arrives,
+  // the species gallery replaces the static fallback plates so that images,
+  // scientific names, and attribution all come from the same backend record.
+  const [mediaItems, setMediaItems] = useState<GenusMediaItem[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchCalyxGenusMedia(contextGenus, controller.signal)
+      .then((resp) => {
+        if (!controller.signal.aborted) setMediaItems(resp.items);
+      })
+      .catch(() => {
+        // Backend offline — species grid falls back to static plates below.
+        console.warn('[DailyGenusFeatureV5] Calyx media fetch failed for genus:', contextGenus);
+      });
+    return () => controller.abort();
+  }, [contextGenus]);
   const trails = useMemo(() => buildDiscoveryTrails(entry), [entry]);
   const summaryCards = useMemo(() => buildSummaryCards(entry), [entry]);
-  const evidenceRows = useMemo(() => buildEvidenceRows(entry), [entry]);
+  const evidenceRows = useMemo(() => buildEvidenceRows(entry, mediaItems.length > 0 ? mediaItems.length : undefined), [entry, mediaItems.length]);
   const floweringMonths = useMemo(() => activeFloweringMonths(entry), [entry]);
-  const speciesCards = useMemo(() => entry.plates.slice(0, 12), [entry.plates]);
+  // Static plates serve as the offline fallback for the species gallery.
+  const staticPlates = useMemo(() => entry.plates.slice(0, 12), [entry.plates]);
 
   return (
     <div className="space-y-4">
       <DailyGenusFeatureV3 />
+
+      {KNOWLEDGE_GRAPH_ENABLED && <DailyGenusGraphEvidence genus={entry.genus} />}
 
       <section className="rounded-lg border border-[#d9caa8] bg-[#f6f0df]/95 p-3 shadow-[0_10px_24px_rgba(30,40,20,0.06)]">
         <DailyGenusRelationshipChips
@@ -194,17 +230,50 @@ const DailyGenusFeatureV5: React.FC = () => {
           </Link>
         </div>
 
+        {/*
+          Live path: media items are sourced from the same Calyx API record
+          as the hero image above — images, scientific names, and attribution
+          all come from a single backend response so they are always in sync.
+
+          Offline path: static curated plates are shown as text-only fallback
+          cards when the Calyx backend is unavailable.
+        */}
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {speciesCards.map((plate) => (
-            <MiniCard key={plate.species} className="min-h-[150px]">
-              <div className="flex items-start justify-between gap-3">
-                <h4 className="font-serif text-xl italic leading-tight text-[#24321f]">{speciesLabel(plate)}</h4>
-                <ShieldCheck className="mt-1 h-4 w-4 shrink-0 text-[#8a6f2d]" />
-              </div>
-              <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8062]">{plate.conservation}</p>
-              <p className="mt-3 text-sm leading-6 text-[#5d684c]">{plate.distribution}</p>
-            </MiniCard>
-          ))}
+          {mediaItems.length > 0
+            ? mediaItems.slice(0, 12).map((item) => (
+                <MiniCard key={item.media_id} className="overflow-hidden !p-0">
+                  <figure>
+                    <img
+                      src={item.thumbnail_url || item.image_url}
+                      alt={item.scientific_name}
+                      className="h-40 w-full object-cover"
+                      loading="lazy"
+                    />
+                    <figcaption className="p-4">
+                      <h4 className="font-serif text-lg italic leading-tight text-[#24321f]">
+                        {item.scientific_name}
+                      </h4>
+                      <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8062]">
+                        {item.source_name}
+                      </p>
+                      {item.attribution && (
+                        <p className="mt-1 text-xs leading-5 text-[#5d684c]">{item.attribution}</p>
+                      )}
+                    </figcaption>
+                  </figure>
+                </MiniCard>
+              ))
+            : staticPlates.map((plate) => (
+                <MiniCard key={plate.species} className="min-h-[150px]">
+                  <div className="flex items-start justify-between gap-3">
+                    <h4 className="font-serif text-xl italic leading-tight text-[#24321f]">{speciesLabel(plate)}</h4>
+                    <ShieldCheck className="mt-1 h-4 w-4 shrink-0 text-[#8a6f2d]" />
+                  </div>
+                  <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#8a8062]">{plate.conservation}</p>
+                  <p className="mt-3 text-sm leading-6 text-[#5d684c]">{plate.distribution}</p>
+                </MiniCard>
+              ))
+          }
         </div>
       </section>
 

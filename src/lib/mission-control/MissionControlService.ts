@@ -110,6 +110,9 @@ function withLiveRecommendationEngine(dashboard: MissionControlOperations): Miss
   return {
     ...dashboard,
     recommendations: mergeLiveRecommendations(dashboard),
+    // BUILD-064: always normalize sections to an array so consumers never
+    // receive undefined even when the backend payload omits the field.
+    sections: safeArr(dashboard.sections),
   };
 }
 
