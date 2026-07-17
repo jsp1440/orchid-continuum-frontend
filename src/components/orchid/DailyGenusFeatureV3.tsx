@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bug, Camera, CalendarRange, Leaf, MapPin, Mountain, Sprout } from 'lucide-react';
 import {
@@ -365,8 +365,11 @@ const DailyGenusFeatureV3: React.FC = () => {
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [visibleIndexes, setVisibleIndexes] = useState<number[]>([]);
-  const [nextIndex, setNextIndex] = useState(9);
-  const [replaceCell, setReplaceCell] = useState(0);
+  // nextIndex and replaceCell are rotation counters used only inside the
+  // interval callback; storing them in refs avoids stale-closure issues and
+  // prevents spurious re-renders.
+  const nextIndexRef = useRef(9);
+  const replaceCellRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [ecology, setEcology] = useState<RichEcology | null>(null);
   const [hovered, setHovered] = useState(false);
@@ -520,47 +523,43 @@ const DailyGenusFeatureV3: React.FC = () => {
     if (!slots.length) return;
     setHeroIndex(0);
     setVisibleIndexes(Array.from({ length: Math.min(9, slots.length) }, (_, i) => i));
-    setNextIndex(Math.min(9, slots.length));
-    setReplaceCell(0);
+    nextIndexRef.current = Math.min(9, slots.length);
+    replaceCellRef.current = 0;
   }, [slots.length, entry.genus]);
 
-  // Reset rotation cleanly on tab resume so stale slot indices never survive
-  // a background → foreground transition.
+  // Reset rotation counters cleanly on tab resume so stale slot indices never
+  // survive a background → foreground transition.
   useEffect(() => {
     if (!tabVisible || !slots.length) return;
-    setNextIndex((n) => (n >= slots.length ? 0 : n));
-    setReplaceCell(0);
+    if (nextIndexRef.current >= slots.length) nextIndexRef.current = 0;
+    replaceCellRef.current = 0;
   }, [tabVisible, slots.length]);
 
   useEffect(() => {
     if (shouldPauseRotation(slots.length, hovered, tabVisible, reducedMotion)) return;
 
-    const slotsLen = slots.length; // stable capture for this effect run
+    const slotsLen = slots.length; // captured length for this effect instance
 
     const id = window.setInterval(() => {
-      setVisibleIndexes((prev) => {
-        const current = prev.length ? prev : [0];
+      setVisibleIndexes((current) => {
+        const visible = current.length ? current : [0];
+        const cell = replaceCellRef.current % visible.length;
+        const promoted = visible[cell] ?? 0;
 
-        setReplaceCell((cell) => {
-          const safeCell = cell % current.length;
-          const promoted = current[safeCell] ?? 0;
+        setHeroIndex(promoted);
 
-          setHeroIndex(promoted);
+        if (slotsLen <= visible.length) {
+          replaceCellRef.current = (cell + 1) % visible.length;
+          return visible;
+        }
 
-          if (slotsLen <= current.length) {
-            return (safeCell + 1) % current.length;
-          }
+        const replacement = nextReplacementIndex(visible, nextIndexRef.current, slotsLen);
+        const nextVisible = visible.map((v, i) => (i === cell ? replacement : v));
 
-          setNextIndex((ni) => {
-            const replacement = nextReplacementIndex(current, ni, slotsLen);
-            setVisibleIndexes(current.map((v, i) => (i === safeCell ? replacement : v)));
-            return (ni + 1) % slotsLen;
-          });
+        nextIndexRef.current = (nextIndexRef.current + 1) % slotsLen;
+        replaceCellRef.current = (cell + 1) % visible.length;
 
-          return (safeCell + 1) % current.length;
-        });
-
-        return current; // outer setVisibleIndexes always returns same array; inner one updates
+        return nextVisible;
       });
     }, ROTATE_MS);
 

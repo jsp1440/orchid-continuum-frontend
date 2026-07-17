@@ -36,7 +36,7 @@ export class RootErrorBoundary extends React.Component<
           className="flex min-h-screen flex-col items-center justify-center bg-[#1a2e1a] px-6 py-20 text-[#f5f0e8]"
           style={{ fontFamily: '"Cormorant Garamond", Georgia, serif' }}
         >
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] text-[#c9a24a]">
+          <p className="font-mono text-xs uppercase tracking-[0.28em] text-[#c9a24a]">
             Orchid Continuum · Diagnostic
           </p>
           <h1 className="mt-4 text-3xl font-medium leading-snug text-[#faf7f2]">
@@ -49,7 +49,7 @@ export class RootErrorBoundary extends React.Component<
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="mt-8 rounded-full border border-[#c9a24a]/60 bg-[#c9a24a]/10 px-7 py-3 font-mono text-[11px] uppercase tracking-[0.22em] text-[#faf7f2] hover:bg-[#c9a24a]/20"
+            className="mt-8 rounded-full border border-[#c9a24a]/60 bg-[#c9a24a]/10 px-7 py-3 font-mono text-xs uppercase tracking-[0.22em] text-[#faf7f2] hover:bg-[#c9a24a]/20"
           >
             Reload page
           </button>

@@ -71,7 +71,7 @@ const OrchidGallery: React.FC = () => {
 
   useEffect(() => {
     if (paused || !tabVisible || records.length <= VISIBLE_PER_VIEW) return;
-    const len = records.length; // stable for this effect run
+    const len = records.length; // captured length for this effect instance to avoid stale closure issues
     timerRef.current = window.setInterval(() => {
       setOffset((o) => (len > 0 ? (o + 1) % len : 0));
     }, ROTATION_INTERVAL_MS);

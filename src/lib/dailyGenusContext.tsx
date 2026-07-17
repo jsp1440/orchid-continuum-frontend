@@ -126,7 +126,7 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({
     const ms = msUntilNextRotation();
     timerRef.current = setTimeout(() => {
       validateSnapshot();
-      scheduleNextRefresh(); // chain — always uses the latest closure
+      scheduleNextRefresh(); // chain — fresh closure because scheduleNextRefresh is in the dependency array
     }, ms + 500); // +500ms to be safely past the boundary
   }, [clearTimer, validateSnapshot]);
 
