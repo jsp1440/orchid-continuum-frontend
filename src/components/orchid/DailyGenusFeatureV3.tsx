@@ -378,6 +378,12 @@ const DailyGenusFeatureV3: React.FC = () => {
     onVisibility();
     document.addEventListener('visibilitychange', onVisibility);
 
+    // pageshow fires on iOS Safari BFCache restores (persisted: true).
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setTabVisible(true);
+    };
+    window.addEventListener('pageshow', onPageShow);
+
     let mql: MediaQueryList | null = null;
     const onMotion = (event?: MediaQueryListEvent) => {
       setReducedMotion(event ? event.matches : mql?.matches ?? false);
@@ -391,6 +397,7 @@ const DailyGenusFeatureV3: React.FC = () => {
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
       if (!mql) return;
       if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onMotion);
     };
@@ -517,34 +524,48 @@ const DailyGenusFeatureV3: React.FC = () => {
     setReplaceCell(0);
   }, [slots.length, entry.genus]);
 
+  // Reset rotation cleanly on tab resume so stale slot indices never survive
+  // a background → foreground transition.
+  useEffect(() => {
+    if (!tabVisible || !slots.length) return;
+    setNextIndex((n) => (n >= slots.length ? 0 : n));
+    setReplaceCell(0);
+  }, [tabVisible, slots.length]);
+
   useEffect(() => {
     if (shouldPauseRotation(slots.length, hovered, tabVisible, reducedMotion)) return;
+
+    const slotsLen = slots.length; // stable capture for this effect run
 
     const id = window.setInterval(() => {
       setVisibleIndexes((prev) => {
         const current = prev.length ? prev : [0];
-        const cell = replaceCell % current.length;
-        const promoted = current[cell] ?? 0;
 
-        setHeroIndex(promoted);
+        setReplaceCell((cell) => {
+          const safeCell = cell % current.length;
+          const promoted = current[safeCell] ?? 0;
 
-        if (slots.length <= current.length) {
-          setReplaceCell((n) => (n + 1) % current.length);
-          return current;
-        }
+          setHeroIndex(promoted);
 
-        const replacement = nextReplacementIndex(current, nextIndex, slots.length);
-        const nextVisible = current.map((v, i) => (i === cell ? replacement : v));
+          if (slotsLen <= current.length) {
+            return (safeCell + 1) % current.length;
+          }
 
-        setNextIndex((n) => (n + 1) % slots.length);
-        setReplaceCell((n) => (n + 1) % current.length);
+          setNextIndex((ni) => {
+            const replacement = nextReplacementIndex(current, ni, slotsLen);
+            setVisibleIndexes(current.map((v, i) => (i === safeCell ? replacement : v)));
+            return (ni + 1) % slotsLen;
+          });
 
-        return nextVisible;
+          return (safeCell + 1) % current.length;
+        });
+
+        return current; // outer setVisibleIndexes always returns same array; inner one updates
       });
     }, ROTATE_MS);
 
     return () => window.clearInterval(id);
-  }, [slots.length, nextIndex, replaceCell, hovered, tabVisible, reducedMotion]);
+  }, [slots.length, hovered, tabVisible, reducedMotion]);
 
   const hero = slots[heroIndex % Math.max(1, slots.length)];
 
@@ -658,8 +679,9 @@ const DailyGenusFeatureV3: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-3 gap-3 lg:col-span-3">
-          {visibleIndexes.map((slotIndex, cell) => {
+          {slots.length > 0 && visibleIndexes.map((slotIndex, cell) => {
             const s = slots[slotIndex % slots.length];
+            if (!s) return null;
             const selected = s.species === hero.species;
             const place = s.place ? placeToFlag(s.place) : null;
             const label = botanicalName(s.species);

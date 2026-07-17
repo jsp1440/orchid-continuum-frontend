@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
+import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -53,6 +54,7 @@ import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 const queryClient = new QueryClient();
 
 const App = () => (
+  <RootErrorBoundary>
   <ThemeProvider defaultTheme="light">
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
@@ -169,6 +171,7 @@ const App = () => (
       </AuthProvider>
     </QueryClientProvider>
   </ThemeProvider>
+  </RootErrorBoundary>
 );
 
 export default App;

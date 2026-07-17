@@ -12,7 +12,7 @@
  *  - 'fallback' : neither backend nor cache available — hardcoded fallback.
  */
 
-export type DataSource = 'live' | 'cache' | 'fallback' | 'pending';
+export type DataSource = 'live' | 'cache' | 'fallback' | 'proxy' | 'inaturalist' | 'pending';
 
 export interface BackendStatus {
   source: DataSource;

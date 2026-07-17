@@ -54,16 +54,31 @@ const OrchidGallery: React.FC = () => {
     };
   }, []);
 
-  // Slow auto-rotation. One card-step at a time.
+  // Slow auto-rotation. One card-step at a time. Paused when the tab is
+  // hidden so we don't burn timers while the page is suspended (iOS Safari).
+  const [tabVisible, setTabVisible] = useState(true);
+
   useEffect(() => {
-    if (paused || records.length <= VISIBLE_PER_VIEW) return;
+    const onVisibility = () => setTabVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibility);
+    const onPageShow = (e: PageTransitionEvent) => { if (e.persisted) setTabVisible(true); };
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (paused || !tabVisible || records.length <= VISIBLE_PER_VIEW) return;
+    const len = records.length; // stable for this effect run
     timerRef.current = window.setInterval(() => {
-      setOffset((o) => (o + 1) % records.length);
+      setOffset((o) => (len > 0 ? (o + 1) % len : 0));
     }, ROTATION_INTERVAL_MS);
     return () => {
       if (timerRef.current) window.clearInterval(timerRef.current);
     };
-  }, [paused, records.length]);
+  }, [paused, tabVisible, records.length]);
 
   const stepBack = () =>
     setOffset((o) => (records.length === 0 ? 0 : (o - 1 + records.length) % records.length));
