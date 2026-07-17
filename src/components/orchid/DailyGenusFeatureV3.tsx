@@ -17,6 +17,7 @@ import {
 } from '@/lib/genusData';
 import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus';
 import { setBackendStatus } from '@/lib/backendStatus';
+import { nextReplacementIndex, shouldPauseRotation } from '@/lib/dailyGenusRotation';
 import { filterRankUrls } from '@/lib/imageQuality';
 import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
@@ -368,6 +369,32 @@ const DailyGenusFeatureV3: React.FC = () => {
   const [replaceCell, setReplaceCell] = useState(0);
   const [loading, setLoading] = useState(true);
   const [ecology, setEcology] = useState<RichEcology | null>(null);
+  const [hovered, setHovered] = useState(false);
+  const [tabVisible, setTabVisible] = useState(true);
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const onVisibility = () => setTabVisible(document.visibilityState === 'visible');
+    onVisibility();
+    document.addEventListener('visibilitychange', onVisibility);
+
+    let mql: MediaQueryList | null = null;
+    const onMotion = (event?: MediaQueryListEvent) => {
+      setReducedMotion(event ? event.matches : mql?.matches ?? false);
+    };
+
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      mql = window.matchMedia('(prefers-reduced-motion: reduce)');
+      setReducedMotion(mql.matches);
+      if (typeof mql.addEventListener === 'function') mql.addEventListener('change', onMotion);
+    }
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      if (!mql) return;
+      if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onMotion);
+    };
+  }, []);
 
   useEffect(() => {
     warmBackends();
@@ -491,7 +518,7 @@ const DailyGenusFeatureV3: React.FC = () => {
   }, [slots.length, entry.genus]);
 
   useEffect(() => {
-    if (slots.length <= 1) return;
+    if (shouldPauseRotation(slots.length, hovered, tabVisible, reducedMotion)) return;
 
     const id = window.setInterval(() => {
       setVisibleIndexes((prev) => {
@@ -506,7 +533,7 @@ const DailyGenusFeatureV3: React.FC = () => {
           return current;
         }
 
-        const replacement = nextIndex % slots.length;
+        const replacement = nextReplacementIndex(current, nextIndex, slots.length);
         const nextVisible = current.map((v, i) => (i === cell ? replacement : v));
 
         setNextIndex((n) => (n + 1) % slots.length);
@@ -517,7 +544,7 @@ const DailyGenusFeatureV3: React.FC = () => {
     }, ROTATE_MS);
 
     return () => window.clearInterval(id);
-  }, [slots.length, nextIndex, replaceCell]);
+  }, [slots.length, nextIndex, replaceCell, hovered, tabVisible, reducedMotion]);
 
   const hero = slots[heroIndex % Math.max(1, slots.length)];
 
@@ -557,7 +584,11 @@ const DailyGenusFeatureV3: React.FC = () => {
   const heroLabel = botanicalName(hero.species);
 
   return (
-    <section className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_16px_40px_rgba(30,40,20,0.12)]">
+    <section
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-[2rem] border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_16px_40px_rgba(30,40,20,0.12)]"
+    >
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#8a8062]">Genus of the Day</p>
@@ -590,6 +621,25 @@ const DailyGenusFeatureV3: React.FC = () => {
               </h3>
               <StatusBadge status={hero.conservation} />
             </div>
+
+            <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#6b664f]">
+              <div className="flex items-baseline gap-1">
+                <dt className="font-medium text-[#5d684c]">Genus</dt>
+                <dd>{titleCaseGenus(entry.genus)}</dd>
+              </div>
+              {(hero.imageSource || displaySource) && (
+                <div className="flex items-baseline gap-1">
+                  <dt className="font-medium text-[#5d684c]">Source</dt>
+                  <dd>{hero.imageSource || displaySource}</dd>
+                </div>
+              )}
+              {hero.imageLicense && (
+                <div className="flex items-baseline gap-1">
+                  <dt className="font-medium text-[#5d684c]">License</dt>
+                  <dd>{hero.imageLicense}</dd>
+                </div>
+              )}
+            </dl>
 
             {hero.commonName && <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[#8a8062]">{hero.commonName}</p>}
 
