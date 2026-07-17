@@ -41,6 +41,8 @@ const META: Record<
   cache: { dot: '#f59e0b', label: 'Cached data' },
   fallback: { dot: '#ef4444', label: 'Fallback mode' },
   pending: { dot: '#a8a29e', label: 'Connecting…' },
+  proxy: { dot: '#f59e0b', label: 'Proxy cache' },
+  inaturalist: { dot: '#f59e0b', label: 'iNaturalist fallback' },
 };
 
 const BackendHealthBanner: React.FC = () => {
