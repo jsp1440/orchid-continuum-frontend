@@ -48,6 +48,35 @@ export type IntakeSource = IntakeQueueItem & {
   tasks: IntakeTask[];
 };
 
+export type WorkflowActionType =
+  | 'TASK'
+  | 'CALENDAR'
+  | 'GRANT'
+  | 'TAXONOMY_REVIEW'
+  | 'LITERATURE_EXTRACTION'
+  | 'PARTNERSHIP'
+  | 'CONNECTOR_REVIEW'
+  | 'MEDIA_SEARCH'
+  | 'ARCHIVE';
+
+export type WorkflowPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+
+export type WorkflowAction = {
+  id: number;
+  source_id: number;
+  action_type: WorkflowActionType;
+  destination: string;
+  title: string;
+  description?: string | null;
+  owner?: string | null;
+  priority: WorkflowPriority;
+  status: string;
+  due_at?: string | null;
+  reminder_at?: string | null;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+};
+
 type JsonRecord = Record<string, unknown>;
 
 async function intakeRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -103,4 +132,34 @@ export async function publishIntakeSource(id: number) {
   return intakeRequest<{ id: number; status: string; graph_mutated: boolean; message: string }>(`/api/intake/${id}/publish`, {
     method: 'POST',
   });
+}
+
+export async function createWorkflowAction(sourceId: number, input: {
+  action_type: WorkflowActionType;
+  destination: string;
+  title: string;
+  description?: string;
+  owner?: string;
+  priority: WorkflowPriority;
+  due_at?: string;
+  reminder_at?: string;
+  notes?: string;
+  metadata?: Record<string, unknown>;
+}) {
+  return intakeRequest<WorkflowAction>(`/api/workflow/sources/${sourceId}/actions`, {
+    method: 'POST',
+    body: JSON.stringify({
+      ...input,
+      due_at: input.due_at || null,
+      reminder_at: input.reminder_at || null,
+      description: input.description || null,
+      owner: input.owner || null,
+      notes: input.notes || null,
+      metadata: input.metadata || {},
+    }),
+  });
+}
+
+export async function fetchSourceWorkflow(sourceId: number) {
+  return intakeRequest<{ source: IntakeQueueItem; actions: WorkflowAction[]; history: unknown[] }>(`/api/workflow/sources/${sourceId}`);
 }
