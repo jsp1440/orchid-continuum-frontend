@@ -45,7 +45,8 @@ import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
 import AdminCenter from "./pages/AdminCenter";
-import MissionControl from "./pages/MissionControl";
+import MissionControlEntry from "./pages/MissionControlEntry";
+import IntelligenceCenter from "./pages/IntelligenceCenter";
 import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 
@@ -76,8 +77,10 @@ const App = () => (
 
                 <Route path="/admin" element={<AdminCenter />} />
                 <Route path="/control-center" element={<AdminCenter />} />
-                <Route path="/mission-control" element={<MissionControl />} />
-                <Route path="/orchid-continuum-mission-control" element={<MissionControl />} />
+                <Route path="/mission-control" element={<MissionControlEntry />} />
+                <Route path="/orchid-continuum-mission-control" element={<MissionControlEntry />} />
+                <Route path="/mission-control/intelligence-center" element={<IntelligenceCenter />} />
+                <Route path="/intelligence-center" element={<IntelligenceCenter />} />
                 <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
                 <Route path="/calyx-science" element={<CalyxScienceStatus />} />
                 <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />

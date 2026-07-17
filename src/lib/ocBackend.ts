@@ -178,14 +178,7 @@ export async function fetchContinuumGraph(genus: string, signal?: AbortSignal): 
   const g = genus;
   const q = encodeURIComponent(g);
   let speciesCount: number | null = null;
-  let description = `Daily featured orchid genus from the Continuum taxonomy.`;
-  try {
-    const daily = await fetchGenusOfDay(signal);
-    if (daily && daily.genus.toLowerCase() === g.toLowerCase()) {
-      speciesCount = typeof daily.species_count === 'number' ? daily.species_count : null;
-      description = daily.common_name || description;
-    }
-  } catch { /* supplemental only */ }
+  const description = `Daily featured orchid genus from the Continuum taxonomy.`;
 
   const { ok, data } = await getJson<{
     genus?: string;

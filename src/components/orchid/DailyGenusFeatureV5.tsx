@@ -15,7 +15,9 @@ import {
   Sprout,
 } from 'lucide-react';
 import DailyGenusFeatureV4 from '@/components/orchid/DailyGenusFeatureV4';
+import DailyGenusGraphEvidence from '@/components/orchid/DailyGenusGraphEvidence';
 import DailyGenusRelationshipChips from '@/components/orchid/DailyGenusRelationshipChips';
+import { KNOWLEDGE_GRAPH_ENABLED } from '@/lib/backendConfig';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { featuredGenusEntry } from '@/lib/featuredGenus';
 import { lookupGenus } from '@/lib/genusData';
@@ -167,6 +169,8 @@ const DailyGenusFeatureV5: React.FC = () => {
   return (
     <div className="space-y-4">
       <DailyGenusFeatureV4 />
+
+      {KNOWLEDGE_GRAPH_ENABLED && <DailyGenusGraphEvidence genus={entry.genus} />}
 
       <section className="rounded-lg border border-[#d9caa8] bg-[#f6f0df]/95 p-3 shadow-[0_10px_24px_rgba(30,40,20,0.06)]">
         <DailyGenusRelationshipChips
