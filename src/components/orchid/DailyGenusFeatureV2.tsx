@@ -17,7 +17,7 @@ import {
   type SpeciesPlate,
 } from '@/lib/genusData';
 import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus';
-import { setBackendStatus } from '@/lib/backendStatus';
+import { setBackendStatus, imageSourceToDataSource } from '@/lib/backendStatus';
 import FallbackImage from '@/components/orchid/FallbackImage';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
 import { bestUrlScore } from '@/lib/imageQuality';
@@ -80,7 +80,7 @@ function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
 
 function recordBackendSource(source: ImageSource | null, genus: string): void {
   setBackendStatus({
-    source: source || 'pending',
+    source: imageSourceToDataSource(source || 'pending'),
     genus,
     lastPingTime: Date.now(),
     cacheWrittenAt: null,

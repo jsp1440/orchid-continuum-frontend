@@ -14,6 +14,23 @@
 
 export type DataSource = 'live' | 'cache' | 'fallback' | 'pending';
 
+/**
+ * Normalises an image-layer source string (ImageSource) into a DataSource
+ * value that BackendHealthBanner.META always has a key for.
+ *
+ *   'proxy'       → 'live'     (Supabase server-side cache; backend is healthy)
+ *   'inaturalist' → 'fallback' (last-resort iNat photos; OC library had nothing)
+ *   everything else passes through unchanged — they are already valid DataSource values.
+ */
+export function imageSourceToDataSource(source: string): DataSource {
+  if (source === 'proxy') return 'live';
+  if (source === 'inaturalist') return 'fallback';
+  if (source === 'live' || source === 'cache' || source === 'fallback' || source === 'pending') {
+    return source;
+  }
+  return 'pending';
+}
+
 export interface BackendStatus {
   source: DataSource;
   /** Epoch ms of the last successful backend response (null if never). */

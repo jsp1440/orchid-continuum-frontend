@@ -16,7 +16,7 @@ import {
   type SpeciesPlate,
 } from '@/lib/genusData';
 import { featuredGenusEntry, fetchFeaturedNarrative } from '@/lib/featuredGenus';
-import { setBackendStatus } from '@/lib/backendStatus';
+import { setBackendStatus, imageSourceToDataSource } from '@/lib/backendStatus';
 import { nextReplacementIndex, shouldPauseRotation } from '@/lib/dailyGenusRotation';
 import { filterRankUrls } from '@/lib/imageQuality';
 import FallbackImage from '@/components/orchid/FallbackImage';
@@ -298,7 +298,7 @@ function speciesCaption(slot: Slot, eco: RichEcology | null, genusDescription: s
 
 function recordBackendSource(source: ImageSource | null, genus: string): void {
   setBackendStatus({
-    source: source || 'pending',
+    source: imageSourceToDataSource(source || 'pending'),
     genus,
     lastPingTime: Date.now(),
     cacheWrittenAt: null,

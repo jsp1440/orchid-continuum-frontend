@@ -55,7 +55,7 @@ const BackendHealthBanner: React.FC = () => {
     return () => clearInterval(id);
   }, [open]);
 
-  const meta = META[status.source];
+  const meta = META[status.source] ?? META.pending;
 
   return (
     <div
