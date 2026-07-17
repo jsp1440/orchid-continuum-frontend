@@ -112,6 +112,24 @@ export async function submitIntakeText(input: {
   );
 }
 
+export type BatchUploadResult = {
+  batch: { id: number; display_name: string; accepted_count: number; duplicate_count: number; failed_count: number; review_required_count: number };
+  files: Array<{ filename: string; status: 'PRESERVED' | 'DUPLICATE' | 'FAILED'; error?: string }>;
+  partial_success: boolean;
+  canonical_graph_mutated: false;
+};
+
+export async function uploadIntakeBatch(input: { displayName: string; sourceLabel?: string; files: File[] }): Promise<BatchUploadResult> {
+  const form = new FormData();
+  form.set('display_name', input.displayName);
+  if (input.sourceLabel) form.set('source_label', input.sourceLabel);
+  input.files.forEach((file) => form.append('files', file, file.name));
+  const response = await fetch(`${CALYX_BACKEND_BASE_URL}/api/intake/batches`, { method: 'POST', credentials: 'include', headers: { Accept: 'application/json' }, body: form });
+  const payload = await response.json() as BatchUploadResult & { detail?: unknown };
+  if (!response.ok && response.status !== 207) throw new Error(`File intake ${response.status}: ${JSON.stringify(payload.detail || payload)}`);
+  return payload;
+}
+
 export async function fetchIntakeQueue(): Promise<IntakeQueueItem[]> {
   const response = await intakeRequest<{ items: IntakeQueueItem[] }>('/api/intake/review');
   return response.items || [];
