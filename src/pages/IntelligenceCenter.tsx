@@ -3,6 +3,7 @@ import { ArrowLeft, CalendarClock, CheckCircle2, Inbox, Loader2, LockKeyhole, Re
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
+import UniversalFileIntake from '@/components/intelligence/UniversalFileIntake';
 import { createOwnerSession } from '@/lib/ownerOperationsConsole';
 import {
   createWorkflowAction,
@@ -218,6 +219,7 @@ export default function IntelligenceCenter() {
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-6">
+              <UniversalFileIntake />
               <section className="rounded-xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
                 <h2 className="text-2xl">New submission</h2>
                 <p className="mt-2 text-sm text-[#f5f0e8]/60">Paste an article, email, report, AI briefing, or meeting notes.</p>
