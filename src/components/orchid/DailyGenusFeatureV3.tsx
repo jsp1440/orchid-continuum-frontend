@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Bug, Camera, CalendarRange, Leaf, MapPin, Mountain, Sprout } from 'lucide-react';
 import {
@@ -365,8 +365,11 @@ const DailyGenusFeatureV3: React.FC = () => {
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
   const [heroIndex, setHeroIndex] = useState(0);
   const [visibleIndexes, setVisibleIndexes] = useState<number[]>([]);
-  const [nextIndex, setNextIndex] = useState(9);
-  const [replaceCell, setReplaceCell] = useState(0);
+  // nextIndex and replaceCell are rotation counters used only inside the
+  // interval callback; storing them in refs avoids stale-closure issues and
+  // prevents spurious re-renders.
+  const nextIndexRef = useRef(9);
+  const replaceCellRef = useRef(0);
   const [loading, setLoading] = useState(true);
   const [ecology, setEcology] = useState<RichEcology | null>(null);
   const [hovered, setHovered] = useState(false);
@@ -377,6 +380,12 @@ const DailyGenusFeatureV3: React.FC = () => {
     const onVisibility = () => setTabVisible(document.visibilityState === 'visible');
     onVisibility();
     document.addEventListener('visibilitychange', onVisibility);
+
+    // pageshow fires on iOS Safari BFCache restores (persisted: true).
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) setTabVisible(true);
+    };
+    window.addEventListener('pageshow', onPageShow);
 
     let mql: MediaQueryList | null = null;
     const onMotion = (event?: MediaQueryListEvent) => {
@@ -391,6 +400,7 @@ const DailyGenusFeatureV3: React.FC = () => {
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('pageshow', onPageShow);
       if (!mql) return;
       if (typeof mql.removeEventListener === 'function') mql.removeEventListener('change', onMotion);
     };
@@ -513,38 +523,48 @@ const DailyGenusFeatureV3: React.FC = () => {
     if (!slots.length) return;
     setHeroIndex(0);
     setVisibleIndexes(Array.from({ length: Math.min(9, slots.length) }, (_, i) => i));
-    setNextIndex(Math.min(9, slots.length));
-    setReplaceCell(0);
+    nextIndexRef.current = Math.min(9, slots.length);
+    replaceCellRef.current = 0;
   }, [slots.length, entry.genus]);
+
+  // Reset rotation counters cleanly on tab resume so stale slot indices never
+  // survive a background → foreground transition.
+  useEffect(() => {
+    if (!tabVisible || !slots.length) return;
+    if (nextIndexRef.current >= slots.length) nextIndexRef.current = 0;
+    replaceCellRef.current = 0;
+  }, [tabVisible, slots.length]);
 
   useEffect(() => {
     if (shouldPauseRotation(slots.length, hovered, tabVisible, reducedMotion)) return;
 
+    const slotsLen = slots.length; // captured length for this effect instance
+
     const id = window.setInterval(() => {
-      setVisibleIndexes((prev) => {
-        const current = prev.length ? prev : [0];
-        const cell = replaceCell % current.length;
-        const promoted = current[cell] ?? 0;
+      setVisibleIndexes((current) => {
+        const visible = current.length ? current : [0];
+        const cell = replaceCellRef.current % visible.length;
+        const promoted = visible[cell] ?? 0;
 
         setHeroIndex(promoted);
 
-        if (slots.length <= current.length) {
-          setReplaceCell((n) => (n + 1) % current.length);
-          return current;
+        if (slotsLen <= visible.length) {
+          replaceCellRef.current = (cell + 1) % visible.length;
+          return visible;
         }
 
-        const replacement = nextReplacementIndex(current, nextIndex, slots.length);
-        const nextVisible = current.map((v, i) => (i === cell ? replacement : v));
+        const replacement = nextReplacementIndex(visible, nextIndexRef.current, slotsLen);
+        const nextVisible = visible.map((v, i) => (i === cell ? replacement : v));
 
-        setNextIndex((n) => (n + 1) % slots.length);
-        setReplaceCell((n) => (n + 1) % current.length);
+        nextIndexRef.current = (nextIndexRef.current + 1) % slotsLen;
+        replaceCellRef.current = (cell + 1) % visible.length;
 
         return nextVisible;
       });
     }, ROTATE_MS);
 
     return () => window.clearInterval(id);
-  }, [slots.length, nextIndex, replaceCell, hovered, tabVisible, reducedMotion]);
+  }, [slots.length, hovered, tabVisible, reducedMotion]);
 
   const hero = slots[heroIndex % Math.max(1, slots.length)];
 
@@ -658,8 +678,9 @@ const DailyGenusFeatureV3: React.FC = () => {
         </div>
 
         <div className="grid grid-cols-3 gap-3 lg:col-span-3">
-          {visibleIndexes.map((slotIndex, cell) => {
+          {slots.length > 0 && visibleIndexes.map((slotIndex, cell) => {
             const s = slots[slotIndex % slots.length];
+            if (!s) return null;
             const selected = s.species === hero.species;
             const place = s.place ? placeToFlag(s.place) : null;
             const label = botanicalName(s.species);

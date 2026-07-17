@@ -41,7 +41,11 @@ const META: Record<
   cache: { dot: '#f59e0b', label: 'Cached data' },
   fallback: { dot: '#ef4444', label: 'Fallback mode' },
   pending: { dot: '#a8a29e', label: 'Connecting…' },
+  proxy: { dot: '#60a5fa', label: 'Proxy data' },
+  inaturalist: { dot: '#84cc16', label: 'iNaturalist data' },
 };
+
+const FALLBACK_META = { dot: '#a8a29e', label: 'Connecting…' };
 
 const BackendHealthBanner: React.FC = () => {
   const status = useBackendStatus();
@@ -55,7 +59,7 @@ const BackendHealthBanner: React.FC = () => {
     return () => clearInterval(id);
   }, [open]);
 
-  const meta = META[status.source];
+  const meta = META[status.source] ?? FALLBACK_META;
 
   return (
     <div

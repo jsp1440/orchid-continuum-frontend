@@ -107,20 +107,64 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({
   }, [validateSnapshot]);
 
   // ── Auto-refresh at the 12-hour window boundary ─────────────────────────
+  //
+  // The timer is cancelled when the page is hidden (iPad Safari suspends JS
+  // while another app is foregrounded) and rescheduled on resume so we never
+  // accumulate orphaned timer chains and always re-validate after a long
+  // background.
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current != null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const scheduleNextRefresh = useCallback(() => {
+    clearTimer();
+    const ms = msUntilNextRotation();
+    timerRef.current = setTimeout(() => {
+      validateSnapshot();
+      scheduleNextRefresh(); // chain — fresh closure because scheduleNextRefresh is in the dependency array
+    }, ms + 500); // +500ms to be safely past the boundary
+  }, [clearTimer, validateSnapshot]);
+
   useEffect(() => {
-    const scheduleRefresh = () => {
-      const ms = msUntilNextRotation();
-      timerRef.current = setTimeout(() => {
+    scheduleNextRefresh();
+    return clearTimer;
+  }, [scheduleNextRefresh, clearTimer]);
+
+  // ── Re-validate on resume from background (iOS Safari / BFCache) ─────────
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        // Re-validate immediately in case the 12-hour window advanced while
+        // the page was suspended, then reschedule the rotation timer.
         validateSnapshot();
-        scheduleRefresh(); // chain next refresh
-      }, ms + 500); // +500ms to be safely past the boundary
+        scheduleNextRefresh();
+      } else {
+        // Page is going into background — cancel the pending timer to avoid
+        // firing stale callbacks while suspended.
+        clearTimer();
+      }
     };
-    scheduleRefresh();
+
+    // pageshow covers BFCache restores (persisted: true) on iOS Safari.
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) {
+        validateSnapshot();
+        scheduleNextRefresh();
+      }
+    };
+
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('pageshow', onPageShow);
     return () => {
-      if (timerRef.current != null) clearTimeout(timerRef.current);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('pageshow', onPageShow);
     };
-  }, [validateSnapshot]);
+  }, [validateSnapshot, scheduleNextRefresh, clearTimer]);
 
   return (
     <DailyGenusContext.Provider value={state}>
