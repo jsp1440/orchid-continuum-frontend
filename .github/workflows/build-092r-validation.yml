@@ -1,0 +1,30 @@
+name: BUILD-092R Frontend Validation
+
+on:
+  pull_request:
+    paths:
+      - "src/pages/MyConservatory.tsx"
+      - "src/App.tsx"
+      - "docs/BUILD-092R-*"
+      - ".github/workflows/build-092r-validation.yml"
+  push:
+    branches: [main]
+
+jobs:
+  my-conservatory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run build
+      - name: Prohibited path scan
+        run: |
+          if grep -R -n -E 'C:/Users/|\.codex/visualizations|node_modules/' src/pages/MyConservatory.tsx docs/BUILD-092R-MY-CONSERVATORY-FRONTEND-RELOCATION.md; then
+            exit 1
+          fi
