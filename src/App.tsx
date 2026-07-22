@@ -21,6 +21,7 @@ import Widgets from "./pages/Widgets";
 import Explore from "./pages/Explore";
 import Species from "./pages/Species";
 import MyCollection from "./pages/MyCollection";
+import MyConservatory from "./pages/MyConservatory";
 import ResearchCenter from "./pages/ResearchCenter";
 import Education from "./pages/Education";
 import Partners from "./pages/Partners";
@@ -55,122 +56,78 @@ const queryClient = new QueryClient();
 
 const App = () => (
   <RootErrorBoundary>
-  <ThemeProvider defaultTheme="light">
-    <QueryClientProvider client={queryClient}>
-      <AuthProvider>
-        <FavoritesSync />
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-
-          <BrowserRouter>
-            <AtlasFilterProvider>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                <Route path="/explore" element={<Explore />} />
-                <Route path="/species" element={<Species />} />
-                <Route path="/genus/:name" element={<GenusDetail />} />
-                <Route path="/species/:slug" element={<SpeciesDossier />} />
-
-                <Route path="/about" element={<About />} />
-                <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
-                <Route path="/atlas" element={<Atlas />} />
-                <Route path="/atlas/:species" element={<Atlas />} />
-
-                <Route path="/admin" element={<AdminCenter />} />
-                <Route path="/control-center" element={<AdminCenter />} />
-                <Route path="/mission-control" element={<MissionControlEntry />} />
-                <Route path="/orchid-continuum-mission-control" element={<MissionControlEntry />} />
-                <Route path="/mission-control/intelligence-center" element={<IntelligenceCenter />} />
-                <Route path="/intelligence-center" element={<IntelligenceCenter />} />
-                <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
-                <Route path="/calyx-science" element={<CalyxScienceStatus />} />
-                <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
-                <Route path="/ai-orchestration" element={<AIOrchestration />} />
-                <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
-
-                <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
-                <Route path="/habitats/:biome" element={<HabitatJourney mode="biome" />} />
-                <Route path="/ecosystems/:species" element={<HabitatJourney mode="species" />} />
-                <Route path="/pollinators" element={<PollinatorProfile />} />
-                <Route path="/pollinators/:taxa" element={<PollinatorProfile />} />
-                <Route path="/mycorrhizae" element={<MycorrhizaProfile />} />
-                <Route path="/mycorrhizae/:taxa" element={<MycorrhizaProfile />} />
-                <Route path="/gallery" element={<Gallery />} />
-                <Route path="/climate" element={<Climate />} />
-                <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
-                <Route path="/knowledge" element={<IntelligenceGraph />} />
-                <Route path="/literature" element={<ComingSoon />} />
-
-                <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
-                <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
-
-                <Route
-                  path="/collection"
-                  element={
-                    <ProtectedRoute
-                      title="Sign in to view your collection"
-                      description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."
-                    >
-                      <MyCollection />
-                    </ProtectedRoute>
-                  }
-                />
-
-                <Route
-                  path="/conservatory"
-                  element={
-                    <ProtectedRoute
-                      title="Sign in to view your conservatory"
-                      description="Your Orchid Continuum conservatory — saved specimens, observations, and field notes — lives behind authentication."
-                    >
-                      <MyCollection />
-                    </ProtectedRoute>
-                  }
-                />
-
-                <Route
-                  path="/research"
-                  element={
-                    <ProtectedRoute
-                      title="Research Center · members only"
-                      description="Sign in to access advanced queries, trait explorers, and the conservation research workspace."
-                    >
-                      <ResearchCenter />
-                    </ProtectedRoute>
-                  }
-                />
-
-                <Route path="/account" element={<Account />} />
-                <Route path="/saved" element={<SavedOrchids />} />
-
-                <Route path="/oacs" element={<OACS />} />
-                <Route path="/zoo" element={<OrchidZoo />} />
-                <Route path="/widgets" element={<Widgets />} />
-                <Route path="/education" element={<Education />} />
-                <Route path="/partners" element={<Partners />} />
-                <Route path="/get-involved" element={<GetInvolved />} />
-
-                <Route path="/ecosystems" element={<Ecosystems />} />
-                <Route path="/conservation" element={<ConservationHub />} />
-                <Route path="/societies" element={<Societies />} />
-                <Route path="/university" element={<OrchidUniversity />} />
-                <Route path="/classroom" element={<Classroom />} />
-
-                <Route path="/org/:slug" element={<OrganizationProfile />} />
-                <Route path="/project/:slug" element={<ProjectWorkspace />} />
-
-                <Route path="/coming-soon/:section" element={<ComingSoon />} />
-                <Route path="/coming-soon" element={<ComingSoon />} />
-
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AtlasFilterProvider>
-          </BrowserRouter>
-        </TooltipProvider>
-      </AuthProvider>
-    </QueryClientProvider>
-  </ThemeProvider>
+    <ThemeProvider defaultTheme="light">
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <FavoritesSync />
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AtlasFilterProvider>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/explore" element={<Explore />} />
+                  <Route path="/species" element={<Species />} />
+                  <Route path="/genus/:name" element={<GenusDetail />} />
+                  <Route path="/species/:slug" element={<SpeciesDossier />} />
+                  <Route path="/about" element={<About />} />
+                  <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
+                  <Route path="/atlas" element={<Atlas />} />
+                  <Route path="/atlas/:species" element={<Atlas />} />
+                  <Route path="/admin" element={<AdminCenter />} />
+                  <Route path="/control-center" element={<AdminCenter />} />
+                  <Route path="/mission-control" element={<MissionControlEntry />} />
+                  <Route path="/orchid-continuum-mission-control" element={<MissionControlEntry />} />
+                  <Route path="/mission-control/intelligence-center" element={<IntelligenceCenter />} />
+                  <Route path="/intelligence-center" element={<IntelligenceCenter />} />
+                  <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
+                  <Route path="/calyx-science" element={<CalyxScienceStatus />} />
+                  <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
+                  <Route path="/ai-orchestration" element={<AIOrchestration />} />
+                  <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
+                  <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
+                  <Route path="/habitats/:biome" element={<HabitatJourney mode="biome" />} />
+                  <Route path="/ecosystems/:species" element={<HabitatJourney mode="species" />} />
+                  <Route path="/pollinators" element={<PollinatorProfile />} />
+                  <Route path="/pollinators/:taxa" element={<PollinatorProfile />} />
+                  <Route path="/mycorrhizae" element={<MycorrhizaProfile />} />
+                  <Route path="/mycorrhizae/:taxa" element={<MycorrhizaProfile />} />
+                  <Route path="/gallery" element={<Gallery />} />
+                  <Route path="/climate" element={<Climate />} />
+                  <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
+                  <Route path="/knowledge" element={<IntelligenceGraph />} />
+                  <Route path="/literature" element={<ComingSoon />} />
+                  <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
+                  <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
+                  <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
+                  <Route path="/conservatory/*" element={<ProtectedRoute title="Sign in to view your conservatory" description="Your private living collection, plant passports, QR identifiers, and collection notes live behind authentication."><MyConservatory /></ProtectedRoute>} />
+                  <Route path="/research" element={<ProtectedRoute title="Research Center · members only" description="Sign in to access advanced queries, trait explorers, and the conservation research workspace."><ResearchCenter /></ProtectedRoute>} />
+                  <Route path="/account" element={<Account />} />
+                  <Route path="/saved" element={<SavedOrchids />} />
+                  <Route path="/oacs" element={<OACS />} />
+                  <Route path="/zoo" element={<OrchidZoo />} />
+                  <Route path="/widgets" element={<Widgets />} />
+                  <Route path="/education" element={<Education />} />
+                  <Route path="/partners" element={<Partners />} />
+                  <Route path="/get-involved" element={<GetInvolved />} />
+                  <Route path="/ecosystems" element={<Ecosystems />} />
+                  <Route path="/conservation" element={<ConservationHub />} />
+                  <Route path="/societies" element={<Societies />} />
+                  <Route path="/university" element={<OrchidUniversity />} />
+                  <Route path="/classroom" element={<Classroom />} />
+                  <Route path="/org/:slug" element={<OrganizationProfile />} />
+                  <Route path="/project/:slug" element={<ProjectWorkspace />} />
+                  <Route path="/coming-soon/:section" element={<ComingSoon />} />
+                  <Route path="/coming-soon" element={<ComingSoon />} />
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </AtlasFilterProvider>
+            </BrowserRouter>
+          </TooltipProvider>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ThemeProvider>
   </RootErrorBoundary>
 );
 
