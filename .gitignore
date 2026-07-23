@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Glossary Preparation Workflow default output directory (generated artifacts)
+glossary-output
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -1,0 +1,22 @@
+{
+  "entries": [
+    {
+      "term": "Velamen",
+      "definition": "A spongy, multi-layered epidermis covering the aerial roots of many epiphytic orchids that absorbs water and nutrients.",
+      "category": "morphology",
+      "synonyms": ["velamen radicum"],
+      "relatedTerms": ["root", "epiphyte"],
+      "source": "Pridgeon 1987",
+      "sourceCitation": "Pridgeon, A.M. (1987). The velamen and exodermis of orchid roots.",
+      "notes": "Key adaptation for epiphytic life."
+    },
+    {
+      "term": "Pollinia",
+      "definition": "Coherent masses of pollen grains transferred as a unit during orchid pollination.",
+      "category": "reproduction",
+      "synonyms": ["pollinium"],
+      "relatedTerms": ["column", "anther cap"],
+      "source": "Dressler 1981"
+    }
+  ]
+}
