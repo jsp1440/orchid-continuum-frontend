@@ -1,0 +1,27 @@
+name: CALYX-INTERFACE-001 Validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/pages/CalyxInterface.tsx'
+      - 'src/lib/calyxBrain.ts'
+      - 'src/App.tsx'
+      - '.github/workflows/calyx-interface-001-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint -- --max-warnings=0
+      - run: npm run build
