@@ -51,6 +51,7 @@ import MissionControlEntry from "./pages/MissionControlEntry";
 import IntelligenceCenter from "./pages/IntelligenceCenter";
 import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
+import CalyxInterface from "./pages/CalyxInterface";
 
 const queryClient = new QueryClient();
 
@@ -83,6 +84,9 @@ const App = () => (
                   <Route path="/intelligence-center" element={<IntelligenceCenter />} />
                   <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
                   <Route path="/calyx-science" element={<CalyxScienceStatus />} />
+                  <Route path="/mission-control/calyx" element={<CalyxInterface />} />
+                  <Route path="/calyx" element={<CalyxInterface />} />
+                  <Route path="/speak-with-calyx" element={<CalyxInterface />} />
                   <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
