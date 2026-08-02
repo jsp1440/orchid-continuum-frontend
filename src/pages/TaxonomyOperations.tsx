@@ -33,10 +33,21 @@ type TaxonomyReleaseReport = {
   };
 };
 
-type Gate = {
+type BackendGate = {
   name: string;
-  detail: string;
-  status: 'verified' | 'blocked' | 'pending';
+  status: 'passed' | 'blocked';
+  evidence: string;
+  checked_at: string;
+  blocking_reason?: string | null;
+};
+
+type ReadinessReport = {
+  ready_for_upload: boolean;
+  ready_for_promotion: boolean;
+  gates: BackendGate[];
+  checked_at: string;
+  instruction: string;
+  read_only: boolean;
 };
 
 async function parseResponse(response: Response): Promise<Record<string, unknown>> {
@@ -48,25 +59,52 @@ async function parseResponse(response: Response): Promise<Record<string, unknown
   return body;
 }
 
+const gateLabels: Record<string, string> = {
+  owner_authentication: 'Owner authentication',
+  persistent_intake_storage: 'Persistent intake storage',
+  database_connection: 'Database connection',
+  staging_schema: 'Persistent staging schema',
+  deployed_routes: 'Deployed Mission Control routes',
+  smoke_fixture: 'Harmless fixture upload and readback',
+  comparison_engine: 'Release comparison and crosswalk',
+  downstream_impact_audit: 'Downstream impact audit',
+  rollback_certification: 'Promotion and rollback certification',
+  owner_promotion_approval: 'Owner promotion approval',
+};
+
 export default function TaxonomyOperations() {
   const [releases, setReleases] = useState<TaxonomyReleaseReport[]>([]);
+  const [readiness, setReadiness] = useState<ReadinessReport | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [routeVerified, setRouteVerified] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${CALYX_BACKEND_BASE_URL}/api/mission-control/taxonomy/releases`, {
-        credentials: 'include',
-      });
-      const body = await parseResponse(response);
-      setReleases(Array.isArray(body.releases) ? (body.releases as TaxonomyReleaseReport[]) : []);
-      setRouteVerified(true);
+      const [releaseResponse, readinessResponse] = await Promise.all([
+        fetch(`${CALYX_BACKEND_BASE_URL}/api/mission-control/taxonomy/releases`, {
+          credentials: 'include',
+        }),
+        fetch(`${CALYX_BACKEND_BASE_URL}/api/mission-control/taxonomy/readiness`, {
+          credentials: 'include',
+        }),
+      ]);
+      const releaseBody = await parseResponse(releaseResponse);
+      const readinessBody = await parseResponse(readinessResponse);
+      setReleases(
+        Array.isArray(releaseBody.releases)
+          ? (releaseBody.releases as TaxonomyReleaseReport[])
+          : [],
+      );
+      setReadiness(readinessBody as unknown as ReadinessReport);
     } catch (err) {
-      setRouteVerified(false);
-      setError(err instanceof Error ? err.message : 'Unable to verify the taxonomy operations route.');
+      setReadiness(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Unable to load live taxonomy readiness evidence.',
+      );
     } finally {
       setLoading(false);
     }
@@ -77,51 +115,11 @@ export default function TaxonomyOperations() {
   }, [load]);
 
   const latest = releases[0] ?? null;
-  const gates = useMemo<Gate[]>(
-    () => [
-      {
-        name: 'Governed intake code',
-        detail: 'Parser, immutable checksum intake, and owner-gated upload contract are implemented.',
-        status: 'verified',
-      },
-      {
-        name: 'Deployed owner route',
-        detail: routeVerified
-          ? 'The authenticated taxonomy release listing route responded successfully.'
-          : 'The deployed route has not yet been verified from this session.',
-        status: routeVerified ? 'verified' : 'blocked',
-      },
-      {
-        name: 'Persistent staging database',
-        detail: 'Must be applied and verified against the deployed database before the real release is uploaded.',
-        status: 'pending',
-      },
-      {
-        name: 'Release comparison and crosswalk',
-        detail: 'Deterministic comparison exists; production execution against two staged releases is still required.',
-        status: 'pending',
-      },
-      {
-        name: 'Downstream impact audit',
-        detail: 'Read-only impact logic exists; deployed counts must be generated before promotion.',
-        status: 'pending',
-      },
-      {
-        name: 'Promotion and rollback certification',
-        detail: 'Disposable rehearsal must pass and be recorded before production promotion is enabled.',
-        status: 'pending',
-      },
-      {
-        name: 'Owner approval',
-        detail: 'Canonical promotion remains unavailable until every preceding gate is verified.',
-        status: 'blocked',
-      },
-    ],
-    [routeVerified],
+  const gates = readiness?.gates ?? [];
+  const passedCount = useMemo(
+    () => gates.filter((gate) => gate.status === 'passed').length,
+    [gates],
   );
-
-  const verifiedCount = gates.filter((gate) => gate.status === 'verified').length;
-  const uploadRecommended = gates.every((gate) => gate.status === 'verified');
 
   return (
     <div className="min-h-screen bg-[#06110b] text-[#f5f0e8]">
@@ -130,13 +128,13 @@ export default function TaxonomyOperations() {
         <div className="mb-8 flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-[#d4b34a]">
-              <ShieldCheck className="h-3.5 w-3.5" /> Calyx governed operations
+              <ShieldCheck className="h-3.5 w-3.5" /> Live Calyx readiness
             </div>
             <h1 className="mt-5 text-4xl md:text-6xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
               Taxonomy <span className="italic text-[#d4b34a]">Operations</span>
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[#cfc8b8]/85">
-              A fail-closed view of World Plants intake, comparison, impact analysis, rollback readiness, and owner approval.
+              Deployed evidence for World Plants intake, staging, comparison, impact analysis, rollback certification, and owner approval.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -151,7 +149,7 @@ export default function TaxonomyOperations() {
 
         {error ? (
           <div className="mb-6 rounded-2xl border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">
-            <AlertTriangle className="mr-2 inline h-4 w-4" /> {error}
+            <AlertTriangle className="mr-2 inline h-4 w-4" /> {error} Readiness remains blocked until live evidence can be retrieved.
           </div>
         ) : null}
 
@@ -162,14 +160,17 @@ export default function TaxonomyOperations() {
                 <Database className="h-5 w-5 text-[#d4b34a]" />
                 <h2 className="text-2xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Readiness</h2>
               </div>
-              <button onClick={() => void load()} disabled={loading} className="rounded-full border border-white/15 p-2">
+              <button onClick={() => void load()} disabled={loading} className="rounded-full border border-white/15 p-2" aria-label="Refresh readiness">
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
-            <div className="mt-6 text-5xl font-semibold text-[#d4b34a]">{verifiedCount}/{gates.length}</div>
-            <p className="mt-2 text-sm text-[#cfc8b8]/70">Verified operational gates</p>
-            <div className={`mt-6 rounded-2xl border p-4 text-sm ${uploadRecommended ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100' : 'border-amber-300/25 bg-amber-300/10 text-amber-100'}`}>
-              {uploadRecommended ? 'The real Hassler release is ready for upload.' : 'The real Hassler release should not be uploaded yet.'}
+            <div className="mt-6 text-5xl font-semibold text-[#d4b34a]">{passedCount}/{gates.length || '—'}</div>
+            <p className="mt-2 text-sm text-[#cfc8b8]/70">Live operational gates passed</p>
+            <div className={`mt-6 rounded-2xl border p-4 text-sm ${readiness?.ready_for_upload ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100' : 'border-amber-300/25 bg-amber-300/10 text-amber-100'}`}>
+              {readiness?.instruction ?? 'Do not upload the production taxonomy file until live readiness evidence is available.'}
+            </div>
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/15 p-4 text-xs leading-6 text-[#cfc8b8]/75">
+              Promotion readiness: <strong className={readiness?.ready_for_promotion ? 'text-emerald-200' : 'text-amber-200'}>{readiness?.ready_for_promotion ? 'approved' : 'blocked'}</strong>. Upload readiness and canonical promotion are intentionally separate decisions.
             </div>
 
             <div className="mt-6 rounded-2xl border border-white/10 bg-black/15 p-4">
@@ -190,21 +191,25 @@ export default function TaxonomyOperations() {
           <section className="rounded-[2rem] border border-white/10 bg-[#0b1c11]/90 p-6 shadow-2xl">
             <h2 className="text-2xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Operational gates</h2>
             <div className="mt-6 space-y-3">
-              {gates.map((gate) => (
+              {gates.length ? gates.map((gate) => (
                 <article key={gate.name} className="flex gap-4 rounded-2xl border border-white/10 bg-black/15 p-4">
-                  {gate.status === 'verified' ? (
+                  {gate.status === 'passed' ? (
                     <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
-                  ) : gate.status === 'blocked' ? (
-                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
                   ) : (
-                    <CircleDashed className="mt-0.5 h-5 w-5 shrink-0 text-[#cfc8b8]/60" />
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-300" />
                   )}
                   <div>
-                    <h3 className="font-medium">{gate.name}</h3>
-                    <p className="mt-1 text-xs leading-6 text-[#cfc8b8]/70">{gate.detail}</p>
+                    <h3 className="font-medium">{gateLabels[gate.name] ?? gate.name}</h3>
+                    <p className="mt-1 text-xs leading-6 text-[#cfc8b8]/70">{gate.evidence}</p>
+                    {gate.blocking_reason ? <p className="mt-2 text-xs leading-6 text-amber-200/90">Blocker: {gate.blocking_reason}</p> : null}
                   </div>
                 </article>
-              ))}
+              )) : (
+                <article className="flex gap-4 rounded-2xl border border-white/10 bg-black/15 p-4">
+                  <CircleDashed className="mt-0.5 h-5 w-5 shrink-0 text-[#cfc8b8]/60" />
+                  <p className="text-xs leading-6 text-[#cfc8b8]/70">Live readiness evidence has not been returned.</p>
+                </article>
+              )}
             </div>
           </section>
         </div>
