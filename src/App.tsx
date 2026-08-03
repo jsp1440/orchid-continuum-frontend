@@ -55,6 +55,7 @@ import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
 import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
+import HomepageReadiness from "./pages/HomepageReadiness";
 
 const queryClient = new QueryClient();
 
@@ -93,6 +94,8 @@ const App = () => (
                   <Route path="/intelligence-center" element={<IntelligenceCenter />} />
                   <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
                   <Route path="/calyx-science" element={<CalyxScienceStatus />} />
+                  <Route path="/mission-control/readiness/homepage" element={<HomepageReadiness />} />
+                  <Route path="/mission-control/knowledge-graph-readiness" element={<HomepageReadiness />} />
                   <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
