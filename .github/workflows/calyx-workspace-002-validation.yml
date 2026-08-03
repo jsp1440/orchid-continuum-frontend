@@ -1,0 +1,26 @@
+name: CALYX-WORKSPACE-002 Validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/lib/calyxWorkspace.ts'
+      - 'src/pages/CalyxWorkspace.tsx'
+      - 'src/App.tsx'
+      - '.github/workflows/calyx-workspace-002-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx eslint src/lib/calyxWorkspace.ts src/pages/CalyxWorkspace.tsx src/App.tsx --max-warnings=0
+      - run: npm run build

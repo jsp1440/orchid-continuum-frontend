@@ -54,6 +54,7 @@ import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
 import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
+import CalyxWorkspace from "./pages/CalyxWorkspace";
 
 const queryClient = new QueryClient();
 
@@ -73,6 +74,9 @@ const App = () => (
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
                   <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
+                  <Route path="/calyx" element={<CalyxWorkspace />} />
+                  <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
+                  <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />
                   <Route path="/explore" element={<Explore />} />
                   <Route path="/species" element={<Species />} />
                   <Route path="/genus/:name" element={<GenusDetail />} />
