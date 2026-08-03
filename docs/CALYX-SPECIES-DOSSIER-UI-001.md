@@ -1,6 +1,6 @@
 # Calyx Species Dossier UI 001
 
-Status: implementation contract
+Status: implementation in progress
 Backend dependency: `CALYX_SPECIES_DOSSIER_API_V1`
 Brain dependency: `CALYX_FEDERATED_SPECIES_DOSSIER_V1`
 
@@ -9,6 +9,18 @@ Brain dependency: `CALYX_FEDERATED_SPECIES_DOSSIER_V1`
 - `/species/:taxonId`
 - `/species/:taxonId/atlas`
 - `/federation/resolve`
+
+## Executable client
+
+`src/lib/speciesDossier.ts` now defines and consumes:
+
+- `oc-species-dossier-v1`
+- `oc-species-atlas-v1`
+- federation resolution results
+- evidence receipts and evidence states
+- partner references and permission dimensions
+
+It calls the governed backend routes and preserves unavailable states. It does not calculate confidence, infer partner permissions, create scientific claims, or substitute genus text for missing species evidence.
 
 ## Dossier presentation
 
@@ -62,9 +74,13 @@ Every species card links by canonical `taxon_id` to `/species/:taxonId`. No card
 
 The dossier provides an `Open in Identification Matrix` action using the backend-supplied Matrix handoff and preloaded canonical taxon.
 
-## Degraded behavior
+## Next implementation
 
-Unavailable sections display an evidence-unavailable state. Generic genus narratives must never substitute for missing species evidence.
+1. Register the canonical routes.
+2. Add dossier and Atlas page shells.
+3. Add resolved, ambiguous, unresolved, and invalid federation entry states.
+4. Connect Featured Genus cards after the species-exhibit endpoint is operational.
+5. Add responsive and accessibility regression coverage.
 
 ## Safety
 
