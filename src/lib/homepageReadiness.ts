@@ -2,45 +2,59 @@ import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 
 export type MetricState = 'available' | 'unavailable' | 'error';
 
-export type ReadinessMetric = {
-  key: string;
-  label: string;
+export type LiveMetric = {
   state: MetricState;
   value: number | null;
-  numerator: number | null;
   denominator: number | null;
-  unit: string | null;
-  source: string;
-  measured_at: string | null;
-  limitation: string | null;
-};
-
-export type DomainCoverage = {
-  domain: string;
-  species_with_evidence: number | null;
-  accepted_species_total: number | null;
   percentage: number | null;
-  state: MetricState;
-  limitation: string | null;
+  detail: string | null;
 };
 
-export type HomepageReadiness = {
-  contract_version: 'calyx-homepage-readiness-v1';
+export type TaxonomyImageReadiness = {
+  state: MetricState;
+  taxonomy_table?: string | null;
+  image_table?: string | null;
+  taxonomy_key?: string | null;
+  image_taxonomy_key?: string | null;
+  total_taxa?: number;
+  total_images?: number;
+  linked_images?: LiveMetric;
+  unlinked_images?: LiveMetric;
+  broken_taxonomy_targets?: LiveMetric;
+  taxa_with_images?: LiveMetric;
+  interpretation?: 'relational_linkage_only';
+  detail?: string | null;
+};
+
+export type GraphIntegrity = {
+  state: MetricState;
+  null_endpoint_edges?: number;
+  duplicate_edges?: number;
+  passed?: boolean;
+  detail?: string | null;
+};
+
+export type GraphMaterializationReadiness = {
+  state: MetricState;
+  edge_table: string | null;
+  total_edges?: number;
+  taxonomy_to_images?: LiveMetric;
+  integrity?: GraphIntegrity;
+  detail?: string | null;
+};
+
+export type LiveGraphAudit = {
+  contract: 'calyx-live-graph-audit-v1';
   generated_at: string;
-  homepage_ready: boolean;
-  redesign_work_may_proceed: boolean;
-  publication_blocked: boolean;
-  metrics: ReadinessMetric[];
-  domain_coverage: DomainCoverage[];
+  relational: { taxonomy_to_images: TaxonomyImageReadiness };
+  graph: GraphMaterializationReadiness;
   blockers: string[];
-  unavailable_metrics: string[];
-  next_actions: string[];
-  scientific_publication_authority: false;
-  graph_mutation: false;
+  homepage_ready: boolean;
+  warning: string;
 };
 
 export type HomepageReadinessResult =
-  | { status: 'live'; readiness: HomepageReadiness }
+  | { status: 'live'; audit: LiveGraphAudit }
   | { status: 'unavailable'; reason: string };
 
 export async function fetchHomepageReadiness(signal?: AbortSignal): Promise<HomepageReadinessResult> {
@@ -52,11 +66,11 @@ export async function fetchHomepageReadiness(signal?: AbortSignal): Promise<Home
     if (!response.ok) {
       return { status: 'unavailable', reason: `Readiness service returned ${response.status}.` };
     }
-    const payload = (await response.json()) as HomepageReadiness;
-    if (payload.contract_version !== 'calyx-homepage-readiness-v1') {
-      return { status: 'unavailable', reason: 'Readiness contract version could not be verified.' };
+    const payload = (await response.json()) as LiveGraphAudit;
+    if (payload.contract !== 'calyx-live-graph-audit-v1') {
+      return { status: 'unavailable', reason: 'Live graph-audit contract could not be verified.' };
     }
-    return { status: 'live', readiness: payload };
+    return { status: 'live', audit: payload };
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;
     return { status: 'unavailable', reason: 'The live homepage-readiness service could not be reached.' };
