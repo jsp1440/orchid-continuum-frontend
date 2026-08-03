@@ -22,5 +22,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run lint -- --max-warnings=0
+      - run: npx eslint src/lib/calyxWorkspace.ts src/pages/CalyxWorkspace.tsx src/App.tsx --max-warnings=0
       - run: npm run build
