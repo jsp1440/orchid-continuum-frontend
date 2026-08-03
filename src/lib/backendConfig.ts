@@ -1,67 +1,29 @@
 /**
  * backendConfig — THE single source of truth for every Orchid Continuum backend
  * origin the frontend talks to.
- *
- * CURRENT PRODUCTION HOSTS
- *
- *   API / Species / Atlas:
- *   https://orchid-continuum-public-api.onrender.com
- *
- *   Calyx Backend / Mission Control:
- *   https://orchid-calyx-backend.onrender.com
- *
- *   Images:
- *   https://orchidcontinuumharvester2.onrender.com
- *
- * Legacy:
- *   https://orchidcontinuum.onrender.com
  */
 
 const env = import.meta.env as Record<string, string | undefined>;
 
-/**
- * Canonical Orchid Continuum Public API
- *
- * Serves:
- * - species search
- * - species detail
- * - atlas
- * - diagnostics
- * - campaign statistics
- */
 export const BACKEND_BASE_URL = (
   env.VITE_BACKEND_BASE_URL ||
   env.VITE_API_BASE_URL ||
   'https://orchid-continuum-public-api.onrender.com'
 ).replace(/\/$/, '');
 
-/**
- * Calyx backend
- *
- * Serves:
- * - runner health
- * - connector health
- * - runtime summary
- * - mission-control operational telemetry
- */
 export const CALYX_BACKEND_BASE_URL = (
   env.VITE_CALYX_BACKEND_BASE_URL ||
   env.VITE_MISSION_CONTROL_BACKEND_URL ||
   'https://orchid-calyx-backend.onrender.com'
 ).replace(/\/$/, '');
 
-/**
- * BUILD-069 public Knowledge Graph consumer gate.
- *
- * The panel stays absent unless explicitly enabled at build time. This keeps
- * publication and deployment decisions outside the implementation branch.
- */
 export const KNOWLEDGE_GRAPH_ENABLED =
   (env.VITE_ENABLE_KNOWLEDGE_GRAPH || '').trim().toLowerCase() === 'true';
 
 const OWNER_SESSION_STORAGE_KEY = 'calyx_owner_session_bearer_v1';
 const OWNER_SESSION_PATH = '/api/mission-control/owner/session';
 const OWNER_TOKEN_SESSION_PATH = '/api/mission-control/owner/session-token';
+const OWNER_TOKEN_REFRESH_PATH = '/api/mission-control/owner/session-token/refresh';
 
 type OwnerTokenResponse = { token?: unknown };
 
@@ -89,10 +51,36 @@ function clearOwnerBearerToken(): void {
   }
 }
 
+async function refreshOwnerBearerFromCookie(
+  nativeFetch: typeof window.fetch,
+): Promise<string | null> {
+  try {
+    const response = await nativeFetch(
+      `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_REFRESH_PATH}`,
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json' },
+        credentials: 'include',
+      },
+    );
+    if (!response.ok) return null;
+    const payload = await response.json() as OwnerTokenResponse;
+    if (typeof payload.token !== 'string' || !payload.token || payload.token === 'cookie') return null;
+    storeOwnerBearerToken(payload.token);
+    return payload.token;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * Safari and other privacy-focused browsers may block the Calyx backend's
- * cross-site HttpOnly cookie. Install a narrow fetch transport shim that uses
- * the backend's signed session token as a same-tab Bearer fallback.
+ * Install one owner-auth transport for every Calyx request.
+ *
+ * Mission Control creates one signed owner session. The same session is reused
+ * automatically by taxonomy, runtime, harvester, governance, and other owner
+ * tools. When Safari sends the valid cookie for reads but drops it on a later
+ * cross-site POST/multipart request, the transport converts that same session
+ * to a same-tab bearer and retries once. No second login is required.
  */
 function installOwnerSessionTransport(): void {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
@@ -109,21 +97,20 @@ function installOwnerSessionTransport(): void {
     const originalPath = isCalyxRequest ? originalUrl.slice(CALYX_BACKEND_BASE_URL.length).split('?')[0] : '';
     const isOwnerLogin = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'POST';
     const isOwnerLogout = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'DELETE';
+    const isTokenRefresh = isCalyxRequest && originalPath === OWNER_TOKEN_REFRESH_PATH;
 
     let requestInput: RequestInfo | URL = input;
-    if (isOwnerLogin) {
-      requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;
-    }
+    if (isOwnerLogin) requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;
 
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init.headers).forEach((value, key) => headers.set(key, value));
 
-    const bearer = readOwnerBearerToken();
-    if (isCalyxRequest && bearer && !isOwnerLogin && !headers.has('Authorization')) {
-      headers.set('Authorization', `Bearer ${bearer}`);
+    const existingBearer = readOwnerBearerToken();
+    if (isCalyxRequest && existingBearer && !isOwnerLogin && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${existingBearer}`);
     }
 
-    const response = await nativeFetch(requestInput, { ...init, headers });
+    let response = await nativeFetch(requestInput, { ...init, headers, credentials: init.credentials ?? 'include' });
 
     if (isOwnerLogin && response.ok) {
       try {
@@ -132,7 +119,28 @@ function installOwnerSessionTransport(): void {
           storeOwnerBearerToken(payload.token);
         }
       } catch {
-        // createOwnerSession will reject the follow-up inspection if no valid transport exists.
+        // The follow-up owner-session inspection will fail closed.
+      }
+    }
+
+    const shouldRecoverExistingSession =
+      isCalyxRequest &&
+      response.status === 401 &&
+      !isOwnerLogin &&
+      !isOwnerLogout &&
+      !isTokenRefresh &&
+      !headers.has('Authorization');
+
+    if (shouldRecoverExistingSession) {
+      const recoveredBearer = await refreshOwnerBearerFromCookie(nativeFetch);
+      if (recoveredBearer) {
+        const retryHeaders = new Headers(headers);
+        retryHeaders.set('Authorization', `Bearer ${recoveredBearer}`);
+        response = await nativeFetch(requestInput, {
+          ...init,
+          headers: retryHeaders,
+          credentials: init.credentials ?? 'include',
+        });
       }
     }
 
@@ -143,47 +151,22 @@ function installOwnerSessionTransport(): void {
 
 installOwnerSessionTransport();
 
-/**
- * Image backend
- *
- * Genus images are currently served by the harvester image backend:
- *   GET /images/genus/{genus}
- *
- * Do not point this at the public API unless that endpoint has been migrated.
- */
 export const IMAGES_BACKEND_BASE_URL = (
   env.VITE_IMAGES_BACKEND_BASE_URL ||
   env.VITE_IMAGE_BACKEND_BASE_URL ||
   'https://orchidcontinuumharvester2.onrender.com'
 ).replace(/\/$/, '');
 
-/**
- * Legacy backend
- *
- * Retained only for endpoints that have not yet been migrated.
- */
 export const LEGACY_ONRENDER_BASE_URL = (
   env.VITE_LEGACY_ONRENDER_BASE_URL ||
   'https://orchidcontinuum.onrender.com'
 ).replace(/\/$/, '');
 
-/**
- * Ecuador expedition embedded application.
- */
 export const ECUADOR_EMBED_BASE_URL = (
   env.VITE_ECUADOR_EMBED_BASE_URL ||
   env.VITE_ECUADOR_EXPEDITION_EMBED_URL ||
   'https://orchid-continuum-ecuador-expedition.onrender.com'
 ).replace(/\/$/, '');
 
-/**
- * Atlas occurrences endpoint.
- */
-export const ATLAS_OCCURRENCES_URL =
-  `${BACKEND_BASE_URL}/atlas/occurrences`;
-
-/**
- * Atlas health probe.
- */
-export const ATLAS_OCCURRENCES_PROBE_URL =
-  `${BACKEND_BASE_URL}/api/atlas/occurrences?limit=1`;
+export const ATLAS_OCCURRENCES_URL = `${BACKEND_BASE_URL}/atlas/occurrences`;
+export const ATLAS_OCCURRENCES_PROBE_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences?limit=1`;
