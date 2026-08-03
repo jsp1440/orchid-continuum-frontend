@@ -51,6 +51,9 @@ import MissionControlEntry from "./pages/MissionControlEntry";
 import IntelligenceCenter from "./pages/IntelligenceCenter";
 import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
+import ContinuumNext from "./pages/ContinuumNext";
+import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
+import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +70,9 @@ const App = () => (
               <AtlasFilterProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  <Route path="/continuum-next" element={<ContinuumNext />} />
+                  <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
+                  <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
                   <Route path="/explore" element={<Explore />} />
                   <Route path="/species" element={<Species />} />
                   <Route path="/genus/:name" element={<GenusDetail />} />
