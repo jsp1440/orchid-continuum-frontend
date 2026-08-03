@@ -1,6 +1,48 @@
+import { useCallback, useEffect, useState } from "react";
+
 import { matrixFixture } from "@/data/parallelPlatformFixtures";
+import { compareTaxa, type MatrixResult } from "@/lib/parallelPlatform";
+
+const payload = {
+  subject_taxon_id: matrixFixture.subject_taxon_id,
+  object_taxon_id: matrixFixture.object_taxon_id,
+  dimensions: Object.fromEntries(
+    matrixFixture.dimensions.map((dimension) => [
+      dimension.name,
+      {
+        available: dimension.availability !== "unavailable",
+        score: dimension.score,
+        weight: dimension.weight,
+        confidence: dimension.confidence,
+        evidence: dimension.evidence,
+      },
+    ]),
+  ),
+};
 
 export default function RelationshipMatrixNext() {
+  const [result, setResult] = useState<MatrixResult>(matrixFixture);
+  const [state, setState] = useState<"loading" | "live" | "degraded">("loading");
+  const [message, setMessage] = useState("Connecting to the canonical Matrix service…");
+
+  const load = useCallback(async () => {
+    setState("loading");
+    setMessage("Connecting to the canonical Matrix service…");
+    try {
+      setResult(await compareTaxa(payload));
+      setState("live");
+      setMessage("Live canonical backend result");
+    } catch (error) {
+      setResult(matrixFixture);
+      setState("degraded");
+      setMessage(error instanceof Error ? `${error.message}; showing governed fallback.` : "Backend unavailable; showing governed fallback.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
   return (
     <main className="min-h-screen bg-background px-6 py-12 text-foreground">
       <div className="mx-auto max-w-6xl">
@@ -8,16 +50,22 @@ export default function RelationshipMatrixNext() {
         <h1 className="mt-2 text-4xl font-semibold">Compare orchids across evidence domains</h1>
         <p className="mt-4 max-w-3xl text-muted-foreground">Unavailable evidence is shown as unavailable, never as a zero relationship. Every score remains a candidate interpretation until governed review.</p>
 
+        <div className="mt-6 flex flex-wrap items-center gap-3">
+          <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase">{state}</span>
+          <span className="text-sm text-muted-foreground">{message}</span>
+          <button type="button" onClick={() => void load()} className="rounded-lg border px-3 py-2 text-sm font-medium">Refresh live analysis</button>
+        </div>
+
         <section className="mt-8 rounded-2xl border bg-card p-6">
           <div className="grid gap-4 md:grid-cols-3">
-            <div><p className="text-xs uppercase text-muted-foreground">Subject</p><p className="mt-1 font-medium">{matrixFixture.subject_taxon_id}</p></div>
-            <div><p className="text-xs uppercase text-muted-foreground">Compared with</p><p className="mt-1 font-medium">{matrixFixture.object_taxon_id}</p></div>
-            <div><p className="text-xs uppercase text-muted-foreground">Candidate score</p><p className="mt-1 text-3xl font-semibold">{matrixFixture.score?.toFixed(2) ?? "—"}</p></div>
+            <div><p className="text-xs uppercase text-muted-foreground">Subject</p><p className="mt-1 font-medium">{result.subject_taxon_id}</p></div>
+            <div><p className="text-xs uppercase text-muted-foreground">Compared with</p><p className="mt-1 font-medium">{result.object_taxon_id}</p></div>
+            <div><p className="text-xs uppercase text-muted-foreground">Candidate score</p><p className="mt-1 text-3xl font-semibold">{result.score?.toFixed(2) ?? "—"}</p></div>
           </div>
         </section>
 
         <section className="mt-6 grid gap-4 md:grid-cols-2">
-          {matrixFixture.dimensions.map((dimension) => (
+          {result.dimensions.map((dimension) => (
             <article key={dimension.name} className="rounded-2xl border bg-card p-5">
               <div className="flex items-center justify-between gap-4">
                 <h2 className="font-semibold capitalize">{dimension.name.replace("_", " ")}</h2>
