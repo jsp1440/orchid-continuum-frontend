@@ -1,0 +1,33 @@
+name: OC Contract Manifest Validation
+
+on:
+  pull_request:
+    paths:
+      - "contracts/oc-parallel-v1.json"
+      - ".github/workflows/oc-contract-manifest-validation.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          manifest = json.loads(Path('contracts/oc-parallel-v1.json').read_text())
+          assert manifest['contract_version'] == 'oc-parallel-v1'
+          assert manifest['role'] == 'typed_consumer_and_presentation'
+          assert manifest['governance']['client_scoring_allowed'] is False
+          assert manifest['governance']['automatic_verified_identity_allowed'] is False
+          assert manifest['governance']['automatic_scientific_publication_allowed'] is False
+          assert 'GET /api/platform/homepage' in manifest['routes']
+          assert 'POST /api/platform/matrix/pairwise' in manifest['routes']
+          assert 'POST /api/platform/identification/rank' in manifest['routes']
+          PY
