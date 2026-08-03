@@ -29,6 +29,7 @@ import GetInvolved from "./pages/GetInvolved";
 import Ecosystems from "./pages/Ecosystems";
 import ConservationHub from "./pages/ConservationHub";
 import OrchidUniversity from "./pages/OrchidUniversity";
+import UniversityLabPrototype from "./pages/UniversityLabPrototype";
 import Classroom from "./pages/Classroom";
 import Societies from "./pages/Societies";
 import OrganizationProfile from "./pages/OrganizationProfile";
@@ -128,6 +129,7 @@ const App = () => (
                   <Route path="/conservation" element={<ConservationHub />} />
                   <Route path="/societies" element={<Societies />} />
                   <Route path="/university" element={<OrchidUniversity />} />
+                  <Route path="/university/lab" element={<UniversityLabPrototype />} />
                   <Route path="/classroom" element={<Classroom />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
