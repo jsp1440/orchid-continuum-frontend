@@ -1,0 +1,36 @@
+name: Deployment Contract
+
+on:
+  pull_request:
+    paths:
+      - 'src/App.tsx'
+      - 'public/_redirects'
+      - 'vercel.json'
+      - 'scripts/verify-deployment-contract.mjs'
+      - 'package.json'
+      - '.github/workflows/deployment-contract.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/App.tsx'
+      - 'public/_redirects'
+      - 'vercel.json'
+      - 'scripts/verify-deployment-contract.mjs'
+      - 'package.json'
+      - '.github/workflows/deployment-contract.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run validate:deployment
+      - run: npm run build
