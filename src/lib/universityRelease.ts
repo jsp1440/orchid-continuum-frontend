@@ -29,6 +29,21 @@ export type UniversityReleaseReadiness = {
 
 export type UniversityReleaseMode = 'disabled' | 'read_only' | 'durable' | 'blocked';
 
+function completeDurableGate(readiness: UniversityReleaseReadiness): boolean {
+  const gate = readiness.durable_gate;
+  return Boolean(
+    readiness.session_writes_enabled &&
+      readiness.durable_sessions_enabled &&
+      readiness.persistence === 'postgres_durable' &&
+      gate?.session_writes_enabled === true &&
+      gate?.durable_flag_enabled === true &&
+      gate?.read_only_release_verified === true &&
+      gate?.release_evidence_present === true &&
+      gate?.release_evidence_valid === true &&
+      gate?.durable_sessions_enabled === true,
+  );
+}
+
 export function releaseMode(readiness: UniversityReleaseReadiness): UniversityReleaseMode {
   if (!readiness.university_enabled) return 'disabled';
   if (
@@ -39,14 +54,7 @@ export function releaseMode(readiness: UniversityReleaseReadiness): UniversityRe
   ) {
     return 'read_only';
   }
-  if (
-    readiness.session_writes_enabled &&
-    readiness.durable_sessions_enabled &&
-    readiness.persistence === 'postgres_durable' &&
-    readiness.durable_gate?.durable_sessions_enabled === true
-  ) {
-    return 'durable';
-  }
+  if (completeDurableGate(readiness)) return 'durable';
   return 'blocked';
 }
 
@@ -66,11 +74,14 @@ export function releaseBlockers(readiness: UniversityReleaseReadiness): string[]
   if (readiness.durable_sessions_enabled && readiness.persistence !== 'postgres_durable') {
     blockers.push('Durable sessions are enabled but Postgres persistence is not reported.');
   }
-  if (
-    readiness.durable_sessions_enabled &&
-    readiness.durable_gate?.release_evidence_valid !== true
-  ) {
-    blockers.push('Durable activation does not have valid production release evidence.');
+  if (readiness.durable_sessions_enabled) {
+    const gate = readiness.durable_gate;
+    if (gate?.session_writes_enabled !== true) blockers.push('Durable gate does not confirm session writes.');
+    if (gate?.durable_flag_enabled !== true) blockers.push('Durable gate flag is not enabled.');
+    if (gate?.read_only_release_verified !== true) blockers.push('Read-only production release is not verified.');
+    if (gate?.release_evidence_present !== true) blockers.push('Production release evidence is missing.');
+    if (gate?.release_evidence_valid !== true) blockers.push('Durable activation does not have valid production release evidence.');
+    if (gate?.durable_sessions_enabled !== true) blockers.push('Backend durable gate is not fully satisfied.');
   }
   return blockers;
 }
