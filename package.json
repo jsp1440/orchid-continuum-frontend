@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "validate:deployment": "node scripts/verify-deployment-contract.mjs"
+    "validate:deployment": "node scripts/verify-deployment-contract.mjs",
+    "verify:university-production": "node scripts/verify-university-production.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -64,7 +65,7 @@
     "recharts": "^2.12.7",
     "sonner": "^1.5.0",
     "tailwind-merge": "^2.5.2",
-    "tailwindcss-animate": "^1.0.7",
+    "tailwindcss-animate": "^1.0.0",
     "uuid": "^11.1.0",
     "vaul": "^0.9.3",
     "zod": "^3.23.8"
