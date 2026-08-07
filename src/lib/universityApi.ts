@@ -83,6 +83,7 @@ export type UniversitySessionEvent = {
   stage: UniversityInquiryStage;
   payload: Record<string, unknown>;
   actor: string;
+  session_revision: number;
   created_at: string;
 };
 
