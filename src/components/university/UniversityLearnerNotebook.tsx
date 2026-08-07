@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { AlertTriangle, ArrowRight, BookMarked, CheckCircle2, RotateCcw, Save } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { AlertTriangle, ArrowRight, BookMarked, CheckCircle2, LockKeyhole, RotateCcw, Save } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   UniversityApiError,
   universityApi,
@@ -49,7 +51,9 @@ function errorMessage(error: unknown): string {
     if (code === 'CHANGES_NOT_ADDRESSED') {
       return 'A reviewer requested changes. Record a revised conclusion and revised uncertainty before resubmitting.';
     }
-    if (error.status === 401) return 'An authenticated Calyx session is required to use the learner notebook.';
+    if (code === 'INVALID_LEARNER_TOKEN' || code === 'LEARNER_SESSION_REQUIRED' || error.status === 401) {
+      return 'Your learner session is missing or expired. Sign in again before continuing this investigation.';
+    }
     return error.detail?.message ?? error.message;
   }
   return error instanceof Error ? error.message : 'University request failed.';
@@ -114,7 +118,9 @@ export default function UniversityLearnerNotebook({
   chapterId: string;
   laboratoryId: string;
 }) {
-  const [session, setSession] = useState<UniversityLabSession | null>(null);
+  const { session: authSession, loading: authLoading } = useAuth();
+  const accessToken = authSession?.access_token ?? null;
+  const [labSession, setLabSession] = useState<UniversityLabSession | null>(null);
   const [resumeId, setResumeId] = useState('');
   const [note, setNote] = useState('');
   const [evidenceNote, setEvidenceNote] = useState('');
@@ -122,12 +128,21 @@ export default function UniversityLearnerNotebook({
   const [message, setMessage] = useState<string | null>(null);
 
   const acceptSession = (next: UniversityLabSession) => {
-    setSession(next);
+    setLabSession(next);
     setMessage(null);
   };
 
+  const requireToken = (): string => {
+    if (!accessToken) throw new Error('A signed-in learner session is required.');
+    return accessToken;
+  };
+
   const create = useMutation({
-    mutationFn: () => universityApi.createSession({ laboratory_id: laboratoryId, chapter_id: chapterId }),
+    mutationFn: () =>
+      universityApi.createSession(
+        { laboratory_id: laboratoryId, chapter_id: chapterId },
+        requireToken(),
+      ),
     onSuccess: (next) => {
       acceptSession(next);
       setResumeId(next.session_id);
@@ -135,12 +150,13 @@ export default function UniversityLearnerNotebook({
     onError: (error) => setMessage(errorMessage(error)),
   });
   const resume = useMutation({
-    mutationFn: () => universityApi.session(resumeId.trim()),
+    mutationFn: () => universityApi.session(resumeId.trim(), requireToken()),
     onSuccess: acceptSession,
     onError: (error) => setMessage(errorMessage(error)),
   });
   const append = useMutation({
-    mutationFn: (input: AppendInput) => universityApi.appendEvent(session!.session_id, input),
+    mutationFn: (input: AppendInput) =>
+      universityApi.appendEvent(labSession!.session_id, input, requireToken()),
     onSuccess: (next, input) => {
       acceptSession(next);
       if (input.event_type === 'evidence_examined') setEvidenceNote('');
@@ -150,51 +166,52 @@ export default function UniversityLearnerNotebook({
     onError: (error) => setMessage(errorMessage(error)),
   });
   const submit = useMutation({
-    mutationFn: () => universityApi.submitSession(session!.session_id, session!.revision),
+    mutationFn: () =>
+      universityApi.submitSession(labSession!.session_id, labSession!.revision, requireToken()),
     onSuccess: acceptSession,
     onError: (error) => setMessage(errorMessage(error)),
   });
 
   const busy = create.isPending || resume.isPending || append.isPending || submit.isPending;
-  const currentIndex = session ? STAGES.indexOf(session.current_stage) : -1;
-  const readiness = useMemo(() => (session ? stageReady(session) : null), [session]);
-  const editingLocked = session
-    ? ['submitted', 'under_review', 'approved_for_learning', 'archived'].includes(session.status)
+  const currentIndex = labSession ? STAGES.indexOf(labSession.current_stage) : -1;
+  const readiness = useMemo(() => (labSession ? stageReady(labSession) : null), [labSession]);
+  const editingLocked = labSession
+    ? ['submitted', 'under_review', 'approved_for_learning', 'archived'].includes(labSession.status)
     : false;
 
   const savePrimary = () => {
-    if (!session || session.current_stage === 'contribute' || !note.trim()) return;
+    if (!labSession || labSession.current_stage === 'contribute' || !note.trim() || !accessToken) return;
     append.mutate({
-      event_type: PRIMARY_EVENT[session.current_stage],
-      stage: session.current_stage,
+      event_type: PRIMARY_EVENT[labSession.current_stage],
+      stage: labSession.current_stage,
       payload: { text: note.trim(), authorship: 'learner' },
-      expected_revision: session.revision,
+      expected_revision: labSession.revision,
     });
   };
 
   const saveEvidence = () => {
-    if (!session || session.current_stage !== 'investigate' || !evidenceNote.trim()) return;
+    if (!labSession || labSession.current_stage !== 'investigate' || !evidenceNote.trim() || !accessToken) return;
     append.mutate({
       event_type: 'evidence_examined',
       stage: 'investigate',
       payload: { text: evidenceNote.trim(), authorship: 'learner' },
-      expected_revision: session.revision,
+      expected_revision: labSession.revision,
     });
   };
 
   const saveUncertainty = () => {
-    if (!session || session.current_stage !== 'communicate' || !uncertainty.trim()) return;
+    if (!labSession || labSession.current_stage !== 'communicate' || !uncertainty.trim() || !accessToken) return;
     append.mutate({
       event_type: 'uncertainty_recorded',
       stage: 'communicate',
       payload: { text: uncertainty.trim(), authorship: 'learner' },
-      expected_revision: session.revision,
+      expected_revision: labSession.revision,
     });
   };
 
   const advance = () => {
-    if (!session || !readiness?.ready) return;
-    if (session.current_stage === 'communicate') {
+    if (!labSession || !readiness?.ready || !accessToken) return;
+    if (labSession.current_stage === 'communicate') {
       submit.mutate();
       return;
     }
@@ -203,12 +220,41 @@ export default function UniversityLearnerNotebook({
     append.mutate({
       event_type: 'stage_advanced',
       stage: next,
-      payload: { from_stage: session.current_stage, to_stage: next },
-      expected_revision: session.revision,
+      payload: { from_stage: labSession.current_stage, to_stage: next },
+      expected_revision: labSession.revision,
     });
   };
 
-  if (!session) {
+  if (authLoading) {
+    return (
+      <section className="rounded-2xl border border-sky-300/25 bg-sky-300/[0.045] p-7 text-sm text-white/70">
+        Checking learner identity…
+      </section>
+    );
+  }
+
+  if (!accessToken) {
+    return (
+      <section className="rounded-2xl border border-amber-300/25 bg-amber-300/[0.045] p-7 md:p-9">
+        <div className="mb-3 flex items-center gap-3 text-amber-100">
+          <LockKeyhole className="h-5 w-5" />
+          <h2 className="font-serif text-2xl">Learner sign-in required</h2>
+        </div>
+        <p className="max-w-3xl text-sm leading-relaxed text-white/70">
+          Durable investigations are owned by a verified Orchid Continuum account. Sign in before
+          creating or resuming a learner record. Signing in does not grant scientific-review authority.
+        </p>
+        <Link
+          to="/account"
+          className="mt-5 inline-flex rounded-lg border border-amber-200/25 bg-amber-200/10 px-4 py-2 text-sm text-amber-50"
+        >
+          Sign in or manage account
+        </Link>
+      </section>
+    );
+  }
+
+  if (!labSession) {
     return (
       <section className="rounded-2xl border border-sky-300/25 bg-sky-300/[0.045] p-7 md:p-9">
         <div className="mb-3 flex items-center gap-3 text-sky-100">
@@ -216,9 +262,8 @@ export default function UniversityLearnerNotebook({
           <h2 className="font-serif text-2xl">Durable learner notebook</h2>
         </div>
         <p className="max-w-3xl text-sm leading-relaxed text-white/70">
-          This workspace is shown only after the backend reports verified durable persistence. It
-          preserves revision history and human-review boundaries; it does not publish conclusions or
-          promote Candidate Knowledge.
+          This workspace uses your verified Orchid Continuum learner identity and preserves revision
+          history and human-review boundaries. It does not publish conclusions or promote Candidate Knowledge.
         </p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <button
@@ -253,13 +298,13 @@ export default function UniversityLearnerNotebook({
     <section className="rounded-2xl border border-sky-300/25 bg-sky-300/[0.035] p-7 md:p-9">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-sky-200/80">Durable learner record</div>
+          <div className="mb-2 text-[10px] uppercase tracking-[0.2em] text-sky-200/80">Verified durable learner record</div>
           <h2 className="font-serif text-2xl text-white">Scientific inquiry notebook</h2>
-          <p className="mt-2 text-xs text-white/55">Session {session.session_id} · revision {session.revision}</p>
+          <p className="mt-2 text-xs text-white/55">Session {labSession.session_id} · revision {labSession.revision}</p>
         </div>
         <button
           type="button"
-          onClick={() => setSession(null)}
+          onClick={() => setLabSession(null)}
           className="flex items-center gap-2 self-start rounded-lg border border-white/10 px-3 py-2 text-xs text-white/65"
         >
           <RotateCcw className="h-3.5 w-3.5" /> Change session
@@ -268,8 +313,8 @@ export default function UniversityLearnerNotebook({
 
       <div className="mt-7 flex flex-wrap gap-2">
         {STAGES.map((stage, index) => {
-          const active = stage === session.current_stage;
-          const complete = index < currentIndex || session.status === 'approved_for_learning';
+          const active = stage === labSession.current_stage;
+          const complete = index < currentIndex || labSession.status === 'approved_for_learning';
           return (
             <div
               key={stage}
@@ -293,11 +338,11 @@ export default function UniversityLearnerNotebook({
         </div>
       )}
 
-      {editingLocked || session.current_stage === 'contribute' ? (
+      {editingLocked || labSession.current_stage === 'contribute' ? (
         <div className="mt-7 rounded-xl border border-emerald-300/20 bg-emerald-300/[0.05] p-5">
           <div className="flex items-center gap-2 text-emerald-100">
             <CheckCircle2 className="h-4 w-4" />
-            <strong className="text-sm">Session status: {session.status}</strong>
+            <strong className="text-sm">Session status: {labSession.status}</strong>
           </div>
           <p className="mt-2 text-sm leading-relaxed text-white/65">
             Learner editing is locked while this investigation is submitted or under review. A
@@ -308,8 +353,8 @@ export default function UniversityLearnerNotebook({
       ) : (
         <div className="mt-7 space-y-5">
           <div>
-            <div className="mb-2 text-xs uppercase tracking-[0.16em] text-sky-100/70">Current stage · {session.current_stage}</div>
-            <p className="mb-3 text-sm leading-relaxed text-white/70">{PROMPTS[session.current_stage]}</p>
+            <div className="mb-2 text-xs uppercase tracking-[0.16em] text-sky-100/70">Current stage · {labSession.current_stage}</div>
+            <p className="mb-3 text-sm leading-relaxed text-white/70">{PROMPTS[labSession.current_stage]}</p>
             <textarea
               value={note}
               onChange={(event) => setNote(event.target.value)}
@@ -327,7 +372,7 @@ export default function UniversityLearnerNotebook({
             </button>
           </div>
 
-          {session.current_stage === 'investigate' && (
+          {labSession.current_stage === 'investigate' && (
             <div className="rounded-xl border border-amber-300/15 bg-amber-300/[0.035] p-5">
               <label className="text-sm text-amber-50/85">Evidence examined</label>
               <textarea
@@ -343,7 +388,7 @@ export default function UniversityLearnerNotebook({
             </div>
           )}
 
-          {session.current_stage === 'communicate' && (
+          {labSession.current_stage === 'communicate' && (
             <div className="rounded-xl border border-amber-300/15 bg-amber-300/[0.035] p-5">
               <label className="text-sm text-amber-50/85">Uncertainty and limitations</label>
               <textarea
@@ -367,7 +412,7 @@ export default function UniversityLearnerNotebook({
               disabled={busy || !readiness?.ready}
               className="flex items-center justify-center gap-2 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-4 py-2 text-sm text-emerald-50 disabled:opacity-40"
             >
-              {session.current_stage === 'communicate' ? 'Submit for human review' : 'Advance one stage'}
+              {labSession.current_stage === 'communicate' ? 'Submit for human review' : 'Advance one stage'}
               <ArrowRight className="h-4 w-4" />
             </button>
           </div>

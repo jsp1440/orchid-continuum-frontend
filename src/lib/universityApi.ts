@@ -3,6 +3,7 @@ import type { UniversityReleaseReadiness } from './universityRelease';
 export type UniversityCapability = {
   enabled: boolean;
   session_writes_enabled: boolean;
+  learner_auth_enabled: boolean;
   persistence: 'process_local_memory' | 'postgres_durable';
   durable_sessions_enabled: boolean;
   publication_enabled: boolean;
@@ -136,15 +137,19 @@ export class UniversityApiError extends Error {
 
 const apiBase = (import.meta.env.VITE_CALYX_API_URL ?? '').replace(/\/$/, '');
 
-async function requestJson<T>(
-  path: string,
-  options: { method?: 'GET' | 'POST'; body?: unknown } = {},
-): Promise<T> {
+type RequestOptions = {
+  method?: 'GET' | 'POST';
+  body?: unknown;
+  accessToken?: string;
+};
+
+async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       Accept: 'application/json',
       ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(options.accessToken ? { Authorization: `Bearer ${options.accessToken}` } : {}),
     },
     credentials: 'include',
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
@@ -173,14 +178,19 @@ export const universityApi = {
     requestJson<UniversityLaboratory>(
       `/api/learning/laboratories/${encodeURIComponent(laboratoryId)}`,
     ),
-  createSession: (input: { laboratory_id: string; chapter_id: string }) =>
+  createSession: (
+    input: { laboratory_id: string; chapter_id: string },
+    accessToken: string,
+  ) =>
     requestJson<UniversityLabSession>('/api/learning/sessions', {
       method: 'POST',
       body: input,
+      accessToken,
     }),
-  session: (sessionId: string) =>
+  session: (sessionId: string, accessToken: string) =>
     requestJson<UniversityLabSession>(
       `/api/learning/sessions/${encodeURIComponent(sessionId)}`,
+      { accessToken },
     ),
   appendEvent: (
     sessionId: string,
@@ -190,14 +200,15 @@ export const universityApi = {
       payload?: Record<string, unknown>;
       expected_revision: number;
     },
+    accessToken: string,
   ) =>
     requestJson<UniversityLabSession>(
       `/api/learning/sessions/${encodeURIComponent(sessionId)}/events`,
-      { method: 'POST', body: input },
+      { method: 'POST', body: input, accessToken },
     ),
-  submitSession: (sessionId: string, expectedRevision: number) =>
+  submitSession: (sessionId: string, expectedRevision: number, accessToken: string) =>
     requestJson<UniversityLabSession>(
       `/api/learning/sessions/${encodeURIComponent(sessionId)}/submit`,
-      { method: 'POST', body: { expected_revision: expectedRevision } },
+      { method: 'POST', body: { expected_revision: expectedRevision }, accessToken },
     ),
 };
