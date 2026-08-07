@@ -29,8 +29,15 @@ const UniversityLabPrototype = () => {
   });
 
   const mode = release.data ? releaseMode(release.data) : null;
+  const capabilitySafetyConsistent = Boolean(
+    capability.data &&
+      capability.data.publication_enabled === false &&
+      capability.data.candidate_knowledge_writes_enabled === false &&
+      capability.data.calyx_model_calls_enabled === false,
+  );
   const capabilityConsistent = Boolean(
     capability.data?.enabled &&
+      capabilitySafetyConsistent &&
       ((mode === 'read_only' &&
         capability.data.session_writes_enabled === false &&
         capability.data.durable_sessions_enabled === false &&
@@ -45,8 +52,11 @@ const UniversityLabPrototype = () => {
   );
   const durableWorkspace = enabled && mode === 'durable';
   const blockers = release.data ? releaseBlockers(release.data) : [];
+  if (release.data && capability.data && !capabilitySafetyConsistent) {
+    blockers.push('Capability endpoint reports an unsafe scientific write or model-call state.');
+  }
   if (release.data && capability.data && !capabilityConsistent && mode !== 'disabled') {
-    blockers.push('Capability and release-readiness persistence states do not agree.');
+    blockers.push('Capability and release-readiness states do not agree.');
   }
 
   const catalog = useQuery({
