@@ -1,3 +1,5 @@
+import type { UniversityReleaseReadiness } from './universityRelease';
+
 export type UniversityCapability = {
   enabled: boolean;
   session_writes_enabled: boolean;
@@ -60,13 +62,15 @@ async function requestJson<T>(path: string): Promise<T> {
   });
   if (!response.ok) {
     const error = new Error(`University API request failed (${response.status})`);
-    Object.assign(error, { status: response.status });
+    Object.assign(error, { status: response.status, path });
     throw error;
   }
   return response.json() as Promise<T>;
 }
 
 export const universityApi = {
+  releaseReadiness: () =>
+    requestJson<UniversityReleaseReadiness>('/api/learning/release-readiness'),
   capability: () => requestJson<UniversityCapability>('/api/learning/capabilities'),
   catalog: () => requestJson<UniversityCatalog>('/api/learning/catalog'),
   chapter: (chapterId: string) =>
