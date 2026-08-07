@@ -55,8 +55,20 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'University request failed.';
 }
 
+function latestSubmittedRevision(session: UniversityLabSession): number | null {
+  const revisions = session.events
+    .filter((event) => event.event_type === 'session_submitted')
+    .map((event) => event.session_revision);
+  return revisions.length > 0 ? Math.max(...revisions) : null;
+}
+
 function eventsForStage(session: UniversityLabSession, stage = session.current_stage) {
-  return session.events.filter((event) => event.stage === stage);
+  const stageEvents = session.events.filter((event) => event.stage === stage);
+  if (session.status !== 'changes_requested' || stage !== 'communicate') return stageEvents;
+
+  const reviewedSubmissionRevision = latestSubmittedRevision(session);
+  if (reviewedSubmissionRevision === null) return [];
+  return stageEvents.filter((event) => event.session_revision > reviewedSubmissionRevision);
 }
 
 function stageReady(session: UniversityLabSession): { ready: boolean; reason?: string } {
@@ -65,13 +77,25 @@ function stageReady(session: UniversityLabSession): { ready: boolean; reason?: s
   const events = eventsForStage(session, stage);
   const required = PRIMARY_EVENT[stage];
   if (!events.some((event) => event.event_type === required)) {
-    return { ready: false, reason: 'Save substantive work for this stage before advancing.' };
+    return {
+      ready: false,
+      reason:
+        session.status === 'changes_requested' && stage === 'communicate'
+          ? 'Record a revised conclusion after the reviewed submission.'
+          : 'Save substantive work for this stage before advancing.',
+    };
   }
   if (stage === 'investigate' && !events.some((event) => event.event_type === 'evidence_examined')) {
     return { ready: false, reason: 'Record at least one examined evidence item before analysis.' };
   }
   if (stage === 'communicate' && !events.some((event) => event.event_type === 'uncertainty_recorded')) {
-    return { ready: false, reason: 'Record uncertainty before submitting the investigation.' };
+    return {
+      ready: false,
+      reason:
+        session.status === 'changes_requested'
+          ? 'Record revised uncertainty after the reviewed submission.'
+          : 'Record uncertainty before submitting the investigation.',
+    };
   }
   return { ready: true };
 }
