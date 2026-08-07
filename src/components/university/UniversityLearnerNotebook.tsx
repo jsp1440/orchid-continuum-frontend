@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, ArrowRight, BookMarked, CheckCircle2, LockKeyhole, RotateCcw, Save } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import UniversityMyInvestigations from '@/components/university/UniversityMyInvestigations';
 import {
   UniversityApiError,
   universityApi,
@@ -265,6 +266,9 @@ export default function UniversityLearnerNotebook({
           This workspace uses your verified Orchid Continuum learner identity and preserves revision
           history and human-review boundaries. It does not publish conclusions or promote Candidate Knowledge.
         </p>
+
+        <UniversityMyInvestigations accessToken={accessToken} onOpen={acceptSession} />
+
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
@@ -277,7 +281,7 @@ export default function UniversityLearnerNotebook({
           <input
             value={resumeId}
             onChange={(event) => setResumeId(event.target.value)}
-            placeholder="Existing session ID"
+            placeholder="Session ID (support fallback)"
             className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm text-white outline-none"
           />
           <button
@@ -286,7 +290,7 @@ export default function UniversityLearnerNotebook({
             disabled={busy || !resumeId.trim()}
             className="rounded-lg border border-white/15 px-4 py-2 text-sm text-white/80 disabled:opacity-50"
           >
-            Resume
+            Resume by ID
           </button>
         </div>
         {message && <p className="mt-4 text-sm text-red-200">{message}</p>}
