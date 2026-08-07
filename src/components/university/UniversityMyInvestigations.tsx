@@ -22,6 +22,22 @@ function updatedLabel(value: string): string {
   return `Updated ${date.toLocaleString()}`;
 }
 
+function learnerCacheKey(accessToken: string): string | null {
+  try {
+    const [, payload] = accessToken.split('.');
+    if (!payload) return null;
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/');
+    const decoded = atob(normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '='));
+    const claims = JSON.parse(decoded) as { sub?: unknown };
+    const subject = typeof claims.sub === 'string' ? claims.sub.trim() : '';
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(subject)
+      ? subject
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export default function UniversityMyInvestigations({
   accessToken,
   onOpen,
@@ -29,13 +45,21 @@ export default function UniversityMyInvestigations({
   accessToken: string;
   onOpen: (session: UniversityLabSession) => void;
 }) {
+  const learnerKey = useMemo(() => learnerCacheKey(accessToken), [accessToken]);
   const [extra, setExtra] = useState<UniversitySessionSummary[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null | undefined>(undefined);
   const [message, setMessage] = useState<string | null>(null);
 
+  useEffect(() => {
+    setExtra([]);
+    setNextCursor(undefined);
+    setMessage(null);
+  }, [learnerKey]);
+
   const initial = useQuery({
-    queryKey: ['university-my-investigations'],
+    queryKey: ['university-my-investigations', learnerKey],
     queryFn: () => universityApi.listSessions(accessToken, null, 10),
+    enabled: learnerKey !== null,
     retry: false,
   });
 
@@ -73,6 +97,14 @@ export default function UniversityMyInvestigations({
     },
     onError: (error) => setMessage(discoveryError(error)),
   });
+
+  if (learnerKey === null) {
+    return (
+      <div className="mt-6 rounded-xl border border-amber-300/20 bg-amber-300/[0.04] p-5 text-sm text-amber-50/80">
+        Your learner identity could not be partitioned safely for local session discovery. Sign in again before viewing saved investigations.
+      </div>
+    );
+  }
 
   if (initial.isLoading) {
     return <div className="mt-6 text-sm text-white/55">Loading your investigations…</div>;
