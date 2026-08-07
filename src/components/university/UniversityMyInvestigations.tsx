@@ -22,7 +22,7 @@ function updatedLabel(value: string): string {
   return `Updated ${date.toLocaleString()}`;
 }
 
-function learnerCacheKey(accessToken: string): string | null {
+export function learnerCacheKey(accessToken: string): string | null {
   try {
     const [, payload] = accessToken.split('.');
     if (!payload) return null;
