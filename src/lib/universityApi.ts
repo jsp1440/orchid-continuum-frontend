@@ -3,10 +3,11 @@ import type { UniversityReleaseReadiness } from './universityRelease';
 export type UniversityCapability = {
   enabled: boolean;
   session_writes_enabled: boolean;
-  persistence: 'process_local_memory';
-  publication_enabled: false;
-  candidate_knowledge_writes_enabled: false;
-  calyx_model_calls_enabled: false;
+  persistence: 'process_local_memory' | 'postgres_durable';
+  durable_sessions_enabled: boolean;
+  publication_enabled: boolean;
+  candidate_knowledge_writes_enabled: boolean;
+  calyx_model_calls_enabled: boolean;
 };
 
 export type UniversityCatalog = {
@@ -40,7 +41,7 @@ export type UniversityLaboratory = {
   title: string;
   summary: string;
   status: string;
-  inquiry_sequence: string[];
+  inquiry_sequence: UniversityInquiryStage[];
   evidence_catalog: Array<{
     evidence_id: string;
     label: string;
@@ -53,17 +54,110 @@ export type UniversityLaboratory = {
   human_review_required: true;
 };
 
+export type UniversityInquiryStage =
+  | 'observe'
+  | 'question'
+  | 'investigate'
+  | 'analyze'
+  | 'interpret'
+  | 'communicate'
+  | 'contribute';
+
+export type UniversitySessionStatus =
+  | 'created'
+  | 'observing'
+  | 'questioning'
+  | 'investigating'
+  | 'analyzing'
+  | 'interpreting'
+  | 'communicating'
+  | 'submitted'
+  | 'under_review'
+  | 'changes_requested'
+  | 'approved_for_learning'
+  | 'archived';
+
+export type UniversitySessionEvent = {
+  event_id: string;
+  event_type: string;
+  stage: UniversityInquiryStage;
+  payload: Record<string, unknown>;
+  actor: string;
+  session_revision: number;
+  created_at: string;
+};
+
+export type UniversityLabSession = {
+  session_id: string;
+  laboratory_id: string;
+  chapter_id: string;
+  actor: string;
+  status: UniversitySessionStatus;
+  current_stage: UniversityInquiryStage;
+  created_at: string;
+  updated_at: string;
+  revision: number;
+  events: UniversitySessionEvent[];
+  publication_allowed: false;
+  automatic_candidate_knowledge: false;
+  human_review_required: true;
+};
+
+export type InvestigationEventType =
+  | 'observation_added'
+  | 'question_set'
+  | 'hypothesis_added'
+  | 'evidence_examined'
+  | 'analysis_recorded'
+  | 'interpretation_recorded'
+  | 'conclusion_drafted'
+  | 'uncertainty_recorded'
+  | 'stage_advanced';
+
+export type UniversityApiErrorPayload = {
+  code?: string;
+  message?: string;
+  request_id?: string | null;
+};
+
+export class UniversityApiError extends Error {
+  status: number;
+  path: string;
+  detail: UniversityApiErrorPayload | null;
+
+  constructor(status: number, path: string, detail: UniversityApiErrorPayload | null) {
+    super(detail?.message ?? `University API request failed (${status})`);
+    this.name = 'UniversityApiError';
+    this.status = status;
+    this.path = path;
+    this.detail = detail;
+  }
+}
+
 const apiBase = (import.meta.env.VITE_CALYX_API_URL ?? '').replace(/\/$/, '');
 
-async function requestJson<T>(path: string): Promise<T> {
+async function requestJson<T>(
+  path: string,
+  options: { method?: 'GET' | 'POST'; body?: unknown } = {},
+): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
-    headers: { Accept: 'application/json' },
+    method: options.method ?? 'GET',
+    headers: {
+      Accept: 'application/json',
+      ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
     credentials: 'include',
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
   });
   if (!response.ok) {
-    const error = new Error(`University API request failed (${response.status})`);
-    Object.assign(error, { status: response.status, path });
-    throw error;
+    let detail: UniversityApiErrorPayload | null = null;
+    try {
+      const payload = (await response.json()) as { detail?: UniversityApiErrorPayload };
+      detail = payload.detail ?? null;
+    } catch {
+      detail = null;
+    }
+    throw new UniversityApiError(response.status, path, detail);
   }
   return response.json() as Promise<T>;
 }
@@ -78,5 +172,32 @@ export const universityApi = {
   laboratory: (laboratoryId: string) =>
     requestJson<UniversityLaboratory>(
       `/api/learning/laboratories/${encodeURIComponent(laboratoryId)}`,
+    ),
+  createSession: (input: { laboratory_id: string; chapter_id: string }) =>
+    requestJson<UniversityLabSession>('/api/learning/sessions', {
+      method: 'POST',
+      body: input,
+    }),
+  session: (sessionId: string) =>
+    requestJson<UniversityLabSession>(
+      `/api/learning/sessions/${encodeURIComponent(sessionId)}`,
+    ),
+  appendEvent: (
+    sessionId: string,
+    input: {
+      event_type: InvestigationEventType;
+      stage: UniversityInquiryStage;
+      payload?: Record<string, unknown>;
+      expected_revision: number;
+    },
+  ) =>
+    requestJson<UniversityLabSession>(
+      `/api/learning/sessions/${encodeURIComponent(sessionId)}/events`,
+      { method: 'POST', body: input },
+    ),
+  submitSession: (sessionId: string, expectedRevision: number) =>
+    requestJson<UniversityLabSession>(
+      `/api/learning/sessions/${encodeURIComponent(sessionId)}/submit`,
+      { method: 'POST', body: { expected_revision: expectedRevision } },
     ),
 };
