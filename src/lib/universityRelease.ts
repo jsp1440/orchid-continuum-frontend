@@ -1,5 +1,6 @@
 export type UniversityDurableGate = {
   session_writes_enabled: boolean;
+  learner_auth_enabled: boolean;
   durable_flag_enabled: boolean;
   read_only_release_verified: boolean;
   release_evidence_present: boolean;
@@ -14,6 +15,7 @@ export type UniversityReleaseReadiness = {
   university_enabled: boolean;
   read_only_ready: boolean;
   session_writes_enabled: boolean;
+  learner_auth_enabled: boolean;
   publication_enabled: boolean;
   candidate_knowledge_writes_enabled: boolean;
   calyx_model_calls_enabled: boolean;
@@ -25,6 +27,9 @@ export type UniversityReleaseReadiness = {
     OCU_UNIVERSITY_ENABLED: boolean;
     OCU_UNIVERSITY_SESSION_WRITES_ENABLED: boolean;
   };
+  required_durable_identity_configuration?: {
+    OCU_UNIVERSITY_LEARNER_AUTH_ENABLED: boolean;
+  };
 };
 
 export type UniversityReleaseMode = 'disabled' | 'read_only' | 'durable' | 'blocked';
@@ -33,9 +38,11 @@ function completeDurableGate(readiness: UniversityReleaseReadiness): boolean {
   const gate = readiness.durable_gate;
   return Boolean(
     readiness.session_writes_enabled &&
+      readiness.learner_auth_enabled &&
       readiness.durable_sessions_enabled &&
       readiness.persistence === 'postgres_durable' &&
       gate?.session_writes_enabled === true &&
+      gate?.learner_auth_enabled === true &&
       gate?.durable_flag_enabled === true &&
       gate?.read_only_release_verified === true &&
       gate?.release_evidence_present === true &&
@@ -68,15 +75,19 @@ export function releaseBlockers(readiness: UniversityReleaseReadiness): string[]
   if (readiness.calyx_model_calls_enabled) blockers.push('Calyx model calls must remain disabled.');
   if (!readiness.human_review_required) blockers.push('Human review must remain required.');
 
+  if (readiness.session_writes_enabled && !readiness.learner_auth_enabled) {
+    blockers.push('Session writes are enabled without backend-verifiable learner authentication.');
+  }
   if (readiness.session_writes_enabled && !readiness.durable_sessions_enabled) {
     blockers.push('Session writes are enabled without verified durable persistence.');
   }
   if (readiness.durable_sessions_enabled && readiness.persistence !== 'postgres_durable') {
     blockers.push('Durable sessions are enabled but Postgres persistence is not reported.');
   }
-  if (readiness.durable_sessions_enabled) {
+  if (readiness.durable_sessions_enabled || readiness.session_writes_enabled) {
     const gate = readiness.durable_gate;
     if (gate?.session_writes_enabled !== true) blockers.push('Durable gate does not confirm session writes.');
+    if (gate?.learner_auth_enabled !== true) blockers.push('Durable gate does not confirm learner authentication.');
     if (gate?.durable_flag_enabled !== true) blockers.push('Durable gate flag is not enabled.');
     if (gate?.read_only_release_verified !== true) blockers.push('Read-only production release is not verified.');
     if (gate?.release_evidence_present !== true) blockers.push('Production release evidence is missing.');
