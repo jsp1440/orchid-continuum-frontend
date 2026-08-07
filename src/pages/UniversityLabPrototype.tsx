@@ -44,6 +44,7 @@ const UniversityLabPrototype = () => {
         capability.data.persistence === 'process_local_memory') ||
         (mode === 'durable' &&
           capability.data.session_writes_enabled === true &&
+          capability.data.learner_auth_enabled === true &&
           capability.data.durable_sessions_enabled === true &&
           capability.data.persistence === 'postgres_durable')),
   );
@@ -54,6 +55,14 @@ const UniversityLabPrototype = () => {
   const blockers = release.data ? releaseBlockers(release.data) : [];
   if (release.data && capability.data && !capabilitySafetyConsistent) {
     blockers.push('Capability endpoint reports an unsafe scientific write or model-call state.');
+  }
+  if (
+    release.data &&
+    capability.data &&
+    mode === 'durable' &&
+    capability.data.learner_auth_enabled !== true
+  ) {
+    blockers.push('Capability endpoint does not confirm learner authentication.');
   }
   if (release.data && capability.data && !capabilityConsistent && mode !== 'disabled') {
     blockers.push('Capability and release-readiness states do not agree.');
@@ -83,7 +92,7 @@ const UniversityLabPrototype = () => {
       eyebrow="Orchid Continuum University"
       title="Scientific inquiry"
       titleAccent="laboratory"
-      intro="Book in the Brain connected to an evidence-labelled orchid investigation. The interface remains read-only unless the backend proves the separately governed durable-session release gate."
+      intro="Book in the Brain connected to an evidence-labelled orchid investigation. The interface remains read-only unless the backend proves the separately governed durable-session and learner-identity release gates."
     >
       <section className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
         {(release.isLoading || capability.isLoading) && (
@@ -114,7 +123,7 @@ const UniversityLabPrototype = () => {
             </div>
             <p className="max-w-3xl text-sm leading-relaxed text-white/75">
               The University remains closed whenever the backend and capability contracts disagree
-              or any scientific safety boundary is not satisfied. No mock science is substituted.
+              or any scientific or learner-identity safety boundary is not satisfied. No mock science is substituted.
             </p>
             {blockers.length > 0 && (
               <ul className="mt-5 space-y-2 text-sm text-amber-50/80">
@@ -135,7 +144,7 @@ const UniversityLabPrototype = () => {
             <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.045] p-5 text-sm text-emerald-50/80">
               <strong>{summarizeRelease(release.data)}.</strong>{' '}
               {durableWorkspace
-                ? 'Learner revisions may be stored durably; publication, Candidate Knowledge writes, and Calyx model calls remain disabled, and human review is required.'
+                ? 'Learner identity is backend-verified and revisions may be stored durably; publication, Candidate Knowledge writes, and Calyx model calls remain disabled, and human review is required.'
                 : 'Learner writes, publication, Candidate Knowledge writes, and Calyx model calls are disabled; human review is required.'}
             </div>
 
@@ -169,6 +178,7 @@ const UniversityLabPrototype = () => {
                   <p>Candidate Knowledge writes are disabled.</p>
                   <p>Calyx model calls are disabled.</p>
                   <p>Human review remains required.</p>
+                  <p>Learner authentication: {durableWorkspace ? 'backend verified' : 'not required for read-only content'}.</p>
                   <p>
                     Session persistence: {durableWorkspace ? 'verified Postgres durable storage' : 'process-local, non-durable prototype'}.
                   </p>
