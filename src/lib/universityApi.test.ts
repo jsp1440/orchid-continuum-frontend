@@ -87,6 +87,23 @@ describe('University release contract', () => {
       'Session writes are enabled without verified durable persistence.',
     );
   });
+
+  it('fails closed when top-level durable state is true but release evidence is invalid', () => {
+    const unsafe: UniversityReleaseReadiness = {
+      ...durableRelease,
+      durable_gate: {
+        ...durableRelease.durable_gate,
+        release_evidence_valid: false,
+      },
+    };
+    expect(unsafe.durable_sessions_enabled).toBe(true);
+    expect(unsafe.persistence).toBe('postgres_durable');
+    expect(releaseMode(unsafe)).toBe('blocked');
+    expect(safeScienceContent(unsafe)).toBe(false);
+    expect(releaseBlockers(unsafe)).toContain(
+      'Durable activation does not have valid production release evidence.',
+    );
+  });
 });
 
 describe('universityApi', () => {
@@ -141,6 +158,29 @@ describe('universityApi', () => {
       payload: { text: 'bounded analysis' },
       expected_revision: 4,
     });
+  });
+
+  it('preserves session_revision when resuming a durable event history', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        session_id: 's-1',
+        revision: 9,
+        events: [
+          {
+            event_id: 'e-1',
+            event_type: 'session_submitted',
+            stage: 'contribute',
+            payload: {},
+            actor: 'learner-1',
+            session_revision: 7,
+            created_at: '2026-08-07T18:00:00Z',
+          },
+        ],
+      }),
+    }));
+    const session = await universityApi.session('s-1');
+    expect(session.events[0].session_revision).toBe(7);
   });
 
   it('surfaces HTTP failures rather than substituting fixture data', async () => {
