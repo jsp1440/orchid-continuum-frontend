@@ -1,1 +1,1 @@
-export { default } from './DailyGenusFeatureV5';
+export { default } from './DailyGenusFeatureV6';
