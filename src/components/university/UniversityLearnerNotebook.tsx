@@ -39,8 +39,15 @@ const PROMPTS: Record<Exclude<UniversityInquiryStage, 'contribute'>, string> = {
 
 function errorMessage(error: unknown): string {
   if (error instanceof UniversityApiError) {
-    if (error.detail?.code === 'REVISION_CONFLICT') {
-      return 'This session changed elsewhere. Reload the session before making another edit.';
+    const code = error.detail?.code;
+    if (code === 'REVISION_CONFLICT') {
+      return 'This session changed elsewhere. Resume the session again before making another edit.';
+    }
+    if (code === 'STAGE_EXIT_REQUIREMENTS_UNMET') {
+      return error.detail?.message ?? 'Required scientific records are still missing for this stage.';
+    }
+    if (code === 'CHANGES_NOT_ADDRESSED') {
+      return 'A reviewer requested changes. Record a revised conclusion and revised uncertainty before resubmitting.';
     }
     if (error.status === 401) return 'An authenticated Calyx session is required to use the learner notebook.';
     return error.detail?.message ?? error.message;
@@ -48,25 +55,33 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'University request failed.';
 }
 
-function hasEvent(session: UniversityLabSession, eventType: string, stage = session.current_stage): boolean {
-  return session.events.some((event) => event.event_type === eventType && event.stage === stage);
+function eventsForStage(session: UniversityLabSession, stage = session.current_stage) {
+  return session.events.filter((event) => event.stage === stage);
 }
 
 function stageReady(session: UniversityLabSession): { ready: boolean; reason?: string } {
   const stage = session.current_stage;
   if (stage === 'contribute') return { ready: false, reason: 'This investigation has been submitted.' };
+  const events = eventsForStage(session, stage);
   const required = PRIMARY_EVENT[stage];
-  if (!hasEvent(session, required, stage)) {
+  if (!events.some((event) => event.event_type === required)) {
     return { ready: false, reason: 'Save substantive work for this stage before advancing.' };
   }
-  if (stage === 'investigate' && !hasEvent(session, 'evidence_examined', stage)) {
+  if (stage === 'investigate' && !events.some((event) => event.event_type === 'evidence_examined')) {
     return { ready: false, reason: 'Record at least one examined evidence item before analysis.' };
   }
-  if (stage === 'communicate' && !hasEvent(session, 'uncertainty_recorded', stage)) {
+  if (stage === 'communicate' && !events.some((event) => event.event_type === 'uncertainty_recorded')) {
     return { ready: false, reason: 'Record uncertainty before submitting the investigation.' };
   }
   return { ready: true };
 }
+
+type AppendInput = {
+  event_type: InvestigationEventType;
+  stage: UniversityInquiryStage;
+  payload: Record<string, unknown>;
+  expected_revision: number;
+};
 
 export default function UniversityLearnerNotebook({
   chapterId,
@@ -82,34 +97,37 @@ export default function UniversityLearnerNotebook({
   const [uncertainty, setUncertainty] = useState('');
   const [message, setMessage] = useState<string | null>(null);
 
-  const updateSession = (next: UniversityLabSession) => {
+  const acceptSession = (next: UniversityLabSession) => {
     setSession(next);
     setMessage(null);
   };
 
   const create = useMutation({
     mutationFn: () => universityApi.createSession({ laboratory_id: laboratoryId, chapter_id: chapterId }),
-    onSuccess: updateSession,
+    onSuccess: (next) => {
+      acceptSession(next);
+      setResumeId(next.session_id);
+    },
     onError: (error) => setMessage(errorMessage(error)),
   });
   const resume = useMutation({
     mutationFn: () => universityApi.session(resumeId.trim()),
-    onSuccess: updateSession,
+    onSuccess: acceptSession,
     onError: (error) => setMessage(errorMessage(error)),
   });
   const append = useMutation({
-    mutationFn: (input: {
-      event_type: InvestigationEventType;
-      stage: UniversityInquiryStage;
-      payload: Record<string, unknown>;
-      expected_revision: number;
-    }) => universityApi.appendEvent(session!.session_id, input),
-    onSuccess: updateSession,
+    mutationFn: (input: AppendInput) => universityApi.appendEvent(session!.session_id, input),
+    onSuccess: (next, input) => {
+      acceptSession(next);
+      if (input.event_type === 'evidence_examined') setEvidenceNote('');
+      else if (input.event_type === 'uncertainty_recorded') setUncertainty('');
+      else if (input.event_type !== 'stage_advanced') setNote('');
+    },
     onError: (error) => setMessage(errorMessage(error)),
   });
   const submit = useMutation({
     mutationFn: () => universityApi.submitSession(session!.session_id, session!.revision),
-    onSuccess: updateSession,
+    onSuccess: acceptSession,
     onError: (error) => setMessage(errorMessage(error)),
   });
 
@@ -128,7 +146,6 @@ export default function UniversityLearnerNotebook({
       payload: { text: note.trim(), authorship: 'learner' },
       expected_revision: session.revision,
     });
-    setNote('');
   };
 
   const saveEvidence = () => {
@@ -139,7 +156,6 @@ export default function UniversityLearnerNotebook({
       payload: { text: evidenceNote.trim(), authorship: 'learner' },
       expected_revision: session.revision,
     });
-    setEvidenceNote('');
   };
 
   const saveUncertainty = () => {
@@ -150,7 +166,6 @@ export default function UniversityLearnerNotebook({
       payload: { text: uncertainty.trim(), authorship: 'learner' },
       expected_revision: session.revision,
     });
-    setUncertainty('');
   };
 
   const advance = () => {
@@ -262,7 +277,8 @@ export default function UniversityLearnerNotebook({
           </div>
           <p className="mt-2 text-sm leading-relaxed text-white/65">
             Learner editing is locked while this investigation is submitted or under review. A
-            qualified reviewer may request changes, which reopens the communicate stage.
+            qualified reviewer may request changes, which reopens the communicate stage. The server
+            then requires a new conclusion and uncertainty record before resubmission.
           </p>
         </div>
       ) : (
