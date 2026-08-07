@@ -11,7 +11,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "validate:deployment": "node scripts/verify-deployment-contract.mjs"
+    "validate:deployment": "node scripts/verify-deployment-contract.mjs",
+    "verify:university-production": "node scripts/verify-university-production.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
