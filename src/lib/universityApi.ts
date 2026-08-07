@@ -104,6 +104,23 @@ export type UniversityLabSession = {
   human_review_required: true;
 };
 
+export type UniversitySessionSummary = {
+  session_id: string;
+  laboratory_id: string;
+  chapter_id: string;
+  status: UniversitySessionStatus;
+  current_stage: UniversityInquiryStage;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type UniversitySessionPage = {
+  sessions: UniversitySessionSummary[];
+  next_cursor: string | null;
+  has_more: boolean;
+};
+
 export type InvestigationEventType =
   | 'observation_added'
   | 'question_set'
@@ -178,6 +195,13 @@ export const universityApi = {
     requestJson<UniversityLaboratory>(
       `/api/learning/laboratories/${encodeURIComponent(laboratoryId)}`,
     ),
+  listSessions: (accessToken: string, cursor?: string | null, limit = 20) => {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (cursor) params.set('cursor', cursor);
+    return requestJson<UniversitySessionPage>(`/api/learning/sessions?${params.toString()}`, {
+      accessToken,
+    });
+  },
   createSession: (
     input: { laboratory_id: string; chapter_id: string },
     accessToken: string,
