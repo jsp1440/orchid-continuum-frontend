@@ -11,7 +11,13 @@ export const BACKEND_BASE_URL = (
   'https://orchid-continuum-public-api.onrender.com'
 ).replace(/\/$/, '');
 
+/**
+ * Canonical Calyx backend origin for University, Mission Control, and reviewer traffic.
+ * VITE_CALYX_API_URL is the deployment contract documented for Orchid University.
+ * Older aliases remain supported for backward-compatible deployments.
+ */
 export const CALYX_BACKEND_BASE_URL = (
+  env.VITE_CALYX_API_URL ||
   env.VITE_CALYX_BACKEND_BASE_URL ||
   env.VITE_MISSION_CONTROL_BACKEND_URL ||
   'https://orchid-calyx-backend.onrender.com'
