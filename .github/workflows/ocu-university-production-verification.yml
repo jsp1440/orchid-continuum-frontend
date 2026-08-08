@@ -3,6 +3,8 @@ name: OCU University Production Verification
 on:
   pull_request:
     paths:
+      - 'index.html'
+      - 'vite.config.ts'
       - 'scripts/verify-university-production.mjs'
       - '.github/workflows/ocu-university-production-verification.yml'
       - 'package.json'
@@ -28,9 +30,15 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
+      - name: Install dependencies
+        run: npm ci
       - name: Check verifier syntax
         run: node --check scripts/verify-university-production.mjs
+      - name: Build frontend with release identity
+        run: npm run build
+      - name: Verify built app shell contains full Git SHA
+        run: grep -Eq 'name="ocu-release-sha" content="[0-9a-f]{40}"' dist/index.html
 
   verify-production:
     name: Verify deployed University
@@ -41,7 +49,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Run production verification
         run: >-
           node scripts/verify-university-production.mjs
