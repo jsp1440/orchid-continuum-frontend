@@ -4,6 +4,7 @@ import { writeFile } from 'node:fs/promises';
 
 const EXPECTED_CHAPTER = 'BITB-CHAPTER-ORCHID-FLOWERING-001';
 const EXPECTED_LAB = 'OCU-LAB-FAILURE-TO-BLOOM-001';
+const FULL_GIT_SHA = /^[0-9a-f]{40}$/;
 
 function normalizeOrigin(value, label) {
   if (!value) throw new Error(`${label} is required`);
@@ -42,6 +43,13 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function frontendReleaseSha(html) {
+  const match = html.match(/<meta\s+name=["']ocu-release-sha["']\s+content=["']([^"']+)["']\s*\/?\s*>/i);
+  const sha = match?.[1]?.trim().toLowerCase() ?? '';
+  assert(FULL_GIT_SHA.test(sha), 'frontend app shell does not contain an attested full Git commit SHA');
+  return sha;
+}
+
 async function verifyFrontend(frontendOrigin) {
   const routeUrl = `${frontendOrigin}/university/lab`;
   const response = await request(routeUrl, { accept: 'text/html' });
@@ -52,10 +60,21 @@ async function verifyFrontend(frontendOrigin) {
   assert(/<div\s+id=["']root["']/.test(html), `${routeUrl} is not the canonical React app shell`);
   assert(!/Page not found/i.test(html), `${routeUrl} returned a rendered 404 page`);
   assert(!/Built on\s+Famous\.ai/i.test(html), `${routeUrl} is still served by the Famous.ai site`);
-  return { url: routeUrl, status: response.status, canonical_app_shell: true };
+  return {
+    url: routeUrl,
+    status: response.status,
+    canonical_app_shell: true,
+    release_commit_sha: frontendReleaseSha(html),
+  };
 }
 
 async function verifyBackend(apiOrigin) {
+  const releaseIdentity = await readJson(`${apiOrigin}/release-identity`);
+  assert(releaseIdentity.contract === 'OCU-RELEASE-IDENTITY-001', 'backend release identity contract mismatch');
+  assert(releaseIdentity.service === 'orchid-calyx-backend', 'backend release identity service mismatch');
+  assert(releaseIdentity.attested === true, 'backend release identity is not attested');
+  assert(FULL_GIT_SHA.test(releaseIdentity.commit_sha ?? ''), 'backend release identity does not contain a full Git commit SHA');
+
   const readiness = await readJson(`${apiOrigin}/learning/release-readiness`);
   const requiredReadOnlyState = {
     university_enabled: true,
@@ -92,6 +111,7 @@ async function verifyBackend(apiOrigin) {
   assert(laboratory.human_review_required === true, 'human review must remain required');
 
   return {
+    release_identity: releaseIdentity,
     readiness,
     capability,
     catalog: {
@@ -110,8 +130,9 @@ async function main() {
   const startedAt = new Date().toISOString();
 
   const evidence = {
-    schema_version: '1.0.0',
+    schema_version: '1.1.0',
     verification: 'OCU-SCI-007',
+    release_identity_contract: 'OCU-RELEASE-IDENTITY-001',
     started_at: startedAt,
     frontend_origin: frontendOrigin,
     api_origin: apiOrigin,
@@ -122,15 +143,18 @@ async function main() {
   };
 
   await writeFile(outputArg, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
-  console.log(`PASS: Orchid Continuum University production verification`);
+  console.log('PASS: Orchid Continuum University production verification');
+  console.log(`Frontend release: ${evidence.frontend.release_commit_sha}`);
+  console.log(`Backend release: ${evidence.backend.release_identity.commit_sha}`);
   console.log(`Evidence: ${outputArg}`);
 }
 
 main().catch(async (error) => {
   const outputArg = process.argv[4] ?? 'university-production-evidence.json';
   const failure = {
-    schema_version: '1.0.0',
+    schema_version: '1.1.0',
     verification: 'OCU-SCI-007',
+    release_identity_contract: 'OCU-RELEASE-IDENTITY-001',
     completed_at: new Date().toISOString(),
     result: 'fail',
     error: error instanceof Error ? error.message : String(error),
