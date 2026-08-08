@@ -1,3 +1,4 @@
+import { CALYX_BACKEND_BASE_URL } from './backendConfig';
 import type { UniversityReleaseReadiness } from './universityRelease';
 
 export type UniversityCapability = {
@@ -152,8 +153,6 @@ export class UniversityApiError extends Error {
   }
 }
 
-const apiBase = (import.meta.env.VITE_CALYX_API_URL ?? '').replace(/\/$/, '');
-
 type RequestOptions = {
   method?: 'GET' | 'POST';
   body?: unknown;
@@ -161,7 +160,7 @@ type RequestOptions = {
 };
 
 async function requestJson<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, {
+  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
     method: options.method ?? 'GET',
     headers: {
       Accept: 'application/json',
