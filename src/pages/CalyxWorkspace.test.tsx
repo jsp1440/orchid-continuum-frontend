@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getCalyxConversation: vi.fn(),
   sendCalyxTurn: vi.fn(),
   getBrainMission: vi.fn(),
+  listCalyxConversations: vi.fn(async () => ({ conversations: [], persistence_mode: "memory" })),
   pushTranscript: (_text: string) => undefined,
 }));
 
@@ -52,6 +53,7 @@ vi.mock("@/lib/calyxWorkspace", async () => {
     getCalyxConversation: mocks.getCalyxConversation,
     sendCalyxTurn: mocks.sendCalyxTurn,
     getBrainMission: mocks.getBrainMission,
+    listCalyxConversations: mocks.listCalyxConversations,
   };
 });
 
@@ -154,6 +156,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     mocks.getCalyxConversation.mockReset();
     mocks.sendCalyxTurn.mockReset();
     mocks.getBrainMission.mockReset();
+    mocks.listCalyxConversations.mockReset();
+    mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
     mocks.loadCalyxWorkspace.mockClear();
   });
 
