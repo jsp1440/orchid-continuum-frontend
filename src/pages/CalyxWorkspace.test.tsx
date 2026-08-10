@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   })),
   createCalyxConversation: vi.fn(),
   getCalyxConversation: vi.fn(),
+  listCalyxConversations: vi.fn(async () => ({ conversations: [], persistence_mode: "memory" })),
   sendCalyxTurn: vi.fn(),
   getBrainMission: vi.fn(),
   pushTranscript: (_text: string) => undefined,
@@ -50,6 +51,7 @@ vi.mock("@/lib/calyxWorkspace", async () => {
     loadCalyxWorkspace: mocks.loadCalyxWorkspace,
     createCalyxConversation: mocks.createCalyxConversation,
     getCalyxConversation: mocks.getCalyxConversation,
+    listCalyxConversations: mocks.listCalyxConversations,
     sendCalyxTurn: mocks.sendCalyxTurn,
     getBrainMission: mocks.getBrainMission,
   };
@@ -152,8 +154,10 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     root = createRoot(container);
     mocks.createCalyxConversation.mockReset();
     mocks.getCalyxConversation.mockReset();
+    mocks.listCalyxConversations.mockReset();
     mocks.sendCalyxTurn.mockReset();
     mocks.getBrainMission.mockReset();
+    mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
     mocks.loadCalyxWorkspace.mockClear();
   });
 
@@ -357,5 +361,55 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("saved-conversation");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("saved-conversation");
+  });
+
+  it("loads a selected prior conversation from history", async () => {
+    mocks.listCalyxConversations.mockResolvedValue({
+      conversations: [
+        {
+          conversation_id: "history-thread",
+          title: "Prior Vision Thread",
+          created_at: "2026-08-10T00:00:00Z",
+          message_count: 2,
+        },
+      ],
+      persistence_mode: "postgres",
+    });
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("history-thread", [
+        {
+          message_id: "operator-1",
+          conversation_id: "history-thread",
+          role: "operator",
+          content: "saved question",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "calyx-1",
+          conversation_id: "history-thread",
+          role: "calyx",
+          content: "saved answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    await act(async () => {
+      getButton(container, "Prior Vision Thread").click();
+    });
+    await flush(3);
+
+    expect(getContextValue(container, "Conversation")).toBe("history-thread");
+    expect(container.textContent).toContain("saved answer");
+    expect(storedWorkspace().conversationId).toBe("history-thread");
   });
 });

@@ -51,3 +51,53 @@ export function formatUploadedFileSize(bytes: number) {
 
   return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
 }
+
+const TEXT_WORKSPACE_MIME_TYPES = new Set([
+  "text/plain",
+  "text/csv",
+  "text/tab-separated-values",
+  "text/markdown",
+  "application/json",
+]);
+
+export function isCalyxTextWorkspaceFile(file: Pick<File, "name" | "type">) {
+  return (
+    TEXT_WORKSPACE_MIME_TYPES.has(file.type) ||
+    /\.(txt|md|csv|tsv|json)$/i.test(file.name)
+  );
+}
+
+export function buildCalyxDocumentContextPrompt(fileName: string, text: string) {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+  const excerpt = trimmed.slice(0, 2000);
+  return `[From "${fileName}"]\n${excerpt}`;
+}
+
+export function buildCalyxConversationExport(
+  conversation: Pick<CalyxConversation, "conversation_id" | "project_id" | "created_at" | "messages">,
+) {
+  const lines = [
+    "# CALYX Conversation",
+    "",
+    `**Project:** ${normalizeProjectId(conversation.project_id)}`,
+    `**Conversation ID:** ${conversation.conversation_id}`,
+    `**Started:** ${new Date(conversation.created_at).toLocaleString()}`,
+    "",
+    "---",
+    "",
+  ];
+
+  for (const message of visibleConversationMessages(conversation.messages)) {
+    lines.push(`## ${message.role === "operator" ? "You" : "CALYX"}`);
+    lines.push("");
+    lines.push(message.content);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+export function visibleConversationMessages(messages: CalyxConversation["messages"]) {
+  return messages.filter((message) => message.role === "operator" || message.role === "calyx");
+}
