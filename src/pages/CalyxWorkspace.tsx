@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -104,9 +104,12 @@ export default function CalyxWorkspace() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
   const [workspaceStatus, setWorkspaceStatus] = useState<string | null>(null);
+  const [fileTextContent, setFileTextContent] = useState<string | null>(null);
+  const [selectedDocumentText, setSelectedDocumentText] = useState("");
 
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const viewerRef = useRef<HTMLPreElement | null>(null);
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
   const conversationIdRef = useRef<string | null>(null);
@@ -254,6 +257,42 @@ export default function CalyxWorkspace() {
 
     return () => {
       URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedAttachment]);
+
+  useEffect(() => {
+    if (!selectedAttachment) {
+      setFileTextContent(null);
+      setSelectedDocumentText("");
+      return;
+    }
+
+    const TEXT_MIME_TYPES = ["text/plain", "text/csv", "text/tab-separated-values", "text/markdown", "application/json"];
+    const isTextFile =
+      TEXT_MIME_TYPES.includes(selectedAttachment.type) ||
+      /\.(txt|md|csv|tsv|json)$/i.test(selectedAttachment.name);
+
+    if (!isTextFile) {
+      setFileTextContent(null);
+      setSelectedDocumentText("");
+      return;
+    }
+
+    let cancelled = false;
+    selectedAttachment
+      .text()
+      .then((content) => {
+        if (!cancelled) {
+          setFileTextContent(content);
+          setSelectedDocumentText("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFileTextContent(null);
+      });
+
+    return () => {
+      cancelled = true;
     };
   }, [selectedAttachment]);
 
@@ -421,12 +460,47 @@ export default function CalyxWorkspace() {
     });
   }
 
+  function handleViewerMouseUp(_event: MouseEvent<HTMLPreElement>) {
+    const selection = window.getSelection();
+    const text = selection?.toString().trim() ?? "";
+    setSelectedDocumentText(text);
+  }
+
+  function askAboutSelection() {
+    if (!selectedDocumentText) return;
+    const quoted = `> ${selectedDocumentText.replace(/\n/g, "\n> ")}\n\n`;
+    setMessage((current) => (current ? `${current}\n\n${quoted}` : quoted));
+    setSelectedDocumentText("");
+  }
+
+  function exportConversation() {
+    if (!messages.length) return;
+    const lines: string[] = [`# CALYX Conversation — ${normalizedProjectId}`, ""];
+    for (const turn of messages) {
+      if (turn.role === "operator") {
+        lines.push(`**You:** ${turn.content}`, "");
+      } else {
+        lines.push(`**Calyx:** ${turn.content}`, "");
+      }
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `calyx-conversation-${normalizedProjectId}-${Date.now()}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="min-h-screen bg-background px-5 py-10 text-foreground">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">Calyx Workspace</p><h1 className="text-4xl font-semibold">Speak with Calyx</h1><p className="max-w-3xl text-muted-foreground">A server-owned conversation with the Orchid Continuum Brain. Calyx decides when a turn needs governed retrieval or a scientific mission; the browser no longer authors its answers.</p></div>
-          <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
+          <div className="flex flex-wrap items-center gap-2">
+            {messages.length > 0 ? <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={exportConversation} type="button">↓ Export</button> : null}
+            <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
+          </div>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
@@ -437,8 +511,11 @@ export default function CalyxWorkspace() {
                   <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                     {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
                   </div>
+                  {turn.role === "calyx" ? <div className="mt-1 flex flex-wrap items-center gap-3">
+                    {ttsSupported ? <button aria-label="Speak this reply" className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted" onClick={() => speak(turn.content)} type="button">🔊 Speak</button> : null}
+                    {turn.metadata?.provider ? <span className="text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</span> : null}
+                  </div> : null}
                   {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
-                  {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
                 </article>
               ))}
               {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…</div> : null}
@@ -508,9 +585,20 @@ export default function CalyxWorkspace() {
             </section>
 
             <section className="rounded-xl border bg-card p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p>
-              <h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2>
-              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs and images. Other file types stay attached locally until the backend provides canonical upload and rendering support.</p>}
+              <div className="flex items-start justify-between gap-2">
+                <div><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p><h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2></div>
+                {selectedDocumentText ? <button className="shrink-0 rounded-full border border-primary bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20" onClick={askAboutSelection} type="button">Ask Calyx about selection →</button> : null}
+              </div>
+              {!selectedAttachment && <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p>}
+              {selectedAttachment && previewUrl && selectedAttachment.type === "application/pdf" && <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} />}
+              {selectedAttachment && previewUrl && selectedAttachment.type.startsWith("image/") && <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} />}
+              {selectedAttachment && fileTextContent !== null && (
+                <div className="mt-3">
+                  <p className="text-xs text-muted-foreground">Select any text below, then press "Ask Calyx about selection" to send it to the conversation.</p>
+                  <pre className="mt-2 max-h-[28rem] overflow-auto rounded-lg border bg-muted p-3 text-xs leading-5 whitespace-pre-wrap break-words" onMouseUp={handleViewerMouseUp} ref={viewerRef}>{fileTextContent}</pre>
+                </div>
+              )}
+              {selectedAttachment && !previewUrl && fileTextContent === null && <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text files. Other file types stay attached locally until the backend provides canonical upload and rendering support.</p>}
             </section>
           </aside>
         </div>
