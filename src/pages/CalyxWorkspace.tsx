@@ -1,4 +1,4 @@
-import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
@@ -133,6 +133,7 @@ export default function CalyxWorkspace() {
   const selectedAttachment =
     selectedAttachmentIndex === null ? null : uploadedFiles[selectedAttachmentIndex] ?? null;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [textFileContent, setTextFileContent] = useState<string | null>(null);
 
   useEffect(() => {
     activeProjectIdRef.current = normalizedProjectId;
@@ -244,6 +245,31 @@ export default function CalyxWorkspace() {
 
     return () => {
       URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedAttachment]);
+
+  useEffect(() => {
+    setTextFileContent(null);
+    if (!selectedAttachment) return;
+
+    const isText =
+      selectedAttachment.type === "text/plain" ||
+      selectedAttachment.type === "text/csv" ||
+      selectedAttachment.type === "text/markdown" ||
+      selectedAttachment.type === "application/json" ||
+      /\.(txt|md|csv|tsv|json)$/i.test(selectedAttachment.name);
+
+    if (!isText) return;
+
+    let cancelled = false;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (!cancelled && typeof reader.result === "string") setTextFileContent(reader.result);
+    };
+    reader.readAsText(selectedAttachment);
+    return () => {
+      cancelled = true;
+      reader.abort();
     };
   }, [selectedAttachment]);
 
@@ -399,12 +425,53 @@ export default function CalyxWorkspace() {
     });
   }
 
+  function askAboutSelection(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const selected = window.getSelection()?.toString().trim();
+    const snippet = selected || textFileContent?.slice(0, 2000);
+    if (!snippet) return;
+
+    const fileName = selectedAttachment?.name ?? "attached file";
+    setMessage((current) => {
+      const prefix = `Regarding the following excerpt from "${fileName}":\n\n${snippet}\n\n`;
+      return current ? `${prefix}${current}` : prefix;
+    });
+  }
+
+  function exportConversation() {
+    if (!messages.length) return;
+
+    const lines: string[] = [
+      `# CALYX Conversation — project: ${normalizedProjectId}`,
+      `*Exported ${new Date().toISOString()}*`,
+      "",
+    ];
+
+    for (const turn of messages) {
+      const role = turn.role === "operator" ? "**You**" : "**CALYX**";
+      lines.push(`### ${role}`);
+      lines.push(turn.content.trim());
+      lines.push("");
+    }
+
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `calyx-conversation-${normalizedProjectId}-${Date.now()}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <main className="min-h-screen bg-background px-5 py-10 text-foreground">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">Calyx Workspace</p><h1 className="text-4xl font-semibold">Speak with Calyx</h1><p className="max-w-3xl text-muted-foreground">A server-owned conversation with the Orchid Continuum Brain. Calyx decides when a turn needs governed retrieval or a scientific mission; the browser no longer authors its answers.</p></div>
-          <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
+          <div className="flex flex-wrap gap-2">
+            {messages.length ? <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={exportConversation} type="button">⬇ Export</button> : null}
+            <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
+          </div>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
@@ -481,9 +548,36 @@ export default function CalyxWorkspace() {
             </section>
 
             <section className="rounded-xl border bg-card p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p>
-              <h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2>
-              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs and images. Other file types stay attached locally until the backend provides canonical upload and rendering support.</p>}
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p>
+                  <h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2>
+                </div>
+                {textFileContent !== null ? (
+                  <button
+                    className="shrink-0 rounded-full border px-3 py-1 text-xs hover:bg-muted"
+                    onClick={askAboutSelection}
+                    title="Use selected text (or the first 2 000 chars) as context in the message input"
+                    type="button"
+                  >
+                    Ask Calyx about selection
+                  </button>
+                ) : null}
+              </div>
+              {!selectedAttachment ? (
+                <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p>
+              ) : previewUrl && selectedAttachment.type === "application/pdf" ? (
+                <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} />
+              ) : previewUrl && selectedAttachment.type.startsWith("image/") ? (
+                <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} />
+              ) : textFileContent !== null ? (
+                <div className="mt-4">
+                  <p className="mb-2 text-xs text-muted-foreground">Select text in the panel below, then click <strong>Ask Calyx about selection</strong>.</p>
+                  <pre className="h-[28rem] w-full overflow-auto whitespace-pre-wrap break-words rounded-lg border bg-background p-4 font-mono text-xs leading-5 select-text">{textFileContent}</pre>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-muted-foreground">Preview is available for PDFs, images, and plain-text files (txt, md, csv, tsv, json). Other file types stay attached locally until the backend provides canonical upload and rendering support.</p>
+              )}
             </section>
           </aside>
         </div>
