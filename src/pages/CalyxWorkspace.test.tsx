@@ -137,7 +137,7 @@ function getContextValue(container: HTMLElement, label: string) {
 
 function getButton(container: HTMLElement, text: string) {
   const button = Array.from(container.querySelectorAll("button")).find(
-    (item) => item.textContent?.trim() === text,
+    (item) => item.textContent?.trim().includes(text),
   );
   if (!button) throw new Error(`Missing button ${text}`);
   return button;
