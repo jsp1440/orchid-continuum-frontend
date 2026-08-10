@@ -149,6 +149,7 @@ export default function CalyxWorkspace() {
 
   useEffect(() => {
     let active = true;
+    const restoreRequestId = requestIdRef.current;
 
     const restore = async () => {
       try {
@@ -166,19 +167,27 @@ export default function CalyxWorkspace() {
           if (
             active &&
             mountedRef.current &&
+            requestIdRef.current === restoreRequestId &&
             (!stored.projectId || shouldReuseConversation(restored, stored.projectId))
           ) {
             setConversation(restored);
             conversationIdRef.current = restored.conversation_id;
             if (!stored.projectId && restored.project_id) setProjectId(restored.project_id);
-          } else if (active && mountedRef.current && stored.projectId) {
+          } else if (
+            active &&
+            mountedRef.current &&
+            requestIdRef.current === restoreRequestId &&
+            stored.projectId
+          ) {
             setWorkspaceStatus(
               `A saved CALYX thread for another project was skipped so project ${normalizeProjectId(stored.projectId)} stays clean.`,
             );
           }
         }
       } catch {
-        window.localStorage.removeItem(STORAGE_KEY);
+        if (active && mountedRef.current && requestIdRef.current === restoreRequestId) {
+          window.localStorage.removeItem(STORAGE_KEY);
+        }
       }
 
       try {
@@ -247,7 +256,18 @@ export default function CalyxWorkspace() {
     };
   }, [selectedAttachment]);
 
-  async function ensureConversation(activeProjectId: string): Promise<CalyxConversation> {
+  function isActiveLifecycleRequest(requestId: number, targetProjectId: string) {
+    return (
+      mountedRef.current &&
+      requestIdRef.current === requestId &&
+      activeProjectIdRef.current === targetProjectId
+    );
+  }
+
+  async function ensureConversation(
+    activeProjectId: string,
+    requestId: number,
+  ): Promise<CalyxConversation | null> {
     if (shouldReuseConversation(conversation, activeProjectId)) return conversation as CalyxConversation;
 
     const created = await createCalyxConversation({
@@ -259,7 +279,7 @@ export default function CalyxWorkspace() {
       },
     });
 
-    if (!mountedRef.current) return created;
+    if (!isActiveLifecycleRequest(requestId, activeProjectId)) return null;
 
     if (conversation && !shouldReuseConversation(conversation, activeProjectId)) {
       setMissions({});
@@ -303,7 +323,8 @@ export default function CalyxWorkspace() {
     let targetConversationId: string | null = null;
 
     try {
-      const thread = await ensureConversation(activeProjectId);
+      const thread = await ensureConversation(activeProjectId, requestId);
+      if (!thread) return;
       targetConversationId = thread.conversation_id;
 
       const result = await sendCalyxTurn(thread.conversation_id, {
@@ -330,11 +351,7 @@ export default function CalyxWorkspace() {
 
       if (speakReplies && result.answer) speak(result.answer);
     } catch (error) {
-      if (
-        !mountedRef.current ||
-        requestIdRef.current !== requestId ||
-        activeProjectIdRef.current !== activeProjectId
-      ) {
+      if (!isActiveLifecycleRequest(requestId, activeProjectId)) {
         return;
       }
 

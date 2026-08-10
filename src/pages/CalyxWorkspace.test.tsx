@@ -1,0 +1,361 @@
+// @vitest-environment jsdom
+
+import { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  loadCalyxWorkspace: vi.fn(async () => ({
+    capabilities: null,
+    homepage: null,
+    orchestrator: null,
+    orchestratorState: "unavailable" as const,
+    errors: [],
+  })),
+  createCalyxConversation: vi.fn(),
+  getCalyxConversation: vi.fn(),
+  sendCalyxTurn: vi.fn(),
+  getBrainMission: vi.fn(),
+  pushTranscript: (_text: string) => undefined,
+}));
+
+vi.mock("@/hooks/useCalyxSpeechInput", () => ({
+  useCalyxSpeechInput: (onResult: (transcript: string) => void) => {
+    mocks.pushTranscript = onResult;
+    return {
+      state: "unsupported",
+      interimTranscript: "",
+      error: null,
+      startListening: vi.fn(),
+      stopListening: vi.fn(),
+    };
+  },
+}));
+
+vi.mock("@/hooks/useCalyxSpeechOutput", () => ({
+  useCalyxSpeechOutput: () => ({
+    speak: vi.fn(),
+    cancel: vi.fn(),
+    supported: false,
+  }),
+}));
+
+vi.mock("@/lib/calyxWorkspace", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/calyxWorkspace")>(
+    "@/lib/calyxWorkspace",
+  );
+  return {
+    ...actual,
+    loadCalyxWorkspace: mocks.loadCalyxWorkspace,
+    createCalyxConversation: mocks.createCalyxConversation,
+    getCalyxConversation: mocks.getCalyxConversation,
+    sendCalyxTurn: mocks.sendCalyxTurn,
+    getBrainMission: mocks.getBrainMission,
+  };
+});
+
+import { STORAGE_KEY } from "@/lib/calyxConversation";
+import CalyxWorkspace from "./CalyxWorkspace";
+
+type ConversationMessage = {
+  message_id: string;
+  conversation_id: string;
+  role: "operator" | "calyx";
+  content: string;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+};
+
+type ConversationFixture = {
+  conversation_id: string;
+  project_id: string;
+  created_at: string;
+  updated_at: string;
+  messages: ConversationMessage[];
+  persistence_mode: string;
+};
+
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+  true;
+
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+  configurable: true,
+  value: vi.fn(),
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function buildConversation(
+  conversationId: string,
+  messages: ConversationMessage[] = [],
+): ConversationFixture {
+  return {
+    conversation_id: conversationId,
+    project_id: "calyx-speak",
+    created_at: "2026-08-10T00:00:00Z",
+    updated_at: "2026-08-10T00:00:01Z",
+    messages,
+    persistence_mode: "postgres",
+  };
+}
+
+function storedWorkspace() {
+  return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as {
+    conversationId?: string;
+    projectId?: string;
+    speakReplies?: boolean;
+  };
+}
+
+async function flush(times = 1) {
+  for (let index = 0; index < times; index += 1) {
+    await act(async () => {
+      await Promise.resolve();
+    });
+  }
+}
+
+function getContextValue(container: HTMLElement, label: string) {
+  const entry = Array.from(container.querySelectorAll("dl > div")).find(
+    (item) => item.querySelector("dt")?.textContent === label,
+  );
+  const value = entry?.querySelector("dd")?.textContent?.trim();
+  if (!value) throw new Error(`Missing context value for ${label}`);
+  return value;
+}
+
+function getButton(container: HTMLElement, text: string) {
+  const button = Array.from(container.querySelectorAll("button")).find(
+    (item) => item.textContent?.trim() === text,
+  );
+  if (!button) throw new Error(`Missing button ${text}`);
+  return button;
+}
+
+describe("CalyxWorkspace conversation lifecycle", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    mocks.createCalyxConversation.mockReset();
+    mocks.getCalyxConversation.mockReset();
+    mocks.sendCalyxTurn.mockReset();
+    mocks.getBrainMission.mockReset();
+    mocks.loadCalyxWorkspace.mockClear();
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    container.remove();
+  });
+
+  it("keeps the reset UI clean when new conversation interrupts a pending create", async () => {
+    const createOperation = deferred<ConversationFixture>();
+    mocks.createCalyxConversation.mockReturnValue(createOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("What should Calyx study?");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+
+    expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      getButton(container, "New conversation").click();
+    });
+    await flush(2);
+
+    createOperation.resolve(buildConversation("created-conversation"));
+    await flush(3);
+
+    expect(getContextValue(container, "Conversation")).toBe("Not started yet");
+    expect(container.textContent).not.toContain("created-conversation");
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("");
+    expect(mocks.sendCalyxTurn).not.toHaveBeenCalled();
+    expect(storedWorkspace()).not.toHaveProperty("conversationId");
+  });
+
+  it("keeps the reset UI clean when new conversation interrupts a pending restore", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        conversationId: "saved-conversation",
+        projectId: "calyx-speak",
+        speakReplies: false,
+      }),
+    );
+    const restoreOperation = deferred<ConversationFixture>();
+    mocks.getCalyxConversation.mockReturnValue(restoreOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      getButton(container, "New conversation").click();
+    });
+    await flush(2);
+
+    restoreOperation.resolve(
+      buildConversation("saved-conversation", [
+        {
+          message_id: "operator-1",
+          conversation_id: "saved-conversation",
+          role: "operator",
+          content: "saved question",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+      ]),
+    );
+    await flush(3);
+
+    expect(getContextValue(container, "Conversation")).toBe("Not started yet");
+    expect(container.textContent).not.toContain("saved question");
+    expect(storedWorkspace()).not.toHaveProperty("conversationId");
+  });
+
+  it("creates and refreshes a conversation normally when no reset occurs", async () => {
+    const createdConversation = buildConversation("new-conversation");
+    const refreshedConversation = buildConversation("new-conversation", [
+      {
+        message_id: "operator-1",
+        conversation_id: "new-conversation",
+        role: "operator",
+        content: "What should Calyx study?",
+        created_at: "2026-08-10T00:00:02Z",
+      },
+      {
+        message_id: "calyx-1",
+        conversation_id: "new-conversation",
+        role: "calyx",
+        content: "Study orchid resilience signals.",
+        created_at: "2026-08-10T00:00:03Z",
+        metadata: { provider: "deterministic-governed", model: "calyx-governed-summary-v1" },
+      },
+    ]);
+
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn.mockResolvedValue({
+      conversation_id: "new-conversation",
+      operator_message: refreshedConversation.messages[0],
+      calyx_message: refreshedConversation.messages[1],
+      answer: "Study orchid resilience signals.",
+      provider: { name: "deterministic-governed", model: "calyx-governed-summary-v1", request_hash: "hash" },
+      research: { casual: false, mission: null, mission_error: null, retrieval: {} },
+      persistence_mode: "postgres",
+      epistemic_policy: { continuum_first: true },
+    });
+    mocks.getCalyxConversation.mockResolvedValue(refreshedConversation);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("What should Calyx study?");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(mocks.createCalyxConversation).toHaveBeenCalledWith({
+      title: "Speak with Calyx",
+      project_id: "calyx-speak",
+      context: {
+        surface: "orchid-continuum-frontend",
+        project_id: "calyx-speak",
+      },
+    });
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledWith("new-conversation", {
+      message: "What should Calyx study?",
+      project_id: "calyx-speak",
+      research_mode: "auto",
+      retrieval_limit: 8,
+    });
+    expect(getContextValue(container, "Conversation")).toBe("new-conversation");
+    expect(container.textContent).toContain("Study orchid resilience signals.");
+    expect(storedWorkspace().conversationId).toBe("new-conversation");
+  });
+
+  it("restores a saved conversation normally when no reset occurs", async () => {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        conversationId: "saved-conversation",
+        projectId: "calyx-speak",
+        speakReplies: false,
+      }),
+    );
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("saved-conversation", [
+        {
+          message_id: "operator-1",
+          conversation_id: "saved-conversation",
+          role: "operator",
+          content: "saved question",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "calyx-1",
+          conversation_id: "saved-conversation",
+          role: "calyx",
+          content: "saved answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(getContextValue(container, "Conversation")).toBe("saved-conversation");
+    expect(container.textContent).toContain("saved answer");
+    expect(storedWorkspace().conversationId).toBe("saved-conversation");
+  });
+});
