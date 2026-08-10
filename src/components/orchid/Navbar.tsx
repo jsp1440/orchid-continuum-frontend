@@ -26,6 +26,7 @@ const PRIMARY: Linkish[] = [
   { label: 'Conservatory', route: '/collection' },
   { label: 'Atlas',        route: '/atlas' },
   { label: 'Species',      route: '/species' },
+  { label: 'CALYX',        route: '/calyx' },
   { label: 'Education',    route: '/education' },
   { label: 'OASIS',        route: '/oacs' },
   { label: 'About',        route: '/about' },
