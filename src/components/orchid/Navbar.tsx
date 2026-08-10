@@ -23,6 +23,7 @@ type Linkish = {
 
 const PRIMARY: Linkish[] = [
   { label: 'Home',         route: '/' },
+  { label: 'Calyx',        route: '/calyx' },
   { label: 'Conservatory', route: '/collection' },
   { label: 'Atlas',        route: '/atlas' },
   { label: 'Species',      route: '/species' },
