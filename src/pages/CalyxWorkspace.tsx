@@ -1,6 +1,17 @@
-import { type FormEvent, useEffect, useState } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
+import { useCalyxSpeechOutput } from "@/hooks/useCalyxSpeechOutput";
+import {
+  DEFAULT_PROJECT_ID,
+  STORAGE_KEY,
+  formatUploadedFileSize,
+  normalizeProjectId,
+  renderCalyxRichText,
+  shouldReuseConversation,
+} from "@/lib/calyxConversation";
 import {
   CalyxApiError,
   createCalyxConversation,
@@ -23,8 +34,6 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
   orchestratorState: "unavailable",
   errors: [],
 };
-const STORAGE_KEY = "orchid-continuum:calyx-speak:v2";
-const DEFAULT_PROJECT_ID = "calyx-speak";
 
 function EvidenceList({ title, items }: { title: string; items: MissionEvidence[] }) {
   return (
@@ -68,6 +77,10 @@ function MissionResult({ mission }: { mission: BrainMission }) {
   );
 }
 
+function CalyxMessageContent({ content }: { content: string }) {
+  return <div className="calyx-prose text-sm leading-6" dangerouslySetInnerHTML={{ __html: renderCalyxRichText(content) }} />;
+}
+
 function visibleMessages(messages: CalyxServerMessage[]) {
   return messages.filter((message) => message.role === "operator" || message.role === "calyx");
 }
@@ -81,30 +94,75 @@ export default function CalyxWorkspace() {
   const [missions, setMissions] = useState<Record<string, BrainMission>>({});
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
+  const [speakReplies, setSpeakReplies] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [workspaceStatus, setWorkspaceStatus] = useState<string | null>(null);
+
+  const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+  const mountedRef = useRef(true);
+  const conversationIdRef = useRef<string | null>(null);
+  const requestIdRef = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const { speak, cancel: cancelSpeech, supported: ttsSupported } = useCalyxSpeechOutput();
+  const { state: micState, interimTranscript, startListening, stopListening } = useCalyxSpeechInput(
+    useCallback((transcript: string) => {
+      setMessage((current) => (current ? `${current} ${transcript}`.trim() : transcript));
+    }, []),
+  );
+
+  const normalizedProjectId = normalizeProjectId(projectId);
+  const projectMismatch = Boolean(conversation && !shouldReuseConversation(conversation, normalizedProjectId));
+  const latestMission = useMemo(() => {
+    const calyxMessages = conversation?.messages.filter((item) => item.role === "calyx") ?? [];
+    for (let index = calyxMessages.length - 1; index >= 0; index -= 1) {
+      const mission = missions[calyxMessages[index].message_id];
+      if (mission) return mission;
+    }
+    return null;
+  }, [conversation?.messages, missions]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      cancelSpeech();
+      stopListening();
+    };
+  }, [cancelSpeech, stopListening]);
 
   useEffect(() => {
     let active = true;
     const restore = async () => {
       try {
-        const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as { conversationId?: string; projectId?: string };
+        const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as { conversationId?: string; projectId?: string; speakReplies?: boolean };
         if (stored.projectId) setProjectId(stored.projectId);
+        if (typeof stored.speakReplies === "boolean") setSpeakReplies(stored.speakReplies);
         if (stored.conversationId) {
           const restored = await getCalyxConversation(stored.conversationId);
-          if (active) setConversation(restored);
+          if (active && mountedRef.current) {
+            setConversation(restored);
+            conversationIdRef.current = restored.conversation_id;
+            if (!stored.projectId && restored.project_id) setProjectId(restored.project_id);
+          }
         }
       } catch {
         window.localStorage.removeItem(STORAGE_KEY);
       }
-      const value = await loadCalyxWorkspace();
-      if (active) { setSnapshot(value); setLoading(false); }
+      try {
+        const value = await loadCalyxWorkspace();
+        if (active && mountedRef.current) setSnapshot(value);
+      } finally {
+        if (active && mountedRef.current) setLoading(false);
+      }
     };
     void restore();
     return () => { active = false; };
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ conversationId: conversation?.conversation_id, projectId }));
-  }, [conversation?.conversation_id, projectId]);
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ conversationId: conversation?.conversation_id, projectId: normalizedProjectId, speakReplies }));
+  }, [conversation?.conversation_id, normalizedProjectId, speakReplies]);
 
   useEffect(() => {
     if (!conversation) return;
@@ -112,71 +170,159 @@ export default function CalyxWorkspace() {
       if (item.role !== "calyx" || missions[item.message_id]) continue;
       const missionId = typeof item.metadata?.mission_id === "string" ? item.metadata.mission_id : null;
       if (!missionId) continue;
-      void getBrainMission(missionId).then((mission) => setMissions((current) => ({ ...current, [item.message_id]: mission }))).catch(() => undefined);
+      void getBrainMission(missionId)
+        .then((mission) => {
+          if (!mountedRef.current) return;
+          setMissions((current) => ({ ...current, [item.message_id]: mission }));
+        })
+        .catch(() => undefined);
     }
   }, [conversation, missions]);
 
-  async function ensureConversation(): Promise<CalyxConversation> {
-    if (conversation) return conversation;
-    const created = await createCalyxConversation({ title: "Speak with Calyx", project_id: projectId.trim() || DEFAULT_PROJECT_ID, context: { surface: "orchid-continuum-frontend" } });
+  useEffect(() => {
+    scrollAnchorRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [conversation?.messages, submitting, workspaceStatus]);
+
+  async function ensureConversation(activeProjectId: string) {
+    if (shouldReuseConversation(conversation, activeProjectId)) return conversation as CalyxConversation;
+    const created = await createCalyxConversation({ title: "Speak with Calyx", project_id: activeProjectId, context: { surface: "orchid-continuum-frontend" } });
+    if (!mountedRef.current) return created;
     setConversation(created);
+    if (conversation && !shouldReuseConversation(conversation, activeProjectId)) setMissions({});
+    conversationIdRef.current = created.conversation_id;
     return created;
+  }
+
+  async function sendMessage() {
+    const text = message.trim();
+    if (!text || submitting) return;
+    const activeProjectId = normalizeProjectId(projectId);
+    const requestId = requestIdRef.current + 1;
+    requestIdRef.current = requestId;
+    setSubmitting(true);
+    setConversationError(null);
+    setWorkspaceStatus(null);
+    setMessage("");
+    cancelSpeech();
+
+    let targetConversationId: string | null = null;
+    try {
+      const thread = await ensureConversation(activeProjectId);
+      targetConversationId = thread.conversation_id;
+      const result = await sendCalyxTurn(thread.conversation_id, { message: text, project_id: activeProjectId, research_mode: "auto", retrieval_limit: 8 });
+      if (!mountedRef.current || requestIdRef.current !== requestId || conversationIdRef.current !== targetConversationId) return;
+      if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
+      const refreshed = await getCalyxConversation(thread.conversation_id);
+      if (!mountedRef.current || requestIdRef.current !== requestId || conversationIdRef.current !== targetConversationId) return;
+      setConversation(refreshed);
+      if (speakReplies && result.answer) speak(result.answer);
+    } catch (error) {
+      if (!mountedRef.current || requestIdRef.current !== requestId || (targetConversationId && conversationIdRef.current !== targetConversationId)) return;
+      const detail = error instanceof CalyxApiError ? error.message : "Calyx could not complete that turn.";
+      setConversationError(detail);
+    } finally {
+      if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
+    }
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const text = message.trim();
-    if (!text || submitting) return;
-    setSubmitting(true);
-    setConversationError(null);
-    setMessage("");
-    try {
-      const thread = await ensureConversation();
-      const result = await sendCalyxTurn(thread.conversation_id, { message: text, project_id: projectId.trim() || DEFAULT_PROJECT_ID, research_mode: "auto", retrieval_limit: 8 });
-      if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
-      setConversation(await getCalyxConversation(thread.conversation_id));
-    } catch (error) {
-      const detail = error instanceof CalyxApiError ? error.message : "Calyx could not complete that turn.";
-      setConversationError(detail);
-    } finally {
-      setSubmitting(false);
-    }
+    await sendMessage();
   }
 
   function newConversation() {
+    requestIdRef.current += 1;
+    cancelSpeech();
+    stopListening();
+    conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
     setMessage("");
     setConversationError(null);
+    setWorkspaceStatus(null);
+    setSubmitting(false);
     window.localStorage.removeItem(STORAGE_KEY);
   }
 
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+      event.preventDefault();
+      void sendMessage();
+    }
+  }
+
+  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length) {
+      setUploadedFiles((current) => [...current, ...files]);
+      setWorkspaceStatus("Files are attached locally in the scientific workspace. Backend upload routing is pending the canonical Calyx file contract.");
+    }
+    event.target.value = "";
+  }
+
+  function removeFile(index: number) {
+    setUploadedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
+  }
+
+  const messages = conversation ? visibleMessages(conversation.messages) : [];
+
   return (
     <main className="min-h-screen bg-background px-5 py-10 text-foreground">
-      <div className="mx-auto max-w-5xl space-y-6">
+      <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">Calyx Workspace</p><h1 className="text-4xl font-semibold">Speak with Calyx</h1><p className="max-w-3xl text-muted-foreground">A server-owned conversation with the Orchid Continuum Brain. Calyx decides when a turn needs governed retrieval or a scientific mission; the browser no longer authors its answers.</p></div>
           <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
         </header>
 
-        <section className="rounded-xl border bg-card">
-          <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
-            {!conversation || !visibleMessages(conversation.messages).length ? <div className="mx-auto max-w-2xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Try “What do you need Calyx Vision to be able to see and understand?” and continue naturally with follow-up questions.</p></div> : visibleMessages(conversation.messages).map((turn) => (
-              <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
-                <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}><p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p></div>
-                {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
-                {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
-              </article>
-            ))}
-            {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…</div> : null}
-          </div>
-          <form className="border-t p-4" onSubmit={submit}>
-            <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
-            <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={5000} onChange={(event) => setMessage(event.target.value)} placeholder="Message Calyx…" value={message} />
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Conversation settings</summary><label className="mt-2 block font-medium" htmlFor="calyx-project">Research project ID</label><input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" id="calyx-project" maxLength={200} onChange={(event) => setProjectId(event.target.value)} value={projectId} /></details><button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim()} type="submit">{submitting ? "Working…" : "Send"}</button></div>
-            {conversationError ? <p className="mt-3 text-sm text-destructive" role="alert">{conversationError}</p> : null}
-          </form>
-        </section>
+        <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
+          <section className="rounded-xl border bg-card">
+            <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
+              {!messages.length ? <div className="mx-auto max-w-2xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Try “What do you need Calyx Vision to be able to see and understand?” and continue naturally with follow-up questions.</p></div> : messages.map((turn) => (
+                <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
+                  <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>{turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}</div>
+                  {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
+                  {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
+                </article>
+              ))}
+              {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…</div> : null}
+              <div ref={scrollAnchorRef} />
+            </div>
+            <form className="border-t p-4" onSubmit={submit}>
+              {interimTranscript ? <p className="mb-2 text-xs italic text-muted-foreground">{interimTranscript}…</p> : null}
+              <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
+              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={5000} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" value={message} />
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap items-center gap-3"><details className="text-xs text-muted-foreground"><summary className="cursor-pointer">Conversation settings</summary><label className="mt-2 block font-medium" htmlFor="calyx-project">Research project ID</label><input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" id="calyx-project" maxLength={200} onChange={(event) => setProjectId(event.target.value)} value={projectId} /></details>{micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop listening" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : null}<button aria-label="Attach file" className="rounded-full border px-3 py-1 text-xs hover:bg-muted" onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button><input accept="*/*" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />{ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : null}</div><button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim()} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button></div>
+              {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The active conversation belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean Calyx thread for project <strong>{normalizedProjectId}</strong>.</p> : null}
+              {conversationError ? <p className="mt-3 text-sm text-destructive" role="alert">{conversationError}</p> : null}
+            </form>
+          </section>
+
+          <aside className="space-y-4">
+            <section className="rounded-xl border bg-card p-5">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Scientific workspace</p>
+              <h2 className="mt-2 text-2xl font-semibold">Conversation context</h2>
+              <dl className="mt-4 space-y-3 text-sm">
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Project</dt><dd className="text-right font-medium">{normalizedProjectId}</dd></div>
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Conversation</dt><dd className="text-right font-medium">{conversation?.conversation_id ?? "Not started"}</dd></div>
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Turns</dt><dd className="text-right font-medium">{messages.length}</dd></div>
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Speech input</dt><dd className="text-right font-medium">{micState === "unsupported" ? "Unavailable" : micState === "listening" ? "Listening" : "Ready"}</dd></div>
+                <div className="flex items-start justify-between gap-3"><dt className="text-muted-foreground">Spoken replies</dt><dd className="text-right font-medium">{ttsSupported ? (speakReplies ? "Enabled" : "Available") : "Unavailable"}</dd></div>
+              </dl>
+              {workspaceStatus ? <p className="mt-4 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">{workspaceStatus}</p> : null}
+            </section>
+
+            <section className="rounded-xl border bg-card p-5">
+              <div className="flex items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Files</p><h2 className="mt-2 text-xl font-semibold">Attachment queue</h2></div><span className="rounded-full border px-2 py-1 text-xs text-muted-foreground">{uploadedFiles.length}</span></div>
+              {uploadedFiles.length ? <ul className="mt-4 space-y-3">{uploadedFiles.map((file, index) => <li className="rounded-lg bg-muted p-3 text-sm" key={`${file.name}-${file.lastModified}-${index}`}><div className="flex items-start justify-between gap-3"><div><p className="font-medium">{file.name}</p><p className="text-xs text-muted-foreground">{file.type || "Unknown type"} · {formatUploadedFileSize(file.size)}</p></div><button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => removeFile(index)} type="button">Remove</button></div></li>)}</ul> : <p className="mt-4 text-sm text-muted-foreground">Attach papers, datasets, or figures now. They remain in the browser until the canonical Calyx upload route is confirmed.</p>}
+            </section>
+
+            <section className="rounded-xl border bg-card p-5">
+              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Research handoff</p>
+              <h2 className="mt-2 text-xl font-semibold">Latest scientific mission</h2>
+              {latestMission ? <div className="mt-4 space-y-2 text-sm"><p className="font-medium">{latestMission.question}</p><p className="text-muted-foreground">{latestMission.state.replaceAll("_", " ")} · {latestMission.sources.length} sources · {latestMission.supporting_evidence.length} supporting evidence items</p></div> : <p className="mt-4 text-sm text-muted-foreground">Once Calyx launches a governed mission, its latest scientific state will stay visible alongside the conversation.</p>}
+            </section>
+          </aside>
+        </div>
 
         {loading ? <p className="text-sm text-muted-foreground">Loading Calyx systems…</p> : null}
         {snapshot.errors.length ? <section className="rounded-xl border p-4"><h2 className="font-semibold">Degraded connections</h2><ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">{snapshot.errors.map((error) => <li key={error}>{error}</li>)}</ul></section> : null}
