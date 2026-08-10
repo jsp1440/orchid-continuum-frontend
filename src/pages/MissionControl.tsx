@@ -2798,6 +2798,14 @@ const MissionControlContent: React.FC = () => {
             <span className="mr-3 inline-flex rounded-full border border-[#d4b34a]/30 bg-[#d4b34a]/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a]">
               {ownerSessionStatus === 'authenticated' ? 'Owner Session Active' : ownerSessionStatus === 'error' ? 'Owner auth error' : 'Backend auth missing'}
             </span>
+            {ownerSessionStatus === 'authenticated' ? (
+              <Link
+                to="/calyx"
+                className="mr-3 inline-flex items-center gap-1.5 rounded-full border border-[#d4b34a]/50 bg-[#d4b34a]/15 px-3 py-1 font-mono text-[9px] uppercase tracking-[0.16em] text-[#d4b34a] transition-colors hover:bg-[#d4b34a]/25"
+              >
+                ✦ Speak with Calyx
+              </Link>
+            ) : null}
             {ownerSessionStatus === 'authenticated'
               ? 'Privileged controls require a signed server session and per-action permission. State changes are written to the backend and logged.'
               : 'Read-only telemetry and local previews remain available; database writes, command records, audits, queue transitions, and harvester mutations are disabled.'}

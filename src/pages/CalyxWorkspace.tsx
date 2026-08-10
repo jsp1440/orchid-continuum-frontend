@@ -99,6 +99,7 @@ export default function CalyxWorkspace() {
   const [missions, setMissions] = useState<Record<string, BrainMission>>({});
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
+  const [authRequired, setAuthRequired] = useState(false);
   const [speakReplies, setSpeakReplies] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
@@ -296,6 +297,7 @@ export default function CalyxWorkspace() {
 
     setSubmitting(true);
     setConversationError(null);
+    setAuthRequired(false);
     setWorkspaceStatus(null);
     setMessage("");
     cancelSpeech();
@@ -338,7 +340,9 @@ export default function CalyxWorkspace() {
         return;
       }
 
+      const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
       const detail = error instanceof CalyxApiError ? error.message : "Calyx could not complete that turn.";
+      setAuthRequired(isAuth);
       setConversationError(detail);
     } finally {
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
@@ -359,6 +363,7 @@ export default function CalyxWorkspace() {
     setMissions({});
     setMessage("");
     setConversationError(null);
+    setAuthRequired(false);
     setWorkspaceStatus(null);
     setSubmitting(false);
     setUploadedFiles([]);
@@ -442,7 +447,12 @@ export default function CalyxWorkspace() {
               </div>
               {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The visible thread belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean CALYX thread for <strong>{normalizedProjectId}</strong>.</p> : null}
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
-              {conversationError ? <p className="mt-3 text-sm text-destructive" role="alert">{conversationError}</p> : null}
+              {conversationError ? (
+                <p className="mt-3 text-sm text-destructive" role="alert">
+                  {conversationError}
+                  {authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}
+                </p>
+              ) : null}
             </form>
           </section>
 
@@ -490,7 +500,7 @@ export default function CalyxWorkspace() {
 
         {loading ? <p className="text-sm text-muted-foreground">Loading Calyx systems…</p> : null}
         {snapshot.errors.length ? <section className="rounded-xl border p-4"><h2 className="font-semibold">Degraded connections</h2><ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">{snapshot.errors.map((error) => <li key={error}>{error}</li>)}</ul></section> : null}
-        <section className="grid gap-4 md:grid-cols-3"><article className="rounded-xl border p-5"><h2 className="font-semibold">Platform capabilities</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.capabilities ? "Canonical capability contract available." : "Capability service unavailable."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Conversation persistence</h2><p className="mt-2 text-sm text-muted-foreground">{conversation?.persistence_mode ? `${conversation.persistence_mode} conversation state reported by the backend.` : "A server thread will be created when you send the first message."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Durable orchestrator</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.orchestratorState === "available" ? "Authenticated orchestrator status available." : snapshot.orchestratorState === "authentication_required" ? "Owner authentication is required." : "Orchestrator status unavailable."}</p></article></section>
+        <section className="grid gap-4 md:grid-cols-3"><article className="rounded-xl border p-5"><h2 className="font-semibold">Platform capabilities</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.capabilities ? "Canonical capability contract available." : "Capability service unavailable."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Conversation persistence</h2><p className="mt-2 text-sm text-muted-foreground">{conversation?.persistence_mode ? `${conversation.persistence_mode} conversation state reported by the backend.` : "A server thread will be created when you send the first message."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Durable orchestrator</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.orchestratorState === "available" ? "Authenticated orchestrator status available." : snapshot.orchestratorState === "authentication_required" ? <><Link className="underline" to="/mission-control">Sign in at Mission Control</Link> to enable the durable orchestrator.</> : "Orchestrator status unavailable."}</p></article></section>
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"><Link className="rounded-xl border p-5 hover:bg-muted" to="/relationship-matrix"><h2 className="font-semibold">Relationship Matrix</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/orchid-identification"><h2 className="font-semibold">Orchid Identification</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/continuum-next"><h2 className="font-semibold">Homepage Intelligence</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/university"><h2 className="font-semibold">Orchid University</h2></Link></section>
         <section className="rounded-xl border p-5"><h2 className="font-semibold">Governance</h2><p className="mt-2 text-sm text-muted-foreground">Conversation can retrieve and reason, but does not automatically publish scientific knowledge, promote Candidate Knowledge, change taxonomy, or mutate the Knowledge Graph.</p></section>
       </div>
