@@ -1,4 +1,4 @@
-import { Database, Gauge, Inbox } from 'lucide-react';
+import { Bot, Database, Gauge, Inbox } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import IntelligenceCenter from './IntelligenceCenter';
 import MissionControl from './MissionControl';
@@ -30,6 +30,13 @@ export default function MissionControlEntry() {
     <>
       <MissionControl />
       <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3">
+        <Link
+          to="/calyx"
+          className="inline-flex items-center gap-2 rounded-full border border-[#4cc3c2]/50 bg-[#0a2018] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#4cc3c2] shadow-2xl transition hover:bg-[#0f2e21]"
+          aria-label="Speak with CALYX"
+        >
+          <Bot className="h-4 w-4" /> Speak with CALYX
+        </Link>
         <Link
           to="/mission-control?view=taxonomy-operations"
           className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/50 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f6dc82] shadow-2xl transition hover:bg-[#173823]"
