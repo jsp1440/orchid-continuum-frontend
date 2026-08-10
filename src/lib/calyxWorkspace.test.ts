@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BrainMissionApiError, getBrainMission, startBrainMission } from "./calyxWorkspace";
+import {
+  BrainMissionApiError,
+  buildConversationalMissionQuestion,
+  casualCalyxReply,
+  getBrainMission,
+  isCasualCalyxTurn,
+  startBrainMission,
+  summarizeMissionForConversation,
+  type CalyxConversationTurn,
+} from "./calyxWorkspace";
 
 const mission = {
   mission_id: "mission-1", project_id: "project-1", question: "What evidence exists?", state: "AWAITING_HUMAN_REVIEW", current_stage: "eligible_for_publication_state", steps_executed: 10,
@@ -40,5 +49,35 @@ describe("Brain mission API", () => {
   it("reports network failures without inventing mission results", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
     await expect(startBrainMission({ question: "q", project_id: "p" })).rejects.toMatchObject({ kind: "network_error", message: "offline" });
+  });
+});
+
+describe("Calyx conversational bridge", () => {
+  it("keeps greetings conversational instead of launching research", () => {
+    expect(isCasualCalyxTurn("Hello!" )).toBe(true);
+    expect(isCasualCalyxTurn("What evidence supports CAM in orchids?" )).toBe(false);
+    expect(casualCalyxReply("hello")).toContain("I’m Calyx");
+  });
+
+  it("carries recent user context into a bounded follow-up mission", () => {
+    const turns: CalyxConversationTurn[] = [
+      { id: "1", role: "user", text: "We are designing Calyx Vision.", created_at: "2026-08-09T00:00:00Z" },
+      { id: "2", role: "calyx", text: "Understood.", created_at: "2026-08-09T00:00:01Z" },
+      { id: "3", role: "user", text: "It should ground images to glossary concepts.", created_at: "2026-08-09T00:00:02Z" },
+    ];
+    const question = buildConversationalMissionQuestion("What else do you need?", turns);
+    expect(question).toContain("We are designing Calyx Vision.");
+    expect(question).toContain("It should ground images to glossary concepts.");
+    expect(question).toContain("Current question: What else do you need?");
+    expect(question.length).toBeLessThanOrEqual(1000);
+  });
+
+  it("turns governed mission output into a readable Calyx reply without hiding review boundaries", () => {
+    const summary = summarizeMissionForConversation(mission);
+    expect(summary).toContain("Provisional conclusion");
+    expect(summary).toContain("mycorrhiza");
+    expect(summary).toContain("0.72");
+    expect(summary).toContain("human review required");
+    expect(summary).toContain("Research details");
   });
 });
