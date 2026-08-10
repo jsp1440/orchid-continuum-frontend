@@ -25,6 +25,13 @@ export type BrainMission = {
   publication_eligibility: { eligible: boolean; automatic_publication: false; blockers: string[] };
   blockers: MissionBlocker[]; partial: boolean; created_at: string; updated_at: string;
 };
+export type CalyxConversationTurn = {
+  id: string;
+  role: "user" | "calyx";
+  text: string;
+  created_at: string;
+  mission?: BrainMission;
+};
 export type BrainMissionErrorKind = "authentication_required" | "route_unavailable" | "validation_failed" | "server_error" | "network_error";
 export class BrainMissionApiError extends Error {
   constructor(public readonly kind: BrainMissionErrorKind, message: string, public readonly status?: number) { super(message); this.name = "BrainMissionApiError"; }
@@ -57,6 +64,42 @@ async function missionRequest(path: string, init?: RequestInit): Promise<BrainMi
 
 export const startBrainMission = (payload: BrainMissionRequest) => missionRequest("/api/brain/missions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 export const getBrainMission = (missionId: string) => missionRequest(`/api/brain/missions/${encodeURIComponent(missionId)}`);
+
+export function isCasualCalyxTurn(text: string): boolean {
+  const normalized = text.trim().toLowerCase().replace(/[!.?]+$/g, "");
+  return /^(hi|hello|hey|good morning|good afternoon|good evening|thanks|thank you|how are you)$/.test(normalized);
+}
+
+export function casualCalyxReply(text: string): string {
+  const normalized = text.trim().toLowerCase();
+  if (normalized.includes("thank")) return "You’re welcome. I’m ready to work with the Orchid Continuum’s governed evidence and project context whenever you are.";
+  if (normalized.includes("how are you")) return "I’m operational as a governed Orchid Continuum workspace. Ask me a scientific or project question and I can escalate it into a Brain mission when evidence is needed.";
+  return "Hello. I’m Calyx. We can talk normally here, and when your question needs evidence I’ll use the governed Brain mission system and keep the research details attached to the conversation.";
+}
+
+export function buildConversationalMissionQuestion(question: string, turns: CalyxConversationTurn[]): string {
+  const priorUserTurns = turns.filter((turn) => turn.role === "user").slice(-3).map((turn) => turn.text.trim()).filter(Boolean);
+  if (!priorUserTurns.length) return question.trim().slice(0, 1000);
+  const context = priorUserTurns.map((value, index) => `Prior user turn ${index + 1}: ${value}`).join("\n");
+  const prefix = `Conversation context:\n${context}\n\nCurrent question: `;
+  const available = Math.max(1, 1000 - prefix.length);
+  return `${prefix}${question.trim().slice(0, available)}`;
+}
+
+export function summarizeMissionForConversation(mission: BrainMission): string {
+  const conclusions = mission.conclusions.map((item) => item.text.trim()).filter(Boolean);
+  const evidenceCount = mission.supporting_evidence.length + mission.contradicting_evidence.length;
+  const parts: string[] = [];
+  if (conclusions.length) parts.push(conclusions.join(" "));
+  else if (mission.partial) parts.push("I could only complete a partial governed research mission for that question.");
+  else parts.push("I completed the governed research mission, but it did not produce a scientific conclusion.");
+  parts.push(`I found ${evidenceCount} evidence record${evidenceCount === 1 ? "" : "s"} across ${mission.sources.length} canonical source${mission.sources.length === 1 ? "" : "s"}.`);
+  if (mission.missing_evidence.length) parts.push(`Important gaps remain: ${mission.missing_evidence.slice(0, 3).join("; ")}${mission.missing_evidence.length > 3 ? "; and additional gaps shown in Research details" : ""}.`);
+  if (mission.confidence !== null) parts.push(`Backend confidence is ${mission.confidence.toFixed(2)}.`);
+  if (mission.review_status) parts.push(`Review status: ${mission.review_status.replaceAll("_", " ").toLowerCase()}.`);
+  parts.push("Open Research details below this reply to inspect sources, provenance, contradictions, the reasoning ledger, and publication boundary.");
+  return parts.join(" ");
+}
 
 async function getOrchestratorStatus(): Promise<{ data: Record<string, unknown> | null; state: CalyxWorkspaceSnapshot["orchestratorState"]; error?: string }> {
   try {
