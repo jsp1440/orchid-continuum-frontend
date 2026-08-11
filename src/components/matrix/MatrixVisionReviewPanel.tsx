@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Eye, ImageIcon, ShieldCheck, XCircle } from "lucide-react";
 
+import MatrixReportPanel from "@/components/matrix/MatrixReportPanel";
 import {
   attachVisionAnalysis,
   coerceObservationValue,
@@ -222,6 +223,10 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
           </div>
         </details>
       )}
+
+      <div className="mt-8 border-t pt-8">
+        <MatrixReportPanel sessionId={sessionId} disabled={disabled || status === "working"} />
+      </div>
     </section>
   );
 }
