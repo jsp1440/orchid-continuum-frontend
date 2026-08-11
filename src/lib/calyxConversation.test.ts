@@ -112,6 +112,39 @@ describe("calyxConversation helpers", () => {
     });
   });
 
+  it("preserves quoted multiline fields and duplicate headers in delimited previews", () => {
+    const preview = buildStructuredWorkspacePreview(
+      "notes.csv",
+      'species,note,note\nCattleya,"line one\nline two",first\nDracula,single,second',
+    );
+
+    expect(preview).toMatchObject({
+      columns: ["species", "note", "note (2)"],
+      rows: [
+        { species: "Cattleya", note: "line one\nline two", "note (2)": "first" },
+        { species: "Dracula", note: "single", "note (2)": "second" },
+      ],
+    });
+  });
+
+  it("uses distinct label and value fields for numeric-only charts", () => {
+    const preview = buildStructuredWorkspacePreview("counts.csv", "year,count\n2024,10\n2025,12");
+
+    expect(preview?.chart).toMatchObject({
+      labelKey: "year",
+      valueKey: "count",
+      points: [
+        { label: "2024", value: 10 },
+        { label: "2025", value: 12 },
+      ],
+    });
+  });
+
+  it("suppresses charts when no distinct numeric value column exists", () => {
+    const preview = buildStructuredWorkspacePreview("years.csv", "year\n2024\n2025");
+    expect(preview?.chart).toBeNull();
+  });
+
   it("filters visible conversation messages for export and display", () => {
     expect(
       visibleConversationMessages([
