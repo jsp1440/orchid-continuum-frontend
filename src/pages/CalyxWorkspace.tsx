@@ -1,27 +1,31 @@
-import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
+import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
 import { useCalyxSpeechOutput } from "@/hooks/useCalyxSpeechOutput";
 import {
+  buildCalyxConversationExport,
+  buildCalyxDocumentContextPrompt,
   DEFAULT_PROJECT_ID,
   STORAGE_KEY,
   formatUploadedFileSize,
+  isCalyxTextWorkspaceFile,
   normalizeProjectId,
   renderCalyxRichText,
   shouldReuseConversation,
+  visibleConversationMessages,
 } from "@/lib/calyxConversation";
 import {
   CalyxApiError,
   createCalyxConversation,
   getBrainMission,
   getCalyxConversation,
+  listCalyxConversations,
   loadCalyxWorkspace,
   sendCalyxTurn,
   type BrainMission,
   type CalyxConversation,
-  type CalyxServerMessage,
   type CalyxWorkspaceSnapshot,
   type MissionEvidence,
   type MissionSource,
@@ -34,6 +38,25 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
   orchestratorState: "unavailable",
   errors: [],
 };
+
+const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
+
+function useElapsedSeconds(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!active) {
+      setElapsed(0);
+      return;
+    }
+
+    setElapsed(0);
+    const intervalId = window.setInterval(() => setElapsed((current) => current + 1), 1000);
+    return () => window.clearInterval(intervalId);
+  }, [active]);
+
+  return elapsed;
+}
 
 function EvidenceList({ title, items }: { title: string; items: MissionEvidence[] }) {
   return (
@@ -86,10 +109,6 @@ function CalyxMessageContent({ content }: { content: string }) {
   );
 }
 
-function visibleMessages(messages: CalyxServerMessage[]) {
-  return messages.filter((message) => message.role === "operator" || message.role === "calyx");
-}
-
 export default function CalyxWorkspace() {
   const [snapshot, setSnapshot] = useState<CalyxWorkspaceSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
@@ -104,7 +123,15 @@ export default function CalyxWorkspace() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
   const [workspaceStatus, setWorkspaceStatus] = useState<string | null>(null);
+  const [fileTextContent, setFileTextContent] = useState<string | null>(null);
+  const [documentContext, setDocumentContext] = useState("");
+  const [selectedDocumentText, setSelectedDocumentText] = useState("");
+  const [conversations, setConversations] = useState<
+    Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>
+  >([]);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
+  const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
@@ -122,7 +149,7 @@ export default function CalyxWorkspace() {
 
   const normalizedProjectId = normalizeProjectId(projectId);
   const projectMismatch = Boolean(conversation && !shouldReuseConversation(conversation, normalizedProjectId));
-  const messages = conversation ? visibleMessages(conversation.messages) : [];
+  const messages = conversation ? visibleConversationMessages(conversation.messages) : [];
   const latestMission = useMemo(() => {
     const calyxMessages = conversation?.messages.filter((item) => item.role === "calyx") ?? [];
     for (let index = calyxMessages.length - 1; index >= 0; index -= 1) {
@@ -257,6 +284,60 @@ export default function CalyxWorkspace() {
     };
   }, [selectedAttachment]);
 
+  useEffect(() => {
+    if (!selectedAttachment || !isCalyxTextWorkspaceFile(selectedAttachment)) {
+      setFileTextContent(null);
+      setSelectedDocumentText("");
+      setDocumentContext("");
+      return;
+    }
+
+    let cancelled = false;
+    const previewBlob = selectedAttachment.slice(0, MAX_TEXT_WORKSPACE_PREVIEW_BYTES);
+
+    previewBlob
+      .text()
+      .then((content) => {
+        if (!cancelled) {
+          const truncated = selectedAttachment.size > MAX_TEXT_WORKSPACE_PREVIEW_BYTES;
+          setFileTextContent(
+            truncated
+              ? `${content}\n\n[Preview truncated at ${formatUploadedFileSize(MAX_TEXT_WORKSPACE_PREVIEW_BYTES)}.]`
+              : content,
+          );
+          setSelectedDocumentText("");
+          setDocumentContext("");
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setFileTextContent(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedAttachment]);
+
+  const refreshConversationHistory = useCallback(async () => {
+    try {
+      const result = await listCalyxConversations(15);
+      if (!mountedRef.current) return;
+      setConversations(result.conversations);
+      setHistoryError(null);
+    } catch (error) {
+      if (!mountedRef.current) return;
+      const detail =
+        error instanceof CalyxApiError && error.kind === "authentication_required"
+          ? "Sign in at Mission Control to load conversation history."
+          : "Conversation history unavailable.";
+      setHistoryError(detail);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshConversationHistory();
+  }, [refreshConversationHistory]);
+
   function isActiveLifecycleRequest(requestId: number, targetProjectId: string) {
     return (
       mountedRef.current &&
@@ -323,6 +404,7 @@ export default function CalyxWorkspace() {
     cancelSpeech();
 
     let targetConversationId: string | null = null;
+    let turnCommitted = false;
 
     try {
       const thread = await ensureConversation(activeProjectId, requestId);
@@ -335,6 +417,7 @@ export default function CalyxWorkspace() {
         research_mode: "auto",
         retrieval_limit: 8,
       });
+      turnCommitted = true;
 
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
 
@@ -350,6 +433,7 @@ export default function CalyxWorkspace() {
 
       setConversation(refreshed);
       conversationIdRef.current = refreshed.conversation_id;
+      void refreshConversationHistory();
 
       if (speakReplies && result.answer) speak(result.answer);
     } catch (error) {
@@ -357,10 +441,26 @@ export default function CalyxWorkspace() {
         return;
       }
 
+      if (turnCommitted) {
+        setAuthRequired(false);
+        setConversationError(
+          "CALYX completed the turn, but the conversation could not be refreshed. Reload the thread before retrying so the same turn is not sent twice.",
+        );
+        void refreshConversationHistory();
+        return;
+      }
+
+      const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
       const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? error.message : "Calyx could not complete that turn.";
+      const detail =
+        error instanceof CalyxApiError
+          ? isNetwork
+            ? `${error.message} — the CALYX backend may be waking up; your message has been restored so you can retry.`
+            : error.message
+          : "Calyx could not complete that turn.";
       setAuthRequired(isAuth);
       setConversationError(detail);
+      setMessage(text);
     } finally {
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
@@ -385,6 +485,9 @@ export default function CalyxWorkspace() {
     setSubmitting(false);
     setUploadedFiles([]);
     setSelectedAttachmentIndex(null);
+    setFileTextContent(null);
+    setDocumentContext("");
+    setSelectedDocumentText("");
     window.localStorage.removeItem(STORAGE_KEY);
   }
 
@@ -421,12 +524,87 @@ export default function CalyxWorkspace() {
     });
   }
 
+  async function loadConversation(conversationId: string) {
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
+
+    cancelSpeech();
+    stopListening();
+    conversationIdRef.current = null;
+    setConversation(null);
+    setMissions({});
+    setMessage("");
+    setConversationError(null);
+    setAuthRequired(false);
+    setWorkspaceStatus("Loading conversation…");
+    setSubmitting(false);
+
+    try {
+      const loaded = await getCalyxConversation(conversationId);
+      if (!mountedRef.current || requestIdRef.current !== requestId) return;
+      setConversation(loaded);
+      conversationIdRef.current = loaded.conversation_id;
+      if (loaded.project_id) setProjectId(loaded.project_id);
+      setWorkspaceStatus(null);
+    } catch (error) {
+      if (!mountedRef.current || requestIdRef.current !== requestId) return;
+      const detail =
+        error instanceof CalyxApiError && error.kind === "authentication_required"
+          ? "Sign in at Mission Control to load that conversation."
+          : "Could not load that conversation.";
+      setWorkspaceStatus(detail);
+    }
+  }
+
+  function exportConversation() {
+    if (!conversation) return;
+
+    const blob = new Blob([buildCalyxConversationExport(conversation)], {
+      type: "text/markdown;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `calyx-${conversation.conversation_id.slice(0, 8)}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function addDocumentContext(text: string, fileName = selectedAttachment?.name ?? "workspace selection") {
+    const prompt = buildCalyxDocumentContextPrompt(fileName, text);
+    if (!prompt) return;
+
+    setMessage((current) => (current ? `${current}\n\n${prompt}` : prompt));
+  }
+
+  function handleViewerMouseUp(_event: MouseEvent<HTMLElement>) {
+    setSelectedDocumentText(window.getSelection()?.toString().trim() ?? "");
+  }
+
+  function askAboutSelection() {
+    if (selectedDocumentText) {
+      addDocumentContext(selectedDocumentText);
+      setSelectedDocumentText("");
+      return;
+    }
+
+    if (fileTextContent) addDocumentContext(fileTextContent);
+  }
+
+  function addPastedDocumentContext() {
+    addDocumentContext(documentContext, selectedAttachment?.name ?? "pasted document excerpt");
+    setDocumentContext("");
+  }
+
   return (
     <main className="min-h-screen bg-background px-5 py-10 text-foreground">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-2"><p className="text-sm font-medium uppercase tracking-[0.2em] text-muted-foreground">Calyx Workspace</p><h1 className="text-4xl font-semibold">Speak with Calyx</h1><p className="max-w-3xl text-muted-foreground">A server-owned conversation with the Orchid Continuum Brain. Calyx decides when a turn needs governed retrieval or a scientific mission; the browser no longer authors its answers.</p></div>
-          <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
+          <div className="flex flex-wrap items-center gap-2">
+            {conversation ? <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={exportConversation} type="button">↓ Export</button> : null}
+            <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
+          </div>
         </header>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
@@ -437,11 +615,12 @@ export default function CalyxWorkspace() {
                   <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                     {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
                   </div>
+                  {turn.role === "calyx" && ttsSupported ? <button aria-label="Speak this reply" className="mt-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted" onClick={() => speak(turn.content)} type="button">🔊 Speak</button> : null}
                   {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
                   {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
                 </article>
               ))}
-              {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…</div> : null}
+              {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…{submitElapsedSeconds >= 5 ? ` (${submitElapsedSeconds}s${submitElapsedSeconds >= 20 ? " — backend may be waking up" : ""})` : ""}</div> : null}
               <div ref={scrollAnchorRef} />
             </div>
             <form className="border-t p-4" onSubmit={submit}>
@@ -489,6 +668,33 @@ export default function CalyxWorkspace() {
             <section className="rounded-xl border bg-card p-5">
               <div className="flex items-start justify-between gap-3">
                 <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">History</p>
+                  <h2 className="mt-2 text-2xl font-semibold">Prior CALYX threads</h2>
+                </div>
+                <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted" onClick={() => void refreshConversationHistory()} type="button">Refresh</button>
+              </div>
+              {historyError ? <p className="mt-4 text-sm text-muted-foreground">{historyError}</p> : null}
+              {conversations.length ? (
+                <ul className="mt-4 space-y-3">
+                  {conversations.map((thread) => (
+                    <li className="rounded-xl border p-3" key={thread.conversation_id}>
+                      <button className="w-full text-left" onClick={() => void loadConversation(thread.conversation_id)} type="button">
+                        <p className="font-medium">{thread.title || thread.conversation_id}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {new Date(thread.created_at).toLocaleString()} · {thread.message_count ?? 0} messages
+                        </p>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : !historyError ? (
+                <p className="mt-4 text-sm text-muted-foreground">No prior CALYX threads surfaced by the backend yet.</p>
+              ) : null}
+            </section>
+
+            <section className="rounded-xl border bg-card p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div>
                   <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Papers and files</p>
                   <h2 className="mt-2 text-2xl font-semibold">Local workspace</h2>
                 </div>
@@ -508,9 +714,15 @@ export default function CalyxWorkspace() {
             </section>
 
             <section className="rounded-xl border bg-card p-5">
-              <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p>
-              <h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2>
-              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs and images. Other file types stay attached locally until the backend provides canonical upload and rendering support.</p>}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p>
+                  <h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2>
+                </div>
+                {fileTextContent ? <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!fileTextContent} onClick={askAboutSelection} type="button">{selectedDocumentText ? "Ask CALYX about selection" : "Ask CALYX about visible text"}</button> : null}
+              </div>
+              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3"><pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => setDocumentContext(event.target.value)} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
+              {selectedDocumentText ? <p className="mt-3 text-xs text-muted-foreground">Selected text is ready to append to the next message.</p> : null}
             </section>
           </aside>
         </div>
