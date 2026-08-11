@@ -39,6 +39,8 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
   errors: [],
 };
 
+const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
+
 function useElapsedSeconds(active: boolean): number {
   const [elapsed, setElapsed] = useState(0);
 
@@ -291,12 +293,18 @@ export default function CalyxWorkspace() {
     }
 
     let cancelled = false;
+    const previewBlob = selectedAttachment.slice(0, MAX_TEXT_WORKSPACE_PREVIEW_BYTES);
 
-    selectedAttachment
+    previewBlob
       .text()
       .then((content) => {
         if (!cancelled) {
-          setFileTextContent(content);
+          const truncated = selectedAttachment.size > MAX_TEXT_WORKSPACE_PREVIEW_BYTES;
+          setFileTextContent(
+            truncated
+              ? `${content}\n\n[Preview truncated at ${formatUploadedFileSize(MAX_TEXT_WORKSPACE_PREVIEW_BYTES)}.]`
+              : content,
+          );
           setSelectedDocumentText("");
           setDocumentContext("");
         }
@@ -396,6 +404,7 @@ export default function CalyxWorkspace() {
     cancelSpeech();
 
     let targetConversationId: string | null = null;
+    let turnCommitted = false;
 
     try {
       const thread = await ensureConversation(activeProjectId, requestId);
@@ -408,6 +417,7 @@ export default function CalyxWorkspace() {
         research_mode: "auto",
         retrieval_limit: 8,
       });
+      turnCommitted = true;
 
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
 
@@ -428,6 +438,15 @@ export default function CalyxWorkspace() {
       if (speakReplies && result.answer) speak(result.answer);
     } catch (error) {
       if (!isActiveLifecycleRequest(requestId, activeProjectId)) {
+        return;
+      }
+
+      if (turnCommitted) {
+        setAuthRequired(false);
+        setConversationError(
+          "CALYX completed the turn, but the conversation could not be refreshed. Reload the thread before retrying so the same turn is not sent twice.",
+        );
+        void refreshConversationHistory();
         return;
       }
 
