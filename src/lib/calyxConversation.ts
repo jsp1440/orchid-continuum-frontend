@@ -166,12 +166,20 @@ function parseDelimitedRecords(content: string, delimiter: string): string[][] {
 }
 
 function uniqueHeaders(values: string[]): string[] {
-  const counts = new Map<string, number>();
+  const used = new Set<string>();
+
   return values.map((value, index) => {
     const base = value.trim() || `Column ${index + 1}`;
-    const count = (counts.get(base) ?? 0) + 1;
-    counts.set(base, count);
-    return count === 1 ? base : `${base} (${count})`;
+    let candidate = base;
+    let suffix = 2;
+
+    while (used.has(candidate)) {
+      candidate = `${base} (${suffix})`;
+      suffix += 1;
+    }
+
+    used.add(candidate);
+    return candidate;
   });
 }
 
