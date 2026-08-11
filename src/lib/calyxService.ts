@@ -6,6 +6,7 @@ import {
   type BrainMission,
 } from '@/lib/calyxWorkspace';
 import { calyxContextPacket, readCalyxSessionContext } from '@/features/calyx-workspace/sessionContext';
+import { emitWorkspaceOutput, type WorkspaceOutput } from '@/features/calyx-workspace/workspaceOutputBus';
 
 export interface CalyxRequest {
   concept: string;
@@ -91,6 +92,17 @@ function interactionContextText(concept: string): string {
   ].filter(Boolean).join('\n');
 }
 
+export function emitServerWorkspaceOutputs(value: unknown): number {
+  if (!Array.isArray(value)) return 0;
+  let emitted = 0;
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    emitWorkspaceOutput(candidate as WorkspaceOutput);
+    emitted += 1;
+  }
+  return emitted;
+}
+
 export async function askCalyx(req: CalyxRequest): Promise<CalyxResponse> {
   const conversationId = await conversationForSession();
   const contextualQuestion = [
@@ -109,6 +121,7 @@ export async function askCalyx(req: CalyxRequest): Promise<CalyxResponse> {
     research_mode: 'auto',
     retrieval_limit: 12,
   });
+  emitServerWorkspaceOutputs((turn as typeof turn & { workspace_outputs?: unknown }).workspace_outputs);
   const mission = turn.research?.mission ?? null;
   const uncertaintyParts: string[] = [];
   if (mission?.missing_evidence?.length) uncertaintyParts.push(`Evidence gaps: ${mission.missing_evidence.join('; ')}`);
