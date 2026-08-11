@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   })),
   createCalyxConversation: vi.fn(),
   getCalyxConversation: vi.fn(),
+  listCalyxConversations: vi.fn(async () => ({ conversations: [], persistence_mode: "memory" })),
   sendCalyxTurn: vi.fn(),
   getBrainMission: vi.fn(),
   pushTranscript: (_text: string) => undefined,
@@ -50,6 +51,7 @@ vi.mock("@/lib/calyxWorkspace", async () => {
     loadCalyxWorkspace: mocks.loadCalyxWorkspace,
     createCalyxConversation: mocks.createCalyxConversation,
     getCalyxConversation: mocks.getCalyxConversation,
+    listCalyxConversations: mocks.listCalyxConversations,
     sendCalyxTurn: mocks.sendCalyxTurn,
     getBrainMission: mocks.getBrainMission,
   };
@@ -135,7 +137,7 @@ function getContextValue(container: HTMLElement, label: string) {
 
 function getButton(container: HTMLElement, text: string) {
   const button = Array.from(container.querySelectorAll("button")).find(
-    (item) => item.textContent?.trim() === text,
+    (item) => item.textContent?.trim().includes(text),
   );
   if (!button) throw new Error(`Missing button ${text}`);
   return button;
@@ -152,8 +154,10 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     root = createRoot(container);
     mocks.createCalyxConversation.mockReset();
     mocks.getCalyxConversation.mockReset();
+    mocks.listCalyxConversations.mockReset();
     mocks.sendCalyxTurn.mockReset();
     mocks.getBrainMission.mockReset();
+    mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
     mocks.loadCalyxWorkspace.mockClear();
   });
 
@@ -357,5 +361,83 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("saved-conversation");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("saved-conversation");
+  });
+
+  it("restores the user message to the textarea when the Calyx turn fails", async () => {
+    const createdConversation = buildConversation("net-error-conversation");
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("What does Calyx know about mycorrhizal networks?");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("What does Calyx know about mycorrhizal networks?");
+    expect(container.textContent).toContain("Calyx could not complete that turn.");
+  });
+
+  it("loads a selected prior conversation from history", async () => {
+    mocks.listCalyxConversations.mockResolvedValue({
+      conversations: [
+        {
+          conversation_id: "history-thread",
+          title: "Prior Vision Thread",
+          created_at: "2026-08-10T00:00:00Z",
+          message_count: 2,
+        },
+      ],
+      persistence_mode: "postgres",
+    });
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("history-thread", [
+        {
+          message_id: "operator-1",
+          conversation_id: "history-thread",
+          role: "operator",
+          content: "saved question",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "calyx-1",
+          conversation_id: "history-thread",
+          role: "calyx",
+          content: "saved answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    await act(async () => {
+      getButton(container, "Prior Vision Thread").click();
+    });
+    await flush(3);
+
+    expect(getContextValue(container, "Conversation")).toBe("history-thread");
+    expect(container.textContent).toContain("saved answer");
+    expect(storedWorkspace().conversationId).toBe("history-thread");
   });
 });

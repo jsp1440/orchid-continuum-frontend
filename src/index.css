@@ -278,3 +278,10 @@
 .calyx-prose pre code { @apply bg-transparent p-0; }
 .calyx-prose blockquote { @apply mb-2 border-l-2 pl-3 italic text-muted-foreground; }
 .calyx-prose strong { @apply font-semibold; }
+.calyx-prose a { @apply underline underline-offset-2; }
+.calyx-prose hr { @apply my-3 border-border; }
+.calyx-prose table { @apply mb-3 w-full border-collapse overflow-hidden rounded-lg border text-left text-xs; }
+.calyx-prose thead { @apply bg-black/10; }
+.calyx-prose th,
+.calyx-prose td { @apply border px-2 py-1.5 align-top; }
+.calyx-prose tbody tr:nth-child(even) { background: rgb(0 0 0 / 0.04); }
