@@ -22,11 +22,17 @@ describe("guided Matrix observation handling", () => {
 });
 
 describe("Calyx explanation rendering", () => {
-  it("reads narrative text but never interprets it as Matrix state", () => {
-    expect(explanationText({ answer: "Observe the spur next." })).toBe("Observe the spur next.");
+  it("reads the governed structured narrative text without interpreting invariants as prose", () => {
+    expect(explanationText({
+      narrative: {
+        text: "Observe the spur next.",
+        epistemic_state: "explanation_not_evidence",
+      },
+      invariants: { provider_output_mutates_matrix_state: false },
+    })).toBe("Observe the spur next.");
     expect(explanationText({ narrative: "Candidate A is better supported." })).toBe(
       "Candidate A is better supported.",
     );
-    expect(explanationText({ authority: { may_change_candidate_order: false } })).toBe("");
+    expect(explanationText({ invariants: { provider_output_mutates_matrix_state: false } })).toBe("");
   });
 });
