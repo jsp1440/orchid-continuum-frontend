@@ -1,6 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { coerceObservationValue, explanationText } from "./matrixIdentification";
+import {
+  attachVisionAnalysis,
+  coerceObservationValue,
+  explanationText,
+  reviewVisionSuggestion,
+} from "./matrixIdentification";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("guided Matrix observation handling", () => {
   it("preserves numeric measurements as numbers for numeric characters", () => {
@@ -34,5 +43,48 @@ describe("Calyx explanation rendering", () => {
       "Candidate A is better supported.",
     );
     expect(explanationText({ invariants: { provider_output_mutates_matrix_state: false } })).toBe("");
+  });
+});
+
+describe("Vision review API contract", () => {
+  it("attaches an existing governed analysis to the session review queue", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ session_id: "s1", analysis_id: "a1", added: 0, suggestions: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await attachVisionAnalysis("s1", "a1");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/api/matrix-identification/sessions/s1/vision/analyses/a1/suggestions");
+    expect(init.method).toBe("POST");
+  });
+
+  it("sends explicit reviewer certainty and revised value instead of interpreting machine prose", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({ session: {}, suggestion: {}, observation_added: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await reviewVisionSuggestion("s1", "v1", "revise", {
+      certainty: "certain",
+      revisedValue: 300,
+      comments: "reviewed measurement",
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    const body = JSON.parse(String(init.body));
+    expect(body).toEqual({
+      decision: "revise",
+      certainty: "certain",
+      revised_value: 300,
+      comments: "reviewed measurement",
+    });
   });
 });
