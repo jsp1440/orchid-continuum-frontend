@@ -72,12 +72,18 @@ export type SessionEvaluation = {
 };
 
 export type CalyxExplanation = {
+  schema_version?: string;
+  session_id?: string;
+  evidence?: Record<string, unknown>;
+  narrative?: {
+    text?: string;
+    provider?: string;
+    model?: string;
+    epistemic_state?: string;
+  } | string;
+  invariants?: Record<string, unknown>;
   answer?: string;
-  narrative?: string;
   explanation?: string;
-  provider?: Record<string, unknown> | string;
-  evidence_packet?: Record<string, unknown>;
-  authority?: Record<string, unknown>;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -163,5 +169,9 @@ export function coerceObservationValue(raw: string, valueType?: string): unknown
 
 export function explanationText(payload: CalyxExplanation | null): string {
   if (!payload) return "";
-  return String(payload.answer ?? payload.narrative ?? payload.explanation ?? "").trim();
+  if (typeof payload.narrative === "object" && payload.narrative?.text) {
+    return payload.narrative.text.trim();
+  }
+  if (typeof payload.narrative === "string") return payload.narrative.trim();
+  return String(payload.answer ?? payload.explanation ?? "").trim();
 }
