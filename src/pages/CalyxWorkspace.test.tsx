@@ -358,4 +358,32 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("saved-conversation");
   });
+
+  it("restores the user message to the textarea when the Calyx turn fails", async () => {
+    const createdConversation = buildConversation("net-error-conversation");
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("What does Calyx know about mycorrhizal networks?");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("What does Calyx know about mycorrhizal networks?");
+    expect(container.textContent).toContain("Calyx could not complete that turn.");
+  });
 });

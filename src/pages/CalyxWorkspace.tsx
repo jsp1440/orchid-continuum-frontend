@@ -1,5 +1,16 @@
 import type { ChangeEvent, FormEvent, KeyboardEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+function useElapsedSeconds(active: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!active) { setElapsed(0); return; }
+    setElapsed(0);
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+  return elapsed;
+}
 import { Link } from "react-router-dom";
 
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
@@ -104,6 +115,8 @@ export default function CalyxWorkspace() {
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
   const [workspaceStatus, setWorkspaceStatus] = useState<string | null>(null);
+
+  const submitElapsedSeconds = useElapsedSeconds(submitting);
 
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -357,10 +370,14 @@ export default function CalyxWorkspace() {
         return;
       }
 
+      const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
       const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? error.message : "Calyx could not complete that turn.";
+      const detail = error instanceof CalyxApiError
+        ? (isNetwork ? `${error.message} — the Calyx backend may be waking up; your message has been restored so you can retry.` : error.message)
+        : "Calyx could not complete that turn.";
       setAuthRequired(isAuth);
       setConversationError(detail);
+      setMessage(text);
     } finally {
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
@@ -441,7 +458,7 @@ export default function CalyxWorkspace() {
                   {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
                 </article>
               ))}
-              {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…</div> : null}
+              {submitting ? <div className="mr-auto rounded-2xl bg-muted px-4 py-3 text-sm text-muted-foreground">Calyx is working…{submitElapsedSeconds >= 5 ? ` (${submitElapsedSeconds}s${submitElapsedSeconds >= 20 ? " — backend may be waking up" : ""})` : ""}</div> : null}
               <div ref={scrollAnchorRef} />
             </div>
             <form className="border-t p-4" onSubmit={submit}>
