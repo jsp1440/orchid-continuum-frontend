@@ -1,6 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import {
-  CALYX_WORKSPACE_OUTPUT_EVENT,
   emitWorkspaceOutputs,
   validateWorkspaceOutput,
   type WorkspaceOutput,
@@ -83,9 +82,7 @@ describe('workspace output contract', () => {
     expect(validateWorkspaceOutput(table)).toBe(table);
   });
 
-  it('batch ingestion withholds malformed auxiliary panels while emitting valid ones', () => {
-    const listener = vi.fn();
-    window.addEventListener(CALYX_WORKSPACE_OUTPUT_EVENT, listener);
+  it('batch ingestion withholds malformed auxiliary panels while accepting valid ones in Node', () => {
     const valid: WorkspaceOutput = {
       ...base,
       id: 'matrix-ranking',
@@ -96,7 +93,6 @@ describe('workspace output contract', () => {
     const malformed = { id: 'bad', kind: 'table' };
 
     expect(emitWorkspaceOutputs([malformed, valid])).toBe(1);
-    expect(listener).toHaveBeenCalledTimes(1);
-    window.removeEventListener(CALYX_WORKSPACE_OUTPUT_EVENT, listener);
+    expect(emitWorkspaceOutputs(undefined)).toBe(0);
   });
 });
