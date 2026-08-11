@@ -577,6 +577,9 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     await act(async () => {
       mocks.pushTranscript("First pending turn");
+    });
+    await flush();
+    await act(async () => {
       container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flush(2);
@@ -584,7 +587,13 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     await act(async () => {
       getButton(container, "New conversation").click();
+    });
+    await flush();
+    await act(async () => {
       mocks.pushTranscript("Second pending turn");
+    });
+    await flush();
+    await act(async () => {
       container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flush(2);
@@ -595,6 +604,9 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     await act(async () => {
       mocks.pushTranscript("This must remain blocked");
+    });
+    await flush();
+    await act(async () => {
       container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flush(2);
