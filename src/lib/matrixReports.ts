@@ -1,0 +1,73 @@
+import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+
+export type MatrixReportSummary = {
+  report_id: string;
+  content_digest_sha256: string;
+  finalized_at: string;
+  session_revision: number;
+  registry?: {
+    registry_id?: string;
+    version?: string;
+    checksum_sha256?: string;
+  };
+  leading_candidate?: string | null;
+};
+
+export type MatrixReportRecord = {
+  report_id: string;
+  content_digest_sha256: string;
+  finalized_at: string;
+  core: {
+    schema_version: string;
+    evaluator_version: string;
+    session_id: string;
+    session_revision: number;
+    registry: Record<string, unknown>;
+    observations: Array<Record<string, unknown>>;
+    ranking: {
+      candidates: Array<{
+        taxon_id: string;
+        scientific_name: string;
+        score: number;
+        coverage: number;
+      }>;
+      disclaimer?: string;
+    };
+    governance: {
+      artifact_type: string;
+      verified_taxonomic_identification: false;
+      automatic_publication: false;
+      canonical_taxonomy_mutation: false;
+    };
+  };
+};
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
+    credentials: "include",
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    ...init,
+  });
+  const payload = await response.json().catch(() => null) as T | { detail?: unknown } | null;
+  if (!response.ok) {
+    const detail = payload && typeof payload === "object" && "detail" in payload
+      ? JSON.stringify(payload.detail)
+      : response.statusText;
+    throw new Error(`Matrix report API ${response.status}: ${detail}`);
+  }
+  return payload as T;
+}
+
+export async function finalizeMatrixReport(sessionId: string): Promise<{ created: boolean; report: MatrixReportRecord }> {
+  return request<{ created: boolean; report: MatrixReportRecord }>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/reports`,
+    { method: "POST", body: JSON.stringify({ limit: 20 }) },
+  );
+}
+
+export async function listMatrixReports(sessionId: string): Promise<MatrixReportSummary[]> {
+  const result = await request<{ session_id: string; reports: MatrixReportSummary[] }>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/reports`,
+  );
+  return Array.isArray(result.reports) ? result.reports : [];
+}
