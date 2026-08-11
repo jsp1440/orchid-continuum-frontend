@@ -1,5 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
 
+import {
+  lexiconHrefForMatrixCharacter,
+  readIdentificationSourceContext,
+} from "@/features/calyx-workspace/identificationContext";
+import { recordCalyxSurfaceContext } from "@/features/calyx-workspace/sessionContext";
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
 type Certainty = "certain" | "probable" | "uncertain" | "unknown";
@@ -83,6 +89,11 @@ function pretty(value: unknown): string {
 }
 
 export default function OrchidIdentificationNext() {
+  const location = useLocation();
+  const sourceContext = useMemo(
+    () => readIdentificationSourceContext(location.search),
+    [location.search],
+  );
   const [observationsText, setObservationsText] = useState(
     JSON.stringify(exampleObservations, null, 2),
   );
@@ -94,6 +105,22 @@ export default function OrchidIdentificationNext() {
   const [message, setMessage] = useState(
     "Enter observed characters and a governed candidate matrix, then evaluate.",
   );
+
+  useEffect(() => {
+    recordCalyxSurfaceContext({
+      surface: "matrix-identification",
+      module: "matrix-identification",
+      object_type: sourceContext.concept ? "lexicon_context" : "identification_workspace",
+      object_id: sourceContext.concept ?? "matrix-identification",
+      label: sourceContext.label ?? "Matrix Identification Lab",
+      path: typeof window === "undefined" ? undefined : `${window.location.pathname}${window.location.search}`,
+      metadata: {
+        source_lexicon_concept: sourceContext.concept ?? null,
+        source_lexicon_label: sourceContext.label ?? null,
+        context_is_observation: false,
+      },
+    });
+  }, [sourceContext.concept, sourceContext.label]);
 
   const candidateCount = useMemo(() => {
     try {
@@ -146,6 +173,23 @@ export default function OrchidIdentificationNext() {
         <p className="mt-4 max-w-4xl text-muted-foreground">
           Supply observable characters and a governed candidate matrix. Calyx ranks candidates, reports data coverage, and explains every match, partial match, conflict, unknown, and missing candidate state. A ranking is evidence for review—not a verified identification.
         </p>
+
+        {sourceContext.concept && (
+          <section className="mt-6 rounded-2xl border border-emerald-200 bg-emerald-50 p-4" aria-label="Lexicon context">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">Carried from the Illustrated Orchid Lexicon</p>
+            <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-stone-700">
+                Calyx retains <strong>{sourceContext.label ?? sourceContext.concept}</strong> as interface context only. It has not been added to the observation matrix or treated as evidence.
+              </p>
+              <Link
+                to={`/lexicon/entry/${encodeURIComponent(sourceContext.concept)}`}
+                className="rounded-lg border border-emerald-700 px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Return to concept
+              </Link>
+            </div>
+          </section>
+        )}
 
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase">{status}</span>
@@ -218,7 +262,15 @@ export default function OrchidIdentificationNext() {
                       <tbody>
                         {candidate.explanations.map((item) => (
                           <tr key={`${candidate.taxon_id}:${item.character}`} className="border-b align-top">
-                            <td className="p-2 font-medium">{item.character.replaceAll("_", " ")}</td>
+                            <td className="p-2 font-medium">
+                              <Link
+                                to={lexiconHrefForMatrixCharacter(item.character)}
+                                className="text-emerald-800 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-950"
+                                title="Search this identification character in the Illustrated Orchid Lexicon"
+                              >
+                                {item.character.replaceAll("_", " ")}
+                              </Link>
+                            </td>
                             <td className="p-2 font-mono text-xs">{pretty(item.observation)}</td>
                             <td className="p-2 font-mono text-xs">{pretty(item.candidate_state)}</td>
                             <td className="p-2">{item.certainty}</td>
