@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCalyxTurnContext,
   buildCalyxConversationExport,
   buildCalyxDocumentContextPrompt,
+  buildStructuredWorkspacePreview,
   DEFAULT_PROJECT_ID,
   formatUploadedFileSize,
   isCalyxTextWorkspaceFile,
@@ -46,6 +48,51 @@ describe("calyxConversation helpers", () => {
   it("builds a bounded document context prompt", () => {
     expect(buildCalyxDocumentContextPrompt("paper.txt", "  excerpt  ")).toBe('[From "paper.txt"]\nexcerpt');
     expect(buildCalyxDocumentContextPrompt("paper.txt", "   ")).toBe("");
+  });
+
+  it("builds bounded workspace context for backend turns", () => {
+    expect(
+      buildCalyxTurnContext({
+        projectId: "vision-lab",
+        uploadedFiles: [{ name: "paper.csv", type: "text/csv", size: 2048 } as File],
+        selectedAttachment: { name: "paper.csv", type: "text/csv", size: 2048 } as File,
+        selectedDocumentText: "  selected rows  ",
+        documentContext: "  draft note  ",
+        fileTextContent: "a,b\n1,2",
+      }),
+    ).toEqual({
+      surface: "orchid-continuum-frontend",
+      project_id: "vision-lab",
+      workspace: {
+        attachment_count: 1,
+        attachments: [{ name: "paper.csv", type: "text/csv", size_bytes: 2048 }],
+        selected_attachment: {
+          name: "paper.csv",
+          type: "text/csv",
+          size_bytes: 2048,
+          selected_text_excerpt: "selected rows",
+          visible_text_excerpt: undefined,
+        },
+        draft_document_context: "draft note",
+      },
+    });
+  });
+
+  it("extracts a structured preview for local datasets", () => {
+    expect(
+      buildStructuredWorkspacePreview("paper.csv", "species,count\nCattleya,12\nDracula,7"),
+    ).toMatchObject({
+      format: "csv",
+      columns: ["species", "count"],
+      rows: [
+        { species: "Cattleya", count: 12 },
+        { species: "Dracula", count: 7 },
+      ],
+      chart: {
+        labelKey: "species",
+        valueKey: "count",
+      },
+    });
   });
 
   it("filters visible conversation messages for export and display", () => {
