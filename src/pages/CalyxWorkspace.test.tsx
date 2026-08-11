@@ -391,6 +391,61 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Calyx could not complete that turn.");
   });
 
+  it("does not restore a committed message when the post-turn refresh fails", async () => {
+    const createdConversation = buildConversation("refresh-error-conversation");
+    const operatorMessage: ConversationMessage = {
+      message_id: "operator-committed",
+      conversation_id: "refresh-error-conversation",
+      role: "operator",
+      content: "Committed question",
+      created_at: "2026-08-10T00:00:02Z",
+    };
+    const calyxMessage: ConversationMessage = {
+      message_id: "calyx-committed",
+      conversation_id: "refresh-error-conversation",
+      role: "calyx",
+      content: "Committed answer",
+      created_at: "2026-08-10T00:00:03Z",
+    };
+
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn.mockResolvedValue({
+      conversation_id: "refresh-error-conversation",
+      operator_message: operatorMessage,
+      calyx_message: calyxMessage,
+      answer: "Committed answer",
+      provider: { name: "deterministic-governed", model: "calyx-governed-summary-v1", request_hash: "hash" },
+      research: { casual: false, mission: null, mission_error: null, retrieval: {} },
+      persistence_mode: "postgres",
+      epistemic_policy: { continuum_first: true },
+    });
+    mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Committed question");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+    expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
+    expect(container.textContent).toContain("same turn is not sent twice");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+  });
+
   it("loads a selected prior conversation from history", async () => {
     mocks.listCalyxConversations.mockResolvedValue({
       conversations: [
