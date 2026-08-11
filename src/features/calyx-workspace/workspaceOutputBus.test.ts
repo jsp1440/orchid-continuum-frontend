@@ -1,5 +1,10 @@
-import { describe, expect, it } from 'vitest';
-import { validateWorkspaceOutput, type WorkspaceOutput } from './workspaceOutputBus';
+import { describe, expect, it, vi } from 'vitest';
+import {
+  CALYX_WORKSPACE_OUTPUT_EVENT,
+  emitWorkspaceOutputs,
+  validateWorkspaceOutput,
+  type WorkspaceOutput,
+} from './workspaceOutputBus';
 
 const base = {
   id: 'output-1',
@@ -45,6 +50,22 @@ describe('workspace output contract', () => {
     expect(() => validateWorkspaceOutput(output)).toThrow(/source_module/);
   });
 
+  it('requires a valid evidence-status label and non-empty text body', () => {
+    const invalidStatus = {
+      ...base,
+      kind: 'text',
+      provenance: { source_module: 'matrix', evidence_status: 'verified' },
+      payload: { body: 'hello' },
+    } as unknown as WorkspaceOutput;
+    const emptyText = {
+      ...base,
+      kind: 'text',
+      payload: { body: '   ' },
+    } as WorkspaceOutput;
+    expect(() => validateWorkspaceOutput(invalidStatus)).toThrow(/evidence_status/);
+    expect(() => validateWorkspaceOutput(emptyText)).toThrow(/body/);
+  });
+
   it('accepts chart and matrix-style table outputs', () => {
     const chart: WorkspaceOutput = {
       ...base,
@@ -60,5 +81,22 @@ describe('workspace output contract', () => {
     };
     expect(validateWorkspaceOutput(chart)).toBe(chart);
     expect(validateWorkspaceOutput(table)).toBe(table);
+  });
+
+  it('batch ingestion withholds malformed auxiliary panels while emitting valid ones', () => {
+    const listener = vi.fn();
+    window.addEventListener(CALYX_WORKSPACE_OUTPUT_EVENT, listener);
+    const valid: WorkspaceOutput = {
+      ...base,
+      id: 'matrix-ranking',
+      kind: 'table',
+      provenance: { source_module: 'matrix-identification', evidence_status: 'derived', generated: true },
+      payload: { columns: [{ key: 'rank', label: 'Rank' }], rows: [{ rank: 1 }] },
+    };
+    const malformed = { id: 'bad', kind: 'table' };
+
+    expect(emitWorkspaceOutputs([malformed, valid])).toBe(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    window.removeEventListener(CALYX_WORKSPACE_OUTPUT_EVENT, listener);
   });
 });
