@@ -58,9 +58,11 @@ function assertPercent(value: number, name: string): void {
 }
 
 export function validateWorkspaceOutput(output: WorkspaceOutput): WorkspaceOutput {
-  if (!output.id.trim()) throw new Error('workspace output id is required');
-  if (!output.title.trim()) throw new Error('workspace output title is required');
+  if (!output || typeof output !== 'object') throw new Error('workspace output must be an object');
+  if (!output.id?.trim()) throw new Error('workspace output id is required');
+  if (!output.title?.trim()) throw new Error('workspace output title is required');
   if (!output.provenance?.source_module?.trim()) throw new Error('workspace output source_module is required');
+  if (!['evidence', 'derived', 'illustrative', 'unknown'].includes(output.provenance.evidence_status)) throw new Error('workspace output evidence_status is invalid');
   if ((output.kind === 'image' || output.kind === 'diagram')) {
     const payload = output.payload as WorkspaceImagePayload;
     if (!payload.src?.trim() || !payload.alt?.trim()) throw new Error('image outputs require src and alt');
@@ -80,6 +82,10 @@ export function validateWorkspaceOutput(output: WorkspaceOutput): WorkspaceOutpu
     const payload = output.payload as WorkspaceTablePayload;
     if (!payload.columns?.length || !Array.isArray(payload.rows)) throw new Error('table outputs require columns and rows');
   }
+  if (output.kind === 'text') {
+    const payload = output.payload as WorkspaceTextPayload;
+    if (!payload.body?.trim()) throw new Error('text outputs require body');
+  }
   return output;
 }
 
@@ -87,6 +93,22 @@ export function emitWorkspaceOutput(output: WorkspaceOutput): void {
   validateWorkspaceOutput(output);
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent<WorkspaceOutput>(CALYX_WORKSPACE_OUTPUT_EVENT, { detail: output }));
+}
+
+export function emitWorkspaceOutputs(value: unknown): number {
+  if (!Array.isArray(value)) return 0;
+  let emitted = 0;
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object') continue;
+    try {
+      emitWorkspaceOutput(candidate as WorkspaceOutput);
+      emitted += 1;
+    } catch {
+      // Auxiliary tool output is fail-soft. Invalid objects stay outside the
+      // workspace while the primary scientific/conversational response survives.
+    }
+  }
+  return emitted;
 }
 
 export function subscribeWorkspaceOutputs(listener: (output: WorkspaceOutput) => void): () => void {
