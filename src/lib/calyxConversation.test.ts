@@ -34,6 +34,23 @@ describe("calyxConversation helpers", () => {
     expect(html).not.toContain("<script>");
   });
 
+  it("strips javascript: and data: URL protocols from rendered links", () => {
+    const jsUrl = renderCalyxRichText("[click](javascript:alert(1))");
+    expect(jsUrl).not.toContain("javascript:");
+    expect(jsUrl).toContain('href="#"');
+
+    const dataUrl = renderCalyxRichText("[data](data:text/html,<h1>x</h1>)");
+    expect(dataUrl).not.toContain("data:text/html");
+    expect(dataUrl).toContain('href="#"');
+  });
+
+  it("adds rel and target attributes to safe links in rendered content", () => {
+    const html = renderCalyxRichText("[Orchid Continuum](https://orchidcontinuum.org)");
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('href="https://orchidcontinuum.org"');
+  });
+
   it("formats attachment sizes for the workspace panel", () => {
     expect(formatUploadedFileSize(512)).toBe("512 B");
     expect(formatUploadedFileSize(2048)).toBe("2.0 KB");
