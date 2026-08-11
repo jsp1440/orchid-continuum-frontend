@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, ChevronDown, CircleHelp, FlaskConical, RotateCcw, Sparkles } from "lucide-react";
 
+import MatrixVisionReviewPanel from "@/components/matrix/MatrixVisionReviewPanel";
 import {
   addSessionObservation,
   coerceObservationValue,
@@ -108,6 +109,15 @@ export default function OrchidIdentificationNext() {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to record observation.");
     }
+  }
+
+  async function refreshAfterVisionReview(): Promise<void> {
+    if (!session) return;
+    const result = await evaluateIdentificationSession(session.session_id);
+    setEvaluation(result);
+    setCalyxText("");
+    setStatus("ready");
+    setMessage("Reviewed Vision evidence was incorporated and the Matrix ranking was recalculated.");
   }
 
   async function askCalyx(focus: "summary" | "next_observation" | "candidate_comparison"): Promise<void> {
@@ -278,6 +288,14 @@ export default function OrchidIdentificationNext() {
                 <p className="mt-5 text-xs leading-5 text-muted-foreground">{evaluation?.report.disclaimer}</p>
               </div>
             </section>
+
+            <div className="mt-6">
+              <MatrixVisionReviewPanel
+                sessionId={session.session_id}
+                disabled={status === "working"}
+                onObservationAccepted={refreshAfterVisionReview}
+              />
+            </div>
 
             <section className="mt-6 rounded-3xl border bg-card p-6 sm:p-8">
               <div className="flex flex-wrap items-center justify-between gap-4">
