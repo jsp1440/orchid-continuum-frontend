@@ -9,6 +9,7 @@ import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
+import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
@@ -74,6 +75,7 @@ const App = () => (
               <AtlasFilterProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  <Route path="/lexicon/*" element={<LexiconAppLayout />} />
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
                   <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
