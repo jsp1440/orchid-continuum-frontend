@@ -1,0 +1,23 @@
+name: CALYX-MATRIX-005 Validation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  guided-identification:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - name: Focused Matrix regressions
+        run: npm test -- src/lib/matrixIdentification.test.ts
+      - name: Production build
+        run: npm run build
+      - name: Lint Matrix implementation
+        run: npx eslint src/pages/OrchidIdentificationNext.tsx src/lib/matrixIdentification.ts src/lib/matrixIdentification.test.ts
