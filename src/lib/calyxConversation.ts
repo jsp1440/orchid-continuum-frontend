@@ -4,6 +4,18 @@ import type { CalyxConversation } from "@/lib/calyxWorkspace";
 
 marked.setOptions({ gfm: true, breaks: true });
 
+const UNSAFE_HREF_PROTOCOL = /^(javascript|data|vbscript):/i;
+
+marked.use({
+  renderer: {
+    link(href: string, title: string | null | undefined, text: string): string {
+      const safeHref = UNSAFE_HREF_PROTOCOL.test(href ?? "") ? "#" : (href ?? "");
+      const titleAttr = title ? ` title="${title}"` : "";
+      return `<a href="${safeHref}"${titleAttr} rel="noopener noreferrer" target="_blank">${text}</a>`;
+    },
+  },
+});
+
 export const DEFAULT_PROJECT_ID = "calyx-speak";
 export const STORAGE_KEY = "orchid-continuum:calyx-speak:v2";
 
