@@ -26,6 +26,8 @@ export interface CanonicalLexiconEnvelope {
   visibility?: string;
 }
 
+export type CanonicalLexiconResponse = CanonicalLexiconEnvelope;
+
 function normalizeEntry(entry: LexiconEntry): LexiconEntry {
   return {
     ...entry,
@@ -48,6 +50,10 @@ function mergeBySlug(fallback: LexiconEntry[], canonical: LexiconEntry[]): Lexic
     merged.set(entry.slug, normalizeEntry({ ...prior, ...entry, provenance: entry.provenance ?? prior?.provenance }));
   });
   return [...merged.values()].sort((a, b) => a.preferred_term.localeCompare(b.preferred_term));
+}
+
+export function mergeCanonicalAndFallback(canonical: LexiconEntry[], fallback: LexiconEntry[]): LexiconEntry[] {
+  return mergeBySlug(fallback, canonical);
 }
 
 async function requestCanonical(path = ''): Promise<CanonicalLexiconEnvelope> {
@@ -121,12 +127,6 @@ export const getTaxa = (slug: string) => subresource<TaxonLink>(slug, 'example_t
 export const getImages = (slug: string) => subresource<LexiconAsset>(slug, 'assets');
 export const getRelationships = (slug: string) => subresource<Relationship>(slug, 'relationships');
 
-/**
- * Famous AI authoring writes are deliberately fail-closed during migration.
- * The canonical Concept Registry/review APIs own scientific writes. Keeping
- * these signatures allows the Famous admin UI to render without silently
- * writing to its former Supabase tables.
- */
 export interface SaveResult {
   ok: boolean;
   error?: string;
