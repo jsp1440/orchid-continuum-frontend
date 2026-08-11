@@ -249,7 +249,7 @@ export function buildStructuredWorkspacePreview(
   try {
     if (/\.csv$/i.test(fileName)) return buildDelimitedStructuredPreview(trimmed, ",", "csv");
     if (/\.tsv$/i.test(fileName)) return buildDelimitedStructuredPreview(trimmed, "\t", "tsv");
-    if (/\.json$/i.test(fileName) || /^[\[{]/.test(trimmed)) return buildJsonStructuredPreview(trimmed);
+    if (/\.json$/i.test(fileName) || /^[[{]/.test(trimmed)) return buildJsonStructuredPreview(trimmed);
   } catch {
     return null;
   }
