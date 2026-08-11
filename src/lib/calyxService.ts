@@ -97,8 +97,14 @@ export function emitServerWorkspaceOutputs(value: unknown): number {
   let emitted = 0;
   for (const candidate of value) {
     if (!candidate || typeof candidate !== 'object') continue;
-    emitWorkspaceOutput(candidate as WorkspaceOutput);
-    emitted += 1;
+    try {
+      emitWorkspaceOutput(candidate as WorkspaceOutput);
+      emitted += 1;
+    } catch {
+      // A malformed auxiliary panel must never discard an otherwise valid
+      // Calyx conversation turn. The shared bus remains the schema/provenance
+      // boundary, so invalid outputs are simply withheld from the workspace.
+    }
   }
   return emitted;
 }
