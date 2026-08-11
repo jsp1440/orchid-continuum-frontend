@@ -8,7 +8,7 @@ import {
 import { MatrixCalyxChat } from "@/features/calyx-workspace/MatrixCalyxChat";
 import { recordCalyxSurfaceContext } from "@/features/calyx-workspace/sessionContext";
 import { WorkspaceOutputDock } from "@/features/calyx-workspace/WorkspaceOutputDock";
-import { emitWorkspaceOutput, type WorkspaceOutput } from "@/features/calyx-workspace/workspaceOutputBus";
+import { emitWorkspaceOutputs } from "@/features/calyx-workspace/workspaceOutputBus";
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
 type Certainty = "certain" | "probable" | "uncertain" | "unknown";
@@ -92,22 +92,6 @@ function pretty(value: unknown): string {
   return JSON.stringify(value);
 }
 
-export function emitMatrixWorkspaceOutputs(value: unknown): number {
-  if (!Array.isArray(value)) return 0;
-  let emitted = 0;
-  for (const candidate of value) {
-    if (!candidate || typeof candidate !== "object") continue;
-    try {
-      emitWorkspaceOutput(candidate as WorkspaceOutput);
-      emitted += 1;
-    } catch {
-      // Matrix chat and the primary ranking remain usable when an auxiliary
-      // panel violates the shared workspace schema or provenance contract.
-    }
-  }
-  return emitted;
-}
-
 export default function OrchidIdentificationNext() {
   const location = useLocation();
   const sourceContext = useMemo(
@@ -177,7 +161,7 @@ export default function OrchidIdentificationNext() {
       }
       const nextReport = payload as IdentificationReport;
       setReport(nextReport);
-      emitMatrixWorkspaceOutputs(nextReport.workspace_outputs);
+      emitWorkspaceOutputs(nextReport.workspace_outputs);
       setStatus("live");
       setMessage("Live explainable candidate ranking from Calyx. Derived workspace output is available beside the conversation.");
     } catch (error) {
