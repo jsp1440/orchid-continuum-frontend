@@ -110,6 +110,35 @@ function buildConversation(
   };
 }
 
+function buildTurnResult(conversationId: string, answer = "Done.") {
+  return {
+    conversation_id: conversationId,
+    operator_message: {
+      message_id: `${conversationId}-operator`,
+      conversation_id: conversationId,
+      role: "operator" as const,
+      content: "Question",
+      created_at: "2026-08-10T00:00:02Z",
+    },
+    calyx_message: {
+      message_id: `${conversationId}-calyx`,
+      conversation_id: conversationId,
+      role: "calyx" as const,
+      content: answer,
+      created_at: "2026-08-10T00:00:03Z",
+    },
+    answer,
+    provider: {
+      name: "deterministic-governed",
+      model: "calyx-governed-summary-v1",
+      request_hash: "hash",
+    },
+    research: { casual: false, mission: null, mission_error: null, retrieval: {} },
+    persistence_mode: "postgres",
+    epistemic_policy: { continuum_first: true },
+  };
+}
+
 function storedWorkspace() {
   return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as {
     conversationId?: string;
@@ -522,6 +551,56 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       persistence_mode: "postgres",
       epistemic_policy: { continuum_first: true },
     });
+    await flush(4);
+  });
+
+  it("does not let an obsolete request release a newer submission lock", async () => {
+    const firstTurn = deferred<ReturnType<typeof buildTurnResult>>();
+    const secondTurn = deferred<ReturnType<typeof buildTurnResult>>();
+
+    mocks.createCalyxConversation
+      .mockResolvedValueOnce(buildConversation("first-thread"))
+      .mockResolvedValueOnce(buildConversation("second-thread"));
+    mocks.sendCalyxTurn
+      .mockReturnValueOnce(firstTurn.promise)
+      .mockReturnValueOnce(secondTurn.promise);
+    mocks.getCalyxConversation.mockResolvedValue(buildConversation("second-thread"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("First pending turn");
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      getButton(container, "New conversation").click();
+      mocks.pushTranscript("Second pending turn");
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+
+    firstTurn.resolve(buildTurnResult("first-thread", "Obsolete answer"));
+    await flush(3);
+
+    await act(async () => {
+      mocks.pushTranscript("This must remain blocked");
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+
+    secondTurn.resolve(buildTurnResult("second-thread", "Current answer"));
     await flush(4);
   });
 
