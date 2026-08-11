@@ -116,18 +116,29 @@ function normalizeWorkspaceCell(value: unknown): StructuredWorkspaceCell {
   return JSON.stringify(value);
 }
 
-function parseDelimitedRow(line: string, delimiter: string) {
-  const values: string[] = [];
-  let current = "";
+function parseDelimitedRecords(content: string, delimiter: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = "";
   let inQuotes = false;
 
-  for (let index = 0; index < line.length; index += 1) {
-    const character = line[index];
-    const next = line[index + 1];
+  const pushField = () => {
+    record.push(field);
+    field = "";
+  };
+  const pushRecord = () => {
+    pushField();
+    if (record.some((value) => value.trim())) records.push(record);
+    record = [];
+  };
+
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index];
+    const next = content[index + 1];
 
     if (character === '"') {
       if (inQuotes && next === '"') {
-        current += '"';
+        field += '"';
         index += 1;
       } else {
         inQuotes = !inQuotes;
@@ -136,16 +147,32 @@ function parseDelimitedRow(line: string, delimiter: string) {
     }
 
     if (character === delimiter && !inQuotes) {
-      values.push(current);
-      current = "";
+      pushField();
       continue;
     }
 
-    current += character;
+    if ((character === "\n" || character === "\r") && !inQuotes) {
+      if (character === "\r" && next === "\n") index += 1;
+      pushRecord();
+      continue;
+    }
+
+    field += character;
   }
 
-  values.push(current);
-  return values;
+  if (field.length || record.length) pushRecord();
+  if (inQuotes) throw new Error("Unterminated quoted field");
+  return records;
+}
+
+function uniqueHeaders(values: string[]): string[] {
+  const counts = new Map<string, number>();
+  return values.map((value, index) => {
+    const base = value.trim() || `Column ${index + 1}`;
+    const count = (counts.get(base) ?? 0) + 1;
+    counts.set(base, count);
+    return count === 1 ? base : `${base} (${count})`;
+  });
 }
 
 function finalizeStructuredPreview(
@@ -159,15 +186,18 @@ function finalizeStructuredPreview(
   const previewRows = rawRows.slice(0, MAX_STRUCTURED_PREVIEW_ROWS).map((row) =>
     Object.fromEntries(visibleColumns.map((column) => [column, row[column] ?? null])),
   );
-  const numericColumn = visibleColumns.find((column) =>
-    rawRows.some((row) => typeof row[column] === "number"),
+
+  const stringLabelColumn = visibleColumns.find((column) =>
+    rawRows.some((row) => typeof row[column] === "string" && row[column]?.toString().trim()),
   );
-  const labelColumn =
-    visibleColumns.find((column) =>
-      rawRows.some((row) => typeof row[column] === "string" && row[column]?.toString().trim()),
-    ) ?? visibleColumns[0];
+  const labelColumn = stringLabelColumn ?? visibleColumns[0];
+  const numericColumn = visibleColumns.find(
+    (column) =>
+      column !== labelColumn && rawRows.some((row) => typeof row[column] === "number"),
+  );
+
   const chart =
-    numericColumn && labelColumn
+    labelColumn && numericColumn
       ? {
           labelKey: labelColumn,
           valueKey: numericColumn,
@@ -205,22 +235,17 @@ function buildDelimitedStructuredPreview(
   delimiter: string,
   format: "csv" | "tsv",
 ) {
-  const lines = content
-    .split(/\r?\n/)
-    .map((line) => line.trimEnd())
-    .filter((line) => line.trim());
-  if (lines.length < 2) return null;
+  const records = parseDelimitedRecords(content, delimiter);
+  if (records.length < 2) return null;
 
-  const header = parseDelimitedRow(lines[0], delimiter)
-    .map((value, index) => value.trim() || `Column ${index + 1}`);
+  const header = uniqueHeaders(records[0]);
   if (!header.length) return null;
 
-  const rawRows = lines.slice(1).map((line) => {
-    const values = parseDelimitedRow(line, delimiter);
-    return Object.fromEntries(
+  const rawRows = records.slice(1).map((values) =>
+    Object.fromEntries(
       header.map((column, index) => [column, normalizeWorkspaceCell(values[index])]),
-    );
-  });
+    ),
+  );
 
   return finalizeStructuredPreview(format, header, rawRows);
 }
