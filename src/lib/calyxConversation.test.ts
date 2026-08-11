@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildCalyxTurnContext,
   buildCalyxConversationExport,
   buildCalyxDocumentContextPrompt,
+  buildStructuredWorkspacePreview,
   DEFAULT_PROJECT_ID,
   formatUploadedFileSize,
   isCalyxTextWorkspaceFile,
@@ -32,6 +34,23 @@ describe("calyxConversation helpers", () => {
     expect(html).not.toContain("<script>");
   });
 
+  it("strips javascript: and data: URL protocols from rendered links", () => {
+    const jsUrl = renderCalyxRichText("[click](javascript:alert(1))");
+    expect(jsUrl).not.toContain("javascript:");
+    expect(jsUrl).toContain('href="#"');
+
+    const dataUrl = renderCalyxRichText("[data](data:text/html,<h1>x</h1>)");
+    expect(dataUrl).not.toContain("data:text/html");
+    expect(dataUrl).toContain('href="#"');
+  });
+
+  it("adds rel and target attributes to safe links in rendered content", () => {
+    const html = renderCalyxRichText("[Orchid Continuum](https://orchidcontinuum.org)");
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('href="https://orchidcontinuum.org"');
+  });
+
   it("formats attachment sizes for the workspace panel", () => {
     expect(formatUploadedFileSize(512)).toBe("512 B");
     expect(formatUploadedFileSize(2048)).toBe("2.0 KB");
@@ -46,6 +65,84 @@ describe("calyxConversation helpers", () => {
   it("builds a bounded document context prompt", () => {
     expect(buildCalyxDocumentContextPrompt("paper.txt", "  excerpt  ")).toBe('[From "paper.txt"]\nexcerpt');
     expect(buildCalyxDocumentContextPrompt("paper.txt", "   ")).toBe("");
+  });
+
+  it("builds bounded workspace context for backend turns", () => {
+    expect(
+      buildCalyxTurnContext({
+        projectId: "vision-lab",
+        uploadedFiles: [{ name: "paper.csv", type: "text/csv", size: 2048 } as File],
+        selectedAttachment: { name: "paper.csv", type: "text/csv", size: 2048 } as File,
+        selectedDocumentText: "  selected rows  ",
+        documentContext: "  draft note  ",
+        fileTextContent: "a,b\n1,2",
+      }),
+    ).toEqual({
+      surface: "orchid-continuum-frontend",
+      project_id: "vision-lab",
+      workspace: {
+        attachment_count: 1,
+        attachments: [{ name: "paper.csv", type: "text/csv", size_bytes: 2048 }],
+        selected_attachment: {
+          name: "paper.csv",
+          type: "text/csv",
+          size_bytes: 2048,
+          selected_text_excerpt: "selected rows",
+          visible_text_excerpt: undefined,
+        },
+        draft_document_context: "draft note",
+      },
+    });
+  });
+
+  it("extracts a structured preview for local datasets", () => {
+    expect(
+      buildStructuredWorkspacePreview("paper.csv", "species,count\nCattleya,12\nDracula,7"),
+    ).toMatchObject({
+      format: "csv",
+      columns: ["species", "count"],
+      rows: [
+        { species: "Cattleya", count: 12 },
+        { species: "Dracula", count: 7 },
+      ],
+      chart: {
+        labelKey: "species",
+        valueKey: "count",
+      },
+    });
+  });
+
+  it("preserves quoted multiline fields and duplicate headers in delimited previews", () => {
+    const preview = buildStructuredWorkspacePreview(
+      "notes.csv",
+      'species,note,note\nCattleya,"line one\nline two",first\nDracula,single,second',
+    );
+
+    expect(preview).toMatchObject({
+      columns: ["species", "note", "note (2)"],
+      rows: [
+        { species: "Cattleya", note: "line one\nline two", "note (2)": "first" },
+        { species: "Dracula", note: "single", "note (2)": "second" },
+      ],
+    });
+  });
+
+  it("uses distinct label and value fields for numeric-only charts", () => {
+    const preview = buildStructuredWorkspacePreview("counts.csv", "year,count\n2024,10\n2025,12");
+
+    expect(preview?.chart).toMatchObject({
+      labelKey: "year",
+      valueKey: "count",
+      points: [
+        { label: "2024", value: 10 },
+        { label: "2025", value: 12 },
+      ],
+    });
+  });
+
+  it("suppresses charts when no distinct numeric value column exists", () => {
+    const preview = buildStructuredWorkspacePreview("years.csv", "year\n2024\n2025");
+    expect(preview?.chart).toBeNull();
   });
 
   it("filters visible conversation messages for export and display", () => {

@@ -1,12 +1,16 @@
 import type { ChangeEvent, FormEvent, KeyboardEvent, MouseEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
 import { useCalyxSpeechOutput } from "@/hooks/useCalyxSpeechOutput";
 import {
+  buildCalyxTurnContext,
   buildCalyxConversationExport,
   buildCalyxDocumentContextPrompt,
+  buildStructuredWorkspacePreview,
   DEFAULT_PROJECT_ID,
   STORAGE_KEY,
   formatUploadedFileSize,
@@ -136,6 +140,7 @@ export default function CalyxWorkspace() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
+  const submissionLockRef = useRef<number | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
 
@@ -161,6 +166,13 @@ export default function CalyxWorkspace() {
   const selectedAttachment =
     selectedAttachmentIndex === null ? null : uploadedFiles[selectedAttachmentIndex] ?? null;
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const structuredPreview = useMemo(
+    () =>
+      selectedAttachment && fileTextContent
+        ? buildStructuredWorkspacePreview(selectedAttachment.name, fileTextContent)
+        : null,
+    [fileTextContent, selectedAttachment],
+  );
 
   useEffect(() => {
     activeProjectIdRef.current = normalizedProjectId;
@@ -285,10 +297,11 @@ export default function CalyxWorkspace() {
   }, [selectedAttachment]);
 
   useEffect(() => {
+    setFileTextContent(null);
+    setSelectedDocumentText("");
+    setDocumentContext("");
+
     if (!selectedAttachment || !isCalyxTextWorkspaceFile(selectedAttachment)) {
-      setFileTextContent(null);
-      setSelectedDocumentText("");
-      setDocumentContext("");
       return;
     }
 
@@ -305,8 +318,6 @@ export default function CalyxWorkspace() {
               ? `${content}\n\n[Preview truncated at ${formatUploadedFileSize(MAX_TEXT_WORKSPACE_PREVIEW_BYTES)}.]`
               : content,
           );
-          setSelectedDocumentText("");
-          setDocumentContext("");
         }
       })
       .catch(() => {
@@ -355,10 +366,14 @@ export default function CalyxWorkspace() {
     const created = await createCalyxConversation({
       title: "Speak with Calyx",
       project_id: activeProjectId,
-      context: {
-        surface: "orchid-continuum-frontend",
-        project_id: activeProjectId,
-      },
+      context: buildCalyxTurnContext({
+        projectId: activeProjectId,
+        uploadedFiles,
+        selectedAttachment,
+        selectedDocumentText,
+        documentContext,
+        fileTextContent,
+      }),
     });
 
     if (!isActiveLifecycleRequest(requestId, activeProjectId)) return null;
@@ -390,11 +405,12 @@ export default function CalyxWorkspace() {
 
   async function sendMessage() {
     const text = message.trim();
-    if (!text || submitting) return;
+    if (!text || submissionLockRef.current !== null) return;
 
     const activeProjectId = normalizeProjectId(projectId);
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
+    submissionLockRef.current = requestId;
 
     setSubmitting(true);
     setConversationError(null);
@@ -414,6 +430,14 @@ export default function CalyxWorkspace() {
       const result = await sendCalyxTurn(thread.conversation_id, {
         message: text,
         project_id: activeProjectId,
+        context: buildCalyxTurnContext({
+          projectId: activeProjectId,
+          uploadedFiles,
+          selectedAttachment,
+          selectedDocumentText,
+          documentContext,
+          fileTextContent,
+        }),
         research_mode: "auto",
         retrieval_limit: 8,
       });
@@ -462,6 +486,7 @@ export default function CalyxWorkspace() {
       setConversationError(detail);
       setMessage(text);
     } finally {
+      if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
   }
@@ -483,6 +508,7 @@ export default function CalyxWorkspace() {
     setAuthRequired(false);
     setWorkspaceStatus(null);
     setSubmitting(false);
+    submissionLockRef.current = null;
     setUploadedFiles([]);
     setSelectedAttachmentIndex(null);
     setFileTextContent(null);
@@ -538,6 +564,7 @@ export default function CalyxWorkspace() {
     setAuthRequired(false);
     setWorkspaceStatus("Loading conversation…");
     setSubmitting(false);
+    submissionLockRef.current = null;
 
     try {
       const loaded = await getCalyxConversation(conversationId);
@@ -721,7 +748,7 @@ export default function CalyxWorkspace() {
                 </div>
                 {fileTextContent ? <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!fileTextContent} onClick={askAboutSelection} type="button">{selectedDocumentText ? "Ask CALYX about selection" : "Ask CALYX about visible text"}</button> : null}
               </div>
-              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3"><pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => setDocumentContext(event.target.value)} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
+              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3">{structuredPreview ? <div className="space-y-4 rounded-lg border bg-background p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">Structured data preview</p><p className="text-xs text-muted-foreground">{structuredPreview.summary}</p></div><div className="overflow-auto rounded-md border"><table className="min-w-full text-left text-xs"><thead className="bg-muted/60"><tr>{structuredPreview.columns.map((column) => <th className="px-3 py-2 font-medium" key={column}>{column}</th>)}</tr></thead><tbody>{structuredPreview.rows.map((row, rowIndex) => <tr className="border-t align-top" key={`structured-row-${rowIndex}`}>{structuredPreview.columns.map((column) => <td className="px-3 py-2 text-muted-foreground" key={`${column}-${rowIndex}`}>{row[column] === null ? "—" : String(row[column])}</td>)}</tr>)}</tbody></table></div>{structuredPreview.chart ? <ChartContainer className="h-56 w-full" config={{ value: { label: structuredPreview.chart.valueKey, color: "hsl(var(--primary))" } }}><BarChart accessibilityLayer data={structuredPreview.chart.points}><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="label" minTickGap={24} tickLine={false} /><ChartTooltip content={<ChartTooltipContent hideLabel />} /><Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} /></BarChart></ChartContainer> : null}</div> : null}<pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => setDocumentContext(event.target.value)} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
               {selectedDocumentText ? <p className="mt-3 text-xs text-muted-foreground">Selected text is ready to append to the next message.</p> : null}
             </section>
           </aside>

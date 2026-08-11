@@ -4,8 +4,26 @@ import type { CalyxConversation } from "@/lib/calyxWorkspace";
 
 marked.setOptions({ gfm: true, breaks: true });
 
+const UNSAFE_HREF_PROTOCOL = /^(javascript|data|vbscript):/i;
+
+marked.use({
+  renderer: {
+    link(href: string, title: string | null | undefined, text: string): string {
+      const safeHref = UNSAFE_HREF_PROTOCOL.test(href ?? "") ? "#" : (href ?? "");
+      const titleAttr = title ? ` title="${title}"` : "";
+      return `<a href="${safeHref}"${titleAttr} rel="noopener noreferrer" target="_blank">${text}</a>`;
+    },
+  },
+});
+
 export const DEFAULT_PROJECT_ID = "calyx-speak";
 export const STORAGE_KEY = "orchid-continuum:calyx-speak:v2";
+const MAX_DOCUMENT_CONTEXT_CHARACTERS = 2000;
+const MAX_WORKSPACE_CONTEXT_CHARACTERS = 1200;
+const MAX_WORKSPACE_CONTEXT_FILES = 6;
+const MAX_STRUCTURED_PREVIEW_ROWS = 8;
+const MAX_STRUCTURED_PREVIEW_COLUMNS = 6;
+const MAX_STRUCTURED_PREVIEW_POINTS = 12;
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
   "&": "&amp;",
@@ -68,7 +86,266 @@ export function buildCalyxDocumentContextPrompt(fileName: string, text: string) 
   const trimmed = text.trim();
   if (!trimmed) return "";
 
-  return `[From "${fileName}"]\n${trimmed.slice(0, 2000)}`;
+  return `[From "${fileName}"]\n${trimmed.slice(0, MAX_DOCUMENT_CONTEXT_CHARACTERS)}`;
+}
+
+type StructuredWorkspaceCell = string | number | null;
+
+export type StructuredWorkspacePreview = {
+  format: "csv" | "tsv" | "json";
+  summary: string;
+  columns: string[];
+  rows: Array<Record<string, StructuredWorkspaceCell>>;
+  chart: {
+    labelKey: string;
+    valueKey: string;
+    points: Array<{ label: string; value: number }>;
+  } | null;
+};
+
+function normalizeWorkspaceCell(value: unknown): StructuredWorkspaceCell {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  if (typeof value === "boolean") return value ? "true" : "false";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const numeric = Number(trimmed);
+    return Number.isFinite(numeric) && /^-?\d+(\.\d+)?$/.test(trimmed) ? numeric : trimmed;
+  }
+  return JSON.stringify(value);
+}
+
+function parseDelimitedRecords(content: string, delimiter: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = "";
+  let inQuotes = false;
+
+  const pushField = () => {
+    record.push(field);
+    field = "";
+  };
+  const pushRecord = () => {
+    pushField();
+    if (record.some((value) => value.trim())) records.push(record);
+    record = [];
+  };
+
+  for (let index = 0; index < content.length; index += 1) {
+    const character = content[index];
+    const next = content[index + 1];
+
+    if (character === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        index += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (character === delimiter && !inQuotes) {
+      pushField();
+      continue;
+    }
+
+    if ((character === "\n" || character === "\r") && !inQuotes) {
+      if (character === "\r" && next === "\n") index += 1;
+      pushRecord();
+      continue;
+    }
+
+    field += character;
+  }
+
+  if (field.length || record.length) pushRecord();
+  if (inQuotes) throw new Error("Unterminated quoted field");
+  return records;
+}
+
+function uniqueHeaders(values: string[]): string[] {
+  const used = new Set<string>();
+
+  return values.map((value, index) => {
+    const base = value.trim() || `Column ${index + 1}`;
+    let candidate = base;
+    let suffix = 2;
+
+    while (used.has(candidate)) {
+      candidate = `${base} (${suffix})`;
+      suffix += 1;
+    }
+
+    used.add(candidate);
+    return candidate;
+  });
+}
+
+function finalizeStructuredPreview(
+  format: StructuredWorkspacePreview["format"],
+  columns: string[],
+  rawRows: Array<Record<string, StructuredWorkspaceCell>>,
+): StructuredWorkspacePreview | null {
+  if (!columns.length || !rawRows.length) return null;
+
+  const visibleColumns = columns.slice(0, MAX_STRUCTURED_PREVIEW_COLUMNS);
+  const previewRows = rawRows.slice(0, MAX_STRUCTURED_PREVIEW_ROWS).map((row) =>
+    Object.fromEntries(visibleColumns.map((column) => [column, row[column] ?? null])),
+  );
+
+  const stringLabelColumn = visibleColumns.find((column) =>
+    rawRows.some((row) => typeof row[column] === "string" && row[column]?.toString().trim()),
+  );
+  const labelColumn = stringLabelColumn ?? visibleColumns[0];
+  const numericColumn = visibleColumns.find(
+    (column) =>
+      column !== labelColumn && rawRows.some((row) => typeof row[column] === "number"),
+  );
+
+  const chart =
+    labelColumn && numericColumn
+      ? {
+          labelKey: labelColumn,
+          valueKey: numericColumn,
+          points: rawRows
+            .slice(0, MAX_STRUCTURED_PREVIEW_POINTS)
+            .map((row, index) => {
+              const value = row[numericColumn];
+              if (typeof value !== "number") return null;
+              const labelValue = row[labelColumn];
+              return {
+                label:
+                  typeof labelValue === "string" && labelValue.trim()
+                    ? labelValue
+                    : typeof labelValue === "number"
+                      ? String(labelValue)
+                      : `Row ${index + 1}`,
+                value,
+              };
+            })
+            .filter((point): point is { label: string; value: number } => Boolean(point)),
+        }
+      : null;
+
+  return {
+    format,
+    summary: `${rawRows.length} row${rawRows.length === 1 ? "" : "s"} · ${columns.length} column${columns.length === 1 ? "" : "s"}${rawRows.length > previewRows.length || columns.length > visibleColumns.length ? " · preview trimmed" : ""}`,
+    columns: visibleColumns,
+    rows: previewRows,
+    chart: chart?.points.length ? chart : null,
+  };
+}
+
+function buildDelimitedStructuredPreview(
+  content: string,
+  delimiter: string,
+  format: "csv" | "tsv",
+) {
+  const records = parseDelimitedRecords(content, delimiter);
+  if (records.length < 2) return null;
+
+  const header = uniqueHeaders(records[0]);
+  if (!header.length) return null;
+
+  const rawRows = records.slice(1).map((values) =>
+    Object.fromEntries(
+      header.map((column, index) => [column, normalizeWorkspaceCell(values[index])]),
+    ),
+  );
+
+  return finalizeStructuredPreview(format, header, rawRows);
+}
+
+function buildJsonStructuredPreview(content: string) {
+  const payload = JSON.parse(content) as unknown;
+  const records = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object"
+      ? ((payload as { rows?: unknown; items?: unknown; data?: unknown }).rows ??
+          (payload as { items?: unknown }).items ??
+          (payload as { data?: unknown }).data)
+      : null;
+  if (!Array.isArray(records)) return null;
+
+  const objectRows = records.filter(
+    (record): record is Record<string, unknown> =>
+      Boolean(record) && typeof record === "object" && !Array.isArray(record),
+  );
+  if (!objectRows.length) return null;
+
+  const columns = Array.from(
+    new Set(objectRows.flatMap((record) => Object.keys(record))),
+  );
+  const rawRows = objectRows.map((record) =>
+    Object.fromEntries(columns.map((column) => [column, normalizeWorkspaceCell(record[column])])),
+  );
+  return finalizeStructuredPreview("json", columns, rawRows);
+}
+
+export function buildStructuredWorkspacePreview(
+  fileName: string,
+  content: string,
+): StructuredWorkspacePreview | null {
+  const trimmed = content.trim();
+  if (!trimmed) return null;
+
+  try {
+    if (/\.csv$/i.test(fileName)) return buildDelimitedStructuredPreview(trimmed, ",", "csv");
+    if (/\.tsv$/i.test(fileName)) return buildDelimitedStructuredPreview(trimmed, "\t", "tsv");
+    if (/\.json$/i.test(fileName) || /^[[{]/.test(trimmed)) return buildJsonStructuredPreview(trimmed);
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+export function buildCalyxTurnContext(options: {
+  projectId: string;
+  uploadedFiles: Array<Pick<File, "name" | "type" | "size">>;
+  selectedAttachment?: Pick<File, "name" | "type" | "size"> | null;
+  selectedDocumentText?: string;
+  documentContext?: string;
+  fileTextContent?: string | null;
+}) {
+  const context: Record<string, unknown> = {
+    surface: "orchid-continuum-frontend",
+    project_id: normalizeProjectId(options.projectId),
+  };
+
+  const trimmedSelection = options.selectedDocumentText?.trim() ?? "";
+  const trimmedDraftContext = options.documentContext?.trim() ?? "";
+  const trimmedFileExcerpt = options.fileTextContent?.trim() ?? "";
+
+  context.workspace = {
+    attachment_count: options.uploadedFiles.length,
+    attachments: options.uploadedFiles.slice(0, MAX_WORKSPACE_CONTEXT_FILES).map((file) => ({
+      name: file.name,
+      type: file.type || "unknown",
+      size_bytes: file.size,
+    })),
+    selected_attachment: options.selectedAttachment
+      ? {
+          name: options.selectedAttachment.name,
+          type: options.selectedAttachment.type || "unknown",
+          size_bytes: options.selectedAttachment.size,
+          selected_text_excerpt: trimmedSelection
+            ? trimmedSelection.slice(0, MAX_WORKSPACE_CONTEXT_CHARACTERS)
+            : undefined,
+          visible_text_excerpt:
+            !trimmedSelection && trimmedFileExcerpt
+              ? trimmedFileExcerpt.slice(0, MAX_WORKSPACE_CONTEXT_CHARACTERS)
+              : undefined,
+        }
+      : undefined,
+    draft_document_context: trimmedDraftContext
+      ? trimmedDraftContext.slice(0, MAX_WORKSPACE_CONTEXT_CHARACTERS)
+      : undefined,
+  };
+
+  return context;
 }
 
 export function visibleConversationMessages(messages: CalyxConversation["messages"]) {
