@@ -255,7 +255,6 @@ export interface LexiconEntry {
   pronunciation?: string;
   category?: LexiconCategory;
   subcategory?: string;
-
   quick_definition?: string;
   expanded_definition?: string;
   scope_note?: string;
@@ -265,7 +264,6 @@ export interface LexiconEntry {
   broader_concept?: { label: string; slug?: string };
   narrower_concepts?: { label: string; slug?: string }[];
   etymology?: Etymology;
-
   anatomical_context?: string;
   morphological_context?: string;
   mechanism_blocks?: ExplanatoryBlock[];
@@ -274,11 +272,9 @@ export interface LexiconEntry {
   variation_notes?: string;
   character_states?: CharacterState[];
   example_taxa?: TaxonLink[];
-
   identification_significance?: string;
   identification_cautions?: string[];
   identification_companion_characters?: string[];
-
   conservation?: ConservationGuidance;
   assets?: LexiconAsset[];
   research_questions?: string[];
@@ -290,7 +286,6 @@ export interface LexiconEntry {
   vision_lab_notes?: string;
   provenance?: Provenance;
   funding?: FundingProvenance;
-
   maturity?: MaturityFlag[];
   review_state?: ReviewState;
   certainty_summary?: CertaintyLevel;
@@ -310,3 +305,24 @@ export interface LexiconStats {
   expert_reviewed_entries: number;
   categories: number;
 }
+
+export type {
+  PartnerCategory,
+  PartnerRecord,
+  ValidationClass,
+  CheckResult,
+  ValidationBadge,
+  ExpertReviewStatus,
+  ReviewerLevel,
+  MeasurementBasis,
+  ReferenceImageRecord,
+  MorphometricMeasurement,
+  ColourObservation,
+  GenerationSpecItem,
+  CharacterConformanceCheck,
+  CommunityReviewQuestion,
+  CommunityReviewRecord,
+  ExpertReviewRecord,
+  IllustrationVersion,
+  IllustrationValidationRecord,
+} from './lexiconExtendedTypes';
