@@ -43,9 +43,9 @@ describe('Calyx server workspace output bridge', () => {
   });
 
   it('withholds a malformed panel without breaking later valid panels or chat', () => {
-    emitWorkspaceOutput
-      .mockImplementationOnce(() => { throw new Error('invalid workspace output'); })
-      .mockImplementationOnce(() => undefined);
+    emitWorkspaceOutput.mockImplementation((output: { id?: string }) => {
+      if (output.id === 'bad') throw new Error('invalid workspace output');
+    });
 
     const malformed = { id: 'bad', kind: 'table' };
     const valid = {
@@ -58,6 +58,6 @@ describe('Calyx server workspace output bridge', () => {
     };
 
     expect(() => emitServerWorkspaceOutputs([malformed, valid])).not.toThrow();
-    expect(emitServerWorkspaceOutputs([malformed, valid])).toBe(2);
+    expect(emitServerWorkspaceOutputs([malformed, valid])).toBe(1);
   });
 });
