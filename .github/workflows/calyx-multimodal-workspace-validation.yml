@@ -31,6 +31,6 @@ jobs:
       - name: Build frontend
         run: npm run build
       - name: Lint changed workspace surfaces
-        run: npx eslint src/features/calyx-workspace/sessionContext.ts src/features/calyx-workspace/sessionContext.test.ts src/features/calyx-workspace/workspaceOutputBus.ts src/features/calyx-workspace/workspaceOutputBus.test.ts src/features/calyx-workspace/identificationContext.ts src/features/calyx-workspace/identificationContext.test.ts src/features/calyx-workspace/WorkspaceOutputPanel.tsx src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx src/components/lexicon/AskCalyx.tsx src/components/lexicon/EntryView.tsx src/pages/OrchidIdentificationNext.tsx src/lib/calyxService.ts
+        run: npx eslint src/features/calyx-workspace/sessionContext.ts src/features/calyx-workspace/sessionContext.test.ts src/features/calyx-workspace/workspaceOutputBus.ts src/features/calyx-workspace/workspaceOutputBus.test.ts src/features/calyx-workspace/identificationContext.ts src/features/calyx-workspace/identificationContext.test.ts src/features/calyx-workspace/WorkspaceOutputPanel.tsx src/features/calyx-workspace/WorkspaceOutputDock.tsx src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx src/features/calyx-workspace/MatrixCalyxChat.tsx src/components/lexicon/AskCalyx.tsx src/components/lexicon/EntryView.tsx src/pages/OrchidIdentificationNext.tsx src/lib/calyxService.ts
       - name: Diff hygiene
         run: git diff --check origin/${{ github.base_ref }}...HEAD
