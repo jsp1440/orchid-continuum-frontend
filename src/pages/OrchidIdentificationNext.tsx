@@ -5,7 +5,10 @@ import {
   lexiconHrefForMatrixCharacter,
   readIdentificationSourceContext,
 } from "@/features/calyx-workspace/identificationContext";
+import { MatrixCalyxChat } from "@/features/calyx-workspace/MatrixCalyxChat";
 import { recordCalyxSurfaceContext } from "@/features/calyx-workspace/sessionContext";
+import { WorkspaceOutputDock } from "@/features/calyx-workspace/WorkspaceOutputDock";
+import { emitWorkspaceOutput, type WorkspaceOutput } from "@/features/calyx-workspace/workspaceOutputBus";
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
 type Certainty = "certain" | "probable" | "uncertain" | "unknown";
@@ -51,6 +54,7 @@ type IdentificationReport = {
   observation_count: number;
   compared_character_count: number;
   disclaimer: string;
+  workspace_outputs?: unknown;
 };
 
 const exampleObservations: Observation[] = [
@@ -86,6 +90,22 @@ function pretty(value: unknown): string {
   if (value == null) return "—";
   if (typeof value === "string") return value;
   return JSON.stringify(value);
+}
+
+export function emitMatrixWorkspaceOutputs(value: unknown): number {
+  if (!Array.isArray(value)) return 0;
+  let emitted = 0;
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== "object") continue;
+    try {
+      emitWorkspaceOutput(candidate as WorkspaceOutput);
+      emitted += 1;
+    } catch {
+      // Matrix chat and the primary ranking remain usable when an auxiliary
+      // panel violates the shared workspace schema or provenance contract.
+    }
+  }
+  return emitted;
 }
 
 export default function OrchidIdentificationNext() {
@@ -155,9 +175,11 @@ export default function OrchidIdentificationNext() {
         const detail = payload && "detail" in payload ? pretty(payload.detail) : response.statusText;
         throw new Error(`Identification API ${response.status}: ${detail}`);
       }
-      setReport(payload as IdentificationReport);
+      const nextReport = payload as IdentificationReport;
+      setReport(nextReport);
+      emitMatrixWorkspaceOutputs(nextReport.workspace_outputs);
       setStatus("live");
-      setMessage("Live explainable candidate ranking from Calyx.");
+      setMessage("Live explainable candidate ranking from Calyx. Derived workspace output is available beside the conversation.");
     } catch (error) {
       setReport(null);
       setStatus("error");
@@ -229,6 +251,14 @@ export default function OrchidIdentificationNext() {
         >
           {status === "loading" ? "Evaluating…" : "Evaluate candidate matrix"}
         </button>
+
+        <section className="mt-8 grid gap-6 xl:grid-cols-[minmax(0,.9fr),minmax(0,1.1fr)]" aria-label="Calyx adaptive identification workspace">
+          <MatrixCalyxChat sourceConcept={sourceContext.concept} sourceLabel={sourceContext.label} />
+          <WorkspaceOutputDock
+            title="Identification tool outputs"
+            emptyMessage="Run the candidate matrix to open the derived ranking panel here. Calyx conversation remains available alongside it."
+          />
+        </section>
 
         {report && (
           <section className="mt-10">
