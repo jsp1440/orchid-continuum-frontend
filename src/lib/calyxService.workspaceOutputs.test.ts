@@ -9,7 +9,7 @@ vi.mock('@/features/calyx-workspace/workspaceOutputBus', () => ({
 import { emitServerWorkspaceOutputs } from './calyxService';
 
 describe('Calyx server workspace output bridge', () => {
-  beforeEach(() => emitWorkspaceOutput.mockClear());
+  beforeEach(() => emitWorkspaceOutput.mockReset());
 
   it('emits every server-returned grounded output through the shared workspace bus', () => {
     const outputs = [
@@ -40,5 +40,24 @@ describe('Calyx server workspace output bridge', () => {
     expect(emitServerWorkspaceOutputs(undefined)).toBe(0);
     expect(emitServerWorkspaceOutputs({})).toBe(0);
     expect(emitWorkspaceOutput).not.toHaveBeenCalled();
+  });
+
+  it('withholds a malformed panel without breaking later valid panels or chat', () => {
+    emitWorkspaceOutput
+      .mockImplementationOnce(() => { throw new Error('invalid workspace output'); })
+      .mockImplementationOnce(() => undefined);
+
+    const malformed = { id: 'bad', kind: 'table' };
+    const valid = {
+      id: 'good',
+      kind: 'text',
+      title: 'Evidence gaps',
+      provenance: { source_module: 'brain-mission', evidence_status: 'derived', generated: true },
+      payload: { body: 'A bounded uncertainty statement.' },
+      created_at: '2026-08-11T21:31:00Z',
+    };
+
+    expect(() => emitServerWorkspaceOutputs([malformed, valid])).not.toThrow();
+    expect(emitServerWorkspaceOutputs([malformed, valid])).toBe(2);
   });
 });
