@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, CheckCircle2, ChevronDown, CircleHelp, FlaskConical, RotateCcw, Sparkles } from "lucide-react";
 
+import MatrixLexiconGuide from "@/components/matrix/MatrixLexiconGuide";
 import MatrixVisionReviewPanel from "@/components/matrix/MatrixVisionReviewPanel";
 import {
   addSessionObservation,
@@ -234,6 +235,11 @@ export default function OrchidIdentificationNext() {
                 {next ? (
                   <>
                     <p className="mt-3 text-sm leading-6 text-muted-foreground">{next.description || "Record what you can observe. If you cannot determine the character confidently, lower the certainty rather than guessing."}</p>
+                    <MatrixLexiconGuide
+                      registryId={session.registry.registry_id}
+                      registryVersion={session.registry.version}
+                      characterId={next.character}
+                    />
                     <div className="mt-5 rounded-2xl border bg-background p-4">
                       <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
                         <span>{next.distinct_state_count ?? "—"} distinct states</span>
