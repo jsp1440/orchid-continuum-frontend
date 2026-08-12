@@ -39,6 +39,43 @@ export type ApprovedLexiconConcept = {
   provenance?: Record<string, unknown>;
 };
 
+export type MappingStatus =
+  | "mapped_approved"
+  | "mapped_concept_unavailable"
+  | "invalid_concept_id"
+  | "unmapped";
+
+export type RegistryConceptMappingStatus = {
+  registry: {
+    registry_id: string;
+    version: string;
+    checksum_sha256?: string;
+    publication_state?: string;
+  };
+  character_count: number;
+  mapped_approved_count: number;
+  mapped_unavailable_count: number;
+  invalid_mapping_count: number;
+  unmapped_count: number;
+  approved_mapping_coverage: number;
+  ready_for_reviewed_lexicon_guidance: boolean;
+  automatic_concept_matching: false;
+  characters: Array<{
+    character: string;
+    label?: string;
+    weight?: number;
+    concept_id?: string | null;
+    mapping_status: MappingStatus;
+    concept?: {
+      concept_id: string;
+      preferred_term?: string;
+      review_state?: string;
+      source_system?: string;
+      source_record_id?: string;
+    } | null;
+  }>;
+};
+
 export type ConceptMappingDecision = {
   character: string;
   concept_id: string;
@@ -86,6 +123,15 @@ export async function listReviewableRegistries(): Promise<RegistrySummary[]> {
 export async function getRegistryVersion(registryId: string, version: string): Promise<RegistryVersion> {
   return request<RegistryVersion>(
     `/api/matrix-identification/registry/${encodeURIComponent(registryId)}/${encodeURIComponent(version)}`,
+  );
+}
+
+export async function getRegistryConceptMappingStatus(
+  registryId: string,
+  version: string,
+): Promise<RegistryConceptMappingStatus> {
+  return request<RegistryConceptMappingStatus>(
+    `/api/matrix-identification/registry/${encodeURIComponent(registryId)}/${encodeURIComponent(version)}/concept-mapping-status`,
   );
 }
 
