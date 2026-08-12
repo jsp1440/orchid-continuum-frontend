@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { LexiconEntry } from '@/data/types';
-import { getEntries } from '@/lib/lexiconService';
+import { getEntries, getEntry } from '@/lib/lexiconService';
 import { DemoBanner, SiteFooter, SiteHeader, type ViewKey } from '@/components/lexicon/SiteChrome';
 import { HomeView } from '@/components/lexicon/HomeView';
 import { LexiconBrowser } from '@/components/lexicon/LexiconBrowser';
@@ -41,15 +41,40 @@ function pathFor(view:ViewKey,slug?:string,query?:string):string {
 }
 
 const LexiconAppLayout:React.FC=()=>{
-  const[entries,setEntries]=useState<LexiconEntry[]>([]);const[loading,setLoading]=useState(true);const[loadError,setLoadError]=useState('');
-  const location=useLocation();const navigateRouter=useNavigate();const route=useMemo(()=>parseRoute(location.pathname,location.search),[location.pathname,location.search]);
-  const load=useCallback(async()=>{setLoading(true);setLoadError('');try{setEntries(await getEntries());}catch(error){setLoadError(error instanceof Error?error.message:'Lexicon load failed');}finally{setLoading(false);}},[]);
+  const[entries,setEntries]=useState<LexiconEntry[]>([]);
+  const[activeEntry,setActiveEntry]=useState<LexiconEntry|undefined>();
+  const[loading,setLoading]=useState(true);
+  const[loadError,setLoadError]=useState('');
+  const location=useLocation();
+  const navigateRouter=useNavigate();
+  const route=useMemo(()=>parseRoute(location.pathname,location.search),[location.pathname,location.search]);
+
+  const load=useCallback(async()=>{
+    setLoading(true);
+    setLoadError('');
+    try{
+      if(route.view==='entry'&&route.slug){
+        const cached=entries.find((candidate)=>candidate.slug===route.slug);
+        if(cached)setActiveEntry(cached);
+        const resolved=await getEntry(route.slug);
+        setActiveEntry(resolved);
+        return;
+      }
+      setActiveEntry(undefined);
+      setEntries(await getEntries());
+    }catch(error){
+      setLoadError(error instanceof Error?error.message:'Lexicon load failed');
+    }finally{
+      setLoading(false);
+    }
+  },[route.view,route.slug,entries]);
+
   useEffect(()=>{void load();},[load]);
   const go=useCallback((view:ViewKey,slug?:string,query?:string)=>{navigateRouter(pathFor(view,slug,query));window.scrollTo({top:0,behavior:'smooth'});},[navigateRouter]);
   const openEntry=useCallback((slug:string)=>go('entry',slug),[go]);
   const browseWithQuery=useCallback((q:string)=>go('lexicon',undefined,q),[go]);
-  const entry=useMemo(()=>entries.find((e)=>e.slug===route.slug),[entries,route.slug]);
-  return <DisplayPreferencesProvider><div className="min-h-screen bg-[#FDFBF6] text-stone-900 antialiased"><a href="#lexicon-main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-sm focus:bg-[#6B3FA0] focus:px-4 focus:py-2 focus:text-sm focus:text-white">Skip to lexicon content</a><DemoBanner/><SiteHeader view={route.view} onNavigate={(view,slug)=>go(view,slug)}/><main id="lexicon-main">{loadError&&<div role="alert" className="mx-auto mt-6 max-w-5xl rounded-sm border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">Canonical lexicon load warning: {loadError}. The migration fallback remains available.</div>}{loading?<div className="mx-auto max-w-3xl px-4 py-32 text-center"><p className="font-serif text-xl text-stone-500" style={{fontFamily:'Georgia, serif'}}>Loading the lexicon…</p></div>:route.view==='home'?<HomeView entries={entries} onOpen={openEntry} onNavigate={(view,slug)=>go(view,slug)} onSearch={browseWithQuery}/>:route.view==='lexicon'?<LexiconBrowser entries={entries} onOpen={openEntry} initialQuery={route.query??''}/>:route.view==='collection'?<CollectionView entries={entries} onOpen={openEntry} onBrowse={()=>go('lexicon')}/>:route.view==='partners'?<PartnersView/>:route.view==='about'||route.view==='admin'?<AboutView/>:route.view==='validation'?<ValidationView onOpenEntry={openEntry}/>:entry?<EntryView entry={entry} onOpen={openEntry} onBrowse={()=>go('lexicon')}/>:<div className="mx-auto max-w-3xl px-4 py-24 text-center"><h1 className="font-serif text-3xl text-stone-900" style={{fontFamily:'Georgia, serif'}}>Term not found in the lexicon</h1><p className="mt-3 text-stone-600">That concept has not been indexed in the canonical or migration records yet.</p><button type="button" onClick={()=>go('lexicon')} className="mt-6 rounded-sm bg-[#6B3FA0] px-5 py-2.5 text-sm font-medium text-white">Browse the A–Z lexicon</button></div>}</main><SiteFooter onNavigate={(view,slug)=>go(view,slug)}/></div></DisplayPreferencesProvider>;
+
+  return <DisplayPreferencesProvider><div className="min-h-screen bg-[#FDFBF6] text-stone-900 antialiased"><a href="#lexicon-main" className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-sm focus:bg-[#6B3FA0] focus:px-4 focus:py-2 focus:text-sm focus:text-white">Skip to lexicon content</a><DemoBanner/><SiteHeader view={route.view} onNavigate={(view,slug)=>go(view,slug)}/><main id="lexicon-main">{loadError&&<div role="alert" className="mx-auto mt-6 max-w-5xl rounded-sm border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">Canonical lexicon load warning: {loadError}. The migration fallback remains available.</div>}{loading?<div className="mx-auto max-w-3xl px-4 py-32 text-center"><p className="font-serif text-xl text-stone-500" style={{fontFamily:'Georgia, serif'}}>Loading the lexicon…</p></div>:route.view==='home'?<HomeView entries={entries} onOpen={openEntry} onNavigate={(view,slug)=>go(view,slug)} onSearch={browseWithQuery}/>:route.view==='lexicon'?<LexiconBrowser entries={entries} onOpen={openEntry} initialQuery={route.query??''}/>:route.view==='collection'?<CollectionView entries={entries} onOpen={openEntry} onBrowse={()=>go('lexicon')}/>:route.view==='partners'?<PartnersView/>:route.view==='about'||route.view==='admin'?<AboutView/>:route.view==='validation'?<ValidationView onOpenEntry={openEntry}/>:activeEntry?<EntryView entry={activeEntry} onOpen={openEntry} onBrowse={()=>go('lexicon')}/>:<div className="mx-auto max-w-3xl px-4 py-24 text-center"><h1 className="font-serif text-3xl text-stone-900" style={{fontFamily:'Georgia, serif'}}>Term not found in the lexicon</h1><p className="mt-3 text-stone-600">That concept has not been indexed in the canonical or migration records yet.</p><button type="button" onClick={()=>go('lexicon')} className="mt-6 rounded-sm bg-[#6B3FA0] px-5 py-2.5 text-sm font-medium text-white">Browse the A–Z lexicon</button></div>}</main><SiteFooter onNavigate={(view,slug)=>go(view,slug)}/></div></DisplayPreferencesProvider>;
 };
 
 export default LexiconAppLayout;
