@@ -16,8 +16,8 @@ describe('Calyx server workspace output bridge', () => {
       {
         id: 'retrieval-1',
         kind: 'table',
-        title: 'Retrieved evidence',
-        provenance: { source_module: 'evidence-retrieval', evidence_status: 'evidence', generated: false },
+        title: 'Retrieved Orchid Continuum objects',
+        provenance: { source_module: 'evidence-retrieval', evidence_status: 'unknown', generated: false },
         payload: { columns: [{ key: 'title', label: 'Source' }], rows: [{ title: 'Velamen study' }] },
         created_at: '2026-08-11T21:30:00Z',
       },
