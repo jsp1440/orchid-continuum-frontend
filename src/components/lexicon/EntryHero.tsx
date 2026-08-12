@@ -101,7 +101,8 @@ export const EntryHero: React.FC<{
   onBrowse: () => void;
   onJump: (id: string) => void;
 }> = ({ entry, depth, onDepth, onBrowse, onJump }) => {
-  const primaryAsset = entry.assets?.find((asset) => asset.schematic === 'resupination-sequence') ?? entry.assets?.[0];
+  const resupinationAsset = entry.assets?.find((asset) => asset.schematic === 'resupination-sequence');
+  const primaryAsset = resupinationAsset ?? entry.assets?.find((asset) => Boolean(asset.url)) ?? entry.assets?.[0];
 
   return (
     <header className="relative overflow-hidden border-b border-[#E4DCCB] bg-[#F7F2E7]">
@@ -168,7 +169,7 @@ export const EntryHero: React.FC<{
               {primaryAsset ? <AssetKindLabel kind={primaryAsset.kind} /> : null}
               <span className="text-xs text-stone-600">{primaryAsset?.title ?? 'Illustration in development'}</span>
             </figcaption>
-            {entry.slug === 'resupination' ? (
+            {resupinationAsset ? (
               <ResupinationSequence />
             ) : primaryAsset?.url ? (
               <img src={primaryAsset.url} alt={primaryAsset.alt_text ?? primaryAsset.title ?? entry.preferred_term} className="mx-auto max-h-[520px] w-auto max-w-full object-contain" />
