@@ -1,10 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { finalizeMatrixReport, listMatrixReports } from "./matrixReports";
+import { finalizeMatrixReport, getMatrixPersistenceStatus, listMatrixReports } from "./matrixReports";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("Matrix reproducible report client", () => {
+  it("reads the backend persistence mode without inferring durability from report hashing", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        mode: "file_ephemeral",
+        durable: false,
+        ready: true,
+        durable_requested: false,
+        warning: "File-backed Matrix sessions are not restart-durable on ephemeral hosts.",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const status = await getMatrixPersistenceStatus();
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/matrix-identification/sessions/persistence-status");
+    expect(status.durable).toBe(false);
+    expect(status.mode).toBe("file_ephemeral");
+  });
+
   it("finalizes the current session revision through the governed report endpoint", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
