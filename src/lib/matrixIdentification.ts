@@ -2,6 +2,7 @@ import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
 export type Certainty = "certain" | "probable" | "uncertain" | "unknown";
 export type ExplanationAudience = "beginner" | "intermediate" | "expert";
+export type VisionReviewDecision = "accept" | "revise" | "reject";
 
 export type RegistrySummary = {
   registry_id: string;
@@ -86,6 +87,39 @@ export type CalyxExplanation = {
   explanation?: string;
 };
 
+export type VisionSuggestion = {
+  suggestion_id: string;
+  session_id: string;
+  analysis_id: string;
+  vision_observation_id: string;
+  image_id?: string | null;
+  region_id?: string | null;
+  concept_id?: string | null;
+  character: string;
+  registry_character_found: boolean;
+  proposed_value: unknown;
+  character_state_id?: string | null;
+  numeric_value?: number | null;
+  relative_value?: number | null;
+  unit?: string | null;
+  measurement_basis?: string | null;
+  machine_confidence?: number | null;
+  method?: string | null;
+  evidence_region?: string | null;
+  vision_review_state?: string | null;
+  limitations?: string[];
+  state: "pending_review" | "needs_mapping" | "cannot_determine" | "accepted" | "revised" | "rejected";
+  review?: Record<string, unknown> | null;
+  matrix_observation_id?: string | null;
+  accepted_value?: unknown;
+};
+
+export type VisionSuggestionList = {
+  session_id: string;
+  suggestions: VisionSuggestion[];
+  vision_analyses?: Record<string, Record<string, unknown>>;
+};
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
     credentials: "include",
@@ -151,6 +185,42 @@ export async function explainIdentificationSession(
     method: "POST",
     body: JSON.stringify({ audience, focus }),
   });
+}
+
+export async function attachVisionAnalysis(
+  sessionId: string,
+  analysisId: string,
+): Promise<VisionSuggestionList & { added: number; analysis_id: string; rule?: string }> {
+  return request<VisionSuggestionList & { added: number; analysis_id: string; rule?: string }>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/analyses/${encodeURIComponent(analysisId)}/suggestions`,
+    { method: "POST", body: JSON.stringify({}) },
+  );
+}
+
+export async function listVisionSuggestions(sessionId: string): Promise<VisionSuggestionList> {
+  return request<VisionSuggestionList>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions`,
+  );
+}
+
+export async function reviewVisionSuggestion(
+  sessionId: string,
+  suggestionId: string,
+  decision: VisionReviewDecision,
+  options: { certainty?: Certainty; revisedValue?: unknown; comments?: string } = {},
+): Promise<{ session: SessionRecord; suggestion: VisionSuggestion; observation_added: boolean }> {
+  return request<{ session: SessionRecord; suggestion: VisionSuggestion; observation_added: boolean }>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions/${encodeURIComponent(suggestionId)}/review`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        decision,
+        certainty: options.certainty,
+        revised_value: options.revisedValue,
+        comments: options.comments,
+      }),
+    },
+  );
 }
 
 export function coerceObservationValue(raw: string, valueType?: string): unknown {
