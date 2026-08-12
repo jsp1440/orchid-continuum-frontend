@@ -147,7 +147,6 @@ export async function createIdentificationSession(registry: RegistrySummary): Pr
     body: JSON.stringify({
       registry_id: registry.registry_id,
       version: registry.version,
-      actor: "matrix-guided-ui",
       metadata: { input_mode: "guided", client: "orchid-continuum-frontend" },
     }),
   });
