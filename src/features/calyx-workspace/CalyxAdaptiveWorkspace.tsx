@@ -19,6 +19,7 @@ export const CalyxAdaptiveWorkspace: React.FC<{ entry: LexiconEntry; children: R
   const related = entry.related_terminology ?? [];
   const characterStates = entry.character_states ?? [];
   const literature = entry.literature ?? [];
+  const overlayFields = entry.migration_overlay?.fields ?? [];
   const [outputs, setOutputs] = useState<WorkspaceOutput[]>([]);
 
   useEffect(() => subscribeWorkspaceOutputs((output) => {
@@ -37,7 +38,12 @@ export const CalyxAdaptiveWorkspace: React.FC<{ entry: LexiconEntry; children: R
           <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#8E3A6B]">Adaptive workspace</p>
           <h2 className="font-serif text-xl text-stone-900" style={{ fontFamily: 'Georgia, serif' }}>Calyx + {entry.preferred_term}</h2>
         </div>
-        <p className="ml-auto max-w-xl text-xs leading-relaxed text-stone-500">Conversation remains visible while Calyx context, visuals, identification characters and evidence occupy simultaneous panels. Tool-producing modules can now open additional image, diagram, chart, table or text outputs through the shared workspace bus.</p>
+        <p className="ml-auto max-w-xl text-xs leading-relaxed text-stone-500">Conversation remains visible while Calyx context, visuals, identification characters and evidence occupy simultaneous panels. Tool-producing modules can open additional image, diagram, chart, table or text outputs through the shared workspace bus.</p>
+        {overlayFields.length ? (
+          <p className="w-full rounded-sm border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-900">
+            <strong>Migration overlay:</strong> the canonical Concept Registry remains authoritative for identity, reviewed definitions and provenance. The following displayed layers are still preserved from the Famous Lexicon migration until canonical equivalents are available: {overlayFields.join(', ')}.
+          </p>
+        ) : null}
       </header>
       <div className="h-[760px] min-h-[560px] p-2">
         <ResizablePanelGroup direction="horizontal" className="rounded-sm">
