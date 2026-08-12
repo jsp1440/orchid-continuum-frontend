@@ -26,13 +26,37 @@ export interface CanonicalLexiconEnvelope {
   visibility?: string;
 }
 
+export interface CanonicalLexiconEntryEnvelope {
+  release: string;
+  entry: LexiconEntry;
+  source_of_truth?: string;
+  automatic_publication?: boolean;
+  visibility?: string;
+}
+
 export type CanonicalLexiconResponse = CanonicalLexiconEnvelope;
+
+const VALID_REVIEW_STATES: ReviewState[] = [
+  'draft',
+  'source_imported',
+  'literature_reviewed',
+  'illustration_reviewed',
+  'expert_reviewed',
+  'published',
+  'revision_needed',
+];
+
+function normalizeReviewState(value: unknown): ReviewState {
+  const state = String(value ?? '').trim().toLocaleLowerCase();
+  if (state === 'approved') return 'expert_reviewed';
+  return VALID_REVIEW_STATES.includes(state as ReviewState) ? (state as ReviewState) : 'draft';
+}
 
 function normalizeEntry(entry: LexiconEntry): LexiconEntry {
   return {
     ...entry,
     maturity: entry.maturity ?? [],
-    review_state: entry.review_state ?? 'draft',
+    review_state: normalizeReviewState(entry.review_state),
     assets: entry.assets ?? [],
     literature: entry.literature ?? [],
     relationships: entry.relationships ?? [],
@@ -42,13 +66,102 @@ function normalizeEntry(entry: LexiconEntry): LexiconEntry {
   };
 }
 
+function hasContent(value: unknown): boolean {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  return true;
+}
+
+const FAMOUS_OVERLAY_FIELDS: Array<keyof LexiconEntry> = [
+  'pronunciation',
+  'category',
+  'subcategory',
+  'quick_definition',
+  'expanded_definition',
+  'scope_note',
+  'synonyms',
+  'related_terminology',
+  'contrasting_terms',
+  'broader_concept',
+  'narrower_concepts',
+  'etymology',
+  'anatomical_context',
+  'morphological_context',
+  'mechanism_blocks',
+  'significance_blocks',
+  'evolution_blocks',
+  'variation_notes',
+  'character_states',
+  'example_taxa',
+  'identification_significance',
+  'identification_cautions',
+  'identification_companion_characters',
+  'conservation',
+  'assets',
+  'research_questions',
+  'literature',
+  'literature_status',
+  'relationships',
+  'definition_versions',
+  'calyx_notes',
+  'vision_lab_notes',
+  'funding',
+];
+
+/**
+ * The Concept Registry remains authoritative for identity, reviewed definitions,
+ * review state and provenance. The Famous build is retained as a presentation /
+ * migration overlay only where the canonical record has not yet migrated a field.
+ * Every overlaid field is recorded explicitly on the returned entry.
+ */
+function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: LexiconEntry): LexiconEntry {
+  const reviewed = normalizeEntry(canonical);
+  if (!fallback) return reviewed;
+
+  const migrated = normalizeEntry(fallback);
+  const merged = { ...migrated, ...reviewed } as LexiconEntry;
+  const overlayFields: string[] = [];
+
+  for (const field of FAMOUS_OVERLAY_FIELDS) {
+    if (!hasContent((reviewed as Record<string, unknown>)[field as string]) && hasContent((migrated as Record<string, unknown>)[field as string])) {
+      (merged as Record<string, unknown>)[field as string] = (migrated as Record<string, unknown>)[field as string];
+      overlayFields.push(field as string);
+    }
+  }
+
+  merged.id = reviewed.id;
+  merged.concept_id = reviewed.concept_id ?? reviewed.id;
+  merged.concept_uri = reviewed.concept_uri;
+  merged.slug = reviewed.slug;
+  merged.preferred_term = reviewed.preferred_term;
+  merged.review_state = reviewed.review_state;
+  merged.provenance = reviewed.provenance;
+  merged.source_system = reviewed.source_system ?? 'oc_concepts';
+  merged.source_record_id = reviewed.source_record_id ?? reviewed.id;
+  merged.date_created = reviewed.date_created;
+  merged.date_revised = reviewed.date_revised;
+  merged.maturity = [...new Set([...(migrated.maturity ?? []), ...(reviewed.maturity ?? [])])];
+
+  if (overlayFields.length) {
+    merged.migration_overlay = {
+      source_system: 'Famous AI Illustrated Orchid Lexicon migration',
+      fields: overlayFields.sort(),
+    };
+  } else {
+    delete merged.migration_overlay;
+  }
+  return normalizeEntry(merged);
+}
+
 function mergeBySlug(fallback: LexiconEntry[], canonical: LexiconEntry[]): LexiconEntry[] {
+  const fallbackBySlug = new Map(fallback.map((entry) => [entry.slug, normalizeEntry(entry)]));
   const merged = new Map<string, LexiconEntry>();
-  fallback.forEach((entry) => merged.set(entry.slug, normalizeEntry(entry)));
-  canonical.forEach((entry) => {
-    const prior = merged.get(entry.slug);
-    merged.set(entry.slug, normalizeEntry({ ...prior, ...entry, provenance: entry.provenance ?? prior?.provenance }));
-  });
+
+  fallbackBySlug.forEach((entry, slug) => merged.set(slug, entry));
+  canonical.forEach((entry) => merged.set(entry.slug, mergeCanonicalEntry(fallbackBySlug.get(entry.slug), entry)));
+
   return [...merged.values()].sort((a, b) => a.preferred_term.localeCompare(b.preferred_term));
 }
 
@@ -63,6 +176,15 @@ async function requestCanonical(path = ''): Promise<CanonicalLexiconEnvelope> {
   });
   if (!response.ok) throw new Error(`Canonical lexicon API ${response.status}`);
   return response.json() as Promise<CanonicalLexiconEnvelope>;
+}
+
+async function requestCanonicalEntry(slug: string): Promise<CanonicalLexiconEntryEnvelope> {
+  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${LEXICON_API_BASE}/entries/${encodeURIComponent(slug)}`, {
+    credentials: 'include',
+    headers: { Accept: 'application/json' },
+  });
+  if (!response.ok) throw new Error(`Canonical lexicon entry API ${response.status}`);
+  return response.json() as Promise<CanonicalLexiconEntryEnvelope>;
 }
 
 export async function getEntries(): Promise<LexiconEntry[]> {
@@ -82,8 +204,31 @@ export async function getEntries(): Promise<LexiconEntry[]> {
 }
 
 export async function getEntry(slug: string): Promise<LexiconEntry | undefined> {
-  const entries = await getEntries();
-  return entries.find((entry) => entry.slug === slug);
+  const normalizedSlug = slug.trim().toLocaleLowerCase();
+  const fallback = famousFallback.find((entry) => entry.slug === normalizedSlug);
+
+  try {
+    const payload = await requestCanonicalEntry(normalizedSlug);
+    lastSource = fallback ? 'canonical_plus_famous_fallback' : 'canonical';
+    return mergeCanonicalEntry(fallback, payload.entry);
+  } catch {
+    // Backward-compatible staggered deployment path: before the direct entry
+    // route is live, use canonical search rather than dropping immediately to
+    // a Famous-only entry.
+    try {
+      const payload = await requestCanonical(`/search?q=${encodeURIComponent(normalizedSlug.replace(/-/g, ' '))}&limit=50`);
+      const canonical = (payload.entries ?? []).map(normalizeEntry).find((entry) => entry.slug === normalizedSlug);
+      if (canonical) {
+        lastSource = fallback ? 'canonical_plus_famous_fallback' : 'canonical';
+        return mergeCanonicalEntry(fallback, canonical);
+      }
+    } catch {
+      // The static Famous migration remains a resilient UI fallback when the
+      // canonical service itself is unavailable. It is never a write authority.
+    }
+    lastSource = 'famous_fallback';
+    return fallback ? normalizeEntry(fallback) : undefined;
+  }
 }
 
 export async function searchEntries(q: string): Promise<LexiconEntry[]> {
@@ -93,7 +238,7 @@ export async function searchEntries(q: string): Promise<LexiconEntry[]> {
     const payload = await requestCanonical(`/search?q=${encodeURIComponent(q)}&limit=200`);
     const canonical = (payload.entries ?? []).map(normalizeEntry);
     const localMatches = famousFallback.filter((entry) =>
-      [entry.preferred_term, entry.quick_definition ?? '', ...(entry.synonyms ?? [])]
+      [entry.preferred_term, entry.quick_definition ?? '', entry.expanded_definition ?? '', ...(entry.synonyms ?? [])]
         .join(' ')
         .toLocaleLowerCase()
         .includes(needle),
@@ -104,7 +249,7 @@ export async function searchEntries(q: string): Promise<LexiconEntry[]> {
     const all = famousFallback.map(normalizeEntry);
     lastSource = 'famous_fallback';
     return all.filter((entry) =>
-      [entry.preferred_term, entry.quick_definition ?? '', ...(entry.synonyms ?? [])]
+      [entry.preferred_term, entry.quick_definition ?? '', entry.expanded_definition ?? '', ...(entry.synonyms ?? [])]
         .join(' ')
         .toLocaleLowerCase()
         .includes(needle),
