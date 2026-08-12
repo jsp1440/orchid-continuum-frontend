@@ -1,6 +1,10 @@
-import { resupination as famousBaseResupination } from './lexiconEntries';
+import { entries as famousBaseEntries, resupination as famousBaseResupination } from './lexiconEntries';
+import { famousExportRecordOverrides } from './famousExportRecordOverrides';
 import { famousResupinationEnrichment } from './famousResupinationEnrichment';
 import type { LexiconEntry } from './types';
+
+const FULL_EXPORT_SOURCE = 'Famous AI Illustrated Orchid Lexicon full-export migration fallback';
+const FULL_EXPORT_PROVENANCE = 'Uploaded Famous AI Illustrated Orchid Lexicon full export (2026-08-11)';
 
 /**
  * The first GitHub migration retained the Resupination identity/definition but
@@ -11,7 +15,7 @@ import type { LexiconEntry } from './types';
  */
 Object.assign(famousBaseResupination, famousResupinationEnrichment, {
   review_state: 'draft' as const,
-  source_system: 'Famous AI Illustrated Orchid Lexicon full-export migration fallback',
+  source_system: FULL_EXPORT_SOURCE,
 });
 
 /**
@@ -35,9 +39,9 @@ const recovered = (
   maturity: ['core_definition'],
   review_state: 'draft',
   certainty_summary: 'literature_review_pending',
-  source_system: 'Famous AI Illustrated Orchid Lexicon full-export migration fallback',
+  source_system: FULL_EXPORT_SOURCE,
   provenance: {
-    source: 'Uploaded Famous AI Illustrated Orchid Lexicon full export (2026-08-11)',
+    source: FULL_EXPORT_PROVENANCE,
     source_record_id: `famous-recovered-${slug}`,
     validation_status: 'draft',
     confidence: 'not_assessed',
@@ -117,3 +121,25 @@ export const famousLexiconSupplement: LexiconEntry[] = [
     { related_terminology: ['Epiphyte'] },
   ),
 ];
+
+/**
+ * Apply the exact term-level values recovered from the uploaded full export to
+ * the draft fallback inventory. This intentionally mutates only migration data;
+ * the canonical adapter later strips draft scientific/review fields whenever an
+ * ACTIVE + APPROVED Concept Registry record exists for the same slug.
+ */
+for (const entry of [...famousBaseEntries, ...famousLexiconSupplement]) {
+  const recoveredFields = famousExportRecordOverrides[entry.slug];
+  if (!recoveredFields) continue;
+  Object.assign(entry, recoveredFields, {
+    review_state: 'draft' as const,
+    source_system: FULL_EXPORT_SOURCE,
+    provenance: {
+      ...(entry.provenance ?? {}),
+      source: FULL_EXPORT_PROVENANCE,
+      source_record_id: entry.source_record_id ?? entry.id,
+      validation_status: 'draft' as const,
+      confidence: 'not_assessed' as const,
+    },
+  });
+}
