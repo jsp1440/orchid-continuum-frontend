@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   listCalyxConversations: vi.fn(async () => ({ conversations: [], persistence_mode: "memory" })),
   sendCalyxTurn: vi.fn(),
   getBrainMission: vi.fn(),
+  startListening: vi.fn(),
+  stopListening: vi.fn(),
   pushTranscript: (_text: string) => undefined,
 }));
 
@@ -28,8 +30,8 @@ vi.mock("@/hooks/useCalyxSpeechInput", () => ({
       state: "unsupported",
       interimTranscript: "",
       error: null,
-      startListening: vi.fn(),
-      stopListening: vi.fn(),
+      startListening: mocks.startListening,
+      stopListening: mocks.stopListening,
     };
   },
 }));
@@ -186,6 +188,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     mocks.listCalyxConversations.mockReset();
     mocks.sendCalyxTurn.mockReset();
     mocks.getBrainMission.mockReset();
+    mocks.startListening.mockReset();
+    mocks.stopListening.mockReset();
     mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
     mocks.loadCalyxWorkspace.mockClear();
   });
@@ -664,5 +668,58 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+
+  it("stops active voice capture before sending a turn", async () => {
+    const createdConversation = buildConversation("voice-stop-thread");
+    const refreshedConversation = buildConversation("voice-stop-thread", [
+      {
+        message_id: "operator-1",
+        conversation_id: "voice-stop-thread",
+        role: "operator",
+        content: "Voice turn",
+        created_at: "2026-08-10T00:00:02Z",
+      },
+      {
+        message_id: "calyx-1",
+        conversation_id: "voice-stop-thread",
+        role: "calyx",
+        content: "Voice handled.",
+        created_at: "2026-08-10T00:00:03Z",
+      },
+    ]);
+
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn.mockResolvedValue({
+      conversation_id: "voice-stop-thread",
+      operator_message: refreshedConversation.messages[0],
+      calyx_message: refreshedConversation.messages[1],
+      answer: "Voice handled.",
+      provider: { name: "deterministic-governed", model: "calyx-governed-summary-v1", request_hash: "hash" },
+      research: { casual: false, mission: null, mission_error: null, retrieval: {} },
+      persistence_mode: "postgres",
+      epistemic_policy: { continuum_first: true },
+    });
+    mocks.getCalyxConversation.mockResolvedValue(refreshedConversation);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Voice turn");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(mocks.stopListening).toHaveBeenCalledTimes(1);
   });
 });

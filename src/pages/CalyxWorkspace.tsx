@@ -418,6 +418,7 @@ export default function CalyxWorkspace() {
     setWorkspaceStatus(null);
     setMessage("");
     cancelSpeech();
+    stopListening();
 
     let targetConversationId: string | null = null;
     let turnCommitted = false;

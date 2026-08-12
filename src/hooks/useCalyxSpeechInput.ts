@@ -61,29 +61,44 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const recognitionSessionRef = useRef(0);
   const onResultRef = useRef(onResult);
 
   onResultRef.current = onResult;
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    const activeRecognition = recognitionRef.current;
+    if (!activeRecognition) return;
+    recognitionSessionRef.current += 1;
+    activeRecognition.onstart = null;
+    activeRecognition.onresult = null;
+    activeRecognition.onerror = null;
+    activeRecognition.onend = null;
+    recognitionRef.current = null;
+    setState("idle");
+    setInterimTranscript("");
+    activeRecognition.stop();
   }, []);
 
   const startListening = useCallback(() => {
-    if (!speechRecognition || state === "listening") return;
+    if (!speechRecognition || recognitionRef.current) return;
 
     const recognition = new speechRecognition();
+    const sessionId = recognitionSessionRef.current + 1;
+    recognitionSessionRef.current = sessionId;
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
+      if (recognitionSessionRef.current !== sessionId) return;
       setError(null);
       setState("listening");
       setInterimTranscript("");
     };
 
     recognition.onresult = (event) => {
+      if (recognitionSessionRef.current !== sessionId || recognitionRef.current !== recognition) return;
       let interim = "";
       let finalTranscript = "";
 
@@ -102,6 +117,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     };
 
     recognition.onerror = (event) => {
+      if (recognitionSessionRef.current !== sessionId || recognitionRef.current !== recognition) return;
       setError(
         event.error === "not-allowed"
           ? "Microphone access was denied."
@@ -111,10 +127,19 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
       );
       setState("idle");
       setInterimTranscript("");
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
       recognitionRef.current = null;
     };
 
     recognition.onend = () => {
+      if (recognitionSessionRef.current !== sessionId || recognitionRef.current !== recognition) return;
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
       setState("idle");
       setInterimTranscript("");
       recognitionRef.current = null;
@@ -125,14 +150,27 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     try {
       recognition.start();
     } catch {
+      if (recognitionSessionRef.current !== sessionId) return;
       setError("Voice input could not start.");
+      recognition.onstart = null;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
       recognitionRef.current = null;
       setState("idle");
     }
-  }, [speechRecognition, state]);
+  }, [speechRecognition]);
 
   useEffect(() => () => {
-    recognitionRef.current?.stop();
+    recognitionSessionRef.current += 1;
+    const activeRecognition = recognitionRef.current;
+    if (!activeRecognition) return;
+    activeRecognition.onstart = null;
+    activeRecognition.onresult = null;
+    activeRecognition.onerror = null;
+    activeRecognition.onend = null;
+    recognitionRef.current = null;
+    activeRecognition.stop();
   }, []);
 
   return { state, interimTranscript, error, startListening, stopListening };
