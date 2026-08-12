@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Database, FileCheck2, Fingerprint } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, FileCheck2, Fingerprint, ShieldAlert } from "lucide-react";
 
 import {
   finalizeMatrixReport,
+  getMatrixPersistencePreflight,
   getMatrixPersistenceStatus,
   listMatrixReports,
+  type MatrixPersistencePreflight,
   type MatrixPersistenceStatus,
   type MatrixReportSummary,
 } from "@/lib/matrixReports";
@@ -18,21 +20,59 @@ function shortDigest(value: string): string {
   return value.length > 24 ? `${value.slice(0, 12)}…${value.slice(-10)}` : value;
 }
 
+function readinessCopy(
+  persistence: MatrixPersistenceStatus,
+  preflight: MatrixPersistencePreflight | null,
+): { title: string; detail: string; tone: "durable" | "ready" | "blocked" | "ephemeral" } {
+  if (persistence.durable === true && persistence.ready === true) {
+    return {
+      title: "Durable Matrix persistence is active",
+      detail: "Session and report state are using the governed durable PostgreSQL store.",
+      tone: "durable",
+    };
+  }
+  if (preflight?.activation_ready === true) {
+    return {
+      title: "Durable persistence is activation-ready but not enabled",
+      detail: "The target PostgreSQL schema satisfies migration 612, but durable mode remains a separate governed deployment action.",
+      tone: "ready",
+    };
+  }
+  if (preflight?.database_url_configured === true) {
+    const blockers = preflight.blockers?.length
+      ? ` Blockers: ${preflight.blockers.join(", ")}.`
+      : " The migration-612 contract is not currently satisfied.";
+    return {
+      title: "Durable persistence preflight is blocked",
+      detail: `${blockers.trim()} No activation is being attempted from this interface.`,
+      tone: "blocked",
+    };
+  }
+  return {
+    title: "This Matrix session is not durably persisted",
+    detail: persistence.warning || persistence.error || "The current persistence mode may not survive a host restart.",
+    tone: "ephemeral",
+  };
+}
+
 export default function MatrixReportPanel({ sessionId, disabled }: Props) {
   const [reports, setReports] = useState<MatrixReportSummary[]>([]);
   const [persistence, setPersistence] = useState<MatrixPersistenceStatus | null>(null);
+  const [preflight, setPreflight] = useState<MatrixPersistencePreflight | null>(null);
   const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
   const [message, setMessage] = useState(
     "Freeze the current evidence state into a content-addressed report. This does not publish or verify an identification.",
   );
 
   async function refresh(): Promise<void> {
-    const [reportItems, persistenceState] = await Promise.all([
+    const [reportItems, persistenceState, preflightState] = await Promise.all([
       listMatrixReports(sessionId),
       getMatrixPersistenceStatus(),
+      getMatrixPersistencePreflight(),
     ]);
     setReports(reportItems);
     setPersistence(persistenceState);
+    setPreflight(preflightState);
   }
 
   useEffect(() => {
@@ -60,7 +100,9 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
     }
   }
 
-  const durableReady = persistence?.durable === true && persistence.ready === true;
+  const readiness = persistence ? readinessCopy(persistence, preflight) : null;
+  const durableReady = readiness?.tone === "durable";
+  const activationReady = readiness?.tone === "ready";
 
   return (
     <section className="rounded-3xl border bg-card p-6 sm:p-8">
@@ -75,20 +117,39 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
         <FileCheck2 className="h-7 w-7 text-emerald-700" />
       </div>
 
-      {persistence && (
-        <div className={`mt-5 rounded-2xl border p-4 ${durableReady ? "bg-background" : "bg-amber-50/50"}`}>
+      {persistence && readiness && (
+        <div className={`mt-5 rounded-2xl border p-4 ${durableReady ? "bg-background" : activationReady ? "bg-emerald-50/40" : "bg-amber-50/50"}`}>
           <div className="flex items-center gap-2 text-sm font-semibold">
-            {durableReady ? <Database className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4" />}
-            {durableReady ? "Durable Matrix persistence is active" : "This Matrix session is not durably persisted"}
+            {durableReady ? (
+              <Database className="h-4 w-4 text-emerald-700" />
+            ) : activationReady ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-700" />
+            ) : preflight?.database_url_configured ? (
+              <ShieldAlert className="h-4 w-4" />
+            ) : (
+              <AlertTriangle className="h-4 w-4" />
+            )}
+            {readiness.title}
           </div>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
-            Mode: {persistence.mode}. {durableReady
-              ? "Session and report state are using the governed durable store."
-              : persistence.warning || persistence.error || "The current persistence mode may not survive a host restart."}
+            Mode: {persistence.mode}. {readiness.detail}
           </p>
+          {preflight && (
+            <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+              <span>Database URL: {preflight.database_url_configured ? "configured" : "not configured"}</span>
+              <span>Connectivity: {preflight.connectivity ? "confirmed" : "not confirmed"}</span>
+              <span>Migration 612 schema: {preflight.migration_612_schema_ready ? "ready" : "not ready"}</span>
+              <span>Activation flag: {preflight.durable_requested ? "requested" : "not requested"}</span>
+            </div>
+          )}
           {!durableReady && (
             <p className="mt-2 text-xs font-medium">
               A reproducible digest identifies the evidence content, but it does not make an ephemeral server record restart-durable.
+            </p>
+          )}
+          {activationReady && (
+            <p className="mt-2 text-xs font-medium text-emerald-800">
+              This screen is informational only. Enabling durable mode remains a governed deployment action outside the browser.
             </p>
           )}
         </div>
