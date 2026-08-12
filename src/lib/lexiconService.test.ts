@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { mergeCanonicalAndFallback, type CanonicalLexiconResponse } from './lexiconService';
+import { entries as famousBaseEntries } from '@/data/lexiconEntries';
+import { famousLexiconSupplement } from '@/data/famousLexiconSupplement';
 import type { LexiconEntry } from '@/data/types';
 
 const fallback: LexiconEntry[] = [
@@ -57,6 +59,30 @@ const canonical: CanonicalLexiconResponse = {
     },
   ],
 };
+
+describe('complete Famous export migration inventory', () => {
+  it('restores all 45 exported terms without duplicate slugs', () => {
+    const complete = [...famousBaseEntries, ...famousLexiconSupplement];
+    const slugs = complete.map((entry) => entry.slug);
+
+    expect(complete).toHaveLength(45);
+    expect(new Set(slugs).size).toBe(45);
+    expect(slugs).toEqual(
+      expect.arrayContaining([
+        'form',
+        'symmetry',
+        'texture',
+        'substance',
+        'sensu-lato',
+        'sensu-stricto',
+        'pollinator-syndrome',
+        'deceptive-pollination',
+        'keiki',
+        'bark-mix',
+      ]),
+    );
+  });
+});
 
 describe('mergeCanonicalAndFallback', () => {
   it('keeps canonical identity, reviewed definitions and provenance authoritative by slug', () => {
