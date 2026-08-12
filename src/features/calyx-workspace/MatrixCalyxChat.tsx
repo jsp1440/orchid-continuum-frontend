@@ -1,6 +1,7 @@
 import { FormEvent, useMemo, useState } from 'react';
 
 import { askCalyx, type CalyxResponse } from '@/lib/calyxService';
+import { CalyxProviderModeBadge } from './CalyxProviderModeBadge';
 
 export function MatrixCalyxChat({
   sourceConcept,
@@ -63,8 +64,13 @@ export function MatrixCalyxChat({
 
   return (
     <section className="rounded-2xl border bg-card p-5" aria-label="Speak with Calyx about matrix identification">
-      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Speak with Calyx</p>
-      <h2 className="mt-1 text-xl font-semibold">Identification conversation</h2>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-700">Speak with Calyx</p>
+          <h2 className="mt-1 text-xl font-semibold">Identification conversation</h2>
+        </div>
+        <CalyxProviderModeBadge />
+      </div>
       <p className="mt-2 text-sm text-muted-foreground">
         This continues the adaptive Calyx session used by the lexicon. The current Matrix snapshot is supplied only to resolve references such as “these observations” and “leading candidates”; it is not scientific evidence, and candidate rankings are not verified identifications.
       </p>
