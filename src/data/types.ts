@@ -248,8 +248,15 @@ export interface DefinitionVersion {
   sources?: string[];
 }
 
+export interface MigrationOverlay {
+  source_system: 'Famous AI Illustrated Orchid Lexicon migration';
+  fields: string[];
+}
+
 export interface LexiconEntry {
   id: string;
+  concept_id?: string;
+  concept_uri?: string;
   slug: string;
   preferred_term: string;
   pronunciation?: string;
@@ -294,6 +301,7 @@ export interface LexiconEntry {
   import_batch?: string;
   date_created?: string;
   date_revised?: string;
+  migration_overlay?: MigrationOverlay;
 }
 
 export interface LexiconStats {
