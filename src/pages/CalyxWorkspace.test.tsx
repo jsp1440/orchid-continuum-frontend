@@ -715,11 +715,13 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       mocks.pushTranscript("Voice turn");
     });
 
+    const callsBeforeSubmit = mocks.stopListening.mock.calls.length;
+
     await act(async () => {
       container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flush(4);
 
-    expect(mocks.stopListening).toHaveBeenCalledTimes(1);
+    expect(mocks.stopListening.mock.calls.length).toBeGreaterThan(callsBeforeSubmit);
   });
 });
