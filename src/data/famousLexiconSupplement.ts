@@ -1,4 +1,18 @@
+import { resupination as famousBaseResupination } from './lexiconEntries';
+import { famousResupinationEnrichment } from './famousResupinationEnrichment';
 import type { LexiconEntry } from './types';
+
+/**
+ * The first GitHub migration retained the Resupination identity/definition but
+ * stripped many richer layers that are present in the complete uploaded source
+ * export. Enrich that same draft object in place so the runtime still contains
+ * one resupination slug and direct fallback lookup sees the recovered layers.
+ * Canonical ACTIVE + APPROVED data still supersedes these scientific fields.
+ */
+Object.assign(famousBaseResupination, famousResupinationEnrichment, {
+  review_state: 'draft' as const,
+  source_system: 'Famous AI Illustrated Orchid Lexicon full-export migration fallback',
+});
 
 /**
  * Ten lexicon records recovered from the complete Famous AI Illustrated Orchid
