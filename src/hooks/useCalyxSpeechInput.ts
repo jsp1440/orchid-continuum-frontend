@@ -70,7 +70,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   }, []);
 
   const startListening = useCallback(() => {
-    if (!speechRecognition || state === "listening") return;
+    if (!speechRecognition || state === "listening" || recognitionRef.current) return;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;

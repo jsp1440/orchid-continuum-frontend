@@ -659,10 +659,10 @@ export default function CalyxWorkspace() {
                   <details className="text-xs text-muted-foreground">
                     <summary className="cursor-pointer">Conversation settings</summary>
                     <label className="mt-2 block font-medium" htmlFor="calyx-project">Research project ID</label>
-                    <input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" id="calyx-project" maxLength={200} onChange={(event) => setProjectId(event.target.value)} value={projectId} />
+                    <input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} id="calyx-project" maxLength={200} onChange={(event) => setProjectId(event.target.value)} value={projectId} />
                   </details>
-                  {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
-                  <button className="rounded-full border px-3 py-1 text-xs hover:bg-muted" onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button>
+                  {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"} disabled:cursor-not-allowed disabled:opacity-60`} disabled={submitting && micState !== "listening"} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
+                  <button className="rounded-full border px-3 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button>
                   <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
                 </div>
@@ -698,14 +698,14 @@ export default function CalyxWorkspace() {
                   <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">History</p>
                   <h2 className="mt-2 text-2xl font-semibold">Prior CALYX threads</h2>
                 </div>
-                <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted" onClick={() => void refreshConversationHistory()} type="button">Refresh</button>
+                <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} onClick={() => void refreshConversationHistory()} type="button">Refresh</button>
               </div>
               {historyError ? <p className="mt-4 text-sm text-muted-foreground">{historyError}</p> : null}
               {conversations.length ? (
                 <ul className="mt-4 space-y-3">
                   {conversations.map((thread) => (
                     <li className="rounded-xl border p-3" key={thread.conversation_id}>
-                      <button className="w-full text-left" onClick={() => void loadConversation(thread.conversation_id)} type="button">
+                      <button className="w-full text-left disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} onClick={() => void loadConversation(thread.conversation_id)} type="button">
                         <p className="font-medium">{thread.title || thread.conversation_id}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           {new Date(thread.created_at).toLocaleString()} · {thread.message_count ?? 0} messages
@@ -730,11 +730,11 @@ export default function CalyxWorkspace() {
               {uploadedFiles.length ? <ul className="mt-4 space-y-3">{uploadedFiles.map((file, index) => (
                 <li className={`rounded-xl border p-3 ${selectedAttachmentIndex === index ? "border-primary bg-primary/5" : ""}`} key={`${file.name}-${file.size}-${index}`}>
                   <div className="flex items-start justify-between gap-3">
-                    <button className="min-w-0 flex-1 text-left" onClick={() => setSelectedAttachmentIndex(index)} type="button">
+                    <button className="min-w-0 flex-1 text-left disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} onClick={() => setSelectedAttachmentIndex(index)} type="button">
                       <p className="truncate font-medium">{file.name}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{formatUploadedFileSize(file.size)} · {file.type || "Unknown type"}</p>
                     </button>
-                    <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => removeFile(index)} type="button">Remove</button>
+                    <button className="text-xs text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60" disabled={submitting} onClick={() => removeFile(index)} type="button">Remove</button>
                   </div>
                 </li>
               ))}</ul> : <p className="mt-4 text-sm text-muted-foreground">Attach a PDF, image, or dataset file to keep it visible beside the conversation tonight. Server-side ingestion is blocked until the canonical file contract exists.</p>}

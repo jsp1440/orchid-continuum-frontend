@@ -554,6 +554,46 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     await flush(4);
   });
 
+  it("locks context-changing controls while a turn is submitting", async () => {
+    const sendOperation = deferred<ReturnType<typeof buildTurnResult>>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("lock-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(sendOperation.promise);
+    mocks.listCalyxConversations.mockResolvedValue({
+      conversations: [
+        {
+          conversation_id: "history-thread",
+          title: "Prior Vision Thread",
+          created_at: "2026-08-10T00:00:00Z",
+          message_count: 2,
+        },
+      ],
+      persistence_mode: "postgres",
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    await act(async () => {
+      mocks.pushTranscript("Lock turn context");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+
+    expect((container.querySelector("#calyx-project") as HTMLInputElement).disabled).toBe(true);
+    expect(getButton(container, "📎 Attach").hasAttribute("disabled")).toBe(true);
+    expect(getButton(container, "Refresh").hasAttribute("disabled")).toBe(true);
+    expect(getButton(container, "Prior Vision Thread").hasAttribute("disabled")).toBe(true);
+  });
+
   it("does not let an obsolete request release a newer submission lock", async () => {
     const firstTurn = deferred<ReturnType<typeof buildTurnResult>>();
     const secondTurn = deferred<ReturnType<typeof buildTurnResult>>();
