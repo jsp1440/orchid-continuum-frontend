@@ -61,26 +61,34 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   const [interimTranscript, setInterimTranscript] = useState("");
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<BrowserSpeechRecognition | null>(null);
+  const stopRequestedRef = useRef(false);
   const onResultRef = useRef(onResult);
 
   onResultRef.current = onResult;
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    stopRequestedRef.current = true;
+    const activeRecognition = recognitionRef.current;
+    recognitionRef.current = null;
+    activeRecognition?.stop();
+    setInterimTranscript("");
+    setState("idle");
   }, []);
 
   const startListening = useCallback(() => {
-    if (!speechRecognition || state === "listening") return;
+    if (!speechRecognition || state === "listening" || recognitionRef.current) return;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = "en-US";
+    stopRequestedRef.current = false;
+    recognitionRef.current = recognition;
+    setState("listening");
+    setInterimTranscript("");
 
     recognition.onstart = () => {
       setError(null);
-      setState("listening");
-      setInterimTranscript("");
     };
 
     recognition.onresult = (event) => {
@@ -102,37 +110,43 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     };
 
     recognition.onerror = (event) => {
+      const isGracefulStop = stopRequestedRef.current && (event.error === "aborted" || event.error === "no-speech");
       setError(
-        event.error === "not-allowed"
-          ? "Microphone access was denied."
-          : event.error === "no-speech"
-            ? "No speech was detected."
-            : "Voice input could not start.",
+        isGracefulStop
+          ? null
+          : event.error === "not-allowed"
+            ? "Microphone access was denied."
+            : event.error === "no-speech"
+              ? "No speech was detected."
+              : "Voice input could not start.",
       );
       setState("idle");
       setInterimTranscript("");
-      recognitionRef.current = null;
+      stopRequestedRef.current = false;
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
     };
 
     recognition.onend = () => {
       setState("idle");
       setInterimTranscript("");
-      recognitionRef.current = null;
+      stopRequestedRef.current = false;
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
     };
-
-    recognitionRef.current = recognition;
 
     try {
       recognition.start();
     } catch {
       setError("Voice input could not start.");
-      recognitionRef.current = null;
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
       setState("idle");
+      stopRequestedRef.current = false;
     }
   }, [speechRecognition, state]);
 
   useEffect(() => () => {
+    stopRequestedRef.current = true;
     recognitionRef.current?.stop();
+    recognitionRef.current = null;
   }, []);
 
   return { state, interimTranscript, error, startListening, stopListening };
