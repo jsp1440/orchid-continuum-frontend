@@ -45,6 +45,15 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
 
 const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
 
+const CALYX_STARTER_PROMPTS: string[] = [
+  "What do you need Calyx Vision to be able to see and understand?",
+  "Explain the peloton and its role in orchid-mycorrhizal symbiosis.",
+  "What are the most significant evidence gaps in the Orchid Continuum today?",
+  "How do pollinator relationships drive orchid speciation?",
+  "What scientific literature would most strengthen the Knowledge Graph right now?",
+  "How should I think about habitat requirements for epiphytic orchid conservation?",
+];
+
 function useElapsedSeconds(active: boolean): number {
   const [elapsed, setElapsed] = useState(0);
 
@@ -634,10 +643,38 @@ export default function CalyxWorkspace() {
           </div>
         </header>
 
+        {!loading && (snapshot.errors.length > 0 || snapshot.orchestratorState === "authentication_required") ? (
+          <div className={`rounded-xl border px-4 py-3 text-sm ${snapshot.orchestratorState === "authentication_required" ? "border-amber-300 bg-amber-50 text-amber-900" : "border-red-200 bg-red-50 text-red-900"}`} role="alert">
+            {snapshot.orchestratorState === "authentication_required" ? (
+              <p>Sign in at <Link className="underline" to="/mission-control">Mission Control</Link> to enable the governed orchestrator and conversation history.</p>
+            ) : (
+              <p>Some backend services are unreachable. Calyx will still answer, but governed research missions may be limited. {snapshot.errors[0]}</p>
+            )}
+          </div>
+        ) : null}
+
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <section className="rounded-xl border bg-card">
             <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
-              {!messages.length ? <div className="mx-auto max-w-2xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Try “What do you need Calyx Vision to be able to see and understand?” and continue naturally with follow-up questions.</p></div> : messages.map((turn) => (
+              {!messages.length ? (
+                <div className="mx-auto max-w-2xl py-10 text-center">
+                  <h2 className="text-2xl font-semibold">What would you like to work on?</h2>
+                  <p className="mt-3 text-sm text-muted-foreground">Type or speak a question, or choose a prompt below to begin.</p>
+                  <ul className="mt-6 grid gap-2 text-left sm:grid-cols-2" aria-label="Suggested prompts">
+                    {CALYX_STARTER_PROMPTS.map((prompt) => (
+                      <li key={prompt}>
+                        <button
+                          className="w-full rounded-xl border bg-background p-3 text-left text-sm transition-colors hover:bg-muted"
+                          onClick={() => setMessage(prompt)}
+                          type="button"
+                        >
+                          {prompt}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : messages.map((turn) => (
                 <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
                   <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                     {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
