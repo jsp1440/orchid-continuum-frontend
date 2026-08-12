@@ -57,6 +57,7 @@ import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
 import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
+import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import HomepageReadiness from "./pages/HomepageReadiness";
 
@@ -98,6 +99,7 @@ const App = () => (
                   <Route path="/intelligence-center" element={<IntelligenceCenter />} />
                   <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
                   <Route path="/calyx-science" element={<CalyxScienceStatus />} />
+                  <Route path="/mission-control/matrix-registry-review" element={<ProtectedRoute title="Matrix Registry Review · authenticated reviewers" description="Sign in to derive immutable Matrix registry versions from explicit reviewed canonical concept mappings."><MatrixRegistryConceptReview /></ProtectedRoute>} />
                   <Route path="/mission-control/readiness/homepage" element={<HomepageReadiness />} />
                   <Route path="/mission-control/knowledge-graph-readiness" element={<HomepageReadiness />} />
                   <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
