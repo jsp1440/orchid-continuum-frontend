@@ -82,6 +82,15 @@ describe('complete Famous export migration inventory', () => {
       ]),
     );
   });
+
+  it('keeps every recovered record explicitly draft and migration-sourced', () => {
+    expect(famousLexiconSupplement).toHaveLength(10);
+    for (const entry of famousLexiconSupplement) {
+      expect(entry.review_state).toBe('draft');
+      expect(entry.source_system).toContain('migration fallback');
+      expect(entry.provenance?.validation_status).toBe('draft');
+    }
+  });
 });
 
 describe('mergeCanonicalAndFallback', () => {
