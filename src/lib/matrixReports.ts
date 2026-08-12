@@ -1,5 +1,16 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
+export type MatrixPersistenceStatus = {
+  mode: string;
+  durable: boolean;
+  ready: boolean;
+  durable_requested?: boolean;
+  warning?: string;
+  error?: string | null;
+  schema?: string;
+  activation_boundary?: string;
+};
+
 export type MatrixReportSummary = {
   report_id: string;
   content_digest_sha256: string;
@@ -56,6 +67,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(`Matrix report API ${response.status}: ${detail}`);
   }
   return payload as T;
+}
+
+export async function getMatrixPersistenceStatus(): Promise<MatrixPersistenceStatus> {
+  return request<MatrixPersistenceStatus>("/api/matrix-identification/sessions/persistence-status");
 }
 
 export async function finalizeMatrixReport(sessionId: string): Promise<{ created: boolean; report: MatrixReportRecord }> {

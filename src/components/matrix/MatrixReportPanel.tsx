@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
-import { FileCheck2, Fingerprint } from "lucide-react";
+import { AlertTriangle, Database, FileCheck2, Fingerprint } from "lucide-react";
 
 import {
   finalizeMatrixReport,
+  getMatrixPersistenceStatus,
   listMatrixReports,
+  type MatrixPersistenceStatus,
   type MatrixReportSummary,
 } from "@/lib/matrixReports";
 
@@ -18,17 +20,26 @@ function shortDigest(value: string): string {
 
 export default function MatrixReportPanel({ sessionId, disabled }: Props) {
   const [reports, setReports] = useState<MatrixReportSummary[]>([]);
+  const [persistence, setPersistence] = useState<MatrixPersistenceStatus | null>(null);
   const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
   const [message, setMessage] = useState(
     "Freeze the current evidence state into a content-addressed report. This does not publish or verify an identification.",
   );
 
   async function refresh(): Promise<void> {
-    setReports(await listMatrixReports(sessionId));
+    const [reportItems, persistenceState] = await Promise.all([
+      listMatrixReports(sessionId),
+      getMatrixPersistenceStatus(),
+    ]);
+    setReports(reportItems);
+    setPersistence(persistenceState);
   }
 
   useEffect(() => {
-    void refresh().catch(() => undefined);
+    void refresh().catch((error) => {
+      setStatus("error");
+      setMessage(error instanceof Error ? error.message : "Unable to verify Matrix persistence state.");
+    });
   }, [sessionId]);
 
   async function finalize(): Promise<void> {
@@ -41,13 +52,15 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
       setMessage(
         result.created
           ? `Evidence report created for revision ${result.report.core.session_revision}.`
-          : `This exact evidence revision already has the same reproducible report.`,
+          : "This exact evidence revision already has the same reproducible report.",
       );
     } catch (error) {
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to finalize Matrix report.");
     }
   }
+
+  const durableReady = persistence?.durable === true && persistence.ready === true;
 
   return (
     <section className="rounded-3xl border bg-card p-6 sm:p-8">
@@ -61,6 +74,25 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
         </div>
         <FileCheck2 className="h-7 w-7 text-emerald-700" />
       </div>
+
+      {persistence && (
+        <div className={`mt-5 rounded-2xl border p-4 ${durableReady ? "bg-background" : "bg-amber-50/50"}`}>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            {durableReady ? <Database className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4" />}
+            {durableReady ? "Durable Matrix persistence is active" : "This Matrix session is not durably persisted"}
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            Mode: {persistence.mode}. {durableReady
+              ? "Session and report state are using the governed durable store."
+              : persistence.warning || persistence.error || "The current persistence mode may not survive a host restart."}
+          </p>
+          {!durableReady && (
+            <p className="mt-2 text-xs font-medium">
+              A reproducible digest identifies the evidence content, but it does not make an ephemeral server record restart-durable.
+            </p>
+          )}
+        </div>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center gap-3">
         <button
