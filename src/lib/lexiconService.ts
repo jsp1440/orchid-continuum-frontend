@@ -111,6 +111,7 @@ const FAMOUS_OVERLAY_FIELDS: Array<keyof LexiconEntry> = [
  * Canonical Concept Registry science remains authoritative. The migrated Famous
  * build may fill presentation/enrichment fields that have not yet migrated to
  * canonical storage, but those fields are explicitly recorded as an overlay.
+ * Scientific definitions are never supplied by the migration overlay.
  */
 function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: LexiconEntry): LexiconEntry {
   const reviewed = normalizeEntry(canonical);
@@ -119,25 +120,22 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
   const migrated = normalizeEntry(fallback);
   const merged = { ...migrated, ...reviewed } as LexiconEntry;
   const overlayFields: string[] = [];
+  const reviewedRecord = reviewed as unknown as Record<string, unknown>;
+  const migratedRecord = migrated as unknown as Record<string, unknown>;
+  const mergedRecord = merged as unknown as Record<string, unknown>;
 
   for (const field of FAMOUS_OVERLAY_FIELDS) {
-    if (
-      !hasContent((reviewed as Record<string, unknown>)[field as string])
-      && hasContent((migrated as Record<string, unknown>)[field as string])
-    ) {
-      (merged as Record<string, unknown>)[field as string] = (migrated as Record<string, unknown>)[field as string];
+    if (!hasContent(reviewedRecord[field as string]) && hasContent(migratedRecord[field as string])) {
+      mergedRecord[field as string] = migratedRecord[field as string];
       overlayFields.push(field as string);
     }
   }
 
-  // Definitions are scientific content. Famous definitions never replace an
-  // existing canonical definition; they are used only when canonical has none.
-  for (const field of ['quick_definition', 'expanded_definition'] as const) {
-    if (!hasContent(reviewed[field]) && hasContent(migrated[field])) {
-      merged[field] = migrated[field];
-      overlayFields.push(field);
-    }
-  }
+  // These are scientific content. A canonical concept with no reviewed
+  // definition remains explicitly incomplete rather than inheriting migration prose.
+  merged.quick_definition = reviewed.quick_definition;
+  merged.expanded_definition = reviewed.expanded_definition;
+  merged.definition_versions = reviewed.definition_versions;
 
   merged.id = reviewed.id;
   merged.concept_id = reviewed.concept_id ?? reviewed.id;
@@ -150,7 +148,6 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
   merged.source_record_id = reviewed.source_record_id ?? reviewed.id;
   merged.date_created = reviewed.date_created;
   merged.date_revised = reviewed.date_revised;
-  merged.definition_versions = reviewed.definition_versions;
   merged.maturity = [...new Set([...(migrated.maturity ?? []), ...(reviewed.maturity ?? [])])];
 
   if (overlayFields.length) {
