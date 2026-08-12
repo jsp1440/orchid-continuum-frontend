@@ -8,6 +8,7 @@ const fallback: LexiconEntry[] = [
     slug: 'resupination',
     preferred_term: 'Resupination',
     quick_definition: 'Fallback definition',
+    expanded_definition: 'Fallback expanded definition',
     category: 'Development',
     assets: [
       {
@@ -80,6 +81,25 @@ describe('mergeCanonicalAndFallback', () => {
     );
     expect(resupination?.migration_overlay?.source_system).toBe(
       'Famous AI Illustrated Orchid Lexicon migration',
+    );
+  });
+
+  it('never fills an empty canonical definition with Famous migration prose', () => {
+    const canonicalWithoutDefinition: LexiconEntry = {
+      ...canonical.entries[0],
+      quick_definition: undefined,
+      expanded_definition: undefined,
+      definition_versions: [],
+    };
+
+    const merged = mergeCanonicalAndFallback([canonicalWithoutDefinition], fallback);
+    const resupination = merged.find((entry) => entry.slug === 'resupination');
+
+    expect(resupination?.review_state).toBe('expert_reviewed');
+    expect(resupination?.quick_definition).toBeUndefined();
+    expect(resupination?.expanded_definition).toBeUndefined();
+    expect(resupination?.migration_overlay?.fields).not.toEqual(
+      expect.arrayContaining(['quick_definition', 'expanded_definition']),
     );
   });
 
