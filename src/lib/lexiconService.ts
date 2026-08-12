@@ -78,41 +78,17 @@ const FAMOUS_OVERLAY_FIELDS: Array<keyof LexiconEntry> = [
   'pronunciation',
   'category',
   'subcategory',
-  'scope_note',
-  'synonyms',
-  'related_terminology',
-  'contrasting_terms',
-  'broader_concept',
-  'narrower_concepts',
   'etymology',
-  'anatomical_context',
-  'morphological_context',
-  'mechanism_blocks',
-  'significance_blocks',
-  'evolution_blocks',
-  'variation_notes',
-  'character_states',
-  'example_taxa',
-  'identification_significance',
-  'identification_cautions',
-  'identification_companion_characters',
-  'conservation',
   'assets',
-  'research_questions',
-  'literature',
-  'literature_status',
-  'relationships',
-  'calyx_notes',
-  'vision_lab_notes',
   'funding',
 ];
 
 /**
  * Canonical Concept Registry science remains authoritative. The migrated Famous
- * build may fill presentation/enrichment fields that have not yet migrated to
- * canonical storage, but those fields are explicitly recorded as an overlay.
- * Scientific definitions and maturity/capability state are never supplied by
- * the migration overlay.
+ * build may fill a narrow set of presentation-oriented fields that have not yet
+ * migrated to canonical storage, and those fields are explicitly recorded as an
+ * overlay. Definitions, evidence, relationships, character states, conservation
+ * guidance and maturity/capability state are never supplied by the migration overlay.
  */
 function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: LexiconEntry): LexiconEntry {
   const reviewed = normalizeEntry(canonical);
@@ -132,12 +108,35 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
     }
   }
 
-  // These are governed scientific/capability fields. A canonical concept with
-  // no reviewed value remains explicitly incomplete rather than inheriting
-  // migration prose or capability flags.
+  // Governed scientific/capability fields always come from canonical storage.
+  // If canonical storage has no reviewed value, the field remains incomplete.
   merged.quick_definition = reviewed.quick_definition;
   merged.expanded_definition = reviewed.expanded_definition;
+  merged.scope_note = reviewed.scope_note;
+  merged.synonyms = reviewed.synonyms;
+  merged.related_terminology = reviewed.related_terminology;
+  merged.contrasting_terms = reviewed.contrasting_terms;
+  merged.broader_concept = reviewed.broader_concept;
+  merged.narrower_concepts = reviewed.narrower_concepts;
+  merged.anatomical_context = reviewed.anatomical_context;
+  merged.morphological_context = reviewed.morphological_context;
+  merged.mechanism_blocks = reviewed.mechanism_blocks;
+  merged.significance_blocks = reviewed.significance_blocks;
+  merged.evolution_blocks = reviewed.evolution_blocks;
+  merged.variation_notes = reviewed.variation_notes;
+  merged.character_states = reviewed.character_states;
+  merged.example_taxa = reviewed.example_taxa;
+  merged.identification_significance = reviewed.identification_significance;
+  merged.identification_cautions = reviewed.identification_cautions;
+  merged.identification_companion_characters = reviewed.identification_companion_characters;
+  merged.conservation = reviewed.conservation;
+  merged.research_questions = reviewed.research_questions;
+  merged.literature = reviewed.literature;
+  merged.literature_status = reviewed.literature_status;
+  merged.relationships = reviewed.relationships;
   merged.definition_versions = reviewed.definition_versions;
+  merged.calyx_notes = reviewed.calyx_notes;
+  merged.vision_lab_notes = reviewed.vision_lab_notes;
   merged.maturity = reviewed.maturity;
 
   merged.id = reviewed.id;
