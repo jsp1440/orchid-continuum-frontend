@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { LexiconEntry } from '@/data/types';
 import { getEntries, getEntry } from '@/lib/lexiconService';
@@ -45,24 +45,30 @@ const LexiconAppLayout:React.FC=()=>{
   const[activeEntry,setActiveEntry]=useState<LexiconEntry|undefined>();
   const[loading,setLoading]=useState(true);
   const[loadError,setLoadError]=useState('');
+  const loadSequence=useRef(0);
   const location=useLocation();
   const navigateRouter=useNavigate();
   const route=useMemo(()=>parseRoute(location.pathname,location.search),[location.pathname,location.search]);
 
   const load=useCallback(async()=>{
+    const sequence=++loadSequence.current;
     setLoading(true);
     setLoadError('');
     try{
       if(route.view==='entry'&&route.slug){
-        setActiveEntry(await getEntry(route.slug));
+        const resolved=await getEntry(route.slug);
+        if(sequence===loadSequence.current)setActiveEntry(resolved);
         return;
       }
-      setActiveEntry(undefined);
-      setEntries(await getEntries());
+      const resolved=await getEntries();
+      if(sequence===loadSequence.current){
+        setActiveEntry(undefined);
+        setEntries(resolved);
+      }
     }catch(error){
-      setLoadError(error instanceof Error?error.message:'Lexicon load failed');
+      if(sequence===loadSequence.current)setLoadError(error instanceof Error?error.message:'Lexicon load failed');
     }finally{
-      setLoading(false);
+      if(sequence===loadSequence.current)setLoading(false);
     }
   },[route.view,route.slug]);
 
