@@ -1,6 +1,11 @@
 import type { LexiconEntry } from "@/data/types";
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
+export type CanonicalMatrixLexiconEntry = LexiconEntry & {
+  concept_id?: string;
+  concept_uri?: string | null;
+};
+
 export type MatrixCharacterDefinition = {
   character: string;
   label: string;
@@ -15,7 +20,7 @@ export type MatrixCharacterLexiconResolution =
   | {
       status: "mapped";
       character: MatrixCharacterDefinition;
-      concept: LexiconEntry;
+      concept: CanonicalMatrixLexiconEntry;
     }
   | {
       status: "unmapped";
@@ -55,7 +60,7 @@ export async function resolveMatrixCharacterLexicon(
     return { status: "unmapped", character };
   }
 
-  const conceptResponse = await requestJson<{ entry?: LexiconEntry }>(
+  const conceptResponse = await requestJson<{ entry?: CanonicalMatrixLexiconEntry }>(
     `/api/lexicon/concepts/${encodeURIComponent(character.concept_id)}`,
   );
   if (conceptResponse.status === 404) {
