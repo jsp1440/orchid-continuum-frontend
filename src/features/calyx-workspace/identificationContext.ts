@@ -3,6 +3,13 @@ export interface IdentificationSourceContext {
   label?: string;
 }
 
+export const MAX_IDENTIFICATION_CONTEXT_TEXT = 160;
+
+function boundedContextText(value: string | null | undefined): string | undefined {
+  const text = value?.trim();
+  return text ? text.slice(0, MAX_IDENTIFICATION_CONTEXT_TEXT) : undefined;
+}
+
 export function humanizeMatrixCharacter(character: string): string {
   return character
     .trim()
@@ -14,8 +21,10 @@ export function humanizeMatrixCharacter(character: string): string {
 
 export function matrixHrefForLexiconConcept(slug: string, label: string): string {
   const params = new URLSearchParams();
-  if (slug.trim()) params.set('concept', slug.trim());
-  if (label.trim()) params.set('label', label.trim());
+  const boundedSlug = boundedContextText(slug);
+  const boundedLabel = boundedContextText(label);
+  if (boundedSlug) params.set('concept', boundedSlug);
+  if (boundedLabel) params.set('label', boundedLabel);
   const query = params.toString();
   return query ? `/orchid-identification?${query}` : '/orchid-identification';
 }
@@ -27,7 +36,7 @@ export function lexiconHrefForMatrixCharacter(character: string): string {
 
 export function readIdentificationSourceContext(search: string): IdentificationSourceContext {
   const params = new URLSearchParams(search);
-  const concept = params.get('concept')?.trim() || undefined;
-  const label = params.get('label')?.trim() || undefined;
+  const concept = boundedContextText(params.get('concept'));
+  const label = boundedContextText(params.get('label'));
   return { concept, label };
 }
