@@ -71,7 +71,7 @@ describe('mergeCanonicalAndFallback', () => {
     expect(resupination?.provenance?.source).toBe('Orchid Continuum Core Concept Registry');
   });
 
-  it('does not let canonical empty migration fields erase Famous presentation content', () => {
+  it('preserves only allowed Famous presentation fields when canonical equivalents are empty', () => {
     const merged = mergeCanonicalAndFallback(canonical.entries, fallback);
     const resupination = merged.find((entry) => entry.slug === 'resupination');
 
@@ -86,7 +86,7 @@ describe('mergeCanonicalAndFallback', () => {
     );
   });
 
-  it('treats nested empty canonical objects as empty for migration presentation fields', () => {
+  it('treats nested empty canonical objects as empty for allowed presentation fields', () => {
     const canonicalWithEmptyEtymology: LexiconEntry = {
       ...canonical.entries[0],
       etymology: { segments: [] },
@@ -128,7 +128,7 @@ describe('mergeCanonicalAndFallback', () => {
     expect(resupination?.migration_overlay?.fields).not.toContain('maturity');
   });
 
-  it('retains unmatched Famous records as an explicit resilient fallback', () => {
+  it('retains unmatched Famous records as an explicit read-only fallback', () => {
     const merged = mergeCanonicalAndFallback(canonical.entries, fallback);
     const pollinium = merged.find((entry) => entry.slug === 'pollinium');
 
