@@ -4,6 +4,8 @@ import {
   finalizeMatrixReport,
   getMatrixPersistencePreflight,
   getMatrixPersistenceStatus,
+  getMatrixRegistryPersistencePreflight,
+  getMatrixRegistryPersistenceStatus,
   listMatrixReports,
 } from "./matrixReports";
 
@@ -84,6 +86,99 @@ describe("Matrix reproducible report client", () => {
     expect(preflight.activation_ready).toBe(false);
     expect(preflight.blockers).toEqual(["MATRIX_SESSION_REQUIRED_INDEXES_MISSING"]);
     expect(preflight.missing_indexes).toEqual(["idx_matrix_identification_sessions_owner_updated"]);
+  });
+
+  it("reads immutable registry persistence independently from session persistence", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        mode: "file_ephemeral",
+        durable: false,
+        ready: true,
+        durable_requested: false,
+        warning: "File-backed Matrix registry versions are not restart-durable on ephemeral hosts.",
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const status = await getMatrixRegistryPersistenceStatus();
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/matrix-identification/registry/persistence-status");
+    expect(status.durable).toBe(false);
+    expect(status.mode).toBe("file_ephemeral");
+  });
+
+  it("requires registry schema, strict source inventory, and checksum-complete copy before activation readiness", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        schema_version: "matrix-identification-registry-persistence-preflight/v2",
+        database_url_configured: true,
+        durable_requested: false,
+        activated: false,
+        connectivity: true,
+        table_exists: true,
+        migration_613_schema_ready: true,
+        source_inventory_ready: true,
+        data_copy_ready: true,
+        activation_ready: true,
+        blockers: [],
+        file_registry_count: 3,
+        database_registry_count: 3,
+        migration_applied_by_preflight: false,
+        data_copied_by_preflight: false,
+        environment_changed_by_preflight: false,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const preflight = await getMatrixRegistryPersistencePreflight();
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/matrix-identification/registry/persistence-preflight");
+    expect(preflight.activation_ready).toBe(true);
+    expect(preflight.activated).toBe(false);
+    expect(preflight.migration_613_schema_ready).toBe(true);
+    expect(preflight.source_inventory_ready).toBe(true);
+    expect(preflight.data_copy_ready).toBe(true);
+    expect(preflight.data_copied_by_preflight).toBe(false);
+  });
+
+  it("preserves registry source-integrity blockers rather than treating them as copy readiness", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        database_url_configured: true,
+        durable_requested: false,
+        activated: false,
+        migration_613_schema_ready: true,
+        source_inventory_ready: false,
+        data_copy_ready: false,
+        activation_ready: false,
+        blockers: ["MATRIX_REGISTRY_SOURCE_CHECKSUM_INVALID"],
+        source_inventory: {
+          physical_package_count: 3,
+          valid_package_count: 2,
+          inventory_complete: false,
+          blockers: [{ code: "MATRIX_REGISTRY_SOURCE_CHECKSUM_INVALID", path: "/tmp/registry/a/1.json" }],
+        },
+        migration_applied_by_preflight: false,
+        data_copied_by_preflight: false,
+        environment_changed_by_preflight: false,
+      }),
+    }));
+
+    const preflight = await getMatrixRegistryPersistencePreflight();
+
+    expect(preflight.activation_ready).toBe(false);
+    expect(preflight.source_inventory_ready).toBe(false);
+    expect(preflight.blockers).toEqual(["MATRIX_REGISTRY_SOURCE_CHECKSUM_INVALID"]);
+    expect(preflight.source_inventory?.valid_package_count).toBe(2);
   });
 
   it("finalizes the current session revision through the governed report endpoint", async () => {
