@@ -54,10 +54,7 @@ const LexiconAppLayout:React.FC=()=>{
     setLoadError('');
     try{
       if(route.view==='entry'&&route.slug){
-        const cached=entries.find((candidate)=>candidate.slug===route.slug);
-        if(cached)setActiveEntry(cached);
-        const resolved=await getEntry(route.slug);
-        setActiveEntry(resolved);
+        setActiveEntry(await getEntry(route.slug));
         return;
       }
       setActiveEntry(undefined);
@@ -67,7 +64,7 @@ const LexiconAppLayout:React.FC=()=>{
     }finally{
       setLoading(false);
     }
-  },[route.view,route.slug,entries]);
+  },[route.view,route.slug]);
 
   useEffect(()=>{void load();},[load]);
   const go=useCallback((view:ViewKey,slug?:string,query?:string)=>{navigateRouter(pathFor(view,slug,query));window.scrollTo({top:0,behavior:'smooth'});},[navigateRouter]);
