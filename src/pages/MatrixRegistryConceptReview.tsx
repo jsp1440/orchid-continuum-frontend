@@ -3,11 +3,14 @@ import { CheckCircle2, Search, ShieldCheck } from "lucide-react";
 
 import {
   deriveRegistryConceptMappings,
+  getRegistryConceptMappingStatus,
   getRegistryVersion,
   listReviewableRegistries,
   searchApprovedLexiconConcepts,
   type ApprovedLexiconConcept,
+  type MappingStatus,
   type RegistryCharacter,
+  type RegistryConceptMappingStatus,
   type RegistrySummary,
   type RegistryVersion,
 } from "@/lib/matrixRegistryReview";
@@ -21,10 +24,29 @@ function registryKey(item: RegistrySummary): string {
   return `${item.registry_id}:${item.version}`;
 }
 
+function percent(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function mappingLabel(status?: MappingStatus): string {
+  if (status === "mapped_approved") return "Approved canonical mapping";
+  if (status === "mapped_concept_unavailable") return "Mapped concept unavailable";
+  if (status === "invalid_concept_id") return "Invalid concept identifier";
+  return "No reviewed concept binding";
+}
+
+function mappingPriority(status?: MappingStatus): number {
+  if (status === "invalid_concept_id") return 0;
+  if (status === "mapped_concept_unavailable") return 1;
+  if (status === "unmapped") return 2;
+  return 3;
+}
+
 export default function MatrixRegistryConceptReview() {
   const [registries, setRegistries] = useState<RegistrySummary[]>([]);
   const [selectedKey, setSelectedKey] = useState("");
   const [registry, setRegistry] = useState<RegistryVersion | null>(null);
+  const [readiness, setReadiness] = useState<RegistryConceptMappingStatus | null>(null);
   const [selectedCharacter, setSelectedCharacter] = useState<RegistryCharacter | null>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ApprovedLexiconConcept[]>([]);
@@ -39,6 +61,21 @@ export default function MatrixRegistryConceptReview() {
     () => registries.find((item) => registryKey(item) === selectedKey) ?? null,
     [registries, selectedKey],
   );
+
+  const readinessByCharacter = useMemo(
+    () => new Map((readiness?.characters ?? []).map((item) => [item.character, item])),
+    [readiness],
+  );
+
+  const orderedCharacters = useMemo(() => {
+    const characters = [...(registry?.characters ?? [])];
+    return characters.sort((a, b) => {
+      const aStatus = readinessByCharacter.get(a.character)?.mapping_status;
+      const bStatus = readinessByCharacter.get(b.character)?.mapping_status;
+      const priority = mappingPriority(aStatus) - mappingPriority(bStatus);
+      return priority || a.label.localeCompare(b.label);
+    });
+  }, [registry, readinessByCharacter]);
 
   useEffect(() => {
     void listReviewableRegistries()
@@ -57,23 +94,32 @@ export default function MatrixRegistryConceptReview() {
   useEffect(() => {
     if (!selectedSummary) {
       setRegistry(null);
+      setReadiness(null);
       return;
     }
     setStatus("working");
-    setMessage("Loading exact source registry and character bindings…");
+    setMessage("Loading exact source registry and current canonical mapping readiness…");
     setMappings({});
     setSelectedCharacter(null);
     setResults([]);
     setReceipt("");
-    void getRegistryVersion(selectedSummary.registry_id, selectedSummary.version)
-      .then((record) => {
+    void Promise.all([
+      getRegistryVersion(selectedSummary.registry_id, selectedSummary.version),
+      getRegistryConceptMappingStatus(selectedSummary.registry_id, selectedSummary.version),
+    ])
+      .then(([record, mappingStatus]) => {
         setRegistry(record);
+        setReadiness(mappingStatus);
         setStatus("ready");
-        setMessage("Source registry loaded. Select a character and explicitly review its canonical concept mapping.");
+        setMessage(
+          mappingStatus.ready_for_reviewed_lexicon_guidance
+            ? "Every character is currently mapped to an ACTIVE + APPROVED canonical concept."
+            : "Unresolved mappings are listed first. Select a character and explicitly review its canonical concept mapping.",
+        );
       })
       .catch((error) => {
         setStatus("error");
-        setMessage(error instanceof Error ? error.message : "Unable to load source registry.");
+        setMessage(error instanceof Error ? error.message : "Unable to load source registry readiness.");
       });
   }, [selectedSummary]);
 
@@ -180,14 +226,31 @@ export default function MatrixRegistryConceptReview() {
                 <p>{registry.characters.length} characters · {registry.candidate_count ?? registry.candidates?.length ?? "—"} candidates</p>
               </div>
             )}
+            {readiness && (
+              <div className="mt-5 rounded-2xl border bg-background p-4">
+                <p className="text-sm font-semibold">Reviewed concept coverage: {percent(readiness.approved_mapping_coverage)}</p>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <span>{readiness.mapped_approved_count} approved</span>
+                  <span>{readiness.unmapped_count} unmapped</span>
+                  <span>{readiness.mapped_unavailable_count} unavailable</span>
+                  <span>{readiness.invalid_mapping_count} invalid</span>
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  {readiness.ready_for_reviewed_lexicon_guidance
+                    ? "Ready: every character has a current approved canonical concept."
+                    : "Not fully ready: unresolved characters are prioritized in the review list."}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="rounded-3xl border bg-card p-6">
             <h2 className="text-xl font-semibold">2 · Diagnostic characters</h2>
-            <p className="mt-2 text-sm text-muted-foreground">Existing concept IDs are preserved unless you explicitly replace them in the derived version.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Unmapped, stale, or invalid bindings are listed before currently approved mappings. Existing concept IDs are preserved unless you explicitly replace them.</p>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {(registry?.characters ?? []).map((character) => {
+              {orderedCharacters.map((character) => {
                 const pending = mappings[character.character];
+                const mappingState = readinessByCharacter.get(character.character);
                 return (
                   <button
                     type="button"
@@ -197,12 +260,15 @@ export default function MatrixRegistryConceptReview() {
                   >
                     <p className="font-semibold">{character.label}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{character.character} · weight {character.weight ?? 1}</p>
-                    <p className="mt-2 break-all text-xs text-muted-foreground">
+                    <p className="mt-2 text-xs font-medium">{pending ? "Pending reviewer decision" : mappingLabel(mappingState?.mapping_status)}</p>
+                    <p className="mt-1 break-all text-xs text-muted-foreground">
                       {pending
-                        ? `Pending: ${pending.preferred_term} · ${pending.concept_id}`
-                        : character.concept_id
-                          ? `Existing concept: ${character.concept_id}`
-                          : "No reviewed concept binding"}
+                        ? `${pending.preferred_term} · ${pending.concept_id}`
+                        : mappingState?.concept?.preferred_term
+                          ? `${mappingState.concept.preferred_term} · ${mappingState.concept_id}`
+                          : character.concept_id
+                            ? `Stored concept: ${character.concept_id}`
+                            : "No canonical concept ID stored"}
                     </p>
                   </button>
                 );
