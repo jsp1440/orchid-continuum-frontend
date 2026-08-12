@@ -84,6 +84,19 @@ describe('mergeCanonicalAndFallback', () => {
     );
   });
 
+  it('treats nested empty canonical objects as empty for migration presentation fields', () => {
+    const canonicalWithEmptyEtymology: LexiconEntry = {
+      ...canonical.entries[0],
+      etymology: { segments: [] },
+    };
+
+    const merged = mergeCanonicalAndFallback([canonicalWithEmptyEtymology], fallback);
+    const resupination = merged.find((entry) => entry.slug === 'resupination');
+
+    expect(resupination?.etymology?.segments?.[0].form).toBe('re-');
+    expect(resupination?.migration_overlay?.fields).toContain('etymology');
+  });
+
   it('never fills an empty canonical definition with Famous migration prose', () => {
     const canonicalWithoutDefinition: LexiconEntry = {
       ...canonical.entries[0],
@@ -101,6 +114,14 @@ describe('mergeCanonicalAndFallback', () => {
     expect(resupination?.migration_overlay?.fields).not.toEqual(
       expect.arrayContaining(['quick_definition', 'expanded_definition']),
     );
+  });
+
+  it('does not promote Famous maturity flags into canonical capability state', () => {
+    const merged = mergeCanonicalAndFallback(canonical.entries, fallback);
+    const resupination = merged.find((entry) => entry.slug === 'resupination');
+
+    expect(resupination?.maturity).toEqual([]);
+    expect(resupination?.migration_overlay?.fields).not.toContain('maturity');
   });
 
   it('retains unmatched Famous records as an explicit resilient fallback', () => {
