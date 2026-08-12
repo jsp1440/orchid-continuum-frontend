@@ -69,8 +69,8 @@ function normalizeEntry(entry: LexiconEntry): LexiconEntry {
 function hasContent(value: unknown): boolean {
   if (value === null || value === undefined) return false;
   if (typeof value === 'string') return value.trim().length > 0;
-  if (Array.isArray(value)) return value.length > 0;
-  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length > 0;
+  if (Array.isArray(value)) return value.some(hasContent);
+  if (typeof value === 'object') return Object.values(value as Record<string, unknown>).some(hasContent);
   return true;
 }
 
@@ -111,7 +111,8 @@ const FAMOUS_OVERLAY_FIELDS: Array<keyof LexiconEntry> = [
  * Canonical Concept Registry science remains authoritative. The migrated Famous
  * build may fill presentation/enrichment fields that have not yet migrated to
  * canonical storage, but those fields are explicitly recorded as an overlay.
- * Scientific definitions are never supplied by the migration overlay.
+ * Scientific definitions and maturity/capability state are never supplied by
+ * the migration overlay.
  */
 function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: LexiconEntry): LexiconEntry {
   const reviewed = normalizeEntry(canonical);
@@ -131,11 +132,13 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
     }
   }
 
-  // These are scientific content. A canonical concept with no reviewed
-  // definition remains explicitly incomplete rather than inheriting migration prose.
+  // These are governed scientific/capability fields. A canonical concept with
+  // no reviewed value remains explicitly incomplete rather than inheriting
+  // migration prose or capability flags.
   merged.quick_definition = reviewed.quick_definition;
   merged.expanded_definition = reviewed.expanded_definition;
   merged.definition_versions = reviewed.definition_versions;
+  merged.maturity = reviewed.maturity;
 
   merged.id = reviewed.id;
   merged.concept_id = reviewed.concept_id ?? reviewed.id;
@@ -148,7 +151,6 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
   merged.source_record_id = reviewed.source_record_id ?? reviewed.id;
   merged.date_created = reviewed.date_created;
   merged.date_revised = reviewed.date_revised;
-  merged.maturity = [...new Set([...(migrated.maturity ?? []), ...(reviewed.maturity ?? [])])];
 
   if (overlayFields.length) {
     merged.migration_overlay = {
