@@ -20,8 +20,36 @@ const BlockGrid: React.FC<{ blocks?: ExplanatoryBlock[]; pending: string }> = ({
   );
 };
 
+const GuidanceList: React.FC<{ title: string; items?: string[]; tone?: 'green' | 'amber' }> = ({ title, items, tone = 'green' }) => {
+  if (!items?.length) return null;
+  return (
+    <div>
+      <h3 className={`text-[11px] font-semibold uppercase tracking-[.14em] ${tone === 'amber' ? 'text-amber-800' : 'text-[#4A7C59]'}`}>
+        {title}
+      </h3>
+      <ul className="mt-2 space-y-1 text-sm text-stone-700">
+        {items.map((item) => <li key={item}>• {item}</li>)}
+      </ul>
+    </div>
+  );
+};
+
 export const RecoveredScientificSections: React.FC<{ entry: LexiconEntry }> = ({ entry }) => {
   const migrationSource = entry.source_system?.toLocaleLowerCase().includes('famous');
+  const conservation = entry.conservation;
+  const hasConservationContent = Boolean(
+    conservation?.why_it_matters
+    || conservation?.what_to_record?.length
+    || conservation?.minimum_evidence?.length
+    || conservation?.do_not_infer_from?.length
+    || conservation?.monitoring_relevance
+    || conservation?.restoration_relevance
+    || conservation?.standards_connections?.length
+    || conservation?.linked_evidence?.length
+    || conservation?.certainty
+    || conservation?.scope_note,
+  );
+
   return (
     <div className="space-y-10">
       {migrationSource ? (
@@ -53,24 +81,69 @@ export const RecoveredScientificSections: React.FC<{ entry: LexiconEntry }> = ({
       <section className="rounded-sm border border-stone-200 bg-white p-6">
         <SectionHeading eyebrow="Conservation" title="Recording and conservation guidance" />
         <div className="mt-5 space-y-5">
-          {entry.conservation?.why_it_matters ? <p className="text-sm leading-relaxed text-stone-700">{entry.conservation.why_it_matters}</p> : null}
-          {entry.conservation?.what_to_record?.length ? (
+          {conservation?.why_it_matters ? <p className="text-sm leading-relaxed text-stone-700">{conservation.why_it_matters}</p> : null}
+          <GuidanceList title="What to record" items={conservation?.what_to_record} />
+          <GuidanceList title="Minimum evidence" items={conservation?.minimum_evidence} />
+          <GuidanceList title="Do not infer from" items={conservation?.do_not_infer_from} tone="amber" />
+
+          {conservation?.monitoring_relevance ? (
             <div>
-              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[#4A7C59]">What to record</h3>
-              <ul className="mt-2 space-y-1 text-sm text-stone-700">
-                {entry.conservation.what_to_record.map((item) => <li key={item}>• {item}</li>)}
+              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[#4A7C59]">Monitoring relevance</h3>
+              <p className="mt-1 text-sm leading-relaxed text-stone-700">{conservation.monitoring_relevance}</p>
+            </div>
+          ) : null}
+
+          {conservation?.restoration_relevance ? (
+            <div>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[#4A7C59]">Restoration relevance</h3>
+              <p className="mt-1 text-sm leading-relaxed text-stone-700">{conservation.restoration_relevance}</p>
+            </div>
+          ) : null}
+
+          {conservation?.standards_connections?.length ? (
+            <div>
+              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[#4A7C59]">Standards connections</h3>
+              <ul className="mt-2 space-y-2 text-sm text-stone-700">
+                {conservation.standards_connections.map((connection, index) => (
+                  <li key={`${connection.standard}-${connection.concept_or_term ?? index}`} className="rounded-sm border border-stone-200 bg-[#FDFBF6] p-3">
+                    <strong>{connection.standard}</strong>
+                    {connection.concept_or_term ? ` · ${connection.concept_or_term}` : ''}
+                    {connection.mapping_state ? ` · ${connection.mapping_state.replaceAll('_', ' ')}` : ''}
+                    {connection.note ? <p className="mt-1 text-xs leading-relaxed text-stone-500">{connection.note}</p> : null}
+                  </li>
+                ))}
               </ul>
             </div>
           ) : null}
-          {entry.conservation?.do_not_infer_from?.length ? (
+
+          {conservation?.linked_evidence?.length ? (
             <div>
-              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-amber-800">Do not infer from</h3>
-              <ul className="mt-2 space-y-1 text-sm text-stone-700">
-                {entry.conservation.do_not_infer_from.map((item) => <li key={item}>• {item}</li>)}
+              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[#4A7C59]">Linked evidence</h3>
+              <ul className="mt-2 space-y-2 text-sm text-stone-700">
+                {conservation.linked_evidence.map((evidence, index) => (
+                  <li key={`${evidence.kind}-${evidence.label}-${index}`} className="rounded-sm border border-stone-200 bg-[#FDFBF6] p-3">
+                    <strong>{evidence.label}</strong> · {evidence.kind} · {evidence.status.replaceAll('_', ' ')}
+                    {evidence.note ? <p className="mt-1 text-xs leading-relaxed text-stone-500">{evidence.note}</p> : null}
+                  </li>
+                ))}
               </ul>
             </div>
           ) : null}
-          {!entry.conservation ? <PendingNote label="Conservation guidance awaiting canonical enrichment" /> : null}
+
+          {conservation?.scope_note ? (
+            <div className="border-l-2 border-stone-300 pl-4">
+              <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-stone-600">Scope note</h3>
+              <p className="mt-1 text-sm leading-relaxed text-stone-700">{conservation.scope_note}</p>
+            </div>
+          ) : null}
+
+          {conservation?.certainty ? (
+            <div className="flex items-center gap-2 text-xs text-stone-600">
+              <span>Guidance certainty:</span><CertaintyChip level={conservation.certainty} />
+            </div>
+          ) : null}
+
+          {!hasConservationContent ? <PendingNote label="Conservation guidance awaiting canonical enrichment" /> : null}
         </div>
       </section>
 
