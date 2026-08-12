@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { finalizeMatrixReport, getMatrixPersistenceStatus, listMatrixReports } from "./matrixReports";
+import {
+  finalizeMatrixReport,
+  getMatrixPersistencePreflight,
+  getMatrixPersistenceStatus,
+  listMatrixReports,
+} from "./matrixReports";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -24,6 +29,61 @@ describe("Matrix reproducible report client", () => {
     expect(String(fetchMock.mock.calls[0][0])).toContain("/api/matrix-identification/sessions/persistence-status");
     expect(status.durable).toBe(false);
     expect(status.mode).toBe("file_ephemeral");
+  });
+
+  it("keeps activation readiness separate from durable activation", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        database_url_configured: true,
+        durable_requested: false,
+        activated: false,
+        connectivity: true,
+        table_exists: true,
+        migration_612_schema_ready: true,
+        activation_ready: true,
+        blockers: [],
+        migration_applied_by_preflight: false,
+        environment_changed_by_preflight: false,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const preflight = await getMatrixPersistencePreflight();
+    expect(String(fetchMock.mock.calls[0][0])).toContain("/api/matrix-identification/sessions/persistence-preflight");
+    expect(preflight.activation_ready).toBe(true);
+    expect(preflight.activated).toBe(false);
+    expect(preflight.durable_requested).toBe(false);
+    expect(preflight.migration_applied_by_preflight).toBe(false);
+    expect(preflight.environment_changed_by_preflight).toBe(false);
+  });
+
+  it("preserves migration blockers from the backend preflight", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        database_url_configured: true,
+        durable_requested: false,
+        activated: false,
+        connectivity: true,
+        table_exists: true,
+        migration_612_schema_ready: false,
+        activation_ready: false,
+        blockers: ["MATRIX_SESSION_REQUIRED_INDEXES_MISSING"],
+        missing_indexes: ["idx_matrix_identification_sessions_owner_updated"],
+        migration_applied_by_preflight: false,
+        environment_changed_by_preflight: false,
+      }),
+    }));
+
+    const preflight = await getMatrixPersistencePreflight();
+    expect(preflight.activation_ready).toBe(false);
+    expect(preflight.blockers).toEqual(["MATRIX_SESSION_REQUIRED_INDEXES_MISSING"]);
+    expect(preflight.missing_indexes).toEqual(["idx_matrix_identification_sessions_owner_updated"]);
   });
 
   it("finalizes the current session revision through the governed report endpoint", async () => {
