@@ -22,6 +22,8 @@ const fallback: LexiconEntry[] = [
       segments: [{ form: 're-', language: 'Latin', gloss: 'again', role: 'prefix' }],
     },
     maturity: ['illustrated', 'etymology_added'],
+    certainty_summary: 'literature_review_pending',
+    import_batch: 'famous-demo-batch',
     source_system: 'famous-migration',
   },
   {
@@ -116,11 +118,13 @@ describe('mergeCanonicalAndFallback', () => {
     );
   });
 
-  it('does not promote Famous maturity flags into canonical capability state', () => {
+  it('does not promote Famous maturity, certainty, or import identity into canonical state', () => {
     const merged = mergeCanonicalAndFallback(canonical.entries, fallback);
     const resupination = merged.find((entry) => entry.slug === 'resupination');
 
     expect(resupination?.maturity).toEqual([]);
+    expect(resupination?.certainty_summary).toBeUndefined();
+    expect(resupination?.import_batch).toBeUndefined();
     expect(resupination?.migration_overlay?.fields).not.toContain('maturity');
   });
 
