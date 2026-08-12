@@ -163,6 +163,39 @@ describe('mergeCanonicalAndFallback', () => {
     expect(resupination?.migration_overlay?.fields).not.toContain('maturity');
   });
 
+  it('does not let recovered Famous aliases, relationships or cautions inherit canonical review status', () => {
+    const recoveredNonResupination = [...famousBaseEntries, ...famousLexiconSupplement].find(
+      (entry) => entry.slug === 'non-resupination',
+    );
+    expect(recoveredNonResupination).toBeDefined();
+    expect(recoveredNonResupination?.synonyms).toContain('non-resupinate condition');
+    expect(recoveredNonResupination?.identification_cautions?.length).toBeGreaterThan(0);
+
+    const canonicalNonResupination: LexiconEntry = {
+      id: 'canonical-non-resupination',
+      concept_id: 'canonical-non-resupination',
+      slug: 'non-resupination',
+      preferred_term: 'Non-resupination',
+      quick_definition: 'Canonical definition only.',
+      review_state: 'expert_reviewed',
+      source_system: 'oc_concepts',
+      provenance: { source: 'Orchid Continuum Core Concept Registry' },
+    };
+
+    const merged = mergeCanonicalAndFallback(
+      [canonicalNonResupination],
+      [recoveredNonResupination as LexiconEntry],
+    )[0];
+
+    expect(merged.quick_definition).toBe('Canonical definition only.');
+    expect(merged.synonyms).toBeUndefined();
+    expect(merged.related_terminology).toBeUndefined();
+    expect(merged.identification_cautions).toBeUndefined();
+    expect(merged.certainty_summary).toBeUndefined();
+    expect(merged.review_state).toBe('expert_reviewed');
+    expect(merged.source_system).toBe('oc_concepts');
+  });
+
   it('retains unmatched Famous records as an explicit read-only fallback', () => {
     const merged = mergeCanonicalAndFallback(canonical.entries, fallback);
     const pollinium = merged.find((entry) => entry.slug === 'pollinium');
