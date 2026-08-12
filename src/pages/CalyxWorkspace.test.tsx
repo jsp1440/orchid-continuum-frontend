@@ -408,6 +408,68 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(storedWorkspace().conversationId).toBe("saved-conversation");
   });
 
+  it("loads a starter prompt into the composer from the empty state", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      getButton(container, "What do you need Calyx Vision to be able to see and understand?").click();
+    });
+
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
+      "What do you need Calyx Vision to be able to see and understand?",
+    );
+  });
+
+  it("surfaces an authentication readiness banner near the top of the workspace", async () => {
+    mocks.loadCalyxWorkspace.mockResolvedValueOnce({
+      capabilities: null,
+      homepage: null,
+      orchestrator: null,
+      orchestratorState: "authentication_required",
+      errors: [],
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Sign in at Mission Control");
+    expect(container.textContent).toContain("authenticated conversation");
+  });
+
+  it("surfaces the first backend readiness error near the top of the workspace", async () => {
+    mocks.loadCalyxWorkspace.mockResolvedValueOnce({
+      capabilities: null,
+      homepage: null,
+      orchestrator: null,
+      orchestratorState: "unavailable",
+      errors: ["The Calyx conversation API is not deployed.", "Secondary detail"],
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Backend readiness warning: The Calyx conversation API is not deployed.");
+  });
+
   it("restores the user message to the textarea when the Calyx turn fails", async () => {
     const createdConversation = buildConversation("net-error-conversation");
     mocks.createCalyxConversation.mockResolvedValue(createdConversation);

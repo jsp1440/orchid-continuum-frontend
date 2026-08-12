@@ -44,6 +44,14 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
 };
 
 const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
+const CALYX_STARTER_PROMPTS = [
+  "What do you need Calyx Vision to be able to see and understand?",
+  "Explain the peloton and its role in orchid-mycorrhizal symbiosis.",
+  "What evidence best distinguishes pollinium, caudicle, and viscidium?",
+  "Help me reason through a multi-turn orchid identification workflow.",
+  "What would a strong scientific workspace need for papers, figures, and datasets?",
+  "What remains uncertain about orchid-fungal communication and how should I investigate it?",
+];
 
 function useElapsedSeconds(active: boolean): number {
   const [elapsed, setElapsed] = useState(0);
@@ -138,6 +146,7 @@ export default function CalyxWorkspace() {
   const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
   const submissionLockRef = useRef<number | null>(null);
@@ -173,6 +182,26 @@ export default function CalyxWorkspace() {
         : null,
     [fileTextContent, selectedAttachment],
   );
+  const readinessBanner = useMemo(() => {
+    if (loading) return null;
+    if (snapshot.orchestratorState === "authentication_required") {
+      return {
+        className: "border-amber-500/40 bg-amber-500/10 text-amber-950",
+        content: (
+          <>
+            Sign in at <Link className="underline" to="/mission-control">Mission Control</Link> so CALYX can keep authenticated conversation and governed orchestration aligned.
+          </>
+        ),
+      };
+    }
+    if (snapshot.errors.length) {
+      return {
+        className: "border-destructive/40 bg-destructive/10 text-destructive",
+        content: <>Backend readiness warning: {snapshot.errors[0]}</>,
+      };
+    }
+    return null;
+  }, [loading, snapshot.errors, snapshot.orchestratorState]);
 
   useEffect(() => {
     activeProjectIdRef.current = normalizedProjectId;
@@ -623,6 +652,11 @@ export default function CalyxWorkspace() {
     setDocumentContext("");
   }
 
+  function loadStarterPrompt(prompt: string) {
+    setMessage(prompt);
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
   return (
     <main className="min-h-screen bg-background px-5 py-10 text-foreground">
       <div className="mx-auto max-w-7xl space-y-6">
@@ -633,11 +667,12 @@ export default function CalyxWorkspace() {
             <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
           </div>
         </header>
+        {readinessBanner ? <section className={`rounded-xl border px-4 py-3 text-sm ${readinessBanner.className}`}>{readinessBanner.content}</section> : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <section className="rounded-xl border bg-card">
             <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
-              {!messages.length ? <div className="mx-auto max-w-2xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Try “What do you need Calyx Vision to be able to see and understand?” and continue naturally with follow-up questions.</p></div> : messages.map((turn) => (
+              {!messages.length ? <div className="mx-auto max-w-3xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Choose a starter prompt or type your own scientific question to begin tonight&apos;s CALYX conversation.</p><ul className="mt-6 grid gap-3 text-left md:grid-cols-2">{CALYX_STARTER_PROMPTS.map((prompt) => <li key={prompt}><button className="h-full w-full rounded-2xl border bg-background px-4 py-3 text-sm transition-colors hover:bg-muted" onClick={() => loadStarterPrompt(prompt)} type="button">{prompt}</button></li>)}</ul></div> : messages.map((turn) => (
                 <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
                   <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
                     {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
@@ -653,7 +688,7 @@ export default function CalyxWorkspace() {
             <form className="border-t p-4" onSubmit={submit}>
               {interimTranscript ? <p className="mb-2 text-xs italic text-muted-foreground">{interimTranscript}…</p> : null}
               <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
-              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={5000} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" value={message} />
+              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={5000} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" ref={textareaRef} value={message} />
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <details className="text-xs text-muted-foreground">
