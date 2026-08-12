@@ -113,7 +113,7 @@ export default function OrchidIdentificationNext() {
       object_type: sourceContext.concept ? "lexicon_context" : "identification_workspace",
       object_id: sourceContext.concept ?? "matrix-identification",
       label: sourceContext.label ?? "Matrix Identification Lab",
-      path: typeof window === "undefined" ? undefined : `${window.location.pathname}${window.location.search}`,
+      path: "/orchid-identification",
       metadata: {
         source_lexicon_concept: sourceContext.concept ?? null,
         source_lexicon_label: sourceContext.label ?? null,
@@ -171,7 +171,7 @@ export default function OrchidIdentificationNext() {
         <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-700">Matrix Identification Lab</p>
         <h1 className="mt-2 text-4xl font-semibold">Build an explainable orchid identification</h1>
         <p className="mt-4 max-w-4xl text-muted-foreground">
-          Supply observable characters and a governed candidate matrix. Calyx ranks candidates, reports data coverage, and explains every match, partial match, conflict, unknown, and missing candidate state. A ranking is evidence for review—not a verified identification.
+          Supply observable characters and a governed candidate matrix. Calyx ranks candidates, reports data coverage, and explains every match, partial match, conflict, unknown, and missing candidate state. A ranking is a derived analytical result for review—not evidence or a verified identification.
         </p>
 
         {sourceContext.concept && (
