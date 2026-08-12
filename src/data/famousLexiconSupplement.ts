@@ -29,6 +29,7 @@ const recovered = (
     confidence: 'not_assessed',
   },
   ...extra,
+  review_state: 'draft',
 });
 
 export const famousLexiconSupplement: LexiconEntry[] = [
