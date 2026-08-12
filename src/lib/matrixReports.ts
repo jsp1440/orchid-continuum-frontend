@@ -11,6 +11,25 @@ export type MatrixPersistenceStatus = {
   activation_boundary?: string;
 };
 
+export type MatrixPersistencePreflight = {
+  schema_version?: string;
+  database_url_configured: boolean;
+  durable_requested: boolean;
+  activated: boolean;
+  connectivity: boolean;
+  table_exists: boolean;
+  migration_612_schema_ready: boolean;
+  activation_ready: boolean;
+  blockers?: string[];
+  missing_columns?: string[];
+  type_mismatches?: Array<{ column: string; expected: string; actual?: string | null }>;
+  primary_key_ok?: boolean;
+  missing_indexes?: string[];
+  migration_applied_by_preflight: false;
+  environment_changed_by_preflight: false;
+  governance_boundary?: string;
+};
+
 export type MatrixReportSummary = {
   report_id: string;
   content_digest_sha256: string;
@@ -71,6 +90,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getMatrixPersistenceStatus(): Promise<MatrixPersistenceStatus> {
   return request<MatrixPersistenceStatus>("/api/matrix-identification/sessions/persistence-status");
+}
+
+export async function getMatrixPersistencePreflight(): Promise<MatrixPersistencePreflight> {
+  return request<MatrixPersistencePreflight>("/api/matrix-identification/sessions/persistence-preflight");
 }
 
 export async function finalizeMatrixReport(sessionId: string): Promise<{ created: boolean; report: MatrixReportRecord }> {
