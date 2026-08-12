@@ -4,6 +4,7 @@ import {
   humanizeMatrixCharacter,
   lexiconHrefForMatrixCharacter,
   matrixHrefForLexiconConcept,
+  MAX_IDENTIFICATION_CONTEXT_TEXT,
   readIdentificationSourceContext,
 } from './identificationContext';
 
@@ -30,5 +31,26 @@ describe('lexicon and identification context links', () => {
       concept: 'velamen',
       label: 'Velamen',
     });
+  });
+
+  it('caps hostile or accidental oversized query context before session persistence', () => {
+    const oversizedConcept = `concept-${'x'.repeat(1000)}`;
+    const oversizedLabel = `label-${'y'.repeat(1000)}`;
+    const result = readIdentificationSourceContext(
+      `?concept=${encodeURIComponent(oversizedConcept)}&label=${encodeURIComponent(oversizedLabel)}`,
+    );
+
+    expect(result.concept).toHaveLength(MAX_IDENTIFICATION_CONTEXT_TEXT);
+    expect(result.label).toHaveLength(MAX_IDENTIFICATION_CONTEXT_TEXT);
+    expect(result.concept).toBe(oversizedConcept.slice(0, MAX_IDENTIFICATION_CONTEXT_TEXT));
+    expect(result.label).toBe(oversizedLabel.slice(0, MAX_IDENTIFICATION_CONTEXT_TEXT));
+  });
+
+  it('caps outbound lexicon context to the same contract before building a Matrix URL', () => {
+    const href = matrixHrefForLexiconConcept('x'.repeat(500), 'y'.repeat(500));
+    const params = new URLSearchParams(href.split('?')[1]);
+
+    expect(params.get('concept')).toHaveLength(MAX_IDENTIFICATION_CONTEXT_TEXT);
+    expect(params.get('label')).toHaveLength(MAX_IDENTIFICATION_CONTEXT_TEXT);
   });
 });
