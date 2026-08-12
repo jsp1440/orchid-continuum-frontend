@@ -138,6 +138,7 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
   merged.calyx_notes = reviewed.calyx_notes;
   merged.vision_lab_notes = reviewed.vision_lab_notes;
   merged.maturity = reviewed.maturity;
+  merged.certainty_summary = reviewed.certainty_summary;
 
   merged.id = reviewed.id;
   merged.concept_id = reviewed.concept_id ?? reviewed.id;
@@ -148,6 +149,7 @@ function mergeCanonicalEntry(fallback: LexiconEntry | undefined, canonical: Lexi
   merged.provenance = reviewed.provenance;
   merged.source_system = reviewed.source_system ?? 'oc_concepts';
   merged.source_record_id = reviewed.source_record_id ?? reviewed.id;
+  merged.import_batch = reviewed.import_batch;
   merged.date_created = reviewed.date_created;
   merged.date_revised = reviewed.date_revised;
 
