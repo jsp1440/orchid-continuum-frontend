@@ -1,4 +1,5 @@
-import { entries as famousFallback } from '@/data/lexiconEntries';
+import { entries as famousBaseEntries } from '@/data/lexiconEntries';
+import { famousLexiconSupplement } from '@/data/famousLexiconSupplement';
 import type {
   LexiconAsset,
   LexiconCategory,
@@ -13,6 +14,8 @@ import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 
 export const LEXICON_API_BASE = '/api/lexicon';
 export type LexiconSource = 'canonical' | 'famous_fallback' | 'canonical_plus_famous_fallback';
+
+const famousFallback: LexiconEntry[] = [...famousBaseEntries, ...famousLexiconSupplement];
 
 let lastSource: LexiconSource = 'famous_fallback';
 export const getLastSource = (): LexiconSource => lastSource;
