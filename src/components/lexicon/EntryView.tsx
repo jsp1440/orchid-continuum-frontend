@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { LexiconEntry } from '@/data/types';
 import { AskCalyx } from './AskCalyx';
+import { ConnectedKnowledge } from './ConnectedKnowledge';
 import { EntryHero, type Depth } from './EntryHero';
 import { ResupinateComparison, ResupinationSequence } from './Schematics';
 import { RecoveredScientificSections } from './RecoveredScientificSections';
@@ -125,6 +126,7 @@ export const EntryView: React.FC<{ entry: LexiconEntry; onOpen: (slug: string) =
             </section>
 
             <div id="why" className="scroll-mt-24"><RecoveredScientificSections entry={entry} /></div>
+            <ConnectedKnowledge entry={entry} onOpen={onOpen} />
 
             <section id="evidence" className="scroll-mt-24 rounded-sm border border-stone-200 bg-white p-6">
               <SectionHeading eyebrow="Evidence" title="Literature and provenance" />
