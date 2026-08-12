@@ -26,7 +26,8 @@ function parseArray(text: string): unknown[] {
 
 function short(value: unknown, limit = 120): string {
   if (value === null || value === undefined) return '';
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  const encoded = typeof value === 'string' ? value : JSON.stringify(value);
+  const text = typeof encoded === 'string' ? encoded : String(value);
   return text.replace(/\s+/g, ' ').trim().slice(0, limit);
 }
 
@@ -45,13 +46,15 @@ export function buildMatrixChatContext({
   candidatesText: string;
   report?: MatrixReport | null;
 }): string {
-  const observations = parseArray(observationsText).slice(0, MAX_OBSERVATIONS);
-  const candidates = parseArray(candidatesText).slice(0, MAX_CANDIDATES);
+  const allObservations = parseArray(observationsText);
+  const allCandidates = parseArray(candidatesText);
+  const observations = allObservations.slice(0, MAX_OBSERVATIONS);
+  const candidates = allCandidates.slice(0, MAX_CANDIDATES);
   const ranked = Array.isArray(report?.candidates) ? report.candidates.slice(0, MAX_CANDIDATES) : [];
 
   const lines = [
     'Current Matrix UI snapshot (interaction context only; not scientific evidence):',
-    `Observations (${observations.length}${parseArray(observationsText).length > MAX_OBSERVATIONS ? '+' : ''} shown):`,
+    `Observations (${observations.length}${allObservations.length > MAX_OBSERVATIONS ? '+' : ''} shown):`,
     ...observations.map((item, index) => `- ${index + 1}: ${short(item, 220)}`),
   ];
 
@@ -64,7 +67,7 @@ export function buildMatrixChatContext({
     );
   } else {
     lines.push(
-      `Candidate matrix (${candidates.length}${parseArray(candidatesText).length > MAX_CANDIDATES ? '+' : ''} shown; not a verified identification):`,
+      `Candidate matrix (${candidates.length}${allCandidates.length > MAX_CANDIDATES ? '+' : ''} shown; not a verified identification):`,
       ...candidates.map((item, index) => `- ${index + 1}: ${short(item, 220)}`),
     );
   }
