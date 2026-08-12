@@ -154,6 +154,12 @@ export const EntryHero: React.FC<{
               <div className="mt-5"><PendingNote label="Definition awaiting canonical enrichment" /></div>
             )}
 
+            {entry.synonyms?.length ? (
+              <p className="mt-4 text-sm leading-relaxed text-stone-600">
+                <strong className="text-stone-800">Also:</strong> {entry.synonyms.join(', ')}
+              </p>
+            ) : null}
+
             <div className="mt-6"><SummaryPoints entry={entry} onJump={onJump} /></div>
 
             <div className="mt-6 flex flex-wrap items-center gap-2">
