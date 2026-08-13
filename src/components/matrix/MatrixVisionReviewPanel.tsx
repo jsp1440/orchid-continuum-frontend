@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
-import { Eye, ImageIcon, ShieldCheck, XCircle } from "lucide-react";
+import { Eye, ImageIcon, Search, ShieldCheck, XCircle } from "lucide-react";
 
 import MatrixReportPanel from "@/components/matrix/MatrixReportPanel";
 import {
   attachVisionAnalysis,
   coerceObservationValue,
+  discoverVisionAnalysesForImage,
   listVisionSuggestions,
   reviewVisionSuggestion,
   type Certainty,
+  type VisionAnalysisSummary,
   type VisionSuggestion,
 } from "@/lib/matrixIdentification";
 
@@ -27,12 +29,20 @@ function stateLabel(state: VisionSuggestion["state"]): string {
   return state.replaceAll("_", " ");
 }
 
+function analysisLabel(analysis: VisionAnalysisSummary): string {
+  const context = analysis.taxon_context ? ` · ${analysis.taxon_context}` : "";
+  return `${analysis.vision_model} ${analysis.vision_model_version} · ${analysis.analysis_status.replaceAll("_", " ")}${context}`;
+}
+
 export default function MatrixVisionReviewPanel({ sessionId, disabled, onObservationAccepted }: Props) {
+  const [imageId, setImageId] = useState("");
+  const [analyses, setAnalyses] = useState<VisionAnalysisSummary[]>([]);
+  const [selectedAnalysisId, setSelectedAnalysisId] = useState("");
   const [analysisId, setAnalysisId] = useState("");
   const [suggestions, setSuggestions] = useState<VisionSuggestion[]>([]);
   const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
   const [message, setMessage] = useState(
-    "Attach an existing governed Calyx Vision analysis. Machine suggestions remain outside Matrix scoring until you review them.",
+    "Find existing governed Calyx Vision analyses by Orchid Continuum image ID, or use an analysis UUID in expert mode. Machine suggestions remain outside Matrix scoring until you review them.",
   );
   const [certainty, setCertainty] = useState<Record<string, Certainty>>({});
   const [revision, setRevision] = useState<Record<string, string>>({});
@@ -43,15 +53,41 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
   }
 
   useEffect(() => {
+    setImageId("");
+    setAnalyses([]);
+    setSelectedAnalysisId("");
+    setAnalysisId("");
     void refresh().catch(() => undefined);
   }, [sessionId]);
 
-  async function attach(): Promise<void> {
-    if (!analysisId.trim()) return;
+  async function discover(): Promise<void> {
+    if (!imageId.trim()) return;
+    setStatus("working");
+    setMessage("Looking up existing governed Vision analyses for this image…");
+    try {
+      const result = await discoverVisionAnalysesForImage(sessionId, imageId.trim());
+      setAnalyses(result.analyses ?? []);
+      setSelectedAnalysisId(result.analyses?.[0]?.analysis_id ?? "");
+      setStatus("idle");
+      setMessage(
+        result.analysis_count
+          ? `Found ${result.analysis_count} governed Vision analysis${result.analysis_count === 1 ? "" : "es"}. Choose one to load its machine suggestions for review.`
+          : "No governed Vision analyses are currently recorded for that image. No new inference was requested.",
+      );
+    } catch (error) {
+      setStatus("error");
+      setAnalyses([]);
+      setSelectedAnalysisId("");
+      setMessage(error instanceof Error ? error.message : "Unable to discover Vision analyses.");
+    }
+  }
+
+  async function attach(targetAnalysisId = selectedAnalysisId || analysisId): Promise<void> {
+    if (!targetAnalysisId.trim()) return;
     setStatus("working");
     setMessage("Loading governed Vision observations for review…");
     try {
-      const result = await attachVisionAnalysis(sessionId, analysisId.trim());
+      const result = await attachVisionAnalysis(sessionId, targetAnalysisId.trim());
       setSuggestions(result.suggestions ?? []);
       setStatus("idle");
       setMessage(
@@ -115,27 +151,76 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
       </div>
 
       <div className="mt-5 rounded-2xl border bg-background p-4">
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Find an existing analysis from an image</p>
+        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
           <input
-            value={analysisId}
-            onChange={(event) => setAnalysisId(event.target.value)}
-            placeholder="Existing Vision analysis ID"
+            value={imageId}
+            onChange={(event) => setImageId(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") void discover(); }}
+            placeholder="Orchid Continuum image ID"
             className="min-w-0 flex-1 rounded-xl border bg-card px-4 py-3"
             disabled={disabled || status === "working"}
           />
           <button
             type="button"
-            onClick={() => void attach()}
-            disabled={disabled || status === "working" || !analysisId.trim()}
+            onClick={() => void discover()}
+            disabled={disabled || status === "working" || !imageId.trim()}
             className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-medium disabled:opacity-50"
           >
-            <ImageIcon className="h-4 w-4" /> Attach governed analysis
+            <Search className="h-4 w-4" /> Find governed analyses
           </button>
         </div>
+
+        {analyses.length > 0 && (
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <select
+              value={selectedAnalysisId}
+              onChange={(event) => setSelectedAnalysisId(event.target.value)}
+              className="min-w-0 rounded-xl border bg-card px-4 py-3 text-sm"
+              disabled={disabled || status === "working"}
+            >
+              {analyses.map((analysis) => (
+                <option key={analysis.analysis_id} value={analysis.analysis_id}>
+                  {analysisLabel(analysis)}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => void attach(selectedAnalysisId)}
+              disabled={disabled || status === "working" || !selectedAnalysisId}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-700 px-4 py-3 font-semibold text-white disabled:opacity-50"
+            >
+              <ImageIcon className="h-4 w-4" /> Load for review
+            </button>
+          </div>
+        )}
+
         <p className="mt-3 text-xs leading-5 text-muted-foreground" aria-live="polite">{message}</p>
         <p className="mt-2 text-xs text-muted-foreground">
-          Live image inference is not implied here. This queue consumes analyses already created by the governed Vision subsystem.
+          This lookup is read-only. It does not request live image inference, create a new analysis, or place machine output into Matrix scoring.
         </p>
+
+        <details className="mt-4 rounded-xl border p-3">
+          <summary className="cursor-pointer text-xs font-semibold">Expert fallback · attach by analysis UUID</summary>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+            <input
+              value={analysisId}
+              onChange={(event) => setAnalysisId(event.target.value)}
+              placeholder="Existing Vision analysis UUID"
+              className="min-w-0 flex-1 rounded-xl border bg-card px-4 py-3"
+              disabled={disabled || status === "working"}
+            />
+            <button
+              type="button"
+              onClick={() => void attach(analysisId)}
+              disabled={disabled || status === "working" || !analysisId.trim()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 font-medium disabled:opacity-50"
+            >
+              <ImageIcon className="h-4 w-4" /> Attach analysis
+            </button>
+          </div>
+        </details>
       </div>
 
       {pending.length > 0 && (
