@@ -44,6 +44,8 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
 };
 
 const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
+const MAX_CALYX_MESSAGE_CHARS = 30000;
+const MAX_HISTORICAL_MISSION_LOOKUPS = 3;
 
 function useElapsedSeconds(active: boolean): number {
   const [elapsed, setElapsed] = useState(0);
@@ -143,6 +145,7 @@ export default function CalyxWorkspace() {
   const submissionLockRef = useRef<number | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
+  const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
 
   const { speak, cancel: cancelSpeech, supported: ttsSupported } = useCalyxSpeechOutput();
   const { state: micState, interimTranscript, error: speechInputError, startListening, stopListening } =
@@ -259,10 +262,15 @@ export default function CalyxWorkspace() {
   useEffect(() => {
     if (!conversation) return;
 
-    for (const item of conversation.messages) {
-      if (item.role !== "calyx" || missions[item.message_id]) continue;
+    const recentCalyxMessages = conversation.messages
+      .filter((item) => item.role === "calyx")
+      .slice(-MAX_HISTORICAL_MISSION_LOOKUPS);
+
+    for (const item of recentCalyxMessages) {
+      if (missions[item.message_id]) continue;
       const missionId = typeof item.metadata?.mission_id === "string" ? item.metadata.mission_id : null;
-      if (!missionId) continue;
+      if (!missionId || missionLookupAttemptsRef.current.has(missionId)) continue;
+      missionLookupAttemptsRef.current.add(missionId);
 
       void getBrainMission(missionId)
         .then((mission) => {
@@ -380,6 +388,7 @@ export default function CalyxWorkspace() {
 
     if (conversation && !shouldReuseConversation(conversation, activeProjectId)) {
       setMissions({});
+      missionLookupAttemptsRef.current.clear();
       setWorkspaceStatus(`Started a clean CALYX thread for project ${activeProjectId}.`);
     } else {
       setWorkspaceStatus(null);
@@ -503,6 +512,7 @@ export default function CalyxWorkspace() {
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
+    missionLookupAttemptsRef.current.clear();
     setMessage("");
     setConversationError(null);
     setAuthRequired(false);
@@ -559,6 +569,7 @@ export default function CalyxWorkspace() {
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
+    missionLookupAttemptsRef.current.clear();
     setMessage("");
     setConversationError(null);
     setAuthRequired(false);
@@ -653,7 +664,8 @@ export default function CalyxWorkspace() {
             <form className="border-t p-4" onSubmit={submit}>
               {interimTranscript ? <p className="mb-2 text-xs italic text-muted-foreground">{interimTranscript}…</p> : null}
               <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
-              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={5000} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" value={message} />
+              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" value={message} />
+              <div className="mt-1 flex justify-end"><p className={`text-xs ${message.length >= MAX_CALYX_MESSAGE_CHARS * 0.9 ? "text-amber-600" : "text-muted-foreground"}`}>{message.length.toLocaleString()} / {MAX_CALYX_MESSAGE_CHARS.toLocaleString()} characters</p></div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <details className="text-xs text-muted-foreground">
