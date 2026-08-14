@@ -359,7 +359,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
         },
       },
       research_mode: "auto",
-      retrieval_limit: 8,
+      retrieval_limit: 20,
     });
     expect(getContextValue(container, "Conversation")).toBe("new-conversation");
     expect(container.textContent).toContain("Study orchid resilience signals.");
