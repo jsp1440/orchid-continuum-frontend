@@ -4,6 +4,7 @@ import {
   attachVisionAnalysis,
   coerceObservationValue,
   explanationText,
+  getVisionCapabilityStatus,
   reviewVisionSuggestion,
 } from "./matrixIdentification";
 
@@ -47,6 +48,29 @@ describe("Calyx explanation rendering", () => {
 });
 
 describe("Vision review API contract", () => {
+  it("reads the governed Vision status without requesting inference", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: async () => ({
+        persistence_mode: "memory",
+        durable_persistence_enabled: false,
+        schema_ready: false,
+        live_inference_enabled: false,
+      }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const status = await getVisionCapabilityStatus();
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toContain("/api/vision-lexicon/status");
+    expect(init.method).toBeUndefined();
+    expect(status.live_inference_enabled).toBe(false);
+    expect(status.durable_persistence_enabled).toBe(false);
+  });
+
   it("attaches an existing governed analysis to the session review queue", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
