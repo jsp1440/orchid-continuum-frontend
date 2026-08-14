@@ -1,160 +1,147 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Compass, Leaf, ShieldCheck } from 'lucide-react';
-import BotanicalLineArt from './BotanicalLineArt';
+import React, { useEffect, useState } from 'react';
+import { ArrowRight, Globe2, Leaf } from 'lucide-react';
+import { useDailyGenus } from '@/lib/dailyGenusContext';
+import {
+  fetchCalyxGenusMedia,
+  type GenusMediaItem,
+} from '@/lib/genusMediaResolver';
 
 /**
- * HomeHero — Orchid Continuum scientific landing hero.
+ * Public opening: the orchid leads; the institution follows.
  *
- * BUILD-036 keeps the museum / ecological-atlas aesthetic while making the
- * first screen explicitly grant-ready: beauty leads to discovery, discovery
- * leads to relationships, and relationships lead to stewardship.
+ * This intentionally consumes the existing Featured Genus media resolver rather
+ * than creating a new image source. #166 owns deeper consolidation of the
+ * Featured Genus data/media pipeline.
  */
-
 const HomeHero: React.FC = () => {
-  const navigate = useNavigate();
+  const { genus } = useDailyGenus();
+  const [heroMedia, setHeroMedia] = useState<GenusMediaItem | null>(null);
+  const [mediaState, setMediaState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
 
-  const scrollToWeb = () => {
-    const el = document.getElementById('continuum-web');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => {
+    const controller = new AbortController();
+    setMediaState('loading');
+    setHeroMedia(null);
+
+    void fetchCalyxGenusMedia(genus, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        const item = response.items[0] ?? null;
+        setHeroMedia(item);
+        setMediaState(item ? 'ready' : 'unavailable');
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setMediaState('unavailable');
+      });
+
+    return () => controller.abort();
+  }, [genus]);
+
+  const scrollToFeaturedGenus = () => {
+    document.getElementById('species-in-focus')?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const scrollToStory = () => {
-    const el = document.getElementById('species-in-focus');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  const scrollToAtlas = () => {
+    document.getElementById('homepage-atlas')?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
-
-    <section className="relative overflow-hidden bg-[#1a2e1a] text-[#f5f0e8] border-b border-white/[0.06]">
+    <section className="relative overflow-hidden border-b border-white/[0.06] bg-[#14281c] text-[#f5f0e8]">
       <div
-        className="absolute inset-0 pointer-events-none"
+        className="pointer-events-none absolute inset-0"
         style={{
           background:
             'radial-gradient(ellipse at 14% 0%, rgba(54,102,72,0.35) 0%, transparent 55%),' +
-            'radial-gradient(ellipse at 92% 100%, rgba(120,90,40,0.12) 0%, transparent 60%),' +
-            'linear-gradient(180deg, #1f3622 0%, #16271a 100%)',
+            'linear-gradient(180deg, #1f3622 0%, #14281c 100%)',
         }}
       />
 
-      <div
-        className="pointer-events-none absolute inset-0 flex items-center justify-center"
-        aria-hidden="true"
-        style={{
-          backgroundImage:
-            'url("https://raw.githubusercontent.com/jsp1440/OrchidContinuumHarvester/main/attached_assets/orchid_continuum_logo.png")',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-          backgroundSize: 'min(90%, 1100px)',
-          opacity: 0.05,
-        }}
-      />
-
-      <div
-        className="pointer-events-none absolute -right-24 top-12 w-[640px] opacity-[0.07] hidden md:block"
-        aria-hidden="true"
-      >
-        <BotanicalLineArt
-          variant="vampira"
-          stroke="#d4b34a"
-          strokeWidth={1}
-          className="w-full h-auto"
-        />
-      </div>
-
-
-      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 pt-24 lg:pt-28 pb-14 lg:pb-16">
-        <div className="grid lg:grid-cols-12 gap-10 items-center">
-          <div className="lg:col-span-8">
-            <div className="inline-flex items-center gap-3 font-mono text-[10px] tracking-[0.32em] uppercase text-[#c9a24a]">
-              <span className="inline-block w-8 h-px bg-[#c9a24a]/60" />
-              Biodiversity · Relationships · Education · Conservation
+      <div className="relative z-10 mx-auto max-w-[1400px] px-6 pb-12 pt-24 lg:px-10 lg:pb-16 lg:pt-28">
+        <div className="grid items-center gap-8 lg:grid-cols-12 lg:gap-12">
+          <div className="lg:col-span-5">
+            <div className="inline-flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.30em] text-[#c9a24a]">
+              <span className="inline-block h-px w-8 bg-[#c9a24a]/60" />
+              Featured Genus · {genus}
             </div>
 
             <h1
-              className="mt-7 text-[#faf7f2] leading-[1.0] tracking-[-0.012em]"
+              className="mt-6 leading-[1.02] tracking-[-0.012em] text-[#faf7f2]"
               style={{
-                fontFamily:
-                  '"Playfair Display","Cormorant Garamond",Georgia,serif',
+                fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
                 fontWeight: 500,
-                fontSize: 'clamp(2.4rem, 5.4vw, 4.7rem)',
+                fontSize: 'clamp(2.5rem, 5vw, 4.7rem)',
               }}
             >
-              Discover the hidden relationships that connect orchids to the{' '}
-              <span className="italic text-[#d4b34a]">living world</span>.
+              Orchids are never just flowers.
             </h1>
 
             <p
-              className="mt-6 max-w-3xl text-[#e7dfd1]/90 leading-[1.4]"
+              className="mt-5 max-w-2xl leading-[1.45] text-[#e7dfd1]/90"
               style={{
-                fontFamily:
-                  '"Cormorant Garamond","Playfair Display",Georgia,serif',
-                fontSize: 'clamp(1.15rem, 1.7vw, 1.55rem)',
+                fontFamily: '"Cormorant Garamond","Playfair Display",Georgia,serif',
+                fontSize: 'clamp(1.15rem, 1.65vw, 1.5rem)',
               }}
             >
-              The Orchid Continuum connects orchids with pollinators, fungi,
-              habitats, climate, images, maps, literature, education, and
-              conservation action — so beauty becomes understanding, and
-              understanding becomes stewardship.
+              Follow one genus through species, place, pollinators, fungi,
+              climate, evidence, and conservation.
             </p>
 
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-7 flex flex-wrap gap-3">
               <button
                 type="button"
-                onClick={scrollToStory}
-                className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-[#d4b34a] text-[#14281c] hover:bg-[#e6c763] transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
+                onClick={scrollToFeaturedGenus}
+                className="group inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-6 py-3.5 font-mono text-[11px] uppercase tracking-[0.20em] text-[#14281c] transition-colors hover:bg-[#e6c763]"
               >
                 <Leaf className="h-4 w-4" />
-                Follow today's orchid
-                <ArrowRight className="h-4 w-4 opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all" />
+                Explore {genus}
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
               </button>
               <button
                 type="button"
-                onClick={scrollToWeb}
-                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-[#d4b34a]/40 text-[#faf7f2] hover:bg-[#d4b34a]/10 hover:border-[#d4b34a] transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
+                onClick={scrollToAtlas}
+                className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/40 px-6 py-3.5 font-mono text-[11px] uppercase tracking-[0.20em] text-[#faf7f2] transition-colors hover:border-[#d4b34a] hover:bg-[#d4b34a]/10"
               >
-                <Compass className="h-4 w-4" />
-                Explore the Continuum
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/get-involved')}
-                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-emerald-300/30 text-[#faf7f2] hover:bg-emerald-300/10 hover:border-emerald-300/60 transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Support conservation
+                <Globe2 className="h-4 w-4" />
+                See it in place
               </button>
             </div>
-
-            <p className="mt-8 font-mono text-[10px] tracking-[0.24em] uppercase text-[#7a7466]">
-              An independent biodiversity and conservation initiative ·
-              fiscally sponsored by Ecologistics, 501(c)(3).
-            </p>
           </div>
 
-
-          <div className="lg:col-span-4 hidden lg:block">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[340px] h-[340px] rounded-full border border-[#d4b34a]/30" />
-                <div className="absolute w-[440px] h-[440px] rounded-full border border-[#d4b34a]/10" />
-              </div>
-              <div className="relative flex items-center justify-center">
-                <img
-                  src="https://d64gsuwffb70l.cloudfront.net/685ce481a881cc69fa33814c_1780636186272_bb5ee54d.png"
-                  alt="Orchid Continuum — The Global Orchid Experience"
-                  className="w-full h-auto max-w-sm mx-auto drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
-                  loading="eager"
-                />
-              </div>
-              <div className="mt-6 text-center">
-                <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">
-                  The Global Orchid Experience
+          <div className="lg:col-span-7">
+            <div className="relative min-h-[360px] overflow-hidden rounded-[2rem] border border-white/[0.10] bg-black/20 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:min-h-[460px] lg:min-h-[560px]">
+              {heroMedia ? (
+                <>
+                  <img
+                    src={heroMedia.image_url}
+                    alt={heroMedia.scientific_name}
+                    className="absolute inset-0 h-full w-full object-cover"
+                    loading="eager"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                  <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
+                    <p className="font-serif text-2xl italic text-white sm:text-3xl">
+                      {heroMedia.scientific_name}
+                    </p>
+                    <p className="mt-2 max-w-2xl text-xs leading-5 text-white/75 sm:text-sm">
+                      {heroMedia.attribution || heroMedia.source_name}
+                      {heroMedia.license ? ` · ${heroMedia.license}` : ''}
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="flex min-h-[360px] h-full items-center justify-center px-8 text-center sm:min-h-[460px] lg:min-h-[560px]">
+                  <div>
+                    <p className="font-serif text-3xl italic text-[#f5f0e8]">{genus}</p>
+                    <p className="mt-3 text-sm leading-6 text-[#d8cfbd]/75">
+                      {mediaState === 'loading'
+                        ? 'Loading an approved Featured Genus photograph…'
+                        : 'Approved Featured Genus media are temporarily unavailable.'}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           </div>
-
         </div>
       </div>
     </section>
