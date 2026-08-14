@@ -10,8 +10,9 @@ Validation gate: frontend tests, production build, and lint must pass on the fin
 - `dailyGenusContext` — CONTINUE. It remains the authority for the stable genus cadence.
 - `genusMediaResolver` — CONVERGE. It remains the sole Featured Genus media request path and now shares concurrent requests/results across homepage consumers.
 - `HomeHero` — CONVERGE onto the shared Featured Genus context instead of fetching media independently.
+- legacy `DailyGenusFeatureV3` data/image harvester — SUPERSEDE on the homepage. The replacement keeps the visual/species-selection role but consumes only shared approved Calyx media.
 - `DailyGenusFeatureV5` — CONTINUE temporarily. Its existing call to `genusMediaResolver` now collapses onto the same cached request instead of causing a second network fetch.
-- PR #86 / `DailyGenusFeatureV6` / Species Exhibit — CONTINUE + CONVERGE, not abandon. Its evidence-grounded species packet validation remains the preferred species-card lineage. This Wave 2 slice does not duplicate its 1,000+ lines of already-validated exhibit code.
+- PR #86 / `DailyGenusFeatureV6` / Species Exhibit — CONTINUE + CONVERGE, not abandon. Its evidence-grounded species packet validation remains the preferred species-card lineage. This Wave 2 slice does not duplicate its already-validated exhibit code.
 - `heroSpeciesContext` — CONTINUE for compatibility only; `homepageFeaturedContext` is the new homepage-wide shared genus/species/media interface for #166/#167/#169/#170.
 
 ## `/api/homepage/genus/{genus}` decision
@@ -45,6 +46,12 @@ Once the composite endpoint schema is verified, #166 may replace these fragmente
 - provenance state;
 - loading / no-media / backend-error states;
 - controlled `selectSpecies()` limited to species actually present in approved media.
+
+## Species selection and rotation
+
+The Featured Genus visual now uses the same shared active-species state consumed by the Hero and Atlas. Visitors may select any approved species shown in the strip. When more than one approved species is available, the active species rotates within the same genus on a 45-second cadence. Automatic rotation is disabled for visitors who request reduced motion.
+
+This replaces the legacy V3 behavior that independently queried multiple species/image sources. In particular, the direct iNaturalist fallback has been removed from the homepage Featured Genus visual.
 
 ## Failure semantics
 
