@@ -14,8 +14,15 @@ export const OC_BACKEND_BASE = (
   'https://orchid-continuum-public-api.onrender.com'
 ).replace(/\/$/, '');
 
-/** Atlas occurrences data endpoint. */
-export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/atlas/occurrences`;
+/**
+ * Atlas occurrences data endpoint.
+ *
+ * The canonical backend (orchid-continuum-public-api) only serves this route
+ * under the /api prefix — GET /api/atlas/occurrences — not the bare
+ * /atlas/occurrences path. (The legacy onrender host is the one that serves
+ * it unprefixed; OC_BACKEND_BASE defaults to the canonical host.)
+ */
+export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/api/atlas/occurrences`;
 
 const DEFAULT_TIMEOUT = 12_000;
 async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT): Promise<{ ok: boolean; status: number; data: T | null }> {

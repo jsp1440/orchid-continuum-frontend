@@ -4,7 +4,8 @@ import { loadSubsystemCache, saveSubsystemCache } from '../shared/cache'
 import type { ScientificSubsystemIntelligence, Provenance } from '../shared/types'
 
 const SUBSYSTEM_ID = 'atlas'
-const ATLAS_URL = `${BACKEND_BASE_URL}/atlas/occurrences`
+// The canonical backend only serves this route under the /api prefix.
+const ATLAS_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences`
 
 export type AtlasIntelligence = ScientificSubsystemIntelligence & {
   occurrenceCount: number

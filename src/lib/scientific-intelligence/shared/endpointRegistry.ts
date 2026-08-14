@@ -18,7 +18,7 @@ export const ENDPOINT_REGISTRY: EndpointRegistryEntry[] = [
   },
   {
     subsystem: 'atlas',
-    endpoint: `${BACKEND_BASE_URL}/atlas/occurrences`,
+    endpoint: `${BACKEND_BASE_URL}/api/atlas/occurrences`,
     method: 'GET',
     responseShape: '{ total: number, items: Occurrence[] } or Occurrence[]',
     normalizedFields: ['occurrenceCount', 'acceptedTaxa', 'coordinateQuality'],

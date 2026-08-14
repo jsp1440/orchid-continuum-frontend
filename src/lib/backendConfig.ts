@@ -174,5 +174,9 @@ export const ECUADOR_EMBED_BASE_URL = (
   'https://orchid-continuum-ecuador-expedition.onrender.com'
 ).replace(/\/$/, '');
 
-export const ATLAS_OCCURRENCES_URL = `${BACKEND_BASE_URL}/atlas/occurrences`;
+// The canonical backend (orchid-continuum-public-api) only serves this route
+// under the /api prefix — GET /api/atlas/occurrences — not the bare
+// /atlas/occurrences path that BACKEND_BASE_URL used to point at back when it
+// defaulted to the legacy onrender host.
+export const ATLAS_OCCURRENCES_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences`;
 export const ATLAS_OCCURRENCES_PROBE_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences?limit=1`;
