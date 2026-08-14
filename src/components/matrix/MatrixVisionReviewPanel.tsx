@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Eye, ImageIcon, Search, ShieldCheck, XCircle } from "lucide-react";
 
 import MatrixReportPanel from "@/components/matrix/MatrixReportPanel";
+import VisionActivationPreflightCard from "@/components/matrix/VisionActivationPreflightCard";
 import {
   attachVisionAnalysis,
   coerceObservationValue,
@@ -198,6 +199,7 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
             <span>Live inference: {capability.live_inference_enabled === true ? "enabled" : "disabled"}</span>
             {capability.provider_status && <span>Provider: {capability.provider_status.replaceAll("_", " ")}</span>}
           </div>
+          <VisionActivationPreflightCard />
         </div>
       )}
 
