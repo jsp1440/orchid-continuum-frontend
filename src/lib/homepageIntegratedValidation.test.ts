@@ -69,7 +69,7 @@ describe('HOMEPAGE-RECOVERY-008 integrated candidate guardrails', () => {
   it('preserves honest evidence semantics in Atlas and relationships', () => {
     expect(atlas).toContain('Missing records do not establish biological absence');
     expect(atlas).toContain('point density is not population abundance');
-    expect(relationships).toContain('not evidence of biological absence');
+    expect(relationships).toContain('does not establish biological absence');
   });
 
   it('keeps advanced destinations available deeper in the product', () => {
