@@ -37,15 +37,13 @@ const empty = (genus: string, status: GenusMediaResponse['status']): GenusMediaR
   summary: { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
 });
 
-/** The only Featured Genus media request path. No external fallback is allowed. */
-export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal): Promise<GenusMediaResponse> {
-  const requested = genus.trim();
-  if (!requested) return empty(genus, 'invalid_genus');
+const resolvedCache = new Map<string, GenusMediaResponse>();
+const inFlight = new Map<string, Promise<GenusMediaResponse>>();
 
+async function requestGenusMedia(requested: string): Promise<GenusMediaResponse> {
   try {
     const response = await fetch(
       `${CALYX_BACKEND_BASE_URL}/api/media/genus/${encodeURIComponent(requested)}?limit=12`,
-      { signal },
     );
     if (response.status === 400 || response.status === 404) return empty(requested, 'invalid_genus');
     if (!response.ok) return empty(requested, 'service_error');
@@ -54,8 +52,7 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
     if (payload.status !== 'ok' && payload.status !== 'no_approved_media' && payload.status !== 'invalid_genus') {
       return empty(requested, 'service_error');
     }
-    // Deduplicate by image_url so the same photograph never appears in both the
-    // hero slot and the gallery (which would look like a duplicate on the page).
+
     const seenUrls = new Set<string>();
     return {
       status: payload.status,
@@ -80,8 +77,37 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
         ? payload.summary
         : { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
     };
-  } catch (error) {
-    if ((error as Error)?.name === 'AbortError') throw error;
+  } catch {
     return empty(requested, 'service_error');
   }
+}
+
+/**
+ * The only Featured Genus media request path. No external fallback is allowed.
+ * Calls for the same genus share one in-flight request and one page-lifetime
+ * resolved response, so Hero and Featured Genus cannot race separate copies of
+ * the same approved-media contract.
+ */
+export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal): Promise<GenusMediaResponse> {
+  const requested = genus.trim();
+  if (!requested) return empty(genus, 'invalid_genus');
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+
+  const key = requested.toLowerCase();
+  const cached = resolvedCache.get(key);
+  if (cached) return cached;
+
+  let pending = inFlight.get(key);
+  if (!pending) {
+    pending = requestGenusMedia(requested).then((result) => {
+      inFlight.delete(key);
+      if (result.status !== 'service_error') resolvedCache.set(key, result);
+      return result;
+    });
+    inFlight.set(key, pending);
+  }
+
+  const result = await pending;
+  if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+  return result;
 }
