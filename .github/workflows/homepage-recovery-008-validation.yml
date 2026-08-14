@@ -1,0 +1,33 @@
+name: HOMEPAGE-RECOVERY-008 Validation
+
+on:
+  pull_request:
+    paths:
+      - 'src/components/AppLayout.tsx'
+      - 'src/components/orchid/**'
+      - 'src/lib/homepage*'
+      - 'src/App.tsx'
+      - 'docs/HOMEPAGE-RECOVERY-008-INTEGRATED-VALIDATION.md'
+      - '.github/workflows/homepage-recovery-008-validation.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Integrated homepage guardrails
+        run: npx vitest run src/lib/homepageIntegratedValidation.test.ts
+      - name: Repository tests
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Lint
+        run: npm run lint
