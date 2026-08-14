@@ -2,7 +2,21 @@
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const mocks = vi.hoisted(() => ({
+  fetchVisionSuggestionRegion: vi.fn(),
+}));
+
+vi.mock("@/lib/matrixIdentification", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/matrixIdentification")>(
+    "@/lib/matrixIdentification",
+  );
+  return {
+    ...actual,
+    fetchVisionSuggestionRegion: mocks.fetchVisionSuggestionRegion,
+  };
+});
 
 import MatrixMorphologyViewer from "@/components/matrix/MatrixMorphologyViewer";
 import type { VisionSuggestion } from "@/lib/matrixIdentification";
@@ -41,6 +55,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
+  mocks.fetchVisionSuggestionRegion.mockReset();
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -51,38 +66,87 @@ afterEach(() => {
   container.remove();
 });
 
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
+
 describe("MatrixMorphologyViewer", () => {
-  it("renders a tab per deconstruct-the-flower layer and an availability count", () => {
+  it("renders a tab per deconstruct-the-flower layer and shows a checking state before the region resolves", async () => {
+    mocks.fetchVisionSuggestionRegion.mockReturnValue(new Promise(() => {})); // never resolves
     act(() => {
-      root.render(<MatrixMorphologyViewer suggestion={suggestion} />);
+      root.render(<MatrixMorphologyViewer sessionId="session-1" suggestion={suggestion} />);
     });
     const tabs = container.querySelectorAll('[role="tab"]');
     expect(tabs.length).toBe(9);
     expect(container.textContent).toContain("2 of 9 layers analyzed");
+    expect(container.textContent).toContain("checking for region geometry");
   });
 
-  it("defaults to the first layer panel and shows its unavailable reason", () => {
-    act(() => {
-      root.render(<MatrixMorphologyViewer suggestion={suggestion} />);
+  it("fetches the region for the current session and suggestion", async () => {
+    mocks.fetchVisionSuggestionRegion.mockResolvedValue({
+      session_id: "session-1",
+      suggestion_id: "sugg-1",
+      region: null,
     });
-    expect(container.textContent).toContain("Not analyzed for this suggestion.");
-    expect(container.textContent).toContain("resolvable image URL");
+    act(() => {
+      root.render(<MatrixMorphologyViewer sessionId="session-1" suggestion={suggestion} />);
+    });
+    await flush();
+    expect(mocks.fetchVisionSuggestionRegion).toHaveBeenCalledWith("session-1", "sugg-1");
   });
 
-  it("switches panel content when a different layer tab is activated", () => {
-    act(() => {
-      root.render(<MatrixMorphologyViewer suggestion={suggestion} />);
+  it("renders real geometry once the region resolves with masks and landmarks", async () => {
+    mocks.fetchVisionSuggestionRegion.mockResolvedValue({
+      session_id: "session-1",
+      suggestion_id: "sugg-1",
+      region: {
+        region_id: "region-42",
+        analysis_id: "analysis-1",
+        concept_id: null,
+        label: "Labellum",
+        bounding_box: { x: 120, y: 200, width: 80, height: 60 },
+        segmentation_ref: "mask:labellum:v1",
+        landmarks: [{ name: "labellum_apex", x: 160, y: 240 }],
+        confidence: 0.83,
+        review_state: "MACHINE_GENERATED",
+      },
     });
-    const measurementsTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
-      el.textContent?.includes("Measurements"),
+    act(() => {
+      root.render(<MatrixMorphologyViewer sessionId="session-1" suggestion={suggestion} />);
+    });
+    await flush();
+
+    expect(container.textContent).not.toContain("checking for region geometry");
+    expect(container.textContent).toContain("4 of 9 layers analyzed");
+
+    const masksTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+      el.textContent?.includes("Organ masks"),
     ) as HTMLButtonElement;
-    expect(measurementsTab).toBeTruthy();
-
     act(() => {
-      measurementsTab.click();
+      masksTab.click();
     });
+    expect(container.textContent).toContain("Segmentation reference: mask:labellum:v1");
+  });
 
-    expect(measurementsTab.getAttribute("aria-selected")).toBe("true");
-    expect(container.textContent).toContain("Value: 4.2 cm");
+  it("shows an explicit error banner without claiming geometry is confirmed absent when the region fetch fails", async () => {
+    mocks.fetchVisionSuggestionRegion.mockRejectedValue(new Error("service unavailable"));
+    act(() => {
+      root.render(<MatrixMorphologyViewer sessionId="session-1" suggestion={suggestion} />);
+    });
+    await flush();
+
+    expect(container.textContent).toContain("Could not check this suggestion for region geometry");
+    expect(container.textContent).toContain("service unavailable");
+    // Still in the "not checked yet" wording, not the confirmed-absent wording.
+    const masksTab = Array.from(container.querySelectorAll('[role="tab"]')).find((el) =>
+      el.textContent?.includes("Organ masks"),
+    ) as HTMLButtonElement;
+    act(() => {
+      masksTab.click();
+    });
+    expect(container.textContent).toContain("not been checked yet");
   });
 });

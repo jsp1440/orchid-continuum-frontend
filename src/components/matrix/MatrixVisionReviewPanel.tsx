@@ -320,7 +320,7 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
                 </button>
                 {expandedMorphologyId === suggestion.suggestion_id && (
                   <div className="mt-3">
-                    <MatrixMorphologyViewer suggestion={suggestion} />
+                    <MatrixMorphologyViewer sessionId={sessionId} suggestion={suggestion} />
                   </div>
                 )}
 
