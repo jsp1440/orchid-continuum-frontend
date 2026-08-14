@@ -7,29 +7,6 @@ import {
   type EndpointProbe,
 } from '@/lib/endpointAudit';
 
-/**
- * Slim status banner pinned at the very top of the homepage, above the
- * navigation bar. Pings the Orchid Continuum harvester backend ONCE on page
- * load and reports one of three states:
- *
- *   LIVE    → green dot  · "LIVE · Orchid Continuum database connected"
- *   SLOW    → yellow dot · "SLOW · Database responding with delays"
- *   OFFLINE → red dot    · "OFFLINE · Showing cached reference data"
- *
- * Clicking the banner opens a small detail panel listing each audited endpoint
- * (harvester species search, atlas occurrences, campaign stats) with its last
- * response status and latency. The three endpoints are probed on mount and then
- * re-probed in the background every 60 seconds, so a curator always sees a
- * freshly-refreshed view without manually reopening the panel.
- *
- * Style: navy #0d2535 background, parchment #f5f0e8 text, small caps, compact
- * single line, with a × dismiss button on the right. Dismissal is for the
- * current view only (no persistence).
- *
- * `onHeightChange` lets the parent shift the fixed navbar / page content down
- * by the banner height while it is visible.
- */
-
 interface BackendStatusBannerProps {
   onHeightChange?: (px: number) => void;
 }
@@ -43,19 +20,19 @@ const STATE_CONFIG: Record<
 > = {
   checking: {
     dot: '#C9A84C',
-    label: 'Checking · Contacting Orchid Continuum database',
+    label: 'Checking · Contacting Orchid Continuum data services',
   },
   live: {
     dot: '#2f9e44',
-    label: 'LIVE · Orchid Continuum database connected',
+    label: 'LIVE · Orchid Continuum data services connected',
   },
   slow: {
     dot: '#e8b923',
-    label: 'SLOW · Database responding with delays',
+    label: 'SLOW · Data services responding with delays',
   },
   offline: {
     dot: '#d64545',
-    label: 'OFFLINE · Showing cached reference data',
+    label: 'OFFLINE · Live data temporarily unavailable',
   },
 };
 
@@ -82,7 +59,6 @@ const BackendStatusBanner: React.FC<BackendStatusBannerProps> = ({
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Single overall ping + audit on page load (drives the banner headline).
   useEffect(() => {
     const controller = new AbortController();
     let active = true;
@@ -99,9 +75,6 @@ const BackendStatusBanner: React.FC<BackendStatusBannerProps> = ({
     };
   }, []);
 
-  // Background polling of the three audited endpoints: probe immediately on
-  // mount, then re-probe every 60s so the detail panel stays continuously
-  // refreshed even while closed.
   useEffect(() => {
     let active = true;
     let controller = new AbortController();
@@ -126,12 +99,10 @@ const BackendStatusBanner: React.FC<BackendStatusBannerProps> = ({
     };
   }, []);
 
-  // Report height to the parent so it can offset the navbar / page.
   useEffect(() => {
     onHeightChange?.(dismissed ? 0 : BANNER_HEIGHT);
   }, [dismissed, onHeightChange]);
 
-  // Close the detail panel on outside click.
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -207,7 +178,7 @@ const BackendStatusBanner: React.FC<BackendStatusBannerProps> = ({
                 className="font-mono text-[10px] tracking-[0.25em] uppercase text-[#C9A84C]"
                 style={{ fontVariant: 'small-caps' }}
               >
-                Audited data sources
+                Audited homepage data services
               </span>
               <span className="font-mono text-[9px] tracking-[0.14em] uppercase text-[#f5f0e8]/55">
                 {probing
@@ -222,9 +193,9 @@ const BackendStatusBanner: React.FC<BackendStatusBannerProps> = ({
               {(probes.length
                 ? probes
                 : [
-                    { key: 'species-search', label: 'Harvester species search' },
+                    { key: 'species-search', label: 'Species search' },
                     { key: 'atlas-occurrences', label: 'Atlas occurrences' },
-                    { key: 'campaign-stats', label: 'Campaign stats' },
+                    { key: 'homepage-genus', label: 'Featured Genus data' },
                   ].map((e) => ({
                     ...e,
                     url: '',
@@ -273,8 +244,8 @@ const BackendStatusBanner: React.FC<BackendStatusBannerProps> = ({
             </ul>
 
             <p className="mt-2 font-body text-[10px] leading-snug text-[#f5f0e8]/45">
-              Re-probed automatically every 60 seconds. Latency is the last
-              round-trip to the canonical harvester host.
+              Re-probed automatically every 60 seconds. A failed optional feature
+              route is not treated as proof that scientific data are absent.
             </p>
           </div>
         </div>
