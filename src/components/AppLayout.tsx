@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
+import { HomepageFeaturedProvider } from '@/lib/homepageFeaturedContext';
 import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
@@ -70,12 +71,6 @@ const SafeSection: React.FC<SectionBoundaryProps> = ({ name, children }) => (
   <SectionBoundary name={name}>{children}</SectionBoundary>
 );
 
-/**
- * Public homepage story flow.
- *
- * Deep workspaces remain available through navigation/footer. The homepage is
- * intentionally not a catalog of every Orchid Continuum module.
- */
 const AppLayout: React.FC = () => {
   const [bannerHeight, setBannerHeight] = useState(0);
 
@@ -86,23 +81,25 @@ const AppLayout: React.FC = () => {
 
       <main style={{ paddingTop: bannerHeight }}>
         <DailyGenusProvider>
-          <HeroSpeciesProvider>
-            <SafeSection name="Home hero"><HomeHero /></SafeSection>
+          <HomepageFeaturedProvider>
+            <HeroSpeciesProvider>
+              <SafeSection name="Home hero"><HomeHero /></SafeSection>
 
-            <div id="species-in-focus">
-              <SafeSection name="Featured Genus"><DailyGenusFeature /></SafeSection>
-            </div>
+              <div id="species-in-focus">
+                <SafeSection name="Featured Genus"><DailyGenusFeature /></SafeSection>
+              </div>
 
-            <SafeSection name="Relationships"><TheKnowledgeGraph /></SafeSection>
-            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
+              <SafeSection name="Relationships"><TheKnowledgeGraph /></SafeSection>
+              <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
 
-            <div id="homepage-atlas">
-              <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
-            </div>
+              <div id="homepage-atlas">
+                <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
+              </div>
 
-            <SafeSection name="Discovery tools"><CapabilityGrid /></SafeSection>
-            <SafeSection name="Conservation and participation"><HumanStewardship /></SafeSection>
-          </HeroSpeciesProvider>
+              <SafeSection name="Discovery tools"><CapabilityGrid /></SafeSection>
+              <SafeSection name="Conservation and participation"><HumanStewardship /></SafeSection>
+            </HeroSpeciesProvider>
+          </HomepageFeaturedProvider>
         </DailyGenusProvider>
       </main>
 
