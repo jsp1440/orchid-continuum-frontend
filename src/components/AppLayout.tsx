@@ -95,7 +95,11 @@ const AppLayout: React.FC = () => {
 
             <SafeSection name="Relationships"><TheKnowledgeGraph /></SafeSection>
             <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
-            <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
+
+            <div id="homepage-atlas">
+              <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
+            </div>
+
             <SafeSection name="Discovery tools"><CapabilityGrid /></SafeSection>
             <SafeSection name="Conservation and participation"><HumanStewardship /></SafeSection>
           </HeroSpeciesProvider>
