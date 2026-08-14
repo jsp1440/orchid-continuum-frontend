@@ -1,6 +1,6 @@
 import { marked } from "marked";
 
-import type { CalyxConversation } from "@/lib/calyxWorkspace";
+import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
 marked.setOptions({ gfm: true, breaks: true });
 
@@ -200,8 +200,7 @@ function finalizeStructuredPreview(
   );
   const labelColumn = stringLabelColumn ?? visibleColumns[0];
   const numericColumn = visibleColumns.find(
-    (column) =>
-      column !== labelColumn && rawRows.some((row) => typeof row[column] === "number"),
+    (column) => column !== labelColumn && rawRows.some((row) => typeof row[column] === "number"),
   );
 
   const chart =
@@ -238,11 +237,7 @@ function finalizeStructuredPreview(
   };
 }
 
-function buildDelimitedStructuredPreview(
-  content: string,
-  delimiter: string,
-  format: "csv" | "tsv",
-) {
+function buildDelimitedStructuredPreview(content: string, delimiter: string, format: "csv" | "tsv") {
   const records = parseDelimitedRecords(content, delimiter);
   if (records.length < 2) return null;
 
@@ -250,9 +245,7 @@ function buildDelimitedStructuredPreview(
   if (!header.length) return null;
 
   const rawRows = records.slice(1).map((values) =>
-    Object.fromEntries(
-      header.map((column, index) => [column, normalizeWorkspaceCell(values[index])]),
-    ),
+    Object.fromEntries(header.map((column, index) => [column, normalizeWorkspaceCell(values[index])])),
   );
 
   return finalizeStructuredPreview(format, header, rawRows);
@@ -275,9 +268,7 @@ function buildJsonStructuredPreview(content: string) {
   );
   if (!objectRows.length) return null;
 
-  const columns = Array.from(
-    new Set(objectRows.flatMap((record) => Object.keys(record))),
-  );
+  const columns = Array.from(new Set(objectRows.flatMap((record) => Object.keys(record))));
   const rawRows = objectRows.map((record) =>
     Object.fromEntries(columns.map((column) => [column, normalizeWorkspaceCell(record[column])])),
   );
@@ -352,15 +343,32 @@ export function visibleConversationMessages(messages: CalyxConversation["message
   return messages.filter((message) => message.role === "operator" || message.role === "calyx");
 }
 
+function formatCitation(citation: CalyxCitation) {
+  const identifiers = [
+    citation.doi ? `DOI ${citation.doi}` : null,
+    citation.pmid ? `PMID ${citation.pmid}` : null,
+    citation.pmcid ? `PMCID ${citation.pmcid}` : null,
+  ].filter(Boolean);
+  const bibliographic = [citation.authors, citation.publication_date, citation.journal]
+    .filter(Boolean)
+    .join("; ");
+  const governance = citation.canonical_evidence
+    ? "canonical Continuum evidence"
+    : citation.review_state?.replaceAll("_", " ").toLowerCase() || "external / review required";
+  return `- **${citation.title}**${bibliographic ? ` — ${bibliographic}` : ""}${identifiers.length ? ` — ${identifiers.join(" · ")}` : ""} — ${governance}`;
+}
+
 export function buildCalyxConversationExport(
   conversation: Pick<CalyxConversation, "conversation_id" | "project_id" | "created_at" | "messages">,
 ) {
   const lines = [
-    "# CALYX Conversation",
+    "# CALYX Research Package",
     "",
     `**Project:** ${normalizeProjectId(conversation.project_id)}`,
     `**Conversation ID:** ${conversation.conversation_id}`,
     `**Started:** ${new Date(conversation.created_at).toLocaleString()}`,
+    "",
+    "This export preserves CALYX answers, research instructions, citations supplied by the backend, and any chart/map-ready specifications included in the conversation.",
     "",
     "---",
     "",
@@ -371,6 +379,15 @@ export function buildCalyxConversationExport(
     lines.push("");
     lines.push(message.content);
     lines.push("");
+
+    if (message.role === "calyx" && Array.isArray(message.metadata?.citations) && message.metadata.citations.length) {
+      lines.push("### Sources surfaced for this turn");
+      lines.push("");
+      for (const citation of message.metadata.citations) {
+        lines.push(formatCitation(citation));
+      }
+      lines.push("");
+    }
   }
 
   return lines.join("\n");
