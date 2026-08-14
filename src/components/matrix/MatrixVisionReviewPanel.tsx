@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { Eye, ImageIcon, Search, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Eye, ImageIcon, Search, ShieldCheck, XCircle } from "lucide-react";
 
 import MatrixReportPanel from "@/components/matrix/MatrixReportPanel";
 import {
   attachVisionAnalysis,
   coerceObservationValue,
   discoverVisionAnalysesForImage,
+  getVisionCapabilityStatus,
   listVisionSuggestions,
   reviewVisionSuggestion,
   type Certainty,
   type VisionAnalysisSummary,
+  type VisionCapabilityStatus,
   type VisionSuggestion,
 } from "@/lib/matrixIdentification";
 
@@ -34,12 +36,39 @@ function analysisLabel(analysis: VisionAnalysisSummary): string {
   return `${analysis.vision_model} ${analysis.vision_model_version} · ${analysis.analysis_status.replaceAll("_", " ")}${context}`;
 }
 
+function capabilitySummary(capability: VisionCapabilityStatus): {
+  title: string;
+  detail: string;
+  ready: boolean;
+} {
+  if (capability.live_inference_enabled === true) {
+    return {
+      title: "Live Vision inference is enabled",
+      detail: "The governed provider reports live inference available. Matrix review is still required before machine output can be scored.",
+      ready: true,
+    };
+  }
+  if (capability.durable_persistence_enabled === true && capability.schema_ready === true) {
+    return {
+      title: "Vision persistence is ready; live inference is disabled",
+      detail: "Existing governed analyses can be discovered and reviewed, but this interface will not imply that a new provider inference can be requested.",
+      ready: false,
+    };
+  }
+  return {
+    title: "Vision is operating in a limited governed mode",
+    detail: "Existing analyses may be available, but durable persistence and/or the governed Vision schema are not fully active. Live inference is not available from this workflow.",
+    ready: false,
+  };
+}
+
 export default function MatrixVisionReviewPanel({ sessionId, disabled, onObservationAccepted }: Props) {
   const [imageId, setImageId] = useState("");
   const [analyses, setAnalyses] = useState<VisionAnalysisSummary[]>([]);
   const [selectedAnalysisId, setSelectedAnalysisId] = useState("");
   const [analysisId, setAnalysisId] = useState("");
   const [suggestions, setSuggestions] = useState<VisionSuggestion[]>([]);
+  const [capability, setCapability] = useState<VisionCapabilityStatus | null>(null);
   const [status, setStatus] = useState<"idle" | "working" | "error">("idle");
   const [message, setMessage] = useState(
     "Find existing governed Calyx Vision analyses by Orchid Continuum image ID, or use an analysis UUID in expert mode. Machine suggestions remain outside Matrix scoring until you review them.",
@@ -48,8 +77,12 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
   const [revision, setRevision] = useState<Record<string, string>>({});
 
   async function refresh(): Promise<void> {
-    const result = await listVisionSuggestions(sessionId);
-    setSuggestions(result.suggestions ?? []);
+    const [suggestionResult, capabilityResult] = await Promise.all([
+      listVisionSuggestions(sessionId),
+      getVisionCapabilityStatus(),
+    ]);
+    setSuggestions(suggestionResult.suggestions ?? []);
+    setCapability(capabilityResult);
   }
 
   useEffect(() => {
@@ -136,6 +169,7 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
 
   const pending = suggestions.filter((item) => !["accepted", "revised", "rejected"].includes(item.state));
   const completed = suggestions.filter((item) => ["accepted", "revised", "rejected"].includes(item.state));
+  const capabilityCopy = capability ? capabilitySummary(capability) : null;
 
   return (
     <section className="rounded-3xl border bg-card p-6 sm:p-8">
@@ -149,6 +183,23 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
         </div>
         <ShieldCheck className="h-7 w-7 text-emerald-700" />
       </div>
+
+      {capability && capabilityCopy && (
+        <div className={`mt-5 rounded-2xl border p-4 ${capabilityCopy.ready ? "bg-emerald-50/40" : "bg-amber-50/50"}`}>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            {capabilityCopy.ready ? <CheckCircle2 className="h-4 w-4 text-emerald-700" /> : <AlertTriangle className="h-4 w-4" />}
+            {capabilityCopy.title}
+          </div>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">{capabilityCopy.detail}</p>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted-foreground">
+            <span>Persistence: {capability.persistence_mode ?? "unknown"}</span>
+            <span>Schema: {capability.schema_ready === true ? "ready" : "not ready"}</span>
+            <span>Durable: {capability.durable_persistence_enabled === true ? "enabled" : "not enabled"}</span>
+            <span>Live inference: {capability.live_inference_enabled === true ? "enabled" : "disabled"}</span>
+            {capability.provider_status && <span>Provider: {capability.provider_status.replaceAll("_", " ")}</span>}
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 rounded-2xl border bg-background p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Find an existing analysis from an image</p>

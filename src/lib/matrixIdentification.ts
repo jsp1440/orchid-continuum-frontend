@@ -114,6 +114,16 @@ export type VisionAnalysisDiscovery = {
   rule?: string;
 };
 
+export type VisionCapabilityStatus = {
+  persistence_mode?: string;
+  durable_persistence_enabled?: boolean;
+  schema_ready?: boolean;
+  migration_activated?: boolean;
+  live_inference_enabled?: boolean;
+  provider_status?: string;
+  [key: string]: unknown;
+};
+
 export type VisionSuggestion = {
   suggestion_id: string;
   session_id: string;
@@ -212,6 +222,10 @@ export async function explainIdentificationSession(
     method: "POST",
     body: JSON.stringify({ audience, focus }),
   });
+}
+
+export async function getVisionCapabilityStatus(): Promise<VisionCapabilityStatus> {
+  return request<VisionCapabilityStatus>("/api/vision-lexicon/status");
 }
 
 export async function discoverVisionAnalysesForImage(
