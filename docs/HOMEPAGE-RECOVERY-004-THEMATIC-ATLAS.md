@@ -3,6 +3,7 @@
 Parent: #163
 Issue: #167
 Base: #173 / shared Featured Genus context
+Validation gate: focused tests, production build, and lint must pass on the final head before integrated review.
 
 ## Convergence classification
 
