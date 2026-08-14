@@ -72,3 +72,7 @@ This branch **does not authorize deployment**. Deployment remains an explicit ow
 - `READY_FOR_OWNER_RELEASE_DECISION`: both states above are satisfied and no blocker remains.
 
 Only the last state is sufficient to recommend merging/releasing the recovered homepage.
+
+## Preview trigger
+
+A documentation-only commit was added on 2026-08-14 to trigger the connected Vercel Git integration for an isolated branch preview. This does not alter the runtime implementation or production deployment contract.
