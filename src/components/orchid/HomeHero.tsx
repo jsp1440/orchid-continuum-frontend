@@ -1,41 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { ArrowRight, Globe2, Leaf } from 'lucide-react';
-import { useDailyGenus } from '@/lib/dailyGenusContext';
-import {
-  fetchCalyxGenusMedia,
-  type GenusMediaItem,
-} from '@/lib/genusMediaResolver';
+import { useHomepageFeatured } from '@/lib/homepageFeaturedContext';
 
-/**
- * Public opening: the orchid leads; the institution follows.
- *
- * This intentionally consumes the existing Featured Genus media resolver rather
- * than creating a new image source. #166 owns deeper consolidation of the
- * Featured Genus data/media pipeline.
- */
 const HomeHero: React.FC = () => {
-  const { genus } = useDailyGenus();
-  const [heroMedia, setHeroMedia] = useState<GenusMediaItem | null>(null);
-  const [mediaState, setMediaState] = useState<'loading' | 'ready' | 'unavailable'>('loading');
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setMediaState('loading');
-    setHeroMedia(null);
-
-    void fetchCalyxGenusMedia(genus, controller.signal)
-      .then((response) => {
-        if (controller.signal.aborted) return;
-        const item = response.items[0] ?? null;
-        setHeroMedia(item);
-        setMediaState(item ? 'ready' : 'unavailable');
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setMediaState('unavailable');
-      });
-
-    return () => controller.abort();
-  }, [genus]);
+  const {
+    genus,
+    activeMedia,
+    availability,
+    attribution,
+    license,
+    mediaSource,
+  } = useHomepageFeatured();
 
   const scrollToFeaturedGenus = () => {
     document.getElementById('species-in-focus')?.scrollIntoView({ behavior: 'smooth' });
@@ -109,22 +84,22 @@ const HomeHero: React.FC = () => {
 
           <div className="lg:col-span-7">
             <div className="relative min-h-[360px] overflow-hidden rounded-[2rem] border border-white/[0.10] bg-black/20 shadow-[0_30px_80px_rgba(0,0,0,0.35)] sm:min-h-[460px] lg:min-h-[560px]">
-              {heroMedia ? (
+              {activeMedia ? (
                 <>
                   <img
-                    src={heroMedia.image_url}
-                    alt={heroMedia.scientific_name}
+                    src={activeMedia.image_url}
+                    alt={activeMedia.scientific_name}
                     className="absolute inset-0 h-full w-full object-cover"
                     loading="eager"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                   <div className="absolute inset-x-0 bottom-0 p-5 sm:p-7">
                     <p className="font-serif text-2xl italic text-white sm:text-3xl">
-                      {heroMedia.scientific_name}
+                      {activeMedia.scientific_name}
                     </p>
                     <p className="mt-2 max-w-2xl text-xs leading-5 text-white/75 sm:text-sm">
-                      {heroMedia.attribution || heroMedia.source_name}
-                      {heroMedia.license ? ` · ${heroMedia.license}` : ''}
+                      {attribution || mediaSource || 'Orchid Continuum approved media'}
+                      {license ? ` · ${license}` : ''}
                     </p>
                   </div>
                 </>
@@ -133,9 +108,11 @@ const HomeHero: React.FC = () => {
                   <div>
                     <p className="font-serif text-3xl italic text-[#f5f0e8]">{genus}</p>
                     <p className="mt-3 text-sm leading-6 text-[#d8cfbd]/75">
-                      {mediaState === 'loading'
+                      {availability === 'loading'
                         ? 'Loading an approved Featured Genus photograph…'
-                        : 'Approved Featured Genus media are temporarily unavailable.'}
+                        : availability === 'error'
+                          ? 'The approved media service is temporarily unavailable.'
+                          : 'No approved Featured Genus photograph is currently available.'}
                     </p>
                   </div>
                 </div>
