@@ -1,31 +1,18 @@
 /**
- * endpointAudit — single source of truth for "is the backend reachable" plus a
- * one-time console audit of every API base URL the platform talks to.
+ * endpointAudit — truthful reachability checks for the public homepage.
  *
- * The canonical Orchid Continuum backend is:
- *   https://api.orchidcontinuum.org
- *
- * This module is intentionally tiny and side-effect-free until called. It is
- * invoked once on homepage load to (a) drive the slim status banner and (b)
- * print a console summary confirming no fetch call is pointed at localhost, a
- * stray port, or a placeholder host.
+ * This module must only probe endpoints that are part of the visible homepage
+ * data path or are known canonical health contracts. A missing optional route
+ * must never make the whole public database appear offline.
  */
 
 import { OC_BACKEND_BASE } from './ocBackend';
 import { API_BASE_URL } from './api';
 import {
   BACKEND_BASE_URL,
-  LEGACY_ONRENDER_BASE_URL,
   ATLAS_OCCURRENCES_PROBE_URL,
 } from './backendConfig';
 
-/**
- * Canonical Orchid Continuum API / taxonomy backend.
- *
- * Used to drive the status banner ping and the audited-endpoint probes below.
- * NOTE: this is only ONE of three legitimate backend origins (see
- * src/lib/backendConfig.ts) — it is NOT the single host every module must use.
- */
 export const CANONICAL_BACKEND = BACKEND_BASE_URL;
 
 const SLOW_MS = 2500;
@@ -39,19 +26,15 @@ export interface PingResult {
 }
 
 /**
- * Ping the harvester backend ONCE. Resolves to:
- *   - 'live'    : responded under SLOW_MS
- *   - 'slow'    : responded, but slower than SLOW_MS
- *   - 'offline' : timed out, network error, or non-OK status
- *
- * Tries a couple of lightweight, commonly-available endpoints; the first that
- * returns an OK response wins. Never throws.
+ * Ping only known canonical contracts. Never use an optional/missing feature
+ * route (for example campaign stats) as evidence that the whole backend is
+ * offline.
  */
 export async function pingBackend(signal?: AbortSignal): Promise<PingResult> {
   const candidates = [
-    `${CANONICAL_BACKEND}/api/genus/daily`,
     `${CANONICAL_BACKEND}/health`,
     `${CANONICAL_BACKEND}/api/species/search?genus=Cattleya&limit=1`,
+    ATLAS_OCCURRENCES_PROBE_URL,
   ];
 
   for (const url of candidates) {
@@ -71,9 +54,8 @@ export async function pingBackend(signal?: AbortSignal): Promise<PingResult> {
       if (res.ok) {
         return { status: latencyMs > SLOW_MS ? 'slow' : 'live', latencyMs };
       }
-      // non-OK (e.g. 404 on this particular path) — try the next candidate
     } catch {
-      /* timeout / network error — try the next candidate */
+      // timeout / network error — try the next canonical candidate
     } finally {
       clearTimeout(timer);
     }
@@ -82,30 +64,25 @@ export async function pingBackend(signal?: AbortSignal): Promise<PingResult> {
   return { status: 'offline', latencyMs: null };
 }
 
-// ---------------------------------------------------------------------------
-// Per-endpoint probes (for the backend status detail panel)
-// ---------------------------------------------------------------------------
-//
-// The status banner exposes a small detail panel listing each data source a
-// curator cares about, with its last-response status and latency. These are the
-// three audited endpoints, all on the canonical harvester host.
-
 export interface EndpointProbe {
   key: string;
   label: string;
   url: string;
   status: BackendStatus;
-  /** Round-trip latency in ms for the last probe, or null if it failed. */
   latencyMs: number | null;
-  /** HTTP status code of the last response, or null on network error/timeout. */
   httpStatus: number | null;
 }
 
-/** The three data sources surfaced in the detail panel. */
+/**
+ * Homepage-facing contracts surfaced in the status detail panel.
+ *
+ * The genus composite is intentionally probed with a stable genus so the panel
+ * tests the same family of contract the Featured Genus experience can consume.
+ */
 export const AUDITED_ENDPOINTS: { key: string; label: string; url: string }[] = [
   {
     key: 'species-search',
-    label: 'Harvester species search',
+    label: 'Species search',
     url: `${CANONICAL_BACKEND}/api/species/search?genus=Cattleya&limit=1`,
   },
   {
@@ -114,13 +91,12 @@ export const AUDITED_ENDPOINTS: { key: string; label: string; url: string }[] = 
     url: ATLAS_OCCURRENCES_PROBE_URL,
   },
   {
-    key: 'campaign-stats',
-    label: 'Campaign stats',
-    url: `${CANONICAL_BACKEND}/api/campaign/stats`,
+    key: 'homepage-genus',
+    label: 'Featured Genus data',
+    url: `${CANONICAL_BACKEND}/api/homepage/genus/Cattleya`,
   },
 ];
 
-/** Probe a single endpoint, measuring latency + HTTP status. Never throws. */
 async function probeOne(
   ep: { key: string; label: string; url: string },
   signal?: AbortSignal,
@@ -151,44 +127,30 @@ async function probeOne(
   }
 }
 
-/**
- * Probe all three audited endpoints in parallel. Used by the status detail
- * panel both on open and on its 60-second background poll.
- */
 export async function probeEndpoints(
   signal?: AbortSignal,
 ): Promise<EndpointProbe[]> {
   return Promise.all(AUDITED_ENDPOINTS.map((ep) => probeOne(ep, signal)));
 }
 
-
 interface AuditedSource {
   module: string;
-  /** The backend origin this module is actually compiled with. */
   base: string;
-  /** The origin this module is DOCUMENTED to use (its intended host). */
   expected: string;
   correct: boolean;
 }
 
 /**
- * Audit every configured API base URL in the codebase and print a console
- * summary. This does NOT mutate anything — it verifies that each data client is
- * compiled with the backend origin it is DOCUMENTED to use.
- *
- * The Orchid Continuum frontend talks to three distinct backend hosts (see the
- * single source of truth in src/lib/backendConfig.ts): the canonical API /
- * taxonomy backend, the image harvester, and the legacy onrender host. A module
- * is "correct" when its compiled base matches its intended origin — NOT when
- * every module collapses onto one host. A module is flagged only if it has
- * drifted off its documented origin (e.g. a stray hardcoded host crept back in).
+ * Audit configured API base URLs. `ocBackend.ts` is a canonical public-API
+ * client, so its expected origin is BACKEND_BASE_URL/OC_BACKEND_BASE — not the
+ * legacy onrender service.
  */
 export function auditEndpointBases(): AuditedSource[] {
   const sources: AuditedSource[] = [
     {
       module: 'lib/ocBackend.ts',
       base: OC_BACKEND_BASE,
-      expected: LEGACY_ONRENDER_BASE_URL,
+      expected: BACKEND_BASE_URL,
     },
     {
       module: 'lib/genusData.ts',
@@ -202,9 +164,6 @@ export function auditEndpointBases(): AuditedSource[] {
     },
   ].map((s) => ({
     ...s,
-    // A module is correct when its base matches its intended origin. The
-    // api.ts source is env-driven and optional, so ANY value it resolves to
-    // (set or unset) is acceptable.
     correct:
       s.base === s.expected ||
       s.expected.startsWith('(env-driven') ||
@@ -224,25 +183,19 @@ export function auditEndpointBases(): AuditedSource[] {
   });
   const bad = sources.filter((s) => !s.correct);
   if (bad.length === 0) {
-    console.log('Every module resolves to its documented backend origin.');
+    console.log('Every audited module resolves to its documented backend origin.');
   } else {
     console.warn(
       `${bad.length} source(s) have drifted off their documented origin:`,
       bad.map((b) => b.module),
     );
   }
-  // Note: EcuadorExpedition uses an <iframe> embed (not an API fetch); it is
-  // intentionally excluded from this fetch-call audit.
   console.groupEnd();
   /* eslint-enable no-console */
 
   return sources;
 }
 
-/**
- * Run the audit + a single live ping, logging the result. Returns the ping
- * result so the caller (status banner) can render state without re-pinging.
- */
 export async function runStartupEndpointCheck(
   signal?: AbortSignal,
 ): Promise<PingResult> {
