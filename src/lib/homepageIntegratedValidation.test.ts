@@ -9,12 +9,13 @@ const appLayout = source('src/components/AppLayout.tsx');
 const homeHero = source('src/components/orchid/HomeHero.tsx');
 const featured = source('src/components/orchid/DailyGenusFeatureV3.tsx');
 const relationships = source('src/components/orchid/TheKnowledgeGraph.tsx');
+const relationshipContext = source('src/lib/homepageRelationshipContext.tsx');
 const atlas = source('src/components/orchid/HomeAtlas.tsx');
 const calyxGuide = source('src/components/orchid/PublicCalyxGuide.tsx');
 const app = source('src/App.tsx');
 
 describe('HOMEPAGE-RECOVERY-008 integrated candidate guardrails', () => {
-  it('keeps the reduced seven-section public story and does not remount retired major blocks', () => {
+  it('keeps the reduced seven-section public story while Calyx remains an overlay rather than a narrative block', () => {
     for (const section of [
       'Home hero',
       'Featured Genus',
@@ -27,18 +28,24 @@ describe('HOMEPAGE-RECOVERY-008 integrated candidate guardrails', () => {
       expect(appLayout).toContain(`name="${section}"`);
     }
 
-    for (const retiredMount of ['PublicCalyxGuide', 'ContinuumWeb', 'WhyOrchidsMatter', 'NewsStrip']) {
+    for (const retiredMount of ['ContinuumWeb', 'WhyOrchidsMatter', 'NewsStrip']) {
       expect(appLayout).not.toContain(retiredMount);
     }
+
+    expect(appLayout.match(/<PublicCalyxGuide \/>/g)?.length).toBe(1);
+    expect(calyxGuide).toContain('fixed bottom-4 right-4');
   });
 
   it('preserves one shared context chain for featured orchid, relationships, Atlas, and Calyx', () => {
     expect(appLayout).toContain('<HomepageFeaturedProvider>');
     expect(appLayout).toContain('<HomepageRelationshipProvider>');
     expect(appLayout).toContain('<HomepageAtlasProvider>');
-    expect(relationships).toContain('useHomepageFeatured');
+    expect(relationshipContext).toContain('useHomepageFeatured');
+    expect(relationships).toContain('useHomepageRelationships');
     expect(atlas).toContain('useHomepageFeatured');
-    expect(calyxGuide).toContain('useHomepageCalyxContext');
+    expect(atlas).toContain('useHomepageAtlasContext');
+    expect(calyxGuide).toContain('buildHomepageCalyxContext');
+    expect(calyxGuide).toContain('storeHomepageCalyxContext');
   });
 
   it('keeps public language free of known internal/operator/grant phrasing', () => {
@@ -61,7 +68,7 @@ describe('HOMEPAGE-RECOVERY-008 integrated candidate guardrails', () => {
 
   it('preserves honest evidence semantics in Atlas and relationships', () => {
     expect(atlas).toContain('Missing records do not establish biological absence');
-    expect(atlas).toContain('point density is not a population-abundance estimate');
+    expect(atlas).toContain('point density is not population abundance');
     expect(relationships).toContain('not evidence of biological absence');
   });
 
