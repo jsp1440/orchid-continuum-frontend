@@ -6,15 +6,9 @@ import HomeHero from './orchid/HomeHero';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
 import WhyContinuumExists from './orchid/WhyContinuumExists';
-import HabitatCards from './orchid/HabitatCards';
 import CapabilityGrid from './orchid/CapabilityGrid';
-import ContinuumWeb from './orchid/ContinuumWeb';
 import HomeAtlas from './orchid/HomeAtlas';
-import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
 import HumanStewardship from './orchid/HumanStewardship';
-import OrchidGallery from './orchid/OrchidGallery';
-import NewsFromContinuum from './orchid/NewsFromContinuum';
-import PublicCalyxGuide from './orchid/PublicCalyxGuide';
 import Footer from './orchid/Footer';
 import BackendHealthBanner from './orchid/BackendHealthBanner';
 import BackendStatusBanner from './orchid/BackendStatusBanner';
@@ -76,6 +70,12 @@ const SafeSection: React.FC<SectionBoundaryProps> = ({ name, children }) => (
   <SectionBoundary name={name}>{children}</SectionBoundary>
 );
 
+/**
+ * Public homepage story flow.
+ *
+ * Deep workspaces remain available through navigation/footer. The homepage is
+ * intentionally not a catalog of every Orchid Continuum module.
+ */
 const AppLayout: React.FC = () => {
   const [bannerHeight, setBannerHeight] = useState(0);
 
@@ -88,20 +88,16 @@ const AppLayout: React.FC = () => {
         <DailyGenusProvider>
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
-            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
+
             <div id="species-in-focus">
-              <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+              <SafeSection name="Featured Genus"><DailyGenusFeature /></SafeSection>
             </div>
-            <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
-            <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
-            <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
+
+            <SafeSection name="Relationships"><TheKnowledgeGraph /></SafeSection>
+            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
             <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
-            <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
-            <SafeSection name="Identification matrix"><CapabilityGrid /></SafeSection>
-            <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
-            <SafeSection name="Why Orchids Matter"><WhyOrchidsMatter /></SafeSection>
-            <SafeSection name="Human Stewardship"><HumanStewardship /></SafeSection>
-            <SafeSection name="News from the Continuum"><NewsFromContinuum /></SafeSection>
+            <SafeSection name="Discovery tools"><CapabilityGrid /></SafeSection>
+            <SafeSection name="Conservation and participation"><HumanStewardship /></SafeSection>
           </HeroSpeciesProvider>
         </DailyGenusProvider>
       </main>
