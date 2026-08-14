@@ -3,6 +3,7 @@
 Parent: #163
 Issue: #166
 Base implementation: #172
+Validation gate: frontend tests, production build, and lint must pass on the final head before this lane is considered ready for integrated review.
 
 ## Convergence classification
 
