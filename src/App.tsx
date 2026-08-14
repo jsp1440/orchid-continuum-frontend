@@ -10,7 +10,6 @@ import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
-
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
@@ -59,6 +58,7 @@ import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
 import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
 import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
+import HomepageCalyxWorkspace from "./pages/HomepageCalyxWorkspace";
 import HomepageReadiness from "./pages/HomepageReadiness";
 
 const queryClient = new QueryClient();
@@ -81,6 +81,7 @@ const App = () => (
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
                   <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
                   <Route path="/calyx" element={<CalyxWorkspace />} />
+                  <Route path="/homepage-calyx" element={<HomepageCalyxWorkspace />} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
                   <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />
                   <Route path="/explore" element={<Explore />} />
