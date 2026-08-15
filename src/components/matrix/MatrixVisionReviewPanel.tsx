@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Eye, ImageIcon, Search, ShieldCheck, XCircle } from "lucide-react";
 
+import MatrixMorphologyViewer from "@/components/matrix/MatrixMorphologyViewer";
 import MatrixReportPanel from "@/components/matrix/MatrixReportPanel";
 import VisionActivationPreflightCard from "@/components/matrix/VisionActivationPreflightCard";
 import {
@@ -76,6 +77,7 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
   );
   const [certainty, setCertainty] = useState<Record<string, Certainty>>({});
   const [revision, setRevision] = useState<Record<string, string>>({});
+  const [expandedMorphologyId, setExpandedMorphologyId] = useState<string | null>(null);
 
   async function refresh(): Promise<void> {
     const [suggestionResult, capabilityResult] = await Promise.all([
@@ -303,6 +305,24 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
                 </div>
                 {suggestion.evidence_region && <p className="mt-3 text-xs text-muted-foreground">Evidence region: {suggestion.evidence_region}</p>}
                 {!!suggestion.limitations?.length && <p className="mt-2 text-xs text-muted-foreground">Limitations: {suggestion.limitations.join("; ")}</p>}
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedMorphologyId((current) =>
+                      current === suggestion.suggestion_id ? null : suggestion.suggestion_id,
+                    )
+                  }
+                  className="mt-3 text-xs font-semibold text-emerald-700 underline underline-offset-2"
+                  aria-expanded={expandedMorphologyId === suggestion.suggestion_id}
+                >
+                  {expandedMorphologyId === suggestion.suggestion_id ? "Hide" : "Deconstruct this structure"}
+                </button>
+                {expandedMorphologyId === suggestion.suggestion_id && (
+                  <div className="mt-3">
+                    <MatrixMorphologyViewer sessionId={sessionId} suggestion={suggestion} />
+                  </div>
+                )}
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-[auto_1fr]">
                   <select

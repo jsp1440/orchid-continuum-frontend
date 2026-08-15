@@ -253,6 +253,33 @@ export async function listVisionSuggestions(sessionId: string): Promise<VisionSu
   );
 }
 
+export type VisionRegionGeometry = {
+  region_id: string;
+  analysis_id: string;
+  concept_id?: string | null;
+  label: string;
+  bounding_box?: { x: number; y: number; width: number; height: number } | Record<string, unknown> | null;
+  segmentation_ref?: string | null;
+  landmarks?: { name: string; x: number; y: number }[] | null;
+  confidence?: number | null;
+  review_state: string;
+};
+
+export type VisionSuggestionRegion = {
+  session_id: string;
+  suggestion_id: string;
+  region: VisionRegionGeometry | null;
+};
+
+export async function fetchVisionSuggestionRegion(
+  sessionId: string,
+  suggestionId: string,
+): Promise<VisionSuggestionRegion> {
+  return request<VisionSuggestionRegion>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions/${encodeURIComponent(suggestionId)}/region`,
+  );
+}
+
 export async function reviewVisionSuggestion(
   sessionId: string,
   suggestionId: string,
