@@ -54,6 +54,22 @@ export type CalyxConversation = {
   messages: CalyxServerMessage[];
   persistence_mode?: "postgres" | "memory" | string;
 };
+export type CalyxWorkspaceOutputKind = "image" | "diagram" | "chart" | "table" | "text";
+export type CalyxWorkspaceOutputEvidenceStatus = "evidence" | "derived" | "illustrative" | "unknown";
+export type CalyxWorkspaceOutput = {
+  id: string;
+  kind: CalyxWorkspaceOutputKind;
+  title: string;
+  subtitle?: string | null;
+  provenance: {
+    source_module: string;
+    source_id?: string | null;
+    generated?: boolean;
+    evidence_status: CalyxWorkspaceOutputEvidenceStatus;
+  };
+  payload: Record<string, unknown>;
+  created_at: string;
+};
 export type CalyxTurnResponse = {
   conversation_id: string;
   operator_message: CalyxServerMessage;
@@ -61,6 +77,7 @@ export type CalyxTurnResponse = {
   answer: string;
   provider: { name: string; model: string; request_hash: string; provider_response_id?: string | null; fallback_error?: string | null; configuration?: Record<string, unknown> };
   research: { casual: boolean; mission: BrainMission | null; mission_error: string | null; retrieval: Record<string, unknown>; continuum?: Record<string, unknown>; climate?: Record<string, unknown>; citations?: CalyxCitation[] };
+  workspace_outputs?: CalyxWorkspaceOutput[];
   deliverables?: Record<string, unknown>;
   persistence_mode: string;
   epistemic_policy: Record<string, boolean>;
