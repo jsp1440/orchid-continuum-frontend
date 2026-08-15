@@ -19,17 +19,20 @@ const mocks = vi.hoisted(() => ({
   sendCalyxTurn: vi.fn(),
   getBrainMission: vi.fn(),
   pushTranscript: (_text: string) => undefined,
+  speechInputState: "unsupported" as "unsupported" | "idle" | "listening",
+  startListening: vi.fn(),
+  stopListening: vi.fn(),
 }));
 
 vi.mock("@/hooks/useCalyxSpeechInput", () => ({
   useCalyxSpeechInput: (onResult: (transcript: string) => void) => {
     mocks.pushTranscript = onResult;
     return {
-      state: "unsupported",
+      state: mocks.speechInputState,
       interimTranscript: "",
       error: null,
-      startListening: vi.fn(),
-      stopListening: vi.fn(),
+      startListening: mocks.startListening,
+      stopListening: mocks.stopListening,
     };
   },
 }));
@@ -188,6 +191,9 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     mocks.getBrainMission.mockReset();
     mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
     mocks.loadCalyxWorkspace.mockClear();
+    mocks.speechInputState = "unsupported";
+    mocks.startListening.mockReset();
+    mocks.stopListening.mockReset();
   });
 
   afterEach(async () => {
@@ -552,6 +558,83 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       epistemic_policy: { continuum_first: true },
     });
     await flush(4);
+  });
+
+  it("stops active speech input before starting the network turn, in addition to speech output", async () => {
+    mocks.speechInputState = "listening";
+    const sendOperation = deferred<ReturnType<typeof buildTurnResult>>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("stop-listening-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(sendOperation.promise);
+    mocks.getCalyxConversation.mockResolvedValue(buildConversation("stop-listening-thread"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Stop listening before sending");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+
+    expect(mocks.stopListening).toHaveBeenCalled();
+
+    sendOperation.resolve(buildTurnResult("stop-listening-thread"));
+    await flush(4);
+  });
+
+  it("freezes context-mutating controls while a turn is in flight, but leaves an active microphone stoppable", async () => {
+    mocks.speechInputState = "listening";
+    const sendOperation = deferred<ReturnType<typeof buildTurnResult>>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("frozen-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(sendOperation.promise);
+    mocks.getCalyxConversation.mockResolvedValue(buildConversation("frozen-thread"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Freeze the controls");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+
+    const projectInput = container.querySelector("#calyx-project") as HTMLInputElement;
+    expect(projectInput.disabled).toBe(true);
+
+    const attachButton = getButton(container, "Attach");
+    expect(attachButton.disabled).toBe(true);
+
+    const refreshButton = getButton(container, "Refresh");
+    expect(refreshButton.disabled).toBe(true);
+
+    // The microphone was already listening - it must still be stoppable even
+    // while every other context-mutating control is frozen for this turn.
+    const stopButton = getButton(container, "Stop");
+    expect(stopButton.disabled).toBe(false);
+
+    sendOperation.resolve(buildTurnResult("frozen-thread"));
+    await flush(4);
+
+    expect(projectInput.disabled).toBe(false);
+    expect(attachButton.disabled).toBe(false);
   });
 
   it("does not let an obsolete request release a newer submission lock", async () => {
