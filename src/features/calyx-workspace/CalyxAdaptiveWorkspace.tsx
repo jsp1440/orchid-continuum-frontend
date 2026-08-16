@@ -3,7 +3,7 @@ import type { LexiconEntry } from '@/data/types';
 import { FlowerSchematic } from '@/components/lexicon/Schematics';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { readCalyxSessionContext } from './sessionContext';
-import { subscribeWorkspaceOutputs, type WorkspaceOutput } from './workspaceOutputBus';
+import { subscribeWorkspaceOutputClears, subscribeWorkspaceOutputs, type WorkspaceOutput } from './workspaceOutputBus';
 import { WorkspaceOutputPanel } from './WorkspaceOutputPanel';
 
 const PanelFrame: React.FC<{ title: string; eyebrow: string; children: React.ReactNode }> = ({ title, eyebrow, children }) => (
@@ -27,6 +27,15 @@ export const CalyxAdaptiveWorkspace: React.FC<{ entry: LexiconEntry; children: R
       return [...withoutExisting, output].slice(-6);
     });
   }), []);
+
+  useEffect(() => subscribeWorkspaceOutputClears((sourceModule) => {
+    setOutputs((current) => current.filter((item) => item.provenance.source_module !== sourceModule));
+  }), []);
+
+  // A new lexicon concept is a new interaction context - outputs opened by
+  // tool calls made against the previous entry must not linger as if they
+  // still describe this one.
+  useEffect(() => setOutputs([]), [entry.slug]);
 
   const closeOutput = (id: string) => setOutputs((current) => current.filter((item) => item.id !== id));
 
