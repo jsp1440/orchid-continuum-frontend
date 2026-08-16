@@ -3,6 +3,7 @@ import {
   readCalyxSessionContext,
   recordCalyxSurfaceContext,
   clearCalyxSessionContext,
+  calyxContextPacket,
 } from "./sessionContext";
 import {
   emitWorkspaceOutput,
@@ -164,6 +165,52 @@ describe("Cross-Module Canonical Context Continuity: Taxon -> Atlas -> Graph -> 
       "atlas",
       "relationship_explorer",
     ]);
+
+    // 7. Calyx query payload construction from live session context
+    const calyxPacket = calyxContextPacket({
+      question: "Explain the pollination ecology and labellum morphology of Cattleya trianae",
+      active_taxon_id: finalSessionContext.current?.object_id,
+    });
+
+    expect(calyxPacket.context_is_evidence).toBe(false);
+    expect(calyxPacket.context_purpose).toContain("reference resolution");
+    expect((calyxPacket.current_surface as { object_id: string }).object_id).toBe("taxon:orchid:cattleya_trianae");
+    expect(Array.isArray(calyxPacket.session_trail)).toBe(true);
+    expect((calyxPacket.session_trail as Array<{ surface: string }>).length).toBe(3);
+
+    // 8. Auxiliary annotated morphology image emission
+    emitWorkspaceOutput({
+      id: "out:morphology:img-001",
+      kind: "image",
+      title: "Cattleya trianae Labellum Morphology",
+      created_at: new Date().toISOString(),
+      provenance: {
+        source_module: "matrix",
+        source_id: "char:labellum_color",
+        evidence_status: "evidence",
+        generated: false,
+      },
+      payload: {
+        src: "https://orchidcontinuum.org/images/cattleya-trianae-lip.jpg",
+        alt: "Close-up of Cattleya trianae labellum",
+        annotations: [
+          {
+            id: "ann-01",
+            label: "Distal magenta disc",
+            x: 20,
+            y: 30,
+            width: 40,
+            height: 40,
+          },
+        ],
+      },
+    });
+
+    expect(receivedOutputs).toHaveLength(2);
+    expect(receivedOutputs[1].kind).toBe("image");
+
+    // 9. Selective source module cleanup
+    clearWorkspaceOutputsBySource("lexicon");
 
     unsubscribe();
   });
