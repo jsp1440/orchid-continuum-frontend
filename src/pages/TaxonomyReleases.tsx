@@ -62,6 +62,17 @@ function detailMessage(detail: unknown, fallback: string): string {
   return fallback;
 }
 
+function inferReleaseLabel(filename: string): string {
+  const stem = filename.replace(/\.[^.]+$/, '').trim();
+  const explicit = stem.match(/(?:^|\D)(\d{2})[-_. ](\d{2})(?:\D|$)/);
+  if (explicit) return `${explicit[1]}-${explicit[2]}`;
+
+  const compact = stem.match(/(?:^|\D)(\d{4})(?:\D|$)/);
+  if (compact) return `${compact[1].slice(0, 2)}-${compact[1].slice(2)}`;
+
+  return stem || 'world-plants-release';
+}
+
 async function parseResponse(response: Response): Promise<Record<string, unknown>> {
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
@@ -85,8 +96,7 @@ export default function TaxonomyReleases() {
   const [readiness, setReadiness] = useState<TaxonomyReadiness | null>(null);
   const [stage, setStage] = useState<UploadStage>('idle');
 
-  const requiredFieldsComplete = Boolean(selectedFile && versionLabel.trim() && acquiredAt);
-  const uploadEnabled = connection === 'ready' && ownerAuthenticated && requiredFieldsComplete && !uploading;
+  const uploadEnabled = connection === 'ready' && ownerAuthenticated && Boolean(selectedFile) && !uploading;
 
   const blockedGates = useMemo(
     () => (readiness?.gates ?? []).filter((gate) => gate.status !== 'passed' && gate.name !== 'owner_promotion_approval'),
@@ -147,8 +157,8 @@ export default function TaxonomyReleases() {
   }, [checkAccessAndReadiness, loadReleases]);
 
   const uploadRelease = async () => {
-    if (!requiredFieldsComplete) {
-      setError('Choose the Hassler taxonomy file and enter its release label and acquisition date.');
+    if (!selectedFile) {
+      setError('Choose the Hassler taxonomy file first.');
       return;
     }
 
@@ -159,10 +169,13 @@ export default function TaxonomyReleases() {
     setStage('uploading');
     setError(null);
     try {
+      const resolvedVersionLabel = versionLabel.trim() || inferReleaseLabel(selectedFile.name);
+      const resolvedAcquiredAt = acquiredAt || new Date().toISOString().slice(0, 10);
+
       const form = new FormData();
-      form.append('file', selectedFile as File);
-      form.append('version_label', versionLabel.trim());
-      form.append('acquired_at', acquiredAt);
+      form.append('file', selectedFile);
+      form.append('version_label', resolvedVersionLabel);
+      form.append('acquired_at', resolvedAcquiredAt);
       if (notes.trim()) form.append('notes', notes.trim());
 
       const response = await fetch(
@@ -178,6 +191,7 @@ export default function TaxonomyReleases() {
       setLatestReport(report);
       setStage('staged');
       setSelectedFile(null);
+      setVersionLabel('');
       setNotes('');
       await loadReleases();
     } catch (err) {
@@ -190,6 +204,7 @@ export default function TaxonomyReleases() {
 
   const selectFile = (file: File | null) => {
     setSelectedFile(file);
+    setVersionLabel(file ? inferReleaseLabel(file.name) : '');
     setStage(file ? 'selected' : 'idle');
     setError(null);
   };
@@ -197,11 +212,11 @@ export default function TaxonomyReleases() {
   const statusLabel = connection === 'checking'
     ? 'Checking live access…'
     : connection === 'ready'
-      ? 'Owner session active · backend ready'
+      ? 'Ready to upload'
       : connection === 'offline'
         ? 'Live backend unavailable'
         : ownerAuthenticated
-          ? 'Owner session active · intake blocked'
+          ? 'Taxonomy intake blocked'
           : 'Owner authorization required';
 
   return (
@@ -217,7 +232,7 @@ export default function TaxonomyReleases() {
               Taxonomy <span className="italic text-[#d4b34a]">Releases</span>
             </h1>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-[#cfc8b8]/85">
-              Upload Michael Hassler’s World Plants orchid taxonomy for inspection and immutable staging. Uploading never replaces the active canonical taxonomy.
+              Choose the World Plants file, then upload it for inspection. The release label and date are filled automatically.
             </p>
           </div>
           <Link to="/mission-control" className="inline-flex items-center gap-2 rounded-full border border-white/15 px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] hover:border-[#d4b34a]/60 hover:text-[#d4b34a]">
@@ -261,34 +276,54 @@ export default function TaxonomyReleases() {
               })}
             </div>
 
-            <div className="mt-6 grid gap-5 sm:grid-cols-2">
-              <label className="sm:col-span-2">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Taxonomy file</span>
-                <input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} className="mt-2 block w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-[#d4b34a] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-[#12170d]" />
-                {selectedFile ? <p className="mt-2 text-xs text-emerald-200">Selected: {selectedFile.name} · {(selectedFile.size / 1024 / 1024).toFixed(2)} MB</p> : null}
-              </label>
-              <label>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Release label</span>
-                <input value={versionLabel} onChange={(event) => { setVersionLabel(event.target.value); setError(null); }} placeholder="26-08" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3" />
-              </label>
-              <label>
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Acquired date</span>
-                <input type="date" value={acquiredAt} onChange={(event) => { setAcquiredAt(event.target.value); setError(null); }} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3" />
-              </label>
-              <label className="sm:col-span-2">
-                <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Source notes</span>
-                <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={4} placeholder="Received directly from Michael Hassler by email…" className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3" />
-              </label>
-            </div>
+            <label className="mt-6 block">
+              <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Choose taxonomy file</span>
+              <input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={(event) => selectFile(event.target.files?.[0] ?? null)} className="mt-2 block w-full rounded-xl border border-white/10 bg-black/20 p-3 text-sm file:mr-4 file:rounded-full file:border-0 file:bg-[#d4b34a] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-[#12170d]" />
+            </label>
 
-            <button onClick={() => void uploadRelease()} disabled={!uploadEnabled} className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.2em] text-[#12170d] disabled:cursor-not-allowed disabled:opacity-40">
-              {uploading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <FileUp className="h-4 w-4" />}
-              {stage === 'uploading' ? 'Uploading file' : stage === 'inspecting' ? 'Inspecting release' : 'Upload and Inspect'}
-            </button>
-            {!uploadEnabled ? <p className="mt-3 text-xs text-[#cfc8b8]/60">The button becomes available when the owner session, backend readiness, file, label, and date are all confirmed.</p> : null}
+            {selectedFile ? (
+              <div className="mt-4 rounded-2xl border border-emerald-300/25 bg-emerald-300/10 p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold text-emerald-100">
+                  <FileCheck2 className="h-4 w-4" />
+                  {selectedFile.name}
+                </div>
+                <p className="mt-1 text-xs text-emerald-100/70">
+                  {(selectedFile.size / 1024 / 1024).toFixed(2)} MB · release {versionLabel || inferReleaseLabel(selectedFile.name)} · ready to inspect
+                </p>
+                <button onClick={() => void uploadRelease()} disabled={!uploadEnabled} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[#d4b34a] px-5 py-4 font-mono text-sm font-bold uppercase tracking-[0.16em] text-[#12170d] shadow-lg disabled:cursor-not-allowed disabled:opacity-40">
+                  {uploading ? <RefreshCw className="h-5 w-5 animate-spin" /> : <FileUp className="h-5 w-5" />}
+                  {stage === 'uploading' ? 'Uploading…' : stage === 'inspecting' ? 'Inspecting…' : 'Upload & Inspect'}
+                </button>
+                {!uploadEnabled && !uploading ? (
+                  <p className="mt-2 text-center text-xs text-emerald-100/65">
+                    {connection === 'checking' ? 'Checking upload access…' : connection === 'ready' ? 'Preparing upload…' : 'Upload access must be ready before this file can be sent.'}
+                  </p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-[#cfc8b8]/70">Choose the file. No release label, date, or notes are required from you.</p>
+            )}
+
+            <details className="mt-5 rounded-xl border border-white/10 bg-black/15 p-4">
+              <summary className="cursor-pointer text-xs font-semibold text-[#cfc8b8]/80">Advanced details (optional)</summary>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <label>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Release label</span>
+                  <input value={versionLabel} onChange={(event) => { setVersionLabel(event.target.value); setError(null); }} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3" />
+                </label>
+                <label>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Acquired date</span>
+                  <input type="date" value={acquiredAt} onChange={(event) => { setAcquiredAt(event.target.value); setError(null); }} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3" />
+                </label>
+                <label className="sm:col-span-2">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#d4b34a]">Source notes</span>
+                  <textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={3} className="mt-2 w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3" />
+                </label>
+              </div>
+            </details>
 
             <div className="mt-5 rounded-xl border border-amber-300/20 bg-amber-300/10 p-4 text-xs leading-6 text-amber-100/85">
-              This action stores the original bytes by checksum and creates an inspection report. Canonical promotion, production relinking, and fuzzy mapping remain blocked.
+              Uploading stores and inspects the release only. It does not replace the active taxonomy.
             </div>
           </section>
 
