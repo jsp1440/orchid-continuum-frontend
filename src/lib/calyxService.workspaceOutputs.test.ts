@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const emitWorkspaceOutput = vi.fn();
+const { emitWorkspaceOutput } = vi.hoisted(() => ({ emitWorkspaceOutput: vi.fn() }));
 
 vi.mock('@/features/calyx-workspace/workspaceOutputBus', () => ({
   emitWorkspaceOutput,
