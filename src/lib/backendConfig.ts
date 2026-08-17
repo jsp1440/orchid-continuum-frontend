@@ -149,7 +149,14 @@ function installOwnerSessionTransport(): void {
       headers.set('Authorization', `Bearer ${existingBearer}`);
     }
 
-    let response = await nativeFetch(requestInput, { ...init, headers, credentials: init.credentials ?? 'include' });
+    // Only Calyx (first-party, cookie-based owner session) requests should
+    // default to sending credentials. Forcing 'include' on every fetch —
+    // including third-party/public reads like iNaturalist, Supabase, and the
+    // harvester — breaks CORS for any of them that (correctly) serve a
+    // wildcard Access-Control-Allow-Origin, which the Fetch spec forbids
+    // combining with credentialed requests.
+    const credentials = init.credentials ?? (isCalyxRequest ? 'include' : 'same-origin');
+    let response = await nativeFetch(requestInput, { ...init, headers, credentials });
 
     if (isOwnerLogin && !response.ok) {
       ownerLoginAttemptInProgress = false;
