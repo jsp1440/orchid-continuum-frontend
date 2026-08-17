@@ -60,6 +60,30 @@ describe('installOwnerSessionTransport (backendConfig.ts)', () => {
     expect(headers.has('Authorization')).toBe(false);
   });
 
+  it('does not force credentials: include on non-Calyx requests (third-party CORS)', async () => {
+    // A live browser audit of production found this exact default breaking
+    // real fetches to iNaturalist, Supabase, and the harvester: their public
+    // read endpoints correctly serve a wildcard Access-Control-Allow-Origin,
+    // which the Fetch spec forbids combining with a credentialed request.
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await freshModule(native);
+
+    await window.fetch('https://api.inaturalist.org/v1/taxa?q=Cattleya');
+
+    const [, init] = native.mock.calls[0];
+    expect(init?.credentials).toBe('same-origin');
+  });
+
+  it('still defaults Calyx requests to credentials: include', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await freshModule(native);
+
+    await window.fetch(`${CALYX_BASE}/api/media/genus/Cattleya`);
+
+    const [, init] = native.mock.calls[0];
+    expect(init?.credentials).toBe('include');
+  });
+
   it('rewrites the owner-login POST to the token-session endpoint and stores the returned bearer', async () => {
     const native = vi.fn().mockResolvedValue(jsonResponse({ token: 'bearer-abc' }));
     await freshModule(native);
