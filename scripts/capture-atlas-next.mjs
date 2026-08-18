@@ -128,7 +128,36 @@ for (const vp of VIEWPORTS) {
     await shot(page, `${OUT}/${vp.name}-country.png`);
   }
 
-  results.push({ viewport: vp.name, records, complete, country: firstReal ?? null, errors });
+  // --- Slice 2 surfaces -------------------------------------------------
+  // Switch to the knowledge-gap question and capture it, then open the guided
+  // investigation. Both are driven by the real records already loaded.
+  let gap = null;
+  const gapBtn = page.getByRole('button', { name: 'What is not known here?' });
+  if (await gapBtn.isEnabled().catch(() => false)) {
+    await gapBtn.click();
+    await settle(page);
+    await shot(page, `${OUT}/${vp.name}-knowledge-gap.png`);
+    const txt = await page.textContent('body');
+    gap = {
+      legendRendered: /Observed here, with a documented relationship/.test(txt),
+      cautionRendered: /Every orchid depends on a fungus/.test(txt),
+      answerable: (txt.match(/(\d+) of 12 questions/) || [])[1] ?? null,
+    };
+    log(vp.name, 'knowledge gap:', JSON.stringify(gap));
+  }
+
+  let guide = null;
+  const guideBtn = page.getByRole('button', { name: /What do we know about this range/i });
+  if (await guideBtn.isVisible().catch(() => false)) {
+    await guideBtn.click();
+    await page.waitForTimeout(1500);
+    await shot(page, `${OUT}/${vp.name}-guide.png`);
+    const txt = await page.textContent('body');
+    guide = { opened: /Guided investigation/.test(txt) };
+    log(vp.name, 'guide:', JSON.stringify(guide));
+  }
+
+  results.push({ viewport: vp.name, records, complete, country: firstReal ?? null, gap, guide, errors });
   await ctx.close();
 }
 
