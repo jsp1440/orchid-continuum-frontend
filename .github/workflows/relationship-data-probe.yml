@@ -2,6 +2,11 @@ name: Relationship Data Probe
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'prototype/**'
+    paths:
+      - '.github/workflows/relationship-data-probe.yml'
 
 permissions:
   contents: read
