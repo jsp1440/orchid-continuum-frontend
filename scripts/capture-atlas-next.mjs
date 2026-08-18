@@ -49,7 +49,7 @@ async function waitForRecords(page, name, ms = 300_000) {
   }
   // Capture whatever is on screen before giving up; a picture of the stuck
   // state is worth more than the exception alone.
-  await page.screenshot({ path: `${OUT}/${name}-TIMEOUT.png` }).catch(() => {});
+  await page.screenshot({ path: `${OUT}/${name}-TIMEOUT.png`, timeout: 60_000 }).catch(() => {});
   throw new Error(`timed out after ${ms / 1000}s waiting for records (last state: ${lastNote})`);
 }
 
@@ -60,6 +60,25 @@ async function waitForRecords(page, name, ms = 300_000) {
  * real hardware.
  */
 const settle = (page, ms = 9000) => page.waitForTimeout(ms);
+
+/**
+ * Wait for the second load stage. A count taken mid-load is a real count of a
+ * partial read, and the interface says so — but a screenshot captioned as the
+ * Atlas should show the whole Atlas.
+ */
+async function waitForComplete(page, name, ms = 240_000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    const txt = await page.textContent('body').catch(() => '');
+    if (!/Still reading the store/i.test(txt)) return true;
+    await page.waitForTimeout(2000);
+  }
+  log(name, 'WARNING: still loading when the budget ran out; counts are partial');
+  return false;
+}
+
+/** Software rendering needs far longer than the 30s default for a frame. */
+const shot = (page, path) => page.screenshot({ path, timeout: 180_000 });
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = [];
@@ -81,11 +100,14 @@ for (const vp of VIEWPORTS) {
   // The first WebGL context on a software renderer is markedly slower to come
   // up than the rest; give it room before timing anything.
   await page.waitForTimeout(2000);
+  const first = await waitForRecords(page, vp.name);
+  log(vp.name, 'first batch =', first);
+  const complete = await waitForComplete(page, vp.name);
   const records = await waitForRecords(page, vp.name);
-  log(vp.name, 'records =', records);
+  log(vp.name, 'records =', records, complete ? '(complete)' : '(PARTIAL)');
   await settle(page);
 
-  await page.screenshot({ path: `${OUT}/${vp.name}-earth.png` });
+  await shot(page, `${OUT}/${vp.name}-earth.png`);
 
   // Descend: pick the country with the most records, which opens the
   // individual-record scale.
@@ -95,10 +117,10 @@ for (const vp of VIEWPORTS) {
   if (firstReal) {
     await countrySelect.selectOption({ label: firstReal });
     await settle(page);
-    await page.screenshot({ path: `${OUT}/${vp.name}-country.png` });
+    await shot(page, `${OUT}/${vp.name}-country.png`);
   }
 
-  results.push({ viewport: vp.name, records, country: firstReal ?? null, errors });
+  results.push({ viewport: vp.name, records, complete, country: firstReal ?? null, errors });
   await ctx.close();
 }
 

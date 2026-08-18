@@ -38,6 +38,16 @@ const MARK_COLOR = '#8fd0a8';
 const MARK_PROTECTED = '#d8b24c';
 const MARK_SELECTED = '#f0ede4';
 
+/**
+ * Ceiling on individually drawn marks. With instanced rendering the whole layer
+ * is two draw calls, so this is now about legibility rather than frame time —
+ * beyond this many marks in one view the screen is a smear and the aggregate
+ * view is the honest one. It is still a limit, so the interface says when it is
+ * in force: a count describing more records than are on screen is the kind of
+ * quiet mismatch that turns a map into a misleading one.
+ */
+const MAX_DRAWN = 20000;
+
 const AtlasNextShell: React.FC = () => {
   const data = useAtlasData();
   // Stable identity: an inline `: []` would be a new array every render and
@@ -109,7 +119,7 @@ const AtlasNextShell: React.FC = () => {
         color: c.containsProtected ? MARK_PROTECTED : MARK_COLOR,
       }));
     }
-    return selection.slice(0, 4000).map((p) => {
+    return selection.slice(0, MAX_DRAWN).map((p) => {
       const loc = resolveLocation(p, ACCESS);
       return {
         id: p.id,
@@ -160,6 +170,21 @@ const AtlasNextShell: React.FC = () => {
     [genus, points, goToScale],
   );
 
+  /** Step down to the next rung the current data can actually organise. */
+  const nextAvailable = useCallback(
+    (from: ScaleLevel): ScaleLevel => {
+      let level = from;
+      for (let i = 0; i < SCALE_ORDER.length; i += 1) {
+        const candidate = descend(level);
+        if (candidate === level) return level; // already at the bottom
+        level = candidate;
+        if (availableLevels.has(level)) return level;
+      }
+      return from;
+    },
+    [availableLevels],
+  );
+
   const onCellOrPoint = useCallback(
     (id: string | null) => {
       if (!id) {
@@ -171,9 +196,10 @@ const AtlasNextShell: React.FC = () => {
         if (!cell) return;
         // A cell is a tally, so opening it descends rather than selecting a
         // record — there is no single record behind an aggregate.
-        const next = availableLevels.has('country') && cell.countries.length === 1
-          ? 'country'
-          : descend(scale);
+        const next =
+          availableLevels.has('country') && cell.countries.length === 1
+            ? 'country'
+            : nextAvailable(scale);
         if (cell.countries.length === 1) setCountry(cell.countries[0]);
         setScale(next);
         setFocus({ lat: cell.lat, lng: cell.lng, distance: SCALES[next].cameraDistance });
@@ -181,7 +207,7 @@ const AtlasNextShell: React.FC = () => {
       }
       setSelectedId(id);
     },
-    [aggregated, cells, scale, availableLevels],
+    [aggregated, cells, scale, availableLevels, nextAvailable],
   );
 
   const onHover = useCallback(
@@ -410,6 +436,13 @@ const AtlasNextShell: React.FC = () => {
               <p className="mt-1.5 text-[11px] leading-[1.5] text-[#d8b24c]">
                 {protectedCount} record{protectedCount === 1 ? ' is' : 's are'} shown as an area
                 rather than a point, because the species is assessed as threatened.
+              </p>
+            )}
+            {!aggregated && context.visible.records > MAX_DRAWN && (
+              <p className="mt-1.5 text-[11px] leading-[1.5] text-[#d87a4c]">
+                Drawing the first {MAX_DRAWN.toLocaleString()} of{' '}
+                {context.visible.records.toLocaleString()} records at this scale. Narrow the
+                selection, or pull back to see all of them counted together.
               </p>
             )}
             {data.kind === 'ready' && !data.complete && (

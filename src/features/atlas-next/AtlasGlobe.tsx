@@ -237,57 +237,102 @@ const AtlasGlobe: React.FC<Props> = ({
     const markGroup = new THREE.Group();
     globe.add(markGroup);
 
+    // Marks are INSTANCED. A mesh per mark meant one draw call per record, and
+    // at a few thousand records that alone stalled the frame — a limit reached
+    // long before the data runs out. Two instanced meshes now draw the whole
+    // layer in two calls regardless of count.
     const markGeo = new THREE.CircleGeometry(1, 16);
-    const haloGeo = new THREE.RingGeometry(0.82, 1, 28);
-    const materials = new Map<string, THREE.MeshBasicMaterial>();
-    const materialFor = (color: string, opacity: number) => {
-      const k = `${color}:${opacity}`;
-      let m = materials.get(k);
-      if (!m) {
-        m = new THREE.MeshBasicMaterial({
-          color: new THREE.Color(color),
-          transparent: true,
-          opacity,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-        });
-        materials.set(k, m);
-      }
-      return m;
-    };
+    const haloGeo = new THREE.RingGeometry(0.86, 1, 32);
+    const discMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.92,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const haloMat = new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0.24,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+
+    let discMesh: THREE.InstancedMesh | null = null;
+    let haloMesh: THREE.InstancedMesh | null = null;
 
     const rendered: Array<{ id: string; local: THREE.Vector3 }> = [];
 
+    // Scratch objects, reused per instance so a rebuild allocates nothing.
+    const up = new THREE.Vector3(0, 0, 1);
+    const normal = new THREE.Vector3();
+    const quat = new THREE.Quaternion();
+    const scale = new THREE.Vector3();
+    const matrix = new THREE.Matrix4();
+    const colour = new THREE.Color();
+
     const buildMarks = () => {
-      markGroup.clear();
-      rendered.length = 0;
       const g = globeRef.current;
       if (!g) return;
-      for (const m of marksRef.current) {
+      const marks = marksRef.current;
+
+      if (discMesh) {
+        markGroup.remove(discMesh);
+        discMesh.dispose();
+        discMesh = null;
+      }
+      if (haloMesh) {
+        markGroup.remove(haloMesh);
+        haloMesh.dispose();
+        haloMesh = null;
+      }
+      rendered.length = 0;
+      if (marks.length === 0) {
+        mount.dataset.markCount = '0';
+        return;
+      }
+
+      const haloed = marks.filter((m) => (m.haloDeg ?? 0) > 0);
+      discMesh = new THREE.InstancedMesh(markGeo, discMat, marks.length);
+      discMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      if (haloed.length) {
+        haloMesh = new THREE.InstancedMesh(haloGeo, haloMat, haloed.length);
+        haloMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      }
+
+      let h = 0;
+      marks.forEach((m, i) => {
         const c = g.getCoords(m.lat, m.lng, 0.012);
         const local = new THREE.Vector3(c.x, c.y, c.z);
-        const normal = local.clone().normalize();
+        normal.copy(local).normalize();
+        quat.setFromUnitVectors(up, normal); // face outward from the surface
 
-        const disc = new THREE.Mesh(markGeo, materialFor(m.color, 0.92));
-        disc.position.copy(local);
-        disc.scale.setScalar(m.radius);
-        disc.lookAt(local.clone().add(normal));
-        markGroup.add(disc);
+        scale.setScalar(m.radius);
+        matrix.compose(local, quat, scale);
+        discMesh!.setMatrixAt(i, matrix);
+        discMesh!.setColorAt(i, colour.set(m.color));
 
-        if (m.haloDeg && m.haloDeg > 0) {
-          // The ring shows the area a generalised record could be anywhere
-          // within. It is drawn to the real cell size, so it shrinks as the
-          // published precision improves.
-          const ring = new THREE.Mesh(haloGeo, materialFor(m.color, 0.22));
-          ring.position.copy(local);
-          const radiusUnits = (m.haloDeg / 180) * Math.PI * GLOBE_UNITS;
-          ring.scale.setScalar(Math.max(m.radius * 1.6, radiusUnits));
-          ring.lookAt(local.clone().add(normal));
-          markGroup.add(ring);
+        if ((m.haloDeg ?? 0) > 0 && haloMesh) {
+          // The ring shows the area a generalised record lies somewhere within.
+          // Drawn to the real cell size, so it shrinks as precision improves.
+          const radiusUnits = ((m.haloDeg as number) / 180) * Math.PI * GLOBE_UNITS;
+          scale.setScalar(Math.max(m.radius * 1.7, radiusUnits));
+          matrix.compose(local, quat, scale);
+          haloMesh.setMatrixAt(h, matrix);
+          haloMesh.setColorAt(h, colour.set(m.color));
+          h += 1;
         }
 
         rendered.push({ id: m.id, local });
+      });
+
+      discMesh.instanceMatrix.needsUpdate = true;
+      if (discMesh.instanceColor) discMesh.instanceColor.needsUpdate = true;
+      markGroup.add(discMesh);
+      if (haloMesh) {
+        haloMesh.instanceMatrix.needsUpdate = true;
+        if (haloMesh.instanceColor) haloMesh.instanceColor.needsUpdate = true;
+        markGroup.add(haloMesh);
       }
+
       // Surfaced so a test can assert that what is drawn is what is pickable.
       mount.dataset.markCount = String(rendered.length);
     };
@@ -512,9 +557,12 @@ const AtlasGlobe: React.FC<Props> = ({
       dom.removeEventListener('click', onClick);
       rebuildRef.current = null;
       globeRef.current = null;
+      discMesh?.dispose();
+      haloMesh?.dispose();
       markGeo.dispose();
       haloGeo.dispose();
-      materials.forEach((m) => m.dispose());
+      discMat.dispose();
+      haloMat.dispose();
       starGeo.dispose();
       starMat.dispose();
       if (dom.parentNode === mount) mount.removeChild(dom);
