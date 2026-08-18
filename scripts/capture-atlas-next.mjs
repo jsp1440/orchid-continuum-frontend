@@ -69,7 +69,7 @@ const settle = (page, ms = 9000) => page.waitForTimeout(ms);
  * partial read, and the interface says so — but a screenshot captioned as the
  * Atlas should show the whole Atlas.
  */
-async function waitForComplete(page, name, ms = 300_000) {
+async function waitForComplete(page, name, ms = 420_000) {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
     const txt = await page.textContent('body').catch(() => '');
@@ -163,15 +163,22 @@ for (const vp of VIEWPORTS) {
   // Select by INDEX, not by label: the list is sorted by record count and is
   // rebuilt when the second load stage lands, so a label read a moment earlier
   // may no longer exist by the time the click happens.
+  // `force` for the same reason the clicks above are forced: with tens of
+  // thousands of marks on a software renderer, Playwright's actionability check
+  // never observes the two stable frames it wants and times out on an element
+  // that is plainly visible and enabled. The select is never conditionally
+  // hidden or disabled, so there is no real actionability question to skip.
   const countrySelect = page.locator('select').nth(1);
   const optionCount = await countrySelect.locator('option').count();
   let firstReal = null;
   if (optionCount > 1) {
-    await countrySelect.selectOption({ index: 1 });
+    await countrySelect.selectOption({ index: 1 }, { force: true, timeout: 120_000 });
     firstReal = await countrySelect.locator('option:checked').textContent();
     log(vp.name, 'descended into', firstReal);
     await settle(page);
     await shot(page, `${OUT}/${vp.name}-country.png`);
+  } else {
+    log(vp.name, 'WARNING: country list held no entries; descent frame not captured');
   }
 
   results.push({ viewport: vp.name, records, complete, country: firstReal ?? null, gap, guide, errors });

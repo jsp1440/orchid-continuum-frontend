@@ -29,12 +29,18 @@ jobs:
       - run: npm i --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - name: Serve and capture
-        timeout-minutes: 45
+        timeout-minutes: 60
         run: |
           set -o pipefail
           npx vite preview --port 4173 --host 127.0.0.1 &
           npx wait-on http://127.0.0.1:4173 -t 60000
-          node scripts/capture-atlas-next.mjs 2>&1 | tee capture.log
+          # Stamp the source commit into the log. File timestamps do not survive
+          # a checkout, so this is the only durable answer to "which build are
+          # these frames from?" — and a mixed-provenance evidence set must never
+          # be presentable as one build.
+          echo "[capture] commit $(git rev-parse HEAD)" | tee capture.log
+          echo "[capture] captured $(date -u +%Y-%m-%dT%H:%M:%SZ)" | tee -a capture.log
+          node scripts/capture-atlas-next.mjs 2>&1 | tee -a capture.log
       - name: Commit screenshots
         if: always()
         run: |
