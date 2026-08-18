@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import AtlasGlobe, { type GlobeMark } from './AtlasGlobe';
