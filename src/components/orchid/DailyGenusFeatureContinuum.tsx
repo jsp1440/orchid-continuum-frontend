@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Database, ImageOff } from 'lucide-react';
+import { ArrowRight, Bug, Database, Globe2, ImageOff, Sprout } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import type { ContinuumDomainState } from '@/lib/featuredTaxonContinuum';
+import type { WebNodeData } from '@/lib/ocBackend';
 
 const DOMAIN_LABELS: Record<ContinuumDomainState['domain'], string> = {
   taxonomy: 'Taxonomy',
@@ -34,10 +35,52 @@ function EvidenceBadge({ item }: { item: ContinuumDomainState }) {
   );
 }
 
+function RelationshipCard({
+  label,
+  question,
+  node,
+  icon,
+}: {
+  label: string;
+  question: string;
+  node: WebNodeData | null | undefined;
+  icon: React.ReactNode;
+}) {
+  const hasData = Boolean(node?.hasData);
+  return (
+    <article className="rounded-xl border border-[#d1bd8e] bg-[#fffaf0] p-5">
+      <div className="flex items-center gap-2 text-[#755f29]">
+        {icon}
+        <p className="font-mono text-[9px] uppercase tracking-[0.2em]">{label}</p>
+      </div>
+      <h3 className="mt-2 font-serif text-2xl leading-tight text-[#24321f]">{question}</h3>
+      {hasData ? (
+        <>
+          <p className="mt-3 text-sm font-medium text-[#3d4936]">{node?.summary}</p>
+          {node?.items?.length ? (
+            <ul className="mt-3 space-y-1 text-sm leading-6 text-[#5d684c]">
+              {node.items.slice(0, 3).map((item) => <li key={item}>• {item}</li>)}
+            </ul>
+          ) : null}
+          <p className="mt-3 text-xs leading-5 text-[#747d68]">
+            Shown only because the Continuum relationship endpoint returned linked evidence for this featured genus.
+          </p>
+        </>
+      ) : (
+        <div className="mt-3 rounded-lg border border-dashed border-[#c9b37e] bg-[#fbf5e6] p-3">
+          <p className="text-sm font-medium text-[#4a5542]">Not yet documented in the current Continuum view.</p>
+          <p className="mt-1 text-xs leading-5 text-[#747d68]">This is a knowledge gap, not evidence that the relationship is biologically absent.</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
 const DailyGenusFeatureContinuum: React.FC = () => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = continuum?.media.items ?? [];
   const hero = media[0] ?? null;
+  const relationships = continuum?.relationships ?? null;
 
   return (
     <section className="bg-[#f3ead4] px-4 py-10 sm:px-6 lg:px-8" aria-labelledby="featured-genus-title">
@@ -49,7 +92,7 @@ const DailyGenusFeatureContinuum: React.FC = () => {
               {genus}
             </h2>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-[#526046]">
-              This view is rendered from Orchid Continuum services. Missing relationships remain visible as knowledge gaps rather than being replaced with generic scientific claims.
+              Follow this orchid outward through the evidence the Orchid Continuum actually links. Missing relationships remain visible instead of being filled with generic scientific claims.
             </p>
           </div>
           <Link
@@ -115,6 +158,27 @@ const DailyGenusFeatureContinuum: React.FC = () => {
               </>
             )}
           </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <RelationshipCard
+            label="Pollination"
+            question="Who is linked to its pollination story?"
+            node={relationships?.pollinators}
+            icon={<Bug className="h-4 w-4" />}
+          />
+          <RelationshipCard
+            label="Mycorrhizae"
+            question="Which fungal partnerships are documented?"
+            node={relationships?.fungi}
+            icon={<Sprout className="h-4 w-4" />}
+          />
+          <RelationshipCard
+            label="Place"
+            question="Where has the Continuum recorded it?"
+            node={relationships?.geography}
+            icon={<Globe2 className="h-4 w-4" />}
+          />
         </div>
       </div>
     </section>
