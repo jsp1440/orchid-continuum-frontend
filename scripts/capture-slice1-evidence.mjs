@@ -7,7 +7,7 @@ import { writeFile } from 'node:fs/promises';
 
 const BASE = 'http://localhost:4174/';
 const OUT = 'docs/slice1-evidence';
-const report = { capturedAt: new Date().toISOString(), views: [] };
+const report = { capturedAt: new Date().toISOString(), mediaTransport: 'stubbed with verbatim live payload — endpoint CORS-blocks all preview origins', views: [] };
 const browser = await chromium.launch();
 
 for (const vp of [
@@ -15,6 +15,43 @@ for (const vp of [
   { name: 'ipad-landscape', width: 1024, height: 768 },
 ]) {
   const page = await browser.newPage({ viewport: { width: vp.width, height: vp.height }, deviceScaleFactor: 2 });
+
+  // The Calyx media endpoint's CORS allowlist (_ALLOWED_MEDIA_ORIGINS) contains
+  // only the four production hosts and no localhost entry, so no preview origin
+  // can call it regardless of port. To verify the hero's rendering we serve that
+  // ONE request from the exact payload the live API returned for this genus on
+  // 2026-08-18 (verified via GitHub Actions run 32091809919). Everything else on
+  // the page — Supabase evidence, occurrence data, status banners — stays live.
+  await page.route('**/api/media/genus/**', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        status: 'ok',
+        requested_genus: 'Vanilla',
+        accepted_genus: 'Vanilla',
+        generated_at: '2026-08-18T02:26:14.017787+00:00',
+        items: [
+          {
+            media_id: 'oc-image:134543058',
+            taxon_id: '40447',
+            scientific_name: 'Vanilla planifolia',
+            genus: 'Vanilla',
+            image_url: 'https://content.eol.org/data/media/55/2b/c6/509.1001681.jpg',
+            thumbnail_url: 'https://content.eol.org/data/media/55/2b/c6/509.1001681.jpg',
+            source_name: 'EOL',
+            source_record_url: null,
+            license: 'cc-by-sa-3.0',
+            attribution: null,
+            media_kind: 'photograph',
+            quality_score: null,
+          },
+        ],
+        summary: { eligible_count: 1, returned_count: 1, exclusion_counts: {} },
+      }),
+    });
+  });
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
