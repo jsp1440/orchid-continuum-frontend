@@ -91,3 +91,34 @@
   "view_v_atlas_occurrences_public": "absent (400)",
   "view_atlas_occurrences_generalized": "absent (400)"
 }
+=== PASS 2 ===
+{
+  "speciesTable": {
+    "rows": 9,
+    "withIucnCode": 9,
+    "withConservationStatus": 9,
+    "threatened": 5
+  },
+  "speciesIndex": {
+    "namesInSpeciesTable": 9,
+    "namesCarryingAnAssessment": 9
+  },
+  "nameResolution": {
+    "sampled": 4000,
+    "noUsableBinomial": 0,
+    "matchedASpeciesRow": 221,
+    "matchedARowCarryingAnAssessment": 221,
+    "unmatched": 3779,
+    "percentUnresolved": 94.5,
+    "firstUnmatchedNames": [
+      "dracula chimaera",
+      "dracula benedicti",
+      "dracula pusilla",
+      "dracula iricolor",
+      "dracula irmeliniae",
+      "dracula vespertilio",
+      "dracula dalessandroi",
+      "dracula lafleurii"
+    ]
+  }
+}
