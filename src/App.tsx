@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -16,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
+const AtlasNext = lazy(() => import("./pages/AtlasNext"));
 import OrchidZoo from "./pages/OrchidZoo";
 import OACS from "./pages/OACS";
 import Widgets from "./pages/Widgets";
@@ -90,6 +92,22 @@ const App = () => (
                   <Route path="/about" element={<About />} />
                   <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
                   <Route path="/atlas" element={<Atlas />} />
+                  {/* Candidate Living Atlas. Isolated from /atlas by design; three.js
+                      is code-split so it never enters the main bundle. */}
+                  <Route
+                    path="/atlas-next"
+                    element={
+                      <Suspense
+                        fallback={
+                          <div className="flex h-[100dvh] items-center justify-center bg-[#05070b] text-sm text-white/60">
+                            Loading the Atlas…
+                          </div>
+                        }
+                      >
+                        <AtlasNext />
+                      </Suspense>
+                    }
+                  />
                   <Route path="/atlas/:species" element={<Atlas />} />
                   <Route path="/admin" element={<AdminCenter />} />
                   <Route path="/control-center" element={<AdminCenter />} />
