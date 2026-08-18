@@ -66,7 +66,7 @@ const settle = (page, ms = 9000) => page.waitForTimeout(ms);
  * partial read, and the interface says so — but a screenshot captioned as the
  * Atlas should show the whole Atlas.
  */
-async function waitForComplete(page, name, ms = 240_000) {
+async function waitForComplete(page, name, ms = 300_000) {
   const deadline = Date.now() + ms;
   while (Date.now() < deadline) {
     const txt = await page.textContent('body').catch(() => '');
@@ -109,13 +109,21 @@ for (const vp of VIEWPORTS) {
 
   await shot(page, `${OUT}/${vp.name}-earth.png`);
 
-  // Descend: pick the country with the most records, which opens the
+  // Descend into the country with the most records, which opens the
   // individual-record scale.
+  //
+  // Select by INDEX, not by label. The list is sorted by record count and is
+  // rebuilt when the second load stage lands, so a label read a moment earlier
+  // may no longer exist by the time the click happens — which is exactly how
+  // the previous run failed. The index is stable; whichever country it lands on
+  // is reported below.
   const countrySelect = page.locator('select').nth(1);
-  const options = await countrySelect.locator('option').allTextContents();
-  const firstReal = options.find((o) => /\(\d+\)$/.test(o));
-  if (firstReal) {
-    await countrySelect.selectOption({ label: firstReal });
+  const optionCount = await countrySelect.locator('option').count();
+  let firstReal = null;
+  if (optionCount > 1) {
+    await countrySelect.selectOption({ index: 1 });
+    firstReal = await countrySelect.locator('option:checked').textContent();
+    log(vp.name, 'descended into', firstReal);
     await settle(page);
     await shot(page, `${OUT}/${vp.name}-country.png`);
   }
