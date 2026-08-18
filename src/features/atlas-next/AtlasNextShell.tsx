@@ -412,6 +412,12 @@ const AtlasNextShell: React.FC = () => {
                 rather than a point, because the species is assessed as threatened.
               </p>
             )}
+            {data.kind === 'ready' && !data.complete && (
+              <p className="mt-1.5 text-[11px] leading-[1.5] text-[#7fa8d8]">
+                Still reading the store — these counts describe what has arrived so far,
+                not the whole Atlas.
+              </p>
+            )}
             <p className="mt-1.5 text-[11px] leading-[1.5] text-white/35">
               {aggregated
                 ? 'A cell is a count of records in a square of the graticule. It is not a range or a density.'

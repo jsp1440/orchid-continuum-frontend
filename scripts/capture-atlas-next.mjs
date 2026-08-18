@@ -22,17 +22,35 @@ const VIEWPORTS = [
 const log = (...a) => console.log('[capture]', ...a);
 
 /** Wait until the shell reports a non-zero record count, i.e. real data landed. */
-async function waitForRecords(page, ms = 180_000) {
+async function waitForRecords(page, name, ms = 300_000) {
   const deadline = Date.now() + ms;
+  let lastNote = '';
   while (Date.now() < deadline) {
     const txt = await page.textContent('body').catch(() => '');
     const m = txt && txt.match(/(\d[\d,]*)\s+records/);
     if (m && Number(m[1].replace(/,/g, '')) > 0) return Number(m[1].replace(/,/g, ''));
-    if (txt && /could not be reached/i.test(txt)) throw new Error('occurrence store unreachable from runner');
-    if (txt && /returned no usable coordinates/i.test(txt)) throw new Error('occurrence store returned no coordinates');
-    await page.waitForTimeout(1500);
+
+    // Say what state the page is actually in, so a timeout is diagnosable
+    // rather than just a timeout.
+    const note = /could not be reached/i.test(txt)
+      ? 'unavailable'
+      : /returned no usable coordinates/i.test(txt)
+        ? 'empty'
+        : /Reading the occurrence store/i.test(txt)
+          ? 'loading'
+          : 'unrecognised';
+    if (note !== lastNote) {
+      log(name, 'state:', note);
+      lastNote = note;
+    }
+    if (note === 'unavailable') throw new Error('occurrence store unreachable from runner');
+    if (note === 'empty') throw new Error('occurrence store returned no coordinates');
+    await page.waitForTimeout(2000);
   }
-  throw new Error('timed out waiting for records');
+  // Capture whatever is on screen before giving up; a picture of the stuck
+  // state is worth more than the exception alone.
+  await page.screenshot({ path: `${OUT}/${name}-TIMEOUT.png` }).catch(() => {});
+  throw new Error(`timed out after ${ms / 1000}s waiting for records (last state: ${lastNote})`);
 }
 
 /**
@@ -63,7 +81,7 @@ for (const vp of VIEWPORTS) {
   // The first WebGL context on a software renderer is markedly slower to come
   // up than the rest; give it room before timing anything.
   await page.waitForTimeout(2000);
-  const records = await waitForRecords(page);
+  const records = await waitForRecords(page, vp.name);
   log(vp.name, 'records =', records);
   await settle(page);
 

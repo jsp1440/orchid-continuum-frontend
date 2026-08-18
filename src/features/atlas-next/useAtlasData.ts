@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   didAtlasLoadFail,
-  fetchAtlasOccurrencePoints,
+  fetchAtlasOccurrencePointsLazy,
   type AtlasOccurrencePoint,
 } from '@/lib/orchidContinuum';
 
@@ -18,11 +18,23 @@ import {
 
 export type AtlasDataState =
   | { kind: 'loading' }
-  | { kind: 'ready'; points: AtlasOccurrencePoint[] }
+  | { kind: 'ready'; points: AtlasOccurrencePoint[]; complete: boolean }
   | { kind: 'empty' }
   /** Transport failure. The map is blank because we could not read, which is
    *  not a statement about where orchids are. */
   | { kind: 'unavailable'; detail: string };
+
+/** A coordinate must be real to be drawn. 0,0 is a data error, not a place. */
+function usablePoints(points: AtlasOccurrencePoint[]): AtlasOccurrencePoint[] {
+  return points.filter(
+    (p) =>
+      Number.isFinite(p.lat) &&
+      Number.isFinite(p.lng) &&
+      Math.abs(p.lat) <= 90 &&
+      Math.abs(p.lng) <= 180 &&
+      !(p.lat === 0 && p.lng === 0),
+  );
+}
 
 export function useAtlasData(): AtlasDataState {
   const [state, setState] = useState<AtlasDataState>({ kind: 'loading' });
@@ -31,24 +43,31 @@ export function useAtlasData(): AtlasDataState {
     let cancelled = false;
     (async () => {
       try {
-        const points = await fetchAtlasOccurrencePoints();
+        const { initial, full } = await fetchAtlasOccurrencePointsLazy();
         if (cancelled) return;
-        if (didAtlasLoadFail()) {
-          setState({
-            kind: 'unavailable',
-            detail: 'The occurrence store did not respond after retrying.',
-          });
+
+        const firstBatch = usablePoints(initial);
+        if (firstBatch.length) {
+          setState({ kind: 'ready', points: firstBatch, complete: false });
+        }
+
+        const everything = usablePoints(await full);
+        if (cancelled) return;
+
+        if (!everything.length) {
+          // Nothing usable came back at all. Distinguish "the store is empty or
+          // holds no coordinates" from "we could not read it".
+          setState(
+            didAtlasLoadFail()
+              ? {
+                  kind: 'unavailable',
+                  detail: 'The occurrence store did not respond after retrying.',
+                }
+              : { kind: 'empty' },
+          );
           return;
         }
-        const usable = points.filter(
-          (p) =>
-            Number.isFinite(p.lat) &&
-            Number.isFinite(p.lng) &&
-            Math.abs(p.lat) <= 90 &&
-            Math.abs(p.lng) <= 180 &&
-            !(p.lat === 0 && p.lng === 0), // a null island coordinate is a data error, not a place
-        );
-        setState(usable.length ? { kind: 'ready', points: usable } : { kind: 'empty' });
+        setState({ kind: 'ready', points: everything, complete: !didAtlasLoadFail() });
       } catch (e) {
         if (cancelled) return;
         setState({

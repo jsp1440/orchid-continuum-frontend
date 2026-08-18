@@ -29,6 +29,7 @@ jobs:
       - run: npm i --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - name: Serve and capture
+        timeout-minutes: 25
         run: |
           set -o pipefail
           npx vite preview --port 4173 --host 127.0.0.1 &
@@ -42,7 +43,12 @@ jobs:
           mkdir -p docs/evidence/atlas-next
           cp capture.log docs/evidence/atlas-next/capture.log || true
           git add docs/evidence/atlas-next
-          git diff --cached --quiet || git commit -m "chore(atlas-next): capture evidence from CI [skip ci]"
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(atlas-next): capture evidence from CI [skip ci]"
+          # The branch may have moved on while the capture ran; rebase onto it
+          # rather than clobbering newer work.
+          git fetch origin ${{ github.ref_name }}
+          git rebase origin/${{ github.ref_name }} || git rebase --abort
           git push origin HEAD:${{ github.ref_name }} || true
       - uses: actions/upload-artifact@v4
         if: always()
