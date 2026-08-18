@@ -122,6 +122,17 @@ export interface AtlasOccurrencePoint {
    * stated no uncertainty — which is NOT the same as stating zero.
    */
   coordinateUncertaintyM?: number;
+  /**
+   * Whether a conservation assessment could actually be REACHED for this
+   * record — by species_id, or by exact canonical binomial.
+   *
+   * False does not mean "not threatened". It means nobody has told the
+   * Continuum either way, and surfaces must fail closed on it rather than
+   * publishing a precise site by default. The live store makes this the normal
+   * case: the conservation reference table holds nine species against 2,611
+   * distinct names among the occurrences.
+   */
+  assessmentResolved?: boolean;
 }
 
 
@@ -591,6 +602,9 @@ function curatedOccurrenceToPoint(
     tribe: row.tribe ?? undefined,
     conservationStatus: row.conservation_status ?? undefined,
     iucnCode: row.iucn_code ?? undefined,
+    // A curated point comes from a species row, so the assessment was reachable
+    // whether or not that row carries one.
+    assessmentResolved: Boolean(row.conservation_status || row.iucn_code),
     imageUrl: row.image_url ?? undefined,
     taxonomyId: row.slug ?? row.id,
     locality: occ.locality,
@@ -645,6 +659,9 @@ function atlasRowToPoint(
     tribe: linkedSpecies?.tribe ?? undefined,
     conservationStatus: linkedSpecies?.conservation_status ?? conservation?.status,
     iucnCode: linkedSpecies?.iucn_code ?? conservation?.iucn,
+    assessmentResolved: Boolean(
+      linkedSpecies?.conservation_status || linkedSpecies?.iucn_code || conservation,
+    ),
     imageUrl: linkedSpecies?.image_url ?? row.media_url ?? undefined,
     taxonomyId: linkedSpecies?.slug ?? undefined,
     locality: row.locality ?? undefined,

@@ -24,6 +24,35 @@
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import type { AtlasAccessLevel } from './types';
 
+/**
+ * Whether a conservation assessment could be reached for this record at all.
+ *
+ * The distinction between "assessed, and not threatened" and "we could not find
+ * out" is the whole of Slice 2's safety work. The live store makes it urgent:
+ * the conservation reference table holds NINE species, against 2,611 distinct
+ * names among 31,073 occurrences. 94.5% of sampled records resolve to nothing.
+ * Treating those as not-threatened publishes precise sites for taxa nobody has
+ * assessed — which is exactly how a rare orchid ends up on a map.
+ */
+export type SensitivityResolution =
+  /** A row was found and it is assessed CR / EN / VU. */
+  | 'assessed-threatened'
+  /** A row was found and it is assessed, but not as threatened. */
+  | 'assessed-not-threatened'
+  /** No assessment could be reached. Fail closed. */
+  | 'unresolved';
+
+/**
+ * Precautionary cell applied when no assessment can be reached.
+ *
+ * 0.05 degrees is roughly 5.5 km — coarse enough that it does not lead anyone
+ * to a plant, fine enough that a country or landscape view still reads. It is a
+ * POLICY CONSTANT, not a scientific one: it is the one number to change if the
+ * owner wants the public Atlas more or less cautious, and changing it changes
+ * nothing else.
+ */
+export const UNRESOLVED_FLOOR_DEG = 0.05;
+
 /** IUCN threat codes that trigger locality protection. */
 const THREATENED_CODES = new Set(['CR', 'EN', 'VU']);
 
@@ -37,7 +66,10 @@ const TIER_CELL_DEG: Record<string, number> = {
 export type SensitivityReason =
   | 'iucn-threatened'
   | 'conservation-status'
+  /** The record's own stated uncertainty. Nothing is being withheld. */
   | 'coordinate-uncertainty'
+  /** No assessment could be reached, so precision is withheld precautionarily. */
+  | 'unresolved-assessment'
   | 'none';
 
 export interface LocalityPolicy {
@@ -111,12 +143,19 @@ export function resolveLocation(
   point: Pick<
     AtlasOccurrencePoint,
     'lat' | 'lng' | 'iucnCode' | 'conservationStatus' | 'coordinateUncertaintyM'
-  >,
+  > & { assessmentResolved?: boolean },
   access: AtlasAccessLevel = 'public',
   floorCellDeg = 0,
 ): DisplayedLocation {
   const tier = iucnOf(point);
   const uncertaintyCell = uncertaintyToCellDeg(point.coordinateUncertaintyM);
+
+  // Fail closed. `assessmentResolved === false` means the pipeline looked and
+  // found nothing; undefined means the caller did not tell us, and legacy
+  // callers must not be silently downgraded, so only an explicit false triggers
+  // the precaution.
+  const unresolved = point.assessmentResolved === false && !tier;
+  const precautionCell = unresolved && access !== 'research' ? UNRESOLVED_FLOOR_DEG : 0;
 
   // Research access may see through threat-based protection, because that
   // protection exists to guard against collection rather than to describe the
@@ -124,17 +163,22 @@ export function resolveLocation(
   // of the observation itself and no authorisation makes it more precise.
   const threatCell = tier && access !== 'research' ? TIER_CELL_DEG[tier] : 0;
 
-  const cellDeg = Math.max(threatCell, uncertaintyCell, floorCellDeg);
+  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg);
   const { lat, lng } = snapToCell(point.lat, point.lng, cellDeg);
 
+  // Reasons are ranked by which one actually decided the rendering, so the
+  // notice always explains the constraint in force rather than a weaker one.
   let reason: SensitivityReason = 'none';
   let notice = '';
-  if (threatCell > 0 && threatCell >= uncertaintyCell) {
+  if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
     reason = point.iucnCode ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km. This species is assessed as threatened (${tier}), and precise sites are withheld to reduce collection risk.`;
-  } else if (uncertaintyCell > 0) {
+  } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
     reason = 'coordinate-uncertainty';
-    notice = `Shown as an area of about ${km(uncertaintyCell)} km, because the source record states a coordinate uncertainty of ${Math.round(point.coordinateUncertaintyM as number)} m.`;
+    notice = `Shown as an area of about ${km(uncertaintyCell)} km, because the source record states a coordinate uncertainty of ${Math.round(point.coordinateUncertaintyM as number)} m. Nothing is being withheld — the record was never more precise than this.`;
+  } else if (precautionCell > 0) {
+    reason = 'unresolved-assessment';
+    notice = `Location generalised to about ${km(precautionCell)} km. The Continuum holds no conservation assessment for this name, so the Atlas does not publish a precise site. This is a precaution about what we do not know — it is not a statement that the species is threatened.`;
   }
 
   return {
@@ -144,9 +188,11 @@ export function resolveLocation(
       generalised: cellDeg > 0,
       cellDeg,
       reason,
-      // Free-text locality is withheld whenever protection (not merely scale
-      // aggregation) coarsened the coordinate.
-      localityTextAllowed: threatCell === 0,
+      // Free-text locality is withheld whenever a PROTECTION decision coarsened
+      // the coordinate — threat-based or precautionary. A locality string
+      // defeats generalisation, so it has to follow the same rule. Source
+      // imprecision is different: nothing is being withheld there.
+      localityTextAllowed: threatCell === 0 && precautionCell === 0,
       notice,
     },
   };
@@ -154,8 +200,23 @@ export function resolveLocation(
 
 /** True when a record's precise site must not be published at this access level. */
 export function isSensitive(
-  point: Pick<AtlasOccurrencePoint, 'iucnCode' | 'conservationStatus'>,
+  point: Pick<AtlasOccurrencePoint, 'iucnCode' | 'conservationStatus'> & {
+    assessmentResolved?: boolean;
+  },
   access: AtlasAccessLevel = 'public',
 ): boolean {
-  return access !== 'research' && iucnOf(point) !== null;
+  if (access === 'research') return false;
+  if (iucnOf(point) !== null) return true;
+  return point.assessmentResolved === false;
+}
+
+/** Which of the three outcomes applies, for reporting and for Calyx. */
+export function sensitivityResolution(
+  point: Pick<AtlasOccurrencePoint, 'iucnCode' | 'conservationStatus'> & {
+    assessmentResolved?: boolean;
+  },
+): SensitivityResolution {
+  if (iucnOf(point) !== null) return 'assessed-threatened';
+  if (point.assessmentResolved === false) return 'unresolved';
+  return 'assessed-not-threatened';
 }
