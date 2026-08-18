@@ -106,6 +106,22 @@ export interface AtlasOccurrencePoint {
   mycorrhizal?: MycorrhizalRecord;
   dataset: string;
   verified: boolean;
+  /**
+   * `atlas_occurrences.source_record_id` — the identifier this record carries
+   * in its originating dataset, so a point can always be traced back.
+   */
+  sourceRecordId?: string;
+  /** `atlas_occurrences.accepted_name` when the source supplies one. */
+  acceptedName?: string;
+  /** `atlas_occurrences.biome` — undefined when the source did not record it. */
+  biome?: string;
+  /**
+   * `atlas_occurrences.coordinate_uncertainty_m`. Carried through so that no
+   * surface can draw a coordinate more precisely than its source claims, and
+   * so locality protection has the figure it needs. Undefined means the source
+   * stated no uncertainty — which is NOT the same as stating zero.
+   */
+  coordinateUncertaintyM?: number;
 }
 
 
@@ -586,6 +602,13 @@ function atlasRowToPoint(
     mycorrhizal,
     dataset: row.source_dataset,
     verified: row.verified ?? false,
+    sourceRecordId: row.source_record_id ?? undefined,
+    acceptedName: row.accepted_name ?? undefined,
+    biome: row.biome ?? undefined,
+    coordinateUncertaintyM:
+      typeof row.coordinate_uncertainty_m === 'number'
+        ? row.coordinate_uncertainty_m
+        : undefined,
   };
 }
 
