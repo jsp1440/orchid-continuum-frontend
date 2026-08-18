@@ -2,20 +2,16 @@
 [capture] desktop state: loading
 [capture] desktop first batch = 1019
 [capture] desktop records = 31092 (complete)
+[capture] desktop knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
+[capture] desktop guide: {"opened":true,"computedObservation":true}
 [capture] desktop descended into Colombia (5507)
-node:internal/modules/run_main:123
-    triggerUncaughtException(
-    ^
-
-locator.click: Timeout 30000ms exceeded.
-Call log:
-  - waiting for getByRole('button', { name: 'What is not known here?' })
-    - locator resolved to <button type="button" title="What is not known here?" class="min-h-[36px] rounded-full px-3 text-[11.5px] transition-colors text-white/75 hover:bg-white/[0.07] hover:text-white">What is not known here?</button>
-  - attempting click action
-    - waiting for element to be visible, enabled and stable
-
-    at /home/runner/work/orchid-continuum-frontend/orchid-continuum-frontend/scripts/capture-atlas-next.mjs:137:18 {
-  name: 'TimeoutError'
-}
-
-Node.js v20.20.2
+[capture] ipad-landscape loading
+[capture] ipad-landscape state: loading
+[capture] ipad-landscape first batch = 1019
+[capture] ipad-landscape records = 31092 (complete)
+[capture] ipad-landscape knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
+[capture] ipad-landscape guide: {"opened":true,"computedObservation":true}
+[capture] ipad-landscape descended into Colombia (5507)
+[capture] ipad-portrait loading
+[capture] ipad-portrait state: loading
+[capture] ipad-portrait first batch = 1019
