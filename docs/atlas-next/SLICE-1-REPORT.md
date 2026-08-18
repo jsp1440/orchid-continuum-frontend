@@ -20,6 +20,8 @@ Head at the time of writing: `SHA_PLACEHOLDER`.
 | `5f8ed42` | Camera centring and real-time easing fixes |
 | `baf1430` | Interaction fixes — stale handlers, drag detection, iPad card |
 | `36cc43c` | Conservation-status linkage (safety fix) |
+| `d95bea9` | Two-stage load so the globe paints before the store finishes |
+| `90c42cf` | Instanced mark layer |
 
 ## 3. Candidate route
 
@@ -196,10 +198,12 @@ Three things to act on:
    hazard — `instanceof` checks across the two instances silently disagree. Worth
    attempting `resolve.dedupe: ['three']` in `vite.config.ts` in Slice 2 and
    verifying the globe still renders.
-2. **The mark layer will not scale as written.** Each mark is currently its own
-   `Mesh`, which is fine for the hundreds visible at a country and wrong for tens of
-   thousands. Slice 2 should move to a single `InstancedMesh` plus a coarse spatial
-   grid for picking. This is independent of three-globe.
+2. **The mark layer was rebuilt during this slice, not deferred.** It originally
+   drew one `Mesh` per record — one draw call each. CI reached that limit on real
+   data: it loaded 1,019 records, captured the Earth view, then could not finish a
+   frame at the country scale. A real iPad would have hit the same wall. Two
+   instanced meshes now draw the whole layer, discs and generalisation rings, in
+   two calls regardless of count. This is independent of three-globe.
 3. **Reimplementation is cheap if it ever becomes worth it.** Sphere + atmosphere +
    GeoJSON-to-sphere is on the order of 150 lines. Do it only if the duplicated
    `three` cannot be deduped, since that is the real cost, not the 216 KB.
@@ -367,9 +371,9 @@ In priority order.
    frontend. Until every threatened taxon in `atlas_occurrences` can resolve an
    assessment, locality protection has a hole in it. Everything else on this list
    can wait; this cannot.
-2. **Make the mark layer scale.** `InstancedMesh` plus a coarse spatial grid for
-   picking, and attempt `resolve.dedupe: ['three']`. Cheap, and it unblocks showing
-   the full occurrence set rather than the current 4,000-record ceiling.
+2. **Attempt `resolve.dedupe: ['three']`**, and add a coarse spatial grid to
+   picking. Picking is currently linear in the number of marks; that is fine at
+   thousands and will not be at a hundred thousand. Small, and both are cheap.
 3. **The Mapbox handover below the country rung** — terrain and a real basemap at
    `state` / `landscape` / `locality`, entered on descent, credential via env, same
    marks and the same sensitivity policy, degrading to the globe if the token is

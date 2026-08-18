@@ -261,7 +261,6 @@ const AtlasNextShell: React.FC = () => {
         marks={marks}
         focus={focus}
         autoRotate={scale === 'earth' && !selectedId}
-        selectedId={selectedId}
         onSelect={onCellOrPoint}
         onHover={onHover}
         onCameraChange={onCameraChange}

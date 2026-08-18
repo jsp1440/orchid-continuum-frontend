@@ -51,7 +51,6 @@ interface Props {
   marks: GlobeMark[];
   focus: Focus | null;
   autoRotate: boolean;
-  selectedId: string | null;
   onSelect: (id: string | null) => void;
   onHover?: (id: string | null, clientX: number, clientY: number) => void;
   /** Reported whenever the camera settles, so the shell can show where it is. */
@@ -68,7 +67,6 @@ const AtlasGlobe: React.FC<Props> = ({
   marks,
   focus,
   autoRotate,
-  selectedId,
   onSelect,
   onHover,
   onCameraChange,
@@ -76,7 +74,6 @@ const AtlasGlobe: React.FC<Props> = ({
   const mountRef = useRef<HTMLDivElement | null>(null);
   const globeRef = useRef<ThreeGlobe | null>(null);
   const marksRef = useRef<GlobeMark[]>(marks);
-  const selectedRef = useRef<string | null>(selectedId);
   // The scene is built once, so its DOM listeners would otherwise close over
   // the FIRST render's callbacks — which resolve a click against an empty
   // dataset and silently do nothing. Every handler is reached through a ref
@@ -115,9 +112,6 @@ const AtlasGlobe: React.FC<Props> = ({
   useEffect(() => {
     marksRef.current = marks;
   }, [marks]);
-  useEffect(() => {
-    selectedRef.current = selectedId;
-  }, [selectedId]);
   useEffect(() => {
     cameraChangeRef.current = onCameraChange;
   }, [onCameraChange]);
