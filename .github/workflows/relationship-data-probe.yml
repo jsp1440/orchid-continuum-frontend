@@ -65,3 +65,24 @@ jobs:
           curl -s "$URL/rest/v1/atlas_occurrences?select=genus,scientific_name,lat,lng,country,source_dataset&limit=40" \
             -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 4000
           echo ""
+      - name: Targeted probe - Vanilla planifolia viability
+        run: |
+          set -euo pipefail
+          URL=$(grep -oP "supabaseUrl = '\K[^']+" src/lib/supabase.ts)
+          KEY=$(grep -oP "supabaseKey = '\K[^']+" src/lib/supabase.ts)
+          H1="apikey: $KEY"; H2="Authorization: Bearer $KEY"
+
+          echo "===== A. Vanilla occurrences in atlas_occurrences ====="
+          curl -s "$URL/rest/v1/atlas_occurrences?select=scientific_name,lat,lng,elevation_m,country,habitat,biome,year,source_dataset,verified,coordinate_uncertainty_m&genus=eq.Vanilla&limit=30" -H "$H1" -H "$H2" | head -c 4000
+          echo ""
+          echo "===== B. distinct genera present in atlas_occurrences ====="
+          for g in Vanilla Cypripedium Dendrobium Epidendrum Orchis Platanthera Spiranthes Caladenia Drakaea Neottia; do
+            N=$(curl -s "$URL/rest/v1/atlas_occurrences?select=id&genus=eq.$g&limit=1000" -H "$H1" -H "$H2" -H "Prefer: count=exact" -I 2>/dev/null | grep -i content-range || echo "none")
+            echo "$g -> $N"
+          done
+          echo ""
+          echo "===== C. EOL licensed media for Vanilla (backend approved library) ====="
+          curl -s "https://orchid-calyx-backend.onrender.com/api/media/genus/Vanilla?limit=6" | head -c 2500
+          echo ""
+          echo "===== D. species row for vanilla-planifolia (full) ====="
+          curl -s "$URL/rest/v1/species?select=*&slug=eq.vanilla-planifolia" -H "$H1" -H "$H2" | head -c 3000
