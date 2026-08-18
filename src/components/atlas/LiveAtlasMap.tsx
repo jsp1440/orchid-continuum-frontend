@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef } from 'react';
+import type { CircleMarker, LayerGroup, Map as LeafletMap } from 'leaflet';
 import { Globe2, Loader2, Layers as LayersIcon } from 'lucide-react';
 import { useLeaflet } from '@/hooks/useLeaflet';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
@@ -103,10 +104,10 @@ const LiveAtlasMap: React.FC<Props> = ({
 }) => {
   const { ready, error, L } = useLeaflet();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const mapRef = useRef<any>(null);
-  const occurrenceLayerRef = useRef<any>(null);
-  const haloLayerRefs = useRef<Record<string, any>>({});
-  const highlightRef = useRef<any>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
+  const occurrenceLayerRef = useRef<LayerGroup | null>(null);
+  const haloLayerRefs = useRef<Partial<Record<LayerKey, LayerGroup>>>({});
+  const highlightRef = useRef<CircleMarker | null>(null);
 
   const displayPoints = useMemo(() => points.map(displayedPoint), [points]);
 
@@ -200,8 +201,9 @@ const LiveAtlasMap: React.FC<Props> = ({
     ];
 
     for (const spec of haloSpecs) {
-      if (haloLayerRefs.current[spec.key]) {
-        map.removeLayer(haloLayerRefs.current[spec.key]);
+      const existing = haloLayerRefs.current[spec.key];
+      if (existing) {
+        map.removeLayer(existing);
         delete haloLayerRefs.current[spec.key];
       }
       if (!activeLayers.has(spec.key)) continue;
