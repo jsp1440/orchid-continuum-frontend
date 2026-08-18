@@ -50,8 +50,14 @@ export interface AtlasContext {
     records: number;
     species: number;
     countries: number;
-    /** Records whose site was coarsened before display. */
+    /** Records whose site was coarsened because the species is assessed as threatened. */
     protectedRecords: number;
+    /**
+     * Records drawn as an area because the SOURCE states a large coordinate
+     * uncertainty. A different fact from protection, and it must not be
+     * reported as one: the record was never precise to begin with.
+     */
+    impreciseRecords: number;
   };
   filters: { genus: string | null; country: string | null };
   selection: AtlasSelectionContext | null;
@@ -84,12 +90,15 @@ export function buildAtlasContext(args: {
   const species = new Set<string>();
   const countries = new Set<string>();
   let protectedRecords = 0;
+  let impreciseRecords = 0;
   for (const p of args.visiblePoints) {
     if (p.canonicalName) species.add(p.canonicalName);
     if (p.country && p.country !== 'Unknown') countries.add(p.country);
     const policy = resolveLocation(p, args.accessLevel).policy;
     if (policy.reason === 'iucn-threatened' || policy.reason === 'conservation-status') {
       protectedRecords += 1;
+    } else if (policy.reason === 'coordinate-uncertainty') {
+      impreciseRecords += 1;
     }
   }
 
@@ -126,6 +135,7 @@ export function buildAtlasContext(args: {
       species: species.size,
       countries: countries.size,
       protectedRecords,
+      impreciseRecords,
     },
     filters: { genus: args.genus, country: args.country },
     selection,

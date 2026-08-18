@@ -254,6 +254,7 @@ const AtlasNextShell: React.FC = () => {
   }, []);
 
   const protectedCount = context.visible.protectedRecords;
+  const impreciseCount = context.visible.impreciseRecords;
 
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#05070b] text-white">
@@ -431,10 +432,20 @@ const AtlasNextShell: React.FC = () => {
                 </>
               )}
             </p>
+            {/* Two different reasons produce a ring, and a viewer who cannot tell
+                them apart learns the wrong thing from the same mark. */}
             {protectedCount > 0 && (
               <p className="mt-1.5 text-[11px] leading-[1.5] text-[#d8b24c]">
-                {protectedCount} record{protectedCount === 1 ? ' is' : 's are'} shown as an area
-                rather than a point, because the species is assessed as threatened.
+                {protectedCount.toLocaleString()} record{protectedCount === 1 ? ' is' : 's are'}{' '}
+                shown as an area because the species is assessed as threatened and its precise site
+                is withheld.
+              </p>
+            )}
+            {impreciseCount > 0 && (
+              <p className="mt-1.5 text-[11px] leading-[1.5] text-[#d8b24c]">
+                {impreciseCount.toLocaleString()} record{impreciseCount === 1 ? ' is' : 's are'}{' '}
+                shown as an area because the source states a large coordinate uncertainty — nothing
+                is being withheld there; the record was never precise.
               </p>
             )}
             {!aggregated && context.visible.records > MAX_DRAWN && (
