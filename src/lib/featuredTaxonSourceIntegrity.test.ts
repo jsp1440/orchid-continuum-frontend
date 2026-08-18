@@ -75,6 +75,7 @@ describe('featured taxon source integrity', () => {
     expect(guide).toContain('to={calyxHref}');
     expect(guide).not.toContain('to="/calyx"');
     expect(navigation).toContain('/calyx?genus=');
-    expect(navigation).toContain('origin=homepage-featured-taxon');
+    expect(navigation).toContain("const FEATURED_TAXON_ORIGIN = 'homepage-featured-taxon'");
+    expect(navigation).toContain('&origin=${FEATURED_TAXON_ORIGIN}');
   });
 });
