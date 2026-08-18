@@ -40,7 +40,7 @@ const HomeAtlasContinuum: React.FC = () => {
             Where do we actually know <span className="italic text-[#d4b34a]">{genus}</span> occurs?
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[#d8cfbd]/82">
-            The homepage now uses the same Continuum evidence state as the featured orchid instead of maintaining a second set of Atlas statistics and fallback counts.
+            The homepage uses the same Continuum evidence state as the featured orchid instead of maintaining a second set of Atlas statistics and fallback counts.
           </p>
           <Link
             to={atlasHref}
@@ -77,7 +77,7 @@ const HomeAtlasContinuum: React.FC = () => {
           ) : null}
 
           <div className="mt-5 border-t border-white/[0.08] pt-4 text-xs leading-5 text-[#9e978a]">
-            Detailed occurrence points, locality protection, scale transitions, and thematic mapping remain in the Atlas workspace. The homepage does not invent counts when those services are unavailable.
+            The full Atlas opens the current cartographic workspace for occurrence exploration. The homepage deliberately avoids precise locality claims and does not imply that locality-sensitivity safeguards are present until that Atlas work is integrated and validated.
           </div>
         </div>
       </div>
