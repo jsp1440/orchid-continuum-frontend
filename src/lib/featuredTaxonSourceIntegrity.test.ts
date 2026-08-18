@@ -66,4 +66,12 @@ describe('featured taxon source integrity', () => {
       expect(layout, `AppLayout must keep canonical journey surface ${canonical}`).toContain(canonical);
     }
   });
+
+  it('preserves featured genus identity when the homepage hands off to Calyx', () => {
+    const guide = source('components/orchid/PublicCalyxGuide.tsx');
+    expect(guide).toContain('/calyx?genus=');
+    expect(guide).toContain('encodeURIComponent(genus)');
+    expect(guide).toContain('origin=homepage-featured-taxon');
+    expect(guide).not.toContain('to="/calyx"');
+  });
 });
