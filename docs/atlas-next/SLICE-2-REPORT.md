@@ -13,6 +13,7 @@
 | `e11d3e3` | Fail closed on unresolved assessments; question engine; time state; knowledge-gap engine |
 | `c4d3258` | Earth → Mapbox descent, configuration contract, regional layer registry |
 | `6dedfb4` | Slice 2 surfaces added to the CI capture |
+| `c92c543` | Draw ceiling raised — the gap view was truncating at 20,000 of 31,092 |
 
 Slice 1's commits are unchanged beneath these.
 
@@ -122,7 +123,33 @@ ground would be the single most misleading thing this Atlas could do.
 
 ## 7. "What is not known here?" — result
 
-Implemented, and it is the view Slice 2 exists for.
+Implemented, and it is the view Slice 2 exists for. **Against the live store it
+reports this:**
+
+| Across the whole Atlas | |
+|---|---|
+| Occurrence records | 31,092 |
+| Species named | 2,611 |
+| Countries | 134 |
+| Records reaching a **documented fungal partner** | **240** — 0.77% |
+| Records naming a **pollinator** | **372** — 1.2% |
+| Records belonging to names with **no conservation assessment** | **30,720** — 98.8% |
+| Withheld because the species is assessed as threatened | 197 |
+| Drawn as areas because the source itself was imprecise | 7,878 |
+| Drawn as areas in total | 31,001 |
+
+Two things follow from that table, and both belong in front of the owner.
+
+**The map is almost entirely the bottom tier.** 30,480 of 31,092 records are
+coordinates and a name, with no habitat, no elevation, and no documented
+relationship. That is the Continuum's honest picture of orchid science, and it is
+the single most interesting thing this Atlas can show.
+
+**The fail-closed precaution now applies to 98.8% of records**, so nearly every
+mark is drawn as an area. That is the correct posture given nine assessed species
+— and it is also the strongest possible argument for the first Slice 3
+recommendation. The precaution is doing real work; it should not have to do this
+much of it.
 
 Three tiers, each phrased as **what is known first, then what is not**, so no
 label can be read as an absence claim on its own:
@@ -378,13 +405,18 @@ fixed four pre-existing errors along with the new Mapbox configuration.
 6. **Anonymous read on the base table** — the P0, open until PR #13 stage 3.
 7. **The complete occurrence load takes four to five minutes.** Carried from
    Slice 1 and still unaddressed; the partial-read notice makes it honest, not fast.
+8. **CI capture cost.** Each viewport reloads and pays that load again, which
+   overran a 25-minute step budget. Narrowest viewport now runs first, and the
+   ceiling is 45 minutes — but this is a symptom of blocker 7, not a separate one.
 
 ## 16. Recommended Slice 3
 
 1. **Populate the conservation reference table, or attach assessments at ingest.**
-   Not glamorous, and it unblocks more than any rendering work: locality
-   protection, the conservation question, and the honesty of every precautionary
-   generalisation currently applied to 94.5% of records.
+   Not glamorous, and it unblocks more than any rendering work. The live numbers
+   make the case better than argument does: **30,720 of 31,092 records — 98.8% —
+   belong to names the Continuum holds no assessment for**, so the precautionary
+   generalisation now applies to almost the entire Atlas. It is working exactly as
+   designed, and it should not have to work this hard.
 2. **Move consumers onto `atlas_occurrences_public` and complete PR #13.** The
    Atlas is the only consumer I can see; this is a small change and it closes the
    P0 properly.
