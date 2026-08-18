@@ -10,11 +10,16 @@ import { buildAtlasContext } from './atlasContext';
 import {
   SCALES,
   SCALE_ORDER,
-  THEMATIC_MODES,
   type AtlasAccessLevel,
   type ScaleLevel,
-  type ThematicMode,
 } from './types';
+import { QUESTIONS, QUESTION_ORDER, resolveAvailability, type QuestionId } from './questions';
+import { profileOf, recordEvidence, tierOf, TIER_COPY, gapSentences, type CompletenessTier } from './knowledgeGap';
+import { DEFAULT_TIME_STATE, withinTime, type AtlasTimeState } from './time';
+import { mapboxConfig } from './mapboxConfig';
+import { buildInvestigation, type StepId } from './investigation';
+import RegionalMap, { type RegionalView } from './RegionalMap';
+import GuidePanel from './GuidePanel';
 
 /**
  * ATLAS-NEXT — the spatial reasoning shell.
@@ -48,6 +53,19 @@ const MARK_SELECTED = '#f0ede4';
  */
 const MAX_DRAWN = 20000;
 
+/**
+ * The rungs at which the Atlas hands over to the regional engine. Above these a
+ * globe shows planetary pattern better than any tiled map; below them a tiled
+ * map shows terrain and place better than any globe.
+ */
+const REGIONAL_FROM: ScaleLevel[] = ['state', 'landscape', 'locality'];
+
+/** Globe camera distance mapped onto a Mapbox zoom, so the handover is continuous. */
+const zoomForScale = (level: ScaleLevel): number =>
+  ({ earth: 1.5, world: 2.5, continent: 3.5, country: 5, state: 6.5, landscape: 8.5, locality: 11 })[
+    level
+  ] ?? 6;
+
 const AtlasNextShell: React.FC = () => {
   const data = useAtlasData();
   // Stable identity: an inline `: []` would be a new array every render and
@@ -55,13 +73,16 @@ const AtlasNextShell: React.FC = () => {
   const points = useMemo(() => (data.kind === 'ready' ? data.points : []), [data]);
 
   const [scale, setScale] = useState<ScaleLevel>('earth');
-  const [mode] = useState<ThematicMode>('where-it-lives');
+  const [question, setQuestion] = useState<QuestionId>('where-it-lives');
+  const [time] = useState<AtlasTimeState>(DEFAULT_TIME_STATE);
+  const [guideStep, setGuideStep] = useState<StepId | null>(null);
   const [genus, setGenus] = useState<string | null>(null);
   const [country, setCountry] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [view, setView] = useState({ lat: 0, lng: 0, distance: 350 });
   const [showContext, setShowContext] = useState(false);
+  const [regionalView, setRegionalView] = useState<RegionalView | null>(null);
   const [hover, setHover] = useState<{ text: string; x: number; y: number } | null>(null);
 
   const availability = useMemo(() => resolveScaleAvailability(points), [points]);
@@ -75,8 +96,9 @@ const AtlasNextShell: React.FC = () => {
     let out = points;
     if (genus) out = out.filter((p) => p.genus === genus);
     if (country) out = out.filter((p) => p.country === country);
+    if (time.mode !== 'all-time') out = out.filter((p) => withinTime(p.year, time));
     return out;
-  }, [points, genus, country]);
+  }, [points, genus, country, time]);
 
   const genera = useMemo(() => {
     const counts = new Map<string, number>();
@@ -98,7 +120,35 @@ const AtlasNextShell: React.FC = () => {
   }, [points, genus]);
 
   const descriptor = SCALES[scale];
-  const aggregated = descriptor.render === 'aggregated';
+  const aggregated = descriptor.render === 'aggregated' && question !== 'what-is-not-known-here';
+
+  // The scale ladder decides which engine is showing. Below the country rung a
+  // globe stops paying for itself, so the Atlas hands over to a tiled map —
+  // same records, same policy, closer camera.
+  const mapbox = useMemo(() => mapboxConfig(), []);
+  const wantsRegional = REGIONAL_FROM.includes(scale);
+  const mapMode: 'globe' | 'regional' = wantsRegional && mapbox.configured ? 'regional' : 'globe';
+
+  const gapMode = question === 'what-is-not-known-here';
+  const gapProfile = useMemo(() => profileOf(selection, ACCESS), [selection]);
+
+  // Availability is measured against the records actually in view, so a
+  // question can be fully built and still honestly unavailable here.
+  const questionAvailability = useMemo(
+    () =>
+      Object.fromEntries(
+        QUESTION_ORDER.map((id) => [id, resolveAvailability(QUESTIONS[id], selection)]),
+      ) as Record<QuestionId, ReturnType<typeof resolveAvailability>>,
+    [selection],
+  );
+  const answerable = QUESTION_ORDER.filter(
+    (id) => questionAvailability[id].state === 'available',
+  ).length;
+
+  const investigation = useMemo(
+    () => buildInvestigation(selection, genus ? `${genus} — all records` : 'All genera in the Atlas'),
+    [selection, genus],
+  );
 
   const cells = useMemo(
     () => (aggregated ? aggregate(selection, descriptor.aggregationDeg, ACCESS) : []),
@@ -121,6 +171,10 @@ const AtlasNextShell: React.FC = () => {
     }
     return selection.slice(0, MAX_DRAWN).map((p) => {
       const loc = resolveLocation(p, ACCESS);
+      // In gap mode the colour carries how much is KNOWN about the record, not
+      // whether its coordinate was coarsened. Two different questions, so they
+      // never share an encoding.
+      const base = gapMode ? TIER_COPY[tierOf(recordEvidence(p, ACCESS))].tone : MARK_COLOR;
       return {
         id: p.id,
         lat: loc.lat,
@@ -129,13 +183,15 @@ const AtlasNextShell: React.FC = () => {
         color:
           p.id === selectedId
             ? MARK_SELECTED
-            : loc.policy.generalised
-              ? MARK_PROTECTED
-              : MARK_COLOR,
+            : gapMode
+              ? base
+              : loc.policy.generalised
+                ? MARK_PROTECTED
+                : MARK_COLOR,
         haloDeg: loc.policy.cellDeg,
       };
     });
-  }, [aggregated, cells, maxCount, selection, selectedId, descriptor.markRadius]);
+  }, [aggregated, cells, maxCount, selection, selectedId, descriptor.markRadius, gapMode]);
 
   const selectedPoint = useMemo(
     () => (selectedId ? selection.find((p) => p.id === selectedId) ?? null : null),
@@ -238,14 +294,16 @@ const AtlasNextShell: React.FC = () => {
         route: '/atlas-next',
         accessLevel: ACCESS,
         scale,
-        mode,
+        mapMode,
+        question,
+        time,
         view,
         visiblePoints: selection,
         selected: selectedPoint,
         genus,
         country,
       }),
-    [scale, mode, view, selection, selectedPoint, genus, country],
+    [scale, mapMode, question, time, view, selection, selectedPoint, genus, country],
   );
 
   // Keep the camera report cheap; the globe already throttles it.
@@ -258,14 +316,26 @@ const AtlasNextShell: React.FC = () => {
 
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#05070b] text-white">
-      <AtlasGlobe
-        marks={marks}
-        focus={focus}
-        autoRotate={scale === 'earth' && !selectedId}
-        onSelect={onCellOrPoint}
-        onHover={onHover}
-        onCameraChange={onCameraChange}
-      />
+      {/* One engine at a time. Both mounted at once would double the GPU cost
+          and let a stale camera show through the seam. */}
+      {mapMode === 'globe' ? (
+        <AtlasGlobe
+          marks={marks}
+          focus={focus}
+          autoRotate={scale === 'earth' && !selectedId}
+          onSelect={onCellOrPoint}
+          onHover={onHover}
+          onCameraChange={onCameraChange}
+        />
+      ) : (
+        <RegionalMap
+          view={regionalView ?? { lat: view.lat, lng: view.lng, zoom: zoomForScale(scale) }}
+          marks={marks}
+          selectedId={selectedId}
+          onSelect={onCellOrPoint}
+          onViewChange={setRegionalView}
+        />
+      )}
 
       {/* ---------------------------------------------------------------- */}
       {/* Header: the question, always visible                              */}
@@ -282,10 +352,12 @@ const AtlasNextShell: React.FC = () => {
             className="mt-3 text-[26px] leading-[1.1] text-[#f0ede4] md:text-[34px]"
             style={{ fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif' }}
           >
-            {THEMATIC_MODES[mode].question}
+            {QUESTIONS[question].question}
           </h1>
           <p className="mt-1 max-w-[46ch] text-[12.5px] leading-[1.5] text-white/55">
-            Every mark is an occurrence record held by the Continuum. Nothing here is illustrative.
+            {gapMode
+              ? 'Every mark is an occurrence record, coloured by how much is recorded about it — not by anything about the orchid.'
+              : 'Every mark is an occurrence record held by the Continuum. Nothing here is illustrative.'}
           </p>
         </div>
 
@@ -333,31 +405,78 @@ const AtlasNextShell: React.FC = () => {
       {/* ---------------------------------------------------------------- */}
       {/* Question rail: what the Atlas can and cannot yet answer            */}
       {/* ---------------------------------------------------------------- */}
-      <div className="pointer-events-auto absolute bottom-24 left-4 right-4 z-20 md:bottom-6 md:left-24 md:right-auto md:max-w-[380px]">
+      {/* The guide drives the question itself, so the rail stands down while it
+          is open rather than stacking two controls in the same corner. */}
+      <div
+        className={`pointer-events-auto absolute bottom-24 left-4 right-4 z-20 md:bottom-6 md:left-24 md:right-auto md:max-w-[400px] ${
+          guideStep ? 'hidden' : ''
+        }`}
+      >
         <div className="overflow-hidden rounded-xl border border-white/10 bg-black/55 backdrop-blur-xl">
           <div className="flex flex-wrap gap-1.5 p-2.5">
-            {Object.values(THEMATIC_MODES).map((m) => (
-              <button
-                key={m.mode}
-                type="button"
-                disabled={!m.implemented}
-                title={m.implemented ? m.question : `Not built yet — ${m.blockedBy}`}
-                className={`min-h-[36px] rounded-full px-3 text-[11.5px] transition-colors ${
-                  m.mode === mode
-                    ? 'bg-[#7fc49a]/18 text-[#a9e0c0]'
-                    : 'cursor-not-allowed text-white/30 line-through decoration-white/20'
-                }`}
-              >
-                {m.question}
-              </button>
-            ))}
+            {QUESTION_ORDER.map((id) => {
+              const q = QUESTIONS[id];
+              const a = questionAvailability[id];
+              const usable = a.state === 'available';
+              const active = id === question;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={!usable}
+                  onClick={() => usable && setQuestion(id)}
+                  title={usable ? q.question : a.reason}
+                  className={`min-h-[36px] rounded-full px-3 text-[11.5px] transition-colors ${
+                    active
+                      ? 'bg-[#7fc49a]/18 text-[#a9e0c0]'
+                      : usable
+                        ? 'text-white/75 hover:bg-white/[0.07] hover:text-white'
+                        : 'cursor-not-allowed text-white/30 line-through decoration-white/20'
+                  }`}
+                >
+                  {q.question}
+                </button>
+              );
+            })}
           </div>
           <p className="border-t border-white/10 px-3 py-2 text-[11px] leading-[1.5] text-white/40">
-            Six questions are struck through because the Atlas cannot answer them from what the
-            graph currently holds. Hover one to see what is blocking it.
+            {answerable} of {QUESTION_ORDER.length} questions can be answered from what the graph
+            holds here. The rest say what is blocking them.
           </p>
         </div>
       </div>
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Knowledge-gap legend                                              */}
+      {/* ---------------------------------------------------------------- */}
+      {gapMode && (
+        <div className="pointer-events-auto absolute bottom-4 left-4 right-4 z-20 md:bottom-6 md:left-auto md:right-[292px] md:w-[300px]">
+          <div className="overflow-hidden rounded-xl border border-white/10 bg-black/60 backdrop-blur-xl">
+            <div className="space-y-2 p-3">
+              {(['relationship-documented', 'context-no-relationship', 'occurrence-only'] as CompletenessTier[]).map(
+                (t) => {
+                  const copy = TIER_COPY[t];
+                  return (
+                    <div key={t} className="flex gap-2.5">
+                      <span
+                        className="mt-[5px] h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ background: copy.tone }}
+                      />
+                      <div className="min-w-0">
+                        <p className="text-[12px] leading-[1.4] text-white/85">{copy.known}</p>
+                        <p className="text-[11px] leading-[1.45] text-white/45">{copy.missing}</p>
+                      </div>
+                    </div>
+                  );
+                },
+              )}
+            </div>
+            <p className="border-t border-white/10 px-3 py-2.5 text-[11px] leading-[1.55] text-[#d8b24c]">
+              {TIER_COPY['context-no-relationship'].caution}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ---------------------------------------------------------------- */}
       {/* Where: place picker                                               */}
@@ -461,6 +580,24 @@ const AtlasNextShell: React.FC = () => {
                 not the whole Atlas.
               </p>
             )}
+            {gapMode && (
+              <div className="mt-2 space-y-1.5 border-t border-white/10 pt-2">
+                {gapSentences(gapProfile)
+                  .slice(0, 4)
+                  .map((line, i) => (
+                    <p key={i} className="text-[11.5px] leading-[1.5] text-white/65">
+                      {line}
+                    </p>
+                  ))}
+              </div>
+            )}
+            {wantsRegional && !mapbox.configured && (
+              <p className="mt-1.5 text-[11px] leading-[1.5] text-[#9dc0e0]">
+                Regional scales need a map provider. Set{' '}
+                <span className="font-mono">{mapbox.envVar}</span> to the existing Mapbox public
+                token and this rung opens; the globe holds until then.
+              </p>
+            )}
             <p className="mt-1.5 text-[11px] leading-[1.5] text-white/35">
               {aggregated
                 ? 'A cell is a count of records in a square of the graticule. It is not a range or a density.'
@@ -521,9 +658,51 @@ const AtlasNextShell: React.FC = () => {
       )}
 
       {/* ---------------------------------------------------------------- */}
+      {/* Guided investigation                                              */}
+      {/* ---------------------------------------------------------------- */}
+      {investigation && guideStep && (
+        <div className="pointer-events-none absolute inset-x-4 bottom-4 z-40 md:inset-x-auto md:left-24 md:w-[420px]">
+          {(() => {
+            const step = investigation.steps.find((x) => x.id === guideStep);
+            if (!step) return null;
+            return (
+              <GuidePanel
+                investigation={investigation}
+                step={step}
+                onClose={() => setGuideStep(null)}
+                onChoose={(to) => {
+                  if (to === 'exit') return setGuideStep(null);
+                  if (to === 'research') {
+                    setShowContext(true);
+                    return setGuideStep(null);
+                  }
+                  // A step's map action is part of the step, so following the
+                  // guide moves the Atlas rather than narrating over a still map.
+                  const next = investigation.steps.find((x) => x.id === to);
+                  if (next && next.mapAction.question !== question) {
+                    setQuestion(next.mapAction.question);
+                  }
+                  setGuideStep(to);
+                }}
+              />
+            );
+          })()}
+        </div>
+      )}
+
+      {/* ---------------------------------------------------------------- */}
       {/* Calyx context inspector — the state a guide would receive          */}
       {/* ---------------------------------------------------------------- */}
-      <div className="pointer-events-auto absolute bottom-4 right-4 z-30 md:bottom-6">
+      <div className="pointer-events-auto absolute bottom-4 right-4 z-30 flex flex-col items-end gap-2 md:bottom-6">
+        {investigation && !guideStep && (
+          <button
+            type="button"
+            onClick={() => setGuideStep('range')}
+            className="min-h-[40px] rounded-full border border-[#b98ce0]/35 bg-[#b98ce0]/10 px-4 text-[12px] text-[#e8e6df] backdrop-blur transition-colors hover:border-[#b98ce0]/70 hover:bg-[#b98ce0]/20"
+          >
+            What do we know about this range?
+          </button>
+        )}
         <button
           type="button"
           onClick={() => setShowContext((v) => !v)}
