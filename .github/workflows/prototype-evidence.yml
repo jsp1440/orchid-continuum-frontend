@@ -1,0 +1,52 @@
+name: Prototype Evidence Capture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'prototype/**'
+    paths:
+      - 'src/prototype/**'
+      - '.github/workflows/prototype-evidence.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+
+      - name: Serve build and capture live iPad screenshots
+        run: |
+          npx vite preview --port 4174 --host > /tmp/preview.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf -o /dev/null http://localhost:4174/prototype/dependency && break
+            sleep 1
+          done
+          mkdir -p docs/prototype-evidence
+          node scripts/capture-prototype-evidence.mjs
+
+      - name: Commit evidence to the prototype branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/prototype-evidence
+          if git diff --staged --quiet; then
+            echo "No evidence changes to commit."
+          else
+            git commit -m "chore(prototype): capture live iPad evidence for dependency slice"
+            git push origin HEAD:${{ github.ref_name }}
+          fi

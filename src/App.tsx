@@ -40,6 +40,9 @@ import Account from "./pages/Account";
 import HabitatJourney from "./pages/HabitatJourney";
 import PollinatorProfile from "./pages/PollinatorProfile";
 import MycorrhizaProfile from "./pages/MycorrhizaProfile";
+// Protected prototype (issue #163 dependency slice). Not linked from the
+// public homepage; reachable only by direct URL for owner review.
+import DependencySlice from "./prototype/DependencySlice";
 import Gallery from "./pages/Gallery";
 import IntelligenceGraph from "./pages/IntelligenceGraph";
 import Climate from "./pages/Climate";
@@ -112,6 +115,7 @@ const App = () => (
                   <Route path="/pollinators/:taxa" element={<PollinatorProfile />} />
                   <Route path="/mycorrhizae" element={<MycorrhizaProfile />} />
                   <Route path="/mycorrhizae/:taxa" element={<MycorrhizaProfile />} />
+                  <Route path="/prototype/dependency" element={<DependencySlice />} />
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/climate" element={<Climate />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
