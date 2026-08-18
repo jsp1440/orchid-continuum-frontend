@@ -22,6 +22,7 @@ Head at the time of writing: `SHA_PLACEHOLDER`.
 | `36cc43c` | Conservation-status linkage (safety fix) |
 | `d95bea9` | Two-stage load so the globe paints before the store finishes |
 | `90c42cf` | Instanced mark layer |
+| `e1a8015` | Mark radius scaled to the rung |
 
 ## 3. Candidate route
 
@@ -85,7 +86,45 @@ This is the part that mattered most, so it is itemised.
 
 ## 7–9. Screenshots
 
-`SCREENSHOTS_PLACEHOLDER`
+Captured on a CI runner against the real occurrence store, and committed to
+`docs/evidence/atlas-next/`. The development sandbox has no egress to the data
+host, so a locally captured frame would show either the "unavailable" state or
+stubbed points — neither of which is evidence.
+
+| File | Viewport | What it shows |
+|---|---|---|
+| `desktop-earth.png` | 1440×900 | Earth rung. Aggregated into 10° graticule cells, with the panel stating that a cell is a count of records rather than a range or a density |
+| `desktop-country.png` | 1440×900 | Ecuador. **2,423 records, 493 species, 9 of them drawn as generalisation rings** because the species is assessed as threatened |
+| `ipad-landscape-earth.png` | 1180×820 | Earth rung, touch layout |
+| `ipad-landscape-country.png` | 1180×820 | Descended, with the record rail beside the globe |
+| `ipad-portrait-earth.png` | 820×1180 | The narrow case |
+| `ipad-portrait-country.png` | 820×1180 | Descended, with the record as a bottom sheet |
+
+### Three things the real data showed that the fixtures could not
+
+**1. The mark layer had a hard ceiling.** The first CI run loaded 1,019 records,
+captured the Earth view, and then could not finish a frame at the country scale.
+Each mark was its own mesh — one draw call per record. A real iPad would have hit
+the same wall. Rebuilt as two instanced meshes during this slice rather than
+deferred (§12).
+
+**2. Marks sized for orbit become a blot at country scale.** With 2,423 records
+inside Ecuador the discs merged, hiding the density they were made of. Mark radius
+is now a property of the scale rung, so a mark keeps roughly the same size on
+screen as the camera descends.
+
+**3. The complete occurrence load takes minutes, not seconds.** Every viewport
+painted its first 1,019 records within about twenty seconds, and the complete set
+had still not arrived four minutes later — the capture log records all three as
+`PARTIAL`. This is exactly why the two-stage load and the "still reading the
+store" notice exist, and the iPad-portrait frame shows that notice doing its job
+on real data: **287 records, 49 species — described as a partial read, not as the
+Atlas.** By the time the country frames were taken the full set had landed, which
+is why they show 2,423 and 5,507-record countries.
+
+That load time is a finding in its own right. It is not a rendering problem, and it
+should be measured against the store before Slice 2 assumes the Atlas can hold the
+whole set in memory on a phone.
 
 ---
 
