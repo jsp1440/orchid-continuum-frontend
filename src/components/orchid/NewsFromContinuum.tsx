@@ -122,7 +122,7 @@ const NewsFromContinuum: React.FC = () => {
                 </div>
                 {state === 'error' && (
                   <p className="mt-2 text-[13px] text-[#f0a37a] font-body">
-                    Please enter a valid email address. If the signup endpoint is still being connected, try again after deploy.
+                    That address didn&apos;t look right — please check it and try again.
                   </p>
                 )}
 

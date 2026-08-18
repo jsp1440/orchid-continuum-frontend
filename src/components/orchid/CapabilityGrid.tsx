@@ -34,7 +34,7 @@ const CAPABILITIES: Capability[] = [
   {
     icon: Globe,
     title: 'The Living Atlas',
-    body: '580,000+ verified occurrence records mapped in real time. Filter by taxonomy, conservation status, pollinator guild, and climate zone to see exactly where each orchid lives on Earth.',
+    body: 'Verified occurrence records on one map. Filter by taxonomy, conservation status, pollinator guild, and climate to see where a species has actually been recorded — and where nobody has looked yet.',
     link: 'Open the Atlas',
     href: '/atlas',
   },
@@ -55,14 +55,14 @@ const CAPABILITIES: Capability[] = [
   {
     icon: Grid3x3,
     title: 'Matrix Identification System',
-    body: 'A modern replacement for the traditional dichotomous key — only possible because the knowledge graph holds morphological data across all 30,000 species simultaneously. Identify any orchid from observable characteristics.',
+    body: 'An alternative to the dichotomous key: describe the characters you can actually see, and the knowledge graph narrows the possibilities against the morphological records it holds.',
     link: 'Use the Matrix',
     href: '/explore',
   },
   {
     icon: FileText,
-    title: 'The Literature Pipeline',
-    body: 'Scientific papers transformed into machine-readable ecological relationships through the Orchid Relationship Extraction Pipeline (OREP). Every published finding becomes part of the living knowledge graph.',
+    title: 'Literature and Evidence',
+    body: 'Published papers read for the ecological relationships they report, so a claim can be traced back to the study that made it — and an unsupported one can be told apart from a documented one.',
     link: 'Explore the Literature',
     href: '/research',
   },

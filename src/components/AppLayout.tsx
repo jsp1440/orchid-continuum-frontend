@@ -3,6 +3,7 @@ import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
 import HomeHero from './orchid/HomeHero';
+import FungalPartnership from './orchid/FungalPartnership';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
 import WhyContinuumExists from './orchid/WhyContinuumExists';
@@ -18,6 +19,10 @@ import PublicCalyxGuide from './orchid/PublicCalyxGuide';
 import Footer from './orchid/Footer';
 import BackendHealthBanner from './orchid/BackendHealthBanner';
 import BackendStatusBanner from './orchid/BackendStatusBanner';
+import {
+  HOME_ATLAS_ANCHOR,
+  SPECIES_IN_FOCUS_ANCHOR,
+} from '@/lib/homepageAnchors';
 
 type SectionBoundaryProps = {
   name: string;
@@ -89,11 +94,15 @@ const AppLayout: React.FC = () => {
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
 
-            {/* Demo-critical product surfaces belong immediately after the hero. */}
-            <div id="species-in-focus">
+            {/* The hero's thread leads here first: one orchid, followed one
+                step outward, before any product surface is introduced. */}
+            <SafeSection name="First relationship"><FungalPartnership /></SafeSection>
+
+            {/* Demo-critical product surfaces follow the first relationship. */}
+            <div id={SPECIES_IN_FOCUS_ANCHOR}>
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             </div>
-            <div id="home-atlas">
+            <div id={HOME_ATLAS_ANCHOR} className="scroll-mt-24">
               <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
             </div>
             <div id="home-calyx">

@@ -1,160 +1,182 @@
-import React from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowRight, Compass, Leaf, ShieldCheck } from 'lucide-react';
-import BotanicalLineArt from './BotanicalLineArt';
+import React, { useEffect, useState } from 'react';
+import { ArrowDown } from 'lucide-react';
+import { useDailyGenus } from '@/lib/dailyGenusContext';
+import { useHeroSpecies } from '@/lib/heroSpeciesContext';
+import { fetchCalyxGenusMedia } from '@/lib/genusMediaResolver';
+import { creditLine, heroStateFromResponse, type HeroMediaState } from '@/lib/heroMedia';
+import { FIRST_RELATIONSHIP_ANCHOR } from '@/lib/homepageAnchors';
+import ContinuumThread from '@/components/orchid/ContinuumThread';
 
 /**
- * HomeHero — Orchid Continuum scientific landing hero.
+ * HomeHero — one real orchid, at full size, and one way forward.
  *
- * BUILD-036 keeps the museum / ecological-atlas aesthetic while making the
- * first screen explicitly grant-ready: beauty leads to discovery, discovery
- * leads to relationships, and relationships lead to stewardship.
+ * The homepage no longer opens on the institution. It opens on the organism.
+ * There is no logo watermark, no botanical ornament, no description of what
+ * the platform is, and no row of competing calls to action: a visitor gets a
+ * photograph of a real orchid, the name of what they are looking at, one
+ * sentence, and one thread to follow.
+ *
+ * Every photograph here comes from the approved Orchid Continuum media library
+ * and carries its credit. When there is no approved photograph, the hero says
+ * so in plain words rather than substituting a stock image, and when the media
+ * service fails, it says that instead — an outage and an empty archive are
+ * different facts and are never shown as the same one.
  */
 
 const HomeHero: React.FC = () => {
-  const navigate = useNavigate();
+  const { genus } = useDailyGenus();
+  const { setHeroSpecies } = useHeroSpecies();
+  const [media, setMedia] = useState<HeroMediaState>({ kind: 'loading' });
 
-  const scrollToWeb = () => {
-    const el = document.getElementById('continuum-web');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
+  useEffect(() => {
+    if (!genus) return;
+
+    const controller = new AbortController();
+    setMedia({ kind: 'loading' });
+
+    fetchCalyxGenusMedia(genus, controller.signal)
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        setMedia(heroStateFromResponse(response));
+      })
+      .catch(() => {
+        // fetchCalyxGenusMedia only rethrows on abort.
+      });
+
+    return () => controller.abort();
+  }, [genus]);
+
+  // Publish the orchid the page opens on, so the sections below follow the
+  // same individual rather than each choosing their own.
+  useEffect(() => {
+    if (media.kind !== 'photograph') {
+      setHeroSpecies(null);
+      return;
+    }
+    setHeroSpecies({
+      species: media.item.scientific_name,
+      genus: media.item.genus || genus,
+      image: media.item.image_url,
+    });
+  }, [media, genus, setHeroSpecies]);
+
+  const followThread = () => {
+    const target = document.getElementById(FIRST_RELATIONSHIP_ANCHOR);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const scrollToStory = () => {
-    const el = document.getElementById('species-in-focus');
-    if (el) el.scrollIntoView({ behavior: 'smooth' });
-  };
+  const photograph = media.kind === 'photograph' ? media.item : null;
+  const credit = photograph ? creditLine(photograph) : null;
+
+  const title = photograph ? photograph.scientific_name : genus;
+  const eyebrow = photograph
+    ? `Orchidaceae · ${photograph.genus || genus}`
+    : 'Orchidaceae';
 
   return (
-
-    <section className="relative overflow-hidden bg-[#1a2e1a] text-[#f5f0e8] border-b border-white/[0.06]">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            'radial-gradient(ellipse at 14% 0%, rgba(54,102,72,0.35) 0%, transparent 55%),' +
-            'radial-gradient(ellipse at 92% 100%, rgba(120,90,40,0.12) 0%, transparent 60%),' +
-            'linear-gradient(180deg, #1f3622 0%, #16271a 100%)',
-        }}
-      />
-
-      <div
-        className="pointer-events-none absolute inset-0 flex items-center justify-center"
-        aria-hidden="true"
-        style={{
-          backgroundImage:
-            'url("https://raw.githubusercontent.com/jsp1440/OrchidContinuumHarvester/main/attached_assets/orchid_continuum_logo.png")',
-          backgroundRepeat: 'no-repeat',
-          backgroundPosition: 'center',
-          backgroundSize: 'min(90%, 1100px)',
-          opacity: 0.05,
-        }}
-      />
-
-      <div
-        className="pointer-events-none absolute -right-24 top-12 w-[640px] opacity-[0.07] hidden md:block"
-        aria-hidden="true"
-      >
-        <BotanicalLineArt
-          variant="vampira"
-          stroke="#d4b34a"
-          strokeWidth={1}
-          className="w-full h-auto"
+    <section
+      className="relative isolate flex min-h-[88vh] flex-col justify-end overflow-hidden bg-[#0d1a10] text-[#f5f0e8]"
+    >
+      {photograph && (
+        <img
+          key={photograph.image_url}
+          src={photograph.image_url}
+          alt={`${photograph.scientific_name}, photographed in the Orchid Continuum media library`}
+          className="absolute inset-0 -z-10 h-full w-full object-cover"
+          loading="eager"
+          referrerPolicy="no-referrer"
+          onError={() => setMedia({ kind: 'no_approved_media' })}
         />
+      )}
+
+      {/* Legibility scrim. Heavier at the bottom, where the words are. */}
+      <div
+        className="absolute inset-0 -z-10 pointer-events-none"
+        aria-hidden="true"
+        style={{
+          background: photograph
+            ? 'linear-gradient(180deg, rgba(8,18,11,0.62) 0%, rgba(8,18,11,0.18) 34%, rgba(8,18,11,0.72) 74%, rgba(8,18,11,0.94) 100%)'
+            : 'radial-gradient(ellipse at 18% 8%, rgba(54,102,72,0.34) 0%, transparent 58%),' +
+              'linear-gradient(180deg, #16271a 0%, #0b1710 100%)',
+        }}
+      />
+
+      <div className="relative mx-auto w-full max-w-[1400px] px-6 pb-14 pt-28 lg:px-10 lg:pb-16 lg:pt-32">
+        <div className="max-w-2xl">
+          <div className="font-mono text-[10px] uppercase tracking-[0.32em] text-[#d4b34a]">
+            {eyebrow}
+          </div>
+
+          <h1
+            className="mt-4 italic leading-[1.02] tracking-[-0.012em] text-[#fffaf0]"
+            style={{
+              fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
+              fontWeight: 500,
+              fontSize: 'clamp(2.3rem, 6vw, 4.6rem)',
+            }}
+          >
+            {title}
+          </h1>
+
+          <p
+            className="mt-5 max-w-xl text-[#e7dfd1] leading-[1.45]"
+            style={{
+              fontFamily: '"Cormorant Garamond","Playfair Display",Georgia,serif',
+              fontSize: 'clamp(1.15rem, 1.9vw, 1.6rem)',
+            }}
+          >
+            This orchid is the visible end of a much longer story.
+          </p>
+
+          {media.kind === 'no_approved_media' && (
+            <p className="mt-4 max-w-xl text-sm leading-6 text-[#cfc6b4]/85">
+              No photograph of {genus} has cleared the Continuum&apos;s image review yet, so
+              this page will not show you one. The rest of what we know about it is real.
+            </p>
+          )}
+
+          {media.kind === 'service_error' && (
+            <p className="mt-4 max-w-xl text-sm leading-6 text-[#cfc6b4]/85">
+              The Continuum&apos;s image library did not answer just now. This is our
+              outage, not an absence of {genus} photographs.
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={followThread}
+            className="group mt-9 inline-flex items-center gap-3 rounded-full bg-[#d4b34a] px-8 py-4 font-mono text-[11px] uppercase tracking-[0.22em] text-[#14281c] transition-colors hover:bg-[#e6c763] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#f0d98a] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0d1a10]"
+          >
+            Follow it outward
+            <ArrowDown className="h-4 w-4 transition-transform group-hover:translate-y-0.5" />
+          </button>
+        </div>
       </div>
 
-
-      <div className="relative z-10 max-w-[1400px] mx-auto px-6 lg:px-10 pt-24 lg:pt-28 pb-14 lg:pb-16">
-        <div className="grid lg:grid-cols-12 gap-10 items-center">
-          <div className="lg:col-span-8">
-            <div className="inline-flex items-center gap-3 font-mono text-[10px] tracking-[0.32em] uppercase text-[#c9a24a]">
-              <span className="inline-block w-8 h-px bg-[#c9a24a]/60" />
-              Biodiversity · Relationships · Education · Conservation
-            </div>
-
-            <h1
-              className="mt-7 text-[#faf7f2] leading-[1.0] tracking-[-0.012em]"
-              style={{
-                fontFamily:
-                  '"Playfair Display","Cormorant Garamond",Georgia,serif',
-                fontWeight: 500,
-                fontSize: 'clamp(2.4rem, 5.4vw, 4.7rem)',
-              }}
-            >
-              Discover the hidden relationships that connect orchids to the{' '}
-              <span className="italic text-[#d4b34a]">living world</span>.
-            </h1>
-
-            <p
-              className="mt-6 max-w-3xl text-[#e7dfd1]/90 leading-[1.4]"
-              style={{
-                fontFamily:
-                  '"Cormorant Garamond","Playfair Display",Georgia,serif',
-                fontSize: 'clamp(1.15rem, 1.7vw, 1.55rem)',
-              }}
-            >
-              The Orchid Continuum connects orchids with pollinators, fungi,
-              habitats, climate, images, maps, literature, education, and
-              conservation action — so beauty becomes understanding, and
-              understanding becomes stewardship.
-            </p>
-
-            <div className="mt-8 flex flex-wrap gap-3">
-              <button
-                type="button"
-                onClick={scrollToStory}
-                className="group inline-flex items-center gap-2 px-7 py-3.5 rounded-full bg-[#d4b34a] text-[#14281c] hover:bg-[#e6c763] transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
+      {credit && (
+        <div className="relative mx-auto w-full max-w-[1400px] px-6 lg:px-10">
+          <p className="text-right font-mono text-[9px] uppercase tracking-[0.18em] text-[#cfc6b4]/55">
+            {photograph?.source_record_url ? (
+              <a
+                href={photograph.source_record_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline-offset-4 transition-colors hover:text-[#d4b34a] hover:underline"
               >
-                <Leaf className="h-4 w-4" />
-                Follow today's orchid
-                <ArrowRight className="h-4 w-4 opacity-0 -ml-2 group-hover:opacity-100 group-hover:ml-0 transition-all" />
-              </button>
-              <button
-                type="button"
-                onClick={scrollToWeb}
-                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-[#d4b34a]/40 text-[#faf7f2] hover:bg-[#d4b34a]/10 hover:border-[#d4b34a] transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
-              >
-                <Compass className="h-4 w-4" />
-                Explore the Continuum
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate('/get-involved')}
-                className="inline-flex items-center gap-2 px-7 py-3.5 rounded-full border border-emerald-300/30 text-[#faf7f2] hover:bg-emerald-300/10 hover:border-emerald-300/60 transition-colors font-mono text-[11px] tracking-[0.22em] uppercase"
-              >
-                <ShieldCheck className="h-4 w-4" />
-                Support conservation
-              </button>
-            </div>
+                {credit}
+              </a>
+            ) : (
+              credit
+            )}
+          </p>
+        </div>
+      )}
 
-            <p className="mt-8 font-mono text-[10px] tracking-[0.24em] uppercase text-[#7a7466]">
-              An independent biodiversity and conservation initiative ·
-              fiscally sponsored by Ecologistics, 501(c)(3).
-            </p>
-          </div>
-
-
-          <div className="lg:col-span-4 hidden lg:block">
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                <div className="w-[340px] h-[340px] rounded-full border border-[#d4b34a]/30" />
-                <div className="absolute w-[440px] h-[440px] rounded-full border border-[#d4b34a]/10" />
-              </div>
-              <div className="relative flex items-center justify-center">
-                <img
-                  src="https://d64gsuwffb70l.cloudfront.net/685ce481a881cc69fa33814c_1780636186272_bb5ee54d.png"
-                  alt="Orchid Continuum — The Global Orchid Experience"
-                  className="w-full h-auto max-w-sm mx-auto drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
-                  loading="eager"
-                />
-              </div>
-              <div className="mt-6 text-center">
-                <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">
-                  The Global Orchid Experience
-                </div>
-              </div>
-            </div>
-          </div>
-
+      {/* The thread leaves the hero here and is picked up by the first
+          relationship, on the same rail. */}
+      <div className="relative mx-auto hidden w-full max-w-[1400px] px-6 lg:block lg:px-10">
+        <div className="w-10">
+          <ContinuumThread className="h-16" fadeBottom />
         </div>
       </div>
     </section>
