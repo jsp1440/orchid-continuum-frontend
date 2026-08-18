@@ -1,0 +1,38 @@
+[capture] desktop loading
+[capture] desktop state: loading
+[capture] desktop first batch = 1019
+[capture] desktop WARNING: still loading when the budget ran out; counts are partial
+[capture] desktop records = 1019 (PARTIAL)
+[capture] ipad-landscape loading
+[capture] ipad-landscape state: loading
+[capture] ipad-landscape first batch = 1019
+[capture] ipad-landscape WARNING: still loading when the budget ran out; counts are partial
+[capture] ipad-landscape records = 1019 (PARTIAL)
+[capture] ipad-portrait loading
+[capture] ipad-portrait state: loading
+[capture] ipad-portrait first batch = 1019
+[capture] ipad-portrait WARNING: still loading when the budget ran out; counts are partial
+[capture] ipad-portrait records = 1019 (PARTIAL)
+[
+  {
+    "viewport": "desktop",
+    "records": 1019,
+    "complete": false,
+    "country": "Ecuador (2423)",
+    "errors": []
+  },
+  {
+    "viewport": "ipad-landscape",
+    "records": 1019,
+    "complete": false,
+    "country": "Colombia (5507)",
+    "errors": []
+  },
+  {
+    "viewport": "ipad-portrait",
+    "records": 1019,
+    "complete": false,
+    "country": "Ecuador (287)",
+    "errors": []
+  }
+]
