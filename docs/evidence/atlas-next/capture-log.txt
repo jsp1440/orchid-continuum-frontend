@@ -1,28 +1,39 @@
 [capture] desktop loading
 [capture] desktop state: loading
 [capture] desktop first batch = 1019
-[capture] desktop WARNING: still loading when the budget ran out; counts are partial
-[capture] desktop records = 1019 (PARTIAL)
-node:internal/modules/run_main:123
-    triggerUncaughtException(
-    ^
-
-locator.selectOption: Timeout 30000ms exceeded.
-Call log:
-  - waiting for locator('select').nth(1)
-    - locator resolved to <select class="mt-1 min-h-[44px] w-full rounded-md border border-white/12 bg-black/50 px-2.5 text-[13px] text-white focus:border-[#7fc49a]/60 focus:outline-none">…</select>
-  - attempting select option action
-    2 × waiting for element to be visible and enabled
-      - did not find some options
-    - retrying select option action
-    - waiting 20ms
-    - waiting for element to be visible and enabled
-    - did not find some options
-  - retrying select option action
-    - waiting 100ms
-
-    at /home/runner/work/orchid-continuum-frontend/orchid-continuum-frontend/scripts/capture-atlas-next.mjs:118:25 {
-  name: 'TimeoutError'
-}
-
-Node.js v20.20.2
+[capture] desktop records = 31092 (complete)
+[capture] desktop descended into Colombia (5507)
+[capture] ipad-landscape loading
+[capture] ipad-landscape state: loading
+[capture] ipad-landscape first batch = 1019
+[capture] ipad-landscape records = 31092 (complete)
+[capture] ipad-landscape descended into Colombia (5507)
+[capture] ipad-portrait loading
+[capture] ipad-portrait state: loading
+[capture] ipad-portrait first batch = 1019
+[capture] ipad-portrait WARNING: still loading when the budget ran out; counts are partial
+[capture] ipad-portrait records = 1019 (PARTIAL)
+[capture] ipad-portrait descended into Ecuador (287)
+[
+  {
+    "viewport": "desktop",
+    "records": 31092,
+    "complete": true,
+    "country": "Colombia (5507)",
+    "errors": []
+  },
+  {
+    "viewport": "ipad-landscape",
+    "records": 31092,
+    "complete": true,
+    "country": "Colombia (5507)",
+    "errors": []
+  },
+  {
+    "viewport": "ipad-portrait",
+    "records": 1019,
+    "complete": false,
+    "country": "Ecuador (287)",
+    "errors": []
+  }
+]
