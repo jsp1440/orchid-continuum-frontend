@@ -67,11 +67,14 @@ describe('featured taxon source integrity', () => {
     }
   });
 
-  it('preserves featured genus identity when the homepage hands off to Calyx', () => {
+  it('preserves featured genus identity when the homepage hands off to Calyx through the canonical navigation contract', () => {
     const guide = source('components/orchid/PublicCalyxGuide.tsx');
-    expect(guide).toContain('/calyx?genus=');
-    expect(guide).toContain('encodeURIComponent(genus)');
-    expect(guide).toContain('origin=homepage-featured-taxon');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
+    expect(guide).toContain('featuredTaxonCalyxHref');
+    expect(guide).toContain('const calyxHref = featuredTaxonCalyxHref(genus)');
+    expect(guide).toContain('to={calyxHref}');
     expect(guide).not.toContain('to="/calyx"');
+    expect(navigation).toContain('/calyx?genus=');
+    expect(navigation).toContain('origin=homepage-featured-taxon');
   });
 });
