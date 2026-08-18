@@ -9,7 +9,7 @@ import WhyContinuumExists from './orchid/WhyContinuumExists';
 import HabitatCards from './orchid/HabitatCards';
 import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
-import HomeAtlas from './orchid/HomeAtlas';
+import HomeAtlasContinuum from './orchid/HomeAtlasContinuum';
 import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
 import HumanStewardship from './orchid/HumanStewardship';
 import OrchidGallery from './orchid/OrchidGallery';
@@ -93,9 +93,7 @@ const AppLayout: React.FC = () => {
             <div id="species-in-focus">
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             </div>
-            <div id="home-atlas">
-              <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
-            </div>
+            <SafeSection name="Atlas"><HomeAtlasContinuum /></SafeSection>
             <div id="home-calyx">
               <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
             </div>
