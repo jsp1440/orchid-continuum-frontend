@@ -120,6 +120,25 @@ export function resolveAtlasLocation(
   };
 }
 
+/**
+ * Canonical public projection for an Atlas occurrence.
+ *
+ * Public UI consumers should pass occurrence objects through this helper before
+ * displaying or handing them to another public surface. It preserves the
+ * scientific record identity and evidence fields while replacing precise
+ * coordinates with the locality-safe display coordinates and withholding free
+ * text locality whenever the policy requires it.
+ */
+export function toPublicAtlasOccurrence(point: AtlasOccurrencePoint): AtlasOccurrencePoint {
+  const displayed = resolveAtlasLocation(point, 'public');
+  return {
+    ...point,
+    lat: displayed.lat,
+    lng: displayed.lng,
+    locality: displayed.policy.localityTextAllowed ? point.locality : undefined,
+  };
+}
+
 export function isAtlasLocationSensitive(
   point: Pick<AtlasOccurrencePoint, 'iucnCode' | 'conservationStatus' | 'assessmentResolved'>,
   access: AtlasAccessLevel = 'public',
