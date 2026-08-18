@@ -464,6 +464,8 @@ audience.
 
 **Two things to prepare beforehand:** load the Atlas before the session, because
 the complete set takes four to five minutes to arrive; and be ready to say
-plainly that 94.5% of records currently have no conservation assessment, because
-somebody in that room will ask, and the answer is better volunteered than
-extracted.
+plainly that **98.8%** of records currently have no conservation assessment,
+because somebody in that room will ask, and the answer is better volunteered than
+extracted. (The read-only probe put it at 94.5% from a sample; 98.8% is the
+complete count the Atlas itself computes and displays, so it is the number to
+quote — it is the one on the screen.)
