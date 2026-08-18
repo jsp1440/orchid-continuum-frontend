@@ -23,6 +23,8 @@ Head at the time of writing: `SHA_PLACEHOLDER`.
 | `d95bea9` | Two-stage load so the globe paints before the store finishes |
 | `90c42cf` | Instanced mark layer |
 | `e1a8015` | Mark radius scaled to the rung |
+| `5296baf` | Capture selects by index, not by a label that moves |
+| `9abf31d` | Ring reasons reported separately |
 
 ## 3. Candidate route
 
@@ -94,13 +96,16 @@ stubbed points — neither of which is evidence.
 | File | Viewport | What it shows |
 |---|---|---|
 | `desktop-earth.png` | 1440×900 | Earth rung. Aggregated into 10° graticule cells, with the panel stating that a cell is a count of records rather than a range or a density |
-| `desktop-country.png` | 1440×900 | Ecuador. **2,423 records, 493 species, 9 of them drawn as generalisation rings** because the species is assessed as threatened |
+| `desktop-country.png` | 1440×900 | Colombia — **5,507 records, 682 species**, the Andean cordilleras legible in the point pattern, with generalisation rings drawn at their real radii |
 | `ipad-landscape-earth.png` | 1180×820 | Earth rung, touch layout |
 | `ipad-landscape-country.png` | 1180×820 | Descended, with the record rail beside the globe |
-| `ipad-portrait-earth.png` | 820×1180 | The narrow case |
+| `ipad-portrait-earth.png` | 820×1180 | The narrow case, mid-load — the partial-read notice visible and doing its job |
 | `ipad-portrait-country.png` | 820×1180 | Descended, with the record as a bottom sheet |
 
-### Three things the real data showed that the fixtures could not
+**The Atlas holds 31,092 occurrence records.** Colombia is the largest single country
+at 5,507; Ecuador holds 2,423.
+
+### Four things the real data showed that the fixtures could not
 
 **1. The mark layer had a hard ceiling.** The first CI run loaded 1,019 records,
 captured the Earth view, and then could not finish a frame at the country scale.
@@ -114,17 +119,26 @@ is now a property of the scale rung, so a mark keeps roughly the same size on
 screen as the camera descends.
 
 **3. The complete occurrence load takes minutes, not seconds.** Every viewport
-painted its first 1,019 records within about twenty seconds, and the complete set
-had still not arrived four minutes later — the capture log records all three as
-`PARTIAL`. This is exactly why the two-stage load and the "still reading the
-store" notice exist, and the iPad-portrait frame shows that notice doing its job
-on real data: **287 records, 49 species — described as a partial read, not as the
-Atlas.** By the time the country frames were taken the full set had landed, which
-is why they show 2,423 and 5,507-record countries.
+painted its first 1,019 records within about twenty seconds; the complete 31,092
+arrived somewhere between four and five minutes later, and on one run of three
+viewports it had not arrived within a five-minute budget at all. This is exactly why
+the two-stage load and the "still reading the store" notice exist, and the
+iPad-portrait frame shows that notice doing its job on real data — a count described
+as a partial read rather than as the Atlas.
 
 That load time is a finding in its own right. It is not a rendering problem, and it
 should be measured against the store before Slice 2 assumes the Atlas can hold the
-whole set in memory on a phone.
+whole set in memory on a phone. The final capture recorded 31,092 records arriving
+complete on two of three viewports and still partial on the third, which is the
+variance the notice exists to make visible.
+
+**4. One mark was carrying two different meanings.** Colombia at the country rung
+draws hundreds of amber rings and — correctly — no protection notice, because none
+of those records is threatened. They are records whose *source* stated a large
+coordinate uncertainty. Both counts are now reported separately, because one is a
+decision the Atlas made about what to publish and the other is a property of the
+observation. Reporting the second as the first would overstate how much is being
+held back; reporting the first as the second would understate it.
 
 ---
 
@@ -330,6 +344,10 @@ path goes through it — there is no way to draw a mark that bypasses it.
 - Generalised records draw a ring at the real cell radius, so the viewer sees the
   size of the uncertainty rather than a false point.
 - Aggregate cells carry a `containsProtected` flag without naming which record.
+- **Two different reasons produce a ring, and they are counted and stated
+  separately.** Threat protection withholds a site the Atlas could have published;
+  coordinate uncertainty describes a record that was never precise. Conflating them
+  would misreport how much is being held back, in one direction or the other.
 - `AtlasAccessLevel` is a parameter on every call. Slice 1 always passes `public`.
   Research access can see through *threat* protection — which exists to guard
   against collection — but **never** through the record's own coordinate
