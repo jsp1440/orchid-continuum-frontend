@@ -1,0 +1,93 @@
+{
+  "liveColumns": [
+    "accepted_name",
+    "biome",
+    "coordinate_uncertainty_m",
+    "country",
+    "elevation_m",
+    "genus",
+    "habitat",
+    "id",
+    "ingested_at",
+    "lat",
+    "lng",
+    "locality",
+    "media_url",
+    "mycorrhizal_data",
+    "pollinator_data",
+    "region",
+    "scientific_name",
+    "source_dataset",
+    "source_record_id",
+    "species",
+    "species_id",
+    "verified",
+    "year"
+  ],
+  "totals": {
+    "allRecords": 31073,
+    "withSpeciesId": 353,
+    "withoutSpeciesId": 30720
+  },
+  "occurrenceLevelIucn": "column absent from the live table",
+  "coordinateUncertainty": {
+    "stated": 19761,
+    "notStated": 11312,
+    "over10km": 6953
+  },
+  "verified_coverage": {
+    "trueOrPresent": 30470
+  },
+  "biome_coverage": {
+    "trueOrPresent": 0
+  },
+  "accepted_name_coverage": {
+    "trueOrPresent": 31073
+  },
+  "threatenedSpeciesSample": [
+    {
+      "genus": "Dracula",
+      "epithet": "vampira",
+      "iucn": "VU"
+    },
+    {
+      "genus": "Bulbophyllum",
+      "epithet": "rothschildianum",
+      "iucn": "EN"
+    },
+    {
+      "genus": "Vanilla",
+      "epithet": "planifolia",
+      "iucn": "EN"
+    },
+    {
+      "genus": "Stanhopea",
+      "epithet": "tigrina",
+      "iucn": "VU"
+    },
+    {
+      "genus": "Paphiopedilum",
+      "epithet": "venustum",
+      "iucn": "EN"
+    }
+  ],
+  "anonCanReadPreciseCoordsForThreatened": {
+    "species": "Dracula vampira (VU)",
+    "status": 200,
+    "rows": [
+      {
+        "decimalPlacesLat": 6,
+        "decimalPlacesLng": 6,
+        "statedUncertaintyM": 31451
+      },
+      {
+        "decimalPlacesLat": 6,
+        "decimalPlacesLng": 6,
+        "statedUncertaintyM": 31451
+      }
+    ]
+  },
+  "view_atlas_occurrences_public": "absent (400)",
+  "view_v_atlas_occurrences_public": "absent (400)",
+  "view_atlas_occurrences_generalized": "absent (400)"
+}
