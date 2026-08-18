@@ -1,5 +1,6 @@
 import { fetchCalyxGenusMedia, type GenusMediaResponse } from '@/lib/genusMediaResolver';
 import { fetchGenusGraphEvidence, type GenusGraphResult, type KnowledgeGraphDomain } from '@/lib/knowledgeGraph';
+import { fetchContinuumGraph, type ContinuumGraphData } from '@/lib/ocBackend';
 
 export type ContinuumEvidenceState = 'known' | 'unknown' | 'unavailable';
 
@@ -14,6 +15,8 @@ export type FeaturedTaxonContinuum = {
   genus: string;
   media: GenusMediaResponse;
   graph: GenusGraphResult;
+  /** Rich relationship summaries from the canonical Continuum graph endpoint. */
+  relationships: ContinuumGraphData | null;
   domains: ContinuumDomainState[];
   gaps: KnowledgeGraphDomain[];
 };
@@ -57,16 +60,20 @@ export async function fetchFeaturedTaxonContinuum(
   const requested = genus.trim();
   if (!requested) throw new Error('Featured taxon genus is required');
 
-  const [media, graph] = await Promise.all([
+  const [media, graph, relationships] = await Promise.all([
     fetchCalyxGenusMedia(requested, signal),
     fetchGenusGraphEvidence(requested, signal),
+    fetchContinuumGraph(requested, signal).catch(() => null),
   ]);
 
   const domains = domainStates(graph);
   return {
-    genus: graph.status === 'ok' ? graph.evidence.genus : (media.accepted_genus || requested),
+    genus: graph.status === 'ok'
+      ? graph.evidence.genus
+      : (media.accepted_genus || relationships?.genus || requested),
     media,
     graph,
+    relationships,
     domains,
     gaps: domains.filter((item) => item.state === 'unknown').map((item) => item.domain),
   };
