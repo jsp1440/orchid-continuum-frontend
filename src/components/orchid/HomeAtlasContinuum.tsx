@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Globe2, MapPinned } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
+import { featuredTaxonAtlasHref } from '@/lib/featuredTaxonNavigation';
 
 /**
  * Homepage Atlas window.
@@ -18,10 +19,7 @@ const HomeAtlasContinuum: React.FC = () => {
   const hero = continuum?.media.items[0] ?? null;
 
   const evidenceAvailable = Boolean(geography?.hasData || occurrenceDomain?.state === 'known');
-  // AtlasFilterContext already treats `genera` as the canonical URL field.
-  // Carry the featured genus into the full Atlas so the biological question
-  // survives navigation instead of resetting to an unrelated global view.
-  const atlasHref = `/atlas?genera=${encodeURIComponent(genus)}`;
+  const atlasHref = featuredTaxonAtlasHref(genus);
 
   return (
     <section id="home-atlas" className="relative overflow-hidden border-y border-white/[0.08] bg-[#07110c] text-[#f5f0e8]">
