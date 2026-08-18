@@ -37,4 +37,10 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('to={atlasHref}');
     expect(navigation).toContain('/atlas?genera=');
   });
+
+  it('does not publicly claim Atlas locality protection before the Atlas Next safety lane is integrated', () => {
+    const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    expect(atlas).toContain('does not imply that locality-sensitivity safeguards are present');
+    expect(atlas).not.toContain('locality protection, scale transitions');
+  });
 });
