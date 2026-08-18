@@ -239,7 +239,10 @@ const AtlasGlobe: React.FC<Props> = ({
     const haloGeo = new THREE.RingGeometry(0.86, 1, 32);
     const discMat = new THREE.MeshBasicMaterial({
       transparent: true,
-      opacity: 0.92,
+      // Slightly translucent so overlapping records read as density rather than
+      // merging into one flat blot — without becoming a heat map, which would
+      // be a claim the Atlas is not entitled to make.
+      opacity: 0.78,
       side: THREE.DoubleSide,
       depthWrite: false,
     });

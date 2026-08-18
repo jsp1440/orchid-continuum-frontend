@@ -115,7 +115,7 @@ const AtlasNextShell: React.FC = () => {
         lng: c.lng,
         // Area scales with the tally so a cell of 400 reads as heavier than a
         // cell of 4 without pretending to be a density surface.
-        radius: 0.9 + 2.4 * Math.sqrt(c.recordCount / maxCount),
+        radius: descriptor.markRadius * (0.85 + 2.3 * Math.sqrt(c.recordCount / maxCount)),
         color: c.containsProtected ? MARK_PROTECTED : MARK_COLOR,
       }));
     }
@@ -125,7 +125,7 @@ const AtlasNextShell: React.FC = () => {
         id: p.id,
         lat: loc.lat,
         lng: loc.lng,
-        radius: p.id === selectedId ? 1.6 : 0.9,
+        radius: descriptor.markRadius * (p.id === selectedId ? 2.1 : 1),
         color:
           p.id === selectedId
             ? MARK_SELECTED
@@ -135,7 +135,7 @@ const AtlasNextShell: React.FC = () => {
         haloDeg: loc.policy.cellDeg,
       };
     });
-  }, [aggregated, cells, maxCount, selection, selectedId]);
+  }, [aggregated, cells, maxCount, selection, selectedId, descriptor.markRadius]);
 
   const selectedPoint = useMemo(
     () => (selectedId ? selection.find((p) => p.id === selectedId) ?? null : null),

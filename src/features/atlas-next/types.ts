@@ -144,6 +144,12 @@ export interface ScaleDescriptor {
    * Also the coarsest precision at which a record may be drawn here.
    */
   aggregationDeg: number;
+  /**
+   * Drawn radius of a mark in globe units. It shrinks as the camera closes in:
+   * a mark sized for the whole planet becomes a blot once a few thousand
+   * records share one country, and a blot hides the density it is made of.
+   */
+  markRadius: number;
   /** Which canonical field organises descent INTO this level. */
   organisedBy: 'none' | 'region' | 'country' | 'locality';
   purpose: string;
@@ -156,6 +162,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 350,
     render: 'aggregated',
     aggregationDeg: 10,
+    markRadius: 1.05,
     organisedBy: 'none',
     purpose: 'The whole planet at once. Where does this family occur at all?',
   },
@@ -165,6 +172,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 300,
     render: 'aggregated',
     aggregationDeg: 5,
+    markRadius: 0.85,
     organisedBy: 'none',
     purpose: 'Global pattern. Which parts of the world hold records?',
   },
@@ -174,6 +182,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 235,
     render: 'aggregated',
     aggregationDeg: 2,
+    markRadius: 0.55,
     organisedBy: 'region',
     purpose: 'One region of the world, organised by the recorded region field.',
   },
@@ -183,6 +192,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 185,
     render: 'individual',
     aggregationDeg: 1,
+    markRadius: 0.34,
     organisedBy: 'country',
     purpose: 'One country, with its records shown individually.',
   },
@@ -192,6 +202,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 160,
     render: 'individual',
     aggregationDeg: 0.5,
+    markRadius: 0.24,
     organisedBy: 'region',
     purpose: 'A subdivision within a country.',
   },
@@ -201,6 +212,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 145,
     render: 'individual',
     aggregationDeg: 0.25,
+    markRadius: 0.17,
     organisedBy: 'locality',
     purpose: 'A valley, ridge, or reserve — the scale at which habitat is legible.',
   },
@@ -210,6 +222,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
     cameraDistance: 135,
     render: 'individual',
     aggregationDeg: 0.1,
+    markRadius: 0.13,
     organisedBy: 'locality',
     purpose: 'A single site. Subject to locality protection for sensitive taxa.',
   },

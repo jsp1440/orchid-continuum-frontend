@@ -314,6 +314,24 @@ remains unprotected.** That needs a data fix, not a frontend one, and it is the
 single highest-priority item in this report. The test suite pins both the fix and
 the remaining hole so the hole stays visible.
 
+### The path to Research Mode
+
+Slice 1 does not build Research Mode. What it does is make sure Research Mode is a
+change of value rather than a rewrite:
+
+- `AtlasAccessLevel` (`'public' | 'research'`) is a parameter on `resolveLocation`,
+  `isSensitive`, `aggregate` and `buildAtlasContext`. Nothing reads an ambient
+  global, so no code path can quietly assume full precision.
+- The distinction between what research access may and may not unlock is already
+  encoded and tested: threat protection lifts, coordinate uncertainty does not.
+- `AtlasContext` carries `accessLevel`, so a guide is told which regime it is
+  speaking under rather than inferring it.
+- What Research Mode still needs, and deliberately does not have: an authorisation
+  source (who is a researcher, and who says so), an audit trail of precise-coordinate
+  access, and a governance decision about which taxa are releasable to whom. Those
+  are policy questions, not rendering ones, and they should be answered before the
+  parameter is ever set to `'research'` in production.
+
 ---
 
 ## 16. Proposed `AtlasContext` for Calyx
