@@ -6,6 +6,7 @@ import { useDailyGenus } from '@/lib/dailyGenusContext';
 const PublicCalyxGuide: React.FC = () => {
   const { genus, continuum } = useDailyGenus();
   const relationships = continuum?.relationships ?? null;
+  const calyxHref = `/calyx?genus=${encodeURIComponent(genus)}&origin=homepage-featured-taxon`;
 
   const prompts = [
     {
@@ -92,11 +93,11 @@ const PublicCalyxGuide: React.FC = () => {
             </div>
 
             <Link
-              to="/calyx"
+              to={calyxHref}
               className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#d4b34a] transition-colors hover:bg-[#d4b34a]/18"
             >
               <MessageCircle className="h-4 w-4" />
-              Open Calyx
+              Open Calyx with {genus} context
             </Link>
           </div>
         </div>
