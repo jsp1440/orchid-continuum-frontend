@@ -29,7 +29,7 @@ jobs:
       - run: npm i --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - name: Serve and capture
-        timeout-minutes: 25
+        timeout-minutes: 45
         run: |
           set -o pipefail
           npx vite preview --port 4173 --host 127.0.0.1 &

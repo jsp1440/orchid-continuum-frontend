@@ -13,10 +13,13 @@ const BASE = process.env.BASE_URL || 'http://127.0.0.1:4173';
 const OUT = 'docs/evidence/atlas-next';
 mkdirSync(OUT, { recursive: true });
 
+// Narrowest first. Each viewport reloads the page and pays the full four-to-five
+// minute occurrence load again, so a run that runs out of budget loses the LAST
+// viewport in the list — and the narrow case is the one most worth having.
 const VIEWPORTS = [
-  { name: 'desktop', width: 1440, height: 900, touch: false },
-  { name: 'ipad-landscape', width: 1180, height: 820, touch: true },
   { name: 'ipad-portrait', width: 820, height: 1180, touch: true },
+  { name: 'ipad-landscape', width: 1180, height: 820, touch: true },
+  { name: 'desktop', width: 1440, height: 900, touch: false },
 ];
 
 const log = (...a) => console.log('[capture]', ...a);
