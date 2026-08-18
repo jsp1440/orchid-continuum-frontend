@@ -1,17 +1,23 @@
-[capture] desktop loading
-[capture] desktop state: loading
-[capture] desktop first batch = 1019
-[capture] desktop records = 31092 (complete)
-[capture] desktop knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
-[capture] desktop guide: {"opened":true,"computedObservation":true}
-[capture] desktop descended into Colombia (5507)
-[capture] ipad-landscape loading
-[capture] ipad-landscape state: loading
-[capture] ipad-landscape first batch = 1019
-[capture] ipad-landscape records = 31092 (complete)
-[capture] ipad-landscape knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
-[capture] ipad-landscape guide: {"opened":true,"computedObservation":true}
-[capture] ipad-landscape descended into Colombia (5507)
 [capture] ipad-portrait loading
 [capture] ipad-portrait state: loading
 [capture] ipad-portrait first batch = 1019
+[capture] ipad-portrait WARNING: still loading when the budget ran out; counts are partial
+[capture] ipad-portrait records = 1019 (PARTIAL)
+[capture] ipad-portrait knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
+[capture] ipad-portrait guide: {"opened":true,"computedObservation":true}
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+locator.selectOption: Timeout 30000ms exceeded.
+Call log:
+  - waiting for locator('select').nth(1)
+    - locator resolved to <select class="mt-1 min-h-[44px] w-full rounded-md border border-white/12 bg-black/50 px-2.5 text-[13px] text-white focus:border-[#7fc49a]/60 focus:outline-none">…</select>
+  - attempting select option action
+    - waiting for element to be visible and enabled
+
+    at /home/runner/work/orchid-continuum-frontend/orchid-continuum-frontend/scripts/capture-atlas-next.mjs:170:25 {
+  name: 'TimeoutError'
+}
+
+Node.js v20.20.2
