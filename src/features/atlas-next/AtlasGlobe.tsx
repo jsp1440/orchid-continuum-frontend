@@ -77,7 +77,13 @@ const AtlasGlobe: React.FC<Props> = ({
   const globeRef = useRef<ThreeGlobe | null>(null);
   const marksRef = useRef<GlobeMark[]>(marks);
   const selectedRef = useRef<string | null>(selectedId);
+  // The scene is built once, so its DOM listeners would otherwise close over
+  // the FIRST render's callbacks — which resolve a click against an empty
+  // dataset and silently do nothing. Every handler is reached through a ref
+  // that each render refreshes.
   const cameraChangeRef = useRef(onCameraChange);
+  const selectRef = useRef(onSelect);
+  const hoverRef = useRef(onHover);
   const rebuildRef = useRef<null | (() => void)>(null);
 
   const state = useRef({
@@ -115,6 +121,12 @@ const AtlasGlobe: React.FC<Props> = ({
   useEffect(() => {
     cameraChangeRef.current = onCameraChange;
   }, [onCameraChange]);
+  useEffect(() => {
+    selectRef.current = onSelect;
+  }, [onSelect]);
+  useEffect(() => {
+    hoverRef.current = onHover;
+  }, [onHover]);
   useEffect(() => {
     state.current.autoRotate = autoRotate;
   }, [autoRotate]);
@@ -276,6 +288,8 @@ const AtlasGlobe: React.FC<Props> = ({
 
         rendered.push({ id: m.id, local });
       }
+      // Surfaced so a test can assert that what is drawn is what is pickable.
+      mount.dataset.markCount = String(rendered.length);
     };
     buildMarks();
     rebuildRef.current = buildMarks;
@@ -284,7 +298,6 @@ const AtlasGlobe: React.FC<Props> = ({
     // Picking — project, don't raycast
     // -----------------------------------------------------------------------
     const projected = new THREE.Vector3();
-    const camDir = new THREE.Vector3();
 
     const pickAt = (clientX: number, clientY: number): string | null => {
       const rect = renderer.domElement.getBoundingClientRect();
@@ -293,7 +306,6 @@ const AtlasGlobe: React.FC<Props> = ({
       // Touch targets need to be forgiving; a fingertip is not a cursor.
       const hitPx = s.coarsePointer ? 26 : 14;
 
-      camera.getWorldDirection(camDir);
       let bestId: string | null = null;
       let bestDist = hitPx * hitPx;
 
@@ -362,7 +374,13 @@ const AtlasGlobe: React.FC<Props> = ({
         return;
       }
 
-      if (Math.abs(e.clientX - s.pressX) + Math.abs(e.clientY - s.pressY) > 5) s.moved = true;
+      // Only movement WHILE the pointer is down counts as a drag. Tracking any
+      // movement made a click unreliable: a pointer that merely travelled to the
+      // target before pressing was treated as having dragged, and the selection
+      // was swallowed.
+      if (s.pointers.size > 0 && Math.abs(e.clientX - s.pressX) + Math.abs(e.clientY - s.pressY) > 5) {
+        s.moved = true;
+      }
 
       if (s.dragging && s.last) {
         const dx = e.clientX - s.last.x;
@@ -378,9 +396,9 @@ const AtlasGlobe: React.FC<Props> = ({
         return;
       }
 
-      if (onHover && !s.coarsePointer) {
+      if (hoverRef.current && !s.coarsePointer) {
         const id = pickAt(e.clientX, e.clientY);
-        onHover(id, e.clientX, e.clientY);
+        hoverRef.current(id, e.clientX, e.clientY);
         dom.style.cursor = id ? 'pointer' : 'grab';
       }
     };
@@ -397,7 +415,7 @@ const AtlasGlobe: React.FC<Props> = ({
 
     const onClick = (e: MouseEvent) => {
       if (s.moved) return; // a drag is not a selection
-      onSelect(pickAt(e.clientX, e.clientY));
+      selectRef.current(pickAt(e.clientX, e.clientY));
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -502,8 +520,8 @@ const AtlasGlobe: React.FC<Props> = ({
       if (dom.parentNode === mount) mount.removeChild(dom);
       renderer.dispose();
     };
-    // Scene is built once; everything dynamic flows through refs.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Scene is built once; everything dynamic flows through refs, so this
+    // genuinely has no other dependency.
   }, [landFeatures]);
 
   // Rebuild the mark layer whenever the resolved marks change.

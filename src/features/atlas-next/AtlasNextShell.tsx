@@ -462,9 +462,11 @@ const AtlasNextShell: React.FC = () => {
         </div>
       )}
 
-      {/* Selected record */}
+      {/* Selected record. A bottom sheet until there is genuinely room beside the
+          globe: at 820px — iPad portrait — a 390px side panel takes half the
+          world away, so the sheet holds until the large breakpoint. */}
       {selectedPoint && (
-        <div className="absolute inset-x-0 bottom-0 z-40 h-[62dvh] md:inset-y-0 md:left-auto md:right-0 md:h-full md:w-[380px]">
+        <div className="absolute inset-x-0 bottom-0 z-40 h-[62dvh] lg:inset-y-0 lg:left-auto lg:right-0 lg:h-full lg:w-[390px]">
           <OccurrenceCard point={selectedPoint} access={ACCESS} onClose={() => setSelectedId(null)} />
         </div>
       )}

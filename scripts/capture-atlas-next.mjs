@@ -35,8 +35,13 @@ async function waitForRecords(page, ms = 180_000) {
   throw new Error('timed out waiting for records');
 }
 
-/** Let the globe settle: WebGL needs frames, and the camera eases. */
-const settle = (page, ms = 3500) => page.waitForTimeout(ms);
+/**
+ * Let the globe settle. The camera eases toward its target in real time, and a
+ * CI runner renders WebGL in software at a handful of frames per second, so the
+ * flight takes several seconds of wall clock even though it is under two on
+ * real hardware.
+ */
+const settle = (page, ms = 9000) => page.waitForTimeout(ms);
 
 const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
 const results = [];
@@ -55,6 +60,9 @@ for (const vp of VIEWPORTS) {
 
   log(vp.name, 'loading');
   await page.goto(`${BASE}/atlas-next`, { waitUntil: 'domcontentloaded' });
+  // The first WebGL context on a software renderer is markedly slower to come
+  // up than the rest; give it room before timing anything.
+  await page.waitForTimeout(2000);
   const records = await waitForRecords(page);
   log(vp.name, 'records =', records);
   await settle(page);
@@ -68,7 +76,7 @@ for (const vp of VIEWPORTS) {
   const firstReal = options.find((o) => /\(\d+\)$/.test(o));
   if (firstReal) {
     await countrySelect.selectOption({ label: firstReal });
-    await settle(page, 4500);
+    await settle(page);
     await page.screenshot({ path: `${OUT}/${vp.name}-country.png` });
   }
 
