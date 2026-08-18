@@ -153,7 +153,7 @@ export const SCALES: Record<ScaleLevel, ScaleDescriptor> = {
   earth: {
     level: 'earth',
     label: 'Earth',
-    cameraDistance: 420,
+    cameraDistance: 350,
     render: 'aggregated',
     aggregationDeg: 10,
     organisedBy: 'none',

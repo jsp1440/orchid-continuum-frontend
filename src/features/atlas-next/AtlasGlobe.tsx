@@ -87,7 +87,7 @@ const AtlasGlobe: React.FC<Props> = ({
     last: null as { x: number; y: number } | null,
     rotY: 0,
     rotX: 0,
-    distance: 420,
+    distance: 350,
     targetRotY: null as number | null,
     targetRotX: null as number | null,
     targetDistance: null as number | null,
@@ -130,7 +130,17 @@ const AtlasGlobe: React.FC<Props> = ({
       s.targetDistance = null;
       return;
     }
-    s.targetRotY = Math.PI / 2 - (focus.lng * Math.PI) / 180;
+    // three-globe places a point at
+    //   x = r·cos(lat)·sin(lng),  y = r·sin(lat),  z = r·cos(lat)·cos(lng)
+    // and the camera sits on +Z. With the default XYZ euler order the Y
+    // rotation is applied to the vector first, so bringing (lat,lng) to face
+    // the camera needs rotY = -lng and rotX = +lat.
+    //
+    // The prototype used `Math.PI / 2 - lonRad` here, which lands the target a
+    // quarter turn away — on the limb rather than under the camera. It was not
+    // obvious against a photographic texture, but it is plainly wrong once a
+    // record has to sit where the viewer is looking.
+    s.targetRotY = -(focus.lng * Math.PI) / 180;
     s.targetRotX = (focus.lat * Math.PI) / 180;
     s.targetDistance = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE, focus.distance));
   }, [focus]);
@@ -407,15 +417,27 @@ const AtlasGlobe: React.FC<Props> = ({
     // Frame loop
     // -----------------------------------------------------------------------
     let raf = 0;
+    let lastFrame = performance.now();
     const animate = () => {
       raf = requestAnimationFrame(animate);
+
+      // Easing is expressed per second, not per frame. Frame-rate-dependent
+      // easing glides at whatever speed the hardware happens to run at — which
+      // means a slower iPad takes visibly longer to arrive than a desktop, and
+      // an offscreen capture may never arrive at all.
+      const now = performance.now();
+      const dt = Math.min(0.1, (now - lastFrame) / 1000);
+      lastFrame = now;
+
       const focusing = s.targetRotY !== null || s.targetRotX !== null || s.targetDistance !== null;
 
       if (s.autoRotate && !s.reducedMotion && !s.dragging && !focusing) {
-        s.rotY += 0.0009;
+        s.rotY += 0.054 * dt; // ~one turn every two minutes
       }
 
-      const ease = 0.075;
+      // 0.075 per frame at 60fps, restated as a fraction of the remaining
+      // distance to close per second.
+      const ease = 1 - Math.pow(1 - 0.075, dt * 60);
       if (s.targetRotY !== null) {
         let diff = s.targetRotY - s.rotY;
         diff = ((diff + Math.PI) % (Math.PI * 2)) - Math.PI; // shortest way round
@@ -439,12 +461,11 @@ const AtlasGlobe: React.FC<Props> = ({
 
       renderer.render(scene, camera);
 
-      const now = performance.now();
       if (cameraChangeRef.current && now - s.lastReport > 220) {
         s.lastReport = now;
         cameraChangeRef.current({
           lat: (s.rotX * 180) / Math.PI,
-          lng: (((Math.PI / 2 - s.rotY) * 180) / Math.PI + 540) % 360 - 180,
+          lng: ((((-s.rotY * 180) / Math.PI) % 360) + 540) % 360 - 180,
           distance: s.distance,
         });
       }

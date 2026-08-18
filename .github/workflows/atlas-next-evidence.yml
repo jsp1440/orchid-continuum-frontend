@@ -24,9 +24,13 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run build
+      # The repo does not ship playwright; the script needs it resolvable as a
+      # module, which `playwright install` alone does not provide.
+      - run: npm i --no-save playwright@1.56.1
       - run: npx playwright install --with-deps chromium
       - name: Serve and capture
         run: |
+          set -o pipefail
           npx vite preview --port 4173 --host 127.0.0.1 &
           npx wait-on http://127.0.0.1:4173 -t 60000
           node scripts/capture-atlas-next.mjs 2>&1 | tee capture.log

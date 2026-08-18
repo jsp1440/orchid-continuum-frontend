@@ -50,7 +50,7 @@ const AtlasNextShell: React.FC = () => {
   const [country, setCountry] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
-  const [view, setView] = useState({ lat: 0, lng: 0, distance: 420 });
+  const [view, setView] = useState({ lat: 0, lng: 0, distance: 350 });
   const [showContext, setShowContext] = useState(false);
   const [hover, setHover] = useState<{ text: string; x: number; y: number } | null>(null);
 
