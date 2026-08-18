@@ -113,3 +113,86 @@ for (const candidate of ['atlas_occurrences_public', 'v_atlas_occurrences_public
 }
 
 console.log(JSON.stringify(out, null, 2));
+
+// ---------------------------------------------------------------------------
+// PASS 2 — can a conservation assessment actually be resolved, and for how many?
+// ---------------------------------------------------------------------------
+//
+// Pass 1 established that `iucn_code` is absent from the live occurrence table
+// and that only ~1% of rows carry a species_id. Everything therefore depends on
+// matching the occurrence's canonical name against the `species` table. Before
+// changing how unresolved records are drawn, measure how many there are.
+
+const pass2 = {};
+
+pass2.speciesTable = {
+  rows: await (async () => {
+    const r = await get('species?select=id&limit=1', { Prefer: 'count=exact' });
+    const m = r.range && r.range.match(/\/(\d+)$/);
+    return m ? Number(m[1]) : `? (${r.status})`;
+  })(),
+};
+
+const speciesCount = async (q) => {
+  const r = await get(`species?${q}&select=id&limit=1`, { Prefer: 'count=exact' });
+  const m = r.range && r.range.match(/\/(\d+)$/);
+  return m ? Number(m[1]) : `? (${r.status})`;
+};
+pass2.speciesTable.withIucnCode = await speciesCount('iucn_code=not.is.null');
+pass2.speciesTable.withConservationStatus = await speciesCount('conservation_status=not.is.null');
+pass2.speciesTable.threatened = await speciesCount('iucn_code=in.(CR,EN,VU)');
+
+// Build the same index the frontend builds: canonical "Genus epithet" -> assessment.
+const allSpecies = await get('species?select=genus,epithet,iucn_code,conservation_status&limit=5000');
+const assessed = new Map();
+const known = new Set();
+if (Array.isArray(allSpecies.body)) {
+  for (const r of allSpecies.body) {
+    if (!r.genus || !r.epithet) continue;
+    const key = `${r.genus} ${r.epithet}`.trim().toLowerCase();
+    known.add(key);
+    if (r.iucn_code || r.conservation_status) assessed.set(key, r.iucn_code ?? r.conservation_status);
+  }
+}
+pass2.speciesIndex = { namesInSpeciesTable: known.size, namesCarryingAnAssessment: assessed.size };
+
+// Sample occurrence names and see how many resolve. A sample, clearly labelled:
+// the REST interface cannot do this join, and 31k rows is more than this probe
+// should pull.
+const occSample = await get('atlas_occurrences?select=accepted_name,scientific_name,genus,species&limit=4000');
+const binomial = (row) => {
+  const src = (row.accepted_name || row.scientific_name || '').trim();
+  const parts = src.split(/\s+/);
+  if (parts.length >= 2 && /^[a-z-]+$/.test(parts[1])) return `${parts[0]} ${parts[1]}`.toLowerCase();
+  if (row.genus && row.species) return `${row.genus} ${row.species}`.toLowerCase();
+  return null;
+};
+let resolvable = 0;
+let assessedHit = 0;
+let noBinomial = 0;
+const unresolvedExamples = new Set();
+if (Array.isArray(occSample.body)) {
+  for (const row of occSample.body) {
+    const b = binomial(row);
+    if (!b) {
+      noBinomial += 1;
+      continue;
+    }
+    if (known.has(b)) resolvable += 1;
+    else unresolvedExamples.add(b);
+    if (assessed.has(b)) assessedHit += 1;
+  }
+  pass2.nameResolution = {
+    sampled: occSample.body.length,
+    noUsableBinomial: noBinomial,
+    matchedASpeciesRow: resolvable,
+    matchedARowCarryingAnAssessment: assessedHit,
+    unmatched: occSample.body.length - noBinomial - resolvable,
+    percentUnresolved:
+      Math.round(((occSample.body.length - resolvable) / Math.max(1, occSample.body.length)) * 1000) / 10,
+    firstUnmatchedNames: Array.from(unresolvedExamples).slice(0, 8),
+  };
+}
+
+console.log('=== PASS 2 ===');
+console.log(JSON.stringify(pass2, null, 2));
