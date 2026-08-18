@@ -90,10 +90,8 @@ const HabitatCards: React.FC = () => {
             Every orchid belongs to a <span className="italic text-[#d4b34a]">living place.</span>
           </h2>
           <p className="mt-5 max-w-3xl text-[14px] md:text-[15px] leading-relaxed text-[#cfc8b8]/85 font-body">
-            Habitat cards are restored as their own section so they can support the species-centered
-            neighborhood engine without bringing back the old genus-community renderer. These cards
-            connect orchids to climate, elevation, substrate, co-occurring species, pollinators, fungi,
-            and conservation pressure.
+            Where an orchid grows shapes almost everything about it — the climate it tolerates, the
+            elevation it is bound to, what it roots in, and which pollinators and fungi it can meet.
           </p>
         </div>
 
