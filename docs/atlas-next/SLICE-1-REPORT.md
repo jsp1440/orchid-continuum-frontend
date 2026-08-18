@@ -10,10 +10,9 @@
 
 ## 2. Commit
 
-Head of the branch: `6407d4f05ae8e0ba38ed53fa9452b5cbea7e844f`.
-
-Evidence commits from CI follow each code commit; the screenshots in
-`docs/evidence/atlas-next/` were all captured from a single build.
+Last code commit: `9abf31d`. The screenshots in `docs/evidence/atlas-next/` were all
+captured by CI from that build, and committed as `095a586`. Everything after those
+is documentation.
 
 | commit | what it does |
 |---|---|
