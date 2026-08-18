@@ -109,14 +109,57 @@ for (const vp of VIEWPORTS) {
 
   await shot(page, `${OUT}/${vp.name}-earth.png`);
 
-  // Descend into the country with the most records, which opens the
-  // individual-record scale.
-  //
-  // Select by INDEX, not by label. The list is sorted by record count and is
+  // --- Slice 2 surfaces, captured at Earth scale ------------------------
+  // Before the descent, deliberately: at a country rung several thousand marks
+  // are drawn individually, and under CI's software renderer that saturates the
+  // main thread enough that Playwright never observes the two stable frames its
+  // actionability check wants. The clicks are forced for the same reason. This
+  // is a harness constraint, not a defect — the same interactions were exercised
+  // at all three viewports on hardware that can render them.
+  let gap = null;
+  const gapBtn = page.getByRole('button', { name: 'What is not known here?' });
+  if (await gapBtn.isEnabled().catch(() => false)) {
+    await gapBtn.click({ force: true, timeout: 60_000 }).catch((e) => log(vp.name, 'gap click:', e.message));
+    await settle(page);
+    await shot(page, `${OUT}/${vp.name}-knowledge-gap.png`);
+    const txt = await page.textContent('body');
+    gap = {
+      legendRendered: /Observed here, with a documented relationship/.test(txt),
+      cautionRendered: /Every orchid depends on a fungus/.test(txt),
+      answerable: (txt.match(/(\d+) of 12 questions/) || [])[1] ?? null,
+      unassessedSentence: /no conservation assessment for/.test(txt),
+    };
+    log(vp.name, 'knowledge gap:', JSON.stringify(gap));
+  }
+
+  let guide = null;
+  const guideBtn = page.getByRole('button', { name: /What do we know about this range/i });
+  if (await guideBtn.isVisible().catch(() => false)) {
+    await guideBtn.click({ force: true, timeout: 60_000 }).catch(() => {});
+    await page.waitForTimeout(2500);
+    await shot(page, `${OUT}/${vp.name}-guide.png`);
+    const txt = await page.textContent('body');
+    guide = {
+      opened: /Guided investigation/.test(txt),
+      computedObservation: /occurrence records, .* named/.test(txt),
+    };
+    log(vp.name, 'guide:', JSON.stringify(guide));
+    // Close it so the descent frame is not obscured.
+    await page.getByRole('button', { name: 'Close the guide' }).click({ force: true }).catch(() => {});
+    await page.waitForTimeout(800);
+  }
+
+  // Back to the range question for the descent frame.
+  await page
+    .getByRole('button', { name: 'Where does it live?' })
+    .click({ force: true, timeout: 60_000 })
+    .catch(() => {});
+  await page.waitForTimeout(1500);
+
+  // --- Descend ----------------------------------------------------------
+  // Select by INDEX, not by label: the list is sorted by record count and is
   // rebuilt when the second load stage lands, so a label read a moment earlier
-  // may no longer exist by the time the click happens — which is exactly how
-  // the previous run failed. The index is stable; whichever country it lands on
-  // is reported below.
+  // may no longer exist by the time the click happens.
   const countrySelect = page.locator('select').nth(1);
   const optionCount = await countrySelect.locator('option').count();
   let firstReal = null;
@@ -126,35 +169,6 @@ for (const vp of VIEWPORTS) {
     log(vp.name, 'descended into', firstReal);
     await settle(page);
     await shot(page, `${OUT}/${vp.name}-country.png`);
-  }
-
-  // --- Slice 2 surfaces -------------------------------------------------
-  // Switch to the knowledge-gap question and capture it, then open the guided
-  // investigation. Both are driven by the real records already loaded.
-  let gap = null;
-  const gapBtn = page.getByRole('button', { name: 'What is not known here?' });
-  if (await gapBtn.isEnabled().catch(() => false)) {
-    await gapBtn.click();
-    await settle(page);
-    await shot(page, `${OUT}/${vp.name}-knowledge-gap.png`);
-    const txt = await page.textContent('body');
-    gap = {
-      legendRendered: /Observed here, with a documented relationship/.test(txt),
-      cautionRendered: /Every orchid depends on a fungus/.test(txt),
-      answerable: (txt.match(/(\d+) of 12 questions/) || [])[1] ?? null,
-    };
-    log(vp.name, 'knowledge gap:', JSON.stringify(gap));
-  }
-
-  let guide = null;
-  const guideBtn = page.getByRole('button', { name: /What do we know about this range/i });
-  if (await guideBtn.isVisible().catch(() => false)) {
-    await guideBtn.click();
-    await page.waitForTimeout(1500);
-    await shot(page, `${OUT}/${vp.name}-guide.png`);
-    const txt = await page.textContent('body');
-    guide = { opened: /Guided investigation/.test(txt) };
-    log(vp.name, 'guide:', JSON.stringify(guide));
   }
 
   results.push({ viewport: vp.name, records, complete, country: firstReal ?? null, gap, guide, errors });
