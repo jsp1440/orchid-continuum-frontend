@@ -373,7 +373,47 @@ A test holds that only terrain and hillshade may claim READY NOW.
 
 ## 13. Screenshots
 
-`SCREENSHOTS_PLACEHOLDER`
+Twelve frames, in `docs/evidence/atlas-next/`. **All twelve come from one capture
+run of commit `05e3b9b`, 2026-08-18T07:35:54Z.** The run stamps its own commit
+into `capture-log.txt`, which it commits alongside the images, so that claim is
+checkable rather than asserted — file timestamps do not survive a checkout and
+were the wrong thing to trust in the first place.
+
+Captured on a CI runner against the real occurrence store: the development
+sandbox has no egress to the data host, so a locally captured frame would show
+either the unavailable state or stubbed points, and neither is evidence.
+
+| Frame | Desktop 1440×900 | iPad landscape 1180×820 | iPad portrait 820×1180 |
+|---|---|---|---|
+| Earth, range question | `desktop-earth.png` | `ipad-landscape-earth.png` | `ipad-portrait-earth.png` |
+| What is not known here? | `desktop-knowledge-gap.png` | `ipad-landscape-knowledge-gap.png` | `ipad-portrait-knowledge-gap.png` |
+| Guided investigation | `desktop-guide.png` | `ipad-landscape-guide.png` | `ipad-portrait-guide.png` |
+| Descended to a country | `desktop-country.png` | `ipad-landscape-country.png` | `ipad-portrait-country.png` |
+
+Every viewport reached the same state, and the run asserted it rather than
+leaving it to the eye:
+
+| Assertion | Desktop | iPad landscape | iPad portrait |
+|---|---|---|---|
+| Records loaded, complete read | 31,092 | 31,092 | 31,092 |
+| Gap legend rendered | ✓ | ✓ | ✓ |
+| Fungal-partner caution rendered | ✓ | ✓ | ✓ |
+| Questions answerable here | 2 of 12 | 2 of 12 | 2 of 12 |
+| Unassessed-conservation sentence | ✓ | ✓ | ✓ |
+| Guide opened with a computed observation | ✓ | ✓ | ✓ |
+| Descent | Colombia (5,507) | Colombia (5,507) | Colombia (5,507) |
+
+**No regional Mapbox frame exists, and one must not be fabricated.** No token is
+configured, so the descent holds on the globe and names the missing variable —
+which is the correct behaviour and is what these frames show. A screenshot of a
+rendered Mapbox scene would require the token from section 5.
+
+Two harness constraints, stated because they shaped the captures rather than the
+build: the Slice 2 surfaces are exercised at Earth scale before the descent, and
+the interactions are forced. With 31,092 marks under CI's software renderer,
+Playwright's actionability check never observes the two stable frames it wants.
+The controls are neither hidden nor disabled at any viewport — that is asserted
+in the DOM — so nothing is being skipped that a person would hit.
 
 ## 14. Tests and build
 
