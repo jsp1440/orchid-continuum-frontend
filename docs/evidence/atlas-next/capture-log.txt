@@ -3,37 +3,19 @@
 [capture] desktop first batch = 1019
 [capture] desktop records = 31092 (complete)
 [capture] desktop descended into Colombia (5507)
-[capture] ipad-landscape loading
-[capture] ipad-landscape state: loading
-[capture] ipad-landscape first batch = 1019
-[capture] ipad-landscape records = 31092 (complete)
-[capture] ipad-landscape descended into Colombia (5507)
-[capture] ipad-portrait loading
-[capture] ipad-portrait state: loading
-[capture] ipad-portrait first batch = 1019
-[capture] ipad-portrait WARNING: still loading when the budget ran out; counts are partial
-[capture] ipad-portrait records = 1019 (PARTIAL)
-[capture] ipad-portrait descended into Ecuador (287)
-[
-  {
-    "viewport": "desktop",
-    "records": 31092,
-    "complete": true,
-    "country": "Colombia (5507)",
-    "errors": []
-  },
-  {
-    "viewport": "ipad-landscape",
-    "records": 31092,
-    "complete": true,
-    "country": "Colombia (5507)",
-    "errors": []
-  },
-  {
-    "viewport": "ipad-portrait",
-    "records": 1019,
-    "complete": false,
-    "country": "Ecuador (287)",
-    "errors": []
-  }
-]
+node:internal/modules/run_main:123
+    triggerUncaughtException(
+    ^
+
+locator.click: Timeout 30000ms exceeded.
+Call log:
+  - waiting for getByRole('button', { name: 'What is not known here?' })
+    - locator resolved to <button type="button" title="What is not known here?" class="min-h-[36px] rounded-full px-3 text-[11.5px] transition-colors text-white/75 hover:bg-white/[0.07] hover:text-white">What is not known here?</button>
+  - attempting click action
+    - waiting for element to be visible, enabled and stable
+
+    at /home/runner/work/orchid-continuum-frontend/orchid-continuum-frontend/scripts/capture-atlas-next.mjs:137:18 {
+  name: 'TimeoutError'
+}
+
+Node.js v20.20.2
