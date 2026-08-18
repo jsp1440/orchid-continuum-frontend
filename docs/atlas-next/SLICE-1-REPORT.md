@@ -49,7 +49,7 @@ Nothing was reimplemented. The candidate is a new presentation over the existing
 
 | Contract | Used for |
 |---|---|
-| `fetchAtlasOccurrencePoints()` | The **only** source of marks. There is no second path |
+| `fetchAtlasOccurrencePointsLazy()` | The **only** source of marks. There is no second path |
 | `AtlasOccurrencePoint` | Every field the record card shows |
 | `didAtlasLoadFail()` | Distinguishing "unavailable" from "empty" |
 | `canonicalSlug()` | The link from a record to its species page |
@@ -428,14 +428,20 @@ In priority order.
    frontend. Until every threatened taxon in `atlas_occurrences` can resolve an
    assessment, locality protection has a hole in it. Everything else on this list
    can wait; this cannot.
-2. **Attempt `resolve.dedupe: ['three']`**, and add a coarse spatial grid to
+2. **Measure and shorten the occurrence load.** CI showed the complete set still
+   arriving more than four minutes after the first batch. The two-stage load and the
+   partial-read notice make that honest, not fast. Before Slice 2 assumes the whole
+   set can sit in memory on a phone, measure the row count and the page timings, and
+   decide whether the Atlas should be querying a spatial window rather than reading
+   everything.
+3. **Attempt `resolve.dedupe: ['three']`**, and add a coarse spatial grid to
    picking. Picking is currently linear in the number of marks; that is fine at
    thousands and will not be at a hundred thousand. Small, and both are cheap.
-3. **The Mapbox handover below the country rung** — terrain and a real basemap at
+4. **The Mapbox handover below the country rung** — terrain and a real basemap at
    `state` / `landscape` / `locality`, entered on descent, credential via env, same
    marks and the same sensitivity policy, degrading to the globe if the token is
    absent.
-4. **The second thematic question: "What is not known here?"**
+5. **The second thematic question: "What is not known here?"**
 
    Recommended over any relationship mode, for three reasons. It needs **no new
    data** — coverage is computable from what the Continuum already holds, and Slice 1
@@ -483,7 +489,7 @@ Proposed shape:
 | Check | Result |
 |---|---|
 | Production build (`npm run build`) | Passes. `/atlas-next` code-split to its own chunk; main bundle unchanged |
-| Full frontend test suite (`npm test`) | 361 tests, 48 files, all passing |
+| Full frontend test suite (`npm test`) | 361 tests, 49 files, all passing |
 | New tests in this slice | 44 (`sensitivity` 20, `evidence` 10, `scale` 8, `conservationLinkage` 6) |
 | ESLint on all changed files | 0 errors, 0 warnings |
 | `git diff --check` | Clean |
