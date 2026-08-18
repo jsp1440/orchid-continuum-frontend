@@ -86,3 +86,20 @@ jobs:
           echo ""
           echo "===== D. species row for vanilla-planifolia (full) ====="
           curl -s "$URL/rest/v1/species?select=*&slug=eq.vanilla-planifolia" -H "$H1" -H "$H2" | head -c 3000
+
+      - name: Coverage across the 8 featured genera
+        run: |
+          set -euo pipefail
+          URL=$(grep -oP "supabaseUrl = '\K[^']+" src/lib/supabase.ts)
+          KEY=$(grep -oP "supabaseKey = '\K[^']+" src/lib/supabase.ts)
+          H1="apikey: $KEY"; H2="Authorization: Bearer $KEY"
+
+          echo "===== FULL species_mycorrhizal table (all rows) ====="
+          curl -s "$URL/rest/v1/species_mycorrhizal?select=scientific_name,fungal_taxon,fungal_family,association_type,source&limit=200" -H "$H1" -H "$H2" \
+            | python3 -c "import json,sys; [print(f\"{r['scientific_name']:34s} | {r['fungal_taxon']:26s} | {(r.get('source') or 'NO SOURCE')[:60]}\") for r in json.load(sys.stdin)]"
+          echo ""
+          echo "===== per featured genus: mycorrhizal rows ====="
+          for g in Cattleya Dracula Masdevallia Dendrobium Bulbophyllum Catasetum Vanilla Phalaenopsis; do
+            R=$(curl -s "$URL/rest/v1/species_mycorrhizal?select=scientific_name,fungal_taxon&scientific_name=like.$g%25" -H "$H1" -H "$H2")
+            echo "$g -> $R"
+          done
