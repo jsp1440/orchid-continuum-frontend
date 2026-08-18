@@ -44,14 +44,22 @@ const MARK_PROTECTED = '#d8b24c';
 const MARK_SELECTED = '#f0ede4';
 
 /**
- * Ceiling on individually drawn marks. With instanced rendering the whole layer
- * is two draw calls, so this is now about legibility rather than frame time —
- * beyond this many marks in one view the screen is a smear and the aggregate
- * view is the honest one. It is still a limit, so the interface says when it is
- * in force: a count describing more records than are on screen is the kind of
- * quiet mismatch that turns a map into a misleading one.
+ * Ceiling on individually drawn marks.
+ *
+ * With instanced rendering the whole layer is two draw calls, so this was never
+ * a frame-time limit — it was a legibility guess, set at 20,000. Against the
+ * real store that guess started truncating the signature view: the knowledge-gap
+ * question draws every record individually, because a cell containing both a
+ * well-documented record and a bare coordinate has no single honest colour, and
+ * the Atlas holds 31,092 records. A view about what is missing must not itself
+ * be missing 11,000 records.
+ *
+ * Raised to cover the whole store with room to grow. The limit survives, and
+ * the interface still says when it is in force, because a count describing more
+ * records than are on screen is the kind of quiet mismatch that turns a map into
+ * a misleading one.
  */
-const MAX_DRAWN = 20000;
+const MAX_DRAWN = 60000;
 
 /**
  * The rungs at which the Atlas hands over to the regional engine. Above these a
