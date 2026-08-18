@@ -5,7 +5,7 @@
 import { chromium } from 'playwright';
 import { writeFile } from 'node:fs/promises';
 
-const BASE = 'http://localhost:5174/';
+const BASE = 'http://localhost:4174/';
 const OUT = 'docs/slice1-evidence';
 const report = { capturedAt: new Date().toISOString(), views: [] };
 const browser = await chromium.launch();

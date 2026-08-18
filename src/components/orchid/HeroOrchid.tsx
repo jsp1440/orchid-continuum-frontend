@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import { BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { fetchCalyxGenusMedia } from '@/lib/genusMediaResolver';
 import { binomialOf } from '@/lib/fungalPartner';
 
 /**
@@ -47,43 +47,47 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
     setState({ kind: 'loading' });
 
     (async () => {
-      try {
-        const res = await fetch(
-          `${BACKEND_BASE_URL}/api/media/genus/${encodeURIComponent(genus)}?limit=24`,
-        );
-        if (!res.ok) throw new Error(String(res.status));
-        const payload = await res.json();
-        const items: Array<Record<string, unknown>> = Array.isArray(payload?.items) ? payload.items : [];
+      // Uses the single approved-media path (genusMediaResolver), which already
+      // targets the correct Calyx host, rejects non-photograph records, and
+      // deduplicates. An earlier revision of this component called a different
+      // backend host that does not serve this endpoint, and 404'd.
+      const payload = await fetchCalyxGenusMedia(genus);
+      if (cancelled) return;
 
-        // Prefer a record naming an actual species over a genus-only record,
-        // so the hero can state a binomial truthfully.
-        const withSpecies = items.find((i) => {
-          const n = String(i.scientific_name ?? '').trim();
-          return n.split(/\s+/).length >= 2 && !/\bMill\.|\bL\.$/.test(n.split(/\s+/)[1]);
-        });
-        const chosen = withSpecies ?? items[0];
-
-        if (cancelled) return;
-        if (!chosen?.image_url) {
-          setState({ kind: 'no-media' });
-          onSpeciesResolved?.(null);
-          return;
-        }
-
-        const photo: HeroPhotograph = {
-          imageUrl: String(chosen.image_url),
-          scientificName: String(chosen.scientific_name ?? genus),
-          sourceName: String(chosen.source_name ?? 'unrecorded source'),
-          license: (chosen.license as string) ?? null,
-          attribution: (chosen.attribution as string) ?? null,
-        };
-        setState({ kind: 'ready', photo });
-        onSpeciesResolved?.(photo.scientificName);
-      } catch {
-        if (cancelled) return;
+      if (payload.status === 'service_error') {
         setState({ kind: 'unavailable' });
         onSpeciesResolved?.(null);
+        return;
       }
+
+      // Prefer a record naming an actual species, so the hero can state a
+      // binomial truthfully rather than labelling a photograph with a bare
+      // genus. `Vanilla Mill.` is a genus record, not a species.
+      const named = payload.items.find((i) => {
+        const parts = i.scientific_name.trim().split(/\s+/);
+        return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
+      });
+      const chosen = named ?? payload.items[0];
+
+      if (!chosen) {
+        setState({ kind: 'no-media' });
+        onSpeciesResolved?.(null);
+        return;
+      }
+
+      setState({
+        kind: 'ready',
+        photo: {
+          imageUrl: chosen.image_url,
+          scientificName: chosen.scientific_name,
+          sourceName: chosen.source_name || 'unrecorded source',
+          license: chosen.license,
+          attribution: chosen.attribution,
+        },
+      });
+      // Only a genuine binomial is passed downstream; a genus-only record must
+      // not be treated as a species when resolving relationship evidence.
+      onSpeciesResolved?.(named ? chosen.scientific_name : null);
     })();
 
     return () => {
