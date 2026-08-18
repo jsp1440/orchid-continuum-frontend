@@ -27,11 +27,14 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('continuum?.relationships?.geography');
   });
 
-  it('preserves the featured genus when handing the visitor into the full Atlas', () => {
+  it('preserves the featured genus when handing the visitor into the full Atlas through the canonical navigation contract', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    const navigation = read('src/lib/featuredTaxonNavigation.ts');
     const filterContext = read('src/contexts/AtlasFilterContext.tsx');
     expect(filterContext).toContain("'genera'");
-    expect(atlas).toContain('`/atlas?genera=${encodeURIComponent(genus)}`');
+    expect(atlas).toContain('featuredTaxonAtlasHref');
+    expect(atlas).toContain('const atlasHref = featuredTaxonAtlasHref(genus)');
     expect(atlas).toContain('to={atlasHref}');
+    expect(navigation).toContain('/atlas?genera=');
   });
 });
