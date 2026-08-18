@@ -19,8 +19,16 @@ for (const vp of [
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`console: ${m.text()}`); });
 
-  await page.goto(BASE, { waitUntil: 'networkidle', timeout: 90000 });
-  await page.waitForTimeout(4000);
+  // The homepage polls backend status continuously, so 'networkidle' never
+  // settles. Wait for the document, then for the hero image element itself.
+  await page.goto(BASE, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page
+    .locator('section[aria-label^="Featured orchid"] img')
+    .first()
+    .waitFor({ state: 'attached', timeout: 45000 })
+    .catch(() => {});
+  await page.waitForLoadState('load').catch(() => {});
+  await page.waitForTimeout(5000);
 
   // First impression: exactly what fills the opening viewport.
   await page.screenshot({ path: `${OUT}/${vp.name}-1-hero.png` });
