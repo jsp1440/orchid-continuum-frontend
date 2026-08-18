@@ -1,0 +1,62 @@
+name: Relationship Data Probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Probe species_mycorrhizal for defensible orchid-fungus relationships
+        run: |
+          set -euo pipefail
+          URL=$(grep -oP "supabaseUrl = '\K[^']+" src/lib/supabase.ts)
+          KEY=$(grep -oP "supabaseKey = '\K[^']+" src/lib/supabase.ts)
+
+          echo "===== species_mycorrhizal: total shape ====="
+          curl -s "$URL/rest/v1/species_mycorrhizal?select=*&limit=5" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 3000
+          echo ""
+
+          echo "===== rows WITH a non-null source (provenance) ====="
+          curl -s "$URL/rest/v1/species_mycorrhizal?select=scientific_name,fungal_taxon,fungal_family,association_type,note,source&source=not.is.null&limit=40" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 6000
+          echo ""
+
+          echo "===== distinct association_type values ====="
+          curl -s "$URL/rest/v1/species_mycorrhizal?select=association_type&limit=200" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 3000
+          echo ""
+
+      - name: Probe species table for conservation status + habitat
+        run: |
+          set -euo pipefail
+          URL=$(grep -oP "supabaseUrl = '\K[^']+" src/lib/supabase.ts)
+          KEY=$(grep -oP "supabaseKey = '\K[^']+" src/lib/supabase.ts)
+
+          echo "===== species with conservation_status AND habitat ====="
+          curl -s "$URL/rest/v1/species?select=id,slug,genus,epithet,common_name,habitat,ecology,conservation_status,iucn_code,image_url,countries&conservation_status=not.is.null&limit=25" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 6000
+          echo ""
+
+      - name: Probe atlas_occurrences coverage
+        run: |
+          set -euo pipefail
+          URL=$(grep -oP "supabaseUrl = '\K[^']+" src/lib/supabase.ts)
+          KEY=$(grep -oP "supabaseKey = '\K[^']+" src/lib/supabase.ts)
+
+          echo "===== occurrence rows with coords + mycorrhizal_data ====="
+          curl -s "$URL/rest/v1/atlas_occurrences?select=scientific_name,genus,species,lat,lng,elevation_m,country,habitat,biome,year,source_dataset,verified,coordinate_uncertainty_m,mycorrhizal_data&mycorrhizal_data=not.is.null&limit=15" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 5000
+          echo ""
+
+          echo "===== occurrence count by genus (top of table) ====="
+          curl -s "$URL/rest/v1/atlas_occurrences?select=genus,scientific_name,lat,lng,country,source_dataset&limit=40" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY" | head -c 4000
+          echo ""
