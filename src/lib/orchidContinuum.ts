@@ -106,6 +106,33 @@ export interface AtlasOccurrencePoint {
   mycorrhizal?: MycorrhizalRecord;
   dataset: string;
   verified: boolean;
+  /**
+   * `atlas_occurrences.source_record_id` — the identifier this record carries
+   * in its originating dataset, so a point can always be traced back.
+   */
+  sourceRecordId?: string;
+  /** `atlas_occurrences.accepted_name` when the source supplies one. */
+  acceptedName?: string;
+  /** `atlas_occurrences.biome` — undefined when the source did not record it. */
+  biome?: string;
+  /**
+   * `atlas_occurrences.coordinate_uncertainty_m`. Carried through so that no
+   * surface can draw a coordinate more precisely than its source claims, and
+   * so locality protection has the figure it needs. Undefined means the source
+   * stated no uncertainty — which is NOT the same as stating zero.
+   */
+  coordinateUncertaintyM?: number;
+  /**
+   * Whether a conservation assessment could actually be REACHED for this
+   * record — by species_id, or by exact canonical binomial.
+   *
+   * False does not mean "not threatened". It means nobody has told the
+   * Continuum either way, and surfaces must fail closed on it rather than
+   * publishing a precise site by default. The live store makes this the normal
+   * case: the conservation reference table holds nine species against 2,611
+   * distinct names among the occurrences.
+   */
+  assessmentResolved?: boolean;
 }
 
 
@@ -480,6 +507,56 @@ function buildMycorrhizalIndex(rows: MycorrhizalRow[]): MycorrhizalIndex {
   return { bySpeciesId, byCanonical };
 }
 
+// ---------------------------------------------------------------------------
+// Conservation index
+// ---------------------------------------------------------------------------
+//
+// Conservation status lives on `species`, not on `atlas_occurrences`. An
+// ingested occurrence therefore only inherits an assessment when it carries a
+// `species_id` — and many ingested rows do not.
+//
+// That gap is a SAFETY problem, not merely a display one: locality protection
+// keys off the assessment, so an unlinked occurrence of a threatened species
+// would have its precise coordinate published unprotected. Matching on the
+// canonical binomial as well as the id closes most of it, using exactly the
+// same conservative rule as the mycorrhizal index — exact name, first match,
+// nothing inferred.
+
+interface ConservationIndex {
+  bySpeciesId: Map<string, { status?: string; iucn?: string }>;
+  byCanonical: Map<string, { status?: string; iucn?: string }>;
+}
+
+function buildConservationIndex(rows: SpeciesRow[]): ConservationIndex {
+  const bySpeciesId = new Map<string, { status?: string; iucn?: string }>();
+  const byCanonical = new Map<string, { status?: string; iucn?: string }>();
+  for (const r of rows) {
+    if (!r.conservation_status && !r.iucn_code) continue;
+    const rec = {
+      status: r.conservation_status ?? undefined,
+      iucn: r.iucn_code ?? undefined,
+    };
+    if (r.id && !bySpeciesId.has(r.id)) bySpeciesId.set(r.id, rec);
+    const canonical = buildScientificName(r).trim().toLowerCase();
+    if (canonical && !byCanonical.has(canonical)) byCanonical.set(canonical, rec);
+  }
+  return { bySpeciesId, byCanonical };
+}
+
+export function lookupConservation(
+  idx: ConservationIndex | undefined,
+  speciesId: string | undefined,
+  canonicalName: string | undefined,
+): { status?: string; iucn?: string } | undefined {
+  if (!idx) return undefined;
+  if (speciesId) {
+    const hit = idx.bySpeciesId.get(speciesId);
+    if (hit) return hit;
+  }
+  if (canonicalName) return idx.byCanonical.get(canonicalName.trim().toLowerCase());
+  return undefined;
+}
+
 function lookupMyco(
   idx: MycorrhizalIndex | undefined,
   speciesId: string | undefined,
@@ -525,6 +602,9 @@ function curatedOccurrenceToPoint(
     tribe: row.tribe ?? undefined,
     conservationStatus: row.conservation_status ?? undefined,
     iucnCode: row.iucn_code ?? undefined,
+    // A curated point comes from a species row, so the assessment was reachable
+    // whether or not that row carries one.
+    assessmentResolved: Boolean(row.conservation_status || row.iucn_code),
     imageUrl: row.image_url ?? undefined,
     taxonomyId: row.slug ?? row.id,
     locality: occ.locality,
@@ -542,6 +622,7 @@ function atlasRowToPoint(
   row: AtlasOccurrenceRow,
   linkedSpecies?: SpeciesRow,
   mycoIdx?: MycorrhizalIndex,
+  consIdx?: ConservationIndex,
 ): AtlasOccurrencePoint {
   const pollinators =
     row.pollinator_data ??
@@ -557,6 +638,7 @@ function atlasRowToPoint(
     lookupMyco(mycoIdx, speciesId, canonical) ??
     (row.mycorrhizal_data as MycorrhizalRecord | null | undefined) ??
     undefined;
+  const conservation = lookupConservation(consIdx, speciesId, canonical);
   return {
     id: row.id,
     speciesId,
@@ -575,8 +657,11 @@ function atlasRowToPoint(
     family: linkedSpecies?.family ?? undefined,
     subfamily: linkedSpecies?.subfamily ?? undefined,
     tribe: linkedSpecies?.tribe ?? undefined,
-    conservationStatus: linkedSpecies?.conservation_status ?? undefined,
-    iucnCode: linkedSpecies?.iucn_code ?? undefined,
+    conservationStatus: linkedSpecies?.conservation_status ?? conservation?.status,
+    iucnCode: linkedSpecies?.iucn_code ?? conservation?.iucn,
+    assessmentResolved: Boolean(
+      linkedSpecies?.conservation_status || linkedSpecies?.iucn_code || conservation,
+    ),
     imageUrl: linkedSpecies?.image_url ?? row.media_url ?? undefined,
     taxonomyId: linkedSpecies?.slug ?? undefined,
     locality: row.locality ?? undefined,
@@ -586,6 +671,13 @@ function atlasRowToPoint(
     mycorrhizal,
     dataset: row.source_dataset,
     verified: row.verified ?? false,
+    sourceRecordId: row.source_record_id ?? undefined,
+    acceptedName: row.accepted_name ?? undefined,
+    biome: row.biome ?? undefined,
+    coordinateUncertaintyM:
+      typeof row.coordinate_uncertainty_m === 'number'
+        ? row.coordinate_uncertainty_m
+        : undefined,
   };
 }
 
@@ -779,6 +871,7 @@ export async function fetchAtlasOccurrencePoints(): Promise<AtlasOccurrencePoint
 
   const speciesById = new Map(speciesRows.map((r) => [r.id, r]));
   const mycoIdx = buildMycorrhizalIndex(mycoRows);
+  const consIdx = buildConservationIndex(speciesRows);
   const out: AtlasOccurrencePoint[] = [];
 
   // Curated points (from species.occurrences JSONB)
@@ -793,7 +886,7 @@ export async function fetchAtlasOccurrencePoints(): Promise<AtlasOccurrencePoint
   // Real ingested occurrences from atlas_occurrences
   for (const row of atlasRows) {
     const linked = row.species_id ? speciesById.get(row.species_id) : undefined;
-    out.push(atlasRowToPoint(row, linked, mycoIdx));
+    out.push(atlasRowToPoint(row, linked, mycoIdx, consIdx));
   }
 
   return out;
@@ -813,6 +906,7 @@ export async function fetchAtlasOccurrencePointsLazy(limit = 1000): Promise<{
   ]);
   const speciesById = new Map(speciesRows.map((r) => [r.id, r]));
   const mycoIdx = buildMycorrhizalIndex(mycoRows);
+  const consIdx = buildConservationIndex(speciesRows);
 
   const { data, error } = await supabase
     .from('atlas_occurrences')
@@ -823,7 +917,7 @@ export async function fetchAtlasOccurrencePointsLazy(limit = 1000): Promise<{
   if (!error && data) {
     for (const row of data as AtlasOccurrenceRow[]) {
       const linked = row.species_id ? speciesById.get(row.species_id) : undefined;
-      initial.push(atlasRowToPoint(row, linked, mycoIdx));
+      initial.push(atlasRowToPoint(row, linked, mycoIdx, consIdx));
     }
   }
 
