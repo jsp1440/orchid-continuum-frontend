@@ -1,0 +1,44 @@
+name: Slice 1 Evidence Capture
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'feat/homepage-slice-1-**'
+    paths:
+      - 'src/components/orchid/HeroOrchid.tsx'
+      - 'src/components/orchid/FungalDependency.tsx'
+      - 'src/components/orchid/ContinuumThread.tsx'
+      - 'scripts/capture-slice1-evidence.mjs'
+      - '.github/workflows/slice1-evidence.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+      - name: Serve and capture
+        run: |
+          npx vite preview --port 4174 --host > /tmp/preview.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf -o /dev/null http://localhost:4174/ && break; sleep 1; done
+          mkdir -p docs/slice1-evidence
+          node scripts/capture-slice1-evidence.mjs
+      - name: Commit evidence
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/slice1-evidence
+          git diff --staged --quiet || (git commit -m "chore(slice1): live iPad evidence" && git push origin HEAD:${{ github.ref_name }})
