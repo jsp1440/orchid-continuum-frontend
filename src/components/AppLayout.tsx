@@ -88,14 +88,21 @@ const AppLayout: React.FC = () => {
         <DailyGenusProvider>
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
-            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
+
+            {/* Demo-critical product surfaces belong immediately after the hero. */}
             <div id="species-in-focus">
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
             </div>
+            <div id="home-atlas">
+              <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
+            </div>
+            <div id="home-calyx">
+              <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
+            </div>
+
+            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
             <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
-            <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
             <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
-            <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
             <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
             <SafeSection name="Identification matrix"><CapabilityGrid /></SafeSection>
             <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
