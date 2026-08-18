@@ -26,4 +26,12 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('useDailyGenus');
     expect(atlas).toContain('continuum?.relationships?.geography');
   });
+
+  it('preserves the featured genus when handing the visitor into the full Atlas', () => {
+    const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    const filterContext = read('src/contexts/AtlasFilterContext.tsx');
+    expect(filterContext).toContain("'genera'");
+    expect(atlas).toContain('`/atlas?genera=${encodeURIComponent(genus)}`');
+    expect(atlas).toContain('to={atlasHref}');
+  });
 });
