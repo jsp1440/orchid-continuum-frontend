@@ -2,11 +2,12 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Bot, Bug, FlaskConical, Globe2, MessageCircle, Sprout } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
+import { featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
 
 const PublicCalyxGuide: React.FC = () => {
   const { genus, continuum } = useDailyGenus();
   const relationships = continuum?.relationships ?? null;
-  const calyxHref = `/calyx?genus=${encodeURIComponent(genus)}&origin=homepage-featured-taxon`;
+  const calyxHref = featuredTaxonCalyxHref(genus);
 
   const prompts = [
     {
