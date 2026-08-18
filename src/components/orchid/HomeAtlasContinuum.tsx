@@ -18,6 +18,10 @@ const HomeAtlasContinuum: React.FC = () => {
   const hero = continuum?.media.items[0] ?? null;
 
   const evidenceAvailable = Boolean(geography?.hasData || occurrenceDomain?.state === 'known');
+  // AtlasFilterContext already treats `genera` as the canonical URL field.
+  // Carry the featured genus into the full Atlas so the biological question
+  // survives navigation instead of resetting to an unrelated global view.
+  const atlasHref = `/atlas?genera=${encodeURIComponent(genus)}`;
 
   return (
     <section id="home-atlas" className="relative overflow-hidden border-y border-white/[0.08] bg-[#07110c] text-[#f5f0e8]">
@@ -41,10 +45,10 @@ const HomeAtlasContinuum: React.FC = () => {
             The homepage now uses the same Continuum evidence state as the featured orchid instead of maintaining a second set of Atlas statistics and fallback counts.
           </p>
           <Link
-            to="/atlas"
+            to={atlasHref}
             className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/45 bg-[#d4b34a]/10 px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#d4b34a] transition-colors hover:bg-[#d4b34a]/18"
           >
-            Explore in Atlas <ArrowRight className="h-4 w-4" />
+            Explore {genus} in Atlas <ArrowRight className="h-4 w-4" />
           </Link>
         </div>
 
