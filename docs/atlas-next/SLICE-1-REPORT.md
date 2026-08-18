@@ -10,7 +10,10 @@
 
 ## 2. Commit
 
-Head at the time of writing: `SHA_PLACEHOLDER`.
+Head of the branch: `6407d4f05ae8e0ba38ed53fa9452b5cbea7e844f`.
+
+Evidence commits from CI follow each code commit; the screenshots in
+`docs/evidence/atlas-next/` were all captured from a single build.
 
 | commit | what it does |
 |---|---|
@@ -102,8 +105,26 @@ stubbed points — neither of which is evidence.
 | `ipad-portrait-earth.png` | 820×1180 | The narrow case, mid-load — the partial-read notice visible and doing its job |
 | `ipad-portrait-country.png` | 820×1180 | Descended, with the record as a bottom sheet |
 
-**The Atlas holds 31,092 occurrence records.** Colombia is the largest single country
-at 5,507; Ecuador holds 2,423.
+### What the complete Atlas actually contains
+
+| | |
+|---|---|
+| Occurrence records | **31,092** |
+| Species named across them | **2,611** |
+| Occupied 10° graticule cells | 138 |
+| Largest country | Colombia — 5,507 records, 682 species |
+| Records whose precise site is **withheld** (threatened assessment) | **197** |
+| Records shown as an area because the **source** states a large coordinate uncertainty | **7,878** |
+
+That last figure deserves the owner's attention on its own. **Just over a quarter of
+the Atlas — 25.3% of all records — is not precisely located**, and not because
+anything is being held back: those records were never precise. Until this slice the
+interface drew every one of them as a pin, which is a precision claim no source ever
+made. They are now drawn as areas at their real radius, and the count is stated on
+screen.
+
+The two figures are reported separately and must stay separate. 197 is a decision
+the Atlas made about what to publish. 7,878 is a property of the observations.
 
 ### Four things the real data showed that the fixtures could not
 
@@ -138,7 +159,9 @@ of those records is threatened. They are records whose *source* stated a large
 coordinate uncertainty. Both counts are now reported separately, because one is a
 decision the Atlas made about what to publish and the other is a property of the
 observation. Reporting the second as the first would overstate how much is being
-held back; reporting the first as the second would understate it.
+held back; reporting the first as the second would understate it. Across the whole
+Atlas the two are 197 and 7,878 — an order of magnitude apart, which is exactly why
+collapsing them would have been misleading.
 
 ---
 
