@@ -1,0 +1,47 @@
+name: atlas-next evidence
+
+on:
+  push:
+    branches: [feat/atlas-next-living-atlas]
+    paths:
+      - 'src/features/atlas-next/**'
+      - 'src/pages/AtlasNext.tsx'
+      - 'scripts/capture-atlas-next.mjs'
+      - '.github/workflows/atlas-next-evidence.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Serve and capture
+        run: |
+          npx vite preview --port 4173 --host 127.0.0.1 &
+          npx wait-on http://127.0.0.1:4173 -t 60000
+          node scripts/capture-atlas-next.mjs 2>&1 | tee capture.log
+      - name: Commit screenshots
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p docs/evidence/atlas-next
+          cp capture.log docs/evidence/atlas-next/capture.log || true
+          git add docs/evidence/atlas-next
+          git diff --cached --quiet || git commit -m "chore(atlas-next): capture evidence from CI [skip ci]"
+          git push origin HEAD:${{ github.ref_name }} || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: atlas-next-evidence
+          path: docs/evidence/atlas-next
