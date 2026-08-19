@@ -53,6 +53,15 @@ export function boundedCalyxQuestionContext(question: string): string {
   return question.trim().replace(/\s+/g, ' ').slice(0, CALYX_QUESTION_CONTEXT_MAX_CHARS);
 }
 
+export function calyxQuestionContextFields(question: string): Record<string, unknown> {
+  const currentQuestion = boundedCalyxQuestionContext(question);
+  return {
+    current_question: currentQuestion,
+    current_question_source: 'user',
+    current_question_is_evidence: false,
+  };
+}
+
 async function conversationForSession(): Promise<string> {
   if (typeof window !== 'undefined') {
     const existing = window.sessionStorage.getItem(SESSION_THREAD_KEY);
@@ -140,7 +149,7 @@ export async function askCalyx(req: CalyxRequest): Promise<CalyxResponse> {
       ...req.context,
       surface: 'illustrated-orchid-lexicon',
       concept: req.concept,
-      current_question: boundedCalyxQuestionContext(req.question),
+      ...calyxQuestionContextFields(req.question),
     }),
     research_mode: 'auto',
     retrieval_limit: 12,
