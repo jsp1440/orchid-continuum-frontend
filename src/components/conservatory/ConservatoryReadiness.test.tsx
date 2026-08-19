@@ -123,7 +123,7 @@ describe("ConservatoryReadinessBanner", () => {
     expect(container.textContent).toContain("Deploy and confirm data survives a restart.");
   });
 
-  it("shows the fetch error message rather than silently treating a failed check as ready", async () => {
+  it("fails closed on a failed check, without leaking deployment internals", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: false, status: 503 })),
@@ -131,9 +131,16 @@ describe("ConservatoryReadinessBanner", () => {
     renderBanner();
     await flush();
 
-    expect(container.textContent).toContain("Readiness request failed (503).");
-    // Never claim readiness on a failed check.
+    // The banner used to echo the HTTP status. That was deliberately removed so
+    // a public surface cannot report the state of internal infrastructure, and
+    // this test was left asserting the superseded behaviour. What matters is
+    // preserved and asserted below: a failed check must never read as ready.
+    expect(container.textContent).toContain("Collection entry remains blocked");
+    expect(container.textContent).toContain("Collection entry remains safely blocked");
     expect(container.textContent).not.toContain("Ready for three test plants");
+    // No status codes, URLs or environment variable names reach the user.
+    expect(container.textContent).not.toContain("503");
+    expect(container.textContent).not.toContain("VITE_CALYX_API_URL");
   });
 
   it("re-fetches when Check again is clicked", async () => {
