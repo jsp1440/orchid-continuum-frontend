@@ -2,7 +2,7 @@ name: CALYX-MATRIX-005 Validation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, oc-autonomous-integration]
   workflow_dispatch:
 
 jobs:
