@@ -78,4 +78,12 @@ describe('featured taxon source integrity', () => {
     expect(navigation).toContain("const FEATURED_TAXON_ORIGIN = 'homepage-featured-taxon'");
     expect(navigation).toContain('&origin=${FEATURED_TAXON_ORIGIN}');
   });
+
+  it('routes the stewardship Research Station handoff to a live application route', () => {
+    const close = source('components/orchid/HomepageStewardshipClose.tsx');
+    const app = source('App.tsx');
+    expect(close).toContain('to="/research"');
+    expect(close).not.toContain('to="/research-station"');
+    expect(app).toContain('<Route path="/research"');
+  });
 });
