@@ -60,6 +60,8 @@ const ProjectWorkspaceCard: React.FC<ProjectWorkspaceCardProps> = ({
   openTo = [],
   demo = false,
 }) => {
+  const displayTitle = demo ? 'Project workspace placeholder' : title;
+
   const card = (
     <>
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -82,12 +84,12 @@ const ProjectWorkspaceCard: React.FC<ProjectWorkspaceCardProps> = ({
       </div>
 
       <h3 className="font-serif text-xl text-white leading-snug mb-1 group-hover:text-emerald-100">
-        {title}
+        {displayTitle}
       </h3>
 
       {demo ? (
         <p className="text-[13px] text-amber-100/75 leading-relaxed font-light mb-5">
-          Synthetic interface example only. Organization, locality, project activity, contributor counts, methods, ecological relationships, and results are intentionally suppressed until supplied by canonical Continuum project evidence.
+          Synthetic interface example only. Project identity, organization, locality, activity, contributor counts, methods, ecological relationships, and results are intentionally suppressed until supplied by canonical Continuum project evidence.
         </p>
       ) : (
         <>
@@ -129,7 +131,7 @@ const ProjectWorkspaceCard: React.FC<ProjectWorkspaceCardProps> = ({
     return (
       <div
         className="block rounded-2xl border border-amber-200/15 bg-white/[0.02] p-6"
-        aria-label={`${title}: illustrative placeholder, not Continuum evidence`}
+        aria-label="Illustrative project workspace placeholder; not Continuum evidence"
       >
         {card}
       </div>
