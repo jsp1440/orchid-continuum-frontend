@@ -1,0 +1,42 @@
+name: atlas locality safety probe
+
+on:
+  push:
+    branches: [feat/atlas-next-living-atlas]
+    paths:
+      - 'scripts/probe-atlas-locality-safety.mjs'
+      - '.github/workflows/atlas-locality-probe.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Probe (read-only)
+        run: |
+          set -o pipefail
+          # The anon key is already public in the shipped bundle; this reads it
+          # from the same source rather than restating it in CI config.
+          KEY=$(grep -oE "eyJ[A-Za-z0-9_.-]+" src/lib/supabase.ts | head -1)
+          SUPABASE_ANON_KEY="$KEY" node scripts/probe-atlas-locality-safety.mjs 2>&1 | tee probe.json
+      - name: Commit probe result
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p docs/evidence/atlas-next
+          cp probe.json docs/evidence/atlas-next/locality-safety-probe.json || true
+          git add docs/evidence/atlas-next
+          git diff --cached --quiet && exit 0
+          git commit -m "chore(atlas-next): locality safety probe result [skip ci]"
+          git fetch origin ${{ github.ref_name }}
+          git rebase origin/${{ github.ref_name }} || git rebase --abort
+          git push origin HEAD:${{ github.ref_name }} || true

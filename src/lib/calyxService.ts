@@ -4,8 +4,11 @@ import {
   getCalyxConversation,
   sendCalyxTurn,
   type BrainMission,
+  type CalyxTurnResponse,
+  type CalyxWorkspaceOutput,
 } from '@/lib/calyxWorkspace';
 import { calyxContextPacket, readCalyxSessionContext } from '@/features/calyx-workspace/sessionContext';
+import { emitWorkspaceOutput, type WorkspaceOutput, type WorkspaceOutputPayload } from '@/features/calyx-workspace/workspaceOutputBus';
 
 export interface CalyxRequest {
   concept: string;
@@ -91,6 +94,40 @@ function interactionContextText(concept: string): string {
   ].filter(Boolean).join('\n');
 }
 
+function toWorkspaceOutput(serverOutput: CalyxWorkspaceOutput): WorkspaceOutput {
+  return {
+    id: serverOutput.id,
+    kind: serverOutput.kind,
+    title: serverOutput.title,
+    subtitle: serverOutput.subtitle ?? undefined,
+    provenance: {
+      source_module: serverOutput.provenance.source_module,
+      source_id: serverOutput.provenance.source_id ?? undefined,
+      generated: serverOutput.provenance.generated,
+      evidence_status: serverOutput.provenance.evidence_status,
+    },
+    payload: serverOutput.payload as WorkspaceOutputPayload,
+    created_at: serverOutput.created_at,
+  };
+}
+
+/**
+ * Bridge from the server's grounded workspace_outputs (see backend
+ * CALYX-MULTIMODAL-WORKSPACE-001) onto the existing workspaceOutputBus that
+ * CalyxAdaptiveWorkspace already renders. Each output is validated
+ * independently - one malformed or unexpectedly-shaped server output must
+ * never break the turn itself or discard the outputs around it.
+ */
+function emitTurnWorkspaceOutputs(outputs: CalyxTurnResponse['workspace_outputs']): void {
+  for (const serverOutput of outputs ?? []) {
+    try {
+      emitWorkspaceOutput(toWorkspaceOutput(serverOutput));
+    } catch (error) {
+      console.warn('Discarding malformed Calyx workspace output', error);
+    }
+  }
+}
+
 export async function askCalyx(req: CalyxRequest): Promise<CalyxResponse> {
   const conversationId = await conversationForSession();
   const contextualQuestion = [
@@ -109,6 +146,7 @@ export async function askCalyx(req: CalyxRequest): Promise<CalyxResponse> {
     research_mode: 'auto',
     retrieval_limit: 12,
   });
+  emitTurnWorkspaceOutputs(turn.workspace_outputs);
   const mission = turn.research?.mission ?? null;
   const uncertaintyParts: string[] = [];
   if (mission?.missing_evidence?.length) uncertaintyParts.push(`Evidence gaps: ${mission.missing_evidence.join('; ')}`);

@@ -5,18 +5,14 @@ export interface IdentificationSourceContext {
 
 export const MAX_IDENTIFICATION_CONTEXT_TEXT = 160;
 
+// This module carries context Lexicon -> Matrix only. The reverse direction is
+// served by resolveMatrixCharacterLexicon(), which requires a reviewed canonical
+// concept ID and reports 'unmapped' rather than deriving a lexicon lookup from a
+// character label. Guessing the concept from the label would undo that.
+
 function boundedContextText(value: string | null | undefined): string | undefined {
   const text = value?.trim();
   return text ? text.slice(0, MAX_IDENTIFICATION_CONTEXT_TEXT) : undefined;
-}
-
-export function humanizeMatrixCharacter(character: string): string {
-  return character
-    .trim()
-    .replace(/_mm$/i, '')
-    .replace(/_/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 export function matrixHrefForLexiconConcept(slug: string, label: string): string {
@@ -27,11 +23,6 @@ export function matrixHrefForLexiconConcept(slug: string, label: string): string
   if (boundedLabel) params.set('label', boundedLabel);
   const query = params.toString();
   return query ? `/orchid-identification?${query}` : '/orchid-identification';
-}
-
-export function lexiconHrefForMatrixCharacter(character: string): string {
-  const query = humanizeMatrixCharacter(character);
-  return query ? `/lexicon/browse?q=${encodeURIComponent(query)}` : '/lexicon/browse';
 }
 
 export function readIdentificationSourceContext(search: string): IdentificationSourceContext {

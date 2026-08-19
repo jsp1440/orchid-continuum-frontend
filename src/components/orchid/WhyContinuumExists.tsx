@@ -28,14 +28,6 @@ const pathways = [
   },
 ];
 
-const proofPoints = [
-  ['Taxonomy', 'accepted names, synonyms, and species records'],
-  ['Ecology', 'pollinators, fungi, habitat, climate, and elevation'],
-  ['Atlas', 'occurrences, maps, geography, and conservation context'],
-  ['Literature', 'papers, claims, citations, and knowledge gaps'],
-  ['Education', 'glossary, lessons, visual learning, and Orchid University'],
-  ['Calyx', 'mission control, governance, and constitutional orchestration'],
-];
 
 const WhyContinuumExists: React.FC = () => {
   return (
@@ -119,17 +111,6 @@ const WhyContinuumExists: React.FC = () => {
           </div>
         </div>
 
-        <div className="mt-12 rounded-[2rem] border border-[#d4b34a]/18 bg-[#d4b34a]/8 p-5 lg:p-6">
-          <div className="font-mono text-[10px] uppercase tracking-[0.26em] text-[#d4b34a]">Grant-ready platform evidence</div>
-          <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {proofPoints.map(([label, body]) => (
-              <div key={label} className="rounded-2xl border border-white/[0.08] bg-black/15 p-4">
-                <div className="font-serif text-xl text-[#fffaf0]">{label}</div>
-                <p className="mt-1 text-sm leading-6 text-[#d8cfbd]/72">{body}</p>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </section>
   );

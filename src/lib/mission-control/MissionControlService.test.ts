@@ -101,22 +101,6 @@ describe('MissionControlService — safeArr / collection normalization', () => {
       nextBuild: 'BUILD-X',
     };
 
-    const { fetchMissionControlSnapshot } = await import('@/lib/mission-control/MissionControlService');
-    const { fetchMissionControlOperations } = await import('@/lib/missionControlOps');
-    vi.mocked(fetchMissionControlOperations);
-
-    vi.doMock('@/lib/missionControlOps', async (importOriginal) => {
-      const original = await importOriginal<typeof import('@/lib/missionControlOps')>();
-      return {
-        ...original,
-        fetchMissionControlOperations: vi.fn().mockResolvedValue(
-          buildMinimalOps({ recommendations: [rec] }),
-        ),
-      };
-    });
-
-    // Re-import to pick up the new mock
-    vi.resetModules();
     vi.doMock('@/lib/missionControlOps', async () => ({
       ...(await vi.importActual<typeof import('@/lib/missionControlOps')>('@/lib/missionControlOps')),
       fetchMissionControlOperations: vi.fn().mockResolvedValue(
@@ -124,8 +108,8 @@ describe('MissionControlService — safeArr / collection normalization', () => {
       ),
     }));
 
-    const { fetchMissionControlSnapshot: snap } = await import('@/lib/mission-control/MissionControlService');
-    const result = await snap();
+    const { fetchMissionControlSnapshot } = await import('@/lib/mission-control/MissionControlService');
+    const result = await fetchMissionControlSnapshot();
 
     expect(result.dashboard.recommendations).toBeInstanceOf(Array);
     const found = result.dashboard.recommendations.find((r) => r.id === 'r1');

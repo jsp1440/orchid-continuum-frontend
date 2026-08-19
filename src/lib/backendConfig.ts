@@ -33,6 +33,12 @@ const OWNER_TOKEN_REFRESH_PATH = '/api/mission-control/owner/session-token/refre
 
 type OwnerTokenResponse = { token?: unknown };
 
+type OwnerAuthFailurePayload = {
+  detail?: unknown;
+  message?: unknown;
+  reason?: unknown;
+};
+
 function readOwnerBearerToken(): string | null {
   try {
     return typeof sessionStorage === 'undefined' ? null : sessionStorage.getItem(OWNER_SESSION_STORAGE_KEY);
@@ -55,6 +61,27 @@ function clearOwnerBearerToken(): void {
   } catch {
     // Non-fatal.
   }
+}
+
+function ownerAuthFailureMessage(payload: OwnerAuthFailurePayload | null, status: number): string {
+  const detail = payload?.detail ?? payload?.message ?? payload?.reason;
+  if (typeof detail === 'string' && detail.trim()) return detail.trim();
+  return `Calyx backend rejected the owner session (${status}).`;
+}
+
+async function showOwnerAuthFailure(response: Response): Promise<void> {
+  let payload: OwnerAuthFailurePayload | null = null;
+  try {
+    payload = await response.clone().json() as OwnerAuthFailurePayload;
+  } catch {
+    // Fall back to the status-based message below.
+  }
+  const message = ownerAuthFailureMessage(payload, response.status);
+  window.dispatchEvent(new CustomEvent('oc-owner-auth-failure', { detail: { message, status: response.status } }));
+  // Mission Control historically swallowed the locked-screen error state. Keep
+  // owner authentication fail-closed, but make the failure impossible to miss
+  // on Safari/iPad while the locked-screen component is being simplified.
+  window.alert(`Mission Control sign-in failed:\n\n${message}`);
 }
 
 async function refreshOwnerBearerFromCookie(
@@ -96,17 +123,23 @@ function installOwnerSessionTransport(): void {
   markedWindow[marker] = true;
 
   const nativeFetch = window.fetch.bind(window);
+  let ownerLoginAttemptInProgress = false;
+
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
     const originalUrl = input instanceof Request ? input.url : String(input);
     const originalMethod = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
     const isCalyxRequest = originalUrl.startsWith(CALYX_BACKEND_BASE_URL);
     const originalPath = isCalyxRequest ? originalUrl.slice(CALYX_BACKEND_BASE_URL.length).split('?')[0] : '';
     const isOwnerLogin = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'POST';
+    const isOwnerSessionInspection = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'GET';
     const isOwnerLogout = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'DELETE';
     const isTokenRefresh = isCalyxRequest && originalPath === OWNER_TOKEN_REFRESH_PATH;
 
     let requestInput: RequestInfo | URL = input;
-    if (isOwnerLogin) requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;
+    if (isOwnerLogin) {
+      ownerLoginAttemptInProgress = true;
+      requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;
+    }
 
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init.headers).forEach((value, key) => headers.set(key, value));
@@ -116,7 +149,19 @@ function installOwnerSessionTransport(): void {
       headers.set('Authorization', `Bearer ${existingBearer}`);
     }
 
-    let response = await nativeFetch(requestInput, { ...init, headers, credentials: init.credentials ?? 'include' });
+    // Only Calyx (first-party, cookie-based owner session) requests should
+    // default to sending credentials. Forcing 'include' on every fetch —
+    // including third-party/public reads like iNaturalist, Supabase, and the
+    // harvester — breaks CORS for any of them that (correctly) serve a
+    // wildcard Access-Control-Allow-Origin, which the Fetch spec forbids
+    // combining with credentialed requests.
+    const credentials = init.credentials ?? (isCalyxRequest ? 'include' : 'same-origin');
+    let response = await nativeFetch(requestInput, { ...init, headers, credentials });
+
+    if (isOwnerLogin && !response.ok) {
+      ownerLoginAttemptInProgress = false;
+      await showOwnerAuthFailure(response);
+    }
 
     if (isOwnerLogin && response.ok) {
       try {
@@ -150,7 +195,15 @@ function installOwnerSessionTransport(): void {
       }
     }
 
-    if (isOwnerLogout) clearOwnerBearerToken();
+    if (isOwnerSessionInspection && ownerLoginAttemptInProgress) {
+      ownerLoginAttemptInProgress = false;
+      if (!response.ok) await showOwnerAuthFailure(response);
+    }
+
+    if (isOwnerLogout) {
+      ownerLoginAttemptInProgress = false;
+      clearOwnerBearerToken();
+    }
     return response;
   };
 }

@@ -81,9 +81,37 @@ export async function getEntries(): Promise<LexiconEntry[]> {
   }
 }
 
+async function requestCanonicalEntry(slug: string): Promise<LexiconEntry | null> {
+  const response = await fetch(
+    `${CALYX_BACKEND_BASE_URL}${LEXICON_API_BASE}/entries/${encodeURIComponent(slug)}`,
+    { credentials: 'include', headers: { Accept: 'application/json' } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Canonical lexicon entry API ${response.status}`);
+  const payload = (await response.json()) as { entry: LexiconEntry };
+  return payload.entry;
+}
+
 export async function getEntry(slug: string): Promise<LexiconEntry | undefined> {
-  const entries = await getEntries();
-  return entries.find((entry) => entry.slug === slug);
+  try {
+    const canonical = await requestCanonicalEntry(slug);
+    const fallback = famousFallback.find((entry) => entry.slug === slug);
+    if (canonical) {
+      lastSource = fallback ? 'canonical_plus_famous_fallback' : 'canonical';
+      return normalizeEntry({ ...fallback, ...canonical, provenance: canonical.provenance ?? fallback?.provenance });
+    }
+    if (fallback) {
+      lastSource = 'famous_fallback';
+      return normalizeEntry(fallback);
+    }
+    return undefined;
+  } catch {
+    // The direct canonical route is unreachable (network/server error, not a
+    // clean 404) - fall back to the existing bulk-list lookup rather than
+    // breaking the entry page outright.
+    const entries = await getEntries();
+    return entries.find((entry) => entry.slug === slug);
+  }
 }
 
 export async function searchEntries(q: string): Promise<LexiconEntry[]> {

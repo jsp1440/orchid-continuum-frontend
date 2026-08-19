@@ -70,20 +70,29 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   }, []);
 
   const startListening = useCallback(() => {
-    if (!speechRecognition || state === "listening") return;
+    // `state` updates asynchronously (only once `onstart` fires), so a rapid
+    // second call can race past `state === "listening"` before it settles.
+    // `recognitionRef.current` is set synchronously below and is the only
+    // reliable guard against creating a second, orphaned recognizer.
+    if (!speechRecognition || state === "listening" || recognitionRef.current) return;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;
     recognition.interimResults = true;
     recognition.lang = "en-US";
 
+    // Each handler checks it is still the current recognizer before touching
+    // state - a stale recognizer's callbacks (e.g. a delayed onend from a
+    // previous session) must never clobber a newer one's state.
     recognition.onstart = () => {
+      if (recognitionRef.current !== recognition) return;
       setError(null);
       setState("listening");
       setInterimTranscript("");
     };
 
     recognition.onresult = (event) => {
+      if (recognitionRef.current !== recognition) return;
       let interim = "";
       let finalTranscript = "";
 
@@ -102,6 +111,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     };
 
     recognition.onerror = (event) => {
+      if (recognitionRef.current !== recognition) return;
       setError(
         event.error === "not-allowed"
           ? "Microphone access was denied."
@@ -115,6 +125,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     };
 
     recognition.onend = () => {
+      if (recognitionRef.current !== recognition) return;
       setState("idle");
       setInterimTranscript("");
       recognitionRef.current = null;
@@ -125,8 +136,8 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     try {
       recognition.start();
     } catch {
+      if (recognitionRef.current === recognition) recognitionRef.current = null;
       setError("Voice input could not start.");
-      recognitionRef.current = null;
       setState("idle");
     }
   }, [speechRecognition, state]);

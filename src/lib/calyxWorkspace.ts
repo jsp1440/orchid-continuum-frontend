@@ -21,6 +21,18 @@ export type BrainMission = {
   publication_eligibility: { eligible: boolean; automatic_publication: false; blockers: string[] };
   blockers: MissionBlocker[]; partial: boolean; created_at: string; updated_at: string;
 };
+export type CalyxCitation = {
+  title: string;
+  authors?: string | null;
+  publication_date?: string | null;
+  journal?: string | null;
+  doi?: string | null;
+  pmid?: string | null;
+  pmcid?: string | null;
+  provider?: string | null;
+  review_state?: string | null;
+  canonical_evidence?: boolean;
+};
 export type CalyxServerMessage = {
   message_id: string;
   conversation_id: string;
@@ -28,7 +40,7 @@ export type CalyxServerMessage = {
   content: string;
   content_hash?: string;
   created_at: string;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown> & { citations?: CalyxCitation[] };
 };
 export type CalyxConversation = {
   conversation_id: string;
@@ -42,13 +54,31 @@ export type CalyxConversation = {
   messages: CalyxServerMessage[];
   persistence_mode?: "postgres" | "memory" | string;
 };
+export type CalyxWorkspaceOutputKind = "image" | "diagram" | "chart" | "table" | "text";
+export type CalyxWorkspaceOutputEvidenceStatus = "evidence" | "derived" | "illustrative" | "unknown";
+export type CalyxWorkspaceOutput = {
+  id: string;
+  kind: CalyxWorkspaceOutputKind;
+  title: string;
+  subtitle?: string | null;
+  provenance: {
+    source_module: string;
+    source_id?: string | null;
+    generated?: boolean;
+    evidence_status: CalyxWorkspaceOutputEvidenceStatus;
+  };
+  payload: Record<string, unknown>;
+  created_at: string;
+};
 export type CalyxTurnResponse = {
   conversation_id: string;
   operator_message: CalyxServerMessage;
   calyx_message: CalyxServerMessage;
   answer: string;
-  provider: { name: string; model: string; request_hash: string; provider_response_id?: string | null; fallback_error?: string | null };
-  research: { casual: boolean; mission: BrainMission | null; mission_error: string | null; retrieval: Record<string, unknown> };
+  provider: { name: string; model: string; request_hash: string; provider_response_id?: string | null; fallback_error?: string | null; configuration?: Record<string, unknown> };
+  research: { casual: boolean; mission: BrainMission | null; mission_error: string | null; retrieval: Record<string, unknown>; continuum?: Record<string, unknown>; climate?: Record<string, unknown>; citations?: CalyxCitation[] };
+  workspace_outputs?: CalyxWorkspaceOutput[];
+  deliverables?: Record<string, unknown>;
   persistence_mode: string;
   epistemic_policy: Record<string, boolean>;
 };

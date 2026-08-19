@@ -1,0 +1,51 @@
+name: Render Release Probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      frontend_url:
+        description: 'Frontend origin to probe'
+        required: false
+        type: string
+        default: 'https://orchid-continuum-frontend-vof6.onrender.com'
+      calyx_url:
+        description: 'Calyx backend origin to probe'
+        required: false
+        type: string
+        default: 'https://orchid-calyx-backend.onrender.com'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Probe frontend root for deployed release SHA
+        run: |
+          set -x
+          curl -s -D /tmp/frontend-headers.txt -o /tmp/frontend-body.html \
+            -w "HTTP_STATUS:%{http_code}\n" \
+            "${{ inputs.frontend_url }}/"
+          echo "--- headers ---"
+          cat /tmp/frontend-headers.txt
+          echo "--- release-sha meta tag ---"
+          grep -o 'name="ocu-release-sha" content="[0-9a-f]*"' /tmp/frontend-body.html || echo "NO_RELEASE_SHA_META_TAG_FOUND"
+          echo "--- first 300 chars of body ---"
+          head -c 300 /tmp/frontend-body.html
+
+      - name: Probe backend release identity
+        run: |
+          set -x
+          curl -s -w "\nHTTP_STATUS:%{http_code}\n" "${{ inputs.calyx_url }}/api/release-identity"
+
+      - name: Probe backend genus-media endpoint directly (no browser, no CORS)
+        run: |
+          set -x
+          curl -s -w "\nHTTP_STATUS:%{http_code}\n" "${{ inputs.calyx_url }}/api/media/genus/Cattleya?limit=12" | head -c 2000
+
+      - name: Probe frontend /university/lab deep link
+        run: |
+          set -x
+          curl -s -o /dev/null -w "HTTP_STATUS:%{http_code}\n" "${{ inputs.frontend_url }}/university/lab"

@@ -1,28 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  humanizeMatrixCharacter,
-  lexiconHrefForMatrixCharacter,
   matrixHrefForLexiconConcept,
   MAX_IDENTIFICATION_CONTEXT_TEXT,
   readIdentificationSourceContext,
 } from './identificationContext';
 
+// Matrix -> Lexicon is deliberately not built here. resolveMatrixCharacterLexicon()
+// owns that direction and requires a reviewed canonical concept ID; deriving a
+// lexicon search from a character label would route around that review.
 describe('lexicon and identification context links', () => {
-  it('humanizes machine character identifiers without asserting a lexicon mapping', () => {
-    expect(humanizeMatrixCharacter('spur_length_mm')).toBe('spur length');
-    expect(humanizeMatrixCharacter('flower_shape')).toBe('flower shape');
-  });
-
   it('opens the identification lab with a lexicon concept as context only', () => {
     expect(matrixHrefForLexiconConcept('velamen', 'Velamen')).toBe(
       '/orchid-identification?concept=velamen&label=Velamen',
-    );
-  });
-
-  it('links matrix characters to lexicon search rather than inventing a canonical slug', () => {
-    expect(lexiconHrefForMatrixCharacter('spur_length_mm')).toBe(
-      '/lexicon/browse?q=spur%20length',
     );
   });
 
