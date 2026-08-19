@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
@@ -9,8 +9,6 @@ import HomeAtlasContinuum from './orchid/HomeAtlasContinuum';
 import PublicCalyxGuide from './orchid/PublicCalyxGuide';
 import HomepageStewardshipClose from './orchid/HomepageStewardshipClose';
 import Footer from './orchid/Footer';
-import BackendHealthBanner from './orchid/BackendHealthBanner';
-import BackendStatusBanner from './orchid/BackendStatusBanner';
 
 type SectionBoundaryProps = {
   name: string;
@@ -65,14 +63,11 @@ const SafeSection: React.FC<SectionBoundaryProps> = ({ name, children }) => (
 );
 
 const AppLayout: React.FC = () => {
-  const [bannerHeight, setBannerHeight] = useState(0);
-
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">
-      <BackendStatusBanner onHeightChange={setBannerHeight} />
-      <Navbar topOffset={bannerHeight} />
+      <Navbar />
 
-      <main style={{ paddingTop: bannerHeight }}>
+      <main>
         <DailyGenusProvider>
           <HeroSpeciesProvider>
             <SafeSection name="Home hero"><HomeHero /></SafeSection>
@@ -97,7 +92,6 @@ const AppLayout: React.FC = () => {
       </main>
 
       <SafeSection name="Footer"><Footer /></SafeSection>
-      <BackendHealthBanner />
     </div>
   );
 };
