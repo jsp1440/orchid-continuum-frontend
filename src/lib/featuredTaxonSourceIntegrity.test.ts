@@ -96,4 +96,13 @@ describe('featured taxon source integrity', () => {
       expect(footer, `Footer must not expose stale/private target ${staleOrPrivate}`).not.toContain(staleOrPrivate);
     }
   });
+
+  it('sends the legacy collection entrypoint into the live Conservatory workspace', () => {
+    const collection = source('pages/MyCollection.tsx');
+    const app = source('App.tsx');
+    expect(collection).toContain('<Navigate to="/conservatory" replace />');
+    expect(collection).not.toContain('Sign-in coming soon');
+    expect(collection).not.toContain('Mock preview');
+    expect(app).toContain('<Route path="/conservatory/*"');
+  });
 });
