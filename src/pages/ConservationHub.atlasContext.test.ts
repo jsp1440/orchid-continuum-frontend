@@ -17,7 +17,7 @@ describe('ConservationHub Atlas evidence handoff', () => {
   it('does not consume precise Atlas record fields from the conservation URL', () => {
     for (const field of ['lat', 'lng', 'latitude', 'longitude', 'locality', 'occurrenceId', 'occurrence_id', 'recordId']) {
       expect(source).not.toContain(`searchParams.get('${field}')`);
-      expect(source).not.toContain(`searchParams.get(\"${field}\")`);
+      expect(source).not.toContain(`searchParams.get("${field}")`);
     }
   });
 
