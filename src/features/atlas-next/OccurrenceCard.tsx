@@ -74,6 +74,13 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
   const loc = resolveLocation(point, access);
   const name = displayName(point);
   const slug = point.canonicalName ? canonicalSlug(point.canonicalName) : null;
+  const calyxGenus = point.genus?.trim() ?? '';
+  const calyxHref =
+    calyxGenus.length > 0 &&
+    calyxGenus.length <= 80 &&
+    /^[A-Za-z][A-Za-z -]*$/.test(calyxGenus)
+      ? `/calyx?genus=${encodeURIComponent(calyxGenus)}&origin=atlas-next`
+      : null;
 
   return (
     <aside
@@ -170,14 +177,24 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
           </p>
         </div>
 
-        {slug && (
-          <Link
-            to={`/species/${slug}`}
-            className="mt-5 inline-flex min-h-[48px] items-center rounded-full border border-[#7fc49a]/35 px-5 text-[13px] text-[#e8e6df] transition-colors hover:border-[#7fc49a]/70 hover:bg-[#7fc49a]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7fc49a]"
-          >
-            Open the species record →
-          </Link>
-        )}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {slug && (
+            <Link
+              to={`/species/${slug}`}
+              className="inline-flex min-h-[48px] items-center rounded-full border border-[#7fc49a]/35 px-5 text-[13px] text-[#e8e6df] transition-colors hover:border-[#7fc49a]/70 hover:bg-[#7fc49a]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7fc49a]"
+            >
+              Open the species record →
+            </Link>
+          )}
+          {calyxHref && (
+            <Link
+              to={calyxHref}
+              className="inline-flex min-h-[48px] items-center rounded-full border border-[#b98ce0]/40 bg-[#b98ce0]/10 px-5 text-[13px] text-[#eee8f5] transition-colors hover:border-[#b98ce0]/75 hover:bg-[#b98ce0]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b98ce0]"
+            >
+              Continue {calyxGenus} in Calyx →
+            </Link>
+          )}
+        </div>
       </div>
     </aside>
   );
