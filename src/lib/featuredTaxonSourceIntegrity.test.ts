@@ -43,26 +43,10 @@ describe('featured taxon source integrity', () => {
 
   it('keeps the public homepage on the concise evidence journey instead of the legacy card stack', () => {
     const layout = source('components/AppLayout.tsx');
-    for (const legacy of [
-      'WhyContinuumExists',
-      'TheKnowledgeGraph',
-      'HabitatCards',
-      'CapabilityGrid',
-      'OrchidGallery',
-      'WhyOrchidsMatter',
-      'HumanStewardship',
-      'NewsFromContinuum',
-      'HomeAtlas from',
-    ]) {
+    for (const legacy of ['WhyContinuumExists','TheKnowledgeGraph','HabitatCards','CapabilityGrid','OrchidGallery','WhyOrchidsMatter','HumanStewardship','NewsFromContinuum','HomeAtlas from']) {
       expect(layout, `AppLayout must not remount legacy homepage surface ${legacy}`).not.toContain(legacy);
     }
-    for (const canonical of [
-      'DailyGenusFeature',
-      'ContinuumWeb',
-      'HomeAtlasContinuum',
-      'PublicCalyxGuide',
-      'HomepageStewardshipClose',
-    ]) {
+    for (const canonical of ['DailyGenusFeature','ContinuumWeb','HomeAtlasContinuum','PublicCalyxGuide','HomepageStewardshipClose']) {
       expect(layout, `AppLayout must keep canonical journey surface ${canonical}`).toContain(canonical);
     }
   });
@@ -89,12 +73,8 @@ describe('featured taxon source integrity', () => {
 
   it('keeps the public footer on live visitor routes and out of operator-only workspaces', () => {
     const footer = source('components/orchid/Footer.tsx');
-    for (const route of ['/knowledge', '/calyx', '/lexicon', '/get-involved', '/conservation']) {
-      expect(footer, `Footer must expose live visitor route ${route}`).toContain(`route: '${route}'`);
-    }
-    for (const staleOrPrivate of ['#the-knowledge-graph', '#ask-calyx', '#human-stewardship', '/mission-control', 'Owner access']) {
-      expect(footer, `Footer must not expose stale/private target ${staleOrPrivate}`).not.toContain(staleOrPrivate);
-    }
+    for (const route of ['/knowledge', '/calyx', '/lexicon', '/get-involved', '/conservation']) expect(footer).toContain(`route: '${route}'`);
+    for (const staleOrPrivate of ['#the-knowledge-graph', '#ask-calyx', '#human-stewardship', '/mission-control', 'Owner access']) expect(footer).not.toContain(staleOrPrivate);
   });
 
   it('sends the legacy collection entrypoint into the live Conservatory workspace', () => {
@@ -104,5 +84,12 @@ describe('featured taxon source integrity', () => {
     expect(collection).not.toContain('Sign-in coming soon');
     expect(collection).not.toContain('Mock preview');
     expect(app).toContain('<Route path="/conservatory/*"');
+  });
+
+  it('routes public Conservatory navigation directly to the live workspace', () => {
+    const navbar = source('components/orchid/Navbar.tsx');
+    expect(navbar).toContain("{ label: 'Conservatory', route: '/conservatory' }");
+    expect(navbar).not.toContain("{ label: 'Conservatory', route: '/collection' }");
+    expect(navbar).toContain("navigate('/conservatory')");
   });
 });
