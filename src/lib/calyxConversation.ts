@@ -24,6 +24,8 @@ const MAX_WORKSPACE_CONTEXT_FILES = 6;
 const MAX_STRUCTURED_PREVIEW_ROWS = 8;
 const MAX_STRUCTURED_PREVIEW_COLUMNS = 6;
 const MAX_STRUCTURED_PREVIEW_POINTS = 12;
+const MAX_ROUTE_GENUS_CHARACTERS = 80;
+const MAX_ROUTE_ORIGIN_CHARACTERS = 80;
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
   "&": "&amp;",
@@ -293,6 +295,27 @@ export function buildStructuredWorkspacePreview(
   return null;
 }
 
+export type CalyxRouteContext = {
+  origin: string | null;
+  featuredTaxon: { rank: "genus"; name: string } | null;
+};
+
+export function parseCalyxRouteContext(search: string): CalyxRouteContext {
+  const params = new URLSearchParams(search);
+  const rawGenus = params.get("genus")?.trim() ?? "";
+  const rawOrigin = params.get("origin")?.trim() ?? "";
+  const genus = rawGenus && rawGenus.length <= MAX_ROUTE_GENUS_CHARACTERS && /^[A-Za-z][A-Za-z -]*$/.test(rawGenus)
+    ? rawGenus
+    : "";
+  const origin = rawOrigin && rawOrigin.length <= MAX_ROUTE_ORIGIN_CHARACTERS && /^[a-z0-9-]+$/i.test(rawOrigin)
+    ? rawOrigin
+    : "";
+  return {
+    origin: origin || null,
+    featuredTaxon: genus ? { rank: "genus", name: genus } : null,
+  };
+}
+
 export function buildCalyxTurnContext(options: {
   projectId: string;
   uploadedFiles: Array<Pick<File, "name" | "type" | "size">>;
@@ -300,11 +323,24 @@ export function buildCalyxTurnContext(options: {
   selectedDocumentText?: string;
   documentContext?: string;
   fileTextContent?: string | null;
+  routeSearch?: string;
 }) {
   const context: Record<string, unknown> = {
     surface: "orchid-continuum-frontend",
     project_id: normalizeProjectId(options.projectId),
   };
+
+  const routeContext = parseCalyxRouteContext(
+    options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : ""),
+  );
+  if (routeContext.origin || routeContext.featuredTaxon) {
+    context.route_context = {
+      origin: routeContext.origin ?? undefined,
+      featured_taxon: routeContext.featuredTaxon
+        ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
+        : undefined,
+    };
+  }
 
   const trimmedSelection = options.selectedDocumentText?.trim() ?? "";
   const trimmedDraftContext = options.documentContext?.trim() ?? "";

@@ -9,6 +9,7 @@ import {
   formatUploadedFileSize,
   isCalyxTextWorkspaceFile,
   normalizeProjectId,
+  parseCalyxRouteContext,
   renderCalyxRichText,
   shouldReuseConversation,
   visibleConversationMessages,
@@ -76,6 +77,7 @@ describe("calyxConversation helpers", () => {
         selectedDocumentText: "  selected rows  ",
         documentContext: "  draft note  ",
         fileTextContent: "a,b\n1,2",
+        routeSearch: "",
       }),
     ).toEqual({
       surface: "orchid-continuum-frontend",
@@ -92,6 +94,33 @@ describe("calyxConversation helpers", () => {
         },
         draft_document_context: "draft note",
       },
+    });
+  });
+
+  it("grounds CALYX turns in bounded featured-genus route context", () => {
+    expect(parseCalyxRouteContext("?genus=Vanilla&origin=homepage-featured-taxon")).toEqual({
+      origin: "homepage-featured-taxon",
+      featuredTaxon: { rank: "genus", name: "Vanilla" },
+    });
+
+    expect(
+      buildCalyxTurnContext({
+        projectId: "calyx-speak",
+        uploadedFiles: [],
+        routeSearch: "?genus=Vanilla&origin=homepage-featured-taxon",
+      }),
+    ).toMatchObject({
+      route_context: {
+        origin: "homepage-featured-taxon",
+        featured_taxon: { rank: "genus", accepted_name: "Vanilla" },
+      },
+    });
+  });
+
+  it("drops malformed or oversized route context instead of forwarding it", () => {
+    expect(parseCalyxRouteContext("?genus=%3Cscript%3E&origin=homepage%2Fbad")).toEqual({
+      origin: null,
+      featuredTaxon: null,
     });
   });
 
