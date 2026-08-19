@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { parseCalyxRouteContext } from '@/lib/calyxConversation';
+import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
 import {
   ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN,
   atlasOccurrenceEvidenceCalyxHref,
@@ -21,6 +21,28 @@ describe('Atlas Next → Calyx handoff', () => {
       origin: ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN,
       featuredTaxon: { rank: 'genus', name: 'Laelia' },
     });
+  });
+
+  it('forwards the bounded Atlas evidence origin into the actual Calyx backend turn context', () => {
+    const href = atlasOccurrenceEvidenceCalyxHref('Laelia')!;
+    expect(
+      buildCalyxTurnContext({
+        projectId: 'calyx-speak',
+        uploadedFiles: [],
+        routeSearch: href.slice('/calyx'.length),
+      }),
+    ).toMatchObject({
+      route_context: {
+        origin: ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN,
+        featured_taxon: { rank: 'genus', accepted_name: 'Laelia' },
+      },
+    });
+  });
+
+  it('makes the locality-protection boundary explicit at the Atlas → Calyx decision point', () => {
+    expect(SOURCE).toContain('Calyx receives the genus and an occurrence-evidence workflow cue.');
+    expect(SOURCE).toContain('Precise locality, coordinates, and record identifiers stay in Atlas.');
+    expect(SOURCE).toContain('aria-describedby="atlas-calyx-context-note"');
   });
 
   it('fails closed for malformed genus values instead of building a Calyx route', () => {
