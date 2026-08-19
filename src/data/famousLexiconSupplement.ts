@@ -37,7 +37,6 @@ const recovered = (
   category,
   quick_definition,
   maturity: ['core_definition'],
-  review_state: 'draft',
   certainty_summary: 'literature_review_pending',
   source_system: FULL_EXPORT_SOURCE,
   provenance: {
@@ -47,6 +46,9 @@ const recovered = (
     confidence: 'not_assessed',
   },
   ...extra,
+  // Deliberately after the spread, and deliberately the only one: a recovered
+  // entry is always draft, whatever a caller passes. TypeScript reported the
+  // duplicate (TS1117) because this was also set among the defaults above.
   review_state: 'draft',
 });
 
