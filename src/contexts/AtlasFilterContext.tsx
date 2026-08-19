@@ -17,7 +17,7 @@
  * country, biome, conservation tier, pollinator, dataset…).
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { applyAtlasFilters, type AtlasFilterState, type AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 
@@ -82,6 +82,7 @@ export const AtlasFilterProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [searchParams, setSearchParams] = useSearchParams();
   const location = useLocation();
   const [filters, setFilters] = useState<AtlasFilterState>(() => deserializeFromUrl(searchParams));
+  const skipNextUrlSync = useRef(false);
 
   // Keep both the current Atlas and the candidate Atlas Next on the same
   // canonical URL/filter contract. This is what lets a featured-taxon handoff
@@ -96,17 +97,21 @@ export const AtlasFilterProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   // Route navigation can supply canonical filters (for example the homepage
   // handoff `/atlas?genera=Vanilla`). The provider lives above Routes, so its
-  // state survives navigation; without re-hydration the old in-memory state
-  // would immediately overwrite the incoming URL. Hydrate in a layout effect
-  // so the following passive URL-sync effect sees the new route context first.
+  // state survives navigation. Mark this hydration so the passive URL writer
+  // cannot race with it and erase the incoming query using stale state.
   useLayoutEffect(() => {
     if (!isAtlasRoute) return;
+    skipNextUrlSync.current = true;
     setFilters(deserializeFromUrl(searchParams));
   }, [isAtlasRoute, searchParams]);
 
   // Only sync URL on Atlas-related routes to avoid polluting unrelated pages.
   useEffect(() => {
     if (!isAtlasRoute) return;
+    if (skipNextUrlSync.current) {
+      skipNextUrlSync.current = false;
+      return;
+    }
     const next = serializeToUrl(filters, searchParams);
     if (next.toString() !== searchParams.toString()) {
       setSearchParams(next, { replace: true });
