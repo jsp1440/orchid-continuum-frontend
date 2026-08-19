@@ -76,6 +76,9 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
   const name = displayName(point);
   const slug = point.canonicalName ? canonicalSlug(point.canonicalName) : null;
   const calyxHref = atlasOccurrenceEvidenceCalyxHref(point.genus);
+  const conservationHref = point.genus
+    ? `/conservation?genus=${encodeURIComponent(point.genus)}&origin=atlas-next-occurrence-evidence`
+    : null;
 
   return (
     <aside
@@ -176,6 +179,14 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
               className="inline-flex min-h-[48px] items-center rounded-full border border-[#7fc49a]/35 px-5 text-[13px] text-[#e8e6df] transition-colors hover:border-[#7fc49a]/70 hover:bg-[#7fc49a]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7fc49a]"
             >
               Open the species record →
+            </Link>
+          )}
+          {conservationHref && (
+            <Link
+              to={conservationHref}
+              className="inline-flex min-h-[48px] items-center rounded-full border border-[#d8b24c]/40 bg-[#d8b24c]/10 px-5 text-[13px] text-[#f3ebcf] transition-colors hover:border-[#d8b24c]/75 hover:bg-[#d8b24c]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b24c]"
+            >
+              Continue to conservation →
             </Link>
           )}
           {calyxHref && (
