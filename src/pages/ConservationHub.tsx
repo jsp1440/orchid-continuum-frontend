@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Trees, ScrollText, HandHeart, Network, Workflow } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import PageShell from '@/components/orchid/PageShell';
@@ -7,6 +7,10 @@ import ProjectWorkspaceCard from '@/components/orchid/ProjectWorkspaceCard';
 import EducationalOverlay from '@/components/orchid/EducationalOverlay';
 import GlossaryTerm from '@/components/orchid/GlossaryTerm';
 import RoleBadge from '@/components/orchid/RoleBadge';
+import {
+  fetchFeaturedTaxonContinuum,
+  type FeaturedTaxonConservationEvidence,
+} from '@/lib/featuredTaxonContinuum';
 
 /**
  * ConservationHub
@@ -19,7 +23,7 @@ import RoleBadge from '@/components/orchid/RoleBadge';
  * `/api/projects`, `/api/protocols`, and `/api/volunteer-opportunities`.
  *
  * Frontend never queries the database directly; data flows exclusively
- * through the typed API client (see src/lib/api.ts).
+ * through canonical Continuum clients.
  */
 
 const demoOrgs = [
@@ -142,10 +146,46 @@ const boundedGenus = (value: string | null): string | null => {
   return /^[A-Za-z][A-Za-z .'-]*$/.test(genus) ? genus : null;
 };
 
+type ConservationLoadState =
+  | { status: 'idle' | 'loading'; evidence: null }
+  | { status: 'ready'; evidence: FeaturedTaxonConservationEvidence }
+  | { status: 'unavailable'; evidence: null };
+
 const ConservationHub: React.FC = () => {
   const [searchParams] = useSearchParams();
   const genus = boundedGenus(searchParams.get('genus'));
   const fromAtlasEvidence = searchParams.get('origin') === 'atlas-next-occurrence-evidence';
+  const [conservationLoad, setConservationLoad] = useState<ConservationLoadState>({
+    status: 'idle',
+    evidence: null,
+  });
+
+  useEffect(() => {
+    if (!fromAtlasEvidence || !genus) {
+      setConservationLoad({ status: 'idle', evidence: null });
+      return;
+    }
+
+    const controller = new AbortController();
+    setConservationLoad({ status: 'loading', evidence: null });
+    fetchFeaturedTaxonContinuum(genus, controller.signal)
+      .then((continuum) => {
+        if (!controller.signal.aborted) {
+          setConservationLoad({ status: 'ready', evidence: continuum.conservation });
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setConservationLoad({ status: 'unavailable', evidence: null });
+        }
+      });
+
+    return () => controller.abort();
+  }, [fromAtlasEvidence, genus]);
+
+  const conservationEvidence = conservationLoad.status === 'ready'
+    ? conservationLoad.evidence
+    : null;
 
   return (
     <PageShell
@@ -182,7 +222,60 @@ const ConservationHub: React.FC = () => {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">
               You arrived from a selected Atlas occurrence. This workspace carries forward only the genus-level context; precise coordinates, locality, and occurrence identifiers remain in Atlas.
             </p>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">
+
+            <div className="mt-5 max-w-4xl rounded-xl border border-white/10 bg-black/15 p-4" aria-live="polite">
+              <div className="text-[10px] tracking-[0.24em] uppercase text-white/50">
+                Canonical Continuum conservation evidence
+              </div>
+              {conservationLoad.status === 'loading' && (
+                <p className="mt-2 text-sm text-white/65">
+                  Loading conservation evidence from the Continuum…
+                </p>
+              )}
+              {conservationLoad.status === 'unavailable' && (
+                <p className="mt-2 text-sm text-amber-100/80">
+                  Conservation evidence is currently unavailable from the Continuum. No conservation conclusion is substituted.
+                </p>
+              )}
+              {conservationEvidence?.state === 'unavailable' && (
+                <p className="mt-2 text-sm text-amber-100/80">
+                  The Continuum conservation evidence service is unavailable for this genus. No conservation conclusion is substituted.
+                </p>
+              )}
+              {conservationEvidence?.state === 'unknown' && (
+                <p className="mt-2 text-sm text-white/70">
+                  The Continuum currently has no conservation graph coverage for this genus. This is a knowledge gap, not evidence that the genus has no conservation concern.
+                </p>
+              )}
+              {conservationEvidence?.state === 'known' && (
+                <div className="mt-2 text-sm text-white/75">
+                  <p>
+                    Documented Continuum conservation graph coverage: {conservationEvidence.nodes ?? 0} node{conservationEvidence.nodes === 1 ? '' : 's'} and {conservationEvidence.edges ?? 0} edge{conservationEvidence.edges === 1 ? '' : 's'}.
+                  </p>
+                  {conservationEvidence.relationship?.hasData && (
+                    <div className="mt-3 border-t border-white/10 pt-3">
+                      <p className="font-medium text-emerald-100">
+                        {conservationEvidence.relationship.summary}
+                      </p>
+                      {conservationEvidence.relationship.items.length > 0 && (
+                        <ul className="mt-2 list-disc space-y-1 pl-5 text-white/65">
+                          {conservationEvidence.relationship.items.map((item) => (
+                            <li key={item}>{item}</li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+                  {!conservationEvidence.relationship?.hasData && (
+                    <p className="mt-2 text-white/55">
+                      Graph coverage exists, but the canonical relationship service does not currently supply a stronger conservation summary. No status is inferred in the browser.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/60">
               Use the organization, project, and protocol surfaces below to continue the conservation investigation without treating an incomplete record as evidence of absence.
             </p>
           </div>
