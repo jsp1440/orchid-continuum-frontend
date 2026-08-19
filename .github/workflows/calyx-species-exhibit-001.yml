@@ -8,7 +8,7 @@ on:
       - "src/lib/speciesExhibit.test.ts"
       - "src/components/orchid/SpeciesExhibit.tsx"
       - "src/components/orchid/DailyGenusFeature.tsx"
-      - "src/components/orchid/DailyGenusFeatureV6.tsx"
+      - "src/components/orchid/HomeSpeciesExhibit.tsx"
       - "docs/CALYX-SPECIES-EXHIBIT-001.md"
       - ".github/workflows/calyx-species-exhibit-001.yml"
   push:
@@ -40,6 +40,6 @@ jobs:
           src/lib/speciesExhibit.ts
           src/lib/speciesExhibit.test.ts
           src/components/orchid/SpeciesExhibit.tsx
-          src/components/orchid/DailyGenusFeatureV6.tsx
+          src/components/orchid/HomeSpeciesExhibit.tsx
       - name: Diff hygiene
         run: git diff --check

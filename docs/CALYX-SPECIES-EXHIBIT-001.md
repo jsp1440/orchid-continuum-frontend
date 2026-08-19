@@ -22,7 +22,8 @@ Replace the repeated genus narrative/raw media gallery with a typed consumer of 
   - distinguishing fact only when supplied by the server;
   - caveats, unavailable-domain cues, contradiction count, and provenance details;
   - explicit degraded state saying species evidence is unavailable.
-- Added `DailyGenusFeatureV6.tsx`, preserving the V5 Featured Genus ecology, relationship, atlas, phenology, conservation, and evidence sections while replacing the old Species Gallery block with the new governed exhibit.
+- Mounted the exhibit as its own homepage section through `HomeSpeciesExhibit.tsx`, which reads the featured genus from `dailyGenusContext` and renders `SpeciesExhibit` against it.
+- The Featured Genus section itself is left on `DailyGenusFeatureContinuum`, the canonical featured-taxon Continuum contract. An earlier draft of this work swapped it for a V3-lineage `DailyGenusFeatureV6`; that variant also rendered a flowering calendar built from a hardcoded month table, with an invented default season for any genus not listed. Phenology stated as evidence has to be measured from dated occurrence records, so neither the variant nor the calendar is included here.
 - Switched the stable `DailyGenusFeature.tsx` export from V5 to V6.
 - Added unit tests for duplicate identity/media/caption rejection, unsafe media URL rejection, null-caption degradation, and the nine-card cap.
 
