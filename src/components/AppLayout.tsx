@@ -2,7 +2,9 @@ import React from 'react';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
-import HomeHero from './orchid/HomeHero';
+import HeroOrchid from './orchid/HeroOrchid';
+import ContinuumThread from './orchid/ContinuumThread';
+import FungalDependency from './orchid/FungalDependency';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import ContinuumWeb from './orchid/ContinuumWeb';
 import HomeAtlasContinuum from './orchid/HomeAtlasContinuum';
@@ -63,6 +65,10 @@ const SafeSection: React.FC<SectionBoundaryProps> = ({ name, children }) => (
 );
 
 const AppLayout: React.FC = () => {
+  // The species the hero photograph actually names, so the dependency section
+  // asks about the same orchid the visitor is looking at.
+  const [heroSpecies, setHeroSpecies] = useState<string | null>(null);
+
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">
       <Navbar />
@@ -70,7 +76,10 @@ const AppLayout: React.FC = () => {
       <main>
         <DailyGenusProvider>
           <HeroSpeciesProvider>
-            <SafeSection name="Home hero"><HomeHero /></SafeSection>
+            {/* HOMEPAGE-SLICE-1: one orchid, then one dependency, joined by a thread. */}
+            <SafeSection name="Home hero"><HeroOrchid onSpeciesResolved={setHeroSpecies} /></SafeSection>
+            <ContinuumThread />
+            <SafeSection name="First dependency"><FungalDependency heroSpecies={heroSpecies} /></SafeSection>
 
             <div id="species-in-focus">
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
