@@ -1,0 +1,45 @@
+name: CALYX-SPECIES-EXHIBIT-001 Validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "src/lib/speciesExhibit.ts"
+      - "src/lib/speciesExhibit.test.ts"
+      - "src/components/orchid/SpeciesExhibit.tsx"
+      - "src/components/orchid/DailyGenusFeature.tsx"
+      - "src/components/orchid/HomeSpeciesExhibit.tsx"
+      - "docs/CALYX-SPECIES-EXHIBIT-001.md"
+      - ".github/workflows/calyx-species-exhibit-001.yml"
+  push:
+    branches: [feature/calyx-species-exhibit-001]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Focused species exhibit tests
+        run: npm test -- --run src/lib/speciesExhibit.test.ts
+      - name: Build frontend
+        run: npm run build
+      - name: Lint changed species exhibit surface
+        run: >-
+          npx eslint
+          src/lib/speciesExhibit.ts
+          src/lib/speciesExhibit.test.ts
+          src/components/orchid/SpeciesExhibit.tsx
+          src/components/orchid/HomeSpeciesExhibit.tsx
+      - name: Diff hygiene
+        run: git diff --check

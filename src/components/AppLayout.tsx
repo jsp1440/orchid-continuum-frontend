@@ -1,4 +1,5 @@
 import React from 'react';
+import HomeSpeciesExhibit from '@/components/orchid/HomeSpeciesExhibit';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
@@ -83,6 +84,7 @@ const AppLayout: React.FC = () => {
 
             <div id="species-in-focus">
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+              <SafeSection name="Species evidence"><HomeSpeciesExhibit /></SafeSection>
             </div>
 
             <SafeSection name="Continuum relationships"><ContinuumWeb /></SafeSection>
