@@ -17,7 +17,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  actions: read
+  actions: write
   id-token: write
 
 jobs:
@@ -90,26 +90,24 @@ jobs:
 
           mapfile -t prs < <(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq '.[] | select(.body != null and (.body | contains("OC-AUTO-ISSUE: #"))) | .number')
           for pr in "${prs[@]}"; do
-            data=$(gh pr view "$pr" --repo "$REPO" --json body,isDraft,mergeStateStatus,headRefName)
+            data=$(gh pr view "$pr" --repo "$REPO" --json body,isDraft,mergeStateStatus,headRefName,headRefOid)
             body=$(jq -r '.body // ""' <<<"$data")
             issue=$(sed -n 's/.*OC-AUTO-ISSUE: #\([0-9][0-9]*\).*/\1/p' <<<"$body" | head -1)
             [[ -n "$issue" ]] || continue
 
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
 
-            checks=$(gh pr checks "$pr" --repo "$REPO" --json state --jq '[.[].state]' 2>/dev/null || echo '[]')
-            check_count=$(jq 'length' <<<"$checks")
-            if (( check_count == 0 )); then
-              continue
-            fi
-            if jq -e 'any(.[]; . == "FAILURE" or . == "CANCELLED" or . == "TIMED_OUT" or . == "ACTION_REQUIRED" or . == "ERROR")' <<<"$checks" >/dev/null; then
+            head=$(jq -r '.headRefName' <<<"$data")
+            head_sha=$(jq -r '.headRefOid' <<<"$data")
+            ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then "\(.status) \(.conclusion // \"\")" else "" end' <<<"$ci_runs")
+            matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then "\(.status) \(.conclusion // \"\")" else "" end' <<<"$matrix_runs")
+
+            [[ -n "$ci" && -n "$matrix" ]] || continue
+            [[ "$ci" == completed* && "$matrix" == completed* ]] || continue
+            if [[ "$ci" != "completed success" || "$matrix" != "completed success" ]]; then
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
-              continue
-            fi
-            if jq -e 'any(.[]; . == "PENDING" or . == "QUEUED" or . == "IN_PROGRESS" or . == "EXPECTED" or . == "WAITING" or . == "REQUESTED")' <<<"$checks" >/dev/null; then
-              continue
-            fi
-            if ! jq -e 'all(.[]; . == "SUCCESS" or . == "SKIPPED" or . == "NEUTRAL")' <<<"$checks" >/dev/null; then
               continue
             fi
 
@@ -320,9 +318,9 @@ jobs:
 
           existing=$(gh pr list --repo "$REPO" --state open --base main --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
           body=$(cat <<EOF
-          Autonomously validated integration batch from `$INTEGRATION_BRANCH`.
+          Autonomously validated integration batch from $INTEGRATION_BRANCH.
 
-          This PR is the deliberate owner gate between the continuous improvement system and production-facing `main`.
+          This PR is the deliberate owner gate between the continuous improvement system and production-facing main.
 
           - Worker PRs are merged automatically only into the integration branch after CI passes.
           - Scientific/provenance safeguards remain mandatory.
@@ -335,6 +333,10 @@ jobs:
 
           if [[ -z "$existing" ]]; then
             gh pr create --repo "$REPO" --base main --head "$INTEGRATION_BRANCH" --draft --title "OC autonomous integration batch" --body "$body" >/dev/null
+            existing=$(gh pr list --repo "$REPO" --state open --base main --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
           else
             gh pr edit "$existing" --repo "$REPO" --body "$body" >/dev/null
+          fi
+          if [[ -n "$existing" ]]; then
+            gh pr edit "$existing" --repo "$REPO" --add-label oc-owner-gate >/dev/null 2>&1 || true
           fi
