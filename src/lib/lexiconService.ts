@@ -188,15 +188,6 @@ async function requestCanonical(path = ''): Promise<CanonicalLexiconEnvelope> {
   return response.json() as Promise<CanonicalLexiconEnvelope>;
 }
 
-async function requestCanonicalEntry(slug: string): Promise<CanonicalLexiconEntryEnvelope> {
-  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${LEXICON_API_BASE}/entries/${encodeURIComponent(slug)}`, {
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) throw new Error(`Canonical lexicon entry API ${response.status}`);
-  return response.json() as Promise<CanonicalLexiconEntryEnvelope>;
-}
-
 export async function getEntries(): Promise<LexiconEntry[]> {
   try {
     const payload = await requestCanonical('?limit=2000');
@@ -213,27 +204,53 @@ export async function getEntries(): Promise<LexiconEntry[]> {
   }
 }
 
+async function requestCanonicalEntry(slug: string): Promise<LexiconEntry | null> {
+  const response = await fetch(
+    `${CALYX_BACKEND_BASE_URL}${LEXICON_API_BASE}/entries/${encodeURIComponent(slug)}`,
+    { credentials: 'include', headers: { Accept: 'application/json' } },
+  );
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`Canonical lexicon entry API ${response.status}`);
+  const payload = (await response.json()) as { entry: LexiconEntry };
+  return payload.entry;
+}
+
 export async function getEntry(slug: string): Promise<LexiconEntry | undefined> {
   const normalizedSlug = slug.trim().toLocaleLowerCase();
   const fallback = famousFallback.find((entry) => entry.slug === normalizedSlug);
 
   try {
-    const payload = await requestCanonicalEntry(normalizedSlug);
-    lastSource = fallback ? 'canonical_plus_famous_fallback' : 'canonical';
-    return mergeCanonicalEntry(fallback, payload.entry);
+    const canonical = await requestCanonicalEntry(normalizedSlug);
+    if (canonical) {
+      lastSource = fallback ? 'canonical_plus_famous_fallback' : 'canonical';
+      return mergeCanonicalEntry(fallback, canonical);
+    }
+    // A clean 404: canonical storage genuinely holds no entry under this slug.
+    // The migrated record is then all there is, and is reported as such.
+    lastSource = 'famous_fallback';
+    return fallback ? normalizeEntry(fallback) : undefined;
   } catch {
-    // Supports a staggered deployment where the frontend lands before the new
-    // direct-entry backend route. Canonical search is tried before static fallback.
+    // Transport or server failure rather than a clean 404. Supports a staggered
+    // deployment where the frontend lands before the direct-entry route, so
+    // canonical search is tried before anything static.
     try {
-      const payload = await requestCanonical(`/search?q=${encodeURIComponent(normalizedSlug.replace(/-/g, ' '))}&limit=50`);
-      const canonical = (payload.entries ?? []).map(normalizeEntry).find((entry) => entry.slug === normalizedSlug);
-      if (canonical) {
+      const payload = await requestCanonical(
+        `/search?q=${encodeURIComponent(normalizedSlug.replace(/-/g, ' '))}&limit=50`,
+      );
+      const found = (payload.entries ?? [])
+        .map(normalizeEntry)
+        .find((entry) => entry.slug === normalizedSlug);
+      if (found) {
         lastSource = fallback ? 'canonical_plus_famous_fallback' : 'canonical';
-        return mergeCanonicalEntry(fallback, canonical);
+        return mergeCanonicalEntry(fallback, found);
       }
     } catch {
       // The static migration remains read-only resilience, never write authority.
     }
+    // getEntries() reports its own provenance through lastSource, so a hit here
+    // keeps whatever label that call earned rather than being relabelled.
+    const listed = (await getEntries()).find((entry) => entry.slug === normalizedSlug);
+    if (listed) return listed;
     lastSource = 'famous_fallback';
     return fallback ? normalizeEntry(fallback) : undefined;
   }

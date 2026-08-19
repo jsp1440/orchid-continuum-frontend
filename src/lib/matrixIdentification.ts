@@ -87,6 +87,43 @@ export type CalyxExplanation = {
   explanation?: string;
 };
 
+export type VisionAnalysisSummary = {
+  analysis_id: string;
+  image_id: string;
+  reference_set_id?: string | null;
+  vision_model: string;
+  vision_model_version: string;
+  analysis_version: number;
+  taxon_context?: string | null;
+  taxon_confidence?: number | null;
+  calibration_state: string;
+  image_quality: string;
+  analysis_status: string;
+  review_state: string;
+  warnings: string[];
+  limitations: string[];
+};
+
+export type VisionAnalysisDiscovery = {
+  session_id: string;
+  image_id: string;
+  analyses: VisionAnalysisSummary[];
+  analysis_count: number;
+  provider_inference_requested: false;
+  matrix_state_mutated: false;
+  rule?: string;
+};
+
+export type VisionCapabilityStatus = {
+  persistence_mode?: string;
+  durable_persistence_enabled?: boolean;
+  schema_ready?: boolean;
+  migration_activated?: boolean;
+  live_inference_enabled?: boolean;
+  provider_status?: string;
+  [key: string]: unknown;
+};
+
 export type VisionSuggestion = {
   suggestion_id: string;
   session_id: string;
@@ -187,6 +224,19 @@ export async function explainIdentificationSession(
   });
 }
 
+export async function getVisionCapabilityStatus(): Promise<VisionCapabilityStatus> {
+  return request<VisionCapabilityStatus>("/api/vision-lexicon/status");
+}
+
+export async function discoverVisionAnalysesForImage(
+  sessionId: string,
+  imageId: string,
+): Promise<VisionAnalysisDiscovery> {
+  return request<VisionAnalysisDiscovery>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/images/${encodeURIComponent(imageId)}/analyses`,
+  );
+}
+
 export async function attachVisionAnalysis(
   sessionId: string,
   analysisId: string,
@@ -200,6 +250,33 @@ export async function attachVisionAnalysis(
 export async function listVisionSuggestions(sessionId: string): Promise<VisionSuggestionList> {
   return request<VisionSuggestionList>(
     `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions`,
+  );
+}
+
+export type VisionRegionGeometry = {
+  region_id: string;
+  analysis_id: string;
+  concept_id?: string | null;
+  label: string;
+  bounding_box?: { x: number; y: number; width: number; height: number } | Record<string, unknown> | null;
+  segmentation_ref?: string | null;
+  landmarks?: { name: string; x: number; y: number }[] | null;
+  confidence?: number | null;
+  review_state: string;
+};
+
+export type VisionSuggestionRegion = {
+  session_id: string;
+  suggestion_id: string;
+  region: VisionRegionGeometry | null;
+};
+
+export async function fetchVisionSuggestionRegion(
+  sessionId: string,
+  suggestionId: string,
+): Promise<VisionSuggestionRegion> {
+  return request<VisionSuggestionRegion>(
+    `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions/${encodeURIComponent(suggestionId)}/region`,
   );
 }
 

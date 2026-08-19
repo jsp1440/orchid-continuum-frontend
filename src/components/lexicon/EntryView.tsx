@@ -8,6 +8,7 @@ import { RecoveredScientificSections } from './RecoveredScientificSections';
 import { Disclosure, MaturityChecklist, PendingNote, SectionHeading } from './ui';
 import { getLastSource } from '@/lib/lexiconService';
 import { CalyxAdaptiveWorkspace } from '@/features/calyx-workspace/CalyxAdaptiveWorkspace';
+import { matrixHrefForLexiconConcept } from '@/features/calyx-workspace/identificationContext';
 import { recordCalyxSurfaceContext } from '@/features/calyx-workspace/sessionContext';
 
 const TextOrPending: React.FC<{ value?: string; label: string }> = ({ value, label }) =>
@@ -100,6 +101,18 @@ export const EntryView: React.FC<{ entry: LexiconEntry; onOpen: (slug: string) =
               <SectionHeading eyebrow="Identification" title="Characters and cautions" />
               <div className="mt-5 space-y-5">
                 <TextOrPending value={entry.identification_significance} label="Identification significance" />
+                <div className="rounded-sm border border-emerald-200 bg-emerald-50 p-4">
+                  <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-emerald-800">Identification Matrix</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-stone-700">
+                    Open the Matrix Lab with <strong>{entry.preferred_term}</strong> carried as conversational context. The concept is not automatically asserted as an observed character.
+                  </p>
+                  <a
+                    href={matrixHrefForLexiconConcept(entry.slug, entry.preferred_term)}
+                    className="mt-3 inline-flex rounded-sm bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
+                  >
+                    Open in Identification Matrix
+                  </a>
+                </div>
                 {entry.character_states?.length ? (
                   <div>
                     <h3 className="text-[11px] font-semibold uppercase tracking-[.14em] text-[#4A7C59]">Character states</h3>

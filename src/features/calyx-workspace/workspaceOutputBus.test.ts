@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateWorkspaceOutput, type WorkspaceOutput } from './workspaceOutputBus';
+import { emitWorkspaceOutputs, validateWorkspaceOutput, type WorkspaceOutput } from './workspaceOutputBus';
 
 const base = {
   id: 'output-1',
@@ -22,8 +22,8 @@ describe('workspace output contract', () => {
     expect(validateWorkspaceOutput(output)).toBe(output);
   });
 
-  it('rejects annotations that escape the visual evidence boundary', () => {
-    const output: WorkspaceOutput = {
+  it('rejects malformed or out-of-bounds annotations before dispatch', () => {
+    const outOfBounds: WorkspaceOutput = {
       ...base,
       kind: 'diagram',
       payload: {
@@ -32,33 +32,94 @@ describe('workspace output contract', () => {
         annotations: [{ id: 'a1', label: 'bad', x: 90, y: 10, width: 20, height: 20 }],
       },
     };
-    expect(() => validateWorkspaceOutput(output)).toThrow(/bounds/);
+    const malformed = {
+      ...base,
+      kind: 'image',
+      payload: { src: '/image.jpg', alt: 'Image', annotations: [null] },
+    };
+    expect(() => validateWorkspaceOutput(outOfBounds)).toThrow(/bounds/);
+    expect(() => validateWorkspaceOutput(malformed)).toThrow(/objects/);
   });
 
-  it('requires provenance on every cross-module panel output', () => {
-    const output = {
+  it('requires supported kind, provenance, evidence status, and created_at', () => {
+    const invalidKind = { ...base, kind: 'video', payload: { body: 'hello' } };
+    const invalidProvenance = {
       ...base,
       kind: 'text',
       provenance: { source_module: '', evidence_status: 'unknown' },
       payload: { body: 'hello' },
-    } as WorkspaceOutput;
-    expect(() => validateWorkspaceOutput(output)).toThrow(/source_module/);
+    };
+    const invalidStatus = {
+      ...base,
+      kind: 'text',
+      provenance: { source_module: 'matrix', evidence_status: 'verified' },
+      payload: { body: 'hello' },
+    };
+    const missingCreatedAt = { ...base, created_at: '', kind: 'text', payload: { body: 'hello' } };
+
+    expect(() => validateWorkspaceOutput(invalidKind)).toThrow(/kind/);
+    expect(() => validateWorkspaceOutput(invalidProvenance)).toThrow(/source_module/);
+    expect(() => validateWorkspaceOutput(invalidStatus)).toThrow(/evidence_status/);
+    expect(() => validateWorkspaceOutput(missingCreatedAt)).toThrow(/created_at/);
   });
 
-  it('accepts chart and matrix-style table outputs', () => {
+  it('deeply validates table columns but permits hidden row metadata outside displayed columns', () => {
+    const malformedColumns = {
+      ...base,
+      kind: 'table',
+      payload: { columns: [null], rows: [{ rank: 1 }] },
+    };
+    const hiddenCitationMetadata: WorkspaceOutput = {
+      ...base,
+      id: 'retrieval-1',
+      kind: 'table',
+      provenance: { source_module: 'evidence-retrieval', evidence_status: 'unknown', generated: false },
+      payload: {
+        columns: [{ key: 'title', label: 'Source' }],
+        rows: [{ title: 'Velamen study', citation: { revision_id: 9 } }],
+      },
+    };
+
+    expect(() => validateWorkspaceOutput(malformedColumns)).toThrow(/columns/);
+    expect(validateWorkspaceOutput(hiddenCitationMetadata)).toBe(hiddenCitationMetadata);
+  });
+
+  it('deeply validates chart series and referenced data values', () => {
     const chart: WorkspaceOutput = {
       ...base,
       id: 'chart-1',
       kind: 'chart',
       payload: { chart_type: 'bar', x_key: 'taxon', series: [{ key: 'score' }], data: [{ taxon: 'A', score: 0.8 }] },
     };
-    const table: WorkspaceOutput = {
+    const badSeries = {
       ...base,
-      id: 'table-1',
-      kind: 'table',
-      payload: { columns: [{ key: 'character', label: 'Character' }], rows: [{ character: 'velamen present' }] },
+      id: 'bad-series',
+      kind: 'chart',
+      payload: { chart_type: 'bar', x_key: 'taxon', series: [null], data: [] },
     };
+    const badCell = {
+      ...base,
+      id: 'bad-cell',
+      kind: 'chart',
+      payload: { chart_type: 'line', x_key: 'taxon', series: [{ key: 'score' }], data: [{ taxon: 'A', score: { value: 1 } }] },
+    };
+
     expect(validateWorkspaceOutput(chart)).toBe(chart);
-    expect(validateWorkspaceOutput(table)).toBe(table);
+    expect(() => validateWorkspaceOutput(badSeries)).toThrow(/series/);
+    expect(() => validateWorkspaceOutput(badCell)).toThrow(/score/);
+  });
+
+  it('batch ingestion withholds malformed auxiliary panels while accepting valid ones', () => {
+    const valid: WorkspaceOutput = {
+      ...base,
+      id: 'matrix-ranking',
+      kind: 'table',
+      provenance: { source_module: 'matrix-identification', evidence_status: 'derived', generated: true },
+      payload: { columns: [{ key: 'rank', label: 'Rank' }], rows: [{ rank: 1 }] },
+    };
+    const malformed = { ...base, id: 'bad', kind: 'table', payload: { columns: [null], rows: [] } };
+
+    expect(emitWorkspaceOutputs([malformed, valid])).toBe(1);
+    expect(emitWorkspaceOutputs(undefined)).toBe(0);
   });
 });
