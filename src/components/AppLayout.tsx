@@ -1,23 +1,17 @@
-import React, { useState } from 'react';
+import React from 'react';
+import HomeSpeciesExhibit from '@/components/orchid/HomeSpeciesExhibit';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
-import HomeHero from './orchid/HomeHero';
+import HeroOrchid from './orchid/HeroOrchid';
+import ContinuumThread from './orchid/ContinuumThread';
+import FungalDependency from './orchid/FungalDependency';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
-import TheKnowledgeGraph from './orchid/TheKnowledgeGraph';
-import WhyContinuumExists from './orchid/WhyContinuumExists';
-import HabitatCards from './orchid/HabitatCards';
-import CapabilityGrid from './orchid/CapabilityGrid';
 import ContinuumWeb from './orchid/ContinuumWeb';
-import HomeAtlas from './orchid/HomeAtlas';
-import WhyOrchidsMatter from './orchid/WhyOrchidsMatter';
-import HumanStewardship from './orchid/HumanStewardship';
-import OrchidGallery from './orchid/OrchidGallery';
-import NewsFromContinuum from './orchid/NewsFromContinuum';
+import HomeAtlasContinuum from './orchid/HomeAtlasContinuum';
 import PublicCalyxGuide from './orchid/PublicCalyxGuide';
+import HomepageStewardshipClose from './orchid/HomepageStewardshipClose';
 import Footer from './orchid/Footer';
-import BackendHealthBanner from './orchid/BackendHealthBanner';
-import BackendStatusBanner from './orchid/BackendStatusBanner';
 
 type SectionBoundaryProps = {
   name: string;
@@ -26,44 +20,39 @@ type SectionBoundaryProps = {
 
 type SectionBoundaryState = {
   hasError: boolean;
-  errorMessage: string;
-  errorStack: string;
 };
 
 class SectionBoundary extends React.Component<SectionBoundaryProps, SectionBoundaryState> {
   state: SectionBoundaryState = {
     hasError: false,
-    errorMessage: '',
-    errorStack: '',
   };
 
-  static getDerivedStateFromError(error: Error): SectionBoundaryState {
-    return {
-      hasError: true,
-      errorMessage: error?.message || String(error),
-      errorStack: error?.stack || '',
-    };
+  static getDerivedStateFromError(): SectionBoundaryState {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error) {
+    // Preserve diagnostic detail for developers without exposing exception
+    // messages or stack traces in the public scientific experience.
     console.error(`[Orchid Continuum] ${this.props.name} failed`, error);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <section className="mx-auto my-8 max-w-5xl rounded-2xl border border-red-400 bg-red-50 px-5 py-4 text-red-950 shadow-sm">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-red-700">
-            Orchid Continuum Diagnostic
+        <section
+          className="mx-auto my-8 max-w-5xl rounded-2xl border border-[#d9caa8] bg-[#fffaf0] px-5 py-5 text-[#3a4630] shadow-sm"
+          role="status"
+        >
+          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#8a6f2d]">
+            Continuum section unavailable
           </p>
-          <h2 className="mt-1 font-serif text-xl font-bold">
-            {this.props.name} crashed
+          <h2 className="mt-2 font-serif text-xl text-[#24321f]">
+            {this.props.name} could not be displayed.
           </h2>
-          <pre className="mt-3 whitespace-pre-wrap rounded bg-white p-3 text-xs leading-5 text-black">
-            {this.state.errorMessage}
-            {'\n\n'}
-            {this.state.errorStack}
-          </pre>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5d684c]">
+            This section is temporarily unavailable. No scientific fallback content has been substituted.
+          </p>
         </section>
       );
     }
@@ -77,37 +66,43 @@ const SafeSection: React.FC<SectionBoundaryProps> = ({ name, children }) => (
 );
 
 const AppLayout: React.FC = () => {
-  const [bannerHeight, setBannerHeight] = useState(0);
+  // The species the hero photograph actually names, so the dependency section
+  // asks about the same orchid the visitor is looking at.
+  const [heroSpecies, setHeroSpecies] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">
-      <BackendStatusBanner onHeightChange={setBannerHeight} />
-      <Navbar topOffset={bannerHeight} />
+      <Navbar />
 
-      <main style={{ paddingTop: bannerHeight }}>
+      <main>
         <DailyGenusProvider>
           <HeroSpeciesProvider>
-            <SafeSection name="Home hero"><HomeHero /></SafeSection>
-            <SafeSection name="Why the Continuum exists"><WhyContinuumExists /></SafeSection>
+            {/* HOMEPAGE-SLICE-1: one orchid, then one dependency, joined by a thread. */}
+            <SafeSection name="Home hero"><HeroOrchid onSpeciesResolved={setHeroSpecies} /></SafeSection>
+            <ContinuumThread />
+            <SafeSection name="First dependency"><FungalDependency heroSpecies={heroSpecies} /></SafeSection>
+
             <div id="species-in-focus">
               <SafeSection name="Genus of the Day"><DailyGenusFeature /></SafeSection>
+              <SafeSection name="Species evidence"><HomeSpeciesExhibit /></SafeSection>
             </div>
-            <SafeSection name="Knowledge graph"><TheKnowledgeGraph /></SafeSection>
-            <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
-            <SafeSection name="Habitat cards"><HabitatCards /></SafeSection>
-            <SafeSection name="Atlas"><HomeAtlas /></SafeSection>
-            <SafeSection name="Continuum Web"><ContinuumWeb /></SafeSection>
-            <SafeSection name="Identification matrix"><CapabilityGrid /></SafeSection>
-            <SafeSection name="Orchid Gallery"><OrchidGallery /></SafeSection>
-            <SafeSection name="Why Orchids Matter"><WhyOrchidsMatter /></SafeSection>
-            <SafeSection name="Human Stewardship"><HumanStewardship /></SafeSection>
-            <SafeSection name="News from the Continuum"><NewsFromContinuum /></SafeSection>
+
+            <SafeSection name="Continuum relationships"><ContinuumWeb /></SafeSection>
+
+            <div id="home-atlas">
+              <SafeSection name="Atlas"><HomeAtlasContinuum /></SafeSection>
+            </div>
+
+            <div id="home-calyx">
+              <SafeSection name="Calyx public guide"><PublicCalyxGuide /></SafeSection>
+            </div>
+
+            <SafeSection name="Stewardship"><HomepageStewardshipClose /></SafeSection>
           </HeroSpeciesProvider>
         </DailyGenusProvider>
       </main>
 
       <SafeSection name="Footer"><Footer /></SafeSection>
-      <BackendHealthBanner />
     </div>
   );
 };

@@ -1,0 +1,44 @@
+import React, { useEffect, useState } from 'react';
+
+const PURPLE = '#6B3FA0';
+const GREEN = '#4A7C59';
+const INK = '#57534E';
+
+export const FlowerSchematic: React.FC<{ flip?: boolean; showLabels?: boolean; className?: string }> = ({ flip = false, className = '' }) => (
+  <svg viewBox="0 0 200 210" className={className} role="img" aria-label={flip ? 'Schematic orchid flower with the labellum uppermost and the column below it' : 'Schematic orchid flower with the labellum lowermost and the column above it'}>
+    <g transform={flip ? 'rotate(180 100 95)' : undefined}>
+      <ellipse cx="100" cy="34" rx="16" ry="30" fill={PURPLE} opacity="0.32" stroke={PURPLE} strokeWidth="1.2" />
+      <ellipse cx="52" cy="128" rx="15" ry="30" transform="rotate(38 52 128)" fill={PURPLE} opacity="0.26" stroke={PURPLE} strokeWidth="1.2" />
+      <ellipse cx="148" cy="128" rx="15" ry="30" transform="rotate(-38 148 128)" fill={PURPLE} opacity="0.26" stroke={PURPLE} strokeWidth="1.2" />
+      <ellipse cx="47" cy="66" rx="14" ry="27" transform="rotate(-52 47 66)" fill={PURPLE} opacity="0.42" stroke={PURPLE} strokeWidth="1.2" />
+      <ellipse cx="153" cy="66" rx="14" ry="27" transform="rotate(52 153 66)" fill={PURPLE} opacity="0.42" stroke={PURPLE} strokeWidth="1.2" />
+      <path d="M100 104c22 0 34 16 34 33 0 20-15 33-34 33s-34-13-34-33c0-17 12-33 34-33z" fill={PURPLE} opacity="0.62" stroke={PURPLE} strokeWidth="1.4" />
+      <path d="M86 150q14 12 28 0" fill="none" stroke="#FFF" strokeWidth="1.4" opacity="0.8" />
+      <path d="M100 66c7 0 11 6 11 14v22H89V80c0-8 4-14 11-14z" fill="#FBF7EF" stroke={INK} strokeWidth="1.4" />
+      <circle cx="100" cy="74" r="5" fill="#E8B830" stroke={INK} strokeWidth="1" />
+    </g>
+  </svg>
+);
+
+const Label: React.FC<{ x: number; y: number; text: string; anchor?: 'start' | 'middle' | 'end' }> = ({ x, y, text, anchor = 'start' }) => <text x={x} y={y} textAnchor={anchor} fontSize="11" fill={INK} fontFamily="Georgia, serif">{text}</text>;
+
+const StageOne: React.FC = () => <svg viewBox="0 0 300 320" className="h-auto w-full" role="img" aria-label="Stage one: a developing orchid bud on a pedicel, with the ovary indicated and the labellum on the upper side of the bud."><path d="M150 300 L150 214" stroke={GREEN} strokeWidth="5" strokeLinecap="round" /><Label x={158} y={288} text="pedicel" /><ellipse cx="150" cy="200" rx="14" ry="21" fill={GREEN} opacity="0.35" stroke={GREEN} strokeWidth="1.4" /><Label x={170} y={202} text="ovary" /><path d="M150 182c21 0 33 24 33 52s-15 40-33 40-33-12-33-40 12-52 33-52z" fill={PURPLE} opacity="0.28" stroke={PURPLE} strokeWidth="1.5" transform="rotate(180 150 204)" /><path d="M150 104c11 0 18 10 18 26s-8 24-18 24-18-8-18-24 7-26 18-26z" fill={PURPLE} opacity="0.55" stroke={PURPLE} strokeWidth="1.4" /><line x1="150" y1="102" x2="150" y2="78" stroke={INK} strokeWidth="0.9" /><Label x={150} y={68} text="labellum" anchor="middle" /><Label x={150} y={52} text="(upper side of bud)" anchor="middle" /></svg>;
+
+const StageTwo: React.FC<{ angle: number }> = ({ angle }) => <svg viewBox="0 0 300 320" className="h-auto w-full" role="img" aria-label="Stage two: torsion of the ovary and pedicel region, with an arrow indicating the direction of rotation and the flower shown part-way through reorientation."><path d="M150 300 L150 246" stroke={GREEN} strokeWidth="5" strokeLinecap="round" /><path d="M150 246c-16-10 16-24 0-36-16-12 16-24 0-34" fill="none" stroke={GREEN} strokeWidth="5.5" strokeLinecap="round" /><Label x={176} y={210} text="ovary / pedicel" /><Label x={176} y={226} text="torsion" /><path d="M96 150a56 56 0 1 0 50-32" fill="none" stroke={PURPLE} strokeWidth="2" strokeDasharray="5 4" /><path d="M146 118l-5 13 14-3z" fill={PURPLE} /><Label x={92} y={96} text="direction of" anchor="middle" /><Label x={92} y={112} text="rotation" anchor="middle" /><g transform={`translate(150 150) rotate(${angle}) scale(0.62) translate(-100 -95)`} style={{ transition: 'transform 2.2s ease-in-out' }}><FlowerSchematic /></g></svg>;
+
+const StageThree: React.FC = () => <svg viewBox="0 0 300 320" className="h-auto w-full" role="img" aria-label="Stage three: an open resupinate orchid flower with the dorsal sepal uppermost, two petals, two lateral sepals, the column, and the labellum lowermost."><path d="M150 300 L150 258" stroke={GREEN} strokeWidth="5" strokeLinecap="round" /><g transform="translate(150 152) scale(0.62) translate(-100 -95)"><FlowerSchematic /></g><line x1="150" y1="96" x2="150" y2="72" stroke={INK} strokeWidth="0.9" /><Label x={150} y={64} text="dorsal sepal" anchor="middle" /><line x1="112" y1="114" x2="80" y2="102" stroke={INK} strokeWidth="0.9" /><Label x={76} y={100} text="petal" anchor="end" /><line x1="188" y1="114" x2="220" y2="102" stroke={INK} strokeWidth="0.9" /><Label x={224} y={100} text="petal" /><line x1="162" y1="150" x2="222" y2="140" stroke={INK} strokeWidth="0.9" /><Label x={226} y={142} text="column" /><line x1="110" y1="190" x2="74" y2="200" stroke={INK} strokeWidth="0.9" /><Label x={70} y={202} text="lateral sepal" anchor="end" /><line x1="190" y1="190" x2="222" y2="200" stroke={INK} strokeWidth="0.9" /><Label x={226} y={202} text="lateral sepal" /><line x1="150" y1="212" x2="118" y2="240" stroke={INK} strokeWidth="0.9" /><Label x={114} y={244} text="labellum" anchor="end" /><Label x={114} y={260} text="(lowermost)" anchor="end" /></svg>;
+
+const STAGES = [
+  { eyebrow: 'Stage 1', title: 'Developing flower bud', caption: 'The labellum is frequently positioned on the upper side of the bud, before reorientation.' },
+  { eyebrow: 'Stage 2', title: 'Rotational / torsional development', caption: 'Differential growth in the flower-supporting tissue produces a twist or curvature — commonly about 180°, though the amount varies.' },
+  { eyebrow: 'Stage 3', title: 'Open resupinate flower', caption: 'At anthesis the labellum is lowermost, with the column above it.' },
+];
+
+export const ResupinationSequence: React.FC = () => {
+  const [angle, setAngle] = useState(0); const [playing, setPlaying] = useState(false);
+  useEffect(() => { if (!playing) return; const reduce = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; if (reduce) { setAngle(180); setPlaying(false); return; } setAngle(0); const up = window.setTimeout(() => setAngle(180), 60); const done = window.setTimeout(() => setPlaying(false), 2500); return () => { window.clearTimeout(up); window.clearTimeout(done); }; }, [playing]);
+  const panels = [<StageOne key="s1" />, <StageTwo key="s2" angle={angle} />, <StageThree key="s3" />];
+  return <div><div className="flex flex-wrap items-center justify-between gap-3"><p className="text-[12px] uppercase tracking-[0.14em] text-[#4A7C59]">Conceptual schematic — not measured specimen anatomy</p><button type="button" onClick={() => setPlaying(true)} aria-label="Animate the schematic rotation shown in stage 2" className="inline-flex items-center gap-2 rounded-sm border border-[#6B3FA0]/40 bg-white px-3 py-1.5 text-[13px] font-medium text-[#4A2A70] hover:bg-[#6B3FA0]/[0.06]"><svg aria-hidden viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor"><path d="M5 3.5 12 8l-7 4.5z" /></svg>{playing ? 'Rotating…' : 'Animate the rotation'}</button></div><ol className="mt-4 grid gap-5 md:grid-cols-3">{STAGES.map((s,i)=><li key={s.eyebrow} className="rounded-sm border border-[#E4DCCB] bg-[#FDFBF6]"><div className="border-b border-[#EDE6D8] px-4 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#4A7C59]">{s.eyebrow}</p><h4 className="mt-0.5 font-serif text-[15px] leading-snug text-stone-900" style={{fontFamily:'Georgia, serif'}}>{s.title}</h4></div><div className="px-2 pt-2">{panels[i]}</div><p className="border-t border-[#EDE6D8] px-4 py-3 text-[13px] leading-relaxed text-stone-600">{s.caption}</p></li>)}</ol></div>;
+};
+
+export const ResupinateComparison: React.FC = () => <div className="grid gap-6 sm:grid-cols-2">{[{ title:'Resupinate',flip:false,note:'Labellum presented lowermost at anthesis, with the column above it and the dorsal sepal generally uppermost.' },{ title:'Non-resupinate',flip:true,note:'The labellum does not assume the usual lowermost resupinate position and is commonly presented uppermost, with the column below it.' }].map((c)=><figure key={c.title} className="rounded-sm border border-[#E4DCCB] bg-[#FDFBF6] p-5"><div className="flex items-center justify-between gap-3"><h4 className="font-serif text-lg text-stone-900" style={{fontFamily:'Georgia, serif'}}>{c.title}</h4><span className="rounded-sm border border-stone-300 bg-white px-2 py-0.5 text-[10px] uppercase tracking-wide text-stone-500">Conceptual schematic</span></div><div className="mx-auto my-4 max-w-[220px]"><FlowerSchematic flip={c.flip} className="h-auto w-full" /></div><figcaption className="text-sm leading-relaxed text-stone-600">{c.note}</figcaption></figure>)}</div>;

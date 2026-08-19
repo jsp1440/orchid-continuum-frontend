@@ -27,8 +27,8 @@ const Footer: React.FC = () => {
       title: 'Explore',
       items: [
         { label: 'Featured Genus', anchor: '#species-in-focus' },
-        { label: 'Knowledge Graph', anchor: '#the-knowledge-graph' },
-        { label: 'Ask Calyx', anchor: '#ask-calyx' },
+        { label: 'Knowledge Graph', route: '/knowledge' },
+        { label: 'Ask Calyx', route: '/calyx' },
         { label: 'Atlas', route: '/atlas' },
       ],
     },
@@ -46,7 +46,7 @@ const Footer: React.FC = () => {
       title: 'Learn',
       items: [
         { label: 'Orchid University', route: '/university' },
-        { label: 'Glossary', route: '/university' },
+        { label: 'Glossary', route: '/lexicon' },
         { label: 'Classroom', route: '/classroom' },
         { label: 'Species care', route: '/species' },
       ],
@@ -56,13 +56,11 @@ const Footer: React.FC = () => {
       items: [
         { label: 'Partners', route: '/partners' },
         { label: 'Get involved', route: '/get-involved' },
-        { label: 'Mission Control (owner)', route: '/mission-control' },
-        { label: 'Governance', route: '/mission-control' },
-        { label: 'Data sources', anchor: '#the-knowledge-graph' },
+        { label: 'Conservation', route: '/conservation' },
+        { label: 'Data & evidence', route: '/knowledge' },
       ],
     },
   ];
-
 
   return (
     <footer className="relative bg-ink text-[#f5f0e8] overflow-hidden">
@@ -82,13 +80,6 @@ const Footer: React.FC = () => {
             <p className="font-body text-[15px] text-[#e7dfd1]/85 mt-4 max-w-sm leading-relaxed">
               An independent biodiversity intelligence and orchid conservation infrastructure initiative — connecting taxonomy, ecology, cultivation, education, and recovery into one living record.
             </p>
-
-            <div className="mt-5 rounded-2xl border border-[#d4b34a]/18 bg-white/[0.045] p-4">
-              <div className="font-mono text-[10px] uppercase tracking-[0.24em] text-gold-soft">Owner access</div>
-              <p className="mt-2 text-sm leading-6 text-[#e7dfd1]/76">
-                Mission Control is the private operations workspace. Use the footer link, then enter the owner access code configured for this deployment.
-              </p>
-            </div>
 
             <div className="flex gap-3 mt-5">
               {[
@@ -110,7 +101,7 @@ const Footer: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => go({ label: 'Support the Continuum', anchor: '#human-stewardship' })}
+              onClick={() => go({ label: 'Support the Continuum', route: '/get-involved' })}
               className="inline-block mt-5 font-mono text-[11px] tracking-[0.2em] uppercase px-5 py-2.5 rounded-full bg-[#d4b34a] text-[#14281c] hover:bg-[#b8962a] transition-colors"
             >
               Support the Continuum
@@ -157,7 +148,6 @@ const Footer: React.FC = () => {
                 </a>
                 , a 501(c)(3) tax-exempt non-profit corporation. All charitable contributions are tax-deductible to the fullest extent allowed by law.
               </p>
-
             </div>
 
             <div className="md:col-span-5">

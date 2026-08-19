@@ -237,7 +237,13 @@ interface CardProps {
 }
 
 const GalleryCard: React.FC<CardProps> = ({ record }) => {
-  const hasRealImage = !!record.imageUrl && !record.isPlaceholder;
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [record.imageUrl]);
+
+  const hasRealImage = !!record.imageUrl && !record.isPlaceholder && !imageFailed;
   const speciesUrl = record.taxonomyId
     ? `/species/${encodeURIComponent(record.taxonomyId)}`
     : `/species?q=${encodeURIComponent(record.scientificName)}`;
@@ -257,10 +263,12 @@ const GalleryCard: React.FC<CardProps> = ({ record }) => {
             src={record.imageUrl}
             alt={record.scientificName}
             loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setImageFailed(true)}
             className="w-full h-full object-cover transition-transform duration-[2000ms] ease-out group-hover:scale-[1.03]"
           />
         ) : (
-          <PlaceholderImageTile />
+          <PlaceholderImageTile failed={imageFailed} />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-[#04050d] via-[#04050d]/40 to-transparent" />
 
@@ -269,9 +277,9 @@ const GalleryCard: React.FC<CardProps> = ({ record }) => {
           <span className="font-mono text-[9px] tracking-[0.24em] uppercase text-[#c9a24a]/85 bg-black/30 backdrop-blur-sm px-2 py-1 rounded-sm border border-white/5">
             {record.isHybrid ? 'Hybrid · Grex' : 'Species'}
           </span>
-          {record.isPlaceholder && (
+          {(record.isPlaceholder || imageFailed) && (
             <span className="font-mono text-[8.5px] tracking-[0.20em] uppercase text-[#cfc8b8]/70 bg-black/40 backdrop-blur-sm px-2 py-1 rounded-sm border border-white/10">
-              Awaiting DB
+              {imageFailed ? 'Image unavailable' : 'Awaiting DB'}
             </span>
           )}
         </div>
@@ -327,21 +335,35 @@ const GalleryCard: React.FC<CardProps> = ({ record }) => {
   );
 };
 
-// A neutral, non-AI placeholder tile shown while the live image is pending.
-const PlaceholderImageTile: React.FC = () => (
-  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+interface PlaceholderImageTileProps {
+  failed?: boolean;
+}
+
+// A neutral, non-AI placeholder tile shown while the live image is pending or unavailable.
+const PlaceholderImageTile: React.FC<PlaceholderImageTileProps> = ({ failed = false }) => (
+  <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6" role="img" aria-label={failed ? 'Orchid image unavailable' : 'Orchid image pending'}>
     {/* botanical hairline frame */}
     <div className="absolute inset-4 border border-[#c9a24a]/15 rounded-sm" />
     <div className="absolute inset-6 border border-[#c9a24a]/8 rounded-sm" />
 
     <ImageOff className="h-7 w-7 text-[#c9a24a]/40 mb-3" strokeWidth={1.2} />
     <div className="font-mono text-[10px] tracking-[0.30em] uppercase text-[#c9a24a]/70 leading-relaxed">
-      REAL_ORCHID_IMAGE
-      <br />
-      _FROM_DATABASE
+      {failed ? (
+        <>
+          ORCHID_IMAGE
+          <br />
+          _UNAVAILABLE
+        </>
+      ) : (
+        <>
+          REAL_ORCHID_IMAGE
+          <br />
+          _FROM_DATABASE
+        </>
+      )}
     </div>
     <div className="mt-3 font-mono text-[9px] tracking-[0.18em] uppercase text-[#5e5a4e]">
-      pending hydration
+      {failed ? 'source image could not load' : 'pending hydration'}
     </div>
   </div>
 );

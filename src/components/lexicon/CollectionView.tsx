@@ -1,0 +1,10 @@
+import React, { useMemo, useState } from 'react';
+import type { LexiconEntry } from '@/data/types';
+import { PlateGallery } from './EntryPlate';
+import { SectionHeading } from './ui';
+import { getCategories } from '@/lib/lexiconService';
+
+export const CollectionView:React.FC<{entries:LexiconEntry[];onOpen:(slug:string)=>void;onBrowse:()=>void}>=({entries,onOpen,onBrowse})=>{
+  const[c,setC]=useState('All');const categories=useMemo(()=>getCategories(entries),[entries]);const visible=useMemo(()=>entries.filter((e)=>c==='All'||e.category===c),[entries,c]);const illustrated=visible.filter((e)=>(e.assets??[]).length||(e.maturity??[]).includes('illustrated'));const collection=illustrated.length?illustrated:visible;
+  return <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8"><div className="flex flex-wrap items-end justify-between gap-5"><SectionHeading eyebrow="Visual reference" title="Illustrated Collection" lead="A figure is treated as a reusable knowledge object: one plate may illustrate multiple concepts, and every asset should carry provenance, review state and a clear distinction between specimen evidence and conceptual visualization."/><button type="button" onClick={onBrowse} className="rounded-full border border-stone-400 px-4 py-2 text-sm text-stone-700">Browse A–Z</button></div><div className="mt-7 flex flex-wrap gap-2"><button type="button" onClick={()=>setC('All')} className={`rounded-full border px-3 py-1.5 text-xs ${c==='All'?'bg-[#6B3FA0] text-white':'bg-white'}`}>All</button>{categories.map((cat)=><button key={cat} type="button" onClick={()=>setC(cat)} className={`rounded-full border px-3 py-1.5 text-xs ${c===cat?'bg-[#6B3FA0] text-white':'bg-white'}`}>{cat}</button>)}</div><p className="mt-5 text-sm text-stone-500">{illustrated.length ? `${illustrated.length} records in this view currently carry an illustration capability.` : 'Canonical illustration records are still being reconciled; concept records are shown with the Famous schematic/typographic fallback rather than invented images.'}</p><div className="mt-8"><PlateGallery entries={collection} onOpen={onOpen}/></div></div>;
+};

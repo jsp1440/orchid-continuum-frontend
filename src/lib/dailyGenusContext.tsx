@@ -1,118 +1,96 @@
 /**
  * dailyGenusContext — single source of truth for Genus of the Day.
  *
- * Resolves the genus ONCE per 12-hour UTC window and distributes it via
- * React context so DailyGenusFeature, ContinuumWeb, SpeciesInFocus, and
- * HomeAtlas all display the same genus without independent fetches.
- *
- * Resolution order:
- *   1. featuredGenusName() — deterministic, synchronous, always works.
- *   2. Supabase daily_genus_snapshot (optional validation — if the table
- *      exists and returns a row for today's date, that name wins).
- *      If the snapshot is missing or stale, a diagnostic string is set so
- *      any component can surface a curator warning.
+ * Resolves the genus once per rotation window, then hydrates that identity
+ * through the canonical Orchid Continuum featured-taxon contract. Consumers
+ * can therefore share the same approved media + graph evidence state instead
+ * of independently fetching or inventing scientific content.
  */
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { featuredGenusName, msUntilNextRotation } from '@/lib/featuredGenus';
 import { supabase } from '@/lib/supabase';
+import { fetchFeaturedTaxonContinuum, type FeaturedTaxonContinuum } from '@/lib/featuredTaxonContinuum';
 
 export interface DailyGenusState {
-  /** The authoritative Genus of the Day name for this 12-hour window. */
   genus: string;
-  /**
-   * Non-null when the snapshot is missing, stale, or the Supabase call
-   * failed. Curator-facing — surface in a diagnostic banner, not in the
-   * public UI.
-   */
+  continuum: FeaturedTaxonContinuum | null;
+  continuumStatus: 'loading' | 'ready' | 'unavailable';
+  /** Curator-facing diagnostic; never scientific public copy. */
   diagnostic: string | null;
 }
 
+const initialGenus = featuredGenusName();
 const DailyGenusContext = createContext<DailyGenusState>({
-  genus: featuredGenusName(),
+  genus: initialGenus,
+  continuum: null,
+  continuumStatus: 'loading',
   diagnostic: null,
 });
 
-/** Consume the shared Genus of the Day state. */
 export function useDailyGenus(): DailyGenusState {
   return useContext(DailyGenusContext);
 }
 
-/** Wrap the homepage (or any subtree) to share a single resolved genus. */
-export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({
-  children,
-}) => {
-  const [state, setState] = useState<DailyGenusState>(() => ({
-    genus: featuredGenusName(),
+export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, setState] = useState<DailyGenusState>({
+    genus: initialGenus,
+    continuum: null,
+    continuumStatus: 'loading',
     diagnostic: null,
-  }));
+  });
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestRef = useRef(0);
 
-  // ── Snapshot validation (non-blocking) ──────────────────────────────────
+  const hydrateContinuum = useCallback(async (genus: string, diagnostic: string | null) => {
+    const request = ++requestRef.current;
+    setState({ genus, continuum: null, continuumStatus: 'loading', diagnostic });
+    try {
+      const continuum = await fetchFeaturedTaxonContinuum(genus);
+      if (request !== requestRef.current) return;
+      setState({ genus: continuum.genus, continuum, continuumStatus: 'ready', diagnostic });
+    } catch (error) {
+      if (request !== requestRef.current) return;
+      setState({
+        genus,
+        continuum: null,
+        continuumStatus: 'unavailable',
+        diagnostic: [diagnostic, `[Featured taxon] Continuum hydration unavailable for ${genus}: ${String(error)}`]
+          .filter(Boolean)
+          .join(' '),
+      });
+    }
+  }, []);
+
   const validateSnapshot = useCallback(async () => {
     const local = featuredGenusName();
+    const today = new Date().toISOString().slice(0, 10);
     try {
-      const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
       const { data, error } = await supabase
         .from('daily_genus_snapshot')
         .select('genus, snapshot_date')
         .eq('snapshot_date', today)
         .single();
 
-      if (error || !data) {
-        setState({
-          genus: local,
-          diagnostic:
-            `[Genus of the Day] Supabase snapshot missing for ${today}. ` +
-            `Falling back to deterministic rotation: ${local}. ` +
-            `Insert a row into daily_genus_snapshot to override.`,
-        });
+      const snapshotGenus = !error && data ? (data.genus as string | null)?.trim() : null;
+      if (snapshotGenus) {
+        await hydrateContinuum(snapshotGenus, null);
         return;
       }
 
-      const snapshotGenus = (data.genus as string | null)?.trim();
-      if (!snapshotGenus) {
-        setState({
-          genus: local,
-          diagnostic:
-            `[Genus of the Day] Snapshot row for ${today} has empty genus. ` +
-            `Using deterministic fallback: ${local}.`,
-        });
-        return;
-      }
-
-      // Snapshot present and valid — it wins.
-      setState({ genus: snapshotGenus, diagnostic: null });
-    } catch (err) {
-      // daily_genus_snapshot table may not exist yet — that's fine.
-      setState({
-        genus: local,
-        diagnostic:
-          `[Genus of the Day] Could not query daily_genus_snapshot ` +
-          `(table may not exist). Using deterministic rotation: ${local}. ` +
-          `Error: ${String(err)}`,
-      });
+      await hydrateContinuum(
+        local,
+        `[Genus of the Day] Snapshot unavailable for ${today}; using deterministic identity ${local}.`,
+      );
+    } catch (error) {
+      await hydrateContinuum(
+        local,
+        `[Genus of the Day] Snapshot query unavailable; using deterministic identity ${local}. Error: ${String(error)}`,
+      );
     }
-  }, []);
+  }, [hydrateContinuum]);
 
-  // ── Initial resolution ───────────────────────────────────────────────────
-  useEffect(() => {
-    validateSnapshot();
-  }, [validateSnapshot]);
-
-  // ── Auto-refresh at the 12-hour window boundary ─────────────────────────
-  //
-  // The timer is cancelled when the page is hidden (iPad Safari suspends JS
-  // while another app is foregrounded) and rescheduled on resume so we never
-  // accumulate orphaned timer chains and always re-validate after a long
-  // background.
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => { void validateSnapshot(); }, [validateSnapshot]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -123,11 +101,10 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const scheduleNextRefresh = useCallback(() => {
     clearTimer();
-    const ms = msUntilNextRotation();
     timerRef.current = setTimeout(() => {
-      validateSnapshot();
-      scheduleNextRefresh(); // chain — fresh closure because scheduleNextRefresh is in the dependency array
-    }, ms + 500); // +500ms to be safely past the boundary
+      void validateSnapshot();
+      scheduleNextRefresh();
+    }, msUntilNextRotation() + 500);
   }, [clearTimer, validateSnapshot]);
 
   useEffect(() => {
@@ -135,29 +112,19 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({
     return clearTimer;
   }, [scheduleNextRefresh, clearTimer]);
 
-  // ── Re-validate on resume from background (iOS Safari / BFCache) ─────────
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState === 'visible') {
-        // Re-validate immediately in case the 12-hour window advanced while
-        // the page was suspended, then reschedule the rotation timer.
-        validateSnapshot();
+        void validateSnapshot();
         scheduleNextRefresh();
-      } else {
-        // Page is going into background — cancel the pending timer to avoid
-        // firing stale callbacks while suspended.
-        clearTimer();
-      }
+      } else clearTimer();
     };
-
-    // pageshow covers BFCache restores (persisted: true) on iOS Safari.
-    const onPageShow = (e: PageTransitionEvent) => {
-      if (e.persisted) {
-        validateSnapshot();
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        void validateSnapshot();
         scheduleNextRefresh();
       }
     };
-
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('pageshow', onPageShow);
     return () => {
@@ -166,9 +133,5 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({
     };
   }, [validateSnapshot, scheduleNextRefresh, clearTimer]);
 
-  return (
-    <DailyGenusContext.Provider value={state}>
-      {children}
-    </DailyGenusContext.Provider>
-  );
+  return <DailyGenusContext.Provider value={state}>{children}</DailyGenusContext.Provider>;
 };

@@ -255,3 +255,33 @@
   );
   animation: oc-shimmer-sweep 1.4s ease-in-out infinite;
 }
+
+/* ------------------------------------------------------------
+   Calyx prose — markdown rendered inside conversation bubbles
+   ------------------------------------------------------------ */
+.calyx-prose {
+  @apply max-w-none;
+}
+
+.calyx-prose p { @apply mb-2 last:mb-0; }
+.calyx-prose ul { @apply mb-2 list-disc pl-5; }
+.calyx-prose ol { @apply mb-2 list-decimal pl-5; }
+.calyx-prose li { @apply mb-1; }
+.calyx-prose h1,
+.calyx-prose h2,
+.calyx-prose h3 { @apply mb-1 mt-3 font-semibold; }
+.calyx-prose h1 { @apply text-base; }
+.calyx-prose h2,
+.calyx-prose h3 { @apply text-sm; }
+.calyx-prose code { @apply rounded bg-black/10 px-1 py-0.5 font-mono text-xs; }
+.calyx-prose pre { @apply mb-2 overflow-x-auto rounded bg-black/10 p-3 font-mono text-xs; }
+.calyx-prose pre code { @apply bg-transparent p-0; }
+.calyx-prose blockquote { @apply mb-2 border-l-2 pl-3 italic text-muted-foreground; }
+.calyx-prose strong { @apply font-semibold; }
+.calyx-prose a { @apply underline underline-offset-2; }
+.calyx-prose hr { @apply my-3 border-border; }
+.calyx-prose table { @apply mb-3 w-full border-collapse overflow-hidden rounded-lg border text-left text-xs; }
+.calyx-prose thead { @apply bg-black/10; }
+.calyx-prose th,
+.calyx-prose td { @apply border px-2 py-1.5 align-top; }
+.calyx-prose tbody tr:nth-child(even) { background: rgb(0 0 0 / 0.04); }

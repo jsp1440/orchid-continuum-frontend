@@ -46,13 +46,6 @@ const CAPABILITIES: Capability[] = [
     href: '/oacs',
   },
   {
-    icon: ShieldCheck,
-    title: 'Admin Center',
-    body: 'The control panel for database diagnostics, image resolver audits, relationship harvest status, Atlas health, OASIS operations, and future AI agent runs.',
-    link: 'Open Control Panel',
-    href: '/admin',
-  },
-  {
     icon: Grid3x3,
     title: 'Matrix Identification System',
     body: 'A modern replacement for the traditional dichotomous key — only possible because the knowledge graph holds morphological data across all 30,000 species simultaneously. Identify any orchid from observable characteristics.',
@@ -167,7 +160,7 @@ const CapabilityGrid: React.FC = () => {
               lineHeight: 1.18,
             }}
           >
-            Nine ways the knowledge graph changes what we can know — and manage — about orchids.
+            Eight ways the knowledge graph changes what we can know about orchids.
           </h2>
         </div>
 

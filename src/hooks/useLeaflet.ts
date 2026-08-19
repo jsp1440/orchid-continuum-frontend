@@ -1,60 +1,22 @@
 /**
- * useLeaflet — runtime loader for Leaflet GL.
+ * useLeaflet — bundled loader for Leaflet.
  *
- * We intentionally do NOT add Leaflet to package.json (the Famous build
- * pipeline ships with a fixed dependency set). Instead we inject the
- * Leaflet CSS + JS from unpkg at runtime, then expose `window.L` once
- * ready. This keeps the Atlas renderer pluggable — the same hook can
- * later be swapped for MapLibre GL or deck.gl without touching the
- * page-level component.
+ * Leaflet is a real npm dependency (see package.json), imported directly
+ * rather than injected from an external CDN at runtime. The Atlas map
+ * previously depended on unpkg.com being reachable from the visitor's
+ * browser at page-load time; any CDN outage, ad-blocker, or restrictive
+ * network policy took the entire map down with "Leaflet failed to load
+ * from the CDN." Bundling removes that external runtime dependency
+ * entirely — the map ships in the same JS bundle as everything else.
+ *
+ * The hook's public shape (`{ ready, error, L }`) is unchanged so every
+ * existing consumer (AtlasMap, LiveAtlasMap, AtlasMiniMap, HomeAtlas)
+ * keeps working without modification.
  */
 
 import { useEffect, useState } from 'react';
-
-declare global {
-  interface Window {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    L?: any;
-  }
-}
-
-const LEAFLET_VERSION = '1.9.4';
-const CSS_HREF = `https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.css`;
-const JS_SRC = `https://unpkg.com/leaflet@${LEAFLET_VERSION}/dist/leaflet.js`;
-
-let loadingPromise: Promise<void> | null = null;
-
-function ensureCss() {
-  if (document.querySelector(`link[data-leaflet="${LEAFLET_VERSION}"]`)) return;
-  const link = document.createElement('link');
-  link.rel = 'stylesheet';
-  link.href = CSS_HREF;
-  link.setAttribute('data-leaflet', LEAFLET_VERSION);
-  document.head.appendChild(link);
-}
-
-function ensureScript(): Promise<void> {
-  if (window.L) return Promise.resolve();
-  if (loadingPromise) return loadingPromise;
-  loadingPromise = new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      `script[data-leaflet="${LEAFLET_VERSION}"]`,
-    );
-    if (existing) {
-      existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Leaflet load error')));
-      return;
-    }
-    const s = document.createElement('script');
-    s.src = JS_SRC;
-    s.async = true;
-    s.setAttribute('data-leaflet', LEAFLET_VERSION);
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Leaflet load error'));
-    document.head.appendChild(s);
-  });
-  return loadingPromise;
-}
+import * as LeafletNS from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 export interface UseLeafletState {
   ready: boolean;
@@ -65,26 +27,16 @@ export interface UseLeafletState {
 
 export function useLeaflet(): UseLeafletState {
   const [state, setState] = useState<UseLeafletState>({
-    ready: Boolean(window.L),
+    ready: true,
     error: null,
-    L: window.L ?? null,
+    L: LeafletNS,
   });
 
+  // No async loading step remains, but keep the effect so any future
+  // failure mode (e.g. a lazy-loaded plugin) has a place to report into
+  // the same `error` state consumers already handle.
   useEffect(() => {
-    let cancelled = false;
-    ensureCss();
-    ensureScript()
-      .then(() => {
-        if (cancelled) return;
-        setState({ ready: true, error: null, L: window.L });
-      })
-      .catch(err => {
-        if (cancelled) return;
-        setState({ ready: false, error: err?.message ?? 'Leaflet failed to load', L: null });
-      });
-    return () => {
-      cancelled = true;
-    };
+    setState({ ready: true, error: null, L: LeafletNS });
   }, []);
 
   return state;

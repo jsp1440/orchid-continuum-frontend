@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,12 +10,14 @@ import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
+import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
 
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
+const AtlasNext = lazy(() => import("./pages/AtlasNext"));
 import OrchidZoo from "./pages/OrchidZoo";
 import OACS from "./pages/OACS";
 import Widgets from "./pages/Widgets";
@@ -29,6 +32,8 @@ import GetInvolved from "./pages/GetInvolved";
 import Ecosystems from "./pages/Ecosystems";
 import ConservationHub from "./pages/ConservationHub";
 import OrchidUniversity from "./pages/OrchidUniversity";
+import UniversityLabPrototype from "./pages/UniversityLabPrototype";
+import UniversityReviewerWorkspace from "./pages/UniversityReviewerWorkspace";
 import Classroom from "./pages/Classroom";
 import Societies from "./pages/Societies";
 import OrganizationProfile from "./pages/OrganizationProfile";
@@ -54,7 +59,9 @@ import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
 import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
+import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
+import HomepageReadiness from "./pages/HomepageReadiness";
 
 const queryClient = new QueryClient();
 
@@ -71,6 +78,7 @@ const App = () => (
               <AtlasFilterProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  <Route path="/lexicon/*" element={<LexiconAppLayout />} />
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
                   <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
@@ -84,6 +92,22 @@ const App = () => (
                   <Route path="/about" element={<About />} />
                   <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
                   <Route path="/atlas" element={<Atlas />} />
+                  {/* Candidate Living Atlas. Isolated from /atlas by design; three.js
+                      is code-split so it never enters the main bundle. */}
+                  <Route
+                    path="/atlas-next"
+                    element={
+                      <Suspense
+                        fallback={
+                          <div className="flex h-[100dvh] items-center justify-center bg-[#05070b] text-sm text-white/60">
+                            Loading the Atlas…
+                          </div>
+                        }
+                      >
+                        <AtlasNext />
+                      </Suspense>
+                    }
+                  />
                   <Route path="/atlas/:species" element={<Atlas />} />
                   <Route path="/admin" element={<AdminCenter />} />
                   <Route path="/control-center" element={<AdminCenter />} />
@@ -93,6 +117,9 @@ const App = () => (
                   <Route path="/intelligence-center" element={<IntelligenceCenter />} />
                   <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
                   <Route path="/calyx-science" element={<CalyxScienceStatus />} />
+                  <Route path="/mission-control/matrix-registry-review" element={<ProtectedRoute title="Matrix Registry Review · authenticated reviewers" description="Sign in to derive immutable Matrix registry versions from explicit reviewed canonical concept mappings."><MatrixRegistryConceptReview /></ProtectedRoute>} />
+                  <Route path="/mission-control/readiness/homepage" element={<HomepageReadiness />} />
+                  <Route path="/mission-control/knowledge-graph-readiness" element={<HomepageReadiness />} />
                   <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
@@ -125,6 +152,8 @@ const App = () => (
                   <Route path="/conservation" element={<ConservationHub />} />
                   <Route path="/societies" element={<Societies />} />
                   <Route path="/university" element={<OrchidUniversity />} />
+                  <Route path="/university/lab" element={<UniversityLabPrototype />} />
+                  <Route path="/university/review" element={<UniversityReviewerWorkspace />} />
                   <Route path="/classroom" element={<Classroom />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
