@@ -19,44 +19,39 @@ type SectionBoundaryProps = {
 
 type SectionBoundaryState = {
   hasError: boolean;
-  errorMessage: string;
-  errorStack: string;
 };
 
 class SectionBoundary extends React.Component<SectionBoundaryProps, SectionBoundaryState> {
   state: SectionBoundaryState = {
     hasError: false,
-    errorMessage: '',
-    errorStack: '',
   };
 
-  static getDerivedStateFromError(error: Error): SectionBoundaryState {
-    return {
-      hasError: true,
-      errorMessage: error?.message || String(error),
-      errorStack: error?.stack || '',
-    };
+  static getDerivedStateFromError(): SectionBoundaryState {
+    return { hasError: true };
   }
 
   componentDidCatch(error: Error) {
+    // Preserve diagnostic detail for developers without exposing exception
+    // messages or stack traces in the public scientific experience.
     console.error(`[Orchid Continuum] ${this.props.name} failed`, error);
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <section className="mx-auto my-8 max-w-5xl rounded-2xl border border-red-400 bg-red-50 px-5 py-4 text-red-950 shadow-sm">
-          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-red-700">
-            Orchid Continuum Diagnostic
+        <section
+          className="mx-auto my-8 max-w-5xl rounded-2xl border border-[#d9caa8] bg-[#fffaf0] px-5 py-5 text-[#3a4630] shadow-sm"
+          role="status"
+        >
+          <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#8a6f2d]">
+            Continuum section unavailable
           </p>
-          <h2 className="mt-1 font-serif text-xl font-bold">
-            {this.props.name} crashed
+          <h2 className="mt-2 font-serif text-xl text-[#24321f]">
+            {this.props.name} could not be displayed.
           </h2>
-          <pre className="mt-3 whitespace-pre-wrap rounded bg-white p-3 text-xs leading-5 text-black">
-            {this.state.errorMessage}
-            {'\n\n'}
-            {this.state.errorStack}
-          </pre>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-[#5d684c]">
+            This section is temporarily unavailable. No scientific fallback content has been substituted.
+          </p>
         </section>
       );
     }
