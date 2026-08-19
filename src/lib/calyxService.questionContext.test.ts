@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   boundedCalyxQuestionContext,
+  calyxQuestionContextFields,
   CALYX_QUESTION_CONTEXT_MAX_CHARS,
 } from '@/lib/calyxService';
 
@@ -22,5 +23,13 @@ describe('boundedCalyxQuestionContext', () => {
 
   it('allows an empty bounded context instead of inventing a question', () => {
     expect(boundedCalyxQuestionContext('   \n\t  ')).toBe('');
+  });
+
+  it('marks duplicated question context as user-authored and non-evidentiary', () => {
+    expect(calyxQuestionContextFields(' What evidence supports this? ')).toEqual({
+      current_question: 'What evidence supports this?',
+      current_question_source: 'user',
+      current_question_is_evidence: false,
+    });
   });
 });
