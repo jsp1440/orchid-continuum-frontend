@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import HomeSpeciesExhibit from '@/components/orchid/HomeSpeciesExhibit';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
