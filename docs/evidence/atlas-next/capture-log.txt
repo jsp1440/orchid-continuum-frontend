@@ -1,0 +1,76 @@
+[capture] commit 05e3b9b951cd9b22c742377bc0301a58b6fd759e
+[capture] captured 2026-08-18T07:35:54Z
+[capture] ipad-portrait loading
+[capture] ipad-portrait state: loading
+[capture] ipad-portrait first batch = 1019
+[capture] ipad-portrait records = 31092 (complete)
+[capture] ipad-portrait knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
+[capture] ipad-portrait guide: {"opened":true,"computedObservation":true}
+[capture] ipad-portrait descended into Colombia (5507)
+[capture] ipad-landscape loading
+[capture] ipad-landscape state: loading
+[capture] ipad-landscape first batch = 1019
+[capture] ipad-landscape records = 31092 (complete)
+[capture] ipad-landscape knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
+[capture] ipad-landscape guide: {"opened":true,"computedObservation":true}
+[capture] ipad-landscape descended into Colombia (5507)
+[capture] desktop loading
+[capture] desktop state: loading
+[capture] desktop first batch = 1019
+[capture] desktop records = 31092 (complete)
+[capture] desktop knowledge gap: {"legendRendered":true,"cautionRendered":true,"answerable":"2","unassessedSentence":true}
+[capture] desktop guide: {"opened":true,"computedObservation":true}
+[capture] desktop descended into Colombia (5507)
+[
+  {
+    "viewport": "ipad-portrait",
+    "records": 31092,
+    "complete": true,
+    "country": "Colombia (5507)",
+    "gap": {
+      "legendRendered": true,
+      "cautionRendered": true,
+      "answerable": "2",
+      "unassessedSentence": true
+    },
+    "guide": {
+      "opened": true,
+      "computedObservation": true
+    },
+    "errors": []
+  },
+  {
+    "viewport": "ipad-landscape",
+    "records": 31092,
+    "complete": true,
+    "country": "Colombia (5507)",
+    "gap": {
+      "legendRendered": true,
+      "cautionRendered": true,
+      "answerable": "2",
+      "unassessedSentence": true
+    },
+    "guide": {
+      "opened": true,
+      "computedObservation": true
+    },
+    "errors": []
+  },
+  {
+    "viewport": "desktop",
+    "records": 31092,
+    "complete": true,
+    "country": "Colombia (5507)",
+    "gap": {
+      "legendRendered": true,
+      "cautionRendered": true,
+      "answerable": "2",
+      "unassessedSentence": true
+    },
+    "guide": {
+      "opened": true,
+      "computedObservation": true
+    },
+    "errors": []
+  }
+]
