@@ -92,4 +92,12 @@ describe('featured taxon source integrity', () => {
     expect(navbar).not.toContain("{ label: 'Conservatory', route: '/collection' }");
     expect(navbar).toContain("navigate('/conservatory')");
   });
+
+  it('fails Conservatory readiness closed without exposing deployment internals', () => {
+    const readiness = source('components/conservatory/ConservatoryReadiness.tsx');
+    expect(readiness).toContain('Collection entry remains safely blocked');
+    expect(readiness).toContain('if (!API_BASE) throw new Error(SERVICE_UNAVAILABLE)');
+    expect(readiness).not.toContain('VITE_CALYX_API_URL is not configured');
+    expect(readiness).not.toContain('Readiness request failed (');
+  });
 });
