@@ -17,7 +17,7 @@
  * country, biome, conservation tier, pollinator, dataset…).
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { useSearchParams, useLocation } from 'react-router-dom';
 import { applyAtlasFilters, type AtlasFilterState, type AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 
@@ -83,15 +83,28 @@ export const AtlasFilterProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const location = useLocation();
   const [filters, setFilters] = useState<AtlasFilterState>(() => deserializeFromUrl(searchParams));
 
-  // Only sync URL on Atlas-related routes to avoid polluting unrelated pages.
+  // Keep both the current Atlas and the candidate Atlas Next on the same
+  // canonical URL/filter contract. This is what lets a featured-taxon handoff
+  // preserve genus identity instead of opening an unrelated global view.
   const isAtlasRoute = useMemo(
     () =>
-      ['/atlas', '/gallery', '/habitats', '/pollinators', '/mycorrhizae', '/climate', '/conservation'].some(
+      ['/atlas', '/atlas-next', '/gallery', '/habitats', '/pollinators', '/mycorrhizae', '/climate', '/conservation'].some(
         (p) => location.pathname === p || location.pathname.startsWith(`${p}/`),
       ),
     [location.pathname],
   );
 
+  // Route navigation can supply canonical filters (for example the homepage
+  // handoff `/atlas?genera=Vanilla`). The provider lives above Routes, so its
+  // state survives navigation; without re-hydration the old in-memory state
+  // would immediately overwrite the incoming URL. Hydrate in a layout effect
+  // so the following passive URL-sync effect sees the new route context first.
+  useLayoutEffect(() => {
+    if (!isAtlasRoute) return;
+    setFilters(deserializeFromUrl(searchParams));
+  }, [isAtlasRoute, searchParams]);
+
+  // Only sync URL on Atlas-related routes to avoid polluting unrelated pages.
   useEffect(() => {
     if (!isAtlasRoute) return;
     const next = serializeToUrl(filters, searchParams);
