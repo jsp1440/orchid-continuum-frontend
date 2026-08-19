@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import { canonicalSlug } from '@/lib/orchidContinuum';
+import { atlasOccurrenceEvidenceCalyxHref } from './calyxHandoff';
 import { coverage, displayName, resolveOccurrenceEvidence, type FieldEvidence } from './evidence';
 import { resolveLocation } from './sensitivity';
 import { EVIDENCE, type AtlasAccessLevel, type EvidenceState } from './types';
@@ -74,13 +75,7 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
   const loc = resolveLocation(point, access);
   const name = displayName(point);
   const slug = point.canonicalName ? canonicalSlug(point.canonicalName) : null;
-  const calyxGenus = point.genus?.trim() ?? '';
-  const calyxHref =
-    calyxGenus.length > 0 &&
-    calyxGenus.length <= 80 &&
-    /^[A-Za-z][A-Za-z -]*$/.test(calyxGenus)
-      ? `/calyx?genus=${encodeURIComponent(calyxGenus)}&origin=atlas-next-occurrence-evidence`
-      : null;
+  const calyxHref = atlasOccurrenceEvidenceCalyxHref(point.genus);
 
   return (
     <aside
@@ -109,9 +104,6 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-8">
-        {/* Media. Shown only when the record carries an approved image; there is
-            no placeholder photograph, because a photograph of another plant is
-            a claim about this one. */}
         {ev.media.state === 'observed' ? (
           <figure className="-mx-5 mb-4 border-b border-white/[0.07]">
             <img
