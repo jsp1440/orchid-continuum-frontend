@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { ArrowRight, CheckCircle2, ChevronDown, CircleHelp, FlaskConical, RotateCcw, Sparkles } from "lucide-react";
+
+import { readIdentificationSourceContext } from "@/features/calyx-workspace/identificationContext";
+import { recordCalyxSurfaceContext } from "@/features/calyx-workspace/sessionContext";
 
 import MatrixLexiconGuide from "@/components/matrix/MatrixLexiconGuide";
 import MatrixVisionReviewPanel from "@/components/matrix/MatrixVisionReviewPanel";
@@ -29,6 +33,30 @@ function scopeLabel(scope?: Record<string, unknown>): string {
 }
 
 export default function OrchidIdentificationNext() {
+  const location = useLocation();
+  // A visitor arriving from a Lexicon entry carries that concept with them. It is
+  // recorded as where they came from, never as an observed character on the session.
+  const sourceContext = useMemo(
+    () => readIdentificationSourceContext(location.search),
+    [location.search],
+  );
+
+  useEffect(() => {
+    recordCalyxSurfaceContext({
+      surface: "matrix-identification",
+      module: "matrix-identification",
+      object_type: sourceContext.concept ? "lexicon_context" : "identification_workspace",
+      object_id: sourceContext.concept ?? "matrix-identification",
+      label: sourceContext.label ?? "Matrix Identification Lab",
+      path: "/orchid-identification",
+      metadata: {
+        source_lexicon_concept: sourceContext.concept ?? null,
+        source_lexicon_label: sourceContext.label ?? null,
+        context_is_observation: false,
+      },
+    });
+  }, [sourceContext.concept, sourceContext.label]);
+
   const [registries, setRegistries] = useState<RegistrySummary[]>([]);
   const [selectedRegistryKey, setSelectedRegistryKey] = useState("");
   const [evaluation, setEvaluation] = useState<SessionEvaluation | null>(null);

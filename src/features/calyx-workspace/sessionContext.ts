@@ -19,7 +19,11 @@ const MAX_TRAIL = 20;
 
 function storage(): Storage | null {
   if (typeof window === 'undefined') return null;
-  return window.sessionStorage;
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
 }
 
 function sameSurface(a: CalyxSurfaceContext, b: CalyxSurfaceContext): boolean {
@@ -33,16 +37,20 @@ function sameSurface(a: CalyxSurfaceContext, b: CalyxSurfaceContext): boolean {
 export function readCalyxSessionContext(): CalyxSessionContext {
   const store = storage();
   if (!store) return { current: null, trail: [] };
-  const raw = store.getItem(SESSION_CONTEXT_KEY);
-  if (!raw) return { current: null, trail: [] };
   try {
+    const raw = store.getItem(SESSION_CONTEXT_KEY);
+    if (!raw) return { current: null, trail: [] };
     const parsed = JSON.parse(raw) as Partial<CalyxSessionContext>;
     return {
       current: parsed.current ?? null,
       trail: Array.isArray(parsed.trail) ? parsed.trail.slice(-MAX_TRAIL) : [],
     };
   } catch {
-    store.removeItem(SESSION_CONTEXT_KEY);
+    try {
+      store.removeItem(SESSION_CONTEXT_KEY);
+    } catch {
+      // Storage can be unavailable or quota-restricted. Context remains optional.
+    }
     return { current: null, trail: [] };
   }
 }
@@ -60,7 +68,15 @@ export function recordCalyxSurfaceContext(
     ? [...prior.trail.slice(0, -1), next]
     : [...prior.trail, next].slice(-MAX_TRAIL);
   const value = { current: next, trail };
-  storage()?.setItem(SESSION_CONTEXT_KEY, JSON.stringify(value));
+  const store = storage();
+  if (store) {
+    try {
+      store.setItem(SESSION_CONTEXT_KEY, JSON.stringify(value));
+    } catch {
+      // UI context is helpful but non-authoritative. Storage failures must never
+      // crash the scientific workspace or convert context into a hard dependency.
+    }
+  }
   return value;
 }
 
@@ -76,5 +92,11 @@ export function calyxContextPacket(extra: Record<string, unknown> = {}): Record<
 }
 
 export function clearCalyxSessionContext(): void {
-  storage()?.removeItem(SESSION_CONTEXT_KEY);
+  const store = storage();
+  if (!store) return;
+  try {
+    store.removeItem(SESSION_CONTEXT_KEY);
+  } catch {
+    // Clearing optional UI context must also fail soft.
+  }
 }
