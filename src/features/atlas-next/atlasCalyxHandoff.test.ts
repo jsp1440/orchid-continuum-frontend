@@ -59,4 +59,13 @@ describe('Atlas Next → Calyx handoff', () => {
     expect(href).not.toContain('occurrenceId');
     expect(href).not.toContain('id=');
   });
+
+  it('offers a bounded conservation continuation without forwarding precise occurrence data', () => {
+    expect(SOURCE).toContain('Continue to conservation');
+    expect(SOURCE).toContain('/conservation?genus=${encodeURIComponent(point.genus)}&origin=atlas-next-occurrence-evidence');
+    expect(SOURCE).not.toContain('/conservation?lat=');
+    expect(SOURCE).not.toContain('/conservation?lng=');
+    expect(SOURCE).not.toContain('/conservation?locality=');
+    expect(SOURCE).not.toContain('/conservation?occurrenceId=');
+  });
 });
