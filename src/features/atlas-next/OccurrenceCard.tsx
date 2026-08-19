@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import { canonicalSlug } from '@/lib/orchidContinuum';
+import { atlasOccurrenceEvidenceCalyxHref } from './calyxHandoff';
 import { coverage, displayName, resolveOccurrenceEvidence, type FieldEvidence } from './evidence';
 import { resolveLocation } from './sensitivity';
 import { EVIDENCE, type AtlasAccessLevel, type EvidenceState } from './types';
@@ -74,6 +75,10 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
   const loc = resolveLocation(point, access);
   const name = displayName(point);
   const slug = point.canonicalName ? canonicalSlug(point.canonicalName) : null;
+  const calyxHref = atlasOccurrenceEvidenceCalyxHref(point.genus);
+  const conservationHref = point.genus
+    ? `/conservation?genus=${encodeURIComponent(point.genus)}&origin=atlas-next-occurrence-evidence`
+    : null;
 
   return (
     <aside
@@ -102,9 +107,6 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-8">
-        {/* Media. Shown only when the record carries an approved image; there is
-            no placeholder photograph, because a photograph of another plant is
-            a claim about this one. */}
         {ev.media.state === 'observed' ? (
           <figure className="-mx-5 mb-4 border-b border-white/[0.07]">
             <img
@@ -170,14 +172,38 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
           </p>
         </div>
 
-        {slug && (
-          <Link
-            to={`/species/${slug}`}
-            className="mt-5 inline-flex min-h-[48px] items-center rounded-full border border-[#7fc49a]/35 px-5 text-[13px] text-[#e8e6df] transition-colors hover:border-[#7fc49a]/70 hover:bg-[#7fc49a]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7fc49a]"
-          >
-            Open the species record →
-          </Link>
-        )}
+        <div className="mt-5 flex flex-wrap gap-2">
+          {slug && (
+            <Link
+              to={`/species/${slug}`}
+              className="inline-flex min-h-[48px] items-center rounded-full border border-[#7fc49a]/35 px-5 text-[13px] text-[#e8e6df] transition-colors hover:border-[#7fc49a]/70 hover:bg-[#7fc49a]/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#7fc49a]"
+            >
+              Open the species record →
+            </Link>
+          )}
+          {conservationHref && (
+            <Link
+              to={conservationHref}
+              className="inline-flex min-h-[48px] items-center rounded-full border border-[#d8b24c]/40 bg-[#d8b24c]/10 px-5 text-[13px] text-[#f3ebcf] transition-colors hover:border-[#d8b24c]/75 hover:bg-[#d8b24c]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d8b24c]"
+            >
+              Continue to conservation →
+            </Link>
+          )}
+          {calyxHref && (
+            <div className="max-w-full">
+              <Link
+                to={calyxHref}
+                aria-describedby="atlas-calyx-context-note"
+                className="inline-flex min-h-[48px] items-center rounded-full border border-[#b98ce0]/40 bg-[#b98ce0]/10 px-5 text-[13px] text-[#eee8f5] transition-colors hover:border-[#b98ce0]/75 hover:bg-[#b98ce0]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b98ce0]"
+              >
+                Investigate this evidence in Calyx →
+              </Link>
+              <p id="atlas-calyx-context-note" className="mt-2 max-w-sm text-[11px] leading-[1.55] text-white/45">
+                Calyx receives the genus and an occurrence-evidence workflow cue. Precise locality, coordinates, and record identifiers stay in Atlas.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );

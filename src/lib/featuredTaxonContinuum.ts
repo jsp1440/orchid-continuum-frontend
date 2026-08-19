@@ -11,6 +11,15 @@ export type ContinuumDomainState = {
   edges: number | null;
 };
 
+export type FeaturedTaxonConservationEvidence = {
+  /** Graph-domain coverage only; `unknown` is not biological absence. */
+  state: ContinuumEvidenceState;
+  nodes: number | null;
+  edges: number | null;
+  /** Canonical relationship summary when the Continuum relationship service supplies one. */
+  relationship: ContinuumGraphData['conservation'] | null;
+};
+
 export type FeaturedTaxonContinuum = {
   genus: string;
   media: GenusMediaResponse;
@@ -18,6 +27,8 @@ export type FeaturedTaxonContinuum = {
   /** Rich relationship summaries from the canonical Continuum graph endpoint. */
   relationships: ContinuumGraphData | null;
   domains: ContinuumDomainState[];
+  /** Canonical conservation evidence for downstream public consumers. */
+  conservation: FeaturedTaxonConservationEvidence;
   gaps: KnowledgeGraphDomain[];
 };
 
@@ -42,6 +53,19 @@ function domainStates(graph: GenusGraphResult): ContinuumDomainState[] {
     nodes,
     edges,
   }));
+}
+
+function conservationEvidence(
+  domains: ContinuumDomainState[],
+  relationships: ContinuumGraphData | null,
+): FeaturedTaxonConservationEvidence {
+  const conservation = domains.find((item) => item.domain === 'conservation');
+  return {
+    state: conservation?.state ?? 'unavailable',
+    nodes: conservation?.nodes ?? null,
+    edges: conservation?.edges ?? null,
+    relationship: relationships?.conservation ?? null,
+  };
 }
 
 /**
@@ -75,6 +99,7 @@ export async function fetchFeaturedTaxonContinuum(
     graph,
     relationships,
     domains,
+    conservation: conservationEvidence(domains, relationships),
     gaps: domains.filter((item) => item.state === 'unknown').map((item) => item.domain),
   };
 }
