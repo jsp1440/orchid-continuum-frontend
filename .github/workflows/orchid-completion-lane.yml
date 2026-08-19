@@ -11,7 +11,7 @@ permissions:
   contents: write
   issues: write
   pull-requests: write
-  actions: read
+  actions: write
   id-token: write
 
 jobs:
@@ -95,7 +95,10 @@ jobs:
 
           if [[ -n "$pr" ]]; then
             gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-queued --remove-label oc-blocked --add-label oc-validating >/dev/null 2>&1 || true
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane delivered/updated integration PR #$pr and released its execution slot. CI/integration supervision now owns the next transition." >/dev/null
+            head=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json headRefName --jq '.headRefName')
+            gh workflow run frontend-ci.yml --repo "$GITHUB_REPOSITORY" --ref "$head" >/dev/null
+            gh workflow run calyx-matrix-005-validation.yml --repo "$GITHUB_REPOSITORY" --ref "$head" >/dev/null
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane delivered/updated integration PR #$pr, dispatched independent validation, and released its execution slot. CI/integration supervision now owns the next transition." >/dev/null
           else
             gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane ended without a durable integration PR. Returned to the queue for retry while other modules continue." >/dev/null
