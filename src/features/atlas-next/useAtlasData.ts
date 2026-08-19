@@ -30,6 +30,9 @@ export type AtlasDataState =
    *  not a statement about where orchids are. */
   | { kind: 'unavailable'; detail: string };
 
+const PUBLIC_ATLAS_UNAVAILABLE_DETAIL =
+  'The occurrence store could not be reached. No distribution inference has been substituted.';
+
 /** A coordinate must be real to be drawn. 0,0 is a data error, not a place. */
 function usablePoints(points: AtlasOccurrencePoint[]): AtlasOccurrencePoint[] {
   return points.filter(
@@ -75,11 +78,15 @@ export function useAtlasData(): AtlasDataState {
           return;
         }
         setState({ kind: 'ready', points: everything, complete: !didAtlasLoadFail() });
-      } catch (e) {
+      } catch (error) {
         if (cancelled) return;
+        // Keep transport/configuration details available to developers without
+        // exposing exception text, URLs, status codes, or deployment internals
+        // on the public scientific surface.
+        console.error('[Atlas Next] occurrence load failed', error);
         setState({
           kind: 'unavailable',
-          detail: e instanceof Error ? e.message : 'Unknown transport failure.',
+          detail: PUBLIC_ATLAS_UNAVAILABLE_DETAIL,
         });
       }
     })();
