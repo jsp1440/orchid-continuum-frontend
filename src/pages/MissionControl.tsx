@@ -42,6 +42,7 @@ import {
   Workflow,
   Zap,
 } from 'lucide-react';
+import HarvesterProductivityPanel from '@/components/mission-control/HarvesterProductivityPanel';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
@@ -3018,6 +3019,14 @@ const MissionControlContent: React.FC = () => {
                         onAction={handleHarvesterAction}
                       />
                     ))}
+                  </div>
+                  <div className="mt-6 border-t border-white/10 pt-5">
+                    <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
+                      Productivity — what these sources actually accomplished
+                    </p>
+                    <div className="mt-3">
+                      <HarvesterProductivityPanel />
+                    </div>
                   </div>
                 </Panel>
                 </SafePanel>
