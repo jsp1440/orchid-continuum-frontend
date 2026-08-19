@@ -124,8 +124,13 @@ async function missionRequest(path: string, init?: RequestInit): Promise<BrainMi
   }
 }
 
-export const startBrainMission = (payload: BrainMissionRequest) => missionRequest("/api/brain/missions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-export const getBrainMission = (missionId: string) => missionRequest(`/api/brain/missions/${encodeURIComponent(missionId)}`);
+// The Brain scientific-mission API is mounted at /brain, not /api/brain. Its
+// router carries prefix="/brain" and includes the missions router under it, so
+// the served paths are /brain/missions and /brain/missions/{mission_id}. The
+// /api/brain namespace exists but holds only imports and sources, so the old
+// /api/brain/missions path 404'd and no mission could be started.
+export const startBrainMission = (payload: BrainMissionRequest) => missionRequest("/brain/missions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+export const getBrainMission = (missionId: string) => missionRequest(`/brain/missions/${encodeURIComponent(missionId)}`);
 
 export const createCalyxConversation = (payload: { title?: string; project_id?: string; context?: Record<string, unknown> } = {}) =>
   calyxRequest<CalyxConversation>("/api/calyx/speak/conversations", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
