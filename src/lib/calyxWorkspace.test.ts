@@ -48,7 +48,7 @@ describe("Brain mission API", () => {
     const payload = { question: mission.question, project_id: mission.project_id, max_sources: 20, max_execution_steps: 10, timeout_seconds: 30 };
     await expect(startBrainMission(payload)).resolves.toEqual(mission);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://orchid-calyx-backend.onrender.com/api/brain/missions");
+    expect(url).toBe("https://orchid-calyx-backend.onrender.com/brain/missions");
     expect(init).toMatchObject({ method: "POST", credentials: "include", body: JSON.stringify(payload) });
   });
 
@@ -56,7 +56,7 @@ describe("Brain mission API", () => {
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(mission), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
     await getBrainMission("mission/one");
-    expect(fetchMock.mock.calls[0][0]).toBe("https://orchid-calyx-backend.onrender.com/api/brain/missions/mission%2Fone");
+    expect(fetchMock.mock.calls[0][0]).toBe("https://orchid-calyx-backend.onrender.com/brain/missions/mission%2Fone");
   });
 
   it("keeps Brain mission error compatibility", async () => {
