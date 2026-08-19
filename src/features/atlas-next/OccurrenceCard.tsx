@@ -79,7 +79,7 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
     calyxGenus.length > 0 &&
     calyxGenus.length <= 80 &&
     /^[A-Za-z][A-Za-z -]*$/.test(calyxGenus)
-      ? `/calyx?genus=${encodeURIComponent(calyxGenus)}&origin=atlas-next`
+      ? `/calyx?genus=${encodeURIComponent(calyxGenus)}&origin=atlas-next-occurrence-evidence`
       : null;
 
   return (
@@ -191,7 +191,7 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
               to={calyxHref}
               className="inline-flex min-h-[48px] items-center rounded-full border border-[#b98ce0]/40 bg-[#b98ce0]/10 px-5 text-[13px] text-[#eee8f5] transition-colors hover:border-[#b98ce0]/75 hover:bg-[#b98ce0]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b98ce0]"
             >
-              Continue {calyxGenus} in Calyx →
+              Investigate this evidence in Calyx →
             </Link>
           )}
         </div>
