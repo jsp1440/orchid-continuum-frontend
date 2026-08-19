@@ -13,6 +13,10 @@ class MemoryStorage {
   removeItem(key: string) { this.values.delete(key); }
 }
 
+class RejectingStorage extends MemoryStorage {
+  override setItem() { throw new DOMException('Quota exceeded', 'QuotaExceededError'); }
+}
+
 describe('Calyx session context', () => {
   beforeEach(() => {
     Object.defineProperty(globalThis, 'window', {
@@ -52,5 +56,20 @@ describe('Calyx session context', () => {
     expect(packet.context_is_evidence).toBe(false);
     expect(packet.context_purpose).toContain('reference resolution');
     expect((packet.current_surface as { object_id: string }).object_id).toBe('velamen');
+  });
+
+  it('does not crash the workspace when session storage rejects a context write', () => {
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { sessionStorage: new RejectingStorage() },
+    });
+
+    expect(() => recordCalyxSurfaceContext({
+      surface: 'matrix-identification',
+      module: 'matrix-identification',
+      object_id: 'velamen',
+      label: 'Velamen',
+    })).not.toThrow();
+    expect(readCalyxSessionContext()).toEqual({ current: null, trail: [] });
   });
 });
