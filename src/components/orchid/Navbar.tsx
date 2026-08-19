@@ -32,8 +32,6 @@ const PRIMARY: Linkish[] = [
   { label: 'About',        route: '/about' },
 ];
 
-
-
 interface MoreGroup { title: string; items: Linkish[] }
 
 const MORE_GROUPS: MoreGroup[] = [
@@ -50,10 +48,9 @@ const MORE_GROUPS: MoreGroup[] = [
     items: [
       {
         label: 'Orchid Continuum University',
-        route: '/coming-soon/university',
+        route: '/university',
         description: 'Open educational pathways on the knowledge graph',
       },
-
       { label: 'Classroom',           route: '/classroom',  description: 'Teacher dashboards' },
       { label: 'Glossary & Physiology', route: '/education', description: 'BloomBot · glossary · physiology' },
     ],
@@ -61,7 +58,6 @@ const MORE_GROUPS: MoreGroup[] = [
   {
     title: 'Research & support',
     items: [
-      { label: 'Admin Center',    route: '/admin',        description: 'Control panel · diagnostics · harvest status' },
       { label: 'Research Center', route: '/research',     description: 'Queries · traits · networks' },
       { label: 'Partners',        route: '/partners',     description: 'Advisors & institutions' },
       { label: 'Get Involved',    route: '/get-involved', description: 'Volunteer · donate · join' },
@@ -77,7 +73,6 @@ interface NavbarProps {
 }
 
 const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
-
   const [open, setOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
@@ -141,7 +136,6 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
             : 'bg-[#faf7f2]/80 backdrop-blur-sm border-b border-transparent')
         }
       >
-
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-6">
           <Link
             to="/"
@@ -275,7 +269,6 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
             <FavoritesMenu />
 
             {/* Auth-aware right cluster */}
-
             {user ? (
               <div className="relative" ref={accountRef}>
                 <button
@@ -344,7 +337,6 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
               {open ? <X /> : <Menu />}
             </button>
           </div>
-
         </div>
 
         {open && (
