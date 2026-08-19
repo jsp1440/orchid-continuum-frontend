@@ -21,10 +21,12 @@ jobs:
     env:
       ISSUE_NUMBER: ${{ inputs.issue_number }}
       GH_TOKEN: ${{ github.token }}
+      INTEGRATION_BRANCH: oc-autonomous-integration
     steps:
-      - name: Checkout repository
+      - name: Checkout autonomous integration branch
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.INTEGRATION_BRANCH }}
           fetch-depth: 0
 
       - name: Load issue context
@@ -52,6 +54,7 @@ jobs:
             ORCHID CONTINUUM — CONTINUOUS COMPLETION LANE
 
             Repository: ${{ github.repository }}
+            Integration base: oc-autonomous-integration
             Source issue: #${{ inputs.issue_number }} — ${{ steps.issue.outputs.title }}
 
             Issue requirements:
@@ -60,19 +63,24 @@ jobs:
             EXECUTE BEFORE EXPLAINING. This is one lane in a continuously refilling multi-lane completion system.
 
             Rules:
-            - Inspect current main and overlapping PRs before editing; converge rather than duplicate.
+            - Start from the current `oc-autonomous-integration` branch, then inspect current `main` and overlapping PRs before editing; converge rather than duplicate.
+            - If an open PR already contains `OC-AUTO-ISSUE: #${{ inputs.issue_number }}`, update that same PR/branch instead of creating another.
             - Implement the largest safe bounded vertical slice that can be completed in this run.
             - Use real Continuum data/contracts; unavailable != absent; do not invent scientific evidence.
             - Run focused tests, broader tests, lint, typecheck/build and browser/preview validation where appropriate; repair failures before delivery.
-            - Commit and push durable work. Open/update exactly one draft PR to main and include the exact marker `OC-AUTO-ISSUE: #${{ inputs.issue_number }}` in the PR body.
+            - Commit and push durable work. Open/update exactly one draft PR targeting `oc-autonomous-integration` and include these exact machine-readable lines in its body:
+              `OC-AUTO-ISSUE: #${{ inputs.issue_number }}`
+              `OC-AUTO-REQUEUE: true|false`
+              `OC-AUTO-BLOCKED: true|false`
+            - Set `OC-AUTO-REQUEUE: true` when the PR is a coherent partial slice and acceptance work remains after merge; otherwise false.
+            - Set `OC-AUTO-BLOCKED: true` only for a genuine external/owner blocker that prevents further safe implementation on this issue. A blocker on one issue must not stop the program.
             - If the entire issue cannot fit in one run, deliver a coherent working slice and record explicit remaining acceptance items; never return only an audit or plan.
-            - If owner-gated or externally blocked, document the exact blocker and release the lane; other modules must continue.
-            - Never merge, deploy production, mutate production DB/KG/scientific state, activate taxonomy, publish science, create/disclose credentials, spend funds, force-push, or delete branches/repos.
+            - Never merge to `main`, deploy production, mutate production DB/KG/scientific state, activate taxonomy, publish science, create/disclose credentials, spend funds, force-push, or delete branches/repos.
             - Final output: DONE, VALIDATION, PR/HEAD SHA, REMAINING, OWNER GATE if any.
           claude_args: |
             --model claude-sonnet-5
             --max-turns 75
-            --allowedTools "Edit,Read,Write,Bash(git diff:*),Bash(git status:*),Bash(git ls-files:*),Bash(git log:*),Bash(git rev-parse:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(git fetch:*),Bash(npm:*),Bash(npx:*),Bash(test:*),Bash(gh pr:*),Bash(gh issue:*)"
+            --allowedTools "Edit,Read,Write,Bash(git diff:*),Bash(git status:*),Bash(git ls-files:*),Bash(git log:*),Bash(git rev-parse:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(git fetch:*),Bash(git merge:*),Bash(npm:*),Bash(npx:*),Bash(test:*),Bash(gh pr:*),Bash(gh issue:*)"
             --append-system-prompt "Read CLAUDE.md and repository instructions before editing. Orchid Continuum Brain and GitHub are authoritative. BLOCKED DOES NOT MEAN STOPPED FOR THE PROGRAM. Deliver durable GitHub work, never runner-local-only claims. Preserve taxonomy, provenance, uncertainty and sensitive-locality rules."
 
       - name: Classify lane result and release slot
@@ -81,14 +89,14 @@ jobs:
         run: |
           set -euo pipefail
           marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" | head -1)
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" | head -1)
 
           gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-running >/dev/null 2>&1 || true
 
           if [[ -n "$pr" ]]; then
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label oc-owner-gate >/dev/null
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane delivered PR #$pr and released its execution slot. The queue continues with the next eligible module; this issue is now owner/CI-gated." >/dev/null
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-queued --remove-label oc-blocked --add-label oc-validating >/dev/null 2>&1 || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane delivered/updated integration PR #$pr and released its execution slot. CI/integration supervision now owns the next transition." >/dev/null
           else
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --add-label oc-queued >/dev/null
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane ended without a durable PR. Returned to the queue for retry while other modules continue." >/dev/null
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane ended without a durable integration PR. Returned to the queue for retry while other modules continue." >/dev/null
           fi
