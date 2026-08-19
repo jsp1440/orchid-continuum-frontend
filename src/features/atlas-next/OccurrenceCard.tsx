@@ -179,12 +179,18 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
             </Link>
           )}
           {calyxHref && (
-            <Link
-              to={calyxHref}
-              className="inline-flex min-h-[48px] items-center rounded-full border border-[#b98ce0]/40 bg-[#b98ce0]/10 px-5 text-[13px] text-[#eee8f5] transition-colors hover:border-[#b98ce0]/75 hover:bg-[#b98ce0]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b98ce0]"
-            >
-              Investigate this evidence in Calyx →
-            </Link>
+            <div className="max-w-full">
+              <Link
+                to={calyxHref}
+                aria-describedby="atlas-calyx-context-note"
+                className="inline-flex min-h-[48px] items-center rounded-full border border-[#b98ce0]/40 bg-[#b98ce0]/10 px-5 text-[13px] text-[#eee8f5] transition-colors hover:border-[#b98ce0]/75 hover:bg-[#b98ce0]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b98ce0]"
+              >
+                Investigate this evidence in Calyx →
+              </Link>
+              <p id="atlas-calyx-context-note" className="mt-2 max-w-sm text-[11px] leading-[1.55] text-white/45">
+                Calyx receives the genus and an occurrence-evidence workflow cue. Precise locality, coordinates, and record identifiers stay in Atlas.
+              </p>
+            </div>
           )}
         </div>
       </div>
