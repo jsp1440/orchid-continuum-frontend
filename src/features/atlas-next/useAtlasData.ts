@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
 import {
   didAtlasLoadFail,
   fetchAtlasOccurrencePointsLazy,
@@ -14,6 +15,11 @@ import {
  * the statistics bar. None of that is reused. Every mark drawn here comes from
  * the canonical `fetchAtlasOccurrencePoints()` contract, and when that contract
  * returns nothing the Atlas says so instead of drawing something.
+ *
+ * Atlas Next also consumes the shared AtlasFilterContext before records enter
+ * its reasoning shell. That keeps canonical URL handoffs such as
+ * `?genera=Vanilla` continuous across the current Atlas and Atlas Next without
+ * inventing a second route-context format.
  */
 
 export type AtlasDataState =
@@ -38,6 +44,7 @@ function usablePoints(points: AtlasOccurrencePoint[]): AtlasOccurrencePoint[] {
 
 export function useAtlasData(): AtlasDataState {
   const [state, setState] = useState<AtlasDataState>({ kind: 'loading' });
+  const { applyTo } = useAtlasFilters();
 
   useEffect(() => {
     let cancelled = false;
@@ -46,17 +53,17 @@ export function useAtlasData(): AtlasDataState {
         const { initial, full } = await fetchAtlasOccurrencePointsLazy();
         if (cancelled) return;
 
-        const firstBatch = usablePoints(initial);
+        const firstBatch = usablePoints(applyTo(initial));
         if (firstBatch.length) {
           setState({ kind: 'ready', points: firstBatch, complete: false });
         }
 
-        const everything = usablePoints(await full);
+        const everything = usablePoints(applyTo(await full));
         if (cancelled) return;
 
         if (!everything.length) {
-          // Nothing usable came back at all. Distinguish "the store is empty or
-          // holds no coordinates" from "we could not read it".
+          // Nothing usable came back for the current canonical filter context.
+          // Distinguish "no matching usable coordinates" from "we could not read".
           setState(
             didAtlasLoadFail()
               ? {
@@ -79,7 +86,7 @@ export function useAtlasData(): AtlasDataState {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyTo]);
 
   return state;
 }
