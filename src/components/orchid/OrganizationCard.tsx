@@ -42,6 +42,9 @@ const OrganizationCard: React.FC<OrganizationCardProps> = ({
   focus = [],
   demo = false,
 }) => {
+  const displayName = demo ? 'Organization profile placeholder' : name;
+  const displayKind = demo ? 'Interface placeholder' : kind;
+
   const card = (
     <div className="p-6 flex flex-col h-full">
       <div className="flex items-start gap-4 mb-4">
@@ -53,15 +56,15 @@ const OrganizationCard: React.FC<OrganizationCardProps> = ({
               className="w-full h-full object-cover"
             />
           ) : (
-            name.slice(0, 1)
+            displayName.slice(0, 1)
           )}
         </div>
         <div className="min-w-0">
           <div className="text-[10px] tracking-[0.22em] uppercase text-emerald-300/80 mb-1 truncate">
-            {kind}
+            {displayKind}
           </div>
           <h3 className="font-serif text-lg text-white leading-snug truncate group-hover:text-emerald-100">
-            {name}
+            {displayName}
           </h3>
           {!demo && region && (
             <div className="text-xs text-white/55 inline-flex items-center gap-1 mt-1">
@@ -122,7 +125,7 @@ const OrganizationCard: React.FC<OrganizationCardProps> = ({
     return (
       <div
         className="block rounded-2xl border border-amber-200/15 bg-white/[0.02] overflow-hidden"
-        aria-label={`${name}: illustrative placeholder, not Continuum evidence`}
+        aria-label="Illustrative organization profile placeholder; not Continuum evidence"
       >
         {card}
       </div>
