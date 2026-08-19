@@ -86,4 +86,14 @@ describe('featured taxon source integrity', () => {
     expect(close).not.toContain('to="/research-station"');
     expect(app).toContain('<Route path="/research"');
   });
+
+  it('keeps the public footer on live visitor routes and out of operator-only workspaces', () => {
+    const footer = source('components/orchid/Footer.tsx');
+    for (const route of ['/knowledge', '/calyx', '/lexicon', '/get-involved', '/conservation']) {
+      expect(footer, `Footer must expose live visitor route ${route}`).toContain(`route: '${route}'`);
+    }
+    for (const staleOrPrivate of ['#the-knowledge-graph', '#ask-calyx', '#human-stewardship', '/mission-control', 'Owner access']) {
+      expect(footer, `Footer must not expose stale/private target ${staleOrPrivate}`).not.toContain(staleOrPrivate);
+    }
+  });
 });
