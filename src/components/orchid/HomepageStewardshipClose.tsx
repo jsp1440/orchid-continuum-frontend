@@ -30,7 +30,7 @@ const HomepageStewardshipClose: React.FC = () => {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Link to="/research-station" className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
+            <Link to="/research" className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
               <FlaskConical className="h-5 w-5 text-[#d4b34a]" />
               <p className="mt-3 font-serif text-xl text-[#fffaf0]">Research Station</p>
               <p className="mt-2 text-sm leading-6 text-[#cfc8b8]/78">Take an evidence gap into a research workflow.</p>
