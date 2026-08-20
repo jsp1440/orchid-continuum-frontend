@@ -33,6 +33,52 @@ export type CalyxCitation = {
   review_state?: string | null;
   canonical_evidence?: boolean;
 };
+/**
+ * Server-composed synthesis structure for one Calyx answer.
+ *
+ * This is the machinery the conversational answer deliberately does NOT narrate
+ * at the user: claim coverage, contradictions, gaps and provenance. It exists so
+ * the workspace can offer that detail as an inspectable secondary surface
+ * without the primary answer reading like a database dump.
+ *
+ * Supplied by CALYX-CONVERSATIONAL-SYNTHESIS-001. Absent on older backends, so
+ * every consumer must treat it as optional.
+ */
+export type CalyxClaimCoverage = {
+  claim_id: string;
+  claim: string;
+  /** Whether the linked evidence supports, contests, contradicts, or misses this claim. */
+  coverage: "supported" | "contested" | "contradicted" | "unresolved" | string;
+  source_families: string[];
+  supporting_count: number;
+  contradicting_count: number;
+};
+export type CalyxSynthesisStructure = {
+  composer_contract?: string;
+  /** False when the answer was composed from linked evidence, not reasoned generatively. */
+  generative?: boolean;
+  degraded_composition?: boolean;
+  /** The investigation subject this turn continues, resolved server-side. */
+  resolved_subject?: string | null;
+  follow_up_turn?: boolean;
+  claim_coverage?: CalyxClaimCoverage[];
+  integrated_across_source_families?: boolean;
+  cited_source_families?: string[];
+  source_families?: string[];
+  missing_evidence?: string[];
+  canonical_retrieval_gap?: boolean;
+  external_literature_review_required?: boolean;
+  unresolved_conflict?: boolean;
+  mission_unavailable?: boolean;
+  citations?: string[];
+  governed_provenance?: {
+    mission_id?: string | null;
+    evidence_packet_id?: string | null;
+    interpretation_id?: string | number | null;
+    confidence?: number | null;
+    review_status?: string | null;
+  };
+};
 export type CalyxServerMessage = {
   message_id: string;
   conversation_id: string;
@@ -40,7 +86,10 @@ export type CalyxServerMessage = {
   content: string;
   content_hash?: string;
   created_at: string;
-  metadata?: Record<string, unknown> & { citations?: CalyxCitation[] };
+  metadata?: Record<string, unknown> & {
+    citations?: CalyxCitation[];
+    synthesis_structure?: CalyxSynthesisStructure | null;
+  };
 };
 export type CalyxConversation = {
   conversation_id: string;
@@ -77,6 +126,7 @@ export type CalyxTurnResponse = {
   answer: string;
   provider: { name: string; model: string; request_hash: string; provider_response_id?: string | null; fallback_error?: string | null; configuration?: Record<string, unknown> };
   research: { casual: boolean; mission: BrainMission | null; mission_error: string | null; retrieval: Record<string, unknown>; continuum?: Record<string, unknown>; climate?: Record<string, unknown>; citations?: CalyxCitation[] };
+  synthesis_structure?: CalyxSynthesisStructure | null;
   workspace_outputs?: CalyxWorkspaceOutput[];
   deliverables?: Record<string, unknown>;
   persistence_mode: string;
