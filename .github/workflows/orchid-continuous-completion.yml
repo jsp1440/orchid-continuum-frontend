@@ -81,7 +81,13 @@ jobs:
             age=$((now - updated_epoch))
             if (( age > 5700 )); then
               marker="OC-AUTO-ISSUE: #${issue}"
-              durable=$(gh pr list --repo "$REPO" --state open --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" | head -1)
+              # Not `| head -1`. Under `set -o pipefail` head exits after one line,
+              # gh takes SIGPIPE once its output exceeds the 64KB pipe buffer, the
+              # pipeline returns 141 and `set -e` kills the whole step. With several
+              # long-bodied OC-AUTO PRs open that is every run - which is exactly
+              # when this supervisor is most needed.
+              durable=$(gh pr list --repo "$REPO" --state open --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
+              durable=${durable%%$'\n'*}
               if [[ -z "$durable" ]]; then
                 gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --add-label oc-queued >/dev/null 2>&1 || true
               fi
@@ -92,17 +98,22 @@ jobs:
           for pr in "${prs[@]}"; do
             data=$(gh pr view "$pr" --repo "$REPO" --json body,isDraft,mergeStateStatus,headRefName,headRefOid)
             body=$(jq -r '.body // ""' <<<"$data")
-            issue=$(sed -n 's/.*OC-AUTO-ISSUE: #\([0-9][0-9]*\).*/\1/p' <<<"$body" | head -1)
+            issue=$(sed -n 's/.*OC-AUTO-ISSUE: #\([0-9][0-9]*\).*/\1/p' <<<"$body" || true)
+            issue=${issue%%$'\n'*}
             [[ -n "$issue" ]] || continue
 
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
 
             head=$(jq -r '.headRefName' <<<"$data")
             head_sha=$(jq -r '.headRefOid' <<<"$data")
-            ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
-            matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
-            ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$ci_runs")
-            matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$matrix_runs")
+            # No --event filter. Both workflows trigger on pull_request, so filtering
+            # to workflow_dispatch matched nothing, ci and matrix were always empty,
+            # and the `[[ -n "$ci" && -n "$matrix" ]] || continue` below skipped every
+            # pull request. The supervisor could not advance anything, ever.
+            ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then "\(.status) \(.conclusion // \"\")" else "" end' <<<"$ci_runs")
+            matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then "\(.status) \(.conclusion // \"\")" else "" end' <<<"$matrix_runs")
 
             [[ -n "$ci" && -n "$matrix" ]] || continue
             [[ "$ci" == completed* && "$matrix" == completed* ]] || continue
