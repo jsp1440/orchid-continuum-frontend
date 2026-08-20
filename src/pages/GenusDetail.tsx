@@ -24,6 +24,16 @@ import NeighborGeneraSection from '@/components/orchid/NeighborGeneraSection';
 import useSpeciesFavorites from '@/hooks/useSpeciesFavorites';
 import { supabase } from '@/lib/supabase';
 import {
+  deriveEcologicalEvidence,
+  authoredScientificName,
+  buildRepresentativePlates,
+  displayScientificName,
+  hasAuthorship,
+  EVIDENCE_STATE_LABEL,
+  type EcologicalEvidence,
+} from '@/lib/genusProfileDataQuality';
+import { fetchGenusGraphEvidence, type GenusGraphResult } from '@/lib/knowledgeGraph';
+import {
   lookupGenus,
   fetchGenusImagesWithSource,
   fetchValidatedSpecies,
@@ -127,6 +137,49 @@ const EcologyRow: React.FC<{ icon: React.ReactNode; label: string; value: string
   </div>
 );
 
+const EVIDENCE_BADGE_STYLE: Record<EcologicalEvidence['state'], string> = {
+  available: 'border-[#2f6b3f]/40 bg-[#2f6b3f]/10 text-[#2f6b3f]',
+  provisional: 'border-[#a37a1c]/40 bg-[#c9a24a]/12 text-[#7b5c12]',
+  unavailable: 'border-[#2f3b21]/25 bg-[#2f3b21]/[0.06] text-[#6a705c]',
+};
+
+/**
+ * An ecological relationship row that states WHAT KIND of evidence backs it.
+ *
+ * `available`   — the canonical Continuum knowledge graph links records here.
+ * `provisional` — only the curated genus-level field-guide summary exists. It
+ *                 is genus-scope and is not verified for every species shown.
+ * `unavailable` — nothing is claimed; the reason distinguishes "no linked
+ *                 record yet" from "the evidence service did not answer".
+ */
+const EcologyEvidenceRow: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  evidence: EcologicalEvidence;
+}> = ({ icon, label, evidence }) => (
+  <div className="flex items-start gap-3 py-3 border-b border-[#2f3b21]/10 last:border-0">
+    <span className="mt-0.5 text-[#5a6b3f]">{icon}</span>
+    <div className="min-w-0">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[9px] tracking-[0.2em] uppercase text-[#8a8062]">{label}</span>
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-[8px] tracking-[0.14em] uppercase ${EVIDENCE_BADGE_STYLE[evidence.state]}`}
+        >
+          {EVIDENCE_STATE_LABEL[evidence.state]}
+        </span>
+      </div>
+      <div className="mt-1 text-[14px] text-[#3a4630] leading-snug">{evidence.detail}</div>
+      {evidence.scope === 'genus' && (
+        <div className="mt-1 text-[12px] leading-snug text-[#6a705c]">
+          {evidence.reason === 'linked-evidence'
+            ? 'Genus-scope evidence from the Continuum knowledge graph. It is not a verified claim about every species below.'
+            : 'Curated genus-scope summary held in this application. It is not Continuum evidence and is not verified per species.'}
+        </div>
+      )}
+    </div>
+  </div>
+);
+
 const NotFoundGenus: React.FC<{ name: string }> = ({ name }) => (
   <section className="max-w-[900px] mx-auto px-6 lg:px-10 py-24 text-center">
     <Leaf className="h-10 w-10 text-[#c9a24a] mx-auto" strokeWidth={1.1} />
@@ -167,6 +220,11 @@ const GenusDetail: React.FC = () => {
   // Where the current genus images came from (for the source-health indicator).
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
 
+  // Canonical Continuum knowledge-graph coverage for this genus. It decides
+  // whether an ecological relationship is presented as `available` evidence or
+  // only as a `provisional` curated summary — never as a universal claim.
+  const [graphEvidence, setGraphEvidence] = useState<GenusGraphResult | null>(null);
+
   // Session favorites (heart / bookmark) — shared across cards & the tab.
   const { isFavorite, toggleFavorite, count: favoriteCount } = useSpeciesFavorites();
 
@@ -206,12 +264,40 @@ const GenusDetail: React.FC = () => {
   }, [images]);
 
 
+  // The photograph currently painted by the hero carousel. Attribution follows
+  // the visible image, so a rotating hero never reuses the first record's
+  // species name and licence for a different photograph.
+  const [heroActiveUrl, setHeroActiveUrl] = useState<string | null>(null);
+
+  const heroRecordByUrl = useMemo(() => {
+    const map = new Map<string, GenusImage>();
+    for (const img of images) {
+      const candidates = img.image_urls?.length
+        ? img.image_urls
+        : img.image_url
+          ? [img.image_url]
+          : [];
+      for (const url of candidates) {
+        if (url && !map.has(url)) map.set(url, img);
+      }
+    }
+    return map;
+  }, [images]);
+
+  const heroRecord = useMemo(
+    () => (heroActiveUrl ? heroRecordByUrl.get(heroActiveUrl) ?? null : null),
+    [heroActiveUrl, heroRecordByUrl],
+  );
+
+  const heroDisplayName = heroRecord ? displayScientificName(heroRecord.scientific_name) : '';
+  const heroAuthoredName = heroRecord ? authoredScientificName(heroRecord.scientific_name) : '';
+
   const heroAttribution = useMemo(() => {
-    const first = images[0];
-    return [first?.scientific_name, first?.image_source, first?.image_license]
+    if (!heroRecord) return '';
+    return [heroDisplayName, heroRecord.image_source, heroRecord.image_license]
       .filter(Boolean)
       .join(' · ');
-  }, [images]);
+  }, [heroRecord, heroDisplayName]);
 
 
 
@@ -241,6 +327,15 @@ const GenusDetail: React.FC = () => {
         if (!ctrl.signal.aborted) setImagesLoading(false);
       });
 
+
+    setGraphEvidence(null);
+    fetchGenusGraphEvidence(entry.genus, ctrl.signal)
+      .then((result) => {
+        if (!ctrl.signal.aborted) setGraphEvidence(result);
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setGraphEvidence({ status: 'unavailable' });
+      });
 
     setValidationLoaded(false);
     setValidatedSet(new Set());
@@ -319,25 +414,73 @@ const GenusDetail: React.FC = () => {
   // for at all (these are the "empty" IMAGE PENDING cards the request wants
   // removed from the grid entirely).
   const unverifiedMode = validationLoaded && validatedSet.size === 0;
+
+  /**
+   * Representative species plates.
+   *
+   * De-duplicated by normalised taxon identity AND by photograph, so neither a
+   * repeated species nor a repeated image can dominate the gallery. Each entry
+   * carries its display binomial and the authored name kept for provenance.
+   */
   const visiblePlates = useMemo(() => {
     if (!entry) return [];
     const base =
       validatedSet.size === 0
         ? entry.plates
         : entry.plates.filter((p) => isValidatedName(p.species, validatedSet));
-    return base.filter((p) => {
+
+    const representative = buildRepresentativePlates(base, {
+      nameOf: (plate) => plate.species,
+      urlsOf: (plate) => {
+        const trusted = imageMap.get(binomialOf(plate.species));
+        return [
+          ...(trusted?.image_urls ?? (trusted?.image_url ? [trusted.image_url] : [])),
+          ...(plate.image ? [plate.image] : []),
+        ].filter((url): url is string => Boolean(url));
+      },
+    });
+
+    return representative.filter((plate) => {
       // Skip plates whose every candidate image failed to load.
-      if (failedSpecies.has(p.species)) return false;
-      // Once images have loaded, skip plates with NO candidate image at all.
-      if (!imagesLoading) {
-        const trusted = imageMap.get(binomialOf(p.species));
-        const hasUrl =
-          (trusted?.image_urls?.length ?? 0) > 0 || Boolean(trusted?.image_url) || Boolean(p.image);
-        if (!hasUrl) return false;
-      }
+      if (failedSpecies.has(plate.entry.species)) return false;
+      // Once images have loaded, skip plates with NO candidate image left.
+      if (!imagesLoading && plate.urls.length === 0) return false;
       return true;
     });
   }, [entry, validatedSet, failedSpecies, imageMap, imagesLoading]);
+
+  /**
+   * Ecological relationships, expressed as evidence states rather than as
+   * universal genus-wide assertions. `available` requires canonical Continuum
+   * linkage; the curated field-guide text can only ever be `provisional`.
+   */
+  const pollinatorEvidence = useMemo(() => {
+    const domain =
+      graphEvidence?.status === 'ok'
+        ? graphEvidence.evidence.domains.find((d) => d.domain === 'pollinators')
+        : undefined;
+    return deriveEcologicalEvidence({
+      serviceAnswered: graphEvidence !== null && graphEvidence.status !== 'unavailable',
+      hasLinkedEvidence: Boolean(domain && (domain.nodes > 0 || domain.edges > 0)),
+      linkedSummary: domain
+        ? `${domain.nodes} linked pollination nodes · ${domain.edges} relationships in the Continuum graph`
+        : null,
+      curatedGenusSummary: entry?.ecology.pollinatorGuild ?? null,
+    });
+  }, [graphEvidence, entry]);
+
+  const mycorrhizalEvidence = useMemo(
+    () =>
+      // The knowledge-graph contract exposes no mycorrhizal domain, so no
+      // canonical linkage can be claimed here yet. The curated summary is
+      // therefore surfaced as provisional, genus-scope context.
+      deriveEcologicalEvidence({
+        serviceAnswered: graphEvidence !== null && graphEvidence.status !== 'unavailable',
+        hasLinkedEvidence: false,
+        curatedGenusSummary: entry?.ecology.mycorrhizal ?? null,
+      }),
+    [graphEvidence, entry],
+  );
 
 
   return (
@@ -409,6 +552,7 @@ const GenusDetail: React.FC = () => {
                 genus={entry.genus}
                 fetching={imagesLoading}
                 intervalMs={180_000}
+                onActiveUrlChange={setHeroActiveUrl}
               />
 
               {/* Small, non-intrusive image-source health indicator. */}
@@ -421,7 +565,16 @@ const GenusDetail: React.FC = () => {
                 {heroAttribution && (
                   <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] uppercase text-[#e7dcc2]">
                     <Camera className="h-3.5 w-3.5 text-[#c9a24a]" />
-                    <span className="truncate" title={heroAttribution}>{heroAttribution}</span>
+                    <span
+                      className="truncate"
+                      title={
+                        heroAuthoredName && heroAuthoredName !== heroDisplayName
+                          ? `Recorded as ${heroAuthoredName}`
+                          : heroAttribution
+                      }
+                    >
+                      {heroAttribution}
+                    </span>
                   </div>
                 )}
               </div>
@@ -437,8 +590,12 @@ const GenusDetail: React.FC = () => {
                 style={{ fontFamily: 'Georgia, "Cormorant Garamond", serif' }}
               >
                 <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]/85 mb-2">
-                  Field Note · AI summary
+                  Field Note · genus-level context
                 </div>
+                <p className="mb-3 font-mono text-[10px] leading-[1.6] tracking-[0.06em] text-[#a9b896]">
+                  This note describes <span className="italic">{entry.genus}</span> as a genus. It is
+                  not a species-specific account and does not change with the photograph shown above.
+                </p>
                 {narrative ? (
                   <p className="text-[#f3eee2]" style={{ fontSize: '16px', lineHeight: 1.65 }}>
                     {narrative}
@@ -470,16 +627,16 @@ const GenusDetail: React.FC = () => {
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a] mb-3">
                 Ecology
               </div>
-              <div className="rounded-2xl bg-[#f5f0e8] text-[#2f3b21] border border-[#2f3b21]/12 p-6">
-                <EcologyRow
+              <div className="rounded-2xl bg-[#f5f0e8] text-[#2f3b21] border border-[#2f3b21]/12 p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-x-6">
+                <EcologyEvidenceRow
                   icon={<Bug className="h-4 w-4" />}
                   label="Pollinator guild"
-                  value={entry.ecology.pollinatorGuild}
+                  evidence={pollinatorEvidence}
                 />
-                <EcologyRow
+                <EcologyEvidenceRow
                   icon={<Sprout className="h-4 w-4" />}
                   label="Mycorrhizal partners"
-                  value={entry.ecology.mycorrhizal}
+                  evidence={mycorrhizalEvidence}
                 />
                 <EcologyRow
                   icon={<Mountain className="h-4 w-4" />}
@@ -509,23 +666,25 @@ const GenusDetail: React.FC = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {visiblePlates.map((plate) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+              {visiblePlates.map(({ entry: plate, urls, displayName, authoredName }) => {
                 // Match a trusted, backbone-validated image to this plate by
                 // its binomial (genus + epithet). When a match exists the real
                 // photograph replaces the "Image pending" leaf placeholder.
+                // Candidate URLs already had photographs claimed by an earlier
+                // plate removed, so no image can appear twice in this gallery.
                 const trusted = imageMap.get(binomialOf(plate.species));
-                // All candidate URLs (trusted fallbacks + any legacy plate img)
-                // so a broken first URL advances to the next instead of the
-                // "Image pending" placeholder.
-                const urls = [
-                  ...(trusted?.image_urls ?? (trusted?.image_url ? [trusted.image_url] : [])),
-                  ...(plate.image ? [plate.image] : []),
-                ].filter((u, i, a) => u && a.indexOf(u) === i);
                 const image = urls[0];
                 const attribution = [trusted?.image_source, trusted?.image_license]
                   .filter(Boolean)
                   .join(' · ');
+                // Authorship stays in provenance/detail; the display name is
+                // the genus + specific epithet only.
+                const trustedAuthoredName = trusted?.scientific_name
+                  ? authoredScientificName(trusted.scientific_name)
+                  : '';
+                const provenanceName =
+                  hasAuthorship(trustedAuthoredName) ? trustedAuthoredName : authoredName;
                 return (
                   <Link
                     key={plate.species}
@@ -536,7 +695,7 @@ const GenusDetail: React.FC = () => {
                       {urls.length > 0 ? (
                         <FallbackImage
                           urls={urls}
-                          alt={plate.species}
+                          alt={displayName}
                           onSettled={(ok) => handlePlateSettled(plate.species, ok)}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                         />
@@ -606,9 +765,15 @@ const GenusDetail: React.FC = () => {
                       <div
                         className="italic leading-tight text-[18px]"
                         style={{ fontFamily: '"Playfair Display",Georgia,serif' }}
+                        title={provenanceName}
                       >
-                        {plate.species}
+                        {displayName}
                       </div>
+                      {provenanceName !== displayName && (
+                        <div className="mt-1 font-mono text-[11px] leading-[1.5] tracking-[0.02em] text-[#8a8062]">
+                          Recorded as {provenanceName}
+                        </div>
+                      )}
                       <div className="mt-1.5 font-mono text-[15px] tracking-[0.04em] uppercase text-[#7b724f]">
                         {plate.distribution} · {plate.elevation}
                       </div>
