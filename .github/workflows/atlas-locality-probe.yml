@@ -25,7 +25,9 @@ jobs:
           set -o pipefail
           # The anon key is already public in the shipped bundle; this reads it
           # from the same source rather than restating it in CI config.
-          KEY=$(grep -oE "eyJ[A-Za-z0-9_.-]+" src/lib/supabase.ts | head -1)
+          # `| head -1` under pipefail aborts the step if grep outmatches the pipe buffer.
+          KEY=$(grep -oE "eyJ[A-Za-z0-9_.-]+" src/lib/supabase.ts || true)
+          KEY=${KEY%%$'\n'*}
           SUPABASE_ANON_KEY="$KEY" node scripts/probe-atlas-locality-safety.mjs 2>&1 | tee probe.json
       - name: Commit probe result
         if: always()

@@ -106,3 +106,84 @@ describe('pull-request validation covers the autonomous integration gate', () =>
     expect(mainOnly).toEqual(['regression.yml']);
   });
 });
+
+/**
+ * Two ways the autonomous supervisor silently stopped working. Both were found
+ * by reading job data, not logs, and both are the same shape: a step that looks
+ * correct and cannot succeed.
+ */
+describe('the autonomous supervisor can actually run', () => {
+  function runBlocks(): { file: string; job: string; step: string; run: string; pipefail: boolean }[] {
+    const out: { file: string; job: string; step: string; run: string; pipefail: boolean }[] = [];
+    for (const file of readdirSync(WORKFLOW_DIR).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))) {
+      let doc: { jobs?: Record<string, { steps?: { name?: string; run?: string }[] }> };
+      try {
+        doc = yaml.load(readFileSync(join(WORKFLOW_DIR, file), 'utf8')) as typeof doc;
+      } catch {
+        continue;
+      }
+      for (const [job, spec] of Object.entries(doc?.jobs ?? {})) {
+        for (const step of spec?.steps ?? []) {
+          if (typeof step?.run !== 'string') continue;
+          out.push({
+            file,
+            job,
+            step: step.name ?? '(unnamed)',
+            run: step.run,
+            pipefail: /set -[a-z]*o pipefail|set -o pipefail/.test(step.run),
+          });
+        }
+      }
+    }
+    return out;
+  }
+
+  it('never pipes an unbounded producer into head under pipefail', () => {
+    // `gh pr list ... | head -1` returns 141: head exits after one line, gh takes
+    // SIGPIPE once output passes the 64KB pipe buffer, pipefail propagates it and
+    // set -e kills the step. It works until enough PRs are open, then fails every
+    // run — which is when the supervisor matters most.
+    const offenders: string[] = [];
+    for (const block of runBlocks()) {
+      if (!block.pipefail) continue;
+      for (const line of block.run.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#')) continue;
+        if (!/\|\s*head\b/.test(trimmed)) continue;
+        // A guarded pipeline cannot abort the step.
+        if (/\|\|\s*true/.test(trimmed)) continue;
+        offenders.push(`${block.file} :: ${block.job} :: ${block.step} :: ${trimmed}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it('does not look for validation runs under an event those workflows never emit', () => {
+    // The supervisor queried `gh run list --workflow frontend-ci.yml --event
+    // workflow_dispatch`. frontend-ci.yml triggers on pull_request only, so the
+    // query always returned [] and every PR hit the `continue` below it. The
+    // merge path was unreachable for as long as it had existed.
+    const offenders: string[] = [];
+    for (const block of runBlocks()) {
+      for (const line of block.run.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('#')) continue;
+        const match = /--workflow\s+(\S+\.ya?ml)/.exec(trimmed);
+        if (!match) continue;
+        if (!/--event\s+workflow_dispatch/.test(trimmed)) continue;
+
+        let target: { on?: { workflow_dispatch?: unknown }; true?: { workflow_dispatch?: unknown } };
+        try {
+          target = yaml.load(readFileSync(join(WORKFLOW_DIR, match[1]), 'utf8')) as typeof target;
+        } catch {
+          continue;
+        }
+        const triggers = target?.on ?? target?.true;
+        if (triggers && !('workflow_dispatch' in triggers)) {
+          offenders.push(`${block.file} :: ${block.step} queries ${match[1]} for workflow_dispatch, which it never emits`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
+});
