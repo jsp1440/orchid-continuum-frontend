@@ -101,8 +101,8 @@ jobs:
             head_sha=$(jq -r '.headRefOid' <<<"$data")
             ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
             matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
-            ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then "\(.status) \(.conclusion // \"\")" else "" end' <<<"$ci_runs")
-            matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then "\(.status) \(.conclusion // \"\")" else "" end' <<<"$matrix_runs")
+            ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$ci_runs")
+            matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$matrix_runs")
 
             [[ -n "$ci" && -n "$matrix" ]] || continue
             [[ "$ci" == completed* && "$matrix" == completed* ]] || continue

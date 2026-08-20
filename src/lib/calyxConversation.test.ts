@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { atlasOccurrenceEvidenceCalyxHref } from "@/features/atlas-next/calyxHandoff";
 import {
   buildCalyxTurnContext,
   buildCalyxConversationExport,
@@ -101,6 +102,7 @@ describe("calyxConversation helpers", () => {
     expect(parseCalyxRouteContext("?genus=Vanilla&origin=homepage-featured-taxon")).toEqual({
       origin: "homepage-featured-taxon",
       featuredTaxon: { rank: "genus", name: "Vanilla" },
+      questionContext: null,
     });
 
     expect(
@@ -117,10 +119,76 @@ describe("calyxConversation helpers", () => {
     });
   });
 
+  it("carries the Atlas active question into Calyx route context as non-evidentiary metadata", () => {
+    const href = atlasOccurrenceEvidenceCalyxHref(
+      "Vanilla",
+      "  What evidence supports this occurrence pattern?  ",
+    );
+    expect(href).not.toBeNull();
+    const search = new URL(href as string, "https://orchidcontinuum.org").search;
+
+    expect(parseCalyxRouteContext(search)).toEqual({
+      origin: "atlas-next-occurrence-evidence",
+      featuredTaxon: { rank: "genus", name: "Vanilla" },
+      questionContext: {
+        question: "What evidence supports this occurrence pattern?",
+        question_source: "user",
+        question_is_evidence: false,
+      },
+    });
+
+    expect(
+      buildCalyxTurnContext({
+        projectId: "calyx-speak",
+        uploadedFiles: [],
+        routeSearch: `${search}&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private`,
+      }),
+    ).toMatchObject({
+      route_context: {
+        origin: "atlas-next-occurrence-evidence",
+        featured_taxon: { rank: "genus", accepted_name: "Vanilla" },
+        question: "What evidence supports this occurrence pattern?",
+        question_source: "user",
+        question_is_evidence: false,
+      },
+    });
+
+    const routeContext = (
+      buildCalyxTurnContext({
+        projectId: "calyx-speak",
+        uploadedFiles: [],
+        routeSearch: `${search}&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private`,
+      }).route_context ?? {}
+    ) as Record<string, unknown>;
+    expect(routeContext).not.toHaveProperty("latitude");
+    expect(routeContext).not.toHaveProperty("longitude");
+    expect(routeContext).not.toHaveProperty("locality");
+    expect(routeContext).not.toHaveProperty("occurrence_id");
+    expect(routeContext).not.toHaveProperty("collector");
+  });
+
+  it("fails closed when Atlas question provenance is malformed", () => {
+    const parsed = parseCalyxRouteContext(
+      "?genus=Vanilla&origin=atlas-next-occurrence-evidence&question=Where%3F&question_source=user&question_is_evidence=true",
+    );
+    expect(parsed.questionContext).toBeNull();
+
+    const context = buildCalyxTurnContext({
+      projectId: "calyx-speak",
+      uploadedFiles: [],
+      routeSearch:
+        "?genus=Vanilla&origin=atlas-next-occurrence-evidence&question=Where%3F&question_source=user&question_is_evidence=true",
+    });
+    expect(context.route_context).not.toHaveProperty("question");
+    expect(context.route_context).not.toHaveProperty("question_source");
+    expect(context.route_context).not.toHaveProperty("question_is_evidence");
+  });
+
   it("drops malformed or oversized route context instead of forwarding it", () => {
     expect(parseCalyxRouteContext("?genus=%3Cscript%3E&origin=homepage%2Fbad")).toEqual({
       origin: null,
       featuredTaxon: null,
+      questionContext: null,
     });
   });
 

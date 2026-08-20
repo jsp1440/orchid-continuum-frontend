@@ -10,6 +10,7 @@ import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
+import AtlasAwareCalyxRoute from "@/components/calyx/AtlasAwareCalyxRoute";
 import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
 
 import Index from "./pages/Index";
@@ -82,7 +83,7 @@ const App = () => (
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
                   <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
-                  <Route path="/calyx" element={<CalyxWorkspace />} />
+                  <Route path="/calyx" element={<AtlasAwareCalyxRoute />} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
                   <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />
                   <Route path="/explore" element={<Explore />} />
