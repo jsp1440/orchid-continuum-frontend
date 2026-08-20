@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Filter,
   Network,
@@ -11,6 +11,11 @@ import {
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
+import {
+  FEATURED_TAXON_ORIGIN,
+  featuredTaxonAtlasHref,
+  featuredTaxonCalyxHref,
+} from '@/lib/featuredTaxonNavigation';
 
 /**
  * Research Center — advanced research surface for power users.
@@ -63,12 +68,21 @@ const ResearchCenter: React.FC = () => {
   // A project carried in from another module keeps the investigation intact.
   const [searchParams] = useSearchParams();
   const projectId = searchParams.get('project');
+  const routeGenus =
+    searchParams.get('origin') === FEATURED_TAXON_ORIGIN
+      ? String(searchParams.get('genus') ?? '').trim().slice(0, 120)
+      : '';
   const [activeQuery, setActiveQuery] = useState({
-    genus: '',
+    genus: routeGenus,
     country: '',
     biome: '',
     pollinator: '',
   });
+
+  useEffect(() => {
+    if (!routeGenus) return;
+    setActiveQuery((query) => ({ ...query, genus: routeGenus }));
+  }, [routeGenus]);
 
   return (
     <PageShell
@@ -89,6 +103,40 @@ const ResearchCenter: React.FC = () => {
         </div>
       }
     >
+      {routeGenus ? (
+        <section className="pt-10">
+          <div className="max-w-7xl mx-auto px-6 lg:px-10">
+            <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-5 md:flex md:items-center md:justify-between md:gap-6">
+              <div>
+                <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/75">
+                  Continuing from Genus of the Day
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/75">
+                  <span className="font-serif text-lg italic text-white">{routeGenus}</span>{' '}
+                  is preserved here as navigation context and preloaded into the research query builder.
+                  It is not scientific evidence and it does not imply that the persisted project shown below
+                  is about this genus.
+                </p>
+              </div>
+              <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
+                <Link
+                  to={featuredTaxonAtlasHref(routeGenus)}
+                  className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
+                >
+                  Return to Atlas
+                </Link>
+                <Link
+                  to={featuredTaxonCalyxHref(routeGenus)}
+                  className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-100 hover:bg-emerald-300/15"
+                >
+                  Ask Calyx
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
       {/* Research Station — one investigation, read end to end against the
           canonical Research Workspace contract. This is the live surface; the
           query-builder pillars below remain a structural preview. */}
