@@ -63,6 +63,14 @@ describe('featured taxon source integrity', () => {
     expect(navigation).toContain('&origin=${FEATURED_TAXON_ORIGIN}');
   });
 
+  it('fails relationship-service outages closed instead of converting them into knowledge claims', () => {
+    const featured = source('components/orchid/DailyGenusFeatureContinuum.tsx');
+    expect(featured).toContain('const relationshipServiceAvailable = relationships !== null');
+    expect(featured).toContain('Continuum relationship evidence is currently unavailable.');
+    expect(featured).toContain('No biological conclusion is inferred while the relationship service is unavailable.');
+    expect(featured).toContain("relationshipServiceAvailable\n              ? 'Not yet documented in the current Continuum view.'");
+  });
+
   it('routes the stewardship Research Station handoff to a live application route', () => {
     const close = source('components/orchid/HomepageStewardshipClose.tsx');
     const app = source('App.tsx');
