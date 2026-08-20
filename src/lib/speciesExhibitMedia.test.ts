@@ -53,6 +53,13 @@ describe('species exhibit media candidates', () => {
     expect(speciesExhibitMediaCandidates(card(null, [invalid]))).toEqual([]);
   });
 
+  it('rejects media without source or license provenance', () => {
+    const noSource = { ...media('https://example.test/no-source.jpg'), source: null };
+    const noLicense = { ...media('https://example.test/no-license.jpg'), license: null };
+    const valid = media('https://example.test/valid.jpg', 'iNaturalist', 'CC-BY');
+    expect(speciesExhibitMediaCandidates(card(null, [noSource, noLicense, valid]))).toEqual([valid]);
+  });
+
   it('caps candidates at five to keep fallback behavior bounded', () => {
     const extras = Array.from({ length: 8 }, (_, index) => media(`https://example.test/${index}.jpg`));
     expect(speciesExhibitMediaCandidates(card(null, extras))).toHaveLength(5);
