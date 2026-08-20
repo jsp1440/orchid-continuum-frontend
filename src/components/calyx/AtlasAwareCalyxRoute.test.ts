@@ -15,6 +15,11 @@ describe("Atlas-aware Calyx return path", () => {
     expect(SOURCE).toContain('Return to Atlas');
   });
 
+  it("keeps the NAOCC walkthrough reversible back to the homepage Genus of the Day", () => {
+    expect(SOURCE).toContain('to="/"');
+    expect(SOURCE).toContain('Return to Genus of the Day');
+  });
+
   it("does not rebuild the Atlas genera query inline", () => {
     expect(SOURCE).not.toContain('/atlas?genera=');
   });
