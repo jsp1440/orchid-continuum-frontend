@@ -30,6 +30,7 @@ import {
   sendCalyxTurn,
   type BrainMission,
   type CalyxCitation,
+  type CalyxSynthesisStructure,
   type CalyxConversation,
   type CalyxWorkspaceSnapshot,
   type MissionEvidence,
@@ -215,6 +216,109 @@ function CitationList({ items }: { items: CalyxCitation[] }) {
           </li>
         ))}
       </ol>
+    </details>
+  );
+}
+
+const COVERAGE_STYLE: Record<string, string> = {
+  supported: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  contested: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  contradicted: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  unresolved: "border-muted-foreground/30 bg-muted text-muted-foreground",
+};
+
+const COVERAGE_LABEL: Record<string, string> = {
+  supported: "Supported",
+  contested: "Evidence disagrees",
+  contradicted: "Contradicted",
+  unresolved: "No linked evidence",
+};
+
+/**
+ * Secondary, inspectable surface for one answer.
+ *
+ * The primary surface stays the natural synthesized answer. Everything the
+ * conversational reply deliberately does not narrate — which part of the
+ * question each piece of evidence bore on, where evidence disagreed, what is
+ * still missing, and the governed provenance — lives here behind progressive
+ * disclosure so the answer never reads as a source inventory.
+ */
+function SynthesisDetail({ structure }: { structure: CalyxSynthesisStructure }) {
+  const claims = (structure.claim_coverage ?? []).filter((item) => item.claim?.trim());
+  const gaps = structure.missing_evidence ?? [];
+  const provenance = structure.governed_provenance ?? {};
+  const hasProvenance = Boolean(
+    provenance.mission_id || provenance.evidence_packet_id || provenance.interpretation_id,
+  );
+  if (!claims.length && !gaps.length && !hasProvenance && !structure.degraded_composition) return null;
+
+  return (
+    <details className="mt-2 rounded-xl border bg-background px-4 py-3">
+      <summary className="cursor-pointer text-sm font-medium">
+        How this answer was reached
+        {structure.unresolved_conflict ? " · evidence disagrees" : ""}
+      </summary>
+
+      {structure.degraded_composition ? (
+        <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs leading-5">
+          Composed directly from linked evidence — the generative reasoning path was not
+          available for this reply. The evidence and its limits are accurate; the explanation
+          is thinner than it would otherwise be.
+        </p>
+      ) : null}
+
+      {structure.follow_up_turn && structure.resolved_subject ? (
+        <p className="mt-3 text-xs leading-5 text-muted-foreground">
+          Continuing: <span className="text-foreground">{structure.resolved_subject}</span>
+        </p>
+      ) : null}
+
+      {claims.length ? (
+        <ul className="mt-3 space-y-2">
+          {claims.map((claim) => (
+            <li className="rounded-lg border px-3 py-2" key={claim.claim_id}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span
+                  className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${COVERAGE_STYLE[claim.coverage] ?? COVERAGE_STYLE.unresolved}`}
+                >
+                  {COVERAGE_LABEL[claim.coverage] ?? claim.coverage}
+                </span>
+                <span className="min-w-0 text-xs leading-5 text-foreground">{claim.claim}</span>
+              </div>
+              {claim.source_families.length > 1 ? (
+                <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                  Combined across {claim.source_families.length} kinds of evidence:{" "}
+                  {claim.source_families.map((family) => family.replace(/_/g, " ")).join(", ")}
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
+      {gaps.length ? (
+        <div className="mt-3">
+          <p className="text-xs font-medium">Still missing</p>
+          <ul className="mt-1 list-disc pl-5 text-xs leading-5 text-muted-foreground">
+            {gaps.map((gap, index) => <li key={`${gap}-${index}`}>{gap}</li>)}
+          </ul>
+          <p className="mt-1 text-[11px] leading-4 text-muted-foreground">
+            Missing evidence, not evidence of absence.
+          </p>
+        </div>
+      ) : null}
+
+      {hasProvenance ? (
+        <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
+          Provenance:{" "}
+          {[
+            provenance.mission_id ? `mission ${provenance.mission_id}` : null,
+            provenance.evidence_packet_id ? `evidence packet ${provenance.evidence_packet_id}` : null,
+            provenance.interpretation_id ? `interpretation ${provenance.interpretation_id}` : null,
+            provenance.review_status ? String(provenance.review_status).replace(/_/g, " ") : null,
+          ].filter(Boolean).join(" · ")}
+        </p>
+      ) : null}
     </details>
   );
 }
@@ -652,6 +756,9 @@ export default function CalyxWorkspace() {
                     </div>
                     {turn.role === "calyx" && ttsSupported ? <button aria-label="Speak this reply" className="mt-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted" onClick={() => speak(turn.content)} type="button">🔊 Speak</button> : null}
                     {turn.role === "calyx" ? <CitationList items={citations} /> : null}
+                    {turn.role === "calyx" && turn.metadata?.synthesis_structure ? (
+                      <SynthesisDetail structure={turn.metadata.synthesis_structure as CalyxSynthesisStructure} />
+                    ) : null}
                     {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
                     {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
                   </article>
