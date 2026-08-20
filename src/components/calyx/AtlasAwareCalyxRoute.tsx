@@ -1,8 +1,9 @@
 import { useMemo } from "react";
-import { useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
+import { featuredTaxonAtlasHref } from "@/lib/featuredTaxonNavigation";
 import CalyxWorkspace from "@/pages/CalyxWorkspace";
 
 export default function AtlasAwareCalyxRoute() {
@@ -15,6 +16,7 @@ export default function AtlasAwareCalyxRoute() {
   const fromAtlas = routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN;
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
+  const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
 
   return (
     <>
@@ -36,6 +38,12 @@ export default function AtlasAwareCalyxRoute() {
                   <strong>Atlas question:</strong> {question}
                 </p>
               ) : null}
+              <Link
+                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                to={atlasHref}
+              >
+                Return to Atlas{genus ? ` · ${genus}` : ""}
+              </Link>
             </div>
             <p className="max-w-md text-xs text-muted-foreground">
               This handoff carries bounded interaction context only. The question is not scientific evidence, and precise occurrence locality remains in Atlas.
