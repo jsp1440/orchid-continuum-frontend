@@ -11,36 +11,33 @@ import {
   Network,
   Sprout,
 } from 'lucide-react';
+import {
+  GRAPH_EDGES,
+  GRAPH_VIEWBOX,
+  graphNodeGeometry,
+  placeEdgeLabels,
+  type KnowledgeGraphNodeKey,
+} from '@/lib/knowledgeGraphLayout';
 
-type NodeKey =
-  | 'orchid'
-  | 'names'
-  | 'images'
-  | 'occurrences'
-  | 'habitat'
-  | 'pollinators'
-  | 'fungi'
-  | 'climate'
-  | 'literature'
-  | 'conservation';
+type NodeKey = KnowledgeGraphNodeKey;
 
 interface GraphNode {
   key: NodeKey;
   label: string;
   short: string;
+  /** Diagram geometry is owned by knowledgeGraphLayout so it stays collision-free. */
   x: number;
   y: number;
+  radius: number;
   icon: React.ComponentType<{ className?: string }>;
   story: string;
 }
 
-const NODES: GraphNode[] = [
+const NODE_CONTENT: Omit<GraphNode, 'x' | 'y' | 'radius'>[] = [
   {
     key: 'orchid',
     label: 'Orchid',
     short: 'The living plant',
-    x: 300,
-    y: 250,
     icon: Flower2,
     story:
       'The orchid is the starting point, but it is not the whole story. Each species is connected to names, places, images, habitats, pollinators, fungi, climate, literature, and conservation decisions.',
@@ -49,8 +46,6 @@ const NODES: GraphNode[] = [
     key: 'names',
     label: 'Names',
     short: 'Identity through time',
-    x: 300,
-    y: 72,
     icon: Leaf,
     story:
       'Orchid names change as science changes. A plant described a century ago may have been renamed, moved, split, or merged several times. The Continuum keeps those names connected so old records still point to today’s understanding.',
@@ -59,8 +54,6 @@ const NODES: GraphNode[] = [
     key: 'images',
     label: 'Images',
     short: 'Photos as evidence',
-    x: 492,
-    y: 130,
     icon: Camera,
     story:
       'A photograph is more than a picture. It can show where an orchid was found, when it flowered, what traits were visible, and what habitat surrounded it.',
@@ -69,8 +62,6 @@ const NODES: GraphNode[] = [
     key: 'occurrences',
     label: 'Occurrences',
     short: 'Where orchids live',
-    x: 540,
-    y: 315,
     icon: Globe2,
     story:
       'Every observation is a moment in space and time. Together, occurrence records show where orchids live, when they flower, and whether their ranges are stable, shifting, fragmented, or disappearing.',
@@ -79,8 +70,6 @@ const NODES: GraphNode[] = [
     key: 'habitat',
     label: 'Habitat',
     short: 'The ecological stage',
-    x: 420,
-    y: 455,
     icon: Network,
     story:
       'Habitat is where orchid relationships become visible: cloud forests, grasslands, wetlands, canopy branches, dry forests, bogs, cliffs, and Mediterranean shrublands all shape which orchids, fungi, pollinators, and climates occur together.',
@@ -89,8 +78,6 @@ const NODES: GraphNode[] = [
     key: 'pollinators',
     label: 'Pollinators',
     short: 'Animal partners',
-    x: 180,
-    y: 455,
     icon: Bug,
     story:
       'Many orchids depend on particular pollinators. Some share pollinators, while others divide them through fragrance, timing, flower shape, or reward chemistry.',
@@ -99,8 +86,6 @@ const NODES: GraphNode[] = [
     key: 'fungi',
     label: 'Fungi',
     short: 'Germination partners',
-    x: 60,
-    y: 315,
     icon: Sprout,
     story:
       'Orchid seeds contain very little stored food and usually depend on mycorrhizal fungi to germinate, whether they land in soil, moss, bark, leaf litter, or a tree canopy.',
@@ -109,8 +94,6 @@ const NODES: GraphNode[] = [
     key: 'climate',
     label: 'Climate',
     short: 'Conditions through time',
-    x: 108,
-    y: 130,
     icon: CloudSun,
     story:
       'Temperature, rainfall, fog, humidity, elevation, seasonality, and day length help explain where orchids and their partners can survive now — and where they may survive in the future.',
@@ -119,8 +102,6 @@ const NODES: GraphNode[] = [
     key: 'literature',
     label: 'Literature',
     short: 'Scientific memory',
-    x: 300,
-    y: 520,
     icon: BookOpen,
     story:
       'Scientific papers, books, field reports, society newsletters, and historical descriptions are the memory of orchid science. The Continuum connects those observations to names, places, images, traits, and relationships.',
@@ -129,40 +110,18 @@ const NODES: GraphNode[] = [
     key: 'conservation',
     label: 'Conservation',
     short: 'Protecting relationships',
-    x: 300,
-    y: 250,
     icon: Database,
     story:
       'Conservation decisions become stronger when they are connected to identity, habitat, pollinators, fungi, climate, geography, images, and literature.',
   },
 ];
 
-const EDGES: Array<[NodeKey, NodeKey, string]> = [
-  ['orchid', 'names', 'identity'],
-  ['orchid', 'images', 'evidence'],
-  ['orchid', 'occurrences', 'place + time'],
-  ['orchid', 'habitat', 'community'],
-  ['orchid', 'pollinators', 'reproduction'],
-  ['orchid', 'fungi', 'germination'],
-  ['orchid', 'climate', 'survival'],
-  ['orchid', 'literature', 'knowledge'],
-  ['names', 'literature', 'old names'],
-  ['names', 'images', 'ID clues'],
-  ['images', 'occurrences', 'photo location'],
-  ['occurrences', 'climate', 'range + climate'],
-  ['occurrences', 'habitat', 'where habitat occurs'],
-  ['habitat', 'pollinators', 'shared habitat'],
-  ['habitat', 'fungi', 'shared habitat'],
-  ['habitat', 'climate', 'climate shapes habitat'],
-  ['pollinators', 'climate', 'climate affects pollinators'],
-  ['fungi', 'climate', 'moisture + temperature'],
-  ['literature', 'pollinators', 'pollination studies'],
-  ['literature', 'fungi', 'mycorrhiza studies'],
-  ['literature', 'habitat', 'field reports'],
-  ['literature', 'conservation', 'evidence for action'],
-  ['conservation', 'habitat', 'protect habitat'],
-  ['conservation', 'occurrences', 'where protection matters'],
-];
+const NODES: GraphNode[] = NODE_CONTENT.map((node) => ({
+  ...node,
+  ...graphNodeGeometry(node.key),
+}));
+
+const EDGES = GRAPH_EDGES;
 
 const DATA_SOURCES = [
   {
@@ -198,6 +157,8 @@ function nodeByKey(key: NodeKey): GraphNode {
 const TheKnowledgeGraph: React.FC = () => {
   const [active, setActive] = useState<NodeKey>('orchid');
   const activeNode = nodeByKey(active);
+  // Highlighted-edge labels, pre-placed so no two annotations overlap.
+  const edgeLabels = placeEdgeLabels(EDGES, active);
   const ActiveIcon = activeNode.icon;
 
   return (
@@ -323,7 +284,7 @@ const TheKnowledgeGraph: React.FC = () => {
           <div className="relative">
             <div className="rounded-[2rem] border border-white/[0.08] bg-[#071b27]/72 p-4 md:p-6 shadow-2xl shadow-black/25">
               <svg
-                viewBox="0 0 600 590"
+                viewBox={`0 0 ${GRAPH_VIEWBOX.width} ${GRAPH_VIEWBOX.height}`}
                 className="w-full h-auto"
                 role="img"
                 aria-label="Connected orchid knowledge graph"
@@ -338,39 +299,42 @@ const TheKnowledgeGraph: React.FC = () => {
                   </filter>
                 </defs>
 
-                {EDGES.map(([from, to, label], index) => {
+                {EDGES.map(([from, to], index) => {
                   const a = nodeByKey(from);
                   const b = nodeByKey(to);
                   const isActive = from === active || to === active;
 
                   return (
-                    <g key={`${from}-${to}-${index}`}>
-                      <line
-                        x1={a.x}
-                        y1={a.y}
-                        x2={b.x}
-                        y2={b.y}
-                        stroke={isActive ? '#d4b34a' : '#6b8a76'}
-                        strokeWidth={isActive ? 2.5 : 1.1}
-                        strokeOpacity={isActive ? 0.9 : 0.26}
-                      />
-
-                      {isActive && (
-                        <text
-                          x={(a.x + b.x) / 2}
-                          y={(a.y + b.y) / 2 - 6}
-                          textAnchor="middle"
-                          fill="#f0d97a"
-                          fontSize="8.5"
-                          letterSpacing="0.08em"
-                          style={{ textTransform: 'uppercase' }}
-                        >
-                          {label}
-                        </text>
-                      )}
-                    </g>
+                    <line
+                      key={`${from}-${to}-${index}`}
+                      x1={a.x}
+                      y1={a.y}
+                      x2={b.x}
+                      y2={b.y}
+                      stroke={isActive ? '#d4b34a' : '#6b8a76'}
+                      strokeWidth={isActive ? 2.5 : 1.1}
+                      strokeOpacity={isActive ? 0.9 : 0.26}
+                    />
                   );
                 })}
+
+                {/* Edge labels are placed by knowledgeGraphLayout, which drops
+                    any annotation that cannot be drawn clear of its peers
+                    instead of stacking overlapping text. */}
+                {edgeLabels.map((placement) => (
+                  <text
+                    key={placement.key}
+                    x={placement.x}
+                    y={placement.y}
+                    textAnchor="middle"
+                    fill="#f0d97a"
+                    fontSize="8.5"
+                    letterSpacing="0.08em"
+                    style={{ textTransform: 'uppercase' }}
+                  >
+                    {placement.label}
+                  </text>
+                ))}
 
                 {NODES.map((node) => {
                   const Icon = node.icon;
@@ -386,7 +350,7 @@ const TheKnowledgeGraph: React.FC = () => {
                       style={{ cursor: 'pointer' }}
                     >
                       <circle
-                        r={isCenter ? 62 : 46}
+                        r={node.radius}
                         fill={isActive ? '#d4b34a' : isCenter ? '#1f3622' : '#123522'}
                         stroke={isActive ? '#f0d97a' : '#6b8a76'}
                         strokeWidth={isActive ? 2.5 : 1.2}

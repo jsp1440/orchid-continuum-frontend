@@ -30,6 +30,13 @@ export interface HeroCarouselProps {
   fetching?: boolean;
   /** Crossfade cadence in ms (default 180000 = 3 minutes). */
   intervalMs?: number;
+  /**
+   * Reports the URL of the photograph currently painted, or null while none
+   * has decoded. Callers use this so the caption/attribution always describes
+   * the image the visitor is actually looking at instead of reusing the first
+   * record's provenance for every frame.
+   */
+  onActiveUrlChange?: (url: string | null) => void;
 }
 
 const HeroCarousel: React.FC<HeroCarouselProps> = ({
@@ -37,6 +44,7 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({
   genus,
   fetching = false,
   intervalMs = 180_000,
+  onActiveUrlChange,
 }) => {
   // We render the top candidates as real <img> layers (cap at 5 for the carousel).
   const layerUrls = useMemo(() => urls.slice(0, 5), [urls.join('|')]);
@@ -84,6 +92,14 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({
   }, [loadedIndices.length, intervalMs]);
 
   const anyLoaded = loadedIndices.length > 0;
+
+  // Keep the caller's provenance in step with the visible photograph.
+  const activeUrl = status[active] === 'loaded' ? layerUrls[active] ?? null : null;
+  const reportRef = useRef(onActiveUrlChange);
+  reportRef.current = onActiveUrlChange;
+  useEffect(() => {
+    reportRef.current?.(activeUrl);
+  }, [activeUrl]);
 
   // Loading state — nothing has decoded yet and we're still waiting.
   if (!anyLoaded && (!allSettled || fetching) && layerUrls.length > 0) {
