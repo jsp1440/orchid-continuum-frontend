@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
 import {
   didAtlasLoadFail,
   fetchAtlasOccurrencePointsLazy,
@@ -14,6 +15,11 @@ import {
  * the statistics bar. None of that is reused. Every mark drawn here comes from
  * the canonical `fetchAtlasOccurrencePoints()` contract, and when that contract
  * returns nothing the Atlas says so instead of drawing something.
+ *
+ * Atlas Next also consumes the shared AtlasFilterContext before records enter
+ * its reasoning shell. That keeps canonical URL handoffs such as
+ * `?genera=Vanilla` continuous across the current Atlas and Atlas Next without
+ * inventing a second route-context format.
  */
 
 export type AtlasDataState =
@@ -23,6 +29,9 @@ export type AtlasDataState =
   /** Transport failure. The map is blank because we could not read, which is
    *  not a statement about where orchids are. */
   | { kind: 'unavailable'; detail: string };
+
+const PUBLIC_ATLAS_UNAVAILABLE_DETAIL =
+  'The occurrence store could not be reached. No distribution inference has been substituted.';
 
 /** A coordinate must be real to be drawn. 0,0 is a data error, not a place. */
 function usablePoints(points: AtlasOccurrencePoint[]): AtlasOccurrencePoint[] {
@@ -38,6 +47,7 @@ function usablePoints(points: AtlasOccurrencePoint[]): AtlasOccurrencePoint[] {
 
 export function useAtlasData(): AtlasDataState {
   const [state, setState] = useState<AtlasDataState>({ kind: 'loading' });
+  const { applyTo } = useAtlasFilters();
 
   useEffect(() => {
     let cancelled = false;
@@ -46,17 +56,17 @@ export function useAtlasData(): AtlasDataState {
         const { initial, full } = await fetchAtlasOccurrencePointsLazy();
         if (cancelled) return;
 
-        const firstBatch = usablePoints(initial);
+        const firstBatch = usablePoints(applyTo(initial));
         if (firstBatch.length) {
           setState({ kind: 'ready', points: firstBatch, complete: false });
         }
 
-        const everything = usablePoints(await full);
+        const everything = usablePoints(applyTo(await full));
         if (cancelled) return;
 
         if (!everything.length) {
-          // Nothing usable came back at all. Distinguish "the store is empty or
-          // holds no coordinates" from "we could not read it".
+          // Nothing usable came back for the current canonical filter context.
+          // Distinguish "no matching usable coordinates" from "we could not read".
           setState(
             didAtlasLoadFail()
               ? {
@@ -68,18 +78,22 @@ export function useAtlasData(): AtlasDataState {
           return;
         }
         setState({ kind: 'ready', points: everything, complete: !didAtlasLoadFail() });
-      } catch (e) {
+      } catch (error) {
         if (cancelled) return;
+        // Keep transport/configuration details available to developers without
+        // exposing exception text, URLs, status codes, or deployment internals
+        // on the public scientific surface.
+        console.error('[Atlas Next] occurrence load failed', error);
         setState({
           kind: 'unavailable',
-          detail: e instanceof Error ? e.message : 'Unknown transport failure.',
+          detail: PUBLIC_ATLAS_UNAVAILABLE_DETAIL,
         });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [applyTo]);
 
   return state;
 }
