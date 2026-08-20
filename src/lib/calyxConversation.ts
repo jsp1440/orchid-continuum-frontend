@@ -1,5 +1,6 @@
 import { marked } from "marked";
 
+import { parseAtlasCalyxQuestionContext } from "@/features/atlas-next/calyxHandoff";
 import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -298,6 +299,11 @@ export function buildStructuredWorkspacePreview(
 export type CalyxRouteContext = {
   origin: string | null;
   featuredTaxon: { rank: "genus"; name: string } | null;
+  questionContext: {
+    question: string;
+    question_source: "user";
+    question_is_evidence: false;
+  } | null;
 };
 
 export function parseCalyxRouteContext(search: string): CalyxRouteContext {
@@ -313,6 +319,7 @@ export function parseCalyxRouteContext(search: string): CalyxRouteContext {
   return {
     origin: origin || null,
     featuredTaxon: genus ? { rank: "genus", name: genus } : null,
+    questionContext: parseAtlasCalyxQuestionContext(search),
   };
 }
 
@@ -333,12 +340,15 @@ export function buildCalyxTurnContext(options: {
   const routeContext = parseCalyxRouteContext(
     options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : ""),
   );
-  if (routeContext.origin || routeContext.featuredTaxon) {
+  if (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext) {
     context.route_context = {
       origin: routeContext.origin ?? undefined,
       featured_taxon: routeContext.featuredTaxon
         ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
         : undefined,
+      question: routeContext.questionContext?.question,
+      question_source: routeContext.questionContext?.question_source,
+      question_is_evidence: routeContext.questionContext?.question_is_evidence,
     };
   }
 
