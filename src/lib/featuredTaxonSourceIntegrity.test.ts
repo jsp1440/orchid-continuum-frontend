@@ -72,11 +72,21 @@ describe('featured taxon source integrity', () => {
     expect(featured).toContain('This is a knowledge gap, not evidence that the relationship is biologically absent.');
   });
 
-  it('routes the stewardship Research Station handoff to a live application route', () => {
+  it('preserves featured genus context when stewardship hands off to the live Research Station', () => {
     const close = source('components/orchid/HomepageStewardshipClose.tsx');
+    const research = source('pages/ResearchCenter.tsx');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
     const app = source('App.tsx');
-    expect(close).toContain('to="/research"');
-    expect(close).not.toContain('to="/research-station"');
+
+    expect(close).toContain('featuredTaxonResearchHref');
+    expect(close).toContain('const researchHref = featuredTaxonResearchHref(genus)');
+    expect(close).toContain('to={researchHref}');
+    expect(close).not.toContain('to="/research"');
+    expect(navigation).toContain('/research?genus=');
+    expect(research).toContain("searchParams.get('origin') === FEATURED_TAXON_ORIGIN");
+    expect(research).toContain('is preserved here as navigation context');
+    expect(research).toContain('It is not scientific evidence');
+    expect(research).toContain('genus: routeGenus');
     expect(app).toContain('<Route path="/research"');
   });
 
