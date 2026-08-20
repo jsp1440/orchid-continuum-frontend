@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { useLocation } from "react-router-dom";
 
+import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
 import CalyxWorkspace from "@/pages/CalyxWorkspace";
 
@@ -11,7 +12,7 @@ export default function AtlasAwareCalyxRoute() {
     [location.search],
   );
 
-  const fromAtlas = routeContext.origin === "atlas-occurrence-evidence";
+  const fromAtlas = routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN;
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
 
