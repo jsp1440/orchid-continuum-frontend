@@ -1,0 +1,40 @@
+name: Orchid Integration Revalidation
+
+on:
+  pull_request:
+    branches:
+      - oc-autonomous-integration
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  actions: write
+  pull-requests: read
+
+concurrency:
+  group: orchid-integration-revalidation-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    if: contains(github.event.pull_request.body || '', 'OC-AUTO-ISSUE: #')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+    steps:
+      - name: Dispatch exact-head autonomous validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_sha=$(gh pr view "${{ github.event.pull_request.number }}" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+          if [[ "$current_sha" != "$HEAD_SHA" ]]; then
+            echo "PR head moved from $HEAD_SHA to $current_sha; newer synchronize event owns validation."
+            exit 0
+          fi
+
+          gh workflow run frontend-ci.yml --repo "$REPO" --ref "$HEAD_REF"
+          gh workflow run calyx-matrix-005-validation.yml --repo "$REPO" --ref "$HEAD_REF"
+
+          echo "Dispatched Frontend CI and CALYX-MATRIX-005 for $HEAD_REF@$HEAD_SHA."

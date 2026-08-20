@@ -1,0 +1,1 @@
+The `oc-autonomous-integration` branch is the non-production merge target for Orchid Continuum autonomous worker PRs. The orchestrator may merge validated worker PRs here, but it must never merge this branch to `main` or deploy production without an explicit owner decision.
