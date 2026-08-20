@@ -1,0 +1,12 @@
+{
+  "integration_branch": "oc-autonomous-integration",
+  "worker_concurrency": 3,
+  "owner_gated_main": true,
+  "production_deploy_automated": false,
+  "validation_workflows": [
+    "frontend-ci.yml",
+    "calyx-matrix-005-validation.yml"
+  ],
+  "stale_running_reclaim_minutes": 95,
+  "minimum_actionable_queue": 6
+}

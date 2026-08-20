@@ -111,13 +111,6 @@ function toWorkspaceOutput(serverOutput: CalyxWorkspaceOutput): WorkspaceOutput 
   };
 }
 
-/**
- * Bridge from the server's grounded workspace_outputs (see backend
- * CALYX-MULTIMODAL-WORKSPACE-001) onto the existing workspaceOutputBus that
- * CalyxAdaptiveWorkspace already renders. Each output is validated
- * independently - one malformed or unexpectedly-shaped server output must
- * never break the turn itself or discard the outputs around it.
- */
 function emitTurnWorkspaceOutputs(outputs: CalyxTurnResponse['workspace_outputs']): void {
   for (const serverOutput of outputs ?? []) {
     try {
@@ -142,6 +135,7 @@ export async function askCalyx(req: CalyxRequest): Promise<CalyxResponse> {
       ...req.context,
       surface: 'illustrated-orchid-lexicon',
       concept: req.concept,
+      current_question: req.question,
     }),
     research_mode: 'auto',
     retrieval_limit: 12,
