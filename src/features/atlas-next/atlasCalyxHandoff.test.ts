@@ -13,7 +13,7 @@ describe('Atlas Next → Calyx handoff', () => {
   it('hands the selected occurrence genus and evidence-workflow origin into the bounded Calyx route contract', () => {
     const href = atlasOccurrenceEvidenceCalyxHref(' Laelia ');
     expect(href).toBe('/calyx?genus=Laelia&origin=atlas-next-occurrence-evidence');
-    expect(SOURCE).toContain('atlasOccurrenceEvidenceCalyxHref(point.genus)');
+    expect(SOURCE).toContain('atlasOccurrenceEvidenceCalyxHref(point.genus, calyxQuestion)');
     expect(SOURCE).toContain('Investigate this evidence in Calyx');
 
     const route = parseCalyxRouteContext(href!.slice('/calyx'.length));
@@ -54,6 +54,16 @@ describe('Atlas Next → Calyx handoff', () => {
     expect(url.searchParams.get('question')!.length).toBeLessThanOrEqual(800);
   });
 
+  it('gives the visitor a real user-authored question field before continuing to Calyx', () => {
+    expect(SOURCE).toContain("const [calyxQuestion, setCalyxQuestion] = useState('')");
+    expect(SOURCE).toContain('Ask Calyx about this evidence');
+    expect(SOURCE).toContain('value={calyxQuestion}');
+    expect(SOURCE).toContain('onChange={(event) => setCalyxQuestion(event.target.value)}');
+    expect(SOURCE).toContain('maxLength={800}');
+    expect(SOURCE).toContain('Ask Calyx this question');
+    expect(SOURCE).toContain('explicitly marked as not scientific evidence');
+  });
+
   it('bounds oversized question context without altering the full Atlas record boundary', () => {
     const href = atlasOccurrenceEvidenceCalyxHref('Laelia', `Why? ${'x'.repeat(2000)}`)!;
     const url = new URL(href, 'https://orchidcontinuum.org');
@@ -62,7 +72,7 @@ describe('Atlas Next → Calyx handoff', () => {
   });
 
   it('makes the locality-protection boundary explicit at the Atlas → Calyx decision point', () => {
-    expect(SOURCE).toContain('Calyx receives the genus and an occurrence-evidence workflow cue.');
+    expect(SOURCE).toContain('Calyx receives the genus, an occurrence-evidence workflow cue, and your optional bounded question.');
     expect(SOURCE).toContain('Precise locality, coordinates, and record identifiers stay in Atlas.');
     expect(SOURCE).toContain('aria-describedby="atlas-calyx-context-note"');
   });
