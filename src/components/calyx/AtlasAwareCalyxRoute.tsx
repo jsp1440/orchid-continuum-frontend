@@ -38,12 +38,20 @@ export default function AtlasAwareCalyxRoute() {
                   <strong>Atlas question:</strong> {question}
                 </p>
               ) : null}
-              <Link
-                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
-                to={atlasHref}
-              >
-                Return to Atlas{genus ? ` · ${genus}` : ""}
-              </Link>
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
+                <Link
+                  className="inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                  to={atlasHref}
+                >
+                  Return to Atlas{genus ? ` · ${genus}` : ""}
+                </Link>
+                <Link
+                  className="inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                  to="/"
+                >
+                  Return to Genus of the Day
+                </Link>
+              </div>
             </div>
             <p className="max-w-md text-xs text-muted-foreground">
               This handoff carries bounded interaction context only. The question is not scientific evidence, and precise occurrence locality remains in Atlas.
