@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Scatter, ScatterChart, XAxis, YAxis } from "recharts";
 
+import ScientificSynthesis from "@/components/calyx/ScientificSynthesis";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
 import { useCalyxSpeechOutput } from "@/hooks/useCalyxSpeechOutput";
@@ -193,6 +194,9 @@ function MissionResult({ mission }: { mission: BrainMission }) {
   return (
     <div className="space-y-4 pt-4">
       <div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs uppercase tracking-wider text-muted-foreground">Mission state</p><h3 className="text-lg font-semibold">{mission.state.replaceAll("_", " ")}</h3></div><p className="text-sm text-muted-foreground">Stage: {mission.current_stage.replaceAll("_", " ")}</p></div>
+      {/* The Brain's bounded synthesis, ahead of the evidence it interprets.
+          Conclusions are rendered as synthesis, never as another evidence row. */}
+      <ScientificSynthesis mission={mission} />
       <SourceList items={mission.sources} />
       <div className="grid gap-4 md:grid-cols-2"><EvidenceList title="Supporting evidence" items={mission.supporting_evidence} /><EvidenceList title="Contradicting evidence" items={mission.contradicting_evidence} /></div>
       <section className="rounded-xl border p-5"><h3 className="font-semibold">Evidence gaps</h3>{mission.missing_evidence.length ? <ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">{mission.missing_evidence.map((gap, index) => <li key={`${gap}-${index}`}>{gap}</li>)}</ul> : <p className="mt-2 text-sm text-muted-foreground">No additional gaps were reported.</p>}</section>
