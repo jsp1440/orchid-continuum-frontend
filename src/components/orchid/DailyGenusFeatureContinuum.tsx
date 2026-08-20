@@ -40,11 +40,13 @@ function RelationshipCard({
   label,
   question,
   node,
+  relationshipServiceAvailable,
   icon,
 }: {
   label: string;
   question: string;
   node: WebNodeData | null | undefined;
+  relationshipServiceAvailable: boolean;
   icon: React.ReactNode;
 }) {
   const hasData = Boolean(node?.hasData);
@@ -69,8 +71,16 @@ function RelationshipCard({
         </>
       ) : (
         <div className="mt-3 rounded-lg border border-dashed border-[#c9b37e] bg-[#fbf5e6] p-3">
-          <p className="text-sm font-medium text-[#4a5542]">Not yet documented in the current Continuum view.</p>
-          <p className="mt-1 text-xs leading-5 text-[#747d68]">This is a knowledge gap, not evidence that the relationship is biologically absent.</p>
+          <p className="text-sm font-medium text-[#4a5542]">
+            {relationshipServiceAvailable
+              ? 'Not yet documented in the current Continuum view.'
+              : 'Continuum relationship evidence is currently unavailable.'}
+          </p>
+          <p className="mt-1 text-xs leading-5 text-[#747d68]">
+            {relationshipServiceAvailable
+              ? 'This is a knowledge gap, not evidence that the relationship is biologically absent.'
+              : 'No biological conclusion is inferred while the relationship service is unavailable.'}
+          </p>
         </div>
       )}
     </article>
@@ -82,6 +92,7 @@ const DailyGenusFeatureContinuum: React.FC = () => {
   const media = continuum?.media.items ?? [];
   const hero = media[0] ?? null;
   const relationships = continuum?.relationships ?? null;
+  const relationshipServiceAvailable = relationships !== null;
   const atlasHref = featuredTaxonAtlasHref(genus);
   const calyxHref = featuredTaxonCalyxHref(genus);
 
@@ -182,18 +193,21 @@ const DailyGenusFeatureContinuum: React.FC = () => {
             label="Pollination"
             question="Who is linked to its pollination story?"
             node={relationships?.pollinators}
+            relationshipServiceAvailable={relationshipServiceAvailable}
             icon={<Bug className="h-4 w-4" />}
           />
           <RelationshipCard
             label="Mycorrhizae"
             question="Which fungal partnerships are documented?"
             node={relationships?.fungi}
+            relationshipServiceAvailable={relationshipServiceAvailable}
             icon={<Sprout className="h-4 w-4" />}
           />
           <RelationshipCard
             label="Place"
             question="Where has the Continuum recorded it?"
             node={relationships?.geography}
+            relationshipServiceAvailable={relationshipServiceAvailable}
             icon={<Globe2 className="h-4 w-4" />}
           />
         </div>
