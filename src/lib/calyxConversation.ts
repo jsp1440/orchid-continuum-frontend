@@ -346,9 +346,19 @@ export function buildCalyxTurnContext(options: {
       featured_taxon: routeContext.featuredTaxon
         ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
         : undefined,
-      question: routeContext.questionContext?.question,
-      question_source: routeContext.questionContext?.question_source,
-      question_is_evidence: routeContext.questionContext?.question_is_evidence,
+      // Spread, not three optional reads. Assigning `undefined` still creates the
+      // key, so a rejected question left route_context carrying `question`,
+      // `question_source` and `question_is_evidence` - the exact fields the
+      // fail-closed rule exists to withhold. JSON.stringify happens to drop
+      // them on the wire, which is why this went unnoticed, but the contract is
+      // about what the object asserts, not what survives serialization.
+      ...(routeContext.questionContext
+        ? {
+            question: routeContext.questionContext.question,
+            question_source: routeContext.questionContext.question_source,
+            question_is_evidence: routeContext.questionContext.question_is_evidence,
+          }
+        : {}),
     };
   }
 

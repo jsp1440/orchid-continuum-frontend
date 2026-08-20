@@ -22,6 +22,9 @@ describe('Atlas Next → Calyx handoff', () => {
     expect(route).toEqual({
       origin: ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN,
       featuredTaxon: { rank: 'genus', name: 'Laelia' },
+      // A handoff carrying no question must say so explicitly. toEqual is exact,
+      // so this also pins that the field cannot quietly disappear.
+      questionContext: null,
     });
   });
 
