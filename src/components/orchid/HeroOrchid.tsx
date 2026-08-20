@@ -1,111 +1,70 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import { fetchCalyxGenusMedia } from '@/lib/genusMediaResolver';
 import { binomialOf } from '@/lib/fungalPartner';
 
 /**
  * HeroOrchid — HOMEPAGE-SLICE-1.
  *
- * The first public impression is a living orchid, per
- * docs/architecture/Living_Homepage_Philosophy.md ("The first public
- * impression should be a living orchid, not a logo").
- *
- * Replaces the previous typographic hero, which carried a logo watermark, a
- * second logo image, botanical line art, three competing calls to action, and
- * a fiscal-sponsorship line — none of which showed an orchid.
- *
- * Photograph comes from the approved library only. Credit is rendered from
- * whatever the library actually holds: where the photographer is not recorded
- * (common for the EOL-sourced records) that is stated rather than papered over.
+ * The hero consumes the same canonical featured-taxon state as the rest of the
+ * homepage. It never performs its own scientific/media request and it fails
+ * closed when source or license provenance is missing.
  */
 
 export interface HeroPhotograph {
   imageUrl: string;
   scientificName: string;
   sourceName: string;
-  license: string | null;
+  license: string;
   attribution: string | null;
 }
-
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'ready'; photo: HeroPhotograph }
-  | { kind: 'no-media' }
-  | { kind: 'unavailable' };
 
 interface Props {
   /** Notifies the page which species the hero settled on, so downstream sections agree. */
   onSpeciesResolved?: (scientificName: string | null) => void;
 }
 
+function isBinomial(scientificName: string): boolean {
+  const parts = scientificName.trim().split(/\s+/);
+  return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
+}
+
 const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
-  const { genus } = useDailyGenus();
-  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const { genus, continuum, continuumStatus } = useDailyGenus();
+  const media = continuum?.media ?? null;
+
+  // Public hero media must retain source and license provenance. A URL alone is
+  // not sufficient evidence for publication.
+  const eligible = media?.items.filter((item) => Boolean(item.source_name?.trim()) && Boolean(item.license?.trim())) ?? [];
+  const named = eligible.find((item) => isBinomial(item.scientific_name));
+  const chosen = named ?? eligible[0] ?? null;
 
   useEffect(() => {
-    let cancelled = false;
-    setState({ kind: 'loading' });
+    onSpeciesResolved?.(named ? named.scientific_name : null);
+  }, [named, onSpeciesResolved]);
 
-    (async () => {
-      // Uses the single approved-media path (genusMediaResolver), which already
-      // targets the correct Calyx host, rejects non-photograph records, and
-      // deduplicates. An earlier revision of this component called a different
-      // backend host that does not serve this endpoint, and 404'd.
-      const payload = await fetchCalyxGenusMedia(genus);
-      if (cancelled) return;
-
-      if (payload.status === 'service_error') {
-        setState({ kind: 'unavailable' });
-        onSpeciesResolved?.(null);
-        return;
+  const photo: HeroPhotograph | null = chosen
+    ? {
+        imageUrl: chosen.image_url,
+        scientificName: chosen.scientific_name,
+        sourceName: chosen.source_name,
+        license: chosen.license as string,
+        attribution: chosen.attribution,
       }
+    : null;
 
-      // Prefer a record naming an actual species, so the hero can state a
-      // binomial truthfully rather than labelling a photograph with a bare
-      // genus. `Vanilla Mill.` is a genus record, not a species.
-      const named = payload.items.find((i) => {
-        const parts = i.scientific_name.trim().split(/\s+/);
-        return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
-      });
-      const chosen = named ?? payload.items[0];
-
-      if (!chosen) {
-        setState({ kind: 'no-media' });
-        onSpeciesResolved?.(null);
-        return;
-      }
-
-      setState({
-        kind: 'ready',
-        photo: {
-          imageUrl: chosen.image_url,
-          scientificName: chosen.scientific_name,
-          sourceName: chosen.source_name || 'unrecorded source',
-          license: chosen.license,
-          attribution: chosen.attribution,
-        },
-      });
-      // Only a genuine binomial is passed downstream; a genus-only record must
-      // not be treated as a species when resolving relationship evidence.
-      onSpeciesResolved?.(named ? chosen.scientific_name : null);
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [genus, onSpeciesResolved]);
-
-  const photo = state.kind === 'ready' ? state.photo : null;
   const binomial = photo ? binomialOf(photo.scientificName) : genus;
   const authority = photo ? photo.scientificName.replace(binomial, '').trim() : '';
+  const state = continuumStatus === 'loading'
+    ? 'loading'
+    : continuumStatus === 'unavailable' || media?.status === 'service_error'
+      ? 'unavailable'
+      : 'no-media';
 
   return (
     <section
       className="relative isolate overflow-hidden bg-[#0e1611]"
       aria-label={`Featured orchid: ${binomial}`}
     >
-      {/* The photograph is the hero. Height stops short of the viewport so the
-          next section's edge shows and the scroll is invited, not instructed. */}
       <div className="relative h-[62vh] min-h-[380px] md:h-[64vh] lg:h-[66vh]">
         {photo ? (
           <img
@@ -118,11 +77,11 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
         ) : (
           <div className="flex h-full w-full items-center justify-center px-6 text-center">
             <p className="max-w-md text-[15px] leading-7 text-[#9aa596]">
-              {state.kind === 'loading'
+              {state === 'loading'
                 ? 'Finding today’s orchid…'
-                : state.kind === 'no-media'
-                  ? `No approved photograph is available for ${genus} yet.`
-                  : 'The image library could not be reached just now.'}
+                : state === 'no-media'
+                  ? `No approved, fully attributed photograph is available for ${genus} yet.`
+                  : 'The canonical featured-taxon record could not be reached just now.'}
             </p>
           </div>
         )}
@@ -154,7 +113,7 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
             </h1>
 
             <p className="mt-3 max-w-[46ch] text-[15px] leading-7 text-[#ddd8cc] md:text-[16px]">
-              One orchid, and everything it depends on.
+              One orchid, followed through the evidence the Continuum actually holds.
             </p>
 
             <a
@@ -167,7 +126,7 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
             {photo && (
               <p className="mt-5 font-mono text-[10px] leading-5 tracking-[0.02em] text-[#9aa596]">
                 Source: {photo.sourceName}
-                {photo.license ? ` · License: ${photo.license.toUpperCase()}` : ' · License not recorded'}
+                {` · License: ${photo.license.toUpperCase()}`}
                 {' · '}
                 {photo.attribution
                   ? `Photographer: ${photo.attribution}`
