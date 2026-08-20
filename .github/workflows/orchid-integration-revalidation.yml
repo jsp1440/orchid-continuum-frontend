@@ -16,7 +16,10 @@ concurrency:
 
 jobs:
   dispatch:
-    if: contains(github.event.pull_request.body || '', 'OC-AUTO-ISSUE: #')
+    # Quoted because the expression contains ": ". A plain YAML scalar may not,
+    # so unquoted this file failed to parse and GitHub created a failed run with
+    # zero jobs on every push - the workflow never executed once.
+    if: "contains(github.event.pull_request.body || '', 'OC-AUTO-ISSUE: #')"
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}

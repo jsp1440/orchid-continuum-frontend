@@ -2,7 +2,10 @@ name: CALYX-SPECIES-EXHIBIT-001 Validation
 
 on:
   pull_request:
-    branches: [main]
+    # oc-autonomous-integration is the governed staging gate every autonomous
+    # PR targets. Validating only PRs into main meant nothing validated the
+    # gate itself, so work merged there carried no exact-head evidence.
+    branches: [main, oc-autonomous-integration]
     paths:
       - "src/lib/speciesExhibit.ts"
       - "src/lib/speciesExhibit.test.ts"
