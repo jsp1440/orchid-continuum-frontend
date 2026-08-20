@@ -39,6 +39,28 @@ describe('Atlas Next → Calyx handoff', () => {
     });
   });
 
+  it('carries an optional active scientific question as bounded non-evidentiary interaction context', () => {
+    const href = atlasOccurrenceEvidenceCalyxHref(
+      'Laelia',
+      '  What does this occurrence suggest   about the documented elevation range?  ',
+    )!;
+    const url = new URL(href, 'https://orchidcontinuum.org');
+
+    expect(url.searchParams.get('question')).toBe(
+      'What does this occurrence suggest about the documented elevation range?',
+    );
+    expect(url.searchParams.get('question_source')).toBe('user');
+    expect(url.searchParams.get('question_is_evidence')).toBe('false');
+    expect(url.searchParams.get('question')!.length).toBeLessThanOrEqual(800);
+  });
+
+  it('bounds oversized question context without altering the full Atlas record boundary', () => {
+    const href = atlasOccurrenceEvidenceCalyxHref('Laelia', `Why? ${'x'.repeat(2000)}`)!;
+    const url = new URL(href, 'https://orchidcontinuum.org');
+    expect(url.searchParams.get('question')!.length).toBe(800);
+    expect(url.searchParams.get('question_is_evidence')).toBe('false');
+  });
+
   it('makes the locality-protection boundary explicit at the Atlas → Calyx decision point', () => {
     expect(SOURCE).toContain('Calyx receives the genus and an occurrence-evidence workflow cue.');
     expect(SOURCE).toContain('Precise locality, coordinates, and record identifiers stay in Atlas.');
