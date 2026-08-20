@@ -1,13 +1,39 @@
 export const ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN = 'atlas-next-occurrence-evidence';
 
 const MAX_GENUS_CHARACTERS = 80;
-const MAX_QUESTION_CHARACTERS = 800;
+export const MAX_ATLAS_CALYX_QUESTION_CHARACTERS = 800;
 const SAFE_GENUS = /^[A-Za-z][A-Za-z -]*$/;
+
+export type AtlasCalyxQuestionContext = {
+  question: string;
+  question_source: 'user';
+  question_is_evidence: false;
+};
 
 function boundedQuestion(question: string | null | undefined): string | null {
   const normalized = question?.replace(/\s+/g, ' ').trim() ?? '';
   if (!normalized) return null;
-  return normalized.slice(0, MAX_QUESTION_CHARACTERS);
+  return normalized.slice(0, MAX_ATLAS_CALYX_QUESTION_CHARACTERS);
+}
+
+/**
+ * Parse the optional Atlas-authored question context carried on the Calyx route.
+ *
+ * The three provenance fields are an all-or-nothing contract. Any malformed or
+ * incomplete provenance fails closed so duplicated route context can never be
+ * mistaken for scientific evidence.
+ */
+export function parseAtlasCalyxQuestionContext(search: string): AtlasCalyxQuestionContext | null {
+  const params = new URLSearchParams(search);
+  const question = boundedQuestion(params.get('question'));
+  if (!question) return null;
+  if (params.get('question_source') !== 'user') return null;
+  if (params.get('question_is_evidence') !== 'false') return null;
+  return {
+    question,
+    question_source: 'user',
+    question_is_evidence: false,
+  };
 }
 
 /**
