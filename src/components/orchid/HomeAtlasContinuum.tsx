@@ -41,7 +41,7 @@ const HomeAtlasContinuum: React.FC = () => {
             Where do we actually know <span className="italic text-[#d4b34a]">{genus}</span> occurs?
           </h2>
           <p className="mt-4 max-w-2xl text-base leading-7 text-[#d8cfbd]/82">
-            The homepage uses the same Continuum evidence state as the featured orchid instead of maintaining a second set of Atlas statistics and fallback counts.
+            Follow the featured genus from the evidence shown here into the full Atlas, where occurrence records and geographic patterns can be explored without treating missing records as biological absence.
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
@@ -59,7 +59,7 @@ const HomeAtlasContinuum: React.FC = () => {
             </Link>
           </div>
           <p className="mt-3 max-w-2xl text-xs leading-5 text-[#9e978a]">
-            Both paths carry the same featured genus through the canonical Continuum handoff, so a demonstration can move from geographic evidence to a grounded Calyx inquiry without resetting scientific context.
+            Both paths keep the same featured genus, so you can move from geographic evidence into Calyx without losing the scientific context of the demonstration.
           </p>
         </div>
 
@@ -90,7 +90,7 @@ const HomeAtlasContinuum: React.FC = () => {
           ) : null}
 
           <div className="mt-5 border-t border-white/[0.08] pt-4 text-xs leading-5 text-[#9e978a]">
-            The full Atlas opens the current cartographic workspace for occurrence exploration. The homepage deliberately avoids precise locality claims and does not imply that locality-sensitivity safeguards are present until that Atlas work is integrated and validated.
+            Precise locality and occurrence-record details stay in Atlas. The Calyx handoff carries only the featured genus and, when a visitor asks one, a bounded user question that remains explicitly non-evidentiary interaction context.
           </div>
         </div>
       </div>
