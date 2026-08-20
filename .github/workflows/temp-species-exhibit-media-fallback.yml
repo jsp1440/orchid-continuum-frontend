@@ -1,0 +1,63 @@
+name: Temporary species exhibit media fallback
+
+on:
+  push:
+    branches:
+      - fix/species-exhibit-media-fallback
+
+permissions:
+  contents: write
+
+jobs:
+  patch-validate-commit:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/species-exhibit-media-fallback
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply bounded canonical-media fallback patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('src/components/orchid/SpeciesExhibit.tsx')
+          text = path.read_text()
+          old_import = """import {\n  fetchSpeciesExhibit,\n  type SpeciesExhibitCard,\n  type SpeciesExhibitFetchResult,\n} from '@/lib/speciesExhibit';\n"""
+          new_import = old_import + "import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';\n"
+          if text.count(old_import) != 1:
+              raise SystemExit('Expected one speciesExhibit import block')
+          text = text.replace(old_import, new_import)
+
+          old_media = """          const media = item.representative_media;\n          const imageFailed = !!media && failedImages.has(media.url);\n"""
+          new_media = """          const media = speciesExhibitMediaCandidates(item).find(\n            (candidate) => !failedImages.has(candidate.url),\n          ) ?? null;\n"""
+          if text.count(old_media) != 1:
+              raise SystemExit('Expected one media selection block')
+          text = text.replace(old_media, new_media)
+
+          old_render = """              {media && !imageFailed ? (\n                <img\n                  src={media.url}\n                  alt={`Representative source image for ${item.display_name}`}\n                  className=\"h-44 w-full object-cover\"\n                  loading=\"lazy\"\n                  onError={() => {\n                    setFailedImages((current) => {\n                      const next = new Set(current);\n                      next.add(media.url);\n                      return next;\n                    });\n                  }}\n                />\n              ) : (\n"""
+          new_render = """              {media ? (\n                <>\n                  <img\n                    src={media.url}\n                    alt={`Representative source image for ${item.display_name}`}\n                    className=\"h-44 w-full object-cover\"\n                    loading=\"lazy\"\n                    onError={() => {\n                      setFailedImages((current) => {\n                        const next = new Set(current);\n                        next.add(media.url);\n                        return next;\n                      });\n                    }}\n                  />\n                  <div className=\"border-t border-[#dfd1ad] bg-[#f6f0df] px-3 py-1.5 text-[10px] leading-4 text-[#686e5a]\">\n                    {media.source ?? 'Source unavailable'}{media.license ? ` · ${media.license}` : ' · license unavailable'}\n                  </div>\n                </>\n              ) : (\n"""
+          if text.count(old_render) != 1:
+              raise SystemExit('Expected one media render block')
+          path.write_text(text.replace(old_render, new_render))
+          PY
+      - run: npm ci
+      - name: Focused media tests
+        run: npx vitest run src/lib/speciesExhibitMedia.test.ts src/components/orchid/HomeSpeciesExhibit.test.ts
+      - name: Targeted lint
+        run: npx eslint src/lib/speciesExhibitMedia.ts src/lib/speciesExhibitMedia.test.ts src/components/orchid/SpeciesExhibit.tsx
+      - name: Production build
+        run: npm run build
+      - name: Commit validated repair and remove temporary workflow
+        run: |
+          rm .github/workflows/temp-species-exhibit-media-fallback.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/components/orchid/SpeciesExhibit.tsx .github/workflows/temp-species-exhibit-media-fallback.yml
+          git commit -m "fix(media): fall through canonical species image candidates"
+          git push origin HEAD:fix/species-exhibit-media-fallback
