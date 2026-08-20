@@ -2,7 +2,7 @@ name: CALYX-SPECIES-EXHIBIT-001 Validation
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, oc-autonomous-integration]
     paths:
       - "src/lib/speciesExhibit.ts"
       - "src/lib/speciesExhibit.test.ts"
