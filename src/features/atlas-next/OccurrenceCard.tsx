@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import { canonicalSlug } from '@/lib/orchidContinuum';
@@ -70,12 +70,13 @@ const Field: React.FC<{
 };
 
 const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
+  const [calyxQuestion, setCalyxQuestion] = useState('');
   const ev = resolveOccurrenceEvidence(point);
   const cov = coverage(ev);
   const loc = resolveLocation(point, access);
   const name = displayName(point);
   const slug = point.canonicalName ? canonicalSlug(point.canonicalName) : null;
-  const calyxHref = atlasOccurrenceEvidenceCalyxHref(point.genus);
+  const calyxHref = atlasOccurrenceEvidenceCalyxHref(point.genus, calyxQuestion);
   const conservationHref = point.genus
     ? `/conservation?genus=${encodeURIComponent(point.genus)}&origin=atlas-next-occurrence-evidence`
     : null;
@@ -172,6 +173,29 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
           </p>
         </div>
 
+        {calyxHref && (
+          <div className="mt-5 rounded border border-[#b98ce0]/25 bg-[#b98ce0]/[0.06] px-3 py-3">
+            <label
+              htmlFor="atlas-calyx-question"
+              className="font-mono text-[9.5px] uppercase tracking-[0.16em] text-[#c9a7e8]"
+            >
+              Ask Calyx about this evidence
+            </label>
+            <textarea
+              id="atlas-calyx-question"
+              value={calyxQuestion}
+              onChange={(event) => setCalyxQuestion(event.target.value)}
+              maxLength={800}
+              rows={3}
+              placeholder="What does this occurrence suggest about the documented range, elevation, habitat, or evidence gaps?"
+              className="mt-2 w-full resize-y rounded border border-white/10 bg-black/20 px-3 py-2 text-[13px] leading-[1.5] text-white/90 outline-none placeholder:text-white/30 focus:border-[#b98ce0]/70 focus:ring-1 focus:ring-[#b98ce0]/30"
+            />
+            <p className="mt-1.5 text-[10.5px] leading-[1.5] text-white/40">
+              Optional. Your question is carried as interaction context and is explicitly marked as not scientific evidence.
+            </p>
+          </div>
+        )}
+
         <div className="mt-5 flex flex-wrap gap-2">
           {slug && (
             <Link
@@ -196,10 +220,10 @@ const OccurrenceCard: React.FC<Props> = ({ point, access, onClose }) => {
                 aria-describedby="atlas-calyx-context-note"
                 className="inline-flex min-h-[48px] items-center rounded-full border border-[#b98ce0]/40 bg-[#b98ce0]/10 px-5 text-[13px] text-[#eee8f5] transition-colors hover:border-[#b98ce0]/75 hover:bg-[#b98ce0]/20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#b98ce0]"
               >
-                Investigate this evidence in Calyx →
+                {calyxQuestion.trim() ? 'Ask Calyx this question →' : 'Investigate this evidence in Calyx →'}
               </Link>
               <p id="atlas-calyx-context-note" className="mt-2 max-w-sm text-[11px] leading-[1.55] text-white/45">
-                Calyx receives the genus and an occurrence-evidence workflow cue. Precise locality, coordinates, and record identifiers stay in Atlas.
+                Calyx receives the genus, an occurrence-evidence workflow cue, and your optional bounded question. Precise locality, coordinates, and record identifiers stay in Atlas.
               </p>
             </div>
           )}
