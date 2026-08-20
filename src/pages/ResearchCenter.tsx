@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Filter,
   Network,
@@ -9,6 +10,7 @@ import {
   Database,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
+import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
 
 /**
  * Research Center — advanced research surface for power users.
@@ -58,6 +60,9 @@ const PILLARS = [
 ] as const;
 
 const ResearchCenter: React.FC = () => {
+  // A project carried in from another module keeps the investigation intact.
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('project');
   const [activeQuery, setActiveQuery] = useState({
     genus: '',
     country: '',
@@ -84,6 +89,26 @@ const ResearchCenter: React.FC = () => {
         </div>
       }
     >
+      {/* Research Station — one investigation, read end to end against the
+          canonical Research Workspace contract. This is the live surface; the
+          query-builder pillars below remain a structural preview. */}
+      <section className="py-10">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          <div className="mb-6">
+            <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/70 mb-2">
+              Research Station · live
+            </div>
+            <h2 className="font-serif text-2xl md:text-3xl">Your current investigation</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+              Subject, question, what the Continuum holds, where evidence disagrees, what
+              remains unknown, and where to continue. Interpretation comes from Calyx over
+              the governed evidence-synthesis path — never from this page.
+            </p>
+          </div>
+          <ResearchStationWorkbench projectId={projectId} />
+        </div>
+      </section>
+
       {/* Query builder mockup */}
       <section className="py-10">
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
