@@ -97,19 +97,10 @@ const HomeAtlas: React.FC = () => {
   // Bumped by the "Retry now" button to re-run the load effect.
   const [reloadKey, setReloadKey] = useState(0);
 
-  // Filters — the map auto-filters to the synchronized "Genus of the Day" on
-  // load. Seeded from context so it always matches the other homepage sections.
-  // The user can deselect the chip or hit Reset to see everything.
-  const [selectedGenera, setSelectedGenera] = useState<Set<string>>(
-    () => new Set([dailyGenus]),
-  );
-
-  // Keep the genus filter seed in sync if the 12-hour window rotates while
-  // the page is open (or if the context resolves from the Supabase snapshot
-  // after mount).
-  useEffect(() => {
-    setSelectedGenera(new Set([dailyGenus]));
-  }, [dailyGenus]);
+  // Filters start unscoped so a featured genus absent from the loaded occurrence
+  // sample cannot make a healthy Atlas appear empty. The shared daily genus remains
+  // visible and explicitly selectable in the filter UI.
+  const [selectedGenera, setSelectedGenera] = useState<Set<string>>(new Set());
   const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
   const [speciesQuery, setSpeciesQuery] = useState('');
   const [pollinatorOnly, setPollinatorOnly] = useState(false);
