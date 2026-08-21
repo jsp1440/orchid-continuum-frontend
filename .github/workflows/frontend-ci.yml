@@ -8,6 +8,7 @@ on:
   push:
     branches:
       - main
+      - oc-autonomous-integration
   workflow_dispatch:
 
 permissions:
