@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const source = readFileSync(resolve(process.cwd(), 'src/components/orchid/HeroOrchid.tsx'), 'utf8');
+const mediaResolverSource = readFileSync(resolve(process.cwd(), 'src/lib/genusMediaResolver.ts'), 'utf8');
 
 describe('HeroOrchid canonical media contract', () => {
   it('consumes the shared featured-taxon Continuum state instead of fetching genus media independently', () => {
@@ -11,9 +12,10 @@ describe('HeroOrchid canonical media contract', () => {
     expect(source).not.toContain('fetchCalyxGenusMedia');
   });
 
-  it('fails closed when public image provenance lacks source or license', () => {
-    expect(source).toContain("Boolean(item.source_name?.trim())");
-    expect(source).toContain("Boolean(item.license?.trim())");
+  it('fails closed through the shared public media boundary when source or license provenance is missing', () => {
+    expect(source).toContain('publicGenusMediaItems(media?.items ?? [])');
+    expect(mediaResolverSource).toContain('Boolean(item.source_name?.trim())');
+    expect(mediaResolverSource).toContain('Boolean(item.license?.trim())');
     expect(source).not.toContain("'unrecorded source'");
     expect(source).not.toContain('License not recorded');
   });

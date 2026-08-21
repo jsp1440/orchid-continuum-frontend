@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Globe2, MapPinned, MessageCircle } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
 
 /**
  * Homepage Atlas window.
@@ -16,7 +17,7 @@ const HomeAtlasContinuum: React.FC = () => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const geography = continuum?.relationships?.geography ?? null;
   const occurrenceDomain = continuum?.domains.find((item) => item.domain === 'occurrences') ?? null;
-  const hero = continuum?.media.items[0] ?? null;
+  const hero = publicGenusMediaItems(continuum?.media.items ?? [])[0] ?? null;
 
   const evidenceAvailable = Boolean(geography?.hasData || occurrenceDomain?.state === 'known');
   const atlasHref = featuredTaxonAtlasHref(genus);

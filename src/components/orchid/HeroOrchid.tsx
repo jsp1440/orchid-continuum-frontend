@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { binomialOf } from '@/lib/fungalPartner';
+import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
 
 /**
  * HeroOrchid — HOMEPAGE-SLICE-1.
@@ -32,9 +33,9 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = continuum?.media ?? null;
 
-  // Public hero media must retain source and license provenance. A URL alone is
-  // not sufficient evidence for publication.
-  const eligible = media?.items.filter((item) => Boolean(item.source_name?.trim()) && Boolean(item.license?.trim())) ?? [];
+  // A URL alone is not sufficient evidence for public publication. All mounted
+  // homepage media surfaces share this same source+license boundary.
+  const eligible = publicGenusMediaItems(media?.items ?? []);
   const named = eligible.find((item) => isBinomial(item.scientific_name));
   const chosen = named ?? eligible[0] ?? null;
 
