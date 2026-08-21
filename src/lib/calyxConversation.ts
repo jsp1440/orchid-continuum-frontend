@@ -27,6 +27,9 @@ const MAX_STRUCTURED_PREVIEW_COLUMNS = 6;
 const MAX_STRUCTURED_PREVIEW_POINTS = 12;
 const MAX_ROUTE_GENUS_CHARACTERS = 80;
 const MAX_ROUTE_ORIGIN_CHARACTERS = 80;
+const MAX_ROUTE_TAXON_CHARACTERS = 180;
+const RESEARCH_STATION_ORIGIN = "research-station";
+const SAFE_ROUTE_TAXON = /^[A-Za-z0-9][A-Za-z0-9 .:_()'×-]*$/;
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
   "&": "&amp;",
@@ -323,6 +326,13 @@ export function parseCalyxRouteContext(search: string): CalyxRouteContext {
   };
 }
 
+function parseResearchExactTaxon(search: string, origin: string | null): string | null {
+  if (origin !== RESEARCH_STATION_ORIGIN) return null;
+  const value = new URLSearchParams(search).get("taxon")?.trim() ?? "";
+  if (!value || value.length > MAX_ROUTE_TAXON_CHARACTERS || !SAFE_ROUTE_TAXON.test(value)) return null;
+  return value;
+}
+
 export function buildCalyxTurnContext(options: {
   projectId: string;
   uploadedFiles: Array<Pick<File, "name" | "type" | "size">>;
@@ -337,15 +347,22 @@ export function buildCalyxTurnContext(options: {
     project_id: normalizeProjectId(options.projectId),
   };
 
-  const routeContext = parseCalyxRouteContext(
-    options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : ""),
-  );
-  if (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext) {
+  const routeSearch = options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : "");
+  const routeContext = parseCalyxRouteContext(routeSearch);
+  const researchTaxon = parseResearchExactTaxon(routeSearch, routeContext.origin);
+  if (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext || researchTaxon) {
     context.route_context = {
       origin: routeContext.origin ?? undefined,
       featured_taxon: routeContext.featuredTaxon
         ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
         : undefined,
+      ...(researchTaxon
+        ? {
+            taxon: researchTaxon,
+            taxon_source: RESEARCH_STATION_ORIGIN,
+            taxon_is_evidence: false,
+          }
+        : {}),
       // Spread, not three optional reads. Assigning `undefined` still creates the
       // key, so a rejected question left route_context carrying `question`,
       // `question_source` and `question_is_evidence` - the exact fields the
