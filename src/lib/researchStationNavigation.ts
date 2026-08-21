@@ -53,6 +53,21 @@ function requiredTaxon(taxon: string): string {
   return value;
 }
 
+/**
+ * Research Workspace currently supplies a canonical `taxon_id` but no rank.
+ * Do not silently coerce that generic identity into Atlas's genus filter.
+ *
+ * We only classify the two unambiguous name shapes the mounted Atlas already
+ * understands. Everything else remains generic context rather than becoming a
+ * false rank assertion.
+ */
+function atlasTaxonParams(taxon: string): Record<string, string> {
+  const value = requiredTaxon(taxon);
+  if (/^[A-Z][A-Za-z-]+$/.test(value)) return { genera: value };
+  if (/^[A-Z][A-Za-z-]+\s+[a-z][A-Za-z-]+$/.test(value)) return { species: value };
+  return { taxon: value };
+}
+
 function query(params: Record<string, string | null | undefined>): string {
   const entries: Record<string, string> = {};
   for (const [key, value] of Object.entries(params)) {
@@ -73,10 +88,10 @@ export type ResearchStationContext = {
   conversationId?: string | null;
 };
 
-/** Into the Atlas, filtered to the investigation's taxon. */
+/** Into the Atlas, filtered only when the subject's name shape establishes rank. */
 export function researchStationAtlasHref(context: ResearchStationContext): string {
   return `/atlas${query({
-    genera: requiredTaxon(context.taxon),
+    ...atlasTaxonParams(context.taxon),
     project: context.projectId,
     origin: RESEARCH_STATION_ORIGIN,
   })}`;
