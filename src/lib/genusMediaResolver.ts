@@ -38,6 +38,20 @@ const empty = (genus: string, status: GenusMediaResponse['status']): GenusMediaR
   summary: { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
 });
 
+/**
+ * Public publication boundary for canonical genus media.
+ *
+ * The backend remains authoritative for scientific/media selection, but a
+ * public surface may only publish a returned photograph when the record also
+ * carries a non-empty source and license. Missing attribution is allowed and
+ * is rendered explicitly as unavailable; missing source/license is not.
+ */
+export function publicGenusMediaItems(items: readonly GenusMediaItem[]): GenusMediaItem[] {
+  return items.filter(
+    (item) => Boolean(item.source_name?.trim()) && Boolean(item.license?.trim()),
+  );
+}
+
 /** The only Featured Genus media request path. No external fallback is allowed. */
 export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal): Promise<GenusMediaResponse> {
   const requested = genus.trim();

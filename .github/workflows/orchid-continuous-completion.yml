@@ -81,7 +81,13 @@ jobs:
             age=$((now - updated_epoch))
             if (( age > 5700 )); then
               marker="OC-AUTO-ISSUE: #${issue}"
-              durable=$(gh pr list --repo "$REPO" --state open --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" | head -1)
+              # Not `| head -1`. Under `set -o pipefail` head exits after one line,
+              # gh takes SIGPIPE once its output exceeds the 64KB pipe buffer, the
+              # pipeline returns 141 and `set -e` kills the whole step. With several
+              # long-bodied OC-AUTO PRs open that is every run - which is exactly
+              # when this supervisor is most needed.
+              durable=$(gh pr list --repo "$REPO" --state open --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
+              durable=${durable%%$'\n'*}
               if [[ -z "$durable" ]]; then
                 gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --add-label oc-queued >/dev/null 2>&1 || true
               fi
@@ -92,15 +98,20 @@ jobs:
           for pr in "${prs[@]}"; do
             data=$(gh pr view "$pr" --repo "$REPO" --json body,isDraft,mergeStateStatus,headRefName,headRefOid)
             body=$(jq -r '.body // ""' <<<"$data")
-            issue=$(sed -n 's/.*OC-AUTO-ISSUE: #\([0-9][0-9]*\).*/\1/p' <<<"$body" | head -1)
+            issue=$(sed -n 's/.*OC-AUTO-ISSUE: #\([0-9][0-9]*\).*/\1/p' <<<"$body" || true)
+            issue=${issue%%$'\n'*}
             [[ -n "$issue" ]] || continue
 
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
 
             head=$(jq -r '.headRefName' <<<"$data")
             head_sha=$(jq -r '.headRefOid' <<<"$data")
-            ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
-            matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --event workflow_dispatch --limit 10 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            # No --event filter. Both workflows trigger on pull_request, so filtering
+            # to workflow_dispatch matched nothing, ci and matrix were always empty,
+            # and the `[[ -n "$ci" && -n "$matrix" ]] || continue` below skipped every
+            # pull request. The supervisor could not advance anything, ever.
+            ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
             ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$ci_runs")
             matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$matrix_runs")
 
@@ -271,7 +282,14 @@ jobs:
 
   lane1:
     needs: prepare
-    if: needs.prepare.outputs.issue1 != ''
+    # always() is required here. `planner` is skipped whenever no backlog refill is
+    # needed, and GitHub propagates that skip transitively through `prepare` (which
+    # survives only via its own always()) to every dependent job that lacks always().
+    # Without it the lane is skipped even when `prepare` succeeded and selected an
+    # issue, so no Claude worker is ever dispatched. Checking `prepare.result`
+    # preserves the real "prepare must have succeeded" requirement that always()
+    # would otherwise discard.
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.issue1 != ''
     uses: ./.github/workflows/orchid-completion-lane.yml
     with:
       issue_number: ${{ needs.prepare.outputs.issue1 }}
@@ -279,7 +297,8 @@ jobs:
 
   lane2:
     needs: prepare
-    if: needs.prepare.outputs.issue2 != ''
+    # See lane1: always() defeats the transitive skip propagated from `planner`.
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.issue2 != ''
     uses: ./.github/workflows/orchid-completion-lane.yml
     with:
       issue_number: ${{ needs.prepare.outputs.issue2 }}
@@ -287,7 +306,8 @@ jobs:
 
   lane3:
     needs: prepare
-    if: needs.prepare.outputs.issue3 != ''
+    # See lane1: always() defeats the transitive skip propagated from `planner`.
+    if: always() && needs.prepare.result == 'success' && needs.prepare.outputs.issue3 != ''
     uses: ./.github/workflows/orchid-completion-lane.yml
     with:
       issue_number: ${{ needs.prepare.outputs.issue3 }}
@@ -332,7 +352,21 @@ jobs:
           )
 
           if [[ -z "$existing" ]]; then
-            gh pr create --repo "$REPO" --base main --head "$INTEGRATION_BRANCH" --draft --title "OC autonomous integration batch" --body "$body" >/dev/null
+            # Creating the gate PR requires "Allow GitHub Actions to create and approve
+            # pull requests" on the repository. That is an owner setting, not something
+            # this workflow can grant itself. When it is off, report the exact remedy and
+            # leave the run green rather than failing every scheduled cycle red, which
+            # would mask genuine lane and validation failures behind a permanent error.
+            if ! create_error=$(gh pr create --repo "$REPO" --base main --head "$INTEGRATION_BRANCH" --draft --title "OC autonomous integration batch" --body "$body" 2>&1 >/dev/null); then
+              if grep -qi 'not permitted to create or approve pull requests' <<<"$create_error"; then
+                notice="Owner gate PR could not be opened: GitHub Actions is not permitted to create pull requests in $REPO. Enable Settings -> Actions -> General -> Workflow permissions -> 'Allow GitHub Actions to create and approve pull requests'. The integration branch is $ahead commit(s) ahead of main and is still safe to review and merge manually."
+                echo "::warning title=Owner gate PR blocked by repository setting::$notice"
+                printf '### Owner gate\n\n%s\n' "$notice" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              echo "$create_error" >&2
+              exit 1
+            fi
             existing=$(gh pr list --repo "$REPO" --state open --base main --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
           else
             gh pr edit "$existing" --repo "$REPO" --body "$body" >/dev/null

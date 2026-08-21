@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import {
-  fetchFungalEvidence,
-  splitCitation,
-  type FungalEvidence,
-} from '@/lib/fungalPartner';
+import { fetchFeaturedTaxonFungalEvidence } from '@/lib/featuredTaxonContinuum';
+import { splitCitation, type FungalEvidence } from '@/lib/fungalPartner';
 
 /**
  * FungalDependency — HOMEPAGE-SLICE-1, the single relationship section.
@@ -13,8 +10,8 @@ import {
  * Answers a human question — "What feeds this orchid before it can feed
  * itself?" — rather than presenting a category called "Mycorrhizae".
  *
- * The section renders whatever the graph actually holds for the featured
- * orchid, in one of three states:
+ * The section renders whatever the canonical featured-taxon evidence contract
+ * actually holds for the featured orchid, in one of three evidence states:
  *
  *   species     — a study names this exact species' fungal partner
  *   genus       — a study names a partner for a different species in the genus,
@@ -23,8 +20,8 @@ import {
  *                 with the real scale of the gap rather than filled in with
  *                 general orchid biology
  *
- * Six of the eight genera in the homepage rotation are currently unrecorded,
- * so the third state is the ordinary case, not an error path.
+ * Transport failure remains a separate unavailable state and is never treated
+ * as biological absence.
  */
 
 interface Props {
@@ -118,7 +115,7 @@ const FungalDependency: React.FC<Props> = ({ heroSpecies }) => {
   useEffect(() => {
     let cancelled = false;
     setState({ kind: 'loading' });
-    fetchFungalEvidence(genus, heroSpecies)
+    fetchFeaturedTaxonFungalEvidence(genus, heroSpecies)
       .then((evidence) => {
         if (!cancelled) setState({ kind: 'ready', evidence });
       })

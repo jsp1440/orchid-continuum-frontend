@@ -1,6 +1,7 @@
 import { fetchCalyxGenusMedia, type GenusMediaResponse } from '@/lib/genusMediaResolver';
 import { fetchGenusGraphEvidence, type GenusGraphResult, type KnowledgeGraphDomain } from '@/lib/knowledgeGraph';
 import { fetchContinuumGraph, type ContinuumGraphData } from '@/lib/ocBackend';
+import { fetchFungalEvidence, type FungalEvidence } from '@/lib/fungalPartner';
 
 export type ContinuumEvidenceState = 'known' | 'unknown' | 'unavailable';
 
@@ -66,6 +67,24 @@ function conservationEvidence(
     edges: conservation?.edges ?? null,
     relationship: relationships?.conservation ?? null,
   };
+}
+
+/**
+ * Canonical species-aware fungal evidence resolver for featured-taxon consumers.
+ *
+ * The underlying Orchid Continuum evidence source preserves exact species,
+ * congeneric, and unrecorded states. Public components call this adapter rather
+ * than reaching into a scientific table/service directly, so the semantic
+ * boundary remains centralized while the hero's resolved species can still be
+ * used to distinguish species-level evidence from genus-level evidence.
+ */
+export async function fetchFeaturedTaxonFungalEvidence(
+  genus: string,
+  displayedSpecies: string | null,
+): Promise<FungalEvidence> {
+  const requested = genus.trim();
+  if (!requested) throw new Error('Featured taxon genus is required');
+  return fetchFungalEvidence(requested, displayedSpecies);
 }
 
 /**

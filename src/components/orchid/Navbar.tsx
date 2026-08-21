@@ -3,6 +3,7 @@ import { Menu, X, ChevronDown, ExternalLink, User as UserIcon, LogOut, LogIn } f
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
+import { atlasWorkspaceCalyxHref } from '@/lib/featuredTaxonNavigation';
 import FavoritesMenu from './FavoritesMenu';
 
 /**
@@ -83,6 +84,15 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
   const { user, signOut } = useAuth();
   const accountRef = useRef<HTMLDivElement>(null);
 
+  const atlasGenus = (() => {
+    if (!(location.pathname === '/atlas' || location.pathname.startsWith('/atlas/'))) return null;
+    const values = (new URLSearchParams(location.search).get('genera') ?? '')
+      .split('|')
+      .map((value) => value.trim())
+      .filter(Boolean);
+    return values.length === 1 ? values[0] : null;
+  })();
+
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
     onScroll();
@@ -101,6 +111,7 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
 
   const go = (l: Linkish) => {
     if (l.external && l.href) window.open(l.href, '_blank', 'noopener,noreferrer');
+    else if (l.route === '/calyx' && atlasGenus) navigate(atlasWorkspaceCalyxHref(atlasGenus));
     else if (l.route) navigate(l.route);
     setOpen(false);
     setMoreOpen(false);

@@ -2,10 +2,12 @@ import React from 'react';
 import { ArrowRight, FlaskConical, GraduationCap, HeartHandshake, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
+import { featuredTaxonResearchHref } from '@/lib/featuredTaxonNavigation';
 
 const HomepageStewardshipClose: React.FC = () => {
   const { genus, continuum } = useDailyGenus();
   const gapCount = continuum?.gaps.length ?? 0;
+  const researchHref = featuredTaxonResearchHref(genus);
 
   return (
     <section className="border-b border-white/[0.06] bg-[#102116] text-[#f5f0e8]">
@@ -30,10 +32,10 @@ const HomepageStewardshipClose: React.FC = () => {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            <Link to="/research" className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
+            <Link to={researchHref} className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
               <FlaskConical className="h-5 w-5 text-[#d4b34a]" />
               <p className="mt-3 font-serif text-xl text-[#fffaf0]">Research Station</p>
-              <p className="mt-2 text-sm leading-6 text-[#cfc8b8]/78">Take an evidence gap into a research workflow.</p>
+              <p className="mt-2 text-sm leading-6 text-[#cfc8b8]/78">Carry this featured genus into the research workflow without promoting route context to evidence.</p>
             </Link>
             <Link to="/university" className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
               <GraduationCap className="h-5 w-5 text-[#d4b34a]" />

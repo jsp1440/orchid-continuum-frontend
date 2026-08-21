@@ -63,11 +63,41 @@ describe('featured taxon source integrity', () => {
     expect(navigation).toContain('&origin=${FEATURED_TAXON_ORIGIN}');
   });
 
-  it('routes the stewardship Research Station handoff to a live application route', () => {
+  it('keeps the mounted Atlas CALYX navigation on the active single-genus context', () => {
+    const navbar = source('components/orchid/Navbar.tsx');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
+    const calyxRoute = source('components/calyx/AtlasAwareCalyxRoute.tsx');
+
+    expect(navbar).toContain('atlasWorkspaceCalyxHref');
+    expect(navbar).toContain("l.route === '/calyx' && atlasGenus");
+    expect(navigation).toContain("ATLAS_WORKSPACE_ORIGIN = 'atlas-workspace'");
+    expect(calyxRoute).toContain('routeContext.origin === ATLAS_WORKSPACE_ORIGIN');
+  });
+
+  it('fails relationship-service outages closed instead of converting them into knowledge claims', () => {
+    const featured = source('components/orchid/DailyGenusFeatureContinuum.tsx');
+    expect(featured).toContain('deriveEcologicalEvidence');
+    expect(featured).toContain('serviceAnswered');
+    expect(featured).toContain("evidence.reason === 'service-unavailable'");
+    expect(featured).toContain('No fallback relationship claim is substituted while the evidence service is unreachable.');
+    expect(featured).toContain('This is a knowledge gap, not evidence that the relationship is biologically absent.');
+  });
+
+  it('preserves featured genus context when stewardship hands off to the live Research Station', () => {
     const close = source('components/orchid/HomepageStewardshipClose.tsx');
+    const research = source('pages/ResearchCenter.tsx');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
     const app = source('App.tsx');
-    expect(close).toContain('to="/research"');
-    expect(close).not.toContain('to="/research-station"');
+
+    expect(close).toContain('featuredTaxonResearchHref');
+    expect(close).toContain('const researchHref = featuredTaxonResearchHref(genus)');
+    expect(close).toContain('to={researchHref}');
+    expect(close).not.toContain('to="/research"');
+    expect(navigation).toContain('/research?genus=');
+    expect(research).toContain("searchParams.get('origin') === FEATURED_TAXON_ORIGIN");
+    expect(research).toContain('is preserved here as navigation context');
+    expect(research).toContain('It is not scientific evidence');
+    expect(research).toContain('genus: routeGenus');
     expect(app).toContain('<Route path="/research"');
   });
 
