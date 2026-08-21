@@ -9,6 +9,7 @@ import {
   featuredTaxonAtlasHref,
   featuredTaxonCalyxHref,
 } from '@/lib/featuredTaxonNavigation';
+import { researchStationCalyxHref } from '@/lib/researchStationNavigation';
 
 const DEMO_GENUS = 'Vanilla';
 
@@ -64,6 +65,37 @@ describe('NAOCC demo continuity', () => {
       question: 'What ecological evidence helps explain this distribution?',
       question_source: 'user',
       question_is_evidence: false,
+    });
+  });
+
+  it('carries a Research species, project, and conversation into Calyx without promoting the species to evidence', () => {
+    const href = researchStationCalyxHref({
+      taxon: 'Phalaenopsis amabilis',
+      projectId: 'naocc-phalaenopsis',
+      conversationId: 'conversation-phalaenopsis',
+    });
+    const calyxUrl = new URL(href, 'https://orchidcontinuum.org');
+
+    expect(calyxUrl.pathname).toBe('/calyx');
+    expect(calyxUrl.searchParams.get('genus')).toBe('Phalaenopsis');
+    expect(calyxUrl.searchParams.get('taxon')).toBe('Phalaenopsis amabilis');
+    expect(calyxUrl.searchParams.get('project')).toBe('naocc-phalaenopsis');
+    expect(calyxUrl.searchParams.get('conversation')).toBe('conversation-phalaenopsis');
+    expect(calyxUrl.searchParams.get('origin')).toBe('research-station');
+
+    const turnContext = buildCalyxTurnContext({
+      projectId: calyxUrl.searchParams.get('project') ?? '',
+      uploadedFiles: [],
+      routeSearch: calyxUrl.search,
+    });
+
+    expect(turnContext.project_id).toBe('naocc-phalaenopsis');
+    expect(turnContext.route_context).toEqual({
+      origin: 'research-station',
+      featured_taxon: { rank: 'genus', accepted_name: 'Phalaenopsis' },
+      taxon: 'Phalaenopsis amabilis',
+      taxon_source: 'research-station',
+      taxon_is_evidence: false,
     });
   });
 
