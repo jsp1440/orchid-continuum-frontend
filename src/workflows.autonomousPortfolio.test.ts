@@ -41,8 +41,8 @@ describe("frontend autonomous portfolio control plane", () => {
     expect(schedulerText).toContain("sort -t'|' -k1,1n -k2,2 -k3,3n");
   });
 
-  it("declares five bounded implementation lanes", () => {
-    expect(schedulerText).toContain("MAX_ACTIVE_LANES: 5");
+  it("declares five reusable lanes with a two-worker execution ceiling", () => {
+    expect(schedulerText).toContain("MAX_ACTIVE_LANES: 2");
     for (const lane of LANES) {
       expect(workflow.jobs[lane]).toBeDefined();
       expect(workflow.jobs[lane].uses).toBe(
