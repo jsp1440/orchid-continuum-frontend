@@ -1,4 +1,5 @@
 const FEATURED_TAXON_ORIGIN = 'homepage-featured-taxon';
+export const ATLAS_WORKSPACE_ORIGIN = 'atlas-workspace';
 
 function normalizedGenus(genus: string): string {
   const value = genus.trim();
@@ -20,6 +21,15 @@ export function featuredTaxonAtlasHref(genus: string): string {
  */
 export function featuredTaxonCalyxHref(genus: string): string {
   return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}`;
+}
+
+/**
+ * Continue from the mounted Atlas workspace into Calyx while preserving only
+ * the active genus identity. Atlas coordinates, locality text, occurrence IDs,
+ * collector fields, and other record-level details remain in Atlas.
+ */
+export function atlasWorkspaceCalyxHref(genus: string): string {
+  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${ATLAS_WORKSPACE_ORIGIN}`;
 }
 
 /**
