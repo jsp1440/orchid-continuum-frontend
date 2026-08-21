@@ -63,6 +63,17 @@ describe('featured taxon source integrity', () => {
     expect(navigation).toContain('&origin=${FEATURED_TAXON_ORIGIN}');
   });
 
+  it('keeps the mounted Atlas CALYX navigation on the active single-genus context', () => {
+    const navbar = source('components/orchid/Navbar.tsx');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
+    const calyxRoute = source('components/calyx/AtlasAwareCalyxRoute.tsx');
+
+    expect(navbar).toContain('atlasWorkspaceCalyxHref');
+    expect(navbar).toContain("l.route === '/calyx' && atlasGenus");
+    expect(navigation).toContain("ATLAS_WORKSPACE_ORIGIN = 'atlas-workspace'");
+    expect(calyxRoute).toContain('routeContext.origin === ATLAS_WORKSPACE_ORIGIN');
+  });
+
   it('fails relationship-service outages closed instead of converting them into knowledge claims', () => {
     const featured = source('components/orchid/DailyGenusFeatureContinuum.tsx');
     expect(featured).toContain('deriveEcologicalEvidence');
