@@ -72,6 +72,7 @@ const ResearchCenter: React.FC = () => {
     searchParams.get('origin') === FEATURED_TAXON_ORIGIN
       ? String(searchParams.get('genus') ?? '').trim().slice(0, 120)
       : '';
+  const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
     country: '',
@@ -114,8 +115,8 @@ const ResearchCenter: React.FC = () => {
                 <p className="mt-2 text-sm leading-6 text-white/75">
                   <span className="font-serif text-lg italic text-white">{routeGenus}</span>{' '}
                   is preserved here as navigation context and preloaded into the research query builder.
-                  It is not scientific evidence and it does not imply that the persisted project shown below
-                  is about this genus.
+                  It is not scientific evidence and it does not imply that a persisted research project is
+                  about this genus.
                 </p>
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
@@ -146,14 +147,26 @@ const ResearchCenter: React.FC = () => {
             <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/70 mb-2">
               Research Station · live
             </div>
-            <h2 className="font-serif text-2xl md:text-3xl">Your current investigation</h2>
+            <h2 className="font-serif text-2xl md:text-3xl">
+              {featuredGenusWithoutProject ? 'No persisted investigation selected' : 'Your current investigation'}
+            </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
-              Subject, question, what the Continuum holds, where evidence disagrees, what
-              remains unknown, and where to continue. Interpretation comes from Calyx over
-              the governed evidence-synthesis path — never from this page.
+              {featuredGenusWithoutProject
+                ? 'The featured genus remains navigation context only. Choose or carry a project before the Research Station opens persisted evidence, so an unrelated project is never presented as if it belongs to this genus.'
+                : 'Subject, question, what the Continuum holds, where evidence disagrees, what remains unknown, and where to continue. Interpretation comes from Calyx over the governed evidence-synthesis path — never from this page.'}
             </p>
           </div>
-          <ResearchStationWorkbench projectId={projectId} />
+          {featuredGenusWithoutProject ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-[#142a1f] p-6">
+              <p className="max-w-3xl text-sm leading-6 text-white/65">
+                No research project identity came with this handoff. The Research Station will not auto-select
+                another persisted project merely because one exists. Continue with the genus in Atlas or Calyx,
+                or open Research with an explicit project to inspect its governed evidence.
+              </p>
+            </div>
+          ) : (
+            <ResearchStationWorkbench projectId={projectId} />
+          )}
         </div>
       </section>
 
