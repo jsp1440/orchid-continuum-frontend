@@ -1,4 +1,6 @@
 import React from 'react';
+
+import CalyxVerificationWorkbench from '@/components/calyx/CalyxVerificationWorkbench';
 import type { BrainMission, MissionConclusion } from '@/lib/calyxWorkspace';
 
 /**
@@ -83,6 +85,7 @@ const ScientificSynthesis: React.FC<{ mission: BrainMission }> = ({ mission }) =
                     Claims: {claimIds.join(', ')}
                   </p>
                 ) : null}
+                <CalyxVerificationWorkbench mission={mission} conclusion={conclusion} />
               </li>
             );
           })}
