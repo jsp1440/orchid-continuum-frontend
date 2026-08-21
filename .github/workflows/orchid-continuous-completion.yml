@@ -29,7 +29,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       INTEGRATION_BRANCH: oc-autonomous-integration
-      MAX_ACTIVE_LANES: 5
+      MAX_ACTIVE_LANES: 2
     steps:
       - name: Checkout main with full history
         uses: actions/checkout@v4
@@ -110,15 +110,11 @@ jobs:
 
             labels=$(gh issue view "$issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
             [[ -n "$labels" ]] || continue
-            # A running issue owns its execution lease. Do not merge an older PR
-            # head while a bounded repair worker may still be updating it.
             [[ "$labels" == *oc-running* ]] && continue
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
 
             head=$(jq -r '.headRefName' <<<"$data")
             head_sha=$(jq -r '.headRefOid' <<<"$data")
-            # These workflows may be pull_request or workflow_dispatch runs. Match
-            # exact head SHA, not event type.
             ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
             matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
             ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$ci_runs")
@@ -246,7 +242,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       INTEGRATION_BRANCH: oc-autonomous-integration
-      MAX_ACTIVE_LANES: 5
+      MAX_ACTIVE_LANES: 2
     steps:
       - name: Fill available execution slots from priority portfolio
         id: queue
