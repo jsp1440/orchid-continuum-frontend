@@ -89,10 +89,8 @@ jobs:
         run: |
           set -euo pipefail
           marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          # Same SIGPIPE hazard as the supervisor: under `set -o pipefail` head exits
-          # after one line, gh dies on the broken pipe once output passes 64KB, and
-          # set -e kills this step. This is the step that releases the lane's slot,
-          # so losing it leaves the issue claimed with nothing executing it.
+          # Avoid `head` under pipefail: large PR bodies can SIGPIPE gh and strand
+          # an execution slot. Read all matches and select the first in-shell.
           pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
           pr=${pr%%$'\n'*}
 
