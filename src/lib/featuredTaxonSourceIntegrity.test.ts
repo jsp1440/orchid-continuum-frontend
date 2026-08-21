@@ -101,6 +101,15 @@ describe('featured taxon source integrity', () => {
     expect(app).toContain('<Route path="/research"');
   });
 
+  it('does not auto-select an unrelated persisted project for a featured-genus handoff', () => {
+    const research = source('pages/ResearchCenter.tsx');
+    expect(research).toContain('const featuredGenusWithoutProject = Boolean(routeGenus && !projectId)');
+    expect(research).toContain("featuredGenusWithoutProject ? 'No persisted investigation selected'");
+    expect(research).toContain('The Research Station will not auto-select');
+    expect(research).toContain('featuredGenusWithoutProject ? (');
+    expect(research).toContain('<ResearchStationWorkbench projectId={projectId} />');
+  });
+
   it('keeps the public footer on live visitor routes and out of operator-only workspaces', () => {
     const footer = source('components/orchid/Footer.tsx');
     for (const route of ['/knowledge', '/calyx', '/lexicon', '/get-involved', '/conservation']) expect(footer).toContain(`route: '${route}'`);
