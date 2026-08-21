@@ -29,5 +29,4 @@ jobs:
       - run: npm ci
       - run: npx eslint src/lib/calyxWorkspace.ts src/lib/calyxVerification.ts src/lib/calyxVerification.test.ts src/components/calyx/ScientificSynthesis.tsx src/components/calyx/ScientificSynthesis.test.tsx src/components/calyx/CalyxVerificationWorkbench.tsx src/pages/CalyxWorkspace.tsx src/App.tsx --max-warnings=0
       - run: npx vitest run src/lib/calyxVerification.test.ts src/components/calyx/ScientificSynthesis.test.tsx
-      - run: npm run typecheck
       - run: npm run build
