@@ -68,6 +68,23 @@ function atlasTaxonParams(taxon: string): Record<string, string> {
   return { taxon: value };
 }
 
+/**
+ * Calyx's mounted route accepts genus context, but a Research Workspace subject
+ * may be a species or an opaque canonical taxon id. Never label either of those
+ * as a genus merely to populate the route.
+ *
+ * For an unambiguous binomial we may safely derive the genus token while also
+ * carrying the exact taxon identity. Opaque or rank-ambiguous identities remain
+ * generic `taxon` context only.
+ */
+function calyxTaxonParams(taxon: string): Record<string, string> {
+  const value = requiredTaxon(taxon);
+  if (/^[A-Z][A-Za-z-]+$/.test(value)) return { genus: value };
+  const speciesMatch = value.match(/^([A-Z][A-Za-z-]+)\s+[a-z][A-Za-z-]+$/);
+  if (speciesMatch) return { genus: speciesMatch[1], taxon: value };
+  return { taxon: value };
+}
+
 function query(params: Record<string, string | null | undefined>): string {
   const entries: Record<string, string> = {};
   for (const [key, value] of Object.entries(params)) {
@@ -105,7 +122,7 @@ export function researchStationAtlasHref(context: ResearchStationContext): strin
  */
 export function researchStationCalyxHref(context: ResearchStationContext): string {
   return `/calyx${query({
-    genus: requiredTaxon(context.taxon),
+    ...calyxTaxonParams(context.taxon),
     project: context.projectId,
     conversation: context.conversationId,
     origin: RESEARCH_STATION_ORIGIN,
