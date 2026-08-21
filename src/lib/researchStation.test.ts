@@ -139,6 +139,32 @@ describe('cross-module context continuity', () => {
     }
   });
 
+  it('carries a species subject into Calyx without claiming the species is a genus', () => {
+    const href = researchStationCalyxHref(context);
+    const url = new URL(href, 'https://orchid.test');
+    expect(url.searchParams.get('genus')).toBe('Phalaenopsis');
+    expect(url.searchParams.get('taxon')).toBe('Phalaenopsis amabilis');
+    expect(url.searchParams.get('genus')).not.toBe('Phalaenopsis amabilis');
+  });
+
+  it('keeps an unambiguous genus as genus context in Calyx', () => {
+    const url = new URL(
+      researchStationCalyxHref({ taxon: 'Vanda', projectId: 'proj-1' }),
+      'https://orchid.test',
+    );
+    expect(url.searchParams.get('genus')).toBe('Vanda');
+    expect(url.searchParams.has('taxon')).toBe(false);
+  });
+
+  it('does not promote an opaque taxon identity into a Calyx genus claim', () => {
+    const url = new URL(
+      researchStationCalyxHref({ taxon: 'taxon:12345', projectId: 'proj-1' }),
+      'https://orchid.test',
+    );
+    expect(url.searchParams.get('taxon')).toBe('taxon:12345');
+    expect(url.searchParams.has('genus')).toBe(false);
+  });
+
   it('continues an existing Calyx conversation instead of restarting the thread', () => {
     const href = researchStationCalyxHref({ ...context, conversationId: 'conv-9' });
     expect(href).toContain('conversation=conv-9');
