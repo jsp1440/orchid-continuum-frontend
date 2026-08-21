@@ -3,7 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
-import { featuredTaxonAtlasHref } from "@/lib/featuredTaxonNavigation";
+import { ATLAS_WORKSPACE_ORIGIN, featuredTaxonAtlasHref } from "@/lib/featuredTaxonNavigation";
 import CalyxWorkspace from "@/pages/CalyxWorkspace";
 
 export default function AtlasAwareCalyxRoute() {
@@ -13,7 +13,9 @@ export default function AtlasAwareCalyxRoute() {
     [location.search],
   );
 
-  const fromAtlas = routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN;
+  const fromAtlas =
+    routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN ||
+    routeContext.origin === ATLAS_WORKSPACE_ORIGIN;
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
   const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
