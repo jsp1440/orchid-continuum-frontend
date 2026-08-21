@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { atlasOccurrenceEvidenceCalyxHref } from '@/features/atlas-next/calyxHandoff';
 import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
 import {
+  ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
+  atlasWorkspaceCalyxHref,
   featuredTaxonAtlasHref,
   featuredTaxonCalyxHref,
 } from '@/lib/featuredTaxonNavigation';
@@ -25,6 +27,18 @@ describe('NAOCC demo continuity', () => {
     expect(calyxUrl.pathname).toBe('/calyx');
     expect(routeContext).toEqual({
       origin: FEATURED_TAXON_ORIGIN,
+      featuredTaxon: { rank: 'genus', name: DEMO_GENUS },
+      questionContext: null,
+    });
+  });
+
+  it('continues the mounted Atlas single-genus context into Calyx', () => {
+    const calyxUrl = new URL(atlasWorkspaceCalyxHref(DEMO_GENUS), 'https://orchidcontinuum.org');
+    const routeContext = parseCalyxRouteContext(calyxUrl.search);
+
+    expect(calyxUrl.pathname).toBe('/calyx');
+    expect(routeContext).toEqual({
+      origin: ATLAS_WORKSPACE_ORIGIN,
       featuredTaxon: { rank: 'genus', name: DEMO_GENUS },
       questionContext: null,
     });
