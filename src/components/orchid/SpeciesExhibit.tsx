@@ -110,7 +110,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
         <div className="max-w-3xl">
           <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#8a8062]">Species Exhibit</p>
           <h3 className="mt-1 font-serif text-3xl leading-tight text-[#24321f]">
-            Nine evidence-grounded species stories
+            {result.items.length} evidence-grounded species {result.items.length === 1 ? 'story' : 'stories'}
           </h3>
           <p className="mt-2 text-sm leading-6 text-[#5d684c]">
             Every card is a distinct canonical species. Captions, facts, confidence, and caveats come from
