@@ -202,7 +202,7 @@ export default function CalyxVerificationWorkbench({
             <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
               <div><dt className="inline font-medium text-foreground">Mission: </dt><dd className="inline break-all">{result.provenance.missionId}</dd></div>
               <div><dt className="inline font-medium text-foreground">Reasoning ledger: </dt><dd className="inline break-all">{result.provenance.reasoningLedgerId ?? "not supplied"}{result.provenance.reasoningLedgerVersion ? ` · v${result.provenance.reasoningLedgerVersion}` : ""}</dd></div>
-              <div><dt className="inline font-medium text-foreground">Review state: </dt><dd className="inline">{result.provenance.reviewStatus.replaceAll("_", " ")}</dd></div>
+              <div><dt className="inline font-medium text-foreground">Review state: </dt><dd className="inline">{result.provenance.reviewStatus.replace(/_/g, " ")}</dd></div>
               <div><dt className="inline font-medium text-foreground">Publication eligible: </dt><dd className="inline">{result.provenance.publicationEligible ? "yes" : "no"}</dd></div>
               <div className="sm:col-span-2"><dt className="inline font-medium text-foreground">Source revisions: </dt><dd className="inline">{result.provenance.sourceRevisionIds.join(", ") || "not supplied"}</dd></div>
             </dl>
