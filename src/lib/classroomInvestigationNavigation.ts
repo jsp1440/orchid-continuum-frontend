@@ -41,6 +41,16 @@ export type ClassroomInvestigationContext = {
   contextIsLearnerDraft: true;
 };
 
+export type ClassroomCalyxTurnRouteContext = {
+  origin: typeof CLASSROOM_INVESTIGATION_ORIGIN;
+  featured_taxon: { rank: 'genus'; accepted_name: string };
+  context_is_evidence: false;
+  context_is_learner_draft: true;
+  taxon?: string;
+  taxon_source?: typeof CLASSROOM_INVESTIGATION_ORIGIN;
+  taxon_is_evidence?: false;
+};
+
 function hasControlCharacter(value: string): boolean {
   return [...value].some((character) => {
     const code = character.charCodeAt(0);
@@ -145,5 +155,31 @@ export function parseClassroomInvestigationContext(
     taxon,
     contextIsEvidence: false,
     contextIsLearnerDraft: true,
+  };
+}
+
+/**
+ * Adapt a validated classroom arrival to the route_context shape sent to Calyx.
+ * The exact species survives only when the learner supplied a bounded binomial,
+ * and it remains explicitly learner-draft navigation context, never evidence.
+ */
+export function classroomCalyxTurnRouteContext(
+  search: string | URLSearchParams,
+): ClassroomCalyxTurnRouteContext | null {
+  const context = parseClassroomInvestigationContext(search);
+  if (!context) return null;
+
+  return {
+    origin: CLASSROOM_INVESTIGATION_ORIGIN,
+    featured_taxon: { rank: 'genus', accepted_name: context.genus },
+    context_is_evidence: false,
+    context_is_learner_draft: true,
+    ...(context.taxon
+      ? {
+          taxon: context.taxon,
+          taxon_source: CLASSROOM_INVESTIGATION_ORIGIN,
+          taxon_is_evidence: false,
+        }
+      : {}),
   };
 }

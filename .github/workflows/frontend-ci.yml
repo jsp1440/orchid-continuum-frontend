@@ -51,8 +51,8 @@ jobs:
         run: npm run lint
 
       # Runs from the always-on gate rather than a path-filtered workflow, so a
-      # whitespace defect fails on the pull request that introduces it whatever
-      # files it touches. See scripts/check-diff-hygiene.mjs for why this was
-      # previously invisible until promotion to main.
+      # whitespace defect fails on the pull request or push that introduces it.
       - name: Diff hygiene
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
         run: node scripts/check-diff-hygiene.mjs

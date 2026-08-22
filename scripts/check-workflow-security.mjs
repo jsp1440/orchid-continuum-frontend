@@ -30,6 +30,18 @@ function changedFiles() {
     .filter(Boolean);
 }
 
+export function actionPinFinding(trimmed, lineNumber = 0) {
+  // Workflow steps are YAML list items, so the standard form is
+  // `- uses: owner/action@ref`. A matcher that only recognizes a bare `uses:`
+  // silently skips nearly every real action declaration.
+  const uses = String(trimmed ?? "").match(
+    /^(?:-\s*)?uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/,
+  );
+  if (!uses || uses[1].startsWith("./") || FULL_SHA_RE.test(uses[2])) return null;
+  const prefix = lineNumber ? `${lineNumber}: ` : "";
+  return `${prefix}pin ${uses[1]} to a full 40-character commit SHA`;
+}
+
 function inspectWorkflow(path) {
   const source = readFileSync(path, "utf8");
   const lines = source.split("\n");
@@ -69,10 +81,8 @@ function inspectWorkflow(path) {
       findings.push(`${lineNumber}: artifact uploads must use explicit paths, never "path: ."`);
     }
 
-    const uses = trimmed.match(/^uses:\s*([^\s@]+)@([^\s#]+)(?:\s+#.*)?$/);
-    if (uses && !uses[1].startsWith("./") && !FULL_SHA_RE.test(uses[2])) {
-      findings.push(`${lineNumber}: pin ${uses[1]} to a full 40-character commit SHA`);
-    }
+    const actionFinding = actionPinFinding(trimmed, lineNumber);
+    if (actionFinding) findings.push(actionFinding);
 
     const shellContext = /^run:\s*\S/.test(trimmed) || runBlockIndent !== null;
     if (shellContext && /\$\{\{\s*github\./.test(line)) {
