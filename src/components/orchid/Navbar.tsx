@@ -3,7 +3,7 @@ import { Menu, X, ChevronDown, ExternalLink, User as UserIcon, LogOut, LogIn } f
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
-import { atlasWorkspaceCalyxHref, atlasWorkspaceResearchHref } from '@/lib/featuredTaxonNavigation';
+import { atlasWorkspaceCalyxHref, atlasWorkspaceResearchHref, atlasWorkspaceSpeciesHref } from '@/lib/featuredTaxonNavigation';
 import FavoritesMenu from './FavoritesMenu';
 
 /**
@@ -113,6 +113,7 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
 
   const go = (l: Linkish) => {
     if (l.external && l.href) window.open(l.href, '_blank', 'noopener,noreferrer');
+    else if (l.route === '/species' && atlasGenus) navigate(atlasWorkspaceSpeciesHref(atlasGenus));
     else if (l.route === '/calyx' && atlasGenus) navigate(atlasWorkspaceCalyxHref(atlasGenus));
     else if (l.route === '/research' && atlasGenus) navigate(atlasWorkspaceResearchHref(atlasGenus));
     else if (l.route) navigate(l.route);
