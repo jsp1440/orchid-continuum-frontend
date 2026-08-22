@@ -9,6 +9,7 @@ import {
   researchReturnHref,
   seedResearchCalyxPersistence,
 } from "@/lib/researchCalyxRouteBridge";
+import { parseClassroomInvestigationContext } from "@/lib/classroomInvestigationNavigation";
 import { parseSpeciesDossierCalyxContext } from "@/lib/speciesDossierCalyxNavigation";
 import CalyxWorkspace from "@/pages/CalyxWorkspace";
 
@@ -24,6 +25,10 @@ export default function AtlasAwareCalyxRoute() {
   );
   const dossierContext = useMemo(
     () => parseSpeciesDossierCalyxContext(location.search),
+    [location.search],
+  );
+  const classroomContext = useMemo(
+    () => parseClassroomInvestigationContext(location.search),
     [location.search],
   );
 
@@ -73,6 +78,39 @@ export default function AtlasAwareCalyxRoute() {
               were reading, not what has been established. The dossier's evidence, receipts and
               conclusions stayed in the dossier, and nothing Calyx says here becomes evidence by
               being said.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {/* A learner draft must announce itself as one. Calyx answering a
+          classroom question in the same register as a curated investigation is
+          how a student's hypothesis quietly becomes a finding. */}
+      {classroomContext ? (
+        <section
+          aria-label="Classroom investigation context"
+          className="border-b bg-muted/50 px-5 py-3 text-foreground"
+        >
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Continuing from a classroom investigation
+              </p>
+              <p className="mt-1 text-sm">
+                <strong>Subject:</strong>{" "}
+                <i>{classroomContext.taxon ?? classroomContext.genus}</i>
+              </p>
+              <Link
+                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                to="/classroom/investigation"
+              >
+                Back to the investigation
+              </Link>
+            </div>
+            <p className="max-w-md text-xs text-muted-foreground">
+              This is a learner&apos;s working draft, not a reviewed record. The subject and question
+              came from a student; their hypothesis, observations and conclusion did not travel and
+              are not evidence. Nothing said here enters the Continuum&apos;s scientific record.
             </p>
           </div>
         </section>

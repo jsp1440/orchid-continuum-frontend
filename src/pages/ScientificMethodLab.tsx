@@ -4,11 +4,17 @@ import {
   CheckCircle2,
   Download,
   FlaskConical,
+  Map as MapIcon,
+  MessagesSquare,
   Save,
   ShieldCheck,
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import PageShell from '@/components/orchid/PageShell';
+import {
+  classroomAtlasHref,
+  classroomCalyxHref,
+} from '@/lib/classroomInvestigationNavigation';
 
 type InvestigationDraft = {
   title: string;
@@ -128,6 +134,15 @@ const ScientificMethodLab: React.FC = () => {
     setSaved(true);
   };
 
+  // The learner's own subject and question, taken into the Continuum. Nothing
+  // else from the draft can travel: the producers accept a taxon and a question
+  // and have no parameter for a hypothesis, observation, design, analysis or
+  // conclusion. Both fail closed on a subject they cannot bound, so a learner
+  // who wrote "my windowsill orchid" gets no button rather than a conversation
+  // about nothing.
+  const atlasHref = classroomAtlasHref(draft.taxon);
+  const calyxHref = classroomCalyxHref(draft.taxon, draft.question);
+
   const exportDraft = () => {
     const exportedAt = new Date().toISOString();
     const record = {
@@ -245,6 +260,12 @@ const ScientificMethodLab: React.FC = () => {
               <div className="text-xs text-white/45">
                 {saved ? 'Local draft saved' : 'Draft changes are not yet saved'}
               </div>
+              {atlasHref || calyxHref ? (
+                <div className="mt-1 text-xs text-white/45">
+                  Only your taxon and question travel onward. Your hypothesis, observations and
+                  conclusion stay in this draft — they are your work, not Continuum evidence.
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -256,6 +277,24 @@ const ScientificMethodLab: React.FC = () => {
               <Save className="h-4 w-4" />
               Save locally
             </button>
+            {atlasHref ? (
+              <Link
+                to={atlasHref}
+                className="inline-flex items-center gap-2 rounded-lg border border-violet-300/30 px-4 py-2 text-sm text-violet-100 hover:bg-violet-300/10"
+              >
+                <MapIcon className="h-4 w-4" />
+                See it in the Atlas
+              </Link>
+            ) : null}
+            {calyxHref ? (
+              <Link
+                to={calyxHref}
+                className="inline-flex items-center gap-2 rounded-lg border border-violet-300/30 px-4 py-2 text-sm text-violet-100 hover:bg-violet-300/10"
+              >
+                <MessagesSquare className="h-4 w-4" />
+                Ask Calyx
+              </Link>
+            ) : null}
             <button
               type="button"
               onClick={exportDraft}
