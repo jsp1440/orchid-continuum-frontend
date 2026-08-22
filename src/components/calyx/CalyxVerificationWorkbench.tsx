@@ -189,6 +189,75 @@ export default function CalyxVerificationWorkbench({
             )}
           </section>
 
+          {/*
+            The objections the mission raised against itself. "Not validated"
+            and "not publishable" are conclusions the backend reached for
+            reasons it supplied; reporting the conclusion and discarding the
+            reasons answers "why should I believe this" with a shrug.
+          */}
+          {!result.objections.validationValid ||
+          !result.objections.publicationEligible ||
+          result.objections.mission.length ? (
+            <section className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3" data-testid="stated-objections">
+              <h4 className="text-xs font-semibold">Stated objections</h4>
+
+              {!result.objections.validationValid ? (
+                <div className="mt-2">
+                  <p className="text-[11px] font-medium">Failed structural validation</p>
+                  {result.objections.validation.length ? (
+                    <ul className="mt-1 list-disc pl-5 text-[11px] leading-5 text-muted-foreground">
+                      {result.objections.validation.map((reason, index) => (
+                        <li key={`validation-${index}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    // An unexplained failure is less trustworthy than an
+                    // explained one. It must not read as "no objections".
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                      The mission reported the failure but supplied no reason. Absence of a stated
+                      reason is not evidence that the claim is sound.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              {result.objections.mission.length ? (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium">Blocked during the run</p>
+                  <ul className="mt-1 space-y-1 text-[11px] leading-5 text-muted-foreground">
+                    {result.objections.mission.map((blocker, index) => (
+                      <li key={`blocker-${index}`}>
+                        <span className="font-mono text-[10px] uppercase tracking-wide">
+                          {blocker.code || "unspecified"}
+                        </span>
+                        {blocker.stage ? ` · ${blocker.stage}` : ""}
+                        {blocker.detail ? ` — ${blocker.detail}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {!result.objections.publicationEligible ? (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium">Not eligible for publication</p>
+                  {result.objections.publication.length ? (
+                    <ul className="mt-1 list-disc pl-5 text-[11px] leading-5 text-muted-foreground">
+                      {result.objections.publication.map((reason, index) => (
+                        <li key={`publication-${index}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                      No publication blocker was supplied. This is not a statement that the claim is
+                      publishable.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           {result.gaps.length ? (
             <section className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <h4 className="text-xs font-semibold">What still has to be checked</h4>

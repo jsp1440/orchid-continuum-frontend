@@ -43,6 +43,28 @@ export type CalyxVerificationResult = {
     rationaleStatus: "supplied" | "bounded_system_rationale_only" | "missing";
   };
   gaps: string[];
+  /**
+   * The reasons the mission itself supplied for not being validated, not being
+   * publishable, or being blocked mid-run.
+   *
+   * The Workbench exists to answer "why should I believe this claim". Reporting
+   * that a mission failed validation while discarding the backend's stated
+   * reasons answers the question with a shrug. Each list is kept separate
+   * because the backend distinguishes them: a structural validation failure, a
+   * stage blocker, and a publication gate are three different objections.
+   *
+   * `stated` is false when the mission is in the adverse state but supplied no
+   * reasons. That must never render as "no objections" — an unexplained
+   * failure is less trustworthy than an explained one, not more.
+   */
+  objections: {
+    validationValid: boolean;
+    validation: string[];
+    mission: Array<{ code: string; stage: string; detail: string | null }>;
+    publicationEligible: boolean;
+    publication: string[];
+    stated: boolean;
+  };
   provenance: {
     missionId: string;
     reasoningLedgerId: string | null;
@@ -148,6 +170,34 @@ function traceEvidence(
     sourceTitle: clean(source?.title) || clean(source?.object_type) || null,
     contentHash,
     displayPolicy: clean(canonical?.display_policy) || null,
+  };
+}
+
+/**
+ * Collect the objections the mission raised against itself.
+ *
+ * Strings are cleaned and empties dropped so a backend sending `[""]` cannot
+ * render as a bullet with no text — which would read as an objection nobody
+ * can act on rather than as the malformed field it is.
+ */
+function buildObjections(mission: BrainMission): CalyxVerificationResult["objections"] {
+  const validation = (mission.validation?.blockers ?? []).map(clean).filter(Boolean);
+  const publication = (mission.publication_eligibility?.blockers ?? []).map(clean).filter(Boolean);
+  const missionBlockers = (mission.blockers ?? [])
+    .map((blocker) => ({
+      code: clean(blocker?.code),
+      stage: clean(blocker?.stage),
+      detail: clean(blocker?.detail) || null,
+    }))
+    .filter((blocker) => blocker.code || blocker.stage || blocker.detail);
+
+  return {
+    validationValid: mission.validation?.valid === true,
+    validation,
+    mission: missionBlockers,
+    publicationEligible: mission.publication_eligibility?.eligible === true,
+    publication,
+    stated: validation.length > 0 || publication.length > 0 || missionBlockers.length > 0,
   };
 }
 
@@ -260,7 +310,7 @@ export function checkCalyxMissionClaim(
       missionValid ? "pass" : "needs_review",
       missionValid
         ? "The mission passed its structural scientific validation gates."
-        : "The mission is not structurally validated or has unresolved blockers.",
+        : "The mission did not pass structural scientific validation. The reasons it supplied are listed under Stated objections below.",
     ),
     check(
       "evidence_gaps",
@@ -331,6 +381,7 @@ export function checkCalyxMissionClaim(
         : "supplied",
     },
     gaps: mission.missing_evidence ?? [],
+    objections: buildObjections(mission),
     provenance: {
       missionId: mission.mission_id,
       reasoningLedgerId: mission.reasoning_ledger?.ledger_id ?? null,
