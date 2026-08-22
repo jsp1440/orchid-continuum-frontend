@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Globe as GlobeIcon, Map as MapIcon, Loader2 } from 'lucide-react';
-import useGlobeGl from '@/hooks/useGlobeGl';
+import useGlobeGl, { type GlobeInstance } from '@/hooks/useGlobeGl';
 import { fetchGenusOccurrences, type OccurrencePoint } from '@/lib/ocBackend';
 
 /**
@@ -84,8 +84,7 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
   const [loading, setLoading] = useState(true);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const globeRef = useRef<any>(null);
+  const globeRef = useRef<GlobeInstance<MapPoint> | null>(null);
 
   const { Globe, ready, failed } = useGlobeGl(mode === 'globe');
 
@@ -181,8 +180,7 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
     window.addEventListener('error', onError, true);
 
     // (Re)create the globe instance.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const g: any = Globe()(el)
+    const g = Globe()<MapPoint>(el)
       .globeImageUrl(EARTH_TEXTURE)
       .bumpImageUrl(BUMP_TEXTURE)
       .backgroundColor('rgba(0,0,0,0)')
@@ -268,16 +266,11 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
     const g = globeRef.current;
     if (mode !== 'globe' || !g) return;
     g.pointsData(points)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .pointLat((d: any) => d.lat)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .pointLng((d: any) => d.lng)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .pointColor((d: any) => KIND_COLOR[d.kind as Kind])
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .pointAltitude((d: any) => (d.kind === 'occurrence' ? 0.01 : 0.04))
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .pointLabel((d: any) => `${d.name} — ${KIND_LABEL[d.kind as Kind]}`);
+      .pointLat((d) => d.lat)
+      .pointLng((d) => d.lng)
+      .pointColor((d) => KIND_COLOR[d.kind as Kind])
+      .pointAltitude((d) => (d.kind === 'occurrence' ? 0.01 : 0.04))
+      .pointLabel((d) => `${d.name} — ${KIND_LABEL[d.kind as Kind]}`);
   }, [points, mode, ready]);
 
   return (
