@@ -6,6 +6,13 @@ import {
   FileDown,
   CalendarRange,
   CheckCircle2,
+  Eye,
+  CircleHelp,
+  Lightbulb,
+  FlaskConical,
+  Database,
+  BarChart3,
+  Share2,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import RoleBadge from '@/components/orchid/RoleBadge';
@@ -69,6 +76,49 @@ const teacherTools = [
   },
 ];
 
+const scientificMethodStages = [
+  {
+    Icon: Eye,
+    title: 'Observe',
+    body: 'Record what is seen or measured before deciding what it means.',
+  },
+  {
+    Icon: CircleHelp,
+    title: 'Question',
+    body: 'Turn the observation into a focused question that evidence can answer.',
+  },
+  {
+    Icon: Lightbulb,
+    title: 'Hypothesize',
+    body: 'State a testable explanation and the result it predicts.',
+  },
+  {
+    Icon: FlaskConical,
+    title: 'Design',
+    body: 'Choose variables, comparisons, controls, and a reproducible method.',
+  },
+  {
+    Icon: Database,
+    title: 'Collect',
+    body: 'Gather observations and source-backed records without hiding uncertainty.',
+  },
+  {
+    Icon: BarChart3,
+    title: 'Analyze',
+    body: 'Look for patterns, alternatives, limitations, and counterevidence.',
+  },
+  {
+    Icon: CheckCircle2,
+    title: 'Conclude',
+    body: 'Decide whether the evidence supports, weakens, or leaves the hypothesis unresolved.',
+  },
+  {
+    Icon: Share2,
+    title: 'Communicate',
+    body: 'Publish the claim with methods, citations, provenance, and a path to verification.',
+  },
+];
+
 const Classroom: React.FC = () => {
   return (
     <PageShell
@@ -105,6 +155,42 @@ const Classroom: React.FC = () => {
               </h3>
               <p className="text-[13px] text-white/65 leading-relaxed font-light">
                 {t.body}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="max-w-7xl mx-auto px-6 lg:px-10 pb-16">
+        <div className="mb-7 max-w-3xl">
+          <div className="text-[10px] tracking-[0.25em] uppercase text-violet-200/80 mb-2">
+            Recovered learning workflow
+          </div>
+          <h2 className="font-serif text-3xl text-white mb-3">
+            Follow an investigation from observation to publication
+          </h2>
+          <p className="text-sm text-white/65 leading-relaxed font-light">
+            This eight-stage pathway restores the scientific-method teaching
+            sequence from the original Orchid Continuum research platform. It
+            is now presented inside the current Classroom rather than depending
+            on the retired Flask application.
+          </p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {scientificMethodStages.map((stage, index) => (
+            <div
+              key={stage.title}
+              className="rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <stage.Icon className="h-5 w-5 text-violet-200" />
+                <span className="text-[10px] tracking-[0.2em] uppercase text-white/35">
+                  {String(index + 1).padStart(2, '0')}
+                </span>
+              </div>
+              <h3 className="font-serif text-lg text-white mb-2">{stage.title}</h3>
+              <p className="text-[13px] text-white/65 leading-relaxed font-light">
+                {stage.body}
               </p>
             </div>
           ))}
