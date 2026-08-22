@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   classroomAtlasHref,
   classroomCalyxHref,
+  classroomCalyxTurnRouteContext,
   classroomSubject,
   parseClassroomInvestigationContext,
 } from './classroomInvestigationNavigation';
@@ -124,6 +125,20 @@ describe('classroom arrival parsing', () => {
     expect(context!.contextIsLearnerDraft).toBe(true);
   });
 
+  it('adapts the validated species into an explicitly non-evidentiary learner turn context', () => {
+    expect(
+      classroomCalyxTurnRouteContext(searchOf(classroomCalyxHref(SPECIES, QUESTION)!)),
+    ).toEqual({
+      origin: 'classroom-investigation',
+      featured_taxon: { rank: 'genus', accepted_name: GENUS },
+      context_is_evidence: false,
+      context_is_learner_draft: true,
+      taxon: SPECIES,
+      taxon_source: 'classroom-investigation',
+      taxon_is_evidence: false,
+    });
+  });
+
   it('rejects an arrival that does not declare itself a learner draft', () => {
     // The declaration is the whole protection. Without it, a classroom subject
     // would arrive indistinguishable from a curated one.
@@ -132,6 +147,7 @@ describe('classroom arrival parsing', () => {
       '',
     );
     expect(parseClassroomInvestigationContext(stripped)).toBeNull();
+    expect(classroomCalyxTurnRouteContext(stripped)).toBeNull();
   });
 
   it('rejects an arrival claiming its context is evidence', () => {
@@ -140,6 +156,7 @@ describe('classroom arrival parsing', () => {
       'context_is_evidence=true',
     );
     expect(parseClassroomInvestigationContext(tampered)).toBeNull();
+    expect(classroomCalyxTurnRouteContext(tampered)).toBeNull();
   });
 
   it('rejects a genus and binomial that disagree', () => {
@@ -150,16 +167,40 @@ describe('classroom arrival parsing', () => {
     ).toBeNull();
   });
 
-  it('keeps the learner question non-evidentiary in the Calyx turn payload', () => {
+  it('keeps the exact learner species and question non-evidentiary in the Calyx turn payload', () => {
     const turn = buildCalyxTurnContext({
       projectId: 'p-1',
       uploadedFiles: [],
       routeSearch: searchOf(classroomCalyxHref(SPECIES, QUESTION)!),
     }) as { route_context?: Record<string, unknown> };
 
-    expect(turn.route_context?.question).toBe(QUESTION);
-    expect(turn.route_context?.question_is_evidence).toBe(false);
+    expect(turn.route_context).toMatchObject({
+      origin: 'classroom-investigation',
+      featured_taxon: { rank: 'genus', accepted_name: GENUS },
+      taxon: SPECIES,
+      taxon_source: 'classroom-investigation',
+      taxon_is_evidence: false,
+      context_is_evidence: false,
+      context_is_learner_draft: true,
+      question: QUESTION,
+      question_source: 'user',
+      question_is_evidence: false,
+    });
     // And no learner conclusion reached the model.
     expect(JSON.stringify(turn.route_context)).not.toMatch(/hypothes|conclusion/i);
+  });
+
+  it('fails the whole classroom route context closed when its learner boundary is tampered', () => {
+    const tampered = searchOf(classroomCalyxHref(SPECIES, QUESTION)!).replace(
+      'context_is_evidence=false',
+      'context_is_evidence=true',
+    );
+    const turn = buildCalyxTurnContext({
+      projectId: 'p-1',
+      uploadedFiles: [],
+      routeSearch: tampered,
+    }) as { route_context?: Record<string, unknown> };
+
+    expect(turn.route_context).toBeUndefined();
   });
 });
