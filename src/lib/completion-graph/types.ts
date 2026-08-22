@@ -90,6 +90,19 @@ export type CompletionNode = {
   lastUpdated: string;
   /** Lower = more urgent for scheduler ordering. Default applied when absent. */
   priority?: number;
+  /**
+   * Ids of other nodes in this graph that must independently roll up to DONE
+   * before the scheduler may admit this leaf. An id that does not resolve in
+   * the graph is treated as unsatisfied (fail closed) rather than ignored.
+   */
+  dependsOn?: string[];
+  /**
+   * Marks this leaf as a cross-cutting security/governance acceptance gate.
+   * Per OC-COMPLETE-004, such leaves must never be treated as cosmetic lane
+   * work: the scheduler exempts them from lane-fairness deprioritization so
+   * an otherwise-busy lane can never starve a pending security gate.
+   */
+  securityGate?: boolean;
   children: CompletionNode[];
 };
 
