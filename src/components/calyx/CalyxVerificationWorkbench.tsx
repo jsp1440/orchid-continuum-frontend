@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 
+import GovernedEvidenceSearch from "@/components/calyx/GovernedEvidenceSearch";
 import type { BrainMission, MissionConclusion } from "@/lib/calyxWorkspace";
 import {
   checkCalyxMissionClaim,
@@ -196,6 +197,14 @@ export default function CalyxVerificationWorkbench({
               </ul>
             </section>
           ) : null}
+
+          {/*
+            Corpus search sits below the mission's own evidence and above
+            provenance, matching the order a scientist actually asks in: what was
+            claimed, what did the mission cite, what else does the corpus hold,
+            and can any of it be traced.
+          */}
+          <GovernedEvidenceSearch claimText={result.claimText} />
 
           <section className="mt-4 rounded-lg border bg-background p-3">
             <h4 className="text-xs font-semibold">Reproducibility & provenance</h4>
