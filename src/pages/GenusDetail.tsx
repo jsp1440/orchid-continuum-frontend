@@ -33,6 +33,7 @@ import {
   type EcologicalEvidence,
 } from '@/lib/genusProfileDataQuality';
 import { fetchGenusGraphEvidence, type GenusGraphResult } from '@/lib/knowledgeGraph';
+import { genusProfileAtlasHref } from '@/lib/genusProfileNavigation';
 import {
   lookupGenus,
   fetchGenusImagesWithSource,
@@ -57,8 +58,8 @@ import {
  * panel. Cross-platform navigation to the wider Continuum.
  */
 
-const PLATFORM_LINKS: { label: string; to: string }[] = [
-  { label: 'Atlas', to: '/atlas' },
+const PLATFORM_LINKS = (genus: string): { label: string; to: string }[] => [
+  { label: 'Atlas', to: genusProfileAtlasHref(genus) },
   { label: 'Conservatory', to: '/zoo' },
   { label: 'Field Station', to: '/ecosystems' },
   { label: 'Deception Lab', to: '/pollinators' },
@@ -441,7 +442,7 @@ const GenusDetail: React.FC = () => {
     });
 
     return representative.filter((plate) => {
-      // Skip plates whose every candidate image failed to load.
+      // Skip plates whose every candidate image URL failed to load.
       if (failedSpecies.has(plate.entry.species)) return false;
       // Once images have loaded, skip plates with NO candidate image left.
       if (!imagesLoading && plate.urls.length === 0) return false;
@@ -815,7 +816,7 @@ const GenusDetail: React.FC = () => {
               Continue across the Continuum
             </div>
             <div className="flex flex-wrap gap-3">
-              {PLATFORM_LINKS.map((p) => (
+              {PLATFORM_LINKS(entry.genus).map((p) => (
                 <Link
                   key={p.label}
                   to={p.to}
