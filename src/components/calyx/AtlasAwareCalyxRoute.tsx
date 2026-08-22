@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
+import { rejectsCalyxNavigationContext } from "@/lib/calyxRouteTrustBoundary";
 import { ATLAS_WORKSPACE_ORIGIN, featuredTaxonAtlasHref } from "@/lib/featuredTaxonNavigation";
 import {
   parseResearchCalyxRouteBridge,
@@ -17,6 +18,10 @@ export default function AtlasAwareCalyxRoute() {
   const location = useLocation();
   const routeContext = useMemo(
     () => parseCalyxRouteContext(location.search),
+    [location.search],
+  );
+  const rejectedNavigationContext = useMemo(
+    () => rejectsCalyxNavigationContext(location.search),
     [location.search],
   );
   const researchContext = useMemo(
@@ -43,6 +48,31 @@ export default function AtlasAwareCalyxRoute() {
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
   const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
+
+  if (rejectedNavigationContext) {
+    return (
+      <section
+        aria-label="Rejected Calyx navigation context"
+        className="mx-auto max-w-3xl px-6 py-24 text-foreground"
+      >
+        <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+          Navigation context rejected
+        </p>
+        <h1 className="mt-3 text-2xl font-semibold">Calyx did not accept this carried genus.</h1>
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
+          Governed genus handoffs must declare that navigation context is not scientific evidence.
+          This URL did not preserve that boundary, so its carried context was refused rather than
+          silently trusted.
+        </p>
+        <Link
+          className="mt-5 inline-flex text-sm font-medium underline underline-offset-4"
+          to="/calyx"
+        >
+          Open Calyx without carried context
+        </Link>
+      </section>
+    );
+  }
 
   return (
     <>
