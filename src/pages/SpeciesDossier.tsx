@@ -9,6 +9,7 @@ import {
   Leaf,
   Network,
   ImageOff,
+  FileCheck2,
 } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
@@ -18,6 +19,52 @@ import {
   type SpeciesDossierData,
   type MycorrhizalPartner,
 } from '@/lib/ocBackend';
+import {
+  fetchSpeciesDossier,
+  sectionMessage,
+  type SpeciesDossierEnvelope,
+  type DossierSection,
+  type EvidenceReceipt,
+  type EvidenceState,
+} from '@/lib/speciesDossier';
+
+const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
+  available: 'Available',
+  provisional: 'Provisional',
+  conflicting: 'Conflicting',
+  modeled: 'Modeled',
+  inferred: 'Inferred',
+  unavailable: 'Unavailable',
+};
+
+// Sections rendered generically from the dossier envelope. `mycorrhizae` is
+// intentionally excluded — it keeps the existing fetchMycorrhizal-backed
+// block above, which already has its own graceful "data coming soon" degrade.
+const DOSSIER_SECTIONS: Array<{ key: keyof SpeciesDossierEnvelope; label: string }> = [
+  { key: 'nomenclature', label: 'Nomenclature' },
+  { key: 'protologue', label: 'Protologue' },
+  { key: 'type_material', label: 'Type material' },
+  { key: 'historical_media', label: 'Historical media' },
+  { key: 'living_media', label: 'Living media' },
+  { key: 'morphology', label: 'Morphology' },
+  { key: 'distribution', label: 'Distribution' },
+  { key: 'ecology', label: 'Ecology' },
+  { key: 'phenology', label: 'Phenology' },
+  { key: 'pollinators', label: 'Pollinators' },
+  { key: 'conservation', label: 'Conservation evidence' },
+  { key: 'literature', label: 'Literature' },
+  { key: 'cultivation', label: 'Cultivation' },
+  { key: 'knowledge_graph', label: 'Knowledge graph' },
+  { key: 'calyx_narrative', label: 'Calyx narrative' },
+  { key: 'research_gaps', label: 'Research gaps' },
+];
+
+function formatConfidence(confidence: number | null): string {
+  if (typeof confidence !== 'number' || !Number.isFinite(confidence)) {
+    return 'confidence not supplied';
+  }
+  return confidence.toFixed(2);
+}
 
 /**
  * SpeciesDossier — detail page for a single orchid species.
@@ -39,6 +86,9 @@ const SpeciesDossier: React.FC = () => {
   const [partners, setPartners] = useState<MycorrhizalPartner[]>([]);
   const [mycoStatus, setMycoStatus] = useState<number>(0);
   const [mycoLoading, setMycoLoading] = useState(true);
+  const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
+  const [dossierLoading, setDossierLoading] = useState(true);
+  const [dossierError, setDossierError] = useState(false);
 
   useEffect(() => {
     if (!taxonomyId) return;
@@ -55,6 +105,14 @@ const SpeciesDossier: React.FC = () => {
         setPartners(partners);
       })
       .finally(() => setMycoLoading(false));
+
+    setDossierLoading(true);
+    setDossierError(false);
+    setDossier(null);
+    fetchSpeciesDossier(taxonomyId, ctrl.signal)
+      .then((d) => setDossier(d))
+      .catch(() => setDossierError(true))
+      .finally(() => setDossierLoading(false));
 
     return () => ctrl.abort();
   }, [taxonomyId]);
@@ -228,6 +286,28 @@ const SpeciesDossier: React.FC = () => {
                     </Empty>
                   )}
                 </Block>
+
+                {/* Evidence dossier — evidence_state / confidence / license / attribution */}
+                <Block icon={FileCheck2} title="Evidence dossier">
+                  {dossierLoading ? (
+                    <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Loading evidence
+                      receipts…
+                    </div>
+                  ) : dossierError || !dossier ? (
+                    <Empty>Evidence dossier is not currently available.</Empty>
+                  ) : (
+                    <div className="space-y-4">
+                      {DOSSIER_SECTIONS.map(({ key, label }) => (
+                        <DossierSectionBlock
+                          key={key}
+                          label={label}
+                          section={dossier[key] as DossierSection}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </Block>
               </div>
             </div>
           )}
@@ -278,6 +358,100 @@ function Empty({ children }: { children: React.ReactNode }) {
   return (
     <div className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#7a7466]">
       {children}
+    </div>
+  );
+}
+
+function EvidenceStatePill({ state }: { state: EvidenceState }) {
+  const label = EVIDENCE_STATE_LABEL[state] ?? 'Unknown';
+  return (
+    <span
+      data-testid="evidence-state"
+      className="inline-flex items-center px-2 py-0.5 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[9px] tracking-[0.16em] uppercase text-[#c9a24a]"
+    >
+      {label}
+    </span>
+  );
+}
+
+function EvidenceReceiptCard({ receipt }: { receipt: EvidenceReceipt }) {
+  return (
+    <li
+      data-testid="evidence-receipt"
+      className="rounded-lg border border-white/[0.06] bg-[#0a0d1c]/60 p-3"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-body text-[12px] text-[#faf7f2]">
+          {receipt.source_name || receipt.source_id}
+        </span>
+        <EvidenceStatePill state={receipt.evidence_state} />
+      </div>
+      <div
+        data-testid="evidence-confidence"
+        className="mt-1 font-mono text-[9px] tracking-[0.1em] uppercase text-[#cfc8b8]/60"
+      >
+        Confidence: {formatConfidence(receipt.confidence)}
+      </div>
+      <div
+        data-testid="evidence-license"
+        className="mt-0.5 font-mono text-[9px] tracking-[0.1em] uppercase text-[#cfc8b8]/60"
+      >
+        License: {receipt.license || 'not stated'}
+      </div>
+      {receipt.attribution && (
+        <div
+          data-testid="evidence-attribution"
+          className="mt-1 font-body text-[11px] italic text-[#cfc8b8]/70"
+        >
+          {receipt.attribution}
+        </div>
+      )}
+      {receipt.source_url && (
+        <a
+          href={receipt.source_url}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-block font-mono text-[9px] tracking-[0.1em] uppercase text-[#c9a24a] hover:text-[#deb866]"
+        >
+          Source
+        </a>
+      )}
+    </li>
+  );
+}
+
+function DossierSectionBlock({
+  label,
+  section,
+}: {
+  label: string;
+  section: DossierSection;
+}) {
+  return (
+    <div
+      data-testid="dossier-section"
+      data-section-label={label}
+      className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/40 p-4"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/80">
+          {label}
+        </span>
+        <EvidenceStatePill state={section.state} />
+      </div>
+      <p
+        data-testid="dossier-section-message"
+        className="mt-2 font-body text-[12px] text-[#cfc8b8]/70"
+      >
+        {sectionMessage(section)}
+      </p>
+      {section.receipts.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {section.receipts.map((receipt, i) => (
+            <EvidenceReceiptCard key={`${receipt.source_id}-${i}`} receipt={receipt} />
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
