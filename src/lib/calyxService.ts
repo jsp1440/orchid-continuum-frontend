@@ -8,7 +8,11 @@ import {
   type CalyxWorkspaceOutput,
 } from '@/lib/calyxWorkspace';
 import { calyxContextPacket, readCalyxSessionContext } from '@/features/calyx-workspace/sessionContext';
-import { emitWorkspaceOutput, type WorkspaceOutput, type WorkspaceOutputPayload } from '@/features/calyx-workspace/workspaceOutputBus';
+import {
+  emitWorkspaceOutput,
+  validateWorkspaceOutput,
+  type WorkspaceOutput,
+} from '@/features/calyx-workspace/workspaceOutputBus';
 
 export interface CalyxRequest {
   concept: string;
@@ -108,8 +112,19 @@ function interactionContextText(concept: string): string {
   ].filter(Boolean).join('\n');
 }
 
+/**
+ * Convert a server workspace output into the domain type.
+ *
+ * The payload arrives unvalidated, and the shape it must satisfy is a union of
+ * four kinds. Asserting `as WorkspaceOutputPayload` claimed a narrowing nothing
+ * had performed - and the very next call, emitWorkspaceOutput, validates it
+ * anyway. So the conversion runs through the existing validator and takes its
+ * type from that check rather than from an assertion. A malformed payload
+ * throws here exactly as it did before, one frame earlier, into the same
+ * caller-side try/catch.
+ */
 function toWorkspaceOutput(serverOutput: CalyxWorkspaceOutput): WorkspaceOutput {
-  return {
+  return validateWorkspaceOutput({
     id: serverOutput.id,
     kind: serverOutput.kind,
     title: serverOutput.title,
@@ -120,9 +135,9 @@ function toWorkspaceOutput(serverOutput: CalyxWorkspaceOutput): WorkspaceOutput 
       generated: serverOutput.provenance.generated,
       evidence_status: serverOutput.provenance.evidence_status,
     },
-    payload: serverOutput.payload as WorkspaceOutputPayload,
+    payload: serverOutput.payload,
     created_at: serverOutput.created_at,
-  };
+  });
 }
 
 function emitTurnWorkspaceOutputs(outputs: CalyxTurnResponse['workspace_outputs']): void {
