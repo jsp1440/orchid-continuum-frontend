@@ -74,4 +74,40 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
     expect(gap?.status).toBe('MISSING');
   });
+
+  it('#281 round 2: Buying Companion, Vision, and Security/governance are no longer single generic census-pending stubs', () => {
+    // Each of these domains previously had exactly one child capability
+    // (an "Initial capability census" placeholder). Deleting the real
+    // decomposition would silently regress them back to that shape.
+    const buyingCompanion = allNodes.find((n) => n.name === 'Orchid Buying Companion (any form)');
+    expect(buyingCompanion?.status).toBe('MISSING');
+    expect(buyingCompanion?.gateScores).toBeTruthy();
+
+    const visionLeaves = ['cap-vision-matrix-activation-preflight', 'cap-vision-intelligence-adapter'];
+    for (const id of visionLeaves) {
+      const leaf = allNodes.find((n) => n.id === id);
+      expect(leaf, `expected vision leaf ${id} to exist`).toBeTruthy();
+      expect(leaf?.gateScores).toBeTruthy();
+      expect(computeGateScore(leaf?.gateScores).percentage).not.toBeNull();
+    }
+
+    const localityGate = allNodes.find((n) => n.id === 'cap-locality-safety-cross-cutting');
+    expect(localityGate?.gateScores).toBeTruthy();
+    expect(computeGateScore(localityGate?.gateScores).percentage).not.toBeNull();
+    // Security/governance still has two genuinely census-pending capabilities
+    // (auth-gating coverage, partner-data disclosure) — that is honest, not a regression.
+    expect(allNodes.some((n) => n.name.includes('Authenticated-area gating coverage'))).toBe(true);
+    expect(allNodes.some((n) => n.name.includes('Partner-data disclosure boundaries'))).toBe(true);
+  });
+
+  it('#281 round 2: Buying Companion, Vision, and Security/governance have real per-domain leaf structure, not a single "Initial capability census" stub', () => {
+    const domainLeafCounts: Record<string, number> = {
+      'domain-buying-companion': getLeaves(allNodes.find((n) => n.id === 'domain-buying-companion')!).length,
+      'domain-vision': getLeaves(allNodes.find((n) => n.id === 'domain-vision')!).length,
+      'domain-security-governance': getLeaves(allNodes.find((n) => n.id === 'domain-security-governance')!).length,
+    };
+    expect(domainLeafCounts['domain-vision']).toBe(2);
+    expect(domainLeafCounts['domain-security-governance']).toBe(3);
+    expect(domainLeafCounts['domain-buying-companion']).toBe(1);
+  });
 });

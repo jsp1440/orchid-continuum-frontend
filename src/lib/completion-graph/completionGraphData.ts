@@ -705,6 +705,199 @@ const productionReleaseDomain = branch({
   }, [deploymentContractGate, universityProductionLiveVerification]),
 ]);
 
+// ─── Orchid Buying Companion ────────────────────────────────────────────────
+// Real evidence: grep -ri "buying.companion|BuyingCompanion" across src/ this
+// pass returns nothing — no route, page, or component. Recorded as confirmed
+// MISSING (not census-pending) because absence was directly verified, not
+// assumed from silence.
+
+const buyingCompanionDomain = branch({
+  id: 'domain-buying-companion',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Orchid Buying Companion',
+  type: 'domain',
+  nextAction: 'Confirm with the owner whether this module has a canonical name elsewhere in the Brain before building — no matching code exists in this repository.',
+}, [
+  branch({
+    id: 'module-buying-companion-core',
+    parentId: 'domain-buying-companion',
+    name: 'Orchid Buying Companion core',
+    type: 'module',
+    nextAction: 'See child capability.',
+  }, [
+    confirmedMissing({
+      idHint: 'cap-buying-companion',
+      parentId: 'module-buying-companion-core',
+      name: 'Orchid Buying Companion (any form)',
+      evidence: [
+        { kind: 'file', ref: 'src/App.tsx', note: 'Route table grepped for "buying" and "companion" — no match.' },
+        { kind: 'file', ref: 'src/pages/', note: 'grep -ri "buying.companion|BuyingCompanion" across src/ this pass returns zero files.' },
+      ],
+      nextAction: 'Owner: confirm intended scope/name for this module before any implementation begins — building against an unconfirmed name would risk an overlapping lineage.',
+      lane: 'PRODUCT_COMPLETION',
+    }),
+  ]),
+]);
+
+// ─── Vision / image intelligence ───────────────────────────────────────────
+// Real evidence: two independently-wired vision surfaces confirmed this pass —
+// the Matrix vision-review activation preflight, and the Mission Control
+// scientific-intelligence vision adapter. Neither has scientific/provenance,
+// browser, or deployment evidence gathered yet.
+
+const visionMatrixReviewGate: CompletionNode = {
+  id: 'cap-vision-matrix-activation-preflight',
+  parentId: 'module-vision-core',
+  name: 'Vision activation preflight & Matrix vision review panel',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/visionActivationPreflight.ts', note: 'Real fetch against /api/vision-lexicon/activation-preflight with a typed blocker/activation-order contract, not a stub.' },
+    { kind: 'file', ref: 'src/components/matrix/VisionActivationPreflightCard.tsx' },
+    { kind: 'file', ref: 'src/components/matrix/MatrixVisionReviewPanel.tsx' },
+    { kind: 'file', ref: 'src/pages/OrchidIdentificationNext.tsx', note: 'Confirmed reachable: OrchidIdentificationNext renders MatrixVisionReviewPanel, not orphaned.' },
+    { kind: 'route', ref: '/orchid-identification' },
+  ],
+  nextAction: 'Run against a live backend to confirm real (non-blocked) activation state and record a browser pass; only architecture + implementation + reachability were confirmed this pass (3 of 6 gate categories, ~60% weight coverage).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const visionIntelligenceAdapterGate: CompletionNode = {
+  id: 'cap-vision-intelligence-adapter',
+  parentId: 'module-vision-core',
+  name: 'Vision Lab scientific-intelligence adapter (Mission Control)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/scientific-intelligence/vision/adapter.ts', note: 'Real probe against IMAGES_BACKEND_BASE_URL/images/genus with an explicit anti-fabrication fallback contract (unavailable != zero).' },
+    { kind: 'file', ref: 'src/lib/mission-control/intelligentMissionControl.ts', note: 'Confirmed consumer: imports VisionIntelligence and folds it into the Mission Control subsystem bundle under the "vision"/"image" subsystem match.' },
+  ],
+  nextAction: 'Confirm the adapter reads real, non-fallback totals against a live Images backend, then add a browser pass (3 of 6 gate categories evaluated, ~60% weight coverage).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const visionDomain = branch({
+  id: 'domain-vision',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Vision / image intelligence',
+  type: 'domain',
+  nextAction: 'Complete scientific/provenance and browser/e2e gates for both scored capabilities.',
+}, [
+  branch({
+    id: 'module-vision-core',
+    parentId: 'domain-vision',
+    name: 'Vision / image intelligence core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [visionMatrixReviewGate, visionIntelligenceAdapterGate]),
+]);
+
+// ─── Security / partner-data governance ────────────────────────────────────
+// Real evidence: sensitive-locality redaction was traced this pass beyond
+// Atlas alone — atlasLocalitySafety.ts is also consumed by atlas-next's own
+// sensitivity.ts/atlasContext.ts and by researchStationNavigation.ts (the
+// already-scored Atlas -> Research handoff), and the three domains that
+// receive genus-level handoffs from Atlas (Species Dossier, Conservation,
+// Research Station) were directly grepped this pass and confirmed to carry
+// no raw latitude/longitude/locality fields into their own rendering — so
+// this is a traced finding, not an assumption that silence means safety.
+// Auth gating (ProtectedRoute) and partner-data disclosure (partners.ts,
+// all "pending"/"proposed" placeholders, no real partner records) were
+// spot-checked but not exhaustively audited this pass.
+
+const localitySafetyCrossCuttingGate: CompletionNode = {
+  id: 'cap-locality-safety-cross-cutting',
+  parentId: 'module-security-governance-core',
+  name: 'Sensitive-locality redaction as a cross-cutting policy',
+  type: 'acceptance_gate',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'UNKNOWN' },
+  lane: 'RELEASE_ACCEPTANCE',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: null,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/atlasLocalitySafety.ts' },
+    { kind: 'file', ref: 'src/pages/Atlas.tsx' },
+    { kind: 'file', ref: 'src/components/atlas/LiveAtlasMap.tsx' },
+    { kind: 'file', ref: 'src/lib/researchStationNavigation.ts', note: 'Consumes atlasLocalitySafety; matches the already-scored Atlas -> Research handoff (gate-atlas-research-handoff).' },
+    { kind: 'file', ref: 'src/features/atlas-next/sensitivity.ts' },
+    { kind: 'file', ref: 'src/features/atlas-next/atlasContext.ts' },
+    { kind: 'file', ref: 'src/pages/ConservationHub.tsx', note: 'Grepped for latitude/longitude/locality/coordinates: none found; the page explicitly states coordinates and locality "remain in Atlas".' },
+    { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx', note: 'AtlasPoint/AtlasLayer types declare lat/lng in src/lib/speciesDossier.ts, but grepping the dossier page itself for latitude/longitude/locality returns no matches — those types are consumed only by Atlas map components, not rendered on the dossier.' },
+  ],
+  nextAction: 'Extend the same direct grep-for-raw-coordinates check to Matrix, Conservatory/OASIS, and University before calling this policy fully cross-cutting; only Atlas, Atlas Next, Research Station, Conservation, and Species Dossier were traced this pass.',
+  lastAccomplishment: 'Traced locality-safety consumption beyond the original Atlas-only assumption and confirmed three downstream consumers (Conservation, Species Dossier, Research handoff) do not leak raw coordinates.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const securityGovernanceDomain = branch({
+  id: 'domain-security-governance',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Security / partner-data governance',
+  type: 'domain',
+  nextAction: 'Complete the locality-safety cross-cutting trace for Matrix/Conservatory/University; audit ProtectedRoute coverage and partner-data disclosure as separate capabilities.',
+}, [
+  branch({
+    id: 'module-security-governance-core',
+    parentId: 'domain-security-governance',
+    name: 'Cross-cutting security & governance policies',
+    type: 'module',
+    nextAction: 'See child acceptance gate; add auth-gating and partner-data-disclosure capabilities next pass.',
+  }, [
+    localitySafetyCrossCuttingGate,
+    censusPending({
+      idHint: 'cap-auth-gating-coverage',
+      parentId: 'module-security-governance-core',
+      name: 'Authenticated-area gating coverage (ProtectedRoute)',
+      evidence: [
+        { kind: 'file', ref: 'src/components/auth/ProtectedRoute.tsx' },
+        { kind: 'file', ref: 'src/components/conservatory/ConservatoryReadiness.tsx', note: 'One of several confirmed ProtectedRoute-adjacent consumers found this pass; full route audit not yet performed.' },
+      ],
+      nextAction: 'Enumerate every route in src/App.tsx that should require authentication and confirm each is actually wrapped in ProtectedRoute.',
+      lane: 'RELEASE_ACCEPTANCE',
+    }),
+    censusPending({
+      idHint: 'cap-partner-data-disclosure',
+      parentId: 'module-security-governance-core',
+      name: 'Partner-data disclosure boundaries',
+      evidence: [
+        { kind: 'file', ref: 'src/data/partners.ts', note: 'Spot-checked this pass: entries are explicitly "proposed"/"pending"/"component" placeholders, not disclosed real partner records — but the file was not audited exhaustively.' },
+      ],
+      nextAction: 'Confirm no real partner PII/agreement terms are hardcoded anywhere in src/, and that any future real partner data is server-sourced, not committed to the frontend.',
+      lane: 'RELEASE_ACCEPTANCE',
+    }),
+  ]),
+]);
+
 // ─── Remaining initial inventory: recorded as domains, census pending ──────
 // Each entry below has at least one route/file existence check so "missing
 // evidence" is never silently treated as zero — but none have been scored,
@@ -778,26 +971,6 @@ const STUB_DOMAINS: StubDomainSpec[] = [
     lane: 'PRODUCT_COMPLETION',
   },
   {
-    idHint: 'domain-buying-companion',
-    name: 'Orchid Buying Companion',
-    evidence: [
-      { kind: 'file', ref: 'src/App.tsx', note: 'No route, component, or file matching "buying companion" found anywhere in src/ (grep -ri).' },
-    ],
-    nextAction: 'Confirm with the owner whether this module has a canonical name elsewhere in the codebase before building — no matching code was found this pass.',
-    lane: 'PRODUCT_COMPLETION',
-  },
-  {
-    idHint: 'domain-vision',
-    name: 'Vision / image intelligence',
-    evidence: [
-      { kind: 'file', ref: 'src/lib/visionActivationPreflight.ts' },
-      { kind: 'file', ref: 'src/lib/scientific-intelligence/vision/adapter.ts' },
-      { kind: 'file', ref: 'src/components/matrix/VisionActivationPreflightCard.tsx' },
-    ],
-    nextAction: 'Trace vision adapter consumers beyond Matrix and score real image-review acceptance gates.',
-    lane: 'SCIENTIFIC_DATA_COMPLETION',
-  },
-  {
     idHint: 'domain-knowledge-graph',
     name: 'Knowledge Graph',
     evidence: [
@@ -860,15 +1033,6 @@ const STUB_DOMAINS: StubDomainSpec[] = [
     nextAction: 'Confirm whether media/image provenance has a dedicated module or lives inside the Species Dossier evidence receipts; decompose accordingly.',
     lane: 'SCIENTIFIC_DATA_COMPLETION',
   },
-  {
-    idHint: 'domain-security-governance',
-    name: 'Security / partner-data governance',
-    evidence: [
-      { kind: 'file', ref: 'src/lib/atlasLocalitySafety.ts', note: 'Sensitive-locality redaction exists for Atlas; not yet confirmed as a cross-cutting policy applied to every relevant domain.' },
-    ],
-    nextAction: 'Confirm security/governance acceptance gates are actually attached as cross-cutting checks on every domain above, not just Atlas.',
-    lane: 'RELEASE_ACCEPTANCE',
-  },
 ];
 
 function buildStubDomain(spec: StubDomainSpec): CompletionNode {
@@ -918,6 +1082,9 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   universityDomain,
   autonomousControlPlaneDomain,
   productionReleaseDomain,
+  buyingCompanionDomain,
+  visionDomain,
+  securityGovernanceDomain,
   ...stubDomains,
 ]);
 
