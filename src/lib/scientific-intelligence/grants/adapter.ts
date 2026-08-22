@@ -1,4 +1,4 @@
-import { loadIntelligenceStore, grantItems } from '@/lib/missionControlIntelligence'
+import { loadIntelligenceStore, grantItems, type IntelligenceItem } from '@/lib/missionControlIntelligence'
 import { safeArray, safeNumber, safeString, computeDataAge, dataModeFromAge } from '../shared/normalizers'
 import { loadSubsystemCache, saveSubsystemCache } from '../shared/cache'
 import type { ScientificSubsystemIntelligence, Provenance } from '../shared/types'
@@ -63,7 +63,7 @@ export async function fetchGrantsIntelligence(): Promise<GrantsIntelligence> {
 
   try {
     const store = loadIntelligenceStore()
-    const allItems = safeArray(store.intelligenceItems)
+    const allItems = safeArray<IntelligenceItem>(store.intelligenceItems)
     const grants = grantItems(allItems)
 
     if (grants.length === 0) {
