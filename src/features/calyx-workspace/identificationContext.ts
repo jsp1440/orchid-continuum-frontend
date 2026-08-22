@@ -1,14 +1,26 @@
+import {
+  SPECIES_DOSSIER_MATRIX_ORIGIN,
+  parseSpeciesDossierMatrixContext,
+} from '@/lib/speciesDossierMatrixNavigation';
+
 export interface IdentificationSourceContext {
+  source?: 'lexicon' | typeof SPECIES_DOSSIER_MATRIX_ORIGIN;
   concept?: string;
   label?: string;
+  taxonId?: string;
+  taxonLabel?: string | null;
+  contextIsObservation?: false;
+  contextIsEvidence?: false;
 }
 
 export const MAX_IDENTIFICATION_CONTEXT_TEXT = 160;
 
-// This module carries context Lexicon -> Matrix only. The reverse direction is
-// served by resolveMatrixCharacterLexicon(), which requires a reviewed canonical
-// concept ID and reports 'unmapped' rather than deriving a lexicon lookup from a
-// character label. Guessing the concept from the label would undo that.
+// This module carries bounded navigation context into Matrix. The reverse
+// Matrix -> Lexicon direction is served by resolveMatrixCharacterLexicon(),
+// which requires a reviewed canonical concept ID and reports 'unmapped' rather
+// than deriving a lexicon lookup from a character label. Dossier taxon identity
+// is navigation context only and is never promoted into an observation/evidence
+// claim here.
 
 function boundedContextText(value: string | null | undefined): string | undefined {
   const text = value?.trim();
@@ -26,8 +38,23 @@ export function matrixHrefForLexiconConcept(slug: string, label: string): string
 }
 
 export function readIdentificationSourceContext(search: string): IdentificationSourceContext {
+  const dossier = parseSpeciesDossierMatrixContext(search);
+  if (dossier) {
+    return {
+      source: SPECIES_DOSSIER_MATRIX_ORIGIN,
+      taxonId: dossier.taxonId,
+      taxonLabel: dossier.taxonLabel,
+      contextIsObservation: false,
+      contextIsEvidence: false,
+    };
+  }
+
   const params = new URLSearchParams(search);
   const concept = boundedContextText(params.get('concept'));
   const label = boundedContextText(params.get('label'));
-  return { concept, label };
+  return {
+    source: concept || label ? 'lexicon' : undefined,
+    concept,
+    label,
+  };
 }
