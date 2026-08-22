@@ -13,7 +13,8 @@ const CONTINUUM_SOURCE = readFileSync(
 
 describe('homepage featured genus canonical entrypoint', () => {
   it('keeps the live homepage mounted on the Continuum-backed genus feature', () => {
-    expect(ENTRYPOINT_SOURCE).toContain("export { default } from './DailyGenusFeatureContinuum'");
+    expect(ENTRYPOINT_SOURCE).toContain("import DailyGenusFeatureContinuum from './DailyGenusFeatureContinuum'");
+    expect(ENTRYPOINT_SOURCE).toContain('<DailyGenusFeatureContinuum />');
     expect(ENTRYPOINT_SOURCE).not.toContain('DailyGenusFeatureV5');
   });
 
@@ -24,6 +25,15 @@ describe('homepage featured genus canonical entrypoint', () => {
     expect(CONTINUUM_SOURCE).toContain('const calyxHref = featuredTaxonCalyxHref(genus)');
     expect(CONTINUUM_SOURCE).toContain('to={atlasHref}');
     expect(CONTINUUM_SOURCE).toContain('to={calyxHref}');
+  });
+
+  it('mounts the canonical featured-genus continuation into Research Station', () => {
+    expect(ENTRYPOINT_SOURCE).toContain('featuredTaxonResearchHref');
+    expect(ENTRYPOINT_SOURCE).toContain('const researchHref = featuredTaxonResearchHref(genus)');
+    expect(ENTRYPOINT_SOURCE).toContain('to={researchHref}');
+    expect(ENTRYPOINT_SOURCE).toContain('Continue in Research Station');
+    expect(ENTRYPOINT_SOURCE).not.toContain('to="/research"');
+    expect(ENTRYPOINT_SOURCE).not.toContain("to='/research'");
   });
 
   it('does not regress the active homepage to context-free Atlas or Calyx links', () => {

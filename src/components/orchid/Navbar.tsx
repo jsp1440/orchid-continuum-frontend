@@ -3,7 +3,7 @@ import { Menu, X, ChevronDown, ExternalLink, User as UserIcon, LogOut, LogIn } f
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import AuthModal from '@/components/auth/AuthModal';
-import { atlasWorkspaceCalyxHref } from '@/lib/featuredTaxonNavigation';
+import { atlasWorkspaceCalyxHref, atlasWorkspaceResearchHref } from '@/lib/featuredTaxonNavigation';
 import FavoritesMenu from './FavoritesMenu';
 
 /**
@@ -42,6 +42,7 @@ const MORE_GROUPS: MoreGroup[] = [
       { label: 'Ecosystems',       route: '/ecosystems',   description: 'Seven communities of practice' },
       { label: 'Conservation Hub', route: '/conservation', description: 'Organisations & project workspaces' },
       { label: 'Orchid Societies', route: '/societies',    description: 'Local chapters & member tools' },
+      { label: 'Orchids on screen', route: '/culture/orchids-on-screen', description: 'What a century of film made of them' },
     ],
   },
   {
@@ -53,6 +54,7 @@ const MORE_GROUPS: MoreGroup[] = [
         description: 'Open educational pathways on the knowledge graph',
       },
       { label: 'Classroom',           route: '/classroom',  description: 'Teacher dashboards' },
+      { label: 'Judging practice',    route: '/education/judging-practice', description: 'Score a rubric sheet criterion by criterion' },
       { label: 'Glossary & Physiology', route: '/education', description: 'BloomBot · glossary · physiology' },
     ],
   },
@@ -112,6 +114,7 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
   const go = (l: Linkish) => {
     if (l.external && l.href) window.open(l.href, '_blank', 'noopener,noreferrer');
     else if (l.route === '/calyx' && atlasGenus) navigate(atlasWorkspaceCalyxHref(atlasGenus));
+    else if (l.route === '/research' && atlasGenus) navigate(atlasWorkspaceResearchHref(atlasGenus));
     else if (l.route) navigate(l.route);
     setOpen(false);
     setMoreOpen(false);

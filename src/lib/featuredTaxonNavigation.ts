@@ -17,19 +17,34 @@ export function featuredTaxonAtlasHref(genus: string): string {
 
 /**
  * Canonical handoff from a featured-taxon surface into Calyx.
- * Calyx parses these bounded route fields into its server-authoritative turn context.
+ *
+ * The route carries only bounded navigation context. The explicit
+ * `context_is_evidence=false` marker prevents the homepage-selected genus from
+ * ever being interpreted as scientific evidence merely because it initiated a
+ * Calyx conversation.
  */
 export function featuredTaxonCalyxHref(genus: string): string {
-  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}`;
+  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false`;
 }
 
 /**
  * Continue from the mounted Atlas workspace into Calyx while preserving only
  * the active genus identity. Atlas coordinates, locality text, occurrence IDs,
- * collector fields, and other record-level details remain in Atlas.
+ * collector fields, and other record-level details remain in Atlas. The genus
+ * itself is navigation context, not scientific evidence, so that boundary is
+ * declared explicitly on the handoff just as it is for the homepage path.
  */
 export function atlasWorkspaceCalyxHref(genus: string): string {
-  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${ATLAS_WORKSPACE_ORIGIN}`;
+  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${ATLAS_WORKSPACE_ORIGIN}&context_is_evidence=false`;
+}
+
+/**
+ * Continue from the mounted Atlas workspace into Research while preserving
+ * only the active genus identity. The route deliberately carries none of the
+ * Atlas record/locality state and explicitly declares the genus non-evidentiary.
+ */
+export function atlasWorkspaceResearchHref(genus: string): string {
+  return `/research?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${ATLAS_WORKSPACE_ORIGIN}&context_is_evidence=false`;
 }
 
 /**

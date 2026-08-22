@@ -37,6 +37,9 @@ import UniversityLabPrototype from "./pages/UniversityLabPrototype";
 import AppliedAIDataScienceLab from "./pages/AppliedAIDataScienceLab";
 import UniversityReviewerWorkspace from "./pages/UniversityReviewerWorkspace";
 import Classroom from "./pages/Classroom";
+import ScientificMethodLab from "./pages/ScientificMethodLab";
+import JudgingPractice from "./pages/JudgingPractice";
+import ScreenOrchids from "./pages/ScreenOrchids";
 import Societies from "./pages/Societies";
 import OrganizationProfile from "./pages/OrganizationProfile";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
@@ -60,7 +63,7 @@ import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
-import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
+import OrchidIdentificationContinuum from "./pages/OrchidIdentificationContinuum";
 import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import HomepageReadiness from "./pages/HomepageReadiness";
@@ -83,7 +86,7 @@ const App = () => (
                   <Route path="/lexicon/*" element={<LexiconAppLayout />} />
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
-                  <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
+                  <Route path="/orchid-identification" element={<OrchidIdentificationContinuum />} />
                   <Route path="/calyx" element={<AtlasAwareCalyxRoute />} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
                   <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />
@@ -158,6 +161,9 @@ const App = () => (
                   <Route path="/university/applied-ai-data-science" element={<AppliedAIDataScienceLab />} />
                   <Route path="/university/review" element={<UniversityReviewerWorkspace />} />
                   <Route path="/classroom" element={<Classroom />} />
+                  <Route path="/education/judging-practice" element={<JudgingPractice />} />
+                  <Route path="/culture/orchids-on-screen" element={<ScreenOrchids />} />
+                  <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />

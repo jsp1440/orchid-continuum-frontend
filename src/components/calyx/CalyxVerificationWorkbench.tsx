@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 
+import GovernedEvidenceSearch from "@/components/calyx/GovernedEvidenceSearch";
 import type { BrainMission, MissionConclusion } from "@/lib/calyxWorkspace";
 import {
   checkCalyxMissionClaim,
@@ -158,12 +159,30 @@ export default function CalyxVerificationWorkbench({
                     </div>
                     <p className="mt-2 text-xs leading-5">{item.statement}</p>
                     {item.exactExcerpt ? (
-                      <blockquote className="mt-2 border-l-2 border-primary/30 pl-3 text-xs leading-5 text-muted-foreground">
-                        {item.exactExcerpt}
-                      </blockquote>
+                      <>
+                        <blockquote className="mt-2 border-l-2 border-primary/30 pl-3 text-xs leading-5 text-muted-foreground">
+                          {item.exactExcerpt}
+                        </blockquote>
+                        {/* An unhashed summary must not read as authoritatively
+                            as a hash-anchored canonical record. */}
+                        {item.excerptSource === "source_summary" ? (
+                          <p className="mt-1 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
+                            From the mission&apos;s source summary, not the hash-anchored canonical
+                            record. Nothing here confirms it matches the source text.
+                          </p>
+                        ) : null}
+                      </>
+                    ) : item.excerptAbsence === "withheld_by_policy" ? (
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                        Excerpt withheld by display policy
+                        {item.displayPolicy ? ` (${item.displayPolicy})` : ""}. The evidence record
+                        exists and its text is not releasable here — this is not an absence of
+                        evidence.
+                      </p>
                     ) : (
                       <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                        Exact displayable excerpt is not available in this mission response.
+                        No canonical evidence record resolved to this citation, so no exact excerpt
+                        can be shown. This is a traceability gap, not a statement about the source.
                       </p>
                     )}
                     <dl className="mt-3 grid gap-1 text-[10px] text-muted-foreground sm:grid-cols-2">
@@ -171,6 +190,7 @@ export default function CalyxVerificationWorkbench({
                       <div><dt className="inline font-medium text-foreground">Revision: </dt><dd className="inline">{item.sourceRevisionId ?? "not supplied"}</dd></div>
                       <div><dt className="inline font-medium text-foreground">Anchors: </dt><dd className="inline">{item.anchorIds.join(", ") || "not supplied"}</dd></div>
                       <div><dt className="inline font-medium text-foreground">Content hash: </dt><dd className="inline break-all">{item.contentHash ?? "not surfaced"}</dd></div>
+                      <div><dt className="inline font-medium text-foreground">Display policy: </dt><dd className="inline">{item.displayPolicy ?? "not supplied"}</dd></div>
                     </dl>
                     {item.locator ? (
                       <details className="mt-2 text-[10px] text-muted-foreground">
@@ -188,6 +208,75 @@ export default function CalyxVerificationWorkbench({
             )}
           </section>
 
+          {/*
+            The objections the mission raised against itself. "Not validated"
+            and "not publishable" are conclusions the backend reached for
+            reasons it supplied; reporting the conclusion and discarding the
+            reasons answers "why should I believe this" with a shrug.
+          */}
+          {!result.objections.validationValid ||
+          !result.objections.publicationEligible ||
+          result.objections.mission.length ? (
+            <section className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3" data-testid="stated-objections">
+              <h4 className="text-xs font-semibold">Stated objections</h4>
+
+              {!result.objections.validationValid ? (
+                <div className="mt-2">
+                  <p className="text-[11px] font-medium">Failed structural validation</p>
+                  {result.objections.validation.length ? (
+                    <ul className="mt-1 list-disc pl-5 text-[11px] leading-5 text-muted-foreground">
+                      {result.objections.validation.map((reason, index) => (
+                        <li key={`validation-${index}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    // An unexplained failure is less trustworthy than an
+                    // explained one. It must not read as "no objections".
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                      The mission reported the failure but supplied no reason. Absence of a stated
+                      reason is not evidence that the claim is sound.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
+              {result.objections.mission.length ? (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium">Blocked during the run</p>
+                  <ul className="mt-1 space-y-1 text-[11px] leading-5 text-muted-foreground">
+                    {result.objections.mission.map((blocker, index) => (
+                      <li key={`blocker-${index}`}>
+                        <span className="font-mono text-[10px] uppercase tracking-wide">
+                          {blocker.code || "unspecified"}
+                        </span>
+                        {blocker.stage ? ` · ${blocker.stage}` : ""}
+                        {blocker.detail ? ` — ${blocker.detail}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {!result.objections.publicationEligible ? (
+                <div className="mt-3">
+                  <p className="text-[11px] font-medium">Not eligible for publication</p>
+                  {result.objections.publication.length ? (
+                    <ul className="mt-1 list-disc pl-5 text-[11px] leading-5 text-muted-foreground">
+                      {result.objections.publication.map((reason, index) => (
+                        <li key={`publication-${index}`}>{reason}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+                      No publication blocker was supplied. This is not a statement that the claim is
+                      publishable.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+
           {result.gaps.length ? (
             <section className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
               <h4 className="text-xs font-semibold">What still has to be checked</h4>
@@ -197,17 +286,41 @@ export default function CalyxVerificationWorkbench({
             </section>
           ) : null}
 
+          {/*
+            Corpus search sits below the mission's own evidence and above
+            provenance, matching the order a scientist actually asks in: what was
+            claimed, what did the mission cite, what else does the corpus hold,
+            and can any of it be traced.
+          */}
+          <GovernedEvidenceSearch claimText={result.claimText} />
+
           <section className="mt-4 rounded-lg border bg-background p-3">
             <h4 className="text-xs font-semibold">Reproducibility & provenance</h4>
             <dl className="mt-2 grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
               <div><dt className="inline font-medium text-foreground">Mission: </dt><dd className="inline break-all">{result.provenance.missionId}</dd></div>
               <div><dt className="inline font-medium text-foreground">Reasoning ledger: </dt><dd className="inline break-all">{result.provenance.reasoningLedgerId ?? "not supplied"}{result.provenance.reasoningLedgerVersion ? ` · v${result.provenance.reasoningLedgerVersion}` : ""}</dd></div>
+              <div className="sm:col-span-2">
+                <dt className="inline font-medium text-foreground">Mission confidence: </dt>
+                <dd className="inline">
+                  {result.provenance.missionConfidence === null
+                    ? "not supplied"
+                    : `${result.provenance.missionConfidence} — the mission's own self-assessment, not a probability that the claim is true and not a measure of evidence strength`}
+                </dd>
+              </div>
               <div><dt className="inline font-medium text-foreground">Review state: </dt><dd className="inline">{result.provenance.reviewStatus.replace(/_/g, " ")}</dd></div>
               <div><dt className="inline font-medium text-foreground">Publication eligible: </dt><dd className="inline">{result.provenance.publicationEligible ? "yes" : "no"}</dd></div>
               <div className="sm:col-span-2"><dt className="inline font-medium text-foreground">Source revisions: </dt><dd className="inline">{result.provenance.sourceRevisionIds.join(", ") || "not supplied"}</dd></div>
             </dl>
             <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
               Automatic publication is disabled. Human scientific review remains authoritative.
+            </p>
+            {/* The ledger id proves a reasoning record was kept. It does not
+                make the reasoning readable from here, and a verification
+                surface that implies otherwise is the failure it exists to
+                prevent. */}
+            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+              The reasoning ledger is identified but cannot be retrieved from this surface. Its
+              existence is verified; its contents are not.
             </p>
           </section>
         </div>

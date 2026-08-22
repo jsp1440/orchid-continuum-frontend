@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import {
@@ -33,7 +33,10 @@ import {
   AiDataScienceApiError,
   appliedAiDataScienceApi,
   atlasLayerToEducationalRows,
+  clearAiDataScienceProgress,
+  loadAiDataScienceProgress,
   researchStationHref,
+  saveAiDataScienceProgress,
   type ExecutedLab,
 } from '@/lib/appliedAiDataScience';
 import { createCalyxConversation, sendCalyxTurn } from '@/lib/calyxWorkspace';
@@ -86,6 +89,33 @@ export default function AppliedAIDataScienceLab() {
   const [executed, setExecuted] = useState<ExecutedLab | null>(null);
   const [calyxAnswer, setCalyxAnswer] = useState<{ depth: string; answer: string } | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [assessmentResponses, setAssessmentResponses] = useState<Record<string, string>>({});
+  const [resumedFromPriorSession, setResumedFromPriorSession] = useState(false);
+  const [progressHydrated, setProgressHydrated] = useState(false);
+
+  useEffect(() => {
+    const restored = loadAiDataScienceProgress();
+    if (restored && (restored.prepared || restored.executed)) {
+      setPrepared(restored.prepared);
+      setExecuted(restored.executed);
+      setAssessmentResponses(restored.assessment_responses);
+      setCalyxAnswer(restored.calyx_answer);
+      setResumedFromPriorSession(true);
+    }
+    setProgressHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!progressHydrated) return;
+    if (!prepared && !executed) {
+      clearAiDataScienceProgress();
+      return;
+    }
+    saveAiDataScienceProgress(
+      { prepared, executed, assessment_responses: assessmentResponses, calyx_answer: calyxAnswer },
+      new Date().toISOString(),
+    );
+  }, [progressHydrated, prepared, executed, assessmentResponses, calyxAnswer]);
 
   const moduleQuery = useQuery({
     queryKey: ['oc-ai-ds-module', AI_DATA_SCIENCE_MODULE_ID],
@@ -151,6 +181,8 @@ export default function AppliedAIDataScienceLab() {
       setPrepared(value);
       setExecuted(null);
       setCalyxAnswer(null);
+      setAssessmentResponses({});
+      setResumedFromPriorSession(false);
       setMessage(null);
     },
     onError: (error) => setMessage(errorMessage(error)),
@@ -240,6 +272,12 @@ export default function AppliedAIDataScienceLab() {
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
               <p>{message}</p>
             </div>
+          </div>
+        )}
+
+        {resumedFromPriorSession && (
+          <div className="rounded-2xl border border-sky-300/25 bg-sky-300/[0.05] p-5 text-sm text-sky-50">
+            Resumed your prior lab session, including any reflection responses, from this browser. Nothing shown here was re-derived or fabricated — it is the same result the backend already returned.
           </div>
         )}
 
@@ -530,11 +568,27 @@ export default function AppliedAIDataScienceLab() {
 
               <article className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.03] p-7 md:p-9">
                 <h2 className="font-serif text-2xl text-white">Interpret before you continue</h2>
+                <p className="mt-2 text-xs leading-relaxed text-white/50">
+                  Your written responses are saved in this browser so you can resume later. They are learner progress only — never scientific evidence, and never graded automatically.
+                </p>
                 <div className="mt-5 space-y-4">
                   {executed.assessment.prompts.map((prompt, index) => (
                     <div key={prompt.id} className="rounded-xl border border-white/10 bg-black/10 p-4">
                       <div className="text-[10px] uppercase tracking-[0.18em] text-amber-200/80">Reflection {index + 1}</div>
                       <p className="mt-2 text-sm leading-relaxed text-white/75">{prompt.prompt}</p>
+                      <textarea
+                        aria-label={`Reflection ${index + 1} response`}
+                        value={assessmentResponses[prompt.id] ?? ''}
+                        onChange={(event) =>
+                          setAssessmentResponses((previous) => ({
+                            ...previous,
+                            [prompt.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Write your response here…"
+                        rows={3}
+                        className="mt-3 w-full rounded-lg border border-white/10 bg-black/20 p-3 text-sm text-white/85 placeholder:text-white/30 focus:border-amber-300/40 focus:outline-none"
+                      />
                     </div>
                   ))}
                 </div>

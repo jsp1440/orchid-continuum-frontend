@@ -22,13 +22,27 @@ describe('featured taxon navigation contracts', () => {
     expect(url.pathname).toBe('/calyx');
     expect(parsed.featuredTaxon).toEqual({ rank: 'genus', name: 'Vanilla' });
     expect(parsed.origin).toBe(FEATURED_TAXON_ORIGIN);
+    expect(url.searchParams.get('context_is_evidence')).toBe('false');
   });
 
-  it('encodes taxon names rather than interpolating raw query syntax', () => {
+  it('encodes taxon names and marks the handoff explicitly non-evidentiary', () => {
     expect(featuredTaxonAtlasHref('Paphiopedilum')).toBe('/atlas?genera=Paphiopedilum');
     expect(featuredTaxonCalyxHref('Paphiopedilum')).toBe(
-      `/calyx?genus=Paphiopedilum&origin=${FEATURED_TAXON_ORIGIN}`,
+      `/calyx?genus=Paphiopedilum&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false`,
     );
+  });
+
+  it('never emits locality or record-level evidence channels into Calyx', () => {
+    const url = new URL(featuredTaxonCalyxHref('Vanilla'), 'https://orchidcontinuum.org');
+    const keys = [...url.searchParams.keys()];
+
+    expect(keys).toEqual(['genus', 'origin', 'context_is_evidence']);
+    expect(keys).not.toContain('lat');
+    expect(keys).not.toContain('lng');
+    expect(keys).not.toContain('locality');
+    expect(keys).not.toContain('occurrence_id');
+    expect(keys).not.toContain('collector');
+    expect(keys).not.toContain('catalogue_number');
   });
 
   it('fails closed when no featured genus is available', () => {

@@ -11,8 +11,14 @@ import {
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
-import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import {
+  researchStationAtlasHref,
+  researchStationCalyxHref,
+} from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { ATLAS_WORKSPACE_ORIGIN } from '@/lib/featuredTaxonNavigation';
+import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
+import { MATRIX_RESEARCH_ORIGIN } from '@/lib/matrixResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
 
 /**
@@ -65,17 +71,44 @@ const PILLARS = [
 const ResearchCenter: React.FC = () => {
   // A project carried in from another module keeps the investigation intact.
   //
-  // Both governed origins are read through the shared parser rather than by
-  // re-deriving the rule here. The previous inline read recognised only the
-  // featured-taxon origin, so Atlas Next arrivals were silently dropped, and it
-  // accepted any genus string truncated to 120 characters instead of validating
-  // the shape. The parser fails closed on a malformed genus, on an unbounded
-  // project id, and on any attempt to assert the context as evidence.
+  // Governed origins are read through the shared parser rather than by
+  // re-deriving the rule here. The parser fails closed on a malformed genus,
+  // on an unbounded project id, and on any attempt to assert governed Atlas
+  // navigation context as evidence.
   const [searchParams] = useSearchParams();
   const routeContext = parseResearchRouteContext(searchParams);
   const routeGenus = routeContext?.genus ?? '';
   const projectId = routeContext?.projectId ?? null;
-  const arrivedFromAtlas = routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN;
+  const arrivedFromAtlas =
+    routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
+    routeContext?.origin === ATLAS_WORKSPACE_ORIGIN;
+  const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
+  // A Matrix arrival previously fell through to "Continuing from Genus of the
+  // Day" — a curated editorial pick, which is not where this subject came from.
+  // Misattributing provenance on the surface whose purpose is provenance is not
+  // a copy problem.
+  const arrivedFromMatrix = routeContext?.origin === MATRIX_RESEARCH_ORIGIN;
+  // The dossier supplies the accepted binomial; every other origin carries only
+  // a genus. Naming the subject the visitor actually arrived with is the point
+  // of the handoff - re-deriving it here would be the loss it exists to fix.
+  const routeTaxon =
+    routeContext && 'taxon' in routeContext ? (routeContext.taxon ?? null) : null;
+  const subjectLabel = routeTaxon ?? routeGenus;
+
+  // The onward links must carry the subject the banner just named, not the
+  // genus token it was derived from. A visitor arriving from a Species Dossier
+  // for Cattleya purpurata is studying that species; handing Atlas and Calyx
+  // only "Cattleya" silently widens the subject to every congener, which is
+  // precisely the identity loss these handoffs exist to prevent — and the page
+  // says the subject is preserved while doing it.
+  //
+  // researchStationAtlasHref/CalyxHref classify by name shape rather than
+  // assuming rank: a binomial becomes Atlas's species filter (matched against
+  // the canonical binomial) and reaches Calyx as an exact taxon alongside the
+  // derived genus; a bare genus resolves to the same genus filter as before.
+  // Calyx reads that exact taxon only under the research-station origin, and
+  // asserts taxon_is_evidence=false when it does.
+  const onwardContext = { taxon: subjectLabel, projectId };
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
@@ -114,24 +147,39 @@ const ResearchCenter: React.FC = () => {
             <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-5 md:flex md:items-center md:justify-between md:gap-6">
               <div>
                 <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/75">
-                  {arrivedFromAtlas ? 'Continuing from the Atlas' : 'Continuing from Genus of the Day'}
+                  {arrivedFromDossier
+                    ? 'Continuing from the Species Dossier'
+                    : arrivedFromAtlas
+                      ? 'Continuing from the Atlas'
+                      : arrivedFromMatrix
+                        ? 'Continuing from a Matrix candidate'
+                        : 'Continuing from Genus of the Day'}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-white/75">
-                  <span className="font-serif text-lg italic text-white">{routeGenus}</span>{' '}
+                  <span className="font-serif text-lg italic text-white">{subjectLabel}</span>{' '}
                   is preserved here as navigation context and preloaded into the research query builder.
                   It is not scientific evidence and it does not imply that a persisted research project is
                   about this genus.
                 </p>
+                {/* The Matrix contract asserts context_is_identification=false.
+                    That assertion was parsed and then never shown, so a ranked
+                    candidate read exactly like a determined one. */}
+                {arrivedFromMatrix ? (
+                  <p className="mt-2 text-sm leading-6 text-white/75">
+                    This subject came from a Matrix ranking, which is a candidate rather than a
+                    verified identification. Nothing here determines what the specimen is.
+                  </p>
+                ) : null}
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
                 <Link
-                  to={featuredTaxonAtlasHref(routeGenus)}
+                  to={researchStationAtlasHref(onwardContext)}
                   className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
                 >
                   Return to Atlas
                 </Link>
                 <Link
-                  to={featuredTaxonCalyxHref(routeGenus)}
+                  to={researchStationCalyxHref(onwardContext)}
                   className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-100 hover:bg-emerald-300/15"
                 >
                   Ask Calyx

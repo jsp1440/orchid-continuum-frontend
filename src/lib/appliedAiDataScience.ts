@@ -400,6 +400,128 @@ export function atlasLayerToEducationalRows(
     .filter((row) => Boolean(row.scientific_name));
 }
 
+const PROGRESS_STORAGE_KEY = 'oc_ai_ds_lab_progress_v1';
+
+/**
+ * Learner-progress-only continuity for the Applied AI & Data Science Lab.
+ *
+ * This persists what the learner has already seen from the backend (a prepared
+ * manifest, an executed result, and free-text reflection responses) so a reload
+ * resumes the session instead of silently discarding it. It never fabricates or
+ * derives new scientific/taxonomic evidence — it is a client-side echo of state
+ * the backend already returned, scoped away from scientific-truth data.
+ */
+export type AiDataScienceAssessmentProgress = {
+  version: 1;
+  module_id: string;
+  prepared: PreparedLab | null;
+  executed: ExecutedLab | null;
+  assessment_responses: Record<string, string>;
+  calyx_answer: { depth: string; answer: string } | null;
+  saved_at: string;
+};
+
+function isPreparedLabShape(value: unknown): value is PreparedLab {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<PreparedLab>;
+  return (
+    typeof candidate.dataset_view === 'object' &&
+    candidate.dataset_view !== null &&
+    typeof candidate.lab_manifest === 'object' &&
+    candidate.lab_manifest !== null &&
+    typeof candidate.lab_manifest.lab_manifest_id === 'string' &&
+    typeof candidate.lab_manifest.project_id === 'string'
+  );
+}
+
+function isExecutedLabShape(value: unknown): value is ExecutedLab {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<ExecutedLab>;
+  return (
+    typeof candidate.project_id === 'string' &&
+    typeof candidate.lab_manifest_id === 'string' &&
+    typeof candidate.result_table === 'object' &&
+    candidate.result_table !== null &&
+    typeof candidate.assessment === 'object' &&
+    candidate.assessment !== null &&
+    Array.isArray(candidate.assessment.prompts)
+  );
+}
+
+function isAssessmentResponsesShape(value: unknown): value is Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value).every((entry) => typeof entry === 'string');
+}
+
+/**
+ * Reads persisted lab progress and fails closed to a fresh session on any
+ * missing field, shape mismatch, module-id mismatch, or parse error, rather
+ * than surfacing stale or corrupted state to the learner.
+ */
+export function loadAiDataScienceProgress(): AiDataScienceAssessmentProgress | null {
+  try {
+    if (typeof localStorage === 'undefined') return null;
+    const raw = localStorage.getItem(PROGRESS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<AiDataScienceAssessmentProgress>;
+    if (parsed.version !== 1) return null;
+    if (parsed.module_id !== AI_DATA_SCIENCE_MODULE_ID) return null;
+    if (parsed.prepared !== null && parsed.prepared !== undefined && !isPreparedLabShape(parsed.prepared)) return null;
+    if (parsed.executed !== null && parsed.executed !== undefined && !isExecutedLabShape(parsed.executed)) return null;
+    if (
+      parsed.assessment_responses !== undefined &&
+      !isAssessmentResponsesShape(parsed.assessment_responses)
+    ) {
+      return null;
+    }
+    if (typeof parsed.saved_at !== 'string') return null;
+    return {
+      version: 1,
+      module_id: AI_DATA_SCIENCE_MODULE_ID,
+      prepared: parsed.prepared ?? null,
+      executed: parsed.executed ?? null,
+      assessment_responses: parsed.assessment_responses ?? {},
+      calyx_answer: parsed.calyx_answer ?? null,
+      saved_at: parsed.saved_at,
+    };
+  } catch {
+    clearAiDataScienceProgress();
+    return null;
+  }
+}
+
+export function saveAiDataScienceProgress(
+  progress: {
+    prepared: PreparedLab | null;
+    executed: ExecutedLab | null;
+    assessment_responses: Record<string, string>;
+    calyx_answer: { depth: string; answer: string } | null;
+  },
+  savedAt: string,
+): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    const value: AiDataScienceAssessmentProgress = {
+      version: 1,
+      module_id: AI_DATA_SCIENCE_MODULE_ID,
+      saved_at: savedAt,
+      ...progress,
+    };
+    localStorage.setItem(PROGRESS_STORAGE_KEY, JSON.stringify(value));
+  } catch {
+    // Progress persistence must never break the learning lab.
+  }
+}
+
+export function clearAiDataScienceProgress(): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+    localStorage.removeItem(PROGRESS_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function researchStationHref(packet: ResearchPromotionPacket): string {
   const params = new URLSearchParams({
     source: 'university-ai-data-science',

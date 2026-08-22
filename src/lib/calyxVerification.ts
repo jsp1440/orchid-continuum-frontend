@@ -16,6 +16,26 @@ export type CalyxVerificationEvidence = {
   sourceRevisionId: string | null;
   anchorIds: string[];
   exactExcerpt: string | null;
+  /**
+   * Where the displayed excerpt came from, because the two grades are not
+   * equally verifiable.
+   *
+   * `canonical` is the hash-anchored canonical evidence record. `source_summary`
+   * is the mission's own source list, which carries no content hash — the text
+   * is still useful, but nothing lets a reader confirm it matches the source.
+   * Rendering both as an identical blockquote made an unverifiable excerpt look
+   * exactly as authoritative as a verifiable one.
+   */
+  excerptSource: "canonical" | "source_summary" | null;
+  /**
+   * Why no excerpt is displayed, when none is.
+   *
+   * Withheld by policy and never supplied are different scientific states, and
+   * the difference matters: one says the text exists and you may not see it,
+   * the other says nothing is known to exist. Collapsing them into "not
+   * available" teaches a false negative.
+   */
+  excerptAbsence: "withheld_by_policy" | "not_supplied" | null;
   locator: unknown;
   sourceTitle: string | null;
   contentHash: string | null;
@@ -43,10 +63,41 @@ export type CalyxVerificationResult = {
     rationaleStatus: "supplied" | "bounded_system_rationale_only" | "missing";
   };
   gaps: string[];
+  /**
+   * The reasons the mission itself supplied for not being validated, not being
+   * publishable, or being blocked mid-run.
+   *
+   * The Workbench exists to answer "why should I believe this claim". Reporting
+   * that a mission failed validation while discarding the backend's stated
+   * reasons answers the question with a shrug. Each list is kept separate
+   * because the backend distinguishes them: a structural validation failure, a
+   * stage blocker, and a publication gate are three different objections.
+   *
+   * `stated` is false when the mission is in the adverse state but supplied no
+   * reasons. That must never render as "no objections" — an unexplained
+   * failure is less trustworthy than an explained one, not more.
+   */
+  objections: {
+    validationValid: boolean;
+    validation: string[];
+    mission: Array<{ code: string; stage: string; detail: string | null }>;
+    publicationEligible: boolean;
+    publication: string[];
+    stated: boolean;
+  };
   provenance: {
     missionId: string;
     reasoningLedgerId: string | null;
     reasoningLedgerVersion: number | null;
+    /**
+     * The mission's own reported confidence.
+     *
+     * Null when the backend supplied none, which is not zero. This is the
+     * mission's self-assessment, not a probability that the claim is true and
+     * not a measure of evidence strength; it is surfaced because withholding a
+     * value the system computed is its own kind of misreporting.
+     */
+    missionConfidence: number | null;
     sourceRevisionIds: string[];
     reviewStatus: string;
     publicationEligible: boolean;
@@ -137,17 +188,62 @@ function traceEvidence(
     anchorIds.includes(clean(anchor.anchor_id)),
   );
 
+  const canonicalText = clean(canonical?.text);
+  const summaryText = clean(source?.authorized_excerpt);
+  const exactExcerpt = canonicalText || summaryText || null;
+  const displayPolicy = clean(canonical?.display_policy) || null;
+
+  // A canonical record that exists but carries no text is a withholding: the
+  // evidence is real and its text is not releasable here. No record at all is
+  // simply an absence. Reporting both as "not available" would let a policy
+  // withholding read as an empty corpus.
+  const excerptAbsence: CalyxVerificationEvidence["excerptAbsence"] = exactExcerpt
+    ? null
+    : canonical
+      ? "withheld_by_policy"
+      : "not_supplied";
+
   return {
     candidateId: clean(item.candidate_id) || "unidentified-evidence",
     role,
     statement: evidenceStatement(item) || "Source-bound evidence record",
     sourceRevisionId: clean(item.source_revision_id) || null,
     anchorIds,
-    exactExcerpt: clean(canonical?.text) || clean(source?.authorized_excerpt) || null,
+    exactExcerpt,
+    excerptSource: canonicalText ? "canonical" : summaryText ? "source_summary" : null,
+    excerptAbsence,
     locator: matchingAnchor?.locator ?? source?.citation?.locator ?? null,
     sourceTitle: clean(source?.title) || clean(source?.object_type) || null,
     contentHash,
-    displayPolicy: clean(canonical?.display_policy) || null,
+    displayPolicy,
+  };
+}
+
+/**
+ * Collect the objections the mission raised against itself.
+ *
+ * Strings are cleaned and empties dropped so a backend sending `[""]` cannot
+ * render as a bullet with no text — which would read as an objection nobody
+ * can act on rather than as the malformed field it is.
+ */
+function buildObjections(mission: BrainMission): CalyxVerificationResult["objections"] {
+  const validation = (mission.validation?.blockers ?? []).map(clean).filter(Boolean);
+  const publication = (mission.publication_eligibility?.blockers ?? []).map(clean).filter(Boolean);
+  const missionBlockers = (mission.blockers ?? [])
+    .map((blocker) => ({
+      code: clean(blocker?.code),
+      stage: clean(blocker?.stage),
+      detail: clean(blocker?.detail) || null,
+    }))
+    .filter((blocker) => blocker.code || blocker.stage || blocker.detail);
+
+  return {
+    validationValid: mission.validation?.valid === true,
+    validation,
+    mission: missionBlockers,
+    publicationEligible: mission.publication_eligibility?.eligible === true,
+    publication,
+    stated: validation.length > 0 || publication.length > 0 || missionBlockers.length > 0,
   };
 }
 
@@ -251,7 +347,7 @@ export function checkCalyxMissionClaim(
       "Reasoning audit trail",
       ledgerPresent ? "pass" : "fail",
       ledgerPresent
-        ? "A versioned reasoning ledger exists for this mission."
+        ? "A versioned reasoning ledger is recorded. Its contents are not retrievable from this surface, so the reasoning itself has not been inspected here — only its existence and version."
         : "No versioned reasoning ledger is attached to this mission.",
     ),
     check(
@@ -260,7 +356,7 @@ export function checkCalyxMissionClaim(
       missionValid ? "pass" : "needs_review",
       missionValid
         ? "The mission passed its structural scientific validation gates."
-        : "The mission is not structurally validated or has unresolved blockers.",
+        : "The mission did not pass structural scientific validation. The reasons it supplied are listed under Stated objections below.",
     ),
     check(
       "evidence_gaps",
@@ -331,10 +427,12 @@ export function checkCalyxMissionClaim(
         : "supplied",
     },
     gaps: mission.missing_evidence ?? [],
+    objections: buildObjections(mission),
     provenance: {
       missionId: mission.mission_id,
       reasoningLedgerId: mission.reasoning_ledger?.ledger_id ?? null,
       reasoningLedgerVersion: mission.reasoning_ledger?.version ?? null,
+      missionConfidence: typeof mission.confidence === "number" ? mission.confidence : null,
       sourceRevisionIds: [...new Set(evidence.map((item) => item.sourceRevisionId).filter((value): value is string => Boolean(value)))],
       reviewStatus: mission.review_status,
       publicationEligible: mission.publication_eligibility?.eligible === true,

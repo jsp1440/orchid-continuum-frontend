@@ -21,13 +21,22 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          # Full history so the pull request's base branch is present and the
+          # changed range can be computed. The default depth-1 checkout has no
+          # base to diff against.
+          fetch-depth: 0
+          persist-credentials: false
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
           cache: npm
+
+      - name: Enforce governed workflow security
+        run: node scripts/check-workflow-security.mjs
 
       - name: Install dependencies
         run: npm ci
@@ -40,3 +49,10 @@ jobs:
 
       - name: Lint frontend
         run: npm run lint
+
+      # Runs from the always-on gate rather than a path-filtered workflow, so a
+      # whitespace defect fails on the pull request or push that introduces it.
+      - name: Diff hygiene
+        env:
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+        run: node scripts/check-diff-hygiene.mjs
