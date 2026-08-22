@@ -403,6 +403,7 @@ export function atlasLayerToEducationalRows(
 export function researchStationHref(packet: ResearchPromotionPacket): string {
   const params = new URLSearchParams({
     source: 'university-ai-data-science',
+    project: packet.project_id,
     project_id: packet.project_id,
     promotion_id: packet.promotion_id,
     dataset_id: packet.dataset.dataset_id,
