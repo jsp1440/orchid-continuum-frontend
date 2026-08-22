@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Leaf, Compass, BookOpen, ArrowUpRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /**
  * ThreePillars — the three major public pillars of the Orchid Continuum.
@@ -31,7 +32,7 @@ type Pillar = {
   description: string;
   bullets: string[];
   route: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   accent: string;
   cta: string;
 };
