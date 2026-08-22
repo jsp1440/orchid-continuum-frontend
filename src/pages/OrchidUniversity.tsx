@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   GraduationCap,
   BookOpenCheck,
@@ -6,6 +7,9 @@ import {
   Trophy,
   Lightbulb,
   ListChecks,
+  BarChart3,
+  ArrowRight,
+  ShieldCheck,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import GlossaryTerm from '@/components/orchid/GlossaryTerm';
@@ -17,9 +21,6 @@ import RoleBadge from '@/components/orchid/RoleBadge';
  * ----------------
  * The student-facing entry point. Walks learners through the scientific
  * method using the Continuum's living catalogue as their evidence base.
- *
- * Conceptual UI only — investigation templates, science-fair workspaces,
- * and progress tracking await `/api/learning/*` endpoints.
  */
 
 const inquirySteps = [
@@ -105,6 +106,56 @@ const OrchidUniversity: React.FC = () => {
         </div>
       }
     >
+      {/* Live Applied AI & Data Science program */}
+      <section className="max-w-7xl mx-auto px-6 lg:px-10 pt-16">
+        <div className="rounded-2xl border border-sky-300/25 bg-sky-300/[0.045] p-7 md:p-9">
+          <div className="flex flex-col gap-7 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-3xl">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-100">
+                  Live governed lab
+                </span>
+                <span className="rounded-full border border-white/15 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/55">
+                  OC-AI-DS-001
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-sky-100">
+                <BarChart3 className="h-6 w-6" />
+                <h2 className="font-serif text-3xl md:text-4xl text-white">
+                  Applied AI &amp; Data Science with Orchid Continuum
+                </h2>
+              </div>
+              <p className="mt-4 text-sm md:text-base leading-relaxed text-white/72">
+                The first executable module teaches descriptive statistics and exploratory data analysis with a bounded Orchid Continuum occurrence-and-elevation view. Inspect the exact analysis plan, execute it reproducibly, ask Calyx to explain the result, then continue with the same evidence in Research Station.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-2 text-[10px] uppercase tracking-[0.15em] text-white/60">
+                <span className="rounded-full border border-white/10 px-2.5 py-1">Learn</span>
+                <span className="rounded-full border border-white/10 px-2.5 py-1">Apply</span>
+                <span className="rounded-full border border-white/10 px-2.5 py-1">Research</span>
+                <span className="rounded-full border border-white/10 px-2.5 py-1">Deterministic replay</span>
+              </div>
+            </div>
+
+            <div className="min-w-[250px] rounded-xl border border-white/10 bg-black/10 p-5">
+              <div className="mb-3 flex items-center gap-2 text-emerald-100">
+                <ShieldCheck className="h-4 w-4" />
+                <span className="text-xs font-medium">Scientific boundaries preserved</span>
+              </div>
+              <p className="text-xs leading-relaxed text-white/60">
+                Missing data never becomes zero or biological absence. Exact locality is excluded from the learning table. Calyx explanation is not evidence. Learner work does not become canonical science automatically.
+              </p>
+              <Link
+                to="/university/applied-ai-data-science"
+                className="mt-5 inline-flex items-center gap-2 rounded-full border border-sky-300/35 bg-sky-300/10 px-4 py-2.5 text-sm text-sky-50 hover:bg-sky-300/15"
+              >
+                Open the first module
+                <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Inquiry workflow */}
       <section className="max-w-7xl mx-auto px-6 lg:px-10 pt-16">
         <div className="text-[10px] tracking-[0.3em] uppercase text-emerald-200/80 mb-3">
@@ -217,7 +268,7 @@ const OrchidUniversity: React.FC = () => {
             definition one hover away.
           </h3>
           <p className="text-sm text-white/70 max-w-2xl leading-relaxed">
-            Try it: a {' '}
+            Try it: a{' '}
             <GlossaryTerm
               term="Mycorrhiza"
               definition="A symbiotic partnership between fungi and plant roots. For most orchids it is essential — seeds cannot germinate without the right fungal partner."
