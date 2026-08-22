@@ -39,6 +39,15 @@ export function atlasWorkspaceCalyxHref(genus: string): string {
 }
 
 /**
+ * Continue from the mounted Atlas workspace into Research while preserving
+ * only the active genus identity. The route deliberately carries none of the
+ * Atlas record/locality state and explicitly declares the genus non-evidentiary.
+ */
+export function atlasWorkspaceResearchHref(genus: string): string {
+  return `/research?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${ATLAS_WORKSPACE_ORIGIN}&context_is_evidence=false`;
+}
+
+/**
  * Canonical handoff from the homepage evidence journey into the Research Center.
  * The genus is interaction context only: Research Center may preload it for the
  * visitor, but it must not treat the value as evidence or as the subject of an
