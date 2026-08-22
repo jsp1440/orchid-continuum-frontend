@@ -289,6 +289,45 @@ export async function retrieveEvidence(
  * Distinguished from an absent field so the UI can say "excerpt withheld by
  * display policy" instead of showing nothing and implying the source is empty.
  */
+/**
+ * A trust signal the corpus supplied, rendered as a tri-state.
+ *
+ * `unknown` is not a middle value between yes and no — it means the corpus
+ * said nothing. That distinction is the whole point: a source with no
+ * `ai_generated` flag has not been established as human-authored, and a source
+ * with no `peer_reviewed` flag has not been established as either reviewed or
+ * unreviewed. Collapsing unknown into "no" would manufacture assurance the
+ * backend never gave.
+ */
+export type TrustSignalState = "yes" | "no" | "unknown";
+
+export function trustSignal(value: boolean | null | undefined): TrustSignalState {
+  if (value === true) return "yes";
+  if (value === false) return "no";
+  return "unknown";
+}
+
+/**
+ * Whether a result carries any statement at all about its currency.
+ *
+ * A result with no temporal status has not been checked for supersession. It
+ * must not be presented as current — "we do not know" and "still valid" are
+ * different claims, and only one of them is safe to imply.
+ */
+export function hasTemporalStatus(result: EvidenceRetrievalResult): boolean {
+  return Boolean(String(result.temporal_status ?? "").trim());
+}
+
+/**
+ * Whether the corpus explicitly marked this record inactive.
+ *
+ * Undefined is not inactive — it is unstated. Only an explicit `false` means
+ * the record has been retired.
+ */
+export function isExplicitlyInactive(result: EvidenceRetrievalResult): boolean {
+  return result.active === false;
+}
+
 export function isExcerptWithheld(result: EvidenceRetrievalResult): boolean {
   return result.authorized_excerpt == null;
 }
