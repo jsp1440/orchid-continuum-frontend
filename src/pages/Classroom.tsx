@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import {
   Presentation,
   ClipboardList,
@@ -13,6 +14,7 @@ import {
   Database,
   BarChart3,
   Share2,
+  ArrowRight,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import RoleBadge from '@/components/orchid/RoleBadge';
@@ -175,6 +177,15 @@ const Classroom: React.FC = () => {
             is now presented inside the current Classroom rather than depending
             on the retired Flask application.
           </p>
+        </div>
+        <div className="mb-6">
+          <Link
+            to="/classroom/investigation"
+            className="inline-flex items-center gap-2 rounded-lg bg-violet-200 px-4 py-2.5 text-sm font-medium text-slate-950 hover:bg-white"
+          >
+            Start a guided investigation
+            <ArrowRight className="h-4 w-4" />
+          </Link>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {scientificMethodStages.map((stage, index) => (
