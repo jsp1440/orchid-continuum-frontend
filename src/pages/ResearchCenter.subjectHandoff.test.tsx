@@ -20,6 +20,8 @@ vi.mock('@/contexts/AuthContext', async () => {
 
 import ResearchCenter from './ResearchCenter';
 import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
+import { matrixResearchHref } from '@/lib/matrixResearchNavigation';
+import { atlasNextResearchHref } from '@/features/atlas-next/researchHandoff';
 import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
 import { applyAtlasFilters, type AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 
@@ -153,5 +155,55 @@ describe('research center carries the arriving subject onward', () => {
       expect(keys).not.toContain('lon');
       expect(keys).not.toContain('coordinates');
     }
+  });
+});
+
+/**
+ * Where the subject came from, said accurately.
+ *
+ * The banner named three origins and fell through to "Continuing from Genus of
+ * the Day" for everything else — so a Matrix arrival was attributed to a
+ * curated editorial pick. On the surface whose entire purpose is provenance,
+ * that is not a copy problem.
+ *
+ * The Matrix contract also asserts context_is_identification=false. That
+ * assertion was parsed and then discarded, so a ranked candidate read exactly
+ * like a determined one.
+ */
+describe('research center attributes the subject to where it came from', () => {
+  it('names a Matrix arrival as a Matrix candidate', async () => {
+    await renderAt(matrixResearchHref(SPECIES)!);
+    expect(container.textContent).toContain('Continuing from a Matrix candidate');
+    expect(container.textContent).not.toContain('Genus of the Day');
+  });
+
+  it('says a ranking is not a verified identification', async () => {
+    await renderAt(matrixResearchHref(SPECIES)!);
+    const rendered = container.textContent ?? '';
+    expect(rendered).toMatch(/candidate rather than a verified identification/i);
+    expect(rendered).toMatch(/nothing here determines what the specimen is/i);
+    // And it must not read as a determination.
+    expect(rendered).not.toMatch(/identified as|confirmed as/i);
+  });
+
+  it('keeps the other origins attributed correctly', async () => {
+    await renderAt(speciesDossierResearchHref({ genus: GENUS, taxon: SPECIES })!);
+    expect(container.textContent).toContain('Continuing from the Species Dossier');
+    act(() => root?.unmount());
+    container?.remove();
+
+    await renderAt(atlasNextResearchHref({ genus: GENUS })!);
+    expect(container.textContent).toContain('Continuing from the Atlas');
+    act(() => root?.unmount());
+    container?.remove();
+
+    // Genus of the Day is still correct for the featured-taxon origin.
+    await renderAt(`?genus=${GENUS}&origin=homepage-featured-taxon`);
+    expect(container.textContent).toContain('Continuing from Genus of the Day');
+  });
+
+  it('does not attach the identification caveat to origins it does not apply to', async () => {
+    await renderAt(speciesDossierResearchHref({ genus: GENUS, taxon: SPECIES })!);
+    expect(container.textContent).not.toMatch(/verified identification/i);
   });
 });

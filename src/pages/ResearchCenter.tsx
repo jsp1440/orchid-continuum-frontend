@@ -17,6 +17,7 @@ import {
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
+import { MATRIX_RESEARCH_ORIGIN } from '@/lib/matrixResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
 
 /**
@@ -81,6 +82,11 @@ const ResearchCenter: React.FC = () => {
   const projectId = routeContext?.projectId ?? null;
   const arrivedFromAtlas = routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN;
   const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
+  // A Matrix arrival previously fell through to "Continuing from Genus of the
+  // Day" — a curated editorial pick, which is not where this subject came from.
+  // Misattributing provenance on the surface whose purpose is provenance is not
+  // a copy problem.
+  const arrivedFromMatrix = routeContext?.origin === MATRIX_RESEARCH_ORIGIN;
   // The dossier supplies the accepted binomial; every other origin carries only
   // a genus. Naming the subject the visitor actually arrived with is the point
   // of the handoff - re-deriving it here would be the loss it exists to fix.
@@ -144,7 +150,9 @@ const ResearchCenter: React.FC = () => {
                     ? 'Continuing from the Species Dossier'
                     : arrivedFromAtlas
                       ? 'Continuing from the Atlas'
-                      : 'Continuing from Genus of the Day'}
+                      : arrivedFromMatrix
+                        ? 'Continuing from a Matrix candidate'
+                        : 'Continuing from Genus of the Day'}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-white/75">
                   <span className="font-serif text-lg italic text-white">{subjectLabel}</span>{' '}
@@ -152,6 +160,15 @@ const ResearchCenter: React.FC = () => {
                   It is not scientific evidence and it does not imply that a persisted research project is
                   about this genus.
                 </p>
+                {/* The Matrix contract asserts context_is_identification=false.
+                    That assertion was parsed and then never shown, so a ranked
+                    candidate read exactly like a determined one. */}
+                {arrivedFromMatrix ? (
+                  <p className="mt-2 text-sm leading-6 text-white/75">
+                    This subject came from a Matrix ranking, which is a candidate rather than a
+                    verified identification. Nothing here determines what the specimen is.
+                  </p>
+                ) : null}
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
                 <Link
