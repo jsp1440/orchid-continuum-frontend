@@ -83,7 +83,7 @@ function inspectWorkflow(path) {
   return findings;
 }
 
-const workflows = changedFiles().filter(WORKFLOW_RE);
+const workflows = changedFiles().filter((path) => WORKFLOW_RE.test(path));
 const failures = [];
 
 for (const workflow of workflows) {
