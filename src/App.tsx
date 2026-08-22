@@ -60,7 +60,7 @@ import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
-import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
+import OrchidIdentificationContinuum from "./pages/OrchidIdentificationContinuum";
 import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import HomepageReadiness from "./pages/HomepageReadiness";
@@ -83,7 +83,7 @@ const App = () => (
                   <Route path="/lexicon/*" element={<LexiconAppLayout />} />
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
-                  <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
+                  <Route path="/orchid-identification" element={<OrchidIdentificationContinuum />} />
                   <Route path="/calyx" element={<AtlasAwareCalyxRoute />} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
                   <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />

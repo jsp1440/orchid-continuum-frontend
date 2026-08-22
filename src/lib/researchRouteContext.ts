@@ -1,19 +1,32 @@
 import { FEATURED_TAXON_ORIGIN } from '@/lib/featuredTaxonNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { MATRIX_RESEARCH_ORIGIN, parseMatrixResearchContext } from '@/lib/matrixResearchNavigation';
 
 const MAX_GENUS_CHARACTERS = 120;
 const MAX_PROJECT_CHARACTERS = 160;
 const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
 const SAFE_PROJECT = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
-export type ResearchRouteOrigin = typeof FEATURED_TAXON_ORIGIN | typeof ATLAS_NEXT_RESEARCH_ORIGIN;
+type LegacyResearchRouteOrigin = typeof FEATURED_TAXON_ORIGIN | typeof ATLAS_NEXT_RESEARCH_ORIGIN;
+export type ResearchRouteOrigin = LegacyResearchRouteOrigin | typeof MATRIX_RESEARCH_ORIGIN;
 
-export type ResearchRouteContext = {
-  origin: ResearchRouteOrigin;
+type LegacyResearchRouteContext = {
+  origin: LegacyResearchRouteOrigin;
   genus: string;
   projectId: string | null;
   contextIsEvidence: false;
 };
+
+type MatrixResearchRouteContext = {
+  origin: typeof MATRIX_RESEARCH_ORIGIN;
+  genus: string;
+  taxon: string;
+  projectId: null;
+  contextIsEvidence: false;
+  contextIsIdentification: false;
+};
+
+export type ResearchRouteContext = LegacyResearchRouteContext | MatrixResearchRouteContext;
 
 function boundedGenus(value: string | null): string | null {
   const genus = String(value ?? '').trim();
@@ -31,21 +44,34 @@ function boundedProject(value: string | null): string | null {
 /**
  * Parse navigation context entering Research Center.
  *
- * Only the two governed origins are accepted. The parser intentionally reads
- * genus, project, origin, and context_is_evidence only; locality, coordinates,
- * occurrence identifiers, collector/catalogue fields, site/grid/GPS/elevation,
+ * Only governed origins are accepted. Matrix candidate context is explicitly
+ * neither evidence nor a verified identification. Locality, coordinates,
+ * occurrence/catalogue identifiers, collector/site/grid/GPS/elevation data,
  * and all other route material are ignored at this module boundary.
+ *
+ * Legacy Atlas and featured-taxon callers retain their exact historical object
+ * shape; Matrix-only fields are present only on the Matrix discriminant.
  */
 export function parseResearchRouteContext(search: string | URLSearchParams): ResearchRouteContext | null {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
+  const matrixContext = parseMatrixResearchContext(params);
+  if (matrixContext) {
+    return {
+      origin: MATRIX_RESEARCH_ORIGIN,
+      genus: matrixContext.genus,
+      taxon: matrixContext.taxon,
+      projectId: null,
+      contextIsEvidence: false,
+      contextIsIdentification: false,
+    };
+  }
+
   const origin = params.get('origin');
   if (origin !== FEATURED_TAXON_ORIGIN && origin !== ATLAS_NEXT_RESEARCH_ORIGIN) return null;
 
   const genus = boundedGenus(params.get('genus'));
   if (!genus) return null;
 
-  // Navigation context is never scientific evidence. A malformed or truthy
-  // route assertion fails closed rather than upgrading the context boundary.
   const evidenceFlag = params.get('context_is_evidence');
   if (origin === ATLAS_NEXT_RESEARCH_ORIGIN && evidenceFlag !== 'false') return null;
 
