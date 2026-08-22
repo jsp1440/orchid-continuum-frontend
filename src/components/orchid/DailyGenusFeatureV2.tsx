@@ -62,18 +62,31 @@ function uniqueClean(urls: Array<string | undefined>): string[] {
   return out;
 }
 
+/**
+ * Backend image payloads carry URL variants that GenusImage does not promise
+ * (`original_url`, `media_url`, `url`). Reading them means stepping outside the
+ * declared type, so do it in one named place, with a runtime string check,
+ * rather than casting at each read site.
+ */
+function undeclaredUrl(source: GenusImage | undefined, key: string): string | undefined {
+  const value = (source as unknown as Record<string, unknown> | undefined)?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 function urlsFor(trusted?: GenusImage, fallback?: string): string[] {
-  const record = trusted as Record<string, unknown> | undefined;
-  const imageUrls = Array.isArray(record?.image_urls)
-    ? record.image_urls.filter((u): u is string => typeof u === 'string')
+  // image_urls IS declared on GenusImage; the array guard stays because the
+  // backend is the source of the value, not the type.
+  const declaredUrls = trusted?.image_urls;
+  const imageUrls = Array.isArray(declaredUrls)
+    ? declaredUrls.filter((u): u is string => typeof u === 'string')
     : [];
 
   return uniqueClean([
     ...imageUrls,
     trusted?.image_url,
-    record?.original_url as string | undefined,
-    record?.media_url as string | undefined,
-    record?.url as string | undefined,
+    undeclaredUrl(trusted, 'original_url'),
+    undeclaredUrl(trusted, 'media_url'),
+    undeclaredUrl(trusted, 'url'),
     fallback,
   ]);
 }
