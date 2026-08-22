@@ -354,6 +354,71 @@ describe('honest fallback when evidence is missing', () => {
   });
 });
 
+describe('conservation and distribution evidence merged into their existing blocks', () => {
+  it('renders dossier conservation evidence inside the Conservation status block, not a duplicate generic section', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        conservation: emptySection({
+          state: 'available',
+          summary: 'Assessed as Endangered under IUCN criteria B1ab.',
+          receipts: [
+            receipt({
+              source_name: 'IUCN Red List',
+              confidence: 0.9,
+              license: 'CC-BY-NC 4.0',
+            }),
+          ],
+        }),
+      }),
+    );
+
+    renderPage();
+    await flush();
+
+    const sections = Array.from(
+      container.querySelectorAll('[data-testid="dossier-section"]'),
+    ).filter((el) => el.getAttribute('data-section-label') === 'Conservation evidence');
+    expect(sections).toHaveLength(1);
+    expect(sections[0].textContent).toContain('Assessed as Endangered under IUCN criteria B1ab.');
+    expect(sections[0].querySelector('[data-testid="evidence-license"]')?.textContent).toContain(
+      'CC-BY-NC 4.0',
+    );
+  });
+
+  it('renders dossier distribution evidence inside the Native range & habitat block, not a duplicate generic section', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        distribution: emptySection({
+          state: 'available',
+          summary: 'Recorded across the Brazilian Atlantic Forest.',
+          receipts: [receipt({ source_name: 'GBIF Occurrence Index' })],
+        }),
+      }),
+    );
+
+    renderPage();
+    await flush();
+
+    const sections = Array.from(
+      container.querySelectorAll('[data-testid="dossier-section"]'),
+    ).filter((el) => el.getAttribute('data-section-label') === 'Distribution');
+    expect(sections).toHaveLength(1);
+    expect(sections[0].textContent).toContain('Recorded across the Brazilian Atlantic Forest.');
+  });
+
+  it('does not render conservation/distribution evidence blocks when the dossier fetch failed, without breaking the ocBackend fallback', async () => {
+    mocks.fetchSpeciesDossier.mockRejectedValue(new Error('503'));
+
+    renderPage();
+    await flush();
+
+    expect(
+      container.querySelectorAll('[data-testid="dossier-section"]'),
+    ).toHaveLength(0);
+    expect(container.textContent).toContain('Not yet assessed in the Continuum record.');
+  });
+});
+
 describe('no regression to existing SpeciesDossier behavior', () => {
   it('still renders taxonomy fields from fetchSpeciesById', async () => {
     mocks.fetchSpeciesDossier.mockResolvedValue(dossier());

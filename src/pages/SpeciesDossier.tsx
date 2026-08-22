@@ -37,9 +37,14 @@ const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   unavailable: 'Unavailable',
 };
 
-// Sections rendered generically from the dossier envelope. `mycorrhizae` is
-// intentionally excluded — it keeps the existing fetchMycorrhizal-backed
-// block above, which already has its own graceful "data coming soon" degrade.
+// Sections rendered generically from the dossier envelope. Three sections are
+// intentionally excluded here because they are merged into their own
+// dedicated blocks instead, so the evidence appears once, next to the
+// concept it backs, rather than duplicated in a separate generic list:
+//   - `mycorrhizae`  -> "Mycorrhizal partners" (fetchMycorrhizal-backed, with
+//                       its own graceful "data coming soon" degrade)
+//   - `conservation` -> "Conservation status" (fetchSpeciesById-backed)
+//   - `distribution` -> "Native range & habitat" (fetchSpeciesById-backed)
 const DOSSIER_SECTIONS: Array<{ key: keyof SpeciesDossierEnvelope; label: string }> = [
   { key: 'nomenclature', label: 'Nomenclature' },
   { key: 'protologue', label: 'Protologue' },
@@ -47,11 +52,9 @@ const DOSSIER_SECTIONS: Array<{ key: keyof SpeciesDossierEnvelope; label: string
   { key: 'historical_media', label: 'Historical media' },
   { key: 'living_media', label: 'Living media' },
   { key: 'morphology', label: 'Morphology' },
-  { key: 'distribution', label: 'Distribution' },
   { key: 'ecology', label: 'Ecology' },
   { key: 'phenology', label: 'Phenology' },
   { key: 'pollinators', label: 'Pollinators' },
-  { key: 'conservation', label: 'Conservation evidence' },
   { key: 'literature', label: 'Literature' },
   { key: 'cultivation', label: 'Cultivation' },
   { key: 'knowledge_graph', label: 'Knowledge graph' },
@@ -222,6 +225,13 @@ const SpeciesDossier: React.FC = () => {
                   ) : (
                     <Empty>Not yet assessed in the Continuum record.</Empty>
                   )}
+                  {dossier && !dossierError && (
+                    <DossierSectionBlock
+                      label="Conservation evidence"
+                      section={dossier.conservation}
+                      className="mt-3"
+                    />
+                  )}
                 </Block>
 
                 {/* Range / habitat */}
@@ -248,6 +258,13 @@ const SpeciesDossier: React.FC = () => {
                     </div>
                   ) : (
                     <Empty>Range and habitat notes not yet linked.</Empty>
+                  )}
+                  {dossier && !dossierError && (
+                    <DossierSectionBlock
+                      label="Distribution"
+                      section={dossier.distribution}
+                      className="mt-3"
+                    />
                   )}
                 </Block>
 
@@ -423,15 +440,17 @@ function EvidenceReceiptCard({ receipt }: { receipt: EvidenceReceipt }) {
 function DossierSectionBlock({
   label,
   section,
+  className,
 }: {
   label: string;
   section: DossierSection;
+  className?: string;
 }) {
   return (
     <div
       data-testid="dossier-section"
       data-section-label={label}
-      className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/40 p-4"
+      className={`rounded-xl border border-white/[0.08] bg-[#0a0d1c]/40 p-4${className ? ` ${className}` : ''}`}
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/80">
