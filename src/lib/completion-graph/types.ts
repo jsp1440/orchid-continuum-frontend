@@ -23,6 +23,7 @@ export type CompletionStatus =
   | 'BLOCKED'
   | 'OWNER_ACTION'
   | 'EXTERNAL_BLOCKER'
+  | 'RECOVERABLE_LEGACY'
   | 'UNKNOWN';
 
 /** One of the "three levels of done" tracked independently per the mission spec. */

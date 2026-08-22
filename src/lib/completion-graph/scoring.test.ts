@@ -154,6 +154,22 @@ describe('rollupStatus', () => {
     };
     expect(rollupStatus(branch)).toBe('BLOCKED');
   });
+
+  it('rolls up to RECOVERABLE_LEGACY when that is the most severe status present (worse than PARTIAL/UNKNOWN, less severe than MISSING/blockers)', () => {
+    const withLegacyOnly: CompletionNode = {
+      ...gateNode({ id: 'branch' }),
+      type: 'module',
+      children: [gateNode({ id: 'a', status: 'PARTIAL' }), gateNode({ id: 'b', status: 'RECOVERABLE_LEGACY' })],
+    };
+    expect(rollupStatus(withLegacyOnly)).toBe('RECOVERABLE_LEGACY');
+
+    const withMissingToo: CompletionNode = {
+      ...gateNode({ id: 'branch' }),
+      type: 'module',
+      children: [gateNode({ id: 'a', status: 'RECOVERABLE_LEGACY' }), gateNode({ id: 'b', status: 'MISSING' })],
+    };
+    expect(rollupStatus(withMissingToo)).toBe('MISSING');
+  });
 });
 
 describe('rollupThreeLevels', () => {

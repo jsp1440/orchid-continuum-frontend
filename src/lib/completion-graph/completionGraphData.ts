@@ -25,6 +25,7 @@
  * domain never reads as more confident than it is.
  */
 
+import { LEGACY_ASSET_REGISTRY, PENDING_REPO_INSPECTION } from './legacyAssetRegistry';
 import { rollupStatus, rollupThreeLevels } from './scoring';
 import type { CompletionNode, Evidence, ExecutionLane } from './types';
 
@@ -85,6 +86,30 @@ function confirmedMissing(opts: {
       browserEndToEnd: null,
       deployedOperational: null,
     },
+    evidence: opts.evidence,
+    nextAction: opts.nextAction,
+    lastUpdated: CENSUS_DATE,
+    children: [],
+  };
+}
+
+/** A legacy asset identified by OC-ARCHAEOLOGY-001 (#308) with a concrete recovery lead — not yet ported, extracted, or archived. */
+function legacyRecoverable(opts: {
+  parentId: string;
+  name: string;
+  evidence: Evidence[];
+  nextAction: string;
+  lane?: ExecutionLane;
+  idHint: string;
+}): CompletionNode {
+  return {
+    id: nextId(opts.idHint),
+    parentId: opts.parentId,
+    name: opts.name,
+    type: 'capability',
+    status: 'RECOVERABLE_LEGACY',
+    threeLevels: { codeComplete: 'UNKNOWN', integratedComplete: 'UNKNOWN', productComplete: 'UNKNOWN' },
+    lane: opts.lane,
     evidence: opts.evidence,
     nextAction: opts.nextAction,
     lastUpdated: CENSUS_DATE,
@@ -705,6 +730,116 @@ const productionReleaseDomain = branch({
   }, [deploymentContractGate, universityProductionLiveVerification]),
 ]);
 
+// ─── Legacy archaeology & recovery register (OC-ARCHAEOLOGY-001 / issue #308) ──
+// See src/lib/completion-graph/legacyAssetRegistry.ts for the full machine-readable
+// registry and its verification-limitation notice: this pass could not reach any
+// GitHub repo other than this one (cross-repo gh/git/WebFetch all required an
+// approval no interactive user was present to grant), so every entry below is
+// sourced from the issue #308 body, not independently re-fetched this pass.
+
+const REGISTRY_ASSET_BY_ID = new Map(LEGACY_ASSET_REGISTRY.map((asset) => [asset.id, asset]));
+
+function assetEvidence(id: string): Evidence[] {
+  const asset = REGISTRY_ASSET_BY_ID.get(id);
+  const evidence: Evidence[] = [
+    { kind: 'issue', ref: '#308', note: 'Source lead for this legacy asset — see issue body "Known recovery leads already verified in GitHub".' },
+    { kind: 'file', ref: 'src/lib/completion-graph/legacyAssetRegistry.ts', note: `Registry entry id: ${id}` },
+  ];
+  if (asset && asset.source.paths.length > 0) {
+    evidence.push({
+      kind: 'doc',
+      ref: `${asset.source.repo}@${asset.source.ref}`,
+      note: `Claimed paths (unverified this pass): ${asset.source.paths.join(', ')}`,
+    });
+  }
+  return evidence;
+}
+
+const legacyArchaeologyModule = branch({
+  id: 'module-legacy-archaeology-online-repo',
+  parentId: 'domain-legacy-archaeology',
+  name: 'jsp1440/Orchid_Continuum_Online recovery leads',
+  type: 'module',
+  nextAction: 'See child capabilities.',
+}, [
+  legacyRecoverable({
+    idHint: 'cap-legacy-fcos-judging',
+    parentId: 'module-legacy-archaeology-online-repo',
+    name: 'FCOS Orchid Judging system (scoring standards + widget)',
+    evidence: assetEvidence('legacy-fcos-judging-system'),
+    nextAction: 'Obtain read access to jsp1440/Orchid_Continuum_Online (or an owner-provided export) and confirm judging_standards.py / enhanced_judging.py / fcos_judge widget content before scoping a bounded PORT issue. No canonical judging capability exists in this completion graph yet.',
+    lane: 'PRODUCT_COMPLETION',
+  }),
+  legacyRecoverable({
+    idHint: 'cap-legacy-hollywood-orchids',
+    parentId: 'module-legacy-archaeology-online-repo',
+    name: 'Hollywood Orchids / Orchids in Movies widget',
+    evidence: assetEvidence('legacy-hollywood-orchids-widget'),
+    nextAction: 'Obtain read access to jsp1440/Orchid_Continuum_Online and confirm hollywood_orchids_widget.py content and any factual film/actor claims before scoping a bounded PORT or newsletter-republication issue.',
+    lane: 'PRODUCT_COMPLETION',
+  }),
+  legacyRecoverable({
+    idHint: 'cap-legacy-scientific-method-platform',
+    parentId: 'module-legacy-archaeology-online-repo',
+    name: 'Scientific Method / research teaching platform',
+    evidence: assetEvidence('legacy-scientific-method-research-platform'),
+    nextAction: 'Diff scientific_research_platform.py and the Julius scientific-method integration doc against the current University/Applied-AI-Data-Science domain (cap-university-curriculum-core, cap-university-applied-ai) and Research Station (domain-research-station-cap) before deciding EXTRACT_LOGIC vs SUPERSEDED.',
+    lane: 'PRODUCT_COMPLETION',
+  }),
+  legacyRecoverable({
+    idHint: 'cap-legacy-widget-inventories',
+    parentId: 'module-legacy-archaeology-online-repo',
+    name: 'Legacy widget inventories & Neon One embed catalog (documentation)',
+    evidence: assetEvidence('legacy-widget-inventories-catalogs'),
+    nextAction: 'Read COMPLETE_WIDGET_CATALOG.md / WORKING_WIDGETS_LIST.md / WIDGETS_FOR_NEON_ONE.md and diff against the live /widgets gallery (currently 6 widgets: species-snapshot, orchid-of-the-day, atlas-teaser, ecological-interaction-card, zoo-review-card, oacs-greenhouse-snapshot) to find previously-built widgets not yet republished.',
+    lane: 'PRODUCT_COMPLETION',
+  }),
+  censusPending({
+    idHint: 'cap-legacy-historical-bhl-library',
+    parentId: 'module-legacy-archaeology-online-repo',
+    name: 'Historical / BHL / illustration / library-related material',
+    evidence: assetEvidence('legacy-historical-bhl-illustration-library'),
+    nextAction: 'Issue #308 names no concrete path for this material — a directory-level listing of jsp1440/Orchid_Continuum_Online is required before this can move beyond UNKNOWN. Cross-check against cap-literature-public-browser (confirmed MISSING) once inspected.',
+    lane: 'SCIENTIFIC_DATA_COMPLETION',
+  }),
+]);
+
+const legacyRepoInspectionQueue: CompletionNode = {
+  id: 'cap-legacy-repo-inspection-queue',
+  parentId: 'module-legacy-repo-inspection',
+  name: 'Owner repositories named in #308 not yet reachable for inspection',
+  type: 'capability',
+  status: 'OWNER_ACTION',
+  threeLevels: { codeComplete: 'NOT_APPLICABLE', integratedComplete: 'NOT_APPLICABLE', productComplete: 'NOT_APPLICABLE' },
+  lane: 'RELEASE_ACCEPTANCE',
+  evidence: [
+    { kind: 'issue', ref: '#308', note: 'Lists orchid-continuum, orchid-continuum-backend, orchid-continuum-control-panel, orchid-continuum-site, Orchid_Continuum_frontend, orchid-conservatory for inspection.' },
+    { kind: 'file', ref: 'src/lib/completion-graph/legacyAssetRegistry.ts', note: `PENDING_REPO_INSPECTION lists ${PENDING_REPO_INSPECTION.length} repos this pass could not reach at all (zero paths confirmed).` },
+  ],
+  ownerActions: [
+    'Grant this automation cross-repo read access (or CI credentials scoped to read-only) to the named legacy repositories, OR provide an export/mirror/zip of their contents so an autonomous pass can inventory them without live network access.',
+  ],
+  nextAction: 'Once access is granted, run the same archaeology pass this issue performed against jsp1440/Orchid_Continuum_Online on each remaining repo and extend LEGACY_ASSET_REGISTRY.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const legacyRepoInspectionModule = branch({
+  id: 'module-legacy-repo-inspection',
+  parentId: 'domain-legacy-archaeology',
+  name: 'Legacy repository inspection queue',
+  type: 'module',
+  nextAction: 'See child capability.',
+}, [legacyRepoInspectionQueue]);
+
+const legacyArchaeologyDomain = branch({
+  id: 'domain-legacy-archaeology',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Legacy archaeology & recovery register (OC-ARCHAEOLOGY-001)',
+  type: 'domain',
+  nextAction: 'Obtain cross-repo read access (or an owner-provided export) for jsp1440/Orchid_Continuum_Online and the repos in the inspection queue, then convert each RECOVERABLE_LEGACY lead into a scored disposition per src/lib/completion-graph/legacyAssetRegistry.ts.',
+}, [legacyArchaeologyModule, legacyRepoInspectionModule]);
+
 // ─── Remaining initial inventory: recorded as domains, census pending ──────
 // Each entry below has at least one route/file existence check so "missing
 // evidence" is never silently treated as zero — but none have been scored,
@@ -918,6 +1053,7 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   universityDomain,
   autonomousControlPlaneDomain,
   productionReleaseDomain,
+  legacyArchaeologyDomain,
   ...stubDomains,
 ]);
 

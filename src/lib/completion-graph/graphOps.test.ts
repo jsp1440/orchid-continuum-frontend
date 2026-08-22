@@ -49,6 +49,11 @@ describe('countIncompleteLeaves / countLeavesByStatus', () => {
     expect(countIncompleteLeaves(root)).toBe(2);
     expect(countLeavesByStatus(root)).toMatchObject({ DONE: 1, PARTIAL: 1, UNKNOWN: 1 });
   });
+
+  it('counts RECOVERABLE_LEGACY leaves separately from MISSING', () => {
+    const root = tree([leaf({ id: 'a', status: 'RECOVERABLE_LEGACY' }), leaf({ id: 'b', status: 'MISSING' })]);
+    expect(countLeavesByStatus(root)).toMatchObject({ RECOVERABLE_LEGACY: 1, MISSING: 1 });
+  });
 });
 
 describe('findNode / getBreadcrumb', () => {
@@ -98,6 +103,11 @@ describe('selectNextUnmetGate', () => {
       leaf({ id: 'high-priority', status: 'PARTIAL', priority: 1 }),
     ]);
     expect(selectNextUnmetGate(root)?.id).toBe('high-priority');
+  });
+
+  it('treats RECOVERABLE_LEGACY as actionable, per OC-ARCHAEOLOGY-001 (#308) — the scheduler may prefer a bounded port over a rebuild', () => {
+    const root = tree([leaf({ id: 'blocked', status: 'BLOCKED' }), leaf({ id: 'legacy', status: 'RECOVERABLE_LEGACY' })]);
+    expect(selectNextUnmetGate(root)?.id).toBe('legacy');
   });
 });
 

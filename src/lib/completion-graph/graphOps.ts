@@ -29,6 +29,7 @@ export function countLeavesByStatus(node: CompletionNode): Record<CompletionStat
     BLOCKED: 0,
     OWNER_ACTION: 0,
     EXTERNAL_BLOCKER: 0,
+    RECOVERABLE_LEGACY: 0,
     UNKNOWN: 0,
   };
   for (const leaf of getLeaves(node)) counts[leaf.status] += 1;
@@ -71,7 +72,13 @@ export function groupLeavesByLane(node: CompletionNode): Record<ExecutionLane, C
   return groups;
 }
 
-const ACTIONABLE_STATUSES: CompletionStatus[] = ['MISSING', 'PARTIAL', 'UNKNOWN'];
+/**
+ * RECOVERABLE_LEGACY is actionable and, per OC-ARCHAEOLOGY-001 (#308), the
+ * scheduler should prefer bounded recovery/porting over rebuilding from
+ * scratch when it is safer/faster — see LANE_ORDER/priority below for how
+ * that preference is expressed once a leaf's priority is set accordingly.
+ */
+const ACTIONABLE_STATUSES: CompletionStatus[] = ['MISSING', 'RECOVERABLE_LEGACY', 'PARTIAL', 'UNKNOWN'];
 
 const LANE_ORDER: Record<ExecutionLane, number> = {
   PRODUCT_COMPLETION: 0,

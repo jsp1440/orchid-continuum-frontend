@@ -118,6 +118,7 @@ const STATUS_SEVERITY_ORDER: CompletionStatus[] = [
   'BLOCKED',
   'OWNER_ACTION',
   'MISSING',
+  'RECOVERABLE_LEGACY',
   'PARTIAL',
   'UNKNOWN',
 ];
