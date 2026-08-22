@@ -13,9 +13,9 @@
  * accumulated range happened to touch a filtered path and the check finally ran
  * over 100 commits at once - the most expensive possible moment to learn it.
  *
- * This runs from the always-on gate instead, against the pull request's own
- * base, so a whitespace defect fails on the pull request that introduces it
- * regardless of which files it touches.
+ * This runs from the always-on gate. Pull requests compare against their base;
+ * push events compare against the event's previous commit so a direct push does
+ * not accidentally diff HEAD against itself.
  *
  * Exit codes: 0 clean, 1 whitespace errors found, 2 could not determine the
  * range. Two is deliberately not a silent pass: a check that cannot see the
@@ -23,6 +23,9 @@
  */
 
 import { spawnSync } from "node:child_process";
+
+const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
+const ZERO_SHA_RE = /^0{40}$/;
 
 /**
  * Runs git and returns {status, stdout}.
@@ -38,15 +41,40 @@ function git(args) {
   return { status: result.status, stdout: result.stdout ?? "" };
 }
 
-function resolveBase() {
-  // On a pull request GitHub supplies the target branch; on a push there is no
-  // base ref and the merge-base with main is the honest comparison.
-  const baseRef = process.env.GITHUB_BASE_REF?.trim();
-  const candidates = baseRef ? [`origin/${baseRef}`, baseRef] : ["origin/main", "main"];
+function revisionExists(revision) {
+  return git(["rev-parse", "--verify", "--quiet", `${revision}^{commit}`]).status === 0;
+}
+
+/**
+ * Candidate ranges are kept pure so CI event semantics are unit-testable.
+ * PRs use a three-dot range from their base. Pushes use the event's `before`
+ * commit with a two-dot range; on a first push where GitHub reports all zeroes,
+ * HEAD^ is the bounded fallback. If none can be resolved, the check fails closed.
+ */
+export function candidateDiffRanges(baseRef, beforeSha) {
+  const base = String(baseRef ?? "").trim();
+  if (base) {
+    return [
+      { revision: `origin/${base}`, range: `origin/${base}...HEAD` },
+      { revision: base, range: `${base}...HEAD` },
+    ];
+  }
+
+  const before = String(beforeSha ?? "").trim();
+  if (FULL_SHA_RE.test(before) && !ZERO_SHA_RE.test(before)) {
+    return [{ revision: before, range: `${before}..HEAD` }];
+  }
+
+  return [{ revision: "HEAD^", range: "HEAD^..HEAD" }];
+}
+
+function resolveRange() {
+  const candidates = candidateDiffRanges(
+    process.env.GITHUB_BASE_REF,
+    process.env.GITHUB_EVENT_BEFORE,
+  );
   for (const candidate of candidates) {
-    if (git(["rev-parse", "--verify", "--quiet", `${candidate}^{commit}`]).status === 0) {
-      return candidate;
-    }
+    if (revisionExists(candidate.revision)) return candidate.range;
   }
   return null;
 }
@@ -69,32 +97,31 @@ export function classifyDiffCheck(status, stdout) {
 }
 
 function main() {
-  const base = resolveBase();
-  if (!base) {
+  const range = resolveRange();
+  if (!range) {
     console.error(
-      "diff hygiene: could not resolve a base commit to compare against. " +
-        "Ensure the workflow fetches the base branch (fetch-depth: 0).",
+      "diff hygiene: could not resolve a commit range to compare. " +
+        "Ensure checkout has full history and push events provide github.event.before.",
     );
     process.exit(2);
   }
 
-  // Three-dot: only what this branch introduced, not what the base moved on to.
-  const { status, stdout } = git(["diff", "--check", `${base}...HEAD`]);
+  const { status, stdout } = git(["diff", "--check", range]);
   const { verdict, findings, exitCode } = classifyDiffCheck(status, stdout);
 
   if (verdict === "clean") {
-    console.log(`diff hygiene: clean against ${base}.`);
+    console.log(`diff hygiene: clean for ${range}.`);
     return;
   }
 
   if (verdict === "indeterminate") {
     console.error(
-      `diff hygiene: 'git diff --check ${base}...HEAD' failed (status ${status}) without listing findings.`,
+      `diff hygiene: 'git diff --check ${range}' failed (status ${status}) without listing findings.`,
     );
     process.exit(exitCode);
   }
 
-  console.error(`diff hygiene: ${findings.length} whitespace problem(s) against ${base}:`);
+  console.error(`diff hygiene: ${findings.length} whitespace problem(s) for ${range}:`);
   for (const finding of findings) console.error(`  ${finding}`);
   console.error(
     "\nThese are trailing whitespace, blank lines at end of file, or space-before-tab.",
@@ -102,7 +129,7 @@ function main() {
   process.exit(exitCode);
 }
 
-// Only run when invoked as a script, so importing the classifier for tests does
+// Only run when invoked as a script, so importing the pure helpers for tests does
 // not shell out to git or call process.exit.
 if (process.argv[1] && process.argv[1].endsWith("check-diff-hygiene.mjs")) {
   main();
