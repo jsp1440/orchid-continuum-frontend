@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commandStateOf } from './MissionControl';
+import { commandStateOf } from '@/lib/missionControlQueue';
 
 /**
  * The Calyx operations queue renders either live backend items or a static
