@@ -13,6 +13,7 @@ import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
 import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
 
 /**
@@ -76,6 +77,13 @@ const ResearchCenter: React.FC = () => {
   const routeGenus = routeContext?.genus ?? '';
   const projectId = routeContext?.projectId ?? null;
   const arrivedFromAtlas = routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN;
+  const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
+  // The dossier supplies the accepted binomial; every other origin carries only
+  // a genus. Naming the subject the visitor actually arrived with is the point
+  // of the handoff - re-deriving it here would be the loss it exists to fix.
+  const routeTaxon =
+    routeContext && 'taxon' in routeContext ? (routeContext.taxon ?? null) : null;
+  const subjectLabel = routeTaxon ?? routeGenus;
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
@@ -114,10 +122,14 @@ const ResearchCenter: React.FC = () => {
             <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-5 md:flex md:items-center md:justify-between md:gap-6">
               <div>
                 <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/75">
-                  {arrivedFromAtlas ? 'Continuing from the Atlas' : 'Continuing from Genus of the Day'}
+                  {arrivedFromDossier
+                    ? 'Continuing from the Species Dossier'
+                    : arrivedFromAtlas
+                      ? 'Continuing from the Atlas'
+                      : 'Continuing from Genus of the Day'}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-white/75">
-                  <span className="font-serif text-lg italic text-white">{routeGenus}</span>{' '}
+                  <span className="font-serif text-lg italic text-white">{subjectLabel}</span>{' '}
                   is preserved here as navigation context and preloaded into the research query builder.
                   It is not scientific evidence and it does not imply that a persisted research project is
                   about this genus.
