@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
 import {
   readCalyxSessionContext,
   recordCalyxSurfaceContext,
@@ -112,10 +112,14 @@ describe("Cross-Module Canonical Context Continuity: Taxon -> Atlas -> Graph -> 
           json: async () => ({
             entry: {
               id: "concept:magenta_lip",
-              term: "Magenta Labellum",
-              definition: "Intense magenta coloration on the distal portion of the orchid labellum.",
-              category: "morphology",
               concept_id: "concept:magenta_lip",
+              slug: "magenta-labellum",
+              preferred_term: "Magenta Labellum",
+              quick_definition:
+                "Intense magenta coloration on the distal portion of the orchid labellum.",
+              category: "morphology",
+              review_state: "approved",
+              source_system: "oc_concepts",
             },
           }),
         };
@@ -132,13 +136,13 @@ describe("Cross-Module Canonical Context Continuity: Taxon -> Atlas -> Graph -> 
     const resolution = await resolveMatrixCharacterLexicon("reg-01", "v1.0", "char:labellum_color");
     expect(resolution.status).toBe("mapped");
     if (resolution.status === "mapped") {
-      expect(resolution.concept.term).toBe("Magenta Labellum");
+      expect(resolution.concept.preferred_term).toBe("Magenta Labellum");
 
       // 5. Emit output into Calyx Workspace Output Bus
       emitWorkspaceOutput({
         id: "out:lexicon:001",
         kind: "text",
-        title: resolution.concept.term,
+        title: resolution.concept.preferred_term,
         subtitle: "Morphology Concept",
         created_at: new Date().toISOString(),
         provenance: {
@@ -148,7 +152,7 @@ describe("Cross-Module Canonical Context Continuity: Taxon -> Atlas -> Graph -> 
           generated: false,
         },
         payload: {
-          body: resolution.concept.definition,
+          body: resolution.concept.quick_definition,
         },
       });
     }
