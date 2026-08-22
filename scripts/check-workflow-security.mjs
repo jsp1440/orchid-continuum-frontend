@@ -93,23 +93,33 @@ function inspectWorkflow(path) {
   return findings;
 }
 
-const workflows = changedFiles().filter((path) => WORKFLOW_RE.test(path));
-const failures = [];
+function main() {
+  const workflows = changedFiles().filter((path) => WORKFLOW_RE.test(path));
+  const failures = [];
 
-for (const workflow of workflows) {
-  for (const finding of inspectWorkflow(workflow)) {
-    failures.push(`${workflow}:${finding}`);
+  for (const workflow of workflows) {
+    for (const finding of inspectWorkflow(workflow)) {
+      failures.push(`${workflow}:${finding}`);
+    }
   }
+
+  if (failures.length) {
+    console.error("Governed workflow security check failed:\n");
+    for (const failure of failures) console.error(`- ${failure}`);
+    process.exit(1);
+  }
+
+  console.log(
+    workflows.length
+      ? `Governed workflow security check passed for ${workflows.length} changed workflow(s).`
+      : "No workflow files changed; governed workflow security check passed.",
+  );
 }
 
-if (failures.length) {
-  console.error("Governed workflow security check failed:\n");
-  for (const failure of failures) console.error(`- ${failure}`);
-  process.exit(1);
+// Keep the pure helpers importable by Vitest and other validation code without
+// executing repository-diff discovery as a module import side effect. This also
+// lets shallow, specialized workflows run the unit suite without needing an
+// origin/main ref solely because a helper was imported.
+if (process.argv[1] && process.argv[1].endsWith("check-workflow-security.mjs")) {
+  main();
 }
-
-console.log(
-  workflows.length
-    ? `Governed workflow security check passed for ${workflows.length} changed workflow(s).`
-    : "No workflow files changed; governed workflow security check passed."
-);
