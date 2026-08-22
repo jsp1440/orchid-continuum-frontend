@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { classifyDiffCheck } from "../../scripts/check-diff-hygiene.mjs";
+import { candidateDiffRanges, classifyDiffCheck } from "../../scripts/check-diff-hygiene.mjs";
 
 /**
  * The verdict logic behind the repo-wide whitespace gate.
@@ -14,6 +14,34 @@ import { classifyDiffCheck } from "../../scripts/check-diff-hygiene.mjs";
  * findings means git could not evaluate the range at all (missing base ref,
  * shallow clone). That must never read as clean.
  */
+
+describe("diff hygiene range selection", () => {
+  it("uses the pull-request base with a three-dot range", () => {
+    expect(candidateDiffRanges("oc-autonomous-integration", "ignored")).toEqual([
+      {
+        revision: "origin/oc-autonomous-integration",
+        range: "origin/oc-autonomous-integration...HEAD",
+      },
+      {
+        revision: "oc-autonomous-integration",
+        range: "oc-autonomous-integration...HEAD",
+      },
+    ]);
+  });
+
+  it("uses the push event's previous commit instead of the updated branch tip", () => {
+    const before = "0123456789abcdef0123456789abcdef01234567";
+    expect(candidateDiffRanges("", before)).toEqual([
+      { revision: before, range: `${before}..HEAD` },
+    ]);
+  });
+
+  it("falls back to HEAD^ for a first push whose before SHA is all zeroes", () => {
+    expect(candidateDiffRanges("", "0".repeat(40))).toEqual([
+      { revision: "HEAD^", range: "HEAD^..HEAD" },
+    ]);
+  });
+});
 
 describe("diff hygiene verdict", () => {
   it("passes a clean range", () => {
