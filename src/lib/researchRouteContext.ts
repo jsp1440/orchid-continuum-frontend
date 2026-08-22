@@ -1,4 +1,4 @@
-import { FEATURED_TAXON_ORIGIN } from '@/lib/featuredTaxonNavigation';
+import { ATLAS_WORKSPACE_ORIGIN, FEATURED_TAXON_ORIGIN } from '@/lib/featuredTaxonNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { MATRIX_RESEARCH_ORIGIN, parseMatrixResearchContext } from '@/lib/matrixResearchNavigation';
 import {
@@ -11,7 +11,10 @@ const MAX_PROJECT_CHARACTERS = 160;
 const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
 const SAFE_PROJECT = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
-type LegacyResearchRouteOrigin = typeof FEATURED_TAXON_ORIGIN | typeof ATLAS_NEXT_RESEARCH_ORIGIN;
+type LegacyResearchRouteOrigin =
+  | typeof FEATURED_TAXON_ORIGIN
+  | typeof ATLAS_NEXT_RESEARCH_ORIGIN
+  | typeof ATLAS_WORKSPACE_ORIGIN;
 export type ResearchRouteOrigin =
   | LegacyResearchRouteOrigin
   | typeof MATRIX_RESEARCH_ORIGIN
@@ -97,13 +100,24 @@ export function parseResearchRouteContext(search: string | URLSearchParams): Res
   }
 
   const origin = params.get('origin');
-  if (origin !== FEATURED_TAXON_ORIGIN && origin !== ATLAS_NEXT_RESEARCH_ORIGIN) return null;
+  if (
+    origin !== FEATURED_TAXON_ORIGIN &&
+    origin !== ATLAS_NEXT_RESEARCH_ORIGIN &&
+    origin !== ATLAS_WORKSPACE_ORIGIN
+  ) {
+    return null;
+  }
 
   const genus = boundedGenus(params.get('genus'));
   if (!genus) return null;
 
   const evidenceFlag = params.get('context_is_evidence');
-  if (origin === ATLAS_NEXT_RESEARCH_ORIGIN && evidenceFlag !== 'false') return null;
+  if (
+    (origin === ATLAS_NEXT_RESEARCH_ORIGIN || origin === ATLAS_WORKSPACE_ORIGIN) &&
+    evidenceFlag !== 'false'
+  ) {
+    return null;
+  }
 
   return {
     origin,
