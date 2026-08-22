@@ -16,6 +16,7 @@ import {
   researchStationCalyxHref,
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { ATLAS_WORKSPACE_ORIGIN } from '@/lib/featuredTaxonNavigation';
 import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
 import { MATRIX_RESEARCH_ORIGIN } from '@/lib/matrixResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
@@ -70,17 +71,17 @@ const PILLARS = [
 const ResearchCenter: React.FC = () => {
   // A project carried in from another module keeps the investigation intact.
   //
-  // Both governed origins are read through the shared parser rather than by
-  // re-deriving the rule here. The previous inline read recognised only the
-  // featured-taxon origin, so Atlas Next arrivals were silently dropped, and it
-  // accepted any genus string truncated to 120 characters instead of validating
-  // the shape. The parser fails closed on a malformed genus, on an unbounded
-  // project id, and on any attempt to assert the context as evidence.
+  // Governed origins are read through the shared parser rather than by
+  // re-deriving the rule here. The parser fails closed on a malformed genus,
+  // on an unbounded project id, and on any attempt to assert governed Atlas
+  // navigation context as evidence.
   const [searchParams] = useSearchParams();
   const routeContext = parseResearchRouteContext(searchParams);
   const routeGenus = routeContext?.genus ?? '';
   const projectId = routeContext?.projectId ?? null;
-  const arrivedFromAtlas = routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN;
+  const arrivedFromAtlas =
+    routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
+    routeContext?.origin === ATLAS_WORKSPACE_ORIGIN;
   const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
   // A Matrix arrival previously fell through to "Continuing from Genus of the
   // Day" — a curated editorial pick, which is not where this subject came from.
