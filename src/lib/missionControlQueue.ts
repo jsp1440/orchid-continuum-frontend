@@ -16,4 +16,3 @@ export function commandStateOf(item: unknown): string | null {
   const value = (item as Record<string, unknown>).commandState;
   return typeof value === 'string' && value.trim() ? value : null;
 }
-
