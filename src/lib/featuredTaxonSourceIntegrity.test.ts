@@ -94,7 +94,12 @@ describe('featured taxon source integrity', () => {
     expect(close).toContain('to={researchHref}');
     expect(close).not.toContain('to="/research"');
     expect(navigation).toContain('/research?genus=');
-    expect(research).toContain("searchParams.get('origin') === FEATURED_TAXON_ORIGIN");
+    // Pinned to the governed contract, not to one hand-rolled origin comparison.
+    // ResearchCenter previously re-derived the rule inline, which recognised
+    // only this origin and truncated the genus instead of validating it; the
+    // shared parser now decides, so the assertion follows it there.
+    expect(research).toContain('parseResearchRouteContext');
+    expect(research).not.toContain("searchParams.get('origin') ===");
     expect(research).toContain('is preserved here as navigation context');
     expect(research).toContain('It is not scientific evidence');
     expect(research).toContain('genus: routeGenus');
