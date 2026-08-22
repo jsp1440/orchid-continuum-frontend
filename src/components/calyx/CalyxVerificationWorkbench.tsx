@@ -159,12 +159,30 @@ export default function CalyxVerificationWorkbench({
                     </div>
                     <p className="mt-2 text-xs leading-5">{item.statement}</p>
                     {item.exactExcerpt ? (
-                      <blockquote className="mt-2 border-l-2 border-primary/30 pl-3 text-xs leading-5 text-muted-foreground">
-                        {item.exactExcerpt}
-                      </blockquote>
+                      <>
+                        <blockquote className="mt-2 border-l-2 border-primary/30 pl-3 text-xs leading-5 text-muted-foreground">
+                          {item.exactExcerpt}
+                        </blockquote>
+                        {/* An unhashed summary must not read as authoritatively
+                            as a hash-anchored canonical record. */}
+                        {item.excerptSource === "source_summary" ? (
+                          <p className="mt-1 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
+                            From the mission&apos;s source summary, not the hash-anchored canonical
+                            record. Nothing here confirms it matches the source text.
+                          </p>
+                        ) : null}
+                      </>
+                    ) : item.excerptAbsence === "withheld_by_policy" ? (
+                      <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
+                        Excerpt withheld by display policy
+                        {item.displayPolicy ? ` (${item.displayPolicy})` : ""}. The evidence record
+                        exists and its text is not releasable here — this is not an absence of
+                        evidence.
+                      </p>
                     ) : (
                       <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
-                        Exact displayable excerpt is not available in this mission response.
+                        No canonical evidence record resolved to this citation, so no exact excerpt
+                        can be shown. This is a traceability gap, not a statement about the source.
                       </p>
                     )}
                     <dl className="mt-3 grid gap-1 text-[10px] text-muted-foreground sm:grid-cols-2">
@@ -172,6 +190,7 @@ export default function CalyxVerificationWorkbench({
                       <div><dt className="inline font-medium text-foreground">Revision: </dt><dd className="inline">{item.sourceRevisionId ?? "not supplied"}</dd></div>
                       <div><dt className="inline font-medium text-foreground">Anchors: </dt><dd className="inline">{item.anchorIds.join(", ") || "not supplied"}</dd></div>
                       <div><dt className="inline font-medium text-foreground">Content hash: </dt><dd className="inline break-all">{item.contentHash ?? "not surfaced"}</dd></div>
+                      <div><dt className="inline font-medium text-foreground">Display policy: </dt><dd className="inline">{item.displayPolicy ?? "not supplied"}</dd></div>
                     </dl>
                     {item.locator ? (
                       <details className="mt-2 text-[10px] text-muted-foreground">

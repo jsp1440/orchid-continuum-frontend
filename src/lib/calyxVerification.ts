@@ -16,6 +16,26 @@ export type CalyxVerificationEvidence = {
   sourceRevisionId: string | null;
   anchorIds: string[];
   exactExcerpt: string | null;
+  /**
+   * Where the displayed excerpt came from, because the two grades are not
+   * equally verifiable.
+   *
+   * `canonical` is the hash-anchored canonical evidence record. `source_summary`
+   * is the mission's own source list, which carries no content hash — the text
+   * is still useful, but nothing lets a reader confirm it matches the source.
+   * Rendering both as an identical blockquote made an unverifiable excerpt look
+   * exactly as authoritative as a verifiable one.
+   */
+  excerptSource: "canonical" | "source_summary" | null;
+  /**
+   * Why no excerpt is displayed, when none is.
+   *
+   * Withheld by policy and never supplied are different scientific states, and
+   * the difference matters: one says the text exists and you may not see it,
+   * the other says nothing is known to exist. Collapsing them into "not
+   * available" teaches a false negative.
+   */
+  excerptAbsence: "withheld_by_policy" | "not_supplied" | null;
   locator: unknown;
   sourceTitle: string | null;
   contentHash: string | null;
@@ -159,17 +179,34 @@ function traceEvidence(
     anchorIds.includes(clean(anchor.anchor_id)),
   );
 
+  const canonicalText = clean(canonical?.text);
+  const summaryText = clean(source?.authorized_excerpt);
+  const exactExcerpt = canonicalText || summaryText || null;
+  const displayPolicy = clean(canonical?.display_policy) || null;
+
+  // A canonical record that exists but carries no text is a withholding: the
+  // evidence is real and its text is not releasable here. No record at all is
+  // simply an absence. Reporting both as "not available" would let a policy
+  // withholding read as an empty corpus.
+  const excerptAbsence: CalyxVerificationEvidence["excerptAbsence"] = exactExcerpt
+    ? null
+    : canonical
+      ? "withheld_by_policy"
+      : "not_supplied";
+
   return {
     candidateId: clean(item.candidate_id) || "unidentified-evidence",
     role,
     statement: evidenceStatement(item) || "Source-bound evidence record",
     sourceRevisionId: clean(item.source_revision_id) || null,
     anchorIds,
-    exactExcerpt: clean(canonical?.text) || clean(source?.authorized_excerpt) || null,
+    exactExcerpt,
+    excerptSource: canonicalText ? "canonical" : summaryText ? "source_summary" : null,
+    excerptAbsence,
     locator: matchingAnchor?.locator ?? source?.citation?.locator ?? null,
     sourceTitle: clean(source?.title) || clean(source?.object_type) || null,
     contentHash,
-    displayPolicy: clean(canonical?.display_policy) || null,
+    displayPolicy,
   };
 }
 
