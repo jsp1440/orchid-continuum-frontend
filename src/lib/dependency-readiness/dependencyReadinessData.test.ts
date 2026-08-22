@@ -171,6 +171,31 @@ describe('Render-runtime readiness is distinguishable from GitHub-Actions readin
   });
 });
 
+describe('release-SHA build stamp distinguishes GitHub-Actions built-in guarantee from unverifiable Render runtime', () => {
+  it('classifies vite-release-sha-build-stamp as PUBLIC_CONFIG and never requires it anywhere', () => {
+    const record = findRecord('vite-release-sha-build-stamp');
+    expect(record.classification).toBe('PUBLIC_CONFIG');
+    for (const requirement of record.requirements) {
+      expect(requirement.required).toBe(false);
+    }
+  });
+
+  it('reports GITHUB_SHA-backed FRONTEND_GITHUB_ACTIONS as CONFIGURED, unlike unverifiable FRONTEND_RENDER', () => {
+    const record = findRecord('vite-release-sha-build-stamp');
+    const byEnv = Object.fromEntries(record.requirements.map((r) => [r.environment, r]));
+    expect(byEnv.FRONTEND_GITHUB_ACTIONS.readiness).toBe('CONFIGURED');
+    expect(byEnv.FRONTEND_RENDER.readiness).toBe('UNKNOWN');
+    expect(byEnv.BACKEND_RENDER.readiness).toBe('NOT_REQUIRED');
+    expect(byEnv.BACKEND_GITHUB_ACTIONS.readiness).toBe('NOT_REQUIRED');
+  });
+
+  it('accepts the NEXT_PUBLIC_API_BASE_URL alias for the no-fallback API base URL, grep-grounded', () => {
+    const record = findRecord('vite-api-base-url-no-fallback');
+    const renderRow = record.requirements.find((r) => r.environment === 'FRONTEND_RENDER');
+    expect(renderRow?.source).toContain('NEXT_PUBLIC_API_BASE_URL');
+  });
+});
+
 describe('missing readiness is never represented as measured zero', () => {
   it('uses UNKNOWN (not a fabricated MISSING/CONFIGURED) for rows this run could not verify', () => {
     const anthropicActions = findRecord('anthropic-api-key').requirements.filter((r) => r.environment.endsWith('GITHUB_ACTIONS'));

@@ -17,6 +17,10 @@
  *      required elevated approval this autonomous run did not have, so
  *      those rows are UNKNOWN with the exact command recorded as the next
  *      action — never fabricated as measured zero or measured healthy.
+ *      `gh variable list` was also attempted (non-secret GitHub Actions
+ *      variables) and required the same elevated approval; this repo
+ *      currently has zero `vars.*` references in any workflow anyway, so no
+ *      row's requirement depends on that command succeeding.
  */
 
 import type { DependencyRecord } from './types';
@@ -303,7 +307,7 @@ export const DEPENDENCY_READINESS_CENSUS: DependencyRecord[] = [
         environment: 'FRONTEND_RENDER',
         required: false,
         source:
-          'src/lib/api.ts:8,42,103 (API_BASE_URL, API_CONFIGURED, "VITE_API_BASE_URL is not set for this deployment."); src/components/widgets/index.tsx:167,253; src/components/orchid/BiodiversityInfrastructure.tsx:132; src/lib/zoo.ts:108; src/lib/relationshipExplorer.ts:10 (this one file does carry its own onrender.com fallback, so it is not affected by this row\'s degraded path).',
+          'src/lib/api.ts:10-11,42-44,103 (API_BASE_URL accepts VITE_API_BASE_URL or the Next.js-portability alias NEXT_PUBLIC_API_BASE_URL; API_CONFIGURED; "VITE_API_BASE_URL is not set for this deployment."); src/components/widgets/index.tsx:167,253; src/components/orchid/BiodiversityInfrastructure.tsx:132; src/lib/zoo.ts:108 (same VITE_API_BASE_URL / NEXT_PUBLIC_API_BASE_URL alias pair); src/lib/relationshipExplorer.ts:10 (this one file does carry its own onrender.com fallback, so it is not affected by this row\'s degraded path).',
         readiness: 'UNKNOWN',
         validationMethod:
           'Render dashboard env-var presence check for VITE_API_BASE_URL, or observe whether the affected widgets render live data vs. their labelled demo-fallback state — never a value comparison.',
@@ -393,13 +397,14 @@ export const DEPENDENCY_READINESS_CENSUS: DependencyRecord[] = [
     provider: 'Orchid Continuum internal (build/version metadata)',
     owningCapability: 'Mission Control provenance display (src/lib/mission-control/MissionControlService.ts, MissionControlProvider.tsx)',
     classification: 'PUBLIC_CONFIG',
-    notes: 'Diagnostic labels only, not credentials. Each falls back to an explicit \'unknown\'/\'dev\' placeholder rather than a fabricated value when unset.',
+    notes:
+      'Diagnostic labels only, not credentials. Each falls back to an explicit \'unknown\'/\'dev\' placeholder rather than a fabricated value when unset. VITE_RELEASE_SHA is a distinct build-time mechanism (Node process.env read inside vite.config.ts, not a runtime import.meta.env read like these two) and is tracked separately as "vite-release-sha-build-stamp".',
     requirements: [
       {
         environment: 'FRONTEND_RENDER',
         required: false,
         source:
-          'src/lib/mission-control/MissionControlService.ts:44-47 (VITE_API_VERSION -> \'unknown\' fallback); src/lib/mission-control/MissionControlProvider.tsx:16-18 (VITE_BUILD_NUMBER -> \'dev\' fallback); .env.example (VITE_RELEASE_SHA).',
+          'src/lib/mission-control/MissionControlService.ts:44-47 (VITE_API_VERSION -> \'unknown\' fallback); src/lib/mission-control/MissionControlProvider.tsx:16-18 (VITE_BUILD_NUMBER -> \'dev\' fallback).',
         readiness: 'CONFIGURED',
         validationMethod: 'Read the displayed version/build label in Mission Control; not a secret.',
         lastEvidence: 'Explicit non-fabricated placeholder fallbacks (\'unknown\', \'dev\') are present in source.',
@@ -413,6 +418,54 @@ export const DEPENDENCY_READINESS_CENSUS: DependencyRecord[] = [
         validationMethod: 'N/A — not applicable.',
         blockerOrNextAction: 'None.',
       })),
+    ],
+  },
+  {
+    id: 'vite-release-sha-build-stamp',
+    provider: 'Orchid Continuum internal (build-time release identity)',
+    owningCapability: 'Production release provenance stamped into built HTML (vite.config.ts resolveReleaseSha -> %OCU_RELEASE_SHA%)',
+    classification: 'PUBLIC_CONFIG',
+    notes:
+      'A git SHA, not a credential. Distinct from vite-build-metadata: resolved at build time via Node process.env inside vite.config.ts rather than at runtime via import.meta.env, and it fails closed to the explicit literal \'unattested\' — never a fabricated SHA — when no source resolves.',
+    requirements: [
+      {
+        environment: 'FRONTEND_RENDER',
+        required: false,
+        source:
+          'vite.config.ts:8-27 (resolveReleaseSha): tries process.env.VITE_RELEASE_SHA, then process.env.RENDER_GIT_COMMIT, then process.env.GITHUB_SHA, then `git rev-parse HEAD`, else the literal string \'unattested\'.',
+        readiness: 'UNKNOWN',
+        validationMethod:
+          'Inspect the deployed page\'s %OCU_RELEASE_SHA% stamp for a 40-character git SHA vs. the literal \'unattested\' string — a plain-text provenance read, never a secret comparison.',
+        blockerOrNextAction:
+          'Render is documented to auto-populate RENDER_GIT_COMMIT during builds, but this repo cannot confirm the deployed frontend service actually receives it; owner to confirm the live stamp resolves to a real SHA rather than \'unattested\'.',
+      },
+      {
+        environment: 'FRONTEND_GITHUB_ACTIONS',
+        required: false,
+        source:
+          '.github/workflows/frontend-ci.yml:39 and deployment-contract.yml:36 both run `npm run build`, which invokes vite.config.ts:resolveReleaseSha() while GITHUB_SHA is already present in every GitHub Actions job.',
+        readiness: 'CONFIGURED',
+        validationMethod:
+          'Structural: GITHUB_SHA is supplied by GitHub Actions for every workflow run and requires no repository secret/variable configuration (same guarantee as github-token-builtin).',
+        lastEvidence: 'Both listed workflows run `npm run build` before this repo\'s CI can pass; GitHub Actions cannot execute that job without GITHUB_SHA present.',
+        blockerOrNextAction: 'None.',
+      },
+      {
+        environment: 'BACKEND_RENDER',
+        required: false,
+        source: 'Frontend-only build step; the backend does not run vite.config.ts.',
+        readiness: 'NOT_REQUIRED',
+        validationMethod: 'N/A — not applicable.',
+        blockerOrNextAction: 'None.',
+      },
+      {
+        environment: 'BACKEND_GITHUB_ACTIONS',
+        required: false,
+        source: 'Frontend-only build step; not referenced by backend workflows visible from this repo.',
+        readiness: 'NOT_REQUIRED',
+        validationMethod: 'N/A — not applicable.',
+        blockerOrNextAction: 'None.',
+      },
     ],
   },
   {
