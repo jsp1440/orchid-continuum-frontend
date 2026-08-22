@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { nextReplacementIndex, shouldPauseRotation } from '@/lib/dailyGenusRotation';
 
-describe('DailyGenusFeatureV3 rotation helpers', () => {
+describe('daily genus rotation helpers', () => {
   it('pauses rotation when hover, hidden tab, reduced motion, or too few slots', () => {
     expect(shouldPauseRotation(1, false, true, false)).toBe(true);
     expect(shouldPauseRotation(9, true, true, false)).toBe(true);
