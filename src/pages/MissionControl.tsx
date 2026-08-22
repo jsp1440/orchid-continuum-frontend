@@ -47,6 +47,7 @@ import {
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import CompletionObservatory from '@/components/mission-control/CompletionObservatory';
+import DependencyReadinessMatrix from '@/components/mission-control/DependencyReadinessMatrix';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import {
   type ContinuumSubsystem,
@@ -174,6 +175,7 @@ const INTELLIGENCE_STORAGE_KEY = 'oc_mission_control_intelligence_v1';
 const navigationItems = [
   { label: 'Daily Brief', targetId: 'mission-control-daily-brief', icon: Zap },
   { label: 'Completion Observatory', targetId: 'mission-control-completion-observatory', icon: Network },
+  { label: 'Dependency Readiness', targetId: 'mission-control-dependency-readiness', icon: KeyRound },
   { label: 'Owner Guide', targetId: 'mission-control-owner-guide', icon: BookOpen },
   { label: 'Command', targetId: 'mission-control-command', icon: Send },
   { label: 'Calyx Queue', targetId: 'mission-control-calyx-queue', icon: ClipboardList },
@@ -2908,6 +2910,13 @@ const MissionControlContent: React.FC = () => {
                 <SafePanel title="Completion Observatory">
                 <Panel id="mission-control-completion-observatory" eyebrow="OC-OBSERVATORY-001" title="Completion Observatory" icon={Network}>
                   <CompletionObservatory />
+                </Panel>
+                </SafePanel>
+
+                {/* OC-OBSERVATORY-003: secret & external-dependency readiness matrix */}
+                <SafePanel title="Dependency Readiness">
+                <Panel id="mission-control-dependency-readiness" eyebrow="OC-OBSERVATORY-003" title="Secret & Dependency Readiness" icon={KeyRound}>
+                  <DependencyReadinessMatrix />
                 </Panel>
                 </SafePanel>
 
