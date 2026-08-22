@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 
 import { readIdentificationSourceContext } from '@/features/calyx-workspace/identificationContext';
 import { matrixResearchHref } from '@/lib/matrixResearchNavigation';
+import { RESEARCH_STATION_ORIGIN, researchStationHref } from '@/lib/researchStationNavigation';
 import OrchidIdentificationNext from '@/pages/OrchidIdentificationNext';
 
 /**
@@ -26,8 +27,40 @@ export default function OrchidIdentificationContinuum() {
     [sourceContext.source, sourceContext.taxonLabel],
   );
 
+  const fromResearch = sourceContext.source === RESEARCH_STATION_ORIGIN;
+
   return (
     <>
+      {/* A Research Station arrival previously landed here with the subject
+          dropped and no route back: the visitor left an investigation and
+          reached a blank identification tool. Naming the inherited subject and
+          restoring the return path keeps the investigation intact across the
+          module boundary. */}
+      {fromResearch && sourceContext.taxonLabel ? (
+        <section className="border-b bg-muted/50 px-4 py-3 text-foreground sm:px-6">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Continuing from the Research Station
+              </p>
+              <p className="mt-1 text-sm">
+                <strong>Subject:</strong> <i>{sourceContext.taxonLabel}</i>
+              </p>
+              <Link
+                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                to={researchStationHref(sourceContext.projectId ?? '')}
+              >
+                Return to the Research Station
+              </Link>
+            </div>
+            <p className="max-w-md text-xs text-muted-foreground">
+              The subject is bounded navigation context carried from the investigation. Matrix has
+              not observed, identified or verified this taxon, and nothing here asserts that it did.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       <OrchidIdentificationNext />
       {researchHref ? (
         <section className="bg-background px-4 pb-12 text-foreground sm:px-6">
