@@ -106,6 +106,21 @@ async function refreshOwnerBearerFromCookie(
   }
 }
 
+declare global {
+  interface Window {
+    /**
+     * Set once the owner-session fetch transport has been installed, so a
+     * second import cannot wrap `window.fetch` twice.
+     *
+     * Declared rather than reached via `window as Window & Record<string,
+     * unknown>`: Window has no index signature, so that cast did not typecheck
+     * (TS2352), and declaring the one property we own is both accurate and how
+     * this repo already handles ad-hoc globals (see useGlobeGl's `Window.Globe`).
+     */
+    __calyxOwnerSessionTransportInstalled?: boolean;
+  }
+}
+
 /**
  * Install one owner-auth transport for every Calyx request.
  *
@@ -117,10 +132,8 @@ async function refreshOwnerBearerFromCookie(
  */
 function installOwnerSessionTransport(): void {
   if (typeof window === 'undefined' || typeof window.fetch !== 'function') return;
-  const marker = '__calyxOwnerSessionTransportInstalled';
-  const markedWindow = window as Window & Record<string, unknown>;
-  if (markedWindow[marker]) return;
-  markedWindow[marker] = true;
+  if (window.__calyxOwnerSessionTransportInstalled) return;
+  window.__calyxOwnerSessionTransportInstalled = true;
 
   const nativeFetch = window.fetch.bind(window);
   let ownerLoginAttemptInProgress = false;
