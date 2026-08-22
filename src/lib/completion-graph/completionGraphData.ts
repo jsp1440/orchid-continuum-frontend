@@ -604,14 +604,62 @@ const completionGraphEngineGate: CompletionNode = {
   children: [],
 };
 
-const schedulerIssueAutomationGap = confirmedMissing({
-  idHint: 'cap-scheduler-issue-automation',
+// Real evidence: OC-COMPLETE-004 (issue #301). src/lib/completion-graph/scheduler.ts,
+// scheduler.test.ts (17 tests), and CompletionObservatory.tsx switched from the
+// older selectNextUnmetGate() to selectAdmissibleLeaf().
+
+const schedulerAdmissionGate: CompletionNode = {
+  id: 'cap-scheduler-graph-admission',
   parentId: 'module-autonomous-control-plane-core',
-  name: 'Scheduler output wired to real GitHub issue creation/queueing',
+  name: 'Graph-driven scheduler admission algorithm (OC-COMPLETE-004)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: 0,
+    deployedOperational: 0,
+  },
   evidence: [
-    { kind: 'file', ref: 'src/lib/completion-graph/graphOps.ts', note: 'selectNextUnmetGate() is exported and grep-confirmed to have exactly one consumer: CompletionObservatory.tsx\'s own UI render. No caller files an issue, queues work, or otherwise acts on its output.' },
+    {
+      kind: 'file',
+      ref: 'src/lib/completion-graph/scheduler.ts',
+      note: 'selectAdmissibleLeaf(): dependency-aware admission (dependsOn fails closed on unresolved ids), duplicate suppression against open issue/PR refs, ranking by portfolio priority -> unlock value -> acceptance-stage deficit -> staleness -> lane fairness, and an explicit securityGate exemption so a cross-cutting security/governance leaf can never be starved by lane rotation.',
+    },
+    {
+      kind: 'test',
+      ref: 'src/lib/completion-graph/scheduler.test.ts',
+      note: '17 deterministic tests covering all 8 OC-COMPLETE-004 validation requirements: priority precedence over generic backlog, dependency gating, owner/external blockers surfaced not bypassed, duplicate-issue/PR suppression, lane fairness plus security-gate exemption, evidence advancing the leaf selects the next one, provider-field independence, and no percentage inflation from mere execution.',
+    },
+    {
+      kind: 'file',
+      ref: 'src/components/mission-control/CompletionObservatory.tsx',
+      note: 'Switched its scheduler panel from selectNextUnmetGate() to selectAdmissibleLeaf() and now renders the admission ranking reasons — a second real consumer, not an orphaned library.',
+    },
+    { kind: 'test', ref: 'src/components/mission-control/CompletionObservatory.render.test.tsx' },
   ],
-  nextAction: 'Wire selectNextUnmetGate() output into the autonomous scheduler\'s issue creation/queueing path so "choose next unmet gate -> bounded issue" is a real automated loop, not just a UI display.',
+  nextAction: 'This is the pure selection algorithm and its UI consumer, not the production dispatch loop. See the sibling "GitHub Actions planner still invents broad work" gap for what remains.',
+  lastAccomplishment: 'Implemented and fully tested the OC-COMPLETE-004 admission algorithm and wired Mission Control\'s live scheduler panel to it.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const schedulerWorkflowBindingGap = confirmedMissing({
+  idHint: 'cap-scheduler-workflow-binding',
+  parentId: 'module-autonomous-control-plane-core',
+  name: 'Scheduler admission bound into the real GitHub Actions dispatch loop',
+  evidence: [
+    {
+      kind: 'file',
+      ref: '.github/workflows/orchid-continuous-completion.yml',
+      note: 'The "planner" job invents new issues via an LLM prompt whenever the oc-queued backlog runs low, and "prepare" ranks oc-queued issues purely from oc-p0..oc-p5 labels and issue age — neither step reads src/lib/completion-graph data at all. There is no tsx/ts-node dependency in this repo, so a plain GitHub Actions bash step cannot import the TypeScript scheduler.ts directly.',
+    },
+  ],
+  nextAction: 'Add a compiled/plain-JS entrypoint (or a build step) that lets the orchid-continuous-completion.yml planner query selectAdmissibleLeaf() output before falling back to LLM-invented broad work, per the mission\'s "ordinary capacity selects the highest-priority unmet acceptance leaf instead of inventing broad work" requirement.',
   lane: 'INTEGRATION_COMPLETION',
 });
 
@@ -620,7 +668,7 @@ const autonomousControlPlaneDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Autonomous completion control plane',
   type: 'domain',
-  nextAction: 'Capture a real browser session of Mission Control rendering this panel, then wire the scheduler\'s selectNextUnmetGate() output to actual issue creation.',
+  nextAction: 'Capture a real browser session of Mission Control rendering this panel, then bind selectAdmissibleLeaf() into the GitHub Actions dispatch loop itself.',
 }, [
   branch({
     id: 'module-autonomous-control-plane-core',
@@ -628,7 +676,7 @@ const autonomousControlPlaneDomain = branch({
     name: 'Completion control plane core',
     type: 'module',
     nextAction: 'See child capabilities.',
-  }, [completionGraphEngineGate, schedulerIssueAutomationGap]),
+  }, [completionGraphEngineGate, schedulerAdmissionGate, schedulerWorkflowBindingGap]),
 ]);
 
 // ─── Production/deployment/release operations ──────────────────────────────

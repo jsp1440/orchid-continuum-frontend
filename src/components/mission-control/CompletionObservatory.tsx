@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { COMPLETION_GRAPH, COMPLETION_GRAPH_CENSUS_DATE } from '@/lib/completion-graph/completionGraphData';
-import { countIncompleteLeaves, countLeavesByStatus, getLeaves, groupLeavesByLane, listBlockers, listOwnerActions, selectNextUnmetGate } from '@/lib/completion-graph/graphOps';
+import { countIncompleteLeaves, countLeavesByStatus, getLeaves, groupLeavesByLane } from '@/lib/completion-graph/graphOps';
+import { selectAdmissibleLeaf } from '@/lib/completion-graph/scheduler';
 import { computeGateScore, computeNodeCensusCoverage, computeNodePercentage } from '@/lib/completion-graph/scoring';
 import type { CompletionNode, CompletionStatus, Evidence, ExecutionLane } from '@/lib/completion-graph/types';
 
@@ -157,9 +158,10 @@ export default function CompletionObservatory() {
   const incompleteCount = useMemo(() => countIncompleteLeaves(root), [root]);
   const statusCounts = useMemo(() => countLeavesByStatus(root), [root]);
   const totalLeaves = useMemo(() => getLeaves(root).length, [root]);
-  const nextGate = useMemo(() => selectNextUnmetGate(root), [root]);
-  const blockers = useMemo(() => listBlockers(root), [root]);
-  const ownerActions = useMemo(() => listOwnerActions(root), [root]);
+  const admission = useMemo(() => selectAdmissibleLeaf(root, { now: new Date().toISOString() }), [root]);
+  const nextGate = admission.selected;
+  const blockers = useMemo(() => admission.surfacedBlockers.filter((n) => n.status === 'BLOCKED' || n.status === 'EXTERNAL_BLOCKER'), [admission]);
+  const ownerActions = useMemo(() => admission.surfacedBlockers.filter((n) => n.status === 'OWNER_ACTION'), [admission]);
   const laneGroups = useMemo(() => groupLeavesByLane(root), [root]);
 
   return (
@@ -197,11 +199,12 @@ export default function CompletionObservatory() {
         <div className="rounded-lg border border-[#d4b34a]/30 bg-gradient-to-br from-[#0d1d13]/95 to-[#0b1a10]/90 p-4">
           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Scheduler — next bounded action</div>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-[#f5f0e8]/90">
-            <StatusBadge status={nextGate.status} />
-            <span className="font-medium">{nextGate.name}</span>
+            <StatusBadge status={nextGate.node.status} />
+            <span className="font-medium">{nextGate.node.name}</span>
             {nextGate.lane ? <span className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#cfc8b8]/50">{LANE_LABEL[nextGate.lane]}</span> : null}
           </div>
-          <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/80">{nextGate.nextAction}</p>
+          <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/80">{nextGate.node.nextAction}</p>
+          <p className="mt-2 font-mono text-[10px] text-[#cfc8b8]/50">Ranked by: {nextGate.reasons.join(' · ')}</p>
         </div>
       ) : (
         <div className="rounded-lg border border-emerald-300/25 bg-emerald-300/10 p-4 text-sm text-emerald-100/85">

@@ -70,8 +70,15 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(computeGateScore(gate?.gateScores).percentage).not.toBeNull();
   });
 
-  it('records the scheduler->issue-automation gap as confirmed missing, not census-pending', () => {
-    const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
+  it('records the scheduler->workflow-binding gap as confirmed missing, not census-pending', () => {
+    const gap = allNodes.find((n) => n.name.includes('Scheduler admission bound into the real GitHub Actions dispatch loop'));
     expect(gap?.status).toBe('MISSING');
+  });
+
+  it('scores the graph-driven scheduler admission algorithm as a real, tested, partially-integrated capability', () => {
+    const gate = allNodes.find((n) => n.id === 'cap-scheduler-graph-admission');
+    expect(gate?.status).toBe('PARTIAL');
+    expect(gate?.evidence.some((e) => e.ref === 'src/lib/completion-graph/scheduler.ts')).toBe(true);
+    expect(gate?.evidence.some((e) => e.ref === 'src/lib/completion-graph/scheduler.test.ts')).toBe(true);
   });
 });
