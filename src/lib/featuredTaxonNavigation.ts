@@ -17,10 +17,14 @@ export function featuredTaxonAtlasHref(genus: string): string {
 
 /**
  * Canonical handoff from a featured-taxon surface into Calyx.
- * Calyx parses these bounded route fields into its server-authoritative turn context.
+ *
+ * The route carries only bounded navigation context. The explicit
+ * `context_is_evidence=false` marker prevents the homepage-selected genus from
+ * ever being interpreted as scientific evidence merely because it initiated a
+ * Calyx conversation.
  */
 export function featuredTaxonCalyxHref(genus: string): string {
-  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}`;
+  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false`;
 }
 
 /**
