@@ -52,9 +52,5 @@ export function readIdentificationSourceContext(search: string): IdentificationS
   const params = new URLSearchParams(search);
   const concept = boundedContextText(params.get('concept'));
   const label = boundedContextText(params.get('label'));
-  return {
-    source: concept || label ? 'lexicon' : undefined,
-    concept,
-    label,
-  };
+  return { concept, label };
 }
