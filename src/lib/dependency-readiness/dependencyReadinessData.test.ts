@@ -93,6 +93,38 @@ describe('public config is never mislabeled as a secret', () => {
     const backendOnly = listBackendOnlySecrets(DEPENDENCY_READINESS_CENSUS);
     expect(backendOnly.some((r) => r.classification === 'PUBLIC_CONFIG')).toBe(false);
   });
+
+  it('classifies every recursive-census backend-origin/feature-flag/build-metadata alias as PUBLIC_CONFIG', () => {
+    for (const id of [
+      'vite-backend-origin-aliases',
+      'vite-api-base-url-no-fallback',
+      'vite-feature-flags',
+      'vite-mapbox-style-url',
+      'vite-build-metadata',
+    ]) {
+      expect(findRecord(id).classification).toBe('PUBLIC_CONFIG');
+    }
+  });
+});
+
+describe('recursive census keeps expanding coverage without symmetry assumptions', () => {
+  it('marks the no-fallback API base URL UNKNOWN in Render rather than assuming it is configured', () => {
+    const record = findRecord('vite-api-base-url-no-fallback');
+    const renderRow = record.requirements.find((r) => r.environment === 'FRONTEND_RENDER');
+    expect(renderRow?.required).toBe(false);
+    expect(renderRow?.readiness).toBe('UNKNOWN');
+  });
+
+  it('never requires the backend-origin aliases, feature flags, or build metadata outside frontend Render', () => {
+    for (const id of ['vite-backend-origin-aliases', 'vite-feature-flags', 'vite-mapbox-style-url', 'vite-build-metadata']) {
+      const record = findRecord(id);
+      const nonFrontendRenderRows = record.requirements.filter((r) => r.environment !== 'FRONTEND_RENDER');
+      for (const row of nonFrontendRenderRows) {
+        expect(row.required).toBe(false);
+        expect(row.readiness).toBe('NOT_REQUIRED');
+      }
+    }
+  });
 });
 
 describe('backend-only secrets are never recommended for browser exposure', () => {
