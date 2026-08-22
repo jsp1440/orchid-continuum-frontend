@@ -48,6 +48,8 @@ const Footer: React.FC = () => {
         { label: 'Orchid University', route: '/university' },
         { label: 'Glossary', route: '/lexicon' },
         { label: 'Classroom', route: '/classroom' },
+        { label: 'Judging practice', route: '/education/judging-practice' },
+        { label: 'Orchids on screen', route: '/culture/orchids-on-screen' },
         { label: 'Species care', route: '/species' },
       ],
     },
