@@ -198,6 +198,26 @@ export async function resolveFederatedSpecies(
   return readJson<FederationResolveResult>(response);
 }
 
+/**
+ * Accept only a bounded same-origin Matrix handoff supplied by the governed
+ * dossier contract. External URLs, protocol-relative URLs, and unrelated local
+ * routes fail closed so a backend field can never become an arbitrary link.
+ */
+export function safeSpeciesMatrixHref(matrixUrl: string | null | undefined): string | null {
+  const value = matrixUrl?.trim();
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return null;
+
+  try {
+    const base = 'https://orchidcontinuum.invalid';
+    const parsed = new URL(value, base);
+    if (parsed.origin !== new URL(base).origin) return null;
+    if (parsed.pathname !== '/orchid-identification') return null;
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export function sectionMessage(section: DossierSection): string {
   if (section.state === 'unavailable') {
     return section.unavailable_reason || 'Evidence is not currently available.';
