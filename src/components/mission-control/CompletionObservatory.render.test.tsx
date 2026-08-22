@@ -40,4 +40,10 @@ describe('CompletionObservatory', () => {
     const hasAllClear = container.textContent?.includes('No actionable unmet gates remain');
     expect(hasSchedulerCard || hasAllClear).toBe(true);
   });
+
+  it('exposes a RECOVERABLE_LEGACY count for OC-ARCHAEOLOGY-001 (#308)', () => {
+    act(() => root.render(<CompletionObservatory />));
+    expect(container.textContent).toContain('Recoverable legacy');
+    expect(container.textContent).toContain('recoverable legacy');
+  });
 });

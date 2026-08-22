@@ -12,6 +12,7 @@ const STATUS_LABEL: Record<CompletionStatus, string> = {
   BLOCKED: 'Blocked',
   OWNER_ACTION: 'Owner action',
   EXTERNAL_BLOCKER: 'External blocker',
+  RECOVERABLE_LEGACY: 'Recoverable legacy',
   UNKNOWN: 'Unknown',
 };
 
@@ -22,6 +23,7 @@ const STATUS_CLASS: Record<CompletionStatus, string> = {
   BLOCKED: 'border-red-400/40 bg-red-400/15 text-red-100',
   OWNER_ACTION: 'border-amber-300/30 bg-amber-300/12 text-amber-100',
   EXTERNAL_BLOCKER: 'border-red-400/40 bg-red-400/15 text-red-100',
+  RECOVERABLE_LEGACY: 'border-sky-300/35 bg-sky-300/12 text-sky-200',
   UNKNOWN: 'border-white/15 bg-white/[0.06] text-[#cfc8b8]/80',
 };
 
@@ -164,7 +166,7 @@ export default function CompletionObservatory() {
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-lg border border-[#d4b34a]/25 bg-[#0d1d13]/90 p-4">
           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Overall completion</div>
           <div className="mt-2 text-3xl font-semibold text-[#f5f0e8]">
@@ -185,6 +187,11 @@ export default function CompletionObservatory() {
           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Blockers / owner actions</div>
           <div className="mt-2 text-3xl font-semibold text-[#f5f0e8]">{blockers.length + ownerActions.length}</div>
           <div className="mt-1 text-[11px] text-[#cfc8b8]/60">{blockers.length} blocked, {ownerActions.length} awaiting owner</div>
+        </div>
+        <div className="rounded-lg border border-sky-300/25 bg-sky-300/[0.06] p-4">
+          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-sky-200/80">Recoverable legacy</div>
+          <div className="mt-2 text-3xl font-semibold text-[#f5f0e8]">{statusCounts.RECOVERABLE_LEGACY}</div>
+          <div className="mt-1 text-[11px] text-[#cfc8b8]/60">Legacy assets identified by OC-ARCHAEOLOGY-001 (#308), not yet ported or archived</div>
         </div>
         <div className="rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4">
           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Census as of</div>
@@ -244,7 +251,7 @@ export default function CompletionObservatory() {
         <div className="mb-2 flex items-center justify-between">
           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Canonical completion graph</div>
           <div className="font-mono text-[9px] text-[#cfc8b8]/45">
-            {statusCounts.DONE} done · {statusCounts.PARTIAL} partial · {statusCounts.MISSING} missing · {statusCounts.UNKNOWN} unknown
+            {statusCounts.DONE} done · {statusCounts.PARTIAL} partial · {statusCounts.MISSING} missing · {statusCounts.RECOVERABLE_LEGACY} recoverable legacy · {statusCounts.UNKNOWN} unknown
           </div>
         </div>
         <p className="mb-3 text-[12px] leading-5 text-[#cfc8b8]/70">

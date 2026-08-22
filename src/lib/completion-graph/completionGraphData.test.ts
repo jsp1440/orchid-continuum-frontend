@@ -74,4 +74,18 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
     expect(gap?.status).toBe('MISSING');
   });
+
+  it('surfaces OC-ARCHAEOLOGY-001 (#308) legacy leads as RECOVERABLE_LEGACY, not silently absent from the census', () => {
+    const judging = allNodes.find((n) => n.name.includes('FCOS Orchid Judging'));
+    const hollywood = allNodes.find((n) => n.name.includes('Hollywood Orchids'));
+    expect(judging?.status).toBe('RECOVERABLE_LEGACY');
+    expect(hollywood?.status).toBe('RECOVERABLE_LEGACY');
+    expect(judging?.evidence.some((e) => e.kind === 'issue' && e.ref === '#308')).toBe(true);
+  });
+
+  it('flags the unreachable legacy repos as an explicit owner action rather than a silent gap', () => {
+    const queue = allNodes.find((n) => n.id === 'cap-legacy-repo-inspection-queue');
+    expect(queue?.status).toBe('OWNER_ACTION');
+    expect(queue?.ownerActions?.length).toBeGreaterThan(0);
+  });
 });
