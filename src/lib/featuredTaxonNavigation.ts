@@ -39,12 +39,23 @@ export function atlasWorkspaceCalyxHref(genus: string): string {
 }
 
 /**
- * Continue from the mounted Atlas workspace into Research while preserving
- * only the active genus identity. The route deliberately carries none of the
- * Atlas record/locality state and explicitly declares the genus non-evidentiary.
+ * Continue from the canonical Atlas workspace into Research Center while
+ * preserving only the active genus. The handoff shares the Atlas workspace
+ * origin with Calyx and explicitly marks the subject as navigation context,
+ * not evidence. Atlas locality, coordinates, occurrence identifiers, and
+ * record-level material never gain a parameter here.
  */
 export function atlasWorkspaceResearchHref(genus: string): string {
   return `/research?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${ATLAS_WORKSPACE_ORIGIN}&context_is_evidence=false`;
+}
+
+/**
+ * Continue from canonical Atlas into the Species dossiers while preserving
+ * only the active genus filter. Species already owns `genus` as its receiving
+ * query key, so no Atlas locality, record, origin, or evidence fields travel.
+ */
+export function atlasWorkspaceSpeciesHref(genus: string): string {
+  return `/species?genus=${encodeURIComponent(normalizedGenus(genus))}`;
 }
 
 /**
