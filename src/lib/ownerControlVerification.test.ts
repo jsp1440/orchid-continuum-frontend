@@ -12,6 +12,7 @@
 //   (the headers that were causing CORS preflight failures in production)
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { capturingFetch, mockFetchSequence, rejectingFetch } from './testing/fetchMock';
 import {
   createOwnerControlVerification,
   readOwnerControlVerification,
@@ -30,19 +31,6 @@ const SAMPLE_RECORD = {
   read_back_confirmed: true,
 };
 
-function mockFetch(responses: Array<{ ok: boolean; status?: number; body: unknown }>) {
-  let callIndex = 0;
-  return vi.fn(() => {
-    const resp = responses[callIndex++];
-    if (!resp) throw new Error(`mockFetch: no response at index ${callIndex - 1}`);
-    return Promise.resolve({
-      ok: resp.ok,
-      status: resp.status ?? (resp.ok ? 200 : 401),
-      statusText: resp.ok ? 'OK' : 'Unauthorized',
-      text: () => Promise.resolve(JSON.stringify(resp.body)),
-    });
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Suite
@@ -61,16 +49,8 @@ describe('createOwnerControlVerification', () => {
   });
 
   it('always sends credentials: "include" in the write request', async () => {
-    const capturedInits: RequestInit[] = [];
-    globalThis.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
-      if (init) capturedInits.push(init);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: () => Promise.resolve(JSON.stringify(SAMPLE_RECORD)),
-      });
-    }) as typeof fetch;
+    const { fetch: capturingMock, inits: capturedInits } = capturingFetch({ ok: true, status: 200, body: SAMPLE_RECORD });
+    globalThis.fetch = capturingMock;
 
     await createOwnerControlVerification();
 
@@ -79,7 +59,7 @@ describe('createOwnerControlVerification', () => {
   });
 
   it('returns the persisted record on a successful write', async () => {
-    globalThis.fetch = mockFetch([{ ok: true, body: SAMPLE_RECORD }]);
+    globalThis.fetch = mockFetchSequence([{ ok: true, body: SAMPLE_RECORD }]);
 
     const record = await createOwnerControlVerification();
 
@@ -90,7 +70,7 @@ describe('createOwnerControlVerification', () => {
   });
 
   it('throws with the backend error detail when write is rejected (unauthenticated)', async () => {
-    globalThis.fetch = mockFetch([
+    globalThis.fetch = mockFetchSequence([
       { ok: false, status: 401, body: { detail: 'Owner session required' } },
     ]);
 
@@ -98,7 +78,7 @@ describe('createOwnerControlVerification', () => {
   });
 
   it('throws when the server returns a non-2xx error', async () => {
-    globalThis.fetch = mockFetch([
+    globalThis.fetch = mockFetchSequence([
       { ok: false, status: 500, body: { detail: 'Internal server error' } },
     ]);
 
@@ -106,7 +86,7 @@ describe('createOwnerControlVerification', () => {
   });
 
   it('throws on network failure without claiming success', async () => {
-    globalThis.fetch = vi.fn(() => Promise.reject(new TypeError('Load failed')));
+    globalThis.fetch = rejectingFetch(new TypeError('Load failed'));
 
     await expect(createOwnerControlVerification()).rejects.toThrow(/load failed/i);
   });
@@ -125,16 +105,8 @@ describe('readOwnerControlVerification', () => {
   });
 
   it('always sends credentials: "include" in the read request', async () => {
-    const capturedInits: RequestInit[] = [];
-    globalThis.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
-      if (init) capturedInits.push(init);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: () => Promise.resolve(JSON.stringify(SAMPLE_RECORD)),
-      });
-    }) as typeof fetch;
+    const { fetch: capturingMock, inits: capturedInits } = capturingFetch({ ok: true, status: 200, body: SAMPLE_RECORD });
+    globalThis.fetch = capturingMock;
 
     await readOwnerControlVerification('ctrl-verify-001');
 
@@ -143,7 +115,7 @@ describe('readOwnerControlVerification', () => {
   });
 
   it('returns the persisted record on a successful read-back', async () => {
-    globalThis.fetch = mockFetch([{ ok: true, body: SAMPLE_RECORD }]);
+    globalThis.fetch = mockFetchSequence([{ ok: true, body: SAMPLE_RECORD }]);
 
     const record = await readOwnerControlVerification('ctrl-verify-001');
 
@@ -152,16 +124,8 @@ describe('readOwnerControlVerification', () => {
   });
 
   it('does NOT include Content-Type or X-Orchid-Actor in GET headers (CORS fix)', async () => {
-    const capturedInits: RequestInit[] = [];
-    globalThis.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
-      if (init) capturedInits.push(init);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: () => Promise.resolve(JSON.stringify(SAMPLE_RECORD)),
-      });
-    }) as typeof fetch;
+    const { fetch: capturingMock, inits: capturedInits } = capturingFetch({ ok: true, status: 200, body: SAMPLE_RECORD });
+    globalThis.fetch = capturingMock;
 
     await readOwnerControlVerification('ctrl-verify-001');
 
@@ -171,7 +135,7 @@ describe('readOwnerControlVerification', () => {
   });
 
   it('throws when read-back is unauthorized', async () => {
-    globalThis.fetch = mockFetch([
+    globalThis.fetch = mockFetchSequence([
       { ok: false, status: 401, body: { detail: 'Owner session required' } },
     ]);
 
@@ -192,22 +156,18 @@ describe('validateOwnerSession GET headers — CORS preflight fix (BUILD-065A)',
   });
 
   it('does NOT include Content-Type in the GET session validation request', async () => {
-    const capturedInits: RequestInit[] = [];
-    globalThis.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
-      if (init) capturedInits.push(init);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: () => Promise.resolve(JSON.stringify({
-          authenticated: true,
-          status: 'active',
-          owner: 'owner',
-          expires_at: null,
-          allowedActions: {},
-        })),
-      });
-    }) as typeof fetch;
+    const { fetch: capturingMock, inits: capturedInits } = capturingFetch({
+      ok: true,
+      status: 200,
+      body: {
+        authenticated: true,
+        status: 'active',
+        owner: 'owner',
+        expires_at: null,
+        allowedActions: {},
+    },
+    });
+    globalThis.fetch = capturingMock;
 
     await validateOwnerSession();
 
@@ -218,22 +178,18 @@ describe('validateOwnerSession GET headers — CORS preflight fix (BUILD-065A)',
   });
 
   it('does NOT include X-Orchid-Actor in the GET session validation request', async () => {
-    const capturedInits: RequestInit[] = [];
-    globalThis.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
-      if (init) capturedInits.push(init);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: () => Promise.resolve(JSON.stringify({
-          authenticated: true,
-          status: 'active',
-          owner: 'owner',
-          expires_at: null,
-          allowedActions: {},
-        })),
-      });
-    }) as typeof fetch;
+    const { fetch: capturingMock, inits: capturedInits } = capturingFetch({
+      ok: true,
+      status: 200,
+      body: {
+        authenticated: true,
+        status: 'active',
+        owner: 'owner',
+        expires_at: null,
+        allowedActions: {},
+    },
+    });
+    globalThis.fetch = capturingMock;
 
     await validateOwnerSession();
 
@@ -244,22 +200,18 @@ describe('validateOwnerSession GET headers — CORS preflight fix (BUILD-065A)',
   });
 
   it('still sends credentials: "include" in the GET session validation request', async () => {
-    const capturedInits: RequestInit[] = [];
-    globalThis.fetch = vi.fn((_url: unknown, init?: RequestInit) => {
-      if (init) capturedInits.push(init);
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        text: () => Promise.resolve(JSON.stringify({
-          authenticated: false,
-          status: 'missing',
-          owner: '',
-          expires_at: null,
-          allowedActions: {},
-        })),
-      });
-    }) as typeof fetch;
+    const { fetch: capturingMock, inits: capturedInits } = capturingFetch({
+      ok: true,
+      status: 200,
+      body: {
+        authenticated: false,
+        status: 'missing',
+        owner: '',
+        expires_at: null,
+        allowedActions: {},
+    },
+    });
+    globalThis.fetch = capturingMock;
 
     await validateOwnerSession();
 
