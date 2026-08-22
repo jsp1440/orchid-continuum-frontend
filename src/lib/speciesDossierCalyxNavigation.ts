@@ -40,6 +40,14 @@ export type SpeciesDossierCalyxContext = {
   contextIsEvidence: false;
 };
 
+export type SpeciesDossierCalyxTurnRouteContext = {
+  origin: typeof SPECIES_DOSSIER_CALYX_ORIGIN;
+  featured_taxon: { rank: 'genus'; accepted_name: string };
+  taxon: string;
+  taxon_source: typeof SPECIES_DOSSIER_CALYX_ORIGIN;
+  taxon_is_evidence: false;
+};
+
 /**
  * Parse the direct Species Dossier → Calyx handoff at the trust boundary.
  *
@@ -65,6 +73,27 @@ export function parseSpeciesDossierCalyxContext(
     genus,
     taxon,
     contextIsEvidence: false,
+  };
+}
+
+/**
+ * Convert the validated dossier handoff into the exact route_context shape
+ * Calyx sends with a turn. This deliberately exposes no evidence receipt,
+ * occurrence, locality, collector, catalogue, coordinate, confidence, or
+ * conclusion field. The exact species is navigation context only.
+ */
+export function speciesDossierCalyxTurnRouteContext(
+  search: string | URLSearchParams,
+): SpeciesDossierCalyxTurnRouteContext | null {
+  const context = parseSpeciesDossierCalyxContext(search);
+  if (!context) return null;
+
+  return {
+    origin: context.origin,
+    featured_taxon: { rank: 'genus', accepted_name: context.genus },
+    taxon: context.taxon,
+    taxon_source: context.origin,
+    taxon_is_evidence: false,
   };
 }
 
