@@ -2,7 +2,7 @@ export const SPECIES_DOSSIER_MATRIX_ORIGIN = 'species-dossier';
 export const SPECIES_DOSSIER_MATRIX_PATH = '/orchid-identification';
 
 const MAX_TAXON_CONTEXT_TEXT = 160;
-const UNSAFE_CONTEXT_TEXT = /[\u0000-\u001f\u007f<>{}\\]/;
+const UNSAFE_CONTEXT_PUNCTUATION = /[<>{}\\]/;
 
 export interface SpeciesDossierMatrixContext {
   origin: typeof SPECIES_DOSSIER_MATRIX_ORIGIN;
@@ -12,9 +12,21 @@ export interface SpeciesDossierMatrixContext {
   contextIsEvidence: false;
 }
 
+function hasControlCharacter(value: string): boolean {
+  return [...value].some((character) => {
+    const code = character.charCodeAt(0);
+    return code <= 31 || code === 127;
+  });
+}
+
 function boundedTaxonText(value: string | null | undefined): string | null {
   const text = value?.trim();
-  if (!text || text.length > MAX_TAXON_CONTEXT_TEXT || UNSAFE_CONTEXT_TEXT.test(text)) {
+  if (
+    !text ||
+    text.length > MAX_TAXON_CONTEXT_TEXT ||
+    hasControlCharacter(text) ||
+    UNSAFE_CONTEXT_PUNCTUATION.test(text)
+  ) {
     return null;
   }
   return text;
