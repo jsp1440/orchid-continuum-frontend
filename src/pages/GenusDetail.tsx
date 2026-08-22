@@ -33,7 +33,7 @@ import {
   type EcologicalEvidence,
 } from '@/lib/genusProfileDataQuality';
 import { fetchGenusGraphEvidence, type GenusGraphResult } from '@/lib/knowledgeGraph';
-import { genusProfileAtlasHref } from '@/lib/genusProfileNavigation';
+import { genusProfileAtlasHref, genusProfileCalyxHref } from '@/lib/genusProfileNavigation';
 import {
   lookupGenus,
   fetchGenusImagesWithSource,
@@ -60,6 +60,7 @@ import {
 
 const PLATFORM_LINKS = (genus: string): { label: string; to: string }[] => [
   { label: 'Atlas', to: genusProfileAtlasHref(genus) },
+  { label: 'Ask Calyx', to: genusProfileCalyxHref(genus) },
   { label: 'Conservatory', to: '/zoo' },
   { label: 'Field Station', to: '/ecosystems' },
   { label: 'Deception Lab', to: '/pollinators' },
@@ -442,7 +443,7 @@ const GenusDetail: React.FC = () => {
     });
 
     return representative.filter((plate) => {
-      // Skip plates whose every candidate image URL failed to load.
+      // Skip plates whose every candidate image failed to load.
       if (failedSpecies.has(plate.entry.species)) return false;
       // Once images have loaded, skip plates with NO candidate image left.
       if (!imagesLoading && plate.urls.length === 0) return false;

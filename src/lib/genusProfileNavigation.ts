@@ -24,3 +24,17 @@ export function genusProfileAtlasHref(genus: string): string {
   });
   return `/atlas?${params.toString()}`;
 }
+
+/**
+ * Continue directly from a dedicated Genus Profile into Calyx without first
+ * detouring through Atlas. Only the canonical genus identity crosses this
+ * boundary, explicitly marked as navigation context rather than evidence.
+ */
+export function genusProfileCalyxHref(genus: string): string {
+  const params = new URLSearchParams({
+    genus: boundedGenus(genus),
+    origin: GENUS_PROFILE_ORIGIN,
+    context_is_evidence: 'false',
+  });
+  return `/calyx?${params.toString()}`;
+}
