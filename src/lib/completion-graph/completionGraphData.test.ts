@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMPLETION_GRAPH } from './completionGraphData';
-import { countIncompleteLeaves, flattenGraph, getLeaves, selectNextUnmetGate } from './graphOps';
+import { countIncompleteLeaves, flattenGraph, getLeaves, listOwnerActions, selectNextUnmetGate } from './graphOps';
 import { computeGateScore } from './scoring';
 
 describe('COMPLETION_GRAPH structural integrity', () => {
@@ -57,5 +57,21 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     const incomplete = countIncompleteLeaves(COMPLETION_GRAPH);
     expect(incomplete).toBeGreaterThan(0);
     expect(Number.isFinite(incomplete)).toBe(true);
+  });
+
+  it('surfaces the university live-verification gate as an explicit owner action, not a silent gap', () => {
+    const ownerActionIds = listOwnerActions(COMPLETION_GRAPH).map((n) => n.id);
+    expect(ownerActionIds).toContain('cap-university-production-live-verification');
+  });
+
+  it('scores the deployment contract capability from a real executed check, not an assumed pass', () => {
+    const gate = allNodes.find((n) => n.id === 'cap-deployment-contract-validation');
+    expect(gate?.evidence.some((e) => e.ref.includes('validate:deployment'))).toBe(true);
+    expect(computeGateScore(gate?.gateScores).percentage).not.toBeNull();
+  });
+
+  it('records the scheduler->issue-automation gap as confirmed missing, not census-pending', () => {
+    const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
+    expect(gap?.status).toBe('MISSING');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeGateScore, computeNodePercentage, rollupStatus, rollupThreeLevels } from './scoring';
+import { computeGateScore, computeNodeCensusCoverage, computeNodePercentage, rollupStatus, rollupThreeLevels } from './scoring';
 import type { CompletionNode } from './types';
 
 function gateNode(overrides: Partial<CompletionNode> = {}): CompletionNode {
@@ -91,6 +91,45 @@ describe('computeNodePercentage', () => {
     const unscoredB = gateNode({ id: 'b' });
     const branch: CompletionNode = { ...gateNode({ id: 'branch' }), type: 'module', children: [unscoredA, unscoredB] };
     expect(computeNodePercentage(branch)).toBeNull();
+  });
+
+  it('weights sibling branches by structural leaf count, not a flat per-branch average', () => {
+    const fullScores = { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: 1, browserEndToEnd: 1, deployedOperational: 1 };
+    // One branch has a single 100%-scored leaf; the other has three 0%-scored leaves.
+    // A flat per-branch average would read 50%; leaf-count weighting must read 25% (1*100 + 3*0) / 4.
+    const smallBranch: CompletionNode = { ...gateNode({ id: 'small' }), type: 'module', children: [gateNode({ id: 'small-leaf', gateScores: fullScores })] };
+    const bigBranch: CompletionNode = {
+      ...gateNode({ id: 'big' }),
+      type: 'module',
+      children: [
+        gateNode({ id: 'big-1', gateScores: { architectureContracts: 0, implementationPresent: null, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null } }),
+        gateNode({ id: 'big-2', gateScores: { architectureContracts: 0, implementationPresent: null, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null } }),
+        gateNode({ id: 'big-3', gateScores: { architectureContracts: 0, implementationPresent: null, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null } }),
+      ],
+    };
+    const domain: CompletionNode = { ...gateNode({ id: 'domain' }), type: 'domain', children: [smallBranch, bigBranch] };
+    expect(computeNodePercentage(domain)).toBe(25);
+  });
+});
+
+describe('computeNodeCensusCoverage', () => {
+  it('is 0 when nothing under the node has been evaluated', () => {
+    const branch: CompletionNode = { ...gateNode({ id: 'branch' }), type: 'module', children: [gateNode({ id: 'a' }), gateNode({ id: 'b' })] };
+    expect(computeNodeCensusCoverage(branch)).toBe(0);
+  });
+
+  it('is 1 when every leaf has been evaluated, regardless of the score they received', () => {
+    const scored = gateNode({ id: 'a', gateScores: { architectureContracts: 1, implementationPresent: null, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null } });
+    const confirmedAbsent = gateNode({ id: 'b', gateScores: { architectureContracts: 0, implementationPresent: null, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null } });
+    const branch: CompletionNode = { ...gateNode({ id: 'branch' }), type: 'module', children: [scored, confirmedAbsent] };
+    expect(computeNodeCensusCoverage(branch)).toBe(1);
+  });
+
+  it('reports the fraction of leaves evaluated when only some have been', () => {
+    const scored = gateNode({ id: 'a', gateScores: { architectureContracts: 1, implementationPresent: null, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null } });
+    const unscored = gateNode({ id: 'b' });
+    const branch: CompletionNode = { ...gateNode({ id: 'branch' }), type: 'module', children: [scored, unscored] };
+    expect(computeNodeCensusCoverage(branch)).toBe(0.5);
   });
 });
 

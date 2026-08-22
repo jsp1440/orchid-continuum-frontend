@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
 import { COMPLETION_GRAPH, COMPLETION_GRAPH_CENSUS_DATE } from '@/lib/completion-graph/completionGraphData';
 import { countIncompleteLeaves, countLeavesByStatus, getLeaves, groupLeavesByLane, listBlockers, listOwnerActions, selectNextUnmetGate } from '@/lib/completion-graph/graphOps';
-import { computeGateScore, computeNodePercentage } from '@/lib/completion-graph/scoring';
+import { computeGateScore, computeNodeCensusCoverage, computeNodePercentage } from '@/lib/completion-graph/scoring';
 import type { CompletionNode, CompletionStatus, Evidence, ExecutionLane } from '@/lib/completion-graph/types';
 
 const STATUS_LABEL: Record<CompletionStatus, string> = {
@@ -56,7 +56,13 @@ function PercentageLabel({ node }: { node: CompletionNode }) {
       </span>
     );
   }
-  return <span className="font-mono text-[10px] text-[#cfc8b8]/75">{percentage}% (avg of children)</span>;
+  const coverage = Math.round(computeNodeCensusCoverage(node) * 100);
+  return (
+    <span className="font-mono text-[10px] text-[#cfc8b8]/75">
+      {percentage}%{' '}
+      <span className="text-[#cfc8b8]/45">(leaf-weighted, {coverage}% of subtree evaluated)</span>
+    </span>
+  );
 }
 
 function evidenceHref(evidence: Evidence): string | null {
@@ -147,6 +153,7 @@ export default function CompletionObservatory() {
   const root = COMPLETION_GRAPH;
 
   const overallPercentage = useMemo(() => computeNodePercentage(root), [root]);
+  const overallCoverage = useMemo(() => Math.round(computeNodeCensusCoverage(root) * 100), [root]);
   const incompleteCount = useMemo(() => countIncompleteLeaves(root), [root]);
   const statusCounts = useMemo(() => countLeavesByStatus(root), [root]);
   const totalLeaves = useMemo(() => getLeaves(root).length, [root]);
@@ -164,7 +171,9 @@ export default function CompletionObservatory() {
             {overallPercentage === null ? '—' : `${overallPercentage}%`}
           </div>
           <div className="mt-1 text-[11px] text-[#cfc8b8]/60">
-            {overallPercentage === null ? 'No leaves scored yet' : 'Unweighted mean across scored leaves — see coverage notes below'}
+            {overallPercentage === null
+              ? 'No leaves scored yet'
+              : `Leaf-count-weighted across scored subtrees — only ${overallCoverage}% of all tracked leaves have been evaluated`}
           </div>
         </div>
         <div className="rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4">
