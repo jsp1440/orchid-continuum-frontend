@@ -33,6 +33,41 @@ function boundedSpecies(value: string | null | undefined): string | null {
   return taxon;
 }
 
+export type SpeciesDossierCalyxContext = {
+  origin: typeof SPECIES_DOSSIER_CALYX_ORIGIN;
+  genus: string;
+  taxon: string;
+  contextIsEvidence: false;
+};
+
+/**
+ * Parse the direct Species Dossier → Calyx handoff at the trust boundary.
+ *
+ * The dedicated origin is accepted only when the producer explicitly declares
+ * that route context is not evidence. Exact species identity must remain a
+ * bounded binomial matching the supplied genus. All other query parameters are
+ * ignored, so locality, occurrence, collector/catalogue and dossier-evidence
+ * material cannot become part of the accepted Calyx subject context.
+ */
+export function parseSpeciesDossierCalyxContext(
+  search: string | URLSearchParams,
+): SpeciesDossierCalyxContext | null {
+  const params = typeof search === 'string' ? new URLSearchParams(search) : search;
+  if (params.get('origin') !== SPECIES_DOSSIER_CALYX_ORIGIN) return null;
+  if (params.get('context_is_evidence') !== 'false') return null;
+
+  const genus = boundedGenus(params.get('genus'));
+  const taxon = boundedSpecies(params.get('taxon'));
+  if (!genus || !taxon || !taxon.startsWith(`${genus} `)) return null;
+
+  return {
+    origin: SPECIES_DOSSIER_CALYX_ORIGIN,
+    genus,
+    taxon,
+    contextIsEvidence: false,
+  };
+}
+
 /**
  * Build the direct Species Dossier → Calyx navigation handoff.
  *
