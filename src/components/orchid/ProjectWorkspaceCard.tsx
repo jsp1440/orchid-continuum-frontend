@@ -22,8 +22,14 @@ export interface ProjectWorkspaceCardProps {
   contributors?: number;
   /** ISO date string for last meaningful activity. */
   lastActivity?: string;
-  /** Audiences invited to participate. */
-  openTo?: RoleKey[];
+  /**
+   * Audiences invited to participate.
+   *
+   * Readonly because callers pass `as const` literals and this component only
+   * reads the list. A mutable `RoleKey[]` rejected every such caller (TS2322)
+   * while promising a mutability nothing here uses.
+   */
+  openTo?: readonly RoleKey[];
   /** Mark as demo placeholder. */
   demo?: boolean;
 }

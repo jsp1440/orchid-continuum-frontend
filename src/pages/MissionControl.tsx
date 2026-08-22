@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { commandStateOf } from '@/lib/missionControlQueue';
 import { Link } from 'react-router-dom';
 import {
   Activity,
@@ -1386,8 +1387,10 @@ function CalyxOperationsQueuePanel({
                   <div className="mt-1 font-mono text-[8px] uppercase tracking-[0.14em] text-[#cfc8b8]/58">{item.subsystem}</div>
                   <p className="mt-2 text-[12px] leading-5 text-[#cfc8b8]/78">{item.detail}</p>
                   {item.ownerDecision ? <p className="mt-2 text-[12px] leading-5 text-amber-100/82">Decision: {item.ownerDecision}</p> : null}
-                  {'commandState' in item ? (
-                    <div className="mt-2 font-mono text-[8px] uppercase tracking-[0.14em] text-[#d4b34a]">{item.commandState}</div>
+                  {commandStateOf(item) ? (
+                    <div className="mt-2 font-mono text-[8px] uppercase tracking-[0.14em] text-[#d4b34a]">
+                      {commandStateOf(item)}
+                    </div>
                   ) : null}
                   {'status' in item ? (
                     <div className="mt-3 flex flex-wrap gap-2">
