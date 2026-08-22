@@ -1,6 +1,10 @@
 import { marked } from "marked";
 
 import { parseAtlasCalyxQuestionContext } from "@/features/atlas-next/calyxHandoff";
+import {
+  CLASSROOM_INVESTIGATION_ORIGIN,
+  classroomCalyxTurnRouteContext,
+} from "@/lib/classroomInvestigationNavigation";
 import { speciesDossierCalyxTurnRouteContext } from "@/lib/speciesDossierCalyxNavigation";
 import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
@@ -349,19 +353,34 @@ export function buildCalyxTurnContext(options: {
   };
 
   const routeSearch = options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : "");
-  // The Species Dossier handoff has its own validated adapter, which already
-  // produces the exact route_context shape a turn carries. Use it whole rather
-  // than re-deriving the subject here: the trust boundary — bounded binomial,
-  // genus agreement, explicit non-evidence declaration — is enforced in one
-  // place, and a dossier arrival cannot pick up question or research fields it
-  // never carried.
+  // Governed origins that carry exact identity use their dedicated adapters so
+  // their evidence boundaries are validated in one place instead of re-derived
+  // from generic query parameters here.
   const dossierRouteContext = speciesDossierCalyxTurnRouteContext(routeSearch);
+  const classroomRouteContext = classroomCalyxTurnRouteContext(routeSearch);
 
   const routeContext = parseCalyxRouteContext(routeSearch);
   const researchTaxon = parseResearchExactTaxon(routeSearch, routeContext.origin);
+  const invalidClassroomArrival =
+    routeContext.origin === CLASSROOM_INVESTIGATION_ORIGIN && !classroomRouteContext;
+
   if (dossierRouteContext) {
     context.route_context = dossierRouteContext;
-  } else if (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext || researchTaxon) {
+  } else if (classroomRouteContext) {
+    context.route_context = {
+      ...classroomRouteContext,
+      ...(routeContext.questionContext
+        ? {
+            question: routeContext.questionContext.question,
+            question_source: routeContext.questionContext.question_source,
+            question_is_evidence: routeContext.questionContext.question_is_evidence,
+          }
+        : {}),
+    };
+  } else if (
+    !invalidClassroomArrival &&
+    (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext || researchTaxon)
+  ) {
     context.route_context = {
       origin: routeContext.origin ?? undefined,
       featured_taxon: routeContext.featuredTaxon
