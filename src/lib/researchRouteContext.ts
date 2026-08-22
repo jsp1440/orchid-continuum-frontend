@@ -1,6 +1,10 @@
 import { FEATURED_TAXON_ORIGIN } from '@/lib/featuredTaxonNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { MATRIX_RESEARCH_ORIGIN, parseMatrixResearchContext } from '@/lib/matrixResearchNavigation';
+import {
+  SPECIES_DOSSIER_RESEARCH_ORIGIN,
+  parseSpeciesDossierResearchContext,
+} from '@/lib/speciesDossierResearchNavigation';
 
 const MAX_GENUS_CHARACTERS = 120;
 const MAX_PROJECT_CHARACTERS = 160;
@@ -8,7 +12,10 @@ const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
 const SAFE_PROJECT = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 type LegacyResearchRouteOrigin = typeof FEATURED_TAXON_ORIGIN | typeof ATLAS_NEXT_RESEARCH_ORIGIN;
-export type ResearchRouteOrigin = LegacyResearchRouteOrigin | typeof MATRIX_RESEARCH_ORIGIN;
+export type ResearchRouteOrigin =
+  | LegacyResearchRouteOrigin
+  | typeof MATRIX_RESEARCH_ORIGIN
+  | typeof SPECIES_DOSSIER_RESEARCH_ORIGIN;
 
 type LegacyResearchRouteContext = {
   origin: LegacyResearchRouteOrigin;
@@ -26,7 +33,19 @@ type MatrixResearchRouteContext = {
   contextIsIdentification: false;
 };
 
-export type ResearchRouteContext = LegacyResearchRouteContext | MatrixResearchRouteContext;
+type SpeciesDossierResearchRouteContext = {
+  origin: typeof SPECIES_DOSSIER_RESEARCH_ORIGIN;
+  genus: string;
+  /** Accepted binomial when the dossier supplied one; null otherwise. */
+  taxon: string | null;
+  projectId: null;
+  contextIsEvidence: false;
+};
+
+export type ResearchRouteContext =
+  | LegacyResearchRouteContext
+  | MatrixResearchRouteContext
+  | SpeciesDossierResearchRouteContext;
 
 function boundedGenus(value: string | null): string | null {
   const genus = String(value ?? '').trim();
@@ -63,6 +82,17 @@ export function parseResearchRouteContext(search: string | URLSearchParams): Res
       projectId: null,
       contextIsEvidence: false,
       contextIsIdentification: false,
+    };
+  }
+
+  const dossierContext = parseSpeciesDossierResearchContext(params);
+  if (dossierContext) {
+    return {
+      origin: SPECIES_DOSSIER_RESEARCH_ORIGIN,
+      genus: dossierContext.genus,
+      taxon: dossierContext.taxon,
+      projectId: null,
+      contextIsEvidence: false,
     };
   }
 

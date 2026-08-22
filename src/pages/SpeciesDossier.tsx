@@ -10,6 +10,7 @@ import {
   Network,
   ImageOff,
   FileCheck2,
+  FlaskConical,
 } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
@@ -28,6 +29,7 @@ import {
   type EvidenceState,
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
+import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -133,6 +135,14 @@ const SpeciesDossier: React.FC = () => {
   const atlasQuery = encodeURIComponent(
     data?.canonical_name || data?.scientific_name || taxonomyId,
   );
+  // Into Research on the dossier's own subject, so the visitor does not have to
+  // retype the organism they are already looking at. Genus drives the query
+  // builder; the accepted binomial rides along as context only.
+  const researchHref = speciesDossierResearchHref({
+    genus: dossier?.identity.genus ?? data?.genus,
+    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
+  });
+
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
         taxonId: dossier.identity.taxon_id || taxonomyId,
@@ -196,6 +206,14 @@ const SpeciesDossier: React.FC = () => {
                 >
                   <MapIcon className="h-4 w-4" /> View on Atlas
                 </Link>
+                {researchHref && (
+                  <Link
+                    to={researchHref}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full border border-[#c9a24a]/50 bg-[#c9a24a]/[0.08] text-[#c9a24a] hover:bg-[#c9a24a]/[0.14] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
+                  >
+                    <FlaskConical className="h-4 w-4" /> Continue in Research
+                  </Link>
+                )}
                 {matrixHref && (
                   <Link
                     to={matrixHref}
