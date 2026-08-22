@@ -2,10 +2,12 @@ import {
   ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
 } from '@/lib/featuredTaxonNavigation';
+import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
 
 const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
   FEATURED_TAXON_ORIGIN,
   ATLAS_WORKSPACE_ORIGIN,
+  GENUS_PROFILE_ORIGIN,
 ]);
 
 /**
