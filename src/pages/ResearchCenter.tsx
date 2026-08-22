@@ -11,7 +11,10 @@ import {
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
-import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import {
+  researchStationAtlasHref,
+  researchStationCalyxHref,
+} from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
@@ -84,6 +87,21 @@ const ResearchCenter: React.FC = () => {
   const routeTaxon =
     routeContext && 'taxon' in routeContext ? (routeContext.taxon ?? null) : null;
   const subjectLabel = routeTaxon ?? routeGenus;
+
+  // The onward links must carry the subject the banner just named, not the
+  // genus token it was derived from. A visitor arriving from a Species Dossier
+  // for Cattleya purpurata is studying that species; handing Atlas and Calyx
+  // only "Cattleya" silently widens the subject to every congener, which is
+  // precisely the identity loss these handoffs exist to prevent — and the page
+  // says the subject is preserved while doing it.
+  //
+  // researchStationAtlasHref/CalyxHref classify by name shape rather than
+  // assuming rank: a binomial becomes Atlas's species filter (matched against
+  // the canonical binomial) and reaches Calyx as an exact taxon alongside the
+  // derived genus; a bare genus resolves to the same genus filter as before.
+  // Calyx reads that exact taxon only under the research-station origin, and
+  // asserts taxon_is_evidence=false when it does.
+  const onwardContext = { taxon: subjectLabel, projectId };
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
@@ -137,13 +155,13 @@ const ResearchCenter: React.FC = () => {
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
                 <Link
-                  to={featuredTaxonAtlasHref(routeGenus)}
+                  to={researchStationAtlasHref(onwardContext)}
                   className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
                 >
                   Return to Atlas
                 </Link>
                 <Link
-                  to={featuredTaxonCalyxHref(routeGenus)}
+                  to={researchStationCalyxHref(onwardContext)}
                   className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-100 hover:bg-emerald-300/15"
                 >
                   Ask Calyx
