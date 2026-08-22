@@ -10,6 +10,7 @@ import {
   Leaf,
   ArrowUpRight,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /**
  * FeaturedSystems — the homepage's "Featured Systems" band.
@@ -38,7 +39,7 @@ type System = {
   title: string;
   description: string;
   route: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   accent: string;
 };
 
