@@ -1,5 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -48,6 +48,38 @@ function navigationRoutes(source: string): string[] {
 
 const NAV_ROUTES = [...new Set([...navigationRoutes(NAVBAR), ...navigationRoutes(FOOTER)])];
 
+/**
+ * Every static internal link written inline in a component, across the app.
+ *
+ * The data-driven navigation above is only the site chrome. Most links a
+ * visitor actually follows are `to="/…"` inside a page, and those fail exactly
+ * the same way — the Lexicon's own front-door link and every governed handoff
+ * is one of these.
+ *
+ * Only fully static paths are collected. A template literal or an expression
+ * cannot be resolved without executing it, so those are left to their own
+ * tests rather than guessed at here.
+ */
+function inlineLinks(): Array<{ file: string; path: string }> {
+  const found: Array<{ file: string; path: string }> = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith('.tsx') && !entry.name.includes('.test.')) {
+        const text = readFileSync(full, 'utf8');
+        for (const match of text.matchAll(/\bto="(\/[^"{}$]*)"/g)) {
+          const path = match[1].split('?')[0].split('#')[0];
+          found.push({ file: full, path: path.length > 1 ? path.replace(/\/$/, '') : path });
+        }
+      }
+    }
+  };
+  walk(resolve(process.cwd(), 'src'));
+  return found;
+}
+
 describe('navigation reachability', () => {
   it('found the navigation sources it is meant to be checking', () => {
     // A guard that silently matches nothing passes forever. If the navigation
@@ -75,6 +107,20 @@ describe('navigation reachability', () => {
     for (const entry of ['/atlas', '/species', '/calyx', '/research', '/lexicon', '/classroom']) {
       expect(NAV_ROUTES, `${entry} is not linked from navigation`).toContain(entry);
     }
+  });
+});
+
+describe('inline component links', () => {
+  const links = inlineLinks();
+
+  it('found inline links to check', () => {
+    expect(links.length).toBeGreaterThan(20);
+  });
+
+  it('points every static inline link at a mounted route', () => {
+    const dead = links.filter((link) => !isMounted(link.path));
+    const report = dead.map((link) => `${link.path} (${link.file})`).join('\n  ');
+    expect(dead, `inline links with no route:\n  ${report}`).toEqual([]);
   });
 });
 
