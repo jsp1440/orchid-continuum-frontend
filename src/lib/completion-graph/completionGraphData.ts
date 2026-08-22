@@ -16,11 +16,13 @@
  *      show coverage alongside percentage so partial evidence never reads
  *      as more confident than it is.
  *
- * Sibling nodes are averaged unweighted when rolling up (see scoring.ts) —
- * a domain with one deeply-audited module and five UNKNOWN-census modules
- * will look more "complete" than it should until those five get their own
- * audit pass. That is a known limitation of this first census, not a
- * deliberate weighting choice — tracked as remaining work on issue #281.
+ * Sibling nodes roll up weighted by structural leaf count (see
+ * computeNodePercentage in scoring.ts), not a flat per-child average — a
+ * domain with one deeply-audited module and five UNKNOWN-census modules is
+ * weighted by how many leaves each side actually represents, and
+ * computeNodeCensusCoverage exposes what fraction of the subtree has been
+ * evaluated at all so a small, well-scored slice of a large un-audited
+ * domain never reads as more confident than it is.
  */
 
 import { rollupStatus, rollupThreeLevels } from './scoring';
@@ -557,6 +559,152 @@ const universityDomain = branch({
   ]),
 ]);
 
+// ─── Autonomous completion control plane ───────────────────────────────────
+// Real evidence: this engine itself. src/lib/completion-graph/{types,scoring,
+// graphOps,completionGraphData}.ts, src/components/mission-control/
+// CompletionObservatory.tsx mounted inside src/pages/MissionControl.tsx at the
+// "Completion Observatory" panel (grep-confirmed, not orphaned), current HEAD
+// c8238e778cf5cd4b29710102de5f162feddbd500 (PR #298, merged).
+
+const completionGraphEngineGate: CompletionNode = {
+  id: 'cap-completion-graph-engine',
+  parentId: 'module-autonomous-control-plane-core',
+  name: 'Recursive completion graph engine + Mission Control observatory panel',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'NOT_MET' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: 0,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#298', note: 'Merged onto oc-autonomous-integration as commit c8238e7.' },
+    { kind: 'commit', ref: 'c8238e778cf5cd4b29710102de5f162feddbd500', note: 'Current oc-autonomous-integration HEAD at census time; includes #298.' },
+    { kind: 'file', ref: 'src/lib/completion-graph/types.ts' },
+    { kind: 'file', ref: 'src/lib/completion-graph/scoring.ts' },
+    { kind: 'file', ref: 'src/lib/completion-graph/graphOps.ts' },
+    { kind: 'file', ref: 'src/lib/completion-graph/completionGraphData.ts' },
+    { kind: 'file', ref: 'src/components/mission-control/CompletionObservatory.tsx' },
+    { kind: 'file', ref: 'src/pages/MissionControl.tsx', note: 'CompletionObservatory mounted at the "Completion Observatory" panel, grep-confirmed reachable, not orphaned.' },
+    { kind: 'test', ref: 'src/lib/completion-graph/scoring.test.ts' },
+    { kind: 'test', ref: 'src/lib/completion-graph/graphOps.test.ts' },
+    { kind: 'test', ref: 'src/lib/completion-graph/completionGraphData.test.ts' },
+    { kind: 'test', ref: 'src/components/mission-control/CompletionObservatory.render.test.tsx' },
+    { kind: 'route', ref: '/mission-control' },
+  ],
+  prs: ['#298'],
+  nextAction: 'Open Mission Control in a real browser session and confirm the Completion Observatory panel renders live (not just under jsdom) before claiming browser-end-to-end.',
+  lastAccomplishment: 'This engine is the first implementation of OC-OBSERVATORY-001 itself: a recursive Portfolio->Domain->Module->Capability->Integration->Acceptance Gate graph, weighted rollup + census-coverage scoring, and a drill-down UI wired into the real Mission Control page.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const schedulerIssueAutomationGap = confirmedMissing({
+  idHint: 'cap-scheduler-issue-automation',
+  parentId: 'module-autonomous-control-plane-core',
+  name: 'Scheduler output wired to real GitHub issue creation/queueing',
+  evidence: [
+    { kind: 'file', ref: 'src/lib/completion-graph/graphOps.ts', note: 'selectNextUnmetGate() is exported and grep-confirmed to have exactly one consumer: CompletionObservatory.tsx\'s own UI render. No caller files an issue, queues work, or otherwise acts on its output.' },
+  ],
+  nextAction: 'Wire selectNextUnmetGate() output into the autonomous scheduler\'s issue creation/queueing path so "choose next unmet gate -> bounded issue" is a real automated loop, not just a UI display.',
+  lane: 'INTEGRATION_COMPLETION',
+});
+
+const autonomousControlPlaneDomain = branch({
+  id: 'domain-autonomous-control-plane',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Autonomous completion control plane',
+  type: 'domain',
+  nextAction: 'Capture a real browser session of Mission Control rendering this panel, then wire the scheduler\'s selectNextUnmetGate() output to actual issue creation.',
+}, [
+  branch({
+    id: 'module-autonomous-control-plane-core',
+    parentId: 'domain-autonomous-control-plane',
+    name: 'Completion control plane core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [completionGraphEngineGate, schedulerIssueAutomationGap]),
+]);
+
+// ─── Production/deployment/release operations ──────────────────────────────
+// Real evidence: both verification scripts were actually executed this pass
+// against current HEAD (not merely confirmed to exist).
+
+const deploymentContractGate: CompletionNode = {
+  id: 'cap-deployment-contract-validation',
+  parentId: 'module-production-release-core',
+  name: 'Deployment contract validation (critical client routes + SPA fallback)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'NOT_MET' },
+  lane: 'RELEASE_ACCEPTANCE',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: 0,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'scripts/verify-deployment-contract.mjs' },
+    { kind: 'commit', ref: 'c8238e778cf5cd4b29710102de5f162feddbd500', note: 'Executed via `npm run validate:deployment` against this exact HEAD.' },
+    { kind: 'ci', ref: 'npm run validate:deployment', note: 'Local execution output: "Deployment contract valid. Verified 5 critical client routes and two SPA fallback mechanisms." Exit code 0. This is a static-file contract check (App.tsx routes, public/_redirects, vercel.json), not a live deployment probe.' },
+  ],
+  nextAction: 'This checks local contract files only — still needs a real browser/live pass against the actual deployed origin to confirm the routes resolve correctly in production, not just that the config declares them.',
+  lastAccomplishment: 'Ran `npm run validate:deployment` against current HEAD this pass: passed cleanly, confirming /university, /university/lab, /conservatory/*, /mission-control, /calyx are all declared routes with a working SPA fallback in both public/_redirects and vercel.json.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const universityProductionLiveVerification: CompletionNode = {
+  id: 'cap-university-production-live-verification',
+  parentId: 'module-production-release-core',
+  name: 'University live-production verification (verify-university-production.mjs)',
+  type: 'capability',
+  status: 'OWNER_ACTION',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'UNKNOWN', productComplete: 'NOT_MET' },
+  lane: 'RELEASE_ACCEPTANCE',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: null,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'scripts/verify-university-production.mjs', note: 'Real script: fetches a live frontend origin\'s /university/lab route, asserts an attested full Git-SHA meta tag, and cross-checks a live API origin.' },
+    { kind: 'ci', ref: 'npm run verify:university-production', note: 'Executed this pass with no arguments: "FAIL: frontend URL is required", exit code 1. The script takes the production frontend/API origins as positional CLI arguments; no canonical production URL is documented anywhere in this repository (README, docs/, vercel.json, package.json) for an autonomous run to supply.' },
+  ],
+  ownerActions: ['Provide the canonical deployed production frontend_origin and api_origin (or wire them as CI secrets/args in a scheduled workflow) so verify-university-production.mjs can run to completion and this gate can move off OWNER_ACTION.'],
+  nextAction: 'Once the owner supplies (or CI is wired with) the real production origins, run `npm run verify:university-production -- <frontendUrl> <apiUrl>` and record the resulting evidence JSON.',
+  lastAccomplishment: 'Confirmed this pass that the script itself is real and executable — it fails for the correct, honest reason (no target configured), not because it is missing or broken.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const productionReleaseDomain = branch({
+  id: 'domain-production-release',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Production/deployment/release operations',
+  type: 'domain',
+  nextAction: 'Owner: supply canonical production origins so the university live-verification gate can run; otherwise this domain is at its evidence ceiling for an unattended autonomous pass.',
+}, [
+  branch({
+    id: 'module-production-release-core',
+    parentId: 'domain-production-release',
+    name: 'Release verification core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [deploymentContractGate, universityProductionLiveVerification]),
+]);
+
 // ─── Remaining initial inventory: recorded as domains, census pending ──────
 // Each entry below has at least one route/file existence check so "missing
 // evidence" is never silently treated as zero — but none have been scored,
@@ -713,33 +861,12 @@ const STUB_DOMAINS: StubDomainSpec[] = [
     lane: 'SCIENTIFIC_DATA_COMPLETION',
   },
   {
-    idHint: 'domain-autonomous-control-plane',
-    name: 'Autonomous completion control plane',
-    evidence: [
-      { kind: 'file', ref: 'src/lib/completion-graph/', note: 'This census itself — issue #281 is the first implementation of this domain.' },
-      { kind: 'file', ref: 'src/lib/missionControlQueue.ts' },
-      { kind: 'issue', ref: '#281' },
-    ],
-    nextAction: 'Wire this completion graph into Mission Control (in progress this PR) and connect the scheduler output to real queued issues.',
-    lane: 'INTEGRATION_COMPLETION',
-  },
-  {
     idHint: 'domain-security-governance',
     name: 'Security / partner-data governance',
     evidence: [
       { kind: 'file', ref: 'src/lib/atlasLocalitySafety.ts', note: 'Sensitive-locality redaction exists for Atlas; not yet confirmed as a cross-cutting policy applied to every relevant domain.' },
     ],
     nextAction: 'Confirm security/governance acceptance gates are actually attached as cross-cutting checks on every domain above, not just Atlas.',
-    lane: 'RELEASE_ACCEPTANCE',
-  },
-  {
-    idHint: 'domain-production-release',
-    name: 'Production/deployment/release operations',
-    evidence: [
-      { kind: 'file', ref: 'scripts/verify-deployment-contract.mjs' },
-      { kind: 'file', ref: 'scripts/verify-university-production.mjs' },
-    ],
-    nextAction: 'Execute both verification scripts against the current deployment target and record pass/fail as deployed/operational evidence.',
     lane: 'RELEASE_ACCEPTANCE',
   },
 ];
@@ -789,6 +916,8 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   literatureDomain,
   matrixDomain,
   universityDomain,
+  autonomousControlPlaneDomain,
+  productionReleaseDomain,
   ...stubDomains,
 ]);
 

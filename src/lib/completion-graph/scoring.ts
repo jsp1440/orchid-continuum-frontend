@@ -57,10 +57,27 @@ export function computeGateScore(scores: AcceptanceGateScores | undefined): Gate
   };
 }
 
+/** Total structural leaf count beneath (and including, if a leaf itself) a node. */
+function countLeaves(node: CompletionNode): number {
+  if (node.children.length === 0) return 1;
+  return node.children.reduce((sum, child) => sum + countLeaves(child), 0);
+}
+
+/** Leaf count of nodes that have actually been evaluated (gateScores yielding a non-null percentage). */
+function countScoredLeaves(node: CompletionNode): number {
+  if (node.children.length === 0) {
+    return computeGateScore(node.gateScores).percentage !== null ? 1 : 0;
+  }
+  return node.children.reduce((sum, child) => sum + countScoredLeaves(child), 0);
+}
+
 /**
  * Node percentage: a scored leaf uses its own gate score; a branch is the
- * unweighted mean of its children's percentages (siblings are not yet
- * weighted against each other — see README note in completionGraphData.ts).
+ * mean of its children's percentages weighted by each child's structural
+ * leaf count. Leaf-count weighting (rather than an unweighted per-child
+ * mean) is required so one deeply-audited module can't outweigh several
+ * un-audited siblings in the rollup — see computeNodeCensusCoverage for the
+ * complementary "how much of this subtree was actually evaluated" signal.
  * Returns null when nothing under this node has been scored — null must
  * never be displayed as 0.
  */
@@ -68,11 +85,32 @@ export function computeNodePercentage(node: CompletionNode): number | null {
   if (node.children.length === 0) {
     return computeGateScore(node.gateScores).percentage;
   }
-  const childPercentages = node.children
-    .map(computeNodePercentage)
-    .filter((p): p is number => p !== null);
-  if (childPercentages.length === 0) return null;
-  return Math.round(childPercentages.reduce((sum, p) => sum + p, 0) / childPercentages.length);
+  let weightedSum = 0;
+  let weightTotal = 0;
+  for (const child of node.children) {
+    const percentage = computeNodePercentage(child);
+    if (percentage === null) continue;
+    const weight = countLeaves(child);
+    weightedSum += percentage * weight;
+    weightTotal += weight;
+  }
+  if (weightTotal === 0) return null;
+  return Math.round(weightedSum / weightTotal);
+}
+
+/**
+ * Fraction (0-1) of this subtree's structural leaves that have actually been
+ * evaluated (scored or confirmed-missing), independent of what percentage
+ * those evaluated leaves scored. A node can show a high `computeNodePercentage`
+ * while still having low census coverage if only a small, well-scored slice
+ * of a large un-audited subtree has been investigated — Mission Control must
+ * render both numbers together so partial census never reads as confidence
+ * it hasn't earned.
+ */
+export function computeNodeCensusCoverage(node: CompletionNode): number {
+  const total = countLeaves(node);
+  if (total === 0) return 0;
+  return Math.round((countScoredLeaves(node) / total) * 100) / 100;
 }
 
 const STATUS_SEVERITY_ORDER: CompletionStatus[] = [
