@@ -42,6 +42,7 @@ const MORE_GROUPS: MoreGroup[] = [
       { label: 'Ecosystems',       route: '/ecosystems',   description: 'Seven communities of practice' },
       { label: 'Conservation Hub', route: '/conservation', description: 'Organisations & project workspaces' },
       { label: 'Orchid Societies', route: '/societies',    description: 'Local chapters & member tools' },
+      { label: 'Orchids on screen', route: '/culture/orchids-on-screen', description: 'What a century of film made of them' },
     ],
   },
   {
@@ -53,6 +54,7 @@ const MORE_GROUPS: MoreGroup[] = [
         description: 'Open educational pathways on the knowledge graph',
       },
       { label: 'Classroom',           route: '/classroom',  description: 'Teacher dashboards' },
+      { label: 'Judging practice',    route: '/education/judging-practice', description: 'Score a rubric sheet criterion by criterion' },
       { label: 'Glossary & Physiology', route: '/education', description: 'BloomBot · glossary · physiology' },
     ],
   },
