@@ -49,6 +49,12 @@ jobs:
             --max-turns 2
             --allowedTools "Read"
 
+      - name: Diagnose the Claude run
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node scripts/diagnose-claude-run.mjs
+
   recover:
     needs: [inspect, canary]
     if: always() && needs.inspect.result == 'success' && needs.inspect.outputs.count != '0' && needs.canary.result == 'success'

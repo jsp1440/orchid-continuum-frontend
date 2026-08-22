@@ -228,6 +228,11 @@ jobs:
             --max-turns 30
             --allowedTools "Read,Bash(git diff:*),Bash(git status:*),Bash(git log:*),Bash(git ls-files:*),Bash(gh issue:*),Bash(gh pr:*),Bash(gh run:*)"
 
+      - name: Diagnose the Claude run
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node scripts/diagnose-claude-run.mjs
   prepare:
     needs: [inventory, planner]
     if: always() && needs.inventory.result == 'success'

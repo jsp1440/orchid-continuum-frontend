@@ -1,0 +1,163 @@
+#!/usr/bin/env node
+/**
+ * Classify why a claude-code-action step failed.
+ *
+ * The action hides its SDK output ("full output hidden for security"), so an
+ * autonomous job that dies on a provider error reports only
+ * `Claude execution failed: result is_error:true`. That is not diagnosable: a
+ * billing boundary, a revoked key, a permissions problem and a rate limit all
+ * look identical from the workflow log, and every one of them needs a different
+ * response.
+ *
+ * This reads the execution log the action leaves behind and prints the
+ * classification fields only. It never prints the transcript (which is what the
+ * action is withholding), and never prints the API key — only whether one was
+ * present and well-formed.
+ *
+ * Exits 0 unconditionally. It is a diagnostic, not a gate: a non-zero exit here
+ * would mask the real step's failure, and a crash in the diagnostic must never
+ * be mistaken for a product failure.
+ */
+
+import { readFileSync } from "node:fs";
+
+const LOG_PATH =
+  process.env.CLAUDE_EXECUTION_LOG ?? "/home/runner/work/_temp/claude-execution-output.json";
+
+/** Classification of a provider failure, keyed on the HTTP status the SDK reported. */
+function classify(apiErrorStatus, message) {
+  const text = String(message ?? "").toLowerCase();
+  if (apiErrorStatus === 400 && text.includes("credit balance")) {
+    return {
+      cause: "ANTHROPIC_CREDIT_EXHAUSTED",
+      owner_action_required: true,
+      detail: "The Anthropic account has insufficient credit. Repository-side changes cannot fix this.",
+    };
+  }
+  if (apiErrorStatus === 401) {
+    return {
+      cause: "ANTHROPIC_AUTH_REJECTED",
+      owner_action_required: true,
+      detail: "The API key was rejected. Rotate or re-add the ANTHROPIC_API_KEY secret.",
+    };
+  }
+  if (apiErrorStatus === 403) {
+    return {
+      cause: "ANTHROPIC_PERMISSION_DENIED",
+      owner_action_required: true,
+      detail: "The key authenticated but is not permitted to use this model or endpoint.",
+    };
+  }
+  if (apiErrorStatus === 429) {
+    return {
+      cause: "ANTHROPIC_RATE_LIMITED",
+      owner_action_required: false,
+      detail: "Rate limited. A later re-run may succeed without any change.",
+    };
+  }
+  if (typeof apiErrorStatus === "number" && apiErrorStatus >= 500) {
+    return {
+      cause: "ANTHROPIC_PROVIDER_ERROR",
+      owner_action_required: false,
+      detail: "Provider-side error. A later re-run may succeed without any change.",
+    };
+  }
+  if (apiErrorStatus === undefined || apiErrorStatus === null) {
+    return {
+      cause: "NO_PROVIDER_ERROR_REPORTED",
+      owner_action_required: false,
+      detail: "The run failed without an API error status. Treat as a workflow or prompt failure, not a provider outage.",
+    };
+  }
+  return {
+    cause: "UNCLASSIFIED_PROVIDER_ERROR",
+    owner_action_required: false,
+    detail: `Unrecognised API error status ${apiErrorStatus}.`,
+  };
+}
+
+/** Reports key presence and shape. Never the value. */
+function keyShape() {
+  const key = process.env.ANTHROPIC_API_KEY ?? "";
+  if (!key) return "absent";
+  if (!key.startsWith("sk-ant-")) return `present, unexpected prefix, length ${key.length}`;
+  return `present, well-formed, length ${key.length}`;
+}
+
+function findResultRecord(parsed) {
+  const records = Array.isArray(parsed) ? parsed : [parsed];
+  // Last result record wins: a retried run appends rather than replacing.
+  for (let i = records.length - 1; i >= 0; i -= 1) {
+    const record = records[i];
+    if (record && typeof record === "object" && record.type === "result") return record;
+  }
+  return null;
+}
+
+function main() {
+  let raw;
+  try {
+    raw = readFileSync(LOG_PATH, "utf8");
+  } catch {
+    console.log("::warning::claude run diagnosis: no execution log at " + LOG_PATH);
+    console.log("Nothing to classify — the action may have failed before invoking the SDK.");
+    console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    console.log("::warning::claude run diagnosis: execution log is not valid JSON");
+    console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    return;
+  }
+
+  const result = findResultRecord(parsed);
+  if (!result) {
+    console.log("::warning::claude run diagnosis: execution log contains no result record");
+    console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    return;
+  }
+
+  // `subtype` is "success" even on an api_error record, which is why reading it
+  // alone reports a passing run that never executed. is_error is the field that
+  // decides.
+  const isError = result.is_error === true;
+  const apiErrorStatus = result.api_error_status;
+  // Only surfaced on failure: on a successful run `.result` is the model's full
+  // output, which is exactly what the action withholds.
+  const message = isError ? (result.result ?? result.error ?? "") : "";
+
+  console.log("--- claude run diagnosis ---");
+  console.log(`is_error:           ${isError}`);
+  console.log(`subtype:            ${result.subtype ?? "(none)"}`);
+  console.log(`api_error_status:   ${apiErrorStatus ?? "(none)"}`);
+  console.log(`num_turns:          ${result.num_turns ?? "(none)"}`);
+  console.log(`total_cost_usd:     ${result.total_cost_usd ?? "(none)"}`);
+  console.log(`ANTHROPIC_API_KEY:  ${keyShape()}`);
+
+  if (!isError) {
+    console.log("verdict:            run completed without a reported error");
+    return;
+  }
+
+  const { cause, owner_action_required, detail } = classify(apiErrorStatus, message);
+  console.log(`cause:              ${cause}`);
+  console.log(`owner action:       ${owner_action_required ? "REQUIRED" : "not required"}`);
+  console.log(`detail:             ${detail}`);
+  if (message) console.log(`provider message:   ${message}`);
+
+  if (owner_action_required) {
+    console.log(`::warning::Claude runtime blocked by an owner-only boundary: ${cause}. ${detail}`);
+  }
+}
+
+// Only run when invoked as a script. Importing this module (the classifier is
+// unit-tested) must not emit workflow diagnostics into the test output.
+if (process.argv[1] && process.argv[1].endsWith("diagnose-claude-run.mjs")) {
+  main();
+}
+
+export { classify, findResultRecord };
