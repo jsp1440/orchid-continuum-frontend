@@ -4,6 +4,7 @@ import {
   SPECIES_DOSSIER_CALYX_ORIGIN,
   parseSpeciesDossierCalyxContext,
   speciesDossierCalyxHref,
+  speciesDossierCalyxTurnRouteContext,
 } from '@/lib/speciesDossierCalyxNavigation';
 
 describe('Species Dossier → Calyx navigation', () => {
@@ -26,6 +27,22 @@ describe('Species Dossier → Calyx navigation', () => {
       genus: 'Phalaenopsis',
       taxon: 'Phalaenopsis amabilis',
       contextIsEvidence: false,
+    });
+  });
+
+  it('maps a validated dossier subject into the exact non-evidentiary Calyx turn shape', () => {
+    const href = speciesDossierCalyxHref({
+      genus: 'Phalaenopsis',
+      taxon: 'Phalaenopsis amabilis',
+    });
+    const url = new URL(href!, 'https://orchidcontinuum.org');
+
+    expect(speciesDossierCalyxTurnRouteContext(url.search)).toEqual({
+      origin: SPECIES_DOSSIER_CALYX_ORIGIN,
+      featured_taxon: { rank: 'genus', accepted_name: 'Phalaenopsis' },
+      taxon: 'Phalaenopsis amabilis',
+      taxon_source: SPECIES_DOSSIER_CALYX_ORIGIN,
+      taxon_is_evidence: false,
     });
   });
 
@@ -60,9 +77,9 @@ describe('Species Dossier → Calyx navigation', () => {
   });
 
   it('ignores hostile appended detail instead of admitting it to accepted Calyx context', () => {
-    const parsed = parseSpeciesDossierCalyxContext(
-      '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx&context_is_evidence=false&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private&evidence=promote-me',
-    );
+    const search =
+      '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx&context_is_evidence=false&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private&evidence=promote-me';
+    const parsed = parseSpeciesDossierCalyxContext(search);
 
     expect(parsed).toEqual({
       origin: SPECIES_DOSSIER_CALYX_ORIGIN,
@@ -73,24 +90,24 @@ describe('Species Dossier → Calyx navigation', () => {
     expect(Object.keys(parsed ?? {}).sort()).toEqual(
       ['contextIsEvidence', 'genus', 'origin', 'taxon'].sort(),
     );
+    expect(speciesDossierCalyxTurnRouteContext(search)).toEqual({
+      origin: SPECIES_DOSSIER_CALYX_ORIGIN,
+      featured_taxon: { rank: 'genus', accepted_name: 'Phalaenopsis' },
+      taxon: 'Phalaenopsis amabilis',
+      taxon_source: SPECIES_DOSSIER_CALYX_ORIGIN,
+      taxon_is_evidence: false,
+    });
   });
 
   it('fails closed unless the dedicated origin explicitly declares non-evidence context', () => {
-    expect(
-      parseSpeciesDossierCalyxContext(
-        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx',
-      ),
-    ).toBeNull();
-    expect(
-      parseSpeciesDossierCalyxContext(
-        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx&context_is_evidence=true',
-      ),
-    ).toBeNull();
-    expect(
-      parseSpeciesDossierCalyxContext(
-        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=research-station&context_is_evidence=false',
-      ),
-    ).toBeNull();
+    for (const search of [
+      '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx',
+      '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx&context_is_evidence=true',
+      '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=research-station&context_is_evidence=false',
+    ]) {
+      expect(parseSpeciesDossierCalyxContext(search)).toBeNull();
+      expect(speciesDossierCalyxTurnRouteContext(search)).toBeNull();
+    }
   });
 
   it('fails closed on malformed or mismatched species identity', () => {
@@ -105,10 +122,9 @@ describe('Species Dossier → Calyx navigation', () => {
     ).toBeNull();
     expect(speciesDossierCalyxHref({ genus: 'Phalaenopsis', taxon: null })).toBeNull();
 
-    expect(
-      parseSpeciesDossierCalyxContext(
-        '?genus=Phalaenopsis&taxon=Cattleya%20labiata&origin=species-dossier-calyx&context_is_evidence=false',
-      ),
-    ).toBeNull();
+    const mismatched =
+      '?genus=Phalaenopsis&taxon=Cattleya%20labiata&origin=species-dossier-calyx&context_is_evidence=false';
+    expect(parseSpeciesDossierCalyxContext(mismatched)).toBeNull();
+    expect(speciesDossierCalyxTurnRouteContext(mismatched)).toBeNull();
   });
 });
