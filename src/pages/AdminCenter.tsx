@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Sprout,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 
@@ -23,7 +24,7 @@ type StatusCard = {
   value: string;
   label: string;
   detail: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
 };
 
 type ActionCard = {
@@ -31,7 +32,7 @@ type ActionCard = {
   description: string;
   status: string;
   href?: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
 };
 
 const STATUS_CARDS: StatusCard[] = [

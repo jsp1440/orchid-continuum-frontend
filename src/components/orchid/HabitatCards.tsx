@@ -1,5 +1,6 @@
 import React from 'react';
 import { ArrowRight, CloudFog, Droplets, Leaf, Mountain, Trees, Waves } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 type HabitatCard = {
@@ -7,7 +8,7 @@ type HabitatCard = {
   subtitle: string;
   description: string;
   href: string;
-  icon: React.ComponentType<{ className?: string; strokeWidth?: number }>;
+  icon: LucideIcon;
 };
 
 const HABITATS: HabitatCard[] = [

@@ -94,11 +94,25 @@ describe('featured taxon source integrity', () => {
     expect(close).toContain('to={researchHref}');
     expect(close).not.toContain('to="/research"');
     expect(navigation).toContain('/research?genus=');
-    expect(research).toContain("searchParams.get('origin') === FEATURED_TAXON_ORIGIN");
+    // Pinned to the governed contract, not to one hand-rolled origin comparison.
+    // ResearchCenter previously re-derived the rule inline, which recognised
+    // only this origin and truncated the genus instead of validating it; the
+    // shared parser now decides, so the assertion follows it there.
+    expect(research).toContain('parseResearchRouteContext');
+    expect(research).not.toContain("searchParams.get('origin') ===");
     expect(research).toContain('is preserved here as navigation context');
     expect(research).toContain('It is not scientific evidence');
     expect(research).toContain('genus: routeGenus');
     expect(app).toContain('<Route path="/research"');
+  });
+
+  it('does not auto-select an unrelated persisted project for a featured-genus handoff', () => {
+    const research = source('pages/ResearchCenter.tsx');
+    expect(research).toContain('const featuredGenusWithoutProject = Boolean(routeGenus && !projectId)');
+    expect(research).toContain("featuredGenusWithoutProject ? 'No persisted investigation selected'");
+    expect(research).toContain('The Research Station will not auto-select');
+    expect(research).toContain('featuredGenusWithoutProject ? (');
+    expect(research).toContain('<ResearchStationWorkbench projectId={projectId} />');
   });
 
   it('keeps the public footer on live visitor routes and out of operator-only workspaces', () => {

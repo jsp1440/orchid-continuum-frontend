@@ -117,7 +117,7 @@ function parseCalyxArtifacts(content: string): { prose: string; artifacts: Calyx
                 if (!Number.isFinite(lat) || !Number.isFinite(lon) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
                 return { label: typeof row.label === "string" ? row.label : undefined, lat, lon };
               })
-              .filter((point): point is { label?: string; lat: number; lon: number } => Boolean(point))
+              .filter((point): point is NonNullable<typeof point> => point !== null)
           : [];
         if (points.length) {
           artifacts.push({ kind: "map", title: String(value.title ?? "Geographic occurrence plot"), points });

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Globe2, Sprout, GraduationCap, FlaskConical, ShieldCheck, ArrowUpRight,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /**
  * Choose Your Portal
@@ -24,7 +25,7 @@ type Portal = {
   title: string;
   acronym?: string;          // expanded form, shown on hover
   blurb: string;
-  Icon: React.ComponentType<{ className?: string }>;
+  Icon: LucideIcon;
   route?: string;
   external?: string;
   accent: string;            // glow / underline tint

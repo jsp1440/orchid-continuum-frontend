@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Leaf, Compass, BookOpen, ArrowUpRight } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 /**
  * ExploreThreeWays — three doors into the Continuum.
@@ -21,7 +22,7 @@ type Door = {
   invitation: string;
   description: string;
   route: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: LucideIcon;
   accent: string;
   cta: string;
 };

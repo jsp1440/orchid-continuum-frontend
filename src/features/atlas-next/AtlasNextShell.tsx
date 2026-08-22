@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { atlasNextResearchHref } from './researchHandoff';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import AtlasGlobe, { type GlobeMark } from './AtlasGlobe';
 import OccurrenceCard from './OccurrenceCard';
@@ -318,6 +319,21 @@ const AtlasNextShell: React.FC = () => {
   const onCameraChange = useCallback((v: { lat: number; lng: number; distance: number }) => {
     setView(v);
   }, []);
+
+  // Atlas -> Research Station, on the active genus only.
+  //
+  // The builder decides whether a handoff is possible: it returns null for an
+  // absent or malformed genus, so the affordance simply does not appear rather
+  // than offering a link that the Research parser would refuse. Nothing about
+  // the selected points travels - no occurrence id, coordinate, locality,
+  // collector, catalogue number or elevation has a channel here.
+  // `genus` is nullable and this project has strictNullChecks off, so the null
+  // case is guarded here rather than relying on the builder's coercion to catch
+  // it silently.
+  const researchHref = useMemo(
+    () => (genus ? atlasNextResearchHref({ genus }) : null),
+    [genus],
+  );
 
   const protectedCount = context.visible.protectedRecords;
   const impreciseCount = context.visible.impreciseRecords;
@@ -710,6 +726,14 @@ const AtlasNextShell: React.FC = () => {
           >
             What do we know about this range?
           </button>
+        )}
+        {researchHref && (
+          <Link
+            to={researchHref}
+            className="min-h-[40px] rounded-full border border-emerald-300/35 bg-emerald-300/10 px-4 text-[12px] leading-[40px] text-[#e8e6df] backdrop-blur transition-colors hover:border-emerald-300/70 hover:bg-emerald-300/20"
+          >
+            Continue in Research Station
+          </Link>
         )}
         <button
           type="button"

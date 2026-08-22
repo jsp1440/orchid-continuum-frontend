@@ -55,7 +55,7 @@ function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
 }
 
-const Badge = ({ children }: { children: string }) => (
+const Badge = ({ children }: { children: React.ReactNode }) => (
   <span className="rounded-full border border-emerald-300/25 bg-emerald-300/[0.07] px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-100">
     {children}
   </span>

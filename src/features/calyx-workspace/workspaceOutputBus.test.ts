@@ -123,3 +123,49 @@ describe('workspace output contract', () => {
     expect(emitWorkspaceOutputs(undefined)).toBe(0);
   });
 });
+
+describe('server payloads never reach the bus unvalidated', () => {
+  // calyxService used to assert `payload as WorkspaceOutputPayload` when
+  // converting a server output. These pin the property that assertion was
+  // standing in for: the payload union is enforced by a real check, per kind,
+  // so a malformed server payload is rejected rather than dispatched.
+  it('rejects a text output whose payload is missing its body', () => {
+    expect(() =>
+      validateWorkspaceOutput({
+        id: 'out:1',
+        kind: 'text',
+        title: 'Synthesis',
+        created_at: '2026-08-22T00:00:00Z',
+        provenance: { source_module: 'calyx', evidence_status: 'derived' },
+        payload: {},
+      }),
+    ).toThrow();
+  });
+
+  it('rejects a payload shaped for a different kind than the output declares', () => {
+    // An image payload under kind:'text' is exactly what an unchecked cast
+    // would have waved through.
+    expect(() =>
+      validateWorkspaceOutput({
+        id: 'out:2',
+        kind: 'text',
+        title: 'Synthesis',
+        created_at: '2026-08-22T00:00:00Z',
+        provenance: { source_module: 'calyx', evidence_status: 'derived' },
+        payload: { src: 'https://example.org/a.jpg', alt: 'an orchid' },
+      }),
+    ).toThrow();
+  });
+
+  it('accepts a well-formed text output', () => {
+    const output = validateWorkspaceOutput({
+      id: 'out:3',
+      kind: 'text',
+      title: 'Synthesis',
+      created_at: '2026-08-22T00:00:00Z',
+      provenance: { source_module: 'calyx', evidence_status: 'derived' },
+      payload: { body: 'Seasonal leaf persistence tracks thermal niche.' },
+    });
+    expect(output.kind).toBe('text');
+  });
+});
