@@ -9,6 +9,7 @@ import {
   researchReturnHref,
   seedResearchCalyxPersistence,
 } from "@/lib/researchCalyxRouteBridge";
+import { parseSpeciesDossierCalyxContext } from "@/lib/speciesDossierCalyxNavigation";
 import CalyxWorkspace from "@/pages/CalyxWorkspace";
 
 export default function AtlasAwareCalyxRoute() {
@@ -19,6 +20,10 @@ export default function AtlasAwareCalyxRoute() {
   );
   const researchContext = useMemo(
     () => parseResearchCalyxRouteBridge(location.search),
+    [location.search],
+  );
+  const dossierContext = useMemo(
+    () => parseSpeciesDossierCalyxContext(location.search),
     [location.search],
   );
 
@@ -36,6 +41,43 @@ export default function AtlasAwareCalyxRoute() {
 
   return (
     <>
+      {/* A dossier arrival is not a Research project, and saying "Project not
+          supplied" at someone who never had one describes a missing thing that
+          was never expected. Each governed origin gets the banner that is true
+          of it. */}
+      {dossierContext ? (
+        <section
+          aria-label="Species Dossier handoff context"
+          className="border-b bg-muted/50 px-5 py-3 text-foreground"
+        >
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Continuing from the Species Dossier
+              </p>
+              <p className="mt-1 text-sm">
+                <strong>Subject:</strong> <i>{dossierContext.taxon}</i>
+              </p>
+              {/* Back to the genus listing, not /species/<binomial>: a dossier
+                  is addressed by taxonomy_id, which this handoff deliberately
+                  does not carry. A link built from the binomial would 404. */}
+              <Link
+                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                to={`/species?genus=${encodeURIComponent(dossierContext.genus)}`}
+              >
+                Back to {dossierContext.genus} species
+              </Link>
+            </div>
+            <p className="max-w-md text-xs text-muted-foreground">
+              The species is bounded navigation context carried from the dossier — it says what you
+              were reading, not what has been established. The dossier's evidence, receipts and
+              conclusions stayed in the dossier, and nothing Calyx says here becomes evidence by
+              being said.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       {fromAtlas ? (
         <section
           aria-label="Atlas handoff context"
@@ -83,10 +125,18 @@ export default function AtlasAwareCalyxRoute() {
                   <strong>Subject:</strong> <i>{researchContext.taxon}</i>
                 </p>
               ) : null}
-              <p className="mt-1 text-xs text-muted-foreground">
-                Project {researchContext.projectId ?? "not supplied"}
-                {researchContext.conversationId ? ` · conversation ${researchContext.conversationId}` : ""}
-              </p>
+              {researchContext.projectId || researchContext.conversationId ? (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {researchContext.projectId ? `Project ${researchContext.projectId}` : "No project"}
+                  {researchContext.conversationId ? ` · conversation ${researchContext.conversationId}` : ""}
+                </p>
+              ) : (
+                // An investigation that has not been persisted as a project is a
+                // real state, not a missing field. Do not manufacture one.
+                <p className="mt-1 text-xs text-muted-foreground">
+                  No persisted research project — this is a subject carried between modules.
+                </p>
+              )}
               <Link
                 className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
                 to={researchReturnHref(researchContext.projectId)}

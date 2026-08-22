@@ -11,6 +11,7 @@ import {
   ImageOff,
   FileCheck2,
   FlaskConical,
+  MessagesSquare,
 } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
@@ -30,6 +31,7 @@ import {
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
 import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
+import { speciesDossierCalyxHref } from '@/lib/speciesDossierCalyxNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -143,6 +145,15 @@ const SpeciesDossier: React.FC = () => {
     taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
   });
 
+  // Straight into Calyx on this exact species. The producer fails closed unless
+  // it gets a bounded binomial that agrees with the genus, so a dossier whose
+  // identity is incomplete simply does not offer the action rather than opening
+  // a conversation about the wrong organism.
+  const calyxHref = speciesDossierCalyxHref({
+    genus: dossier?.identity.genus ?? data?.genus,
+    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
+  });
+
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
         taxonId: dossier.identity.taxon_id || taxonomyId,
@@ -212,6 +223,14 @@ const SpeciesDossier: React.FC = () => {
                     className="mt-3 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full border border-[#c9a24a]/50 bg-[#c9a24a]/[0.08] text-[#c9a24a] hover:bg-[#c9a24a]/[0.14] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
                   >
                     <FlaskConical className="h-4 w-4" /> Continue in Research
+                  </Link>
+                )}
+                {calyxHref && (
+                  <Link
+                    to={calyxHref}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full border border-[#c9a24a]/50 bg-[#c9a24a]/[0.08] text-[#c9a24a] hover:bg-[#c9a24a]/[0.14] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
+                  >
+                    <MessagesSquare className="h-4 w-4" /> Ask Calyx
                   </Link>
                 )}
                 {matrixHref && (
