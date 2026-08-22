@@ -89,6 +89,15 @@ export type CalyxVerificationResult = {
     missionId: string;
     reasoningLedgerId: string | null;
     reasoningLedgerVersion: number | null;
+    /**
+     * The mission's own reported confidence.
+     *
+     * Null when the backend supplied none, which is not zero. This is the
+     * mission's self-assessment, not a probability that the claim is true and
+     * not a measure of evidence strength; it is surfaced because withholding a
+     * value the system computed is its own kind of misreporting.
+     */
+    missionConfidence: number | null;
     sourceRevisionIds: string[];
     reviewStatus: string;
     publicationEligible: boolean;
@@ -338,7 +347,7 @@ export function checkCalyxMissionClaim(
       "Reasoning audit trail",
       ledgerPresent ? "pass" : "fail",
       ledgerPresent
-        ? "A versioned reasoning ledger exists for this mission."
+        ? "A versioned reasoning ledger is recorded. Its contents are not retrievable from this surface, so the reasoning itself has not been inspected here — only its existence and version."
         : "No versioned reasoning ledger is attached to this mission.",
     ),
     check(
@@ -423,6 +432,7 @@ export function checkCalyxMissionClaim(
       missionId: mission.mission_id,
       reasoningLedgerId: mission.reasoning_ledger?.ledger_id ?? null,
       reasoningLedgerVersion: mission.reasoning_ledger?.version ?? null,
+      missionConfidence: typeof mission.confidence === "number" ? mission.confidence : null,
       sourceRevisionIds: [...new Set(evidence.map((item) => item.sourceRevisionId).filter((value): value is string => Boolean(value)))],
       reviewStatus: mission.review_status,
       publicationEligible: mission.publication_eligibility?.eligible === true,
