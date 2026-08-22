@@ -38,6 +38,7 @@ import AppliedAIDataScienceLab from "./pages/AppliedAIDataScienceLab";
 import UniversityReviewerWorkspace from "./pages/UniversityReviewerWorkspace";
 import Classroom from "./pages/Classroom";
 import ScientificMethodLab from "./pages/ScientificMethodLab";
+import JudgingPractice from "./pages/JudgingPractice";
 import Societies from "./pages/Societies";
 import OrganizationProfile from "./pages/OrganizationProfile";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
@@ -159,6 +160,7 @@ const App = () => (
                   <Route path="/university/applied-ai-data-science" element={<AppliedAIDataScienceLab />} />
                   <Route path="/university/review" element={<UniversityReviewerWorkspace />} />
                   <Route path="/classroom" element={<Classroom />} />
+                  <Route path="/education/judging-practice" element={<JudgingPractice />} />
                   <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
