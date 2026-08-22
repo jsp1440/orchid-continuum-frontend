@@ -144,3 +144,104 @@ describe("Check Calyx mission claim", () => {
     expect(result.checks.find((item) => item.id === "evidence_gaps")?.status).toBe("needs_review");
   });
 });
+
+/**
+ * The objections a mission raises against itself.
+ *
+ * The Workbench exists to answer "why should I believe this claim". The mission
+ * already answers a large part of that: it reports whether it passed structural
+ * validation, whether it was blocked mid-run, and whether it may be published —
+ * each with the reasons the backend supplied. Those reasons were computed,
+ * returned, and then discarded before they reached the scientist.
+ *
+ * The canonical Phalaenopsis fixture demonstrates it unchanged: it is already
+ * ineligible for publication because HUMAN_REVIEW_REQUIRED, and that reason
+ * appeared nowhere.
+ */
+describe("stated objections", () => {
+  it("surfaces the publication blocker the fixture already carries", () => {
+    const result = checkCalyxMissionClaim(mission(), conclusion);
+    expect(result.objections.publicationEligible).toBe(false);
+    expect(result.objections.publication).toEqual(["HUMAN_REVIEW_REQUIRED"]);
+  });
+
+  it("keeps validation, run and publication objections apart", () => {
+    // The backend distinguishes them, so the Workbench must not merge them into
+    // one undifferentiated list of complaints.
+    const result = checkCalyxMissionClaim(
+      mission({
+        validation: { valid: false, blockers: ["EVIDENCE_NOT_SOURCE_BOUND"] },
+        blockers: [{ code: "RETRIEVAL_TIMEOUT", stage: "evidence_retrieval", detail: "index unavailable" }],
+      }),
+      conclusion,
+    );
+
+    expect(result.objections.validation).toEqual(["EVIDENCE_NOT_SOURCE_BOUND"]);
+    expect(result.objections.mission).toEqual([
+      { code: "RETRIEVAL_TIMEOUT", stage: "evidence_retrieval", detail: "index unavailable" },
+    ]);
+    expect(result.objections.publication).toEqual(["HUMAN_REVIEW_REQUIRED"]);
+  });
+
+  it("reports an unexplained failure as unexplained, not as no objection", () => {
+    // A mission that fails validation and says nothing about why is less
+    // trustworthy than one that explains itself. `stated` is what lets the UI
+    // say so rather than rendering an empty list.
+    const result = checkCalyxMissionClaim(
+      mission({
+        validation: { valid: false, blockers: [] },
+        publication_eligibility: { eligible: false, automatic_publication: false, blockers: [] },
+      }),
+      conclusion,
+    );
+
+    expect(result.objections.validationValid).toBe(false);
+    expect(result.objections.stated).toBe(false);
+    expect(result.objections.validation).toEqual([]);
+  });
+
+  it("drops malformed empty reasons rather than rendering blank objections", () => {
+    const result = checkCalyxMissionClaim(
+      mission({
+        validation: { valid: false, blockers: ["", "   ", "REAL_REASON"] },
+        blockers: [{ code: "", stage: "", detail: "" }],
+      }),
+      conclusion,
+    );
+
+    expect(result.objections.validation).toEqual(["REAL_REASON"]);
+    // A blocker with nothing in it is a malformed field, not an objection.
+    expect(result.objections.mission).toEqual([]);
+  });
+
+  it("reports no objection when the mission genuinely raises none", () => {
+    const result = checkCalyxMissionClaim(
+      mission({
+        validation: { valid: true, blockers: [] },
+        publication_eligibility: { eligible: true, automatic_publication: false, blockers: [] },
+        blockers: [],
+      }),
+      conclusion,
+    );
+
+    expect(result.objections.validationValid).toBe(true);
+    expect(result.objections.publicationEligible).toBe(true);
+    expect(result.objections.stated).toBe(false);
+  });
+
+  it("tolerates a backend that omits the objection fields entirely", () => {
+    // Older backends. Absent must not throw, and must not be read as "valid".
+    const result = checkCalyxMissionClaim(
+      mission({
+        validation: undefined as never,
+        publication_eligibility: undefined as never,
+        blockers: undefined as never,
+      }),
+      conclusion,
+    );
+
+    expect(result.objections.validationValid).toBe(false);
+    expect(result.objections.publicationEligible).toBe(false);
+    expect(result.objections.mission).toEqual([]);
+  });
+});
