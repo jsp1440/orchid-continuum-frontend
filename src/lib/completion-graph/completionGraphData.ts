@@ -898,6 +898,340 @@ const securityGovernanceDomain = branch({
   ]),
 ]);
 
+// ─── Calyx reasoning + Verification Workbench ──────────────────────────────
+// Real evidence traced this pass: /speak-with-calyx -> CalyxWorkspace.tsx ->
+// ScientificSynthesis.tsx -> CalyxVerificationWorkbench.tsx ->
+// checkCalyxMissionClaim() in calyxVerification.ts (confirmed reachable by
+// grep, not orphaned). Separately, /calyx-science and
+// /mission-control/science both route to CalyxScienceStatus.tsx, which is
+// owner-session-gated (createOwnerSession/validateOwnerSession) and fails
+// closed on a non-OK HTTP response from any of its eight /api/science/*
+// calls (readJson throws, no fabricated fallback data).
+
+const calyxConversationalReasoningGate: CompletionNode = {
+  id: 'cap-calyx-conversational-reasoning',
+  parentId: 'module-calyx-verification-core',
+  name: 'Calyx conversational reasoning (Speak with Calyx)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/speak-with-calyx' },
+    { kind: 'file', ref: 'src/pages/CalyxWorkspace.tsx' },
+    { kind: 'file', ref: 'src/lib/calyxConversation.ts' },
+    { kind: 'file', ref: 'src/lib/calyxService.ts', note: 'askCalyx() posts to the real /api/calyx/speak/conversations endpoint, not a client-side mock.' },
+    { kind: 'test', ref: 'src/lib/calyxConversation.test.ts' },
+    { kind: 'test', ref: 'src/lib/calyxService.test.ts' },
+    { kind: 'test', ref: 'src/lib/calyxService.questionContext.test.ts' },
+    { kind: 'test', ref: 'src/lib/calyxConversation.headerCollision.test.ts' },
+  ],
+  nextAction: 'Confirm speech input/output and document-upload workspace paths against a live backend, then run a browser pass (3 of 6 gate categories evaluated, ~60% weight coverage).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const calyxVerificationWorkbenchGate: CompletionNode = {
+  id: 'cap-calyx-verification-workbench',
+  parentId: 'module-calyx-verification-core',
+  name: 'Verification Workbench (checkCalyxMissionClaim)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/components/calyx/ScientificSynthesis.tsx', note: 'Renders CalyxVerificationWorkbench from CalyxWorkspace -- confirmed reachable from /speak-with-calyx, not orphaned.' },
+    { kind: 'file', ref: 'src/components/calyx/CalyxVerificationWorkbench.tsx' },
+    { kind: 'file', ref: 'src/lib/calyxVerification.ts', note: 'checkCalyxMissionClaim() structurally checks sourceRevisionId, anchorIds, locator, excerpt, and content hash per evidence item and fails/needs_review closed when any are absent -- genuine provenance enforcement, not a cosmetic pass-through.' },
+    { kind: 'test', ref: 'src/lib/calyxVerification.test.ts' },
+    { kind: 'test', ref: 'src/components/calyx/ScientificSynthesis.test.tsx' },
+    { kind: 'test', ref: 'src/lib/naoccGovernedVerificationContinuity.test.ts', note: 'Cross-checks checkCalyxMissionClaim against buildCalyxTurnContext and researchStationCalyxHref together, confirming Research identity stays non-evidentiary while Calyx audits only governed evidence.' },
+  ],
+  nextAction: 'Run a live/browser pass auditing a real (not fixture) Calyx mission claim end to end (2 of 6 gate categories remain unevaluated: browser/e2e and deployed/operational).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const calyxScienceStatusGate: CompletionNode = {
+  id: 'cap-calyx-science-status-dashboard',
+  parentId: 'module-calyx-verification-core',
+  name: 'Calyx Science Status dashboard (owner-gated)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/calyx-science' },
+    { kind: 'route', ref: '/mission-control/science' },
+    { kind: 'file', ref: 'src/pages/CalyxScienceStatus.tsx' },
+    { kind: 'file', ref: 'src/lib/calyxScience.ts', note: 'fetchCalyxScienceDashboard() throws on any non-OK response across all eight /api/science/* calls -- fails closed, no fabricated department/gap/mission data on backend failure.' },
+    { kind: 'file', ref: 'src/lib/ownerOperationsConsole.ts', note: 'createOwnerSession/validateOwnerSession gate the dashboard; validateOwnerSession rejects sessions with authenticated:true but a missing/whitespace owner field.' },
+    { kind: 'test', ref: 'src/lib/ownerSessionVerification.test.ts' },
+    { kind: 'test', ref: 'src/lib/ownerControlVerification.test.ts' },
+  ],
+  nextAction: 'Run this dashboard against a live Calyx backend with a real owner session and record the science departments/gaps actually returned (3 of 6 gate categories remain unevaluated).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const calyxVerificationDomain = branch({
+  id: 'domain-calyx-verification',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Calyx reasoning + Verification Workbench',
+  type: 'domain',
+  nextAction: 'Execute the three live/browser passes noted on each capability; audit the Calyx voice/speech pipeline as a separate capability next pass.',
+}, [
+  branch({
+    id: 'module-calyx-verification-core',
+    parentId: 'domain-calyx-verification',
+    name: 'Calyx reasoning + verification core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [calyxConversationalReasoningGate, calyxVerificationWorkbenchGate, calyxScienceStatusGate]),
+]);
+
+// ─── Knowledge Graph ────────────────────────────────────────────────────────
+// Real evidence traced this pass: fetchGenusGraphEvidence() in
+// knowledgeGraph.ts calls the real backend contract
+// GET /api/knowledge-graph/genus/:genus and is consumed by GenusDetail.tsx,
+// DailyGenusGraphEvidence.tsx, and featuredTaxonContinuum.ts -- a genuine,
+// reachable backend-KG integration. Separately, /intelligence-graph and
+// /knowledge both route to the same IntelligenceGraph.tsx page, which calls
+// fetchIntelligenceGraph() in orchidContinuum.ts -- this does NOT call the
+// knowledge-graph backend at all; it builds a graph client-side from
+// species/atlas/mycorrhizal rows already loaded elsewhere. Two different
+// things are both reachable under the "Knowledge Graph" name and must not be
+// conflated. TheKnowledgeGraph.tsx (src/components/orchid/) was grepped for
+// importers and has none -- confirmed orphaned, not reachable from any route.
+
+const kgGenusEvidenceGate: CompletionNode = {
+  id: 'cap-kg-genus-evidence',
+  parentId: 'module-knowledge-graph-core',
+  name: 'Genus-scoped Knowledge Graph evidence (backend-integrated)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/knowledgeGraph.ts', note: 'fetchGenusGraphEvidence() calls GET /api/knowledge-graph/genus/:genus; normalizeGenusGraphEvidence() returns status "unavailable"/"not_found"/"invalid" rather than fabricating evidence on a malformed or failed response.' },
+    { kind: 'file', ref: 'src/pages/GenusDetail.tsx' },
+    { kind: 'file', ref: 'src/components/orchid/DailyGenusGraphEvidence.tsx' },
+    { kind: 'file', ref: 'src/lib/featuredTaxonContinuum.ts' },
+    { kind: 'test', ref: 'src/lib/knowledgeGraph.test.ts' },
+  ],
+  nextAction: 'Confirm real genus KG payloads render correctly on a live backend with a browser pass (3 of 6 gate categories evaluated).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const kgVisualizationGate: CompletionNode = {
+  id: 'cap-kg-visualization-graph',
+  parentId: 'module-knowledge-graph-core',
+  name: '/knowledge and /intelligence-graph visualization (client-derived, not backend-KG)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 0,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/knowledge' },
+    { kind: 'route', ref: '/intelligence-graph' },
+    { kind: 'file', ref: 'src/pages/IntelligenceGraph.tsx' },
+    { kind: 'file', ref: 'src/lib/orchidContinuum.ts', note: 'fetchIntelligenceGraph() builds nodes/edges client-side from loadSpeciesRows/loadAtlasRows/loadMycorrhizalRows -- confirmed by reading the implementation it never calls a knowledge-graph backend endpoint, unlike cap-kg-genus-evidence.' },
+    { kind: 'file', ref: 'src/components/orchid/TheKnowledgeGraph.tsx', note: 'Grepped for importers across src/: none found. Confirmed orphaned -- not reachable from any route.' },
+  ],
+  nextAction: 'Decide whether the routes named "Knowledge Graph" should surface real backend KG evidence (cap-kg-genus-evidence) instead of, or alongside, the current client-derived rollup; architectureContracts scored 0 because no KG-specific contract governs what this page actually renders.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const kgMissionControlAdapterGate: CompletionNode = {
+  id: 'cap-kg-mission-control-adapter',
+  parentId: 'module-knowledge-graph-core',
+  name: 'Knowledge Graph scientific-intelligence adapter (internal, Mission Control only)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 0,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: 0,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/scientific-intelligence/knowledge-graph/adapter.ts' },
+    { kind: 'file', ref: 'src/lib/mission-control/intelligentMissionControl.ts', note: 'Only consumer found via grep, same pattern as cap-literature-intelligence-adapter -- feeds Mission Control scoring, not exposed to /knowledge, /intelligence-graph, or the genus-evidence path.' },
+  ],
+  nextAction: 'Decide whether this adapter should feed the public /knowledge route or remains Mission-Control-internal telemetry, mirroring the same open question already recorded for the Literature adapter.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const knowledgeGraphDomain = branch({
+  id: 'domain-knowledge-graph',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Knowledge Graph',
+  type: 'domain',
+  nextAction: 'Resolve the client-derived-vs-backend-KG naming conflict on /knowledge and /intelligence-graph; run a live browser pass on genus-scoped KG evidence.',
+}, [
+  branch({
+    id: 'module-knowledge-graph-core',
+    parentId: 'domain-knowledge-graph',
+    name: 'Knowledge Graph core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [kgGenusEvidenceGate, kgVisualizationGate, kgMissionControlAdapterGate]),
+]);
+
+// ─── Conservatory / OASIS ───────────────────────────────────────────────────
+// Real evidence traced this pass: /conservatory/* is wrapped in
+// <ProtectedRoute> around MyConservatory.tsx, which performs real CRUD
+// against VITE_CALYX_API_URL for accessioned plants (QR identifiers,
+// passports). Its readiness gate (useConservatoryReadiness ->
+// GET /api/conservatory/readiness) fails closed with an explicit
+// "Collection entry remains safely blocked" message on any service error --
+// confirmed by reading the source, not assumed. /oacs (OACS.tsx) tries the
+// real /api/oacs/* endpoints first and falls back to data explicitly named
+// OACS_DEMO_SITES/OACS_DEMO_SNAPSHOTS with a visible "demo placeholders"
+// disclosure string -- honest about being a concept page per its own header
+// comment, never silently presenting demo data as live.
+
+const conservatoryCollectionGate: CompletionNode = {
+  id: 'cap-conservatory-collection',
+  parentId: 'module-conservatory-core',
+  name: 'Authenticated personal conservatory collection (plants, QR passports)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/conservatory/*' },
+    { kind: 'file', ref: 'src/pages/MyConservatory.tsx' },
+    { kind: 'file', ref: 'src/components/auth/ProtectedRoute.tsx', note: 'Confirmed by reading src/App.tsx: /conservatory/* is wrapped in ProtectedRoute, not publicly reachable without auth.' },
+    { kind: 'test', ref: 'src/pages/MyConservatory.test.tsx' },
+  ],
+  nextAction: 'Confirm plant CRUD and QR-identifier flows against a live backend and authenticated session with a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const conservatoryReadinessGate: CompletionNode = {
+  id: 'cap-conservatory-readiness-gate',
+  parentId: 'module-conservatory-core',
+  name: 'Collection-entry readiness gate (fail-closed)',
+  type: 'acceptance_gate',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'RELEASE_ACCEPTANCE',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/components/conservatory/ConservatoryReadiness.tsx', note: 'useConservatoryReadiness() calls GET /api/conservatory/readiness and shows "Collection entry remains safely blocked" on any fetch failure -- confirmed fail-closed, not fail-open, by reading the source.' },
+    { kind: 'test', ref: 'src/components/conservatory/ConservatoryReadiness.test.tsx' },
+  ],
+  nextAction: 'Confirm the readiness gate actually blocks collection entry end to end in a live browser session, including the /conservatory/readiness report route.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const oasisGreenhouseMonitoringGate: CompletionNode = {
+  id: 'cap-oasis-greenhouse-monitoring',
+  parentId: 'module-conservatory-core',
+  name: 'OASIS greenhouse environmental monitoring',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: 0,
+  },
+  evidence: [
+    { kind: 'route', ref: '/oacs' },
+    { kind: 'file', ref: 'src/pages/OACS.tsx', note: 'File\'s own header comment states this is a "concept page" demonstrating the future /api/oacs/* integration "until then" -- self-declared, not inferred.' },
+    { kind: 'file', ref: 'src/lib/oacs.ts', note: 'oacsApi calls real /api/oacs/sites, /sites/:id, /sites/:id/snapshot, /compare endpoints first; OACS_DEMO_SITES/OACS_DEMO_SNAPSHOTS are only used as fallback and are never relabeled as live -- confirmed honest by reading the source and its own "never marked as live" comment.' },
+  ],
+  nextAction: 'Implement the /api/oacs/* backend endpoints (owner/backend-team action, outside this frontend repo\'s authority) and re-score once real sensor data is reachable; deployedOperational scored 0 because the page currently confirms it is running the demo fallback, not live sensor data.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const conservatoryDomain = branch({
+  id: 'domain-conservatory',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Conservatory / OASIS',
+  type: 'domain',
+  nextAction: 'Run a live/browser pass on the authenticated collection and readiness gate; OASIS remains blocked on backend /api/oacs/* implementation.',
+}, [
+  branch({
+    id: 'module-conservatory-core',
+    parentId: 'domain-conservatory',
+    name: 'Conservatory / OASIS core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [conservatoryCollectionGate, conservatoryReadinessGate, oasisGreenhouseMonitoringGate]),
+]);
+
 // ─── Remaining initial inventory: recorded as domains, census pending ──────
 // Each entry below has at least one route/file existence check so "missing
 // evidence" is never silently treated as zero — but none have been scored,
@@ -925,18 +1259,6 @@ const STUB_DOMAINS: StubDomainSpec[] = [
     lane: 'PRODUCT_COMPLETION',
   },
   {
-    idHint: 'domain-calyx-verification',
-    name: 'Calyx reasoning + Verification Workbench',
-    evidence: [
-      { kind: 'route', ref: '/speak-with-calyx' },
-      { kind: 'file', ref: 'src/components/calyx/CalyxVerificationWorkbench.tsx' },
-      { kind: 'route', ref: '/calyx-science' },
-      { kind: 'file', ref: 'src/pages/CalyxScienceStatus.tsx' },
-    ],
-    nextAction: 'Audit Verification Workbench against real Calyx reasoning traces and score its acceptance gates.',
-    lane: 'SCIENTIFIC_DATA_COMPLETION',
-  },
-  {
     idHint: 'domain-research-station',
     name: 'Research Station',
     evidence: [
@@ -956,30 +1278,6 @@ const STUB_DOMAINS: StubDomainSpec[] = [
       { kind: 'route', ref: '/intelligence-graph' },
     ],
     nextAction: 'Decompose Lexicon and Knowledge Explorer into separate capabilities and score against real term/relationship coverage.',
-    lane: 'SCIENTIFIC_DATA_COMPLETION',
-  },
-  {
-    idHint: 'domain-conservatory',
-    name: 'Conservatory / OASIS',
-    evidence: [
-      { kind: 'route', ref: '/conservatory/*' },
-      { kind: 'file', ref: 'src/pages/MyConservatory.tsx' },
-      { kind: 'route', ref: '/oacs' },
-      { kind: 'file', ref: 'src/pages/OACS.tsx' },
-    ],
-    nextAction: 'Audit authenticated conservatory features and OASIS separately; both currently only confirmed to exist, not scored.',
-    lane: 'PRODUCT_COMPLETION',
-  },
-  {
-    idHint: 'domain-knowledge-graph',
-    name: 'Knowledge Graph',
-    evidence: [
-      { kind: 'route', ref: '/knowledge' },
-      { kind: 'route', ref: '/intelligence-graph' },
-      { kind: 'file', ref: 'src/lib/knowledgeGraph.ts' },
-      { kind: 'file', ref: 'src/lib/scientific-intelligence/knowledge-graph/adapter.ts' },
-    ],
-    nextAction: 'Score KG completeness/connectivity against real backend counts, not Mission Control fallback insights.',
     lane: 'SCIENTIFIC_DATA_COMPLETION',
   },
   {
@@ -1085,6 +1383,9 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   buyingCompanionDomain,
   visionDomain,
   securityGovernanceDomain,
+  calyxVerificationDomain,
+  knowledgeGraphDomain,
+  conservatoryDomain,
   ...stubDomains,
 ]);
 

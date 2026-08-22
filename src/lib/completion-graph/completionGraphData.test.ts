@@ -110,4 +110,38 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(domainLeafCounts['domain-security-governance']).toBe(3);
     expect(domainLeafCounts['domain-buying-companion']).toBe(1);
   });
+
+  it('#281 round 3: Calyx, Knowledge Graph, and Conservatory/OASIS are no longer single generic census-pending stubs', () => {
+    const scoredLeafIds = [
+      'cap-calyx-conversational-reasoning',
+      'cap-calyx-verification-workbench',
+      'cap-calyx-science-status-dashboard',
+      'cap-kg-genus-evidence',
+      'cap-kg-visualization-graph',
+      'cap-kg-mission-control-adapter',
+      'cap-conservatory-collection',
+      'cap-conservatory-readiness-gate',
+      'cap-oasis-greenhouse-monitoring',
+    ];
+    for (const id of scoredLeafIds) {
+      const leaf = allNodes.find((n) => n.id === id);
+      expect(leaf, `expected leaf ${id} to exist`).toBeTruthy();
+      expect(leaf?.gateScores, `expected leaf ${id} to have gateScores`).toBeTruthy();
+      expect(computeGateScore(leaf?.gateScores).percentage).not.toBeNull();
+    }
+
+    const domainLeafCounts: Record<string, number> = {
+      'domain-calyx-verification': getLeaves(allNodes.find((n) => n.id === 'domain-calyx-verification')!).length,
+      'domain-knowledge-graph': getLeaves(allNodes.find((n) => n.id === 'domain-knowledge-graph')!).length,
+      'domain-conservatory': getLeaves(allNodes.find((n) => n.id === 'domain-conservatory')!).length,
+    };
+    expect(domainLeafCounts['domain-calyx-verification']).toBe(3);
+    expect(domainLeafCounts['domain-knowledge-graph']).toBe(3);
+    expect(domainLeafCounts['domain-conservatory']).toBe(3);
+
+    // The two "Knowledge Graph" routes are architecturally distinct and must
+    // not collapse back into a single undifferentiated node.
+    const kgVisualization = allNodes.find((n) => n.id === 'cap-kg-visualization-graph');
+    expect(kgVisualization?.gateScores?.architectureContracts).toBe(0);
+  });
 });
