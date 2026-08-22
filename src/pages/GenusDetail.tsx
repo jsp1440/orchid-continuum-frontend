@@ -206,25 +206,58 @@ const NotFoundGenus: React.FC<{ name: string }> = ({ name }) => (
 const GenusDetail: React.FC = () => {
   const { name = '' } = useParams();
   const entry: GenusEntry | undefined = useMemo(() => lookupGenus(name), [name]);
+  // Full trusted-image list for this genus (from /images/genus/{genus}). The
+  // FIRST entry feeds the large featured hero image; the whole list builds the
+  // per-plate image map.
   const [images, setImages] = useState<GenusImage[]>([]);
+  // Whether the trusted-image fetch for the current genus is still in flight.
+  // This lets the hero distinguish "still loading" (show shimmer) from
+  // "loaded, but the backend returned nothing" (show an honest empty state),
+  // instead of sitting on the loading placeholder forever when images === [].
   const [imagesLoading, setImagesLoading] = useState(false);
+  // Validated OC backbone binomials for this genus. Empty + loaded => the
+  // backend returned nothing, so plates are shown with an "unverified" badge.
   const [validatedSet, setValidatedSet] = useState<Set<string>>(new Set());
   const [validationLoaded, setValidationLoaded] = useState(false);
+  // Where the current genus images came from (for the source-health indicator).
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
+
+  // Canonical Continuum knowledge-graph coverage for this genus. It decides
+  // whether an ecological relationship is presented as `available` evidence or
+  // only as a `provisional` curated summary — never as a universal claim.
   const [graphEvidence, setGraphEvidence] = useState<GenusGraphResult | null>(null);
+
+  // Session favorites (heart / bookmark) — shared across cards & the tab.
   const { isFavorite, toggleFavorite, count: favoriteCount } = useSpeciesFavorites();
+
+  // AI-generated narrative for the featured genus (Claude via edge function).
   const [narrative, setNarrative] = useState<string>('');
   const [narrativeLoading, setNarrativeLoading] = useState(false);
+
+  // Species whose every candidate image URL failed to load (after fallbacks).
+  // Such cards are REMOVED from the grid entirely rather than left showing the
+  // "Image pending" placeholder.
   const [failedSpecies, setFailedSpecies] = useState<Set<string>>(new Set());
+
+  // Trusted images keyed by binomial for matching to each species plate.
   const imageMap = useMemo(() => buildImageMap(images), [images]);
+
+  // Candidate URLs for the large featured hero, in the exact priority the
+  // request specifies: response.images[0].image_url first, then
+  // response.images[1].image_url, then response.images[2].image_url. After
+  // those three primaries we append every remaining candidate URL (each
+  // record's image_urls) as deeper fallbacks, so a fully-broken first three
+  // still resolves to a real photo rather than the placeholder.
   const heroUrls = useMemo(() => {
     const out: string[] = [];
     const push = (u?: string) => {
       if (u && !out.includes(u)) out.push(u);
     };
+    // Primary trio — images[0..2].image_url, exactly as requested.
     push(images[0]?.image_url);
     push(images[1]?.image_url);
     push(images[2]?.image_url);
+    // Deeper fallbacks: every other candidate URL across the whole response.
     for (const img of images) {
       const urls = img.image_urls?.length ? img.image_urls : img.image_url ? [img.image_url] : [];
       for (const u of urls) push(u);
@@ -232,6 +265,10 @@ const GenusDetail: React.FC = () => {
     return out;
   }, [images]);
 
+
+  // The photograph currently painted by the hero carousel. Attribution follows
+  // the visible image, so a rotating hero never reuses the first record's
+  // species name and licence for a different photograph.
   const [heroActiveUrl, setHeroActiveUrl] = useState<string | null>(null);
 
   const heroRecordByUrl = useMemo(() => {
@@ -264,10 +301,17 @@ const GenusDetail: React.FC = () => {
       .join(' · ');
   }, [heroRecord, heroDisplayName]);
 
+
+
   useEffect(() => {
     if (!entry) return;
+    // Wake the cold-start-prone harvester backend before any image request.
     warmBackends();
     const ctrl = new AbortController();
+
+    // Trusted, backbone-validated images from the OC approved library. The
+    // source-reporting variant lets us show a small image-source health
+    // indicator (live / cache / proxy / pending) over the featured hero.
     setImages([]);
     setImageSource(null);
     setImagesLoading(true);
@@ -278,11 +322,13 @@ const GenusDetail: React.FC = () => {
         setImageSource(source);
       })
       .catch(() => {
+        /* keep empty list → leaf "Image pending" placeholders */
         if (!ctrl.signal.aborted) setImageSource('pending');
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setImagesLoading(false);
       });
+
 
     setGraphEvidence(null);
     fetchGenusGraphEvidence(entry.genus, ctrl.signal)
@@ -307,11 +353,16 @@ const GenusDetail: React.FC = () => {
     return () => ctrl.abort();
   }, [entry]);
 
+  // Fetch the AI genus narrative (Claude Sonnet via the genus-narrative edge fn).
+  // If the edge function is unavailable / returns nothing, fall back to a warm,
+  // science-grounded narrative composed locally from the curated ecology data
+  // so the Field Note block ALWAYS renders a real summary rather than an empty
+  // box.
   useEffect(() => {
     if (!entry) return;
     let cancelled = false;
     setNarrative('');
-    setFailedSpecies(new Set());
+    setFailedSpecies(new Set()); // reset per-genus failed-image tracking
     setNarrativeLoading(true);
     const fallback = buildLocalNarrative(entry);
     supabase.functions
@@ -332,6 +383,8 @@ const GenusDetail: React.FC = () => {
     };
   }, [entry]);
 
+
+  // Mark a species as failed once every candidate image URL has been exhausted.
   const handlePlateSettled = (species: string, success: boolean) => {
     if (success) return;
     setFailedSpecies((prev) => {
@@ -342,6 +395,9 @@ const GenusDetail: React.FC = () => {
     });
   };
 
+  // DIAGNOSTIC: print the EXACT object fetchGenusImages returned for this genus
+  // right before the hero renders, so the binding can be verified against the
+  // real runtime shape (array of { scientific_name, image_url, image_urls }).
   if (entry) {
     console.log(
       `[GenusDetail] fetchGenusImages("${entry.genus}") returned:`,
@@ -353,8 +409,21 @@ const GenusDetail: React.FC = () => {
     );
   }
 
+  // When the backbone is non-empty, hide plates whose species isn't confirmed.
+  // When it's empty (endpoint unpopulated), keep all plates but flag them.
+  // In both cases, drop plates whose every image URL failed to load AND — once
+  // the image fetch has completed — drop plates the backend supplied NO image
+  // for at all (these are the "empty" IMAGE PENDING cards the request wants
+  // removed from the grid entirely).
   const unverifiedMode = validationLoaded && validatedSet.size === 0;
 
+  /**
+   * Representative species plates.
+   *
+   * De-duplicated by normalised taxon identity AND by photograph, so neither a
+   * repeated species nor a repeated image can dominate the gallery. Each entry
+   * carries its display binomial and the authored name kept for provenance.
+   */
   const visiblePlates = useMemo(() => {
     if (!entry) return [];
     const base =
@@ -374,12 +443,19 @@ const GenusDetail: React.FC = () => {
     });
 
     return representative.filter((plate) => {
+      // Skip plates whose every candidate image failed to load.
       if (failedSpecies.has(plate.entry.species)) return false;
+      // Once images have loaded, skip plates with NO candidate image left.
       if (!imagesLoading && plate.urls.length === 0) return false;
       return true;
     });
   }, [entry, validatedSet, failedSpecies, imageMap, imagesLoading]);
 
+  /**
+   * Ecological relationships, expressed as evidence states rather than as
+   * universal genus-wide assertions. `available` requires canonical Continuum
+   * linkage; the curated field-guide text can only ever be `provisional`.
+   */
   const pollinatorEvidence = useMemo(() => {
     const domain =
       graphEvidence?.status === 'ok'
@@ -397,6 +473,9 @@ const GenusDetail: React.FC = () => {
 
   const mycorrhizalEvidence = useMemo(
     () =>
+      // The knowledge-graph contract exposes no mycorrhizal domain, so no
+      // canonical linkage can be claimed here yet. The curated summary is
+      // therefore surfaced as provisional, genus-scope context.
       deriveEcologicalEvidence({
         serviceAnswered: graphEvidence !== null && graphEvidence.status !== 'unavailable',
         hasLinkedEvidence: false,
@@ -404,6 +483,7 @@ const GenusDetail: React.FC = () => {
       }),
     [graphEvidence, entry],
   );
+
 
   return (
     <div
@@ -419,10 +499,14 @@ const GenusDetail: React.FC = () => {
       {!entry ? (
         <main className="pt-28 pb-20">
           <NotFoundGenus name={name} />
+          {/* Even without a curated profile, the co-occurring neighbour view
+              is fully dynamic (occurrence Atlas + cache) and works for ANY
+              genus name — so we still render the explorable neighbour map. */}
           {name && <NeighborGeneraSection genus={name} />}
         </main>
       ) : (
         <main className="pt-28 pb-24">
+          {/* Back link */}
           <div className="max-w-[1200px] mx-auto px-6 lg:px-10">
             <Link
               to="/"
@@ -432,6 +516,7 @@ const GenusDetail: React.FC = () => {
             </Link>
           </div>
 
+          {/* Hero */}
           <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-8">
             <div className="font-mono text-[10px] tracking-[0.36em] uppercase text-[#c9a24a]/85">
               Genus Profile
@@ -453,6 +538,15 @@ const GenusDetail: React.FC = () => {
             </p>
           </section>
 
+
+          {/* Featured hero image.
+              Data flow: fetchGenusImages(genus) → images[] → heroUrls (ordered
+              images[0].image_url, images[1].image_url, images[2].image_url,
+              then every deeper candidate). HeroCarousel preloads & VALIDATES
+              every URL, paints the first one that actually decodes (so a broken
+              images[0] silently yields to images[1]/[2]), and — once 2+ photos
+              are confirmed — slowly crossfades through the top 5 every 3
+              minutes with each image fully loaded before its transition. */}
           <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-10">
             <div className="relative w-full overflow-hidden rounded-3xl border border-[#c9a24a]/25 bg-[#13241a]" style={{ aspectRatio: '16 / 7' }}>
               <HeroCarousel
@@ -462,9 +556,13 @@ const GenusDetail: React.FC = () => {
                 intervalMs={180_000}
                 onActiveUrlChange={setHeroActiveUrl}
               />
+
+              {/* Small, non-intrusive image-source health indicator. */}
               <div className="absolute top-3 right-3 z-10">
                 <ImageSourceIndicator source={imageSource} />
               </div>
+
+              {/* Caption overlay */}
               <div className="absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-[#0c160e]/85 via-[#0c160e]/30 to-transparent px-6 py-5">
                 {heroAttribution && (
                   <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.14em] uppercase text-[#e7dcc2]">
@@ -485,6 +583,8 @@ const GenusDetail: React.FC = () => {
             </div>
           </section>
 
+          {/* AI species narrative — Claude-generated, 2-3 sentences. Off-white
+              serif text on a dark-green field with a gold left-border accent. */}
           {(narrative || narrativeLoading) && (
             <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-8">
               <div
@@ -511,12 +611,16 @@ const GenusDetail: React.FC = () => {
             </section>
           )}
 
+
+
+          {/* Map + ecology */}
           <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-12 grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2">
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a] mb-3">
                 Occurrences &amp; ecological partners
               </div>
               <GenusOccurrenceMap genus={entry.genus} regions={entry.regions} />
+              {/* Static label-map kept as a compact legend strip below the globe. */}
               <div className="mt-4">
                 <DistributionMap regions={entry.regions} />
               </div>
@@ -550,6 +654,7 @@ const GenusDetail: React.FC = () => {
             </div>
           </section>
 
+          {/* Species plates */}
           <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-14">
             <div className="flex items-center justify-between gap-4 mb-4">
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">
@@ -565,11 +670,18 @@ const GenusDetail: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {visiblePlates.map(({ entry: plate, urls, displayName, authoredName }) => {
+                // Match a trusted, backbone-validated image to this plate by
+                // its binomial (genus + epithet). When a match exists the real
+                // photograph replaces the "Image pending" leaf placeholder.
+                // Candidate URLs already had photographs claimed by an earlier
+                // plate removed, so no image can appear twice in this gallery.
                 const trusted = imageMap.get(binomialOf(plate.species));
                 const image = urls[0];
                 const attribution = [trusted?.image_source, trusted?.image_license]
                   .filter(Boolean)
                   .join(' · ');
+                // Authorship stays in provenance/detail; the display name is
+                // the genus + specific epithet only.
                 const trustedAuthoredName = trusted?.scientific_name
                   ? authoredScientificName(trusted.scientific_name)
                   : '';
@@ -601,6 +713,12 @@ const GenusDetail: React.FC = () => {
                           </span>
                         </div>
                       )}
+                      {/* Verification badge.
+                          A plate backed by an image from v_orchid_images_trusted
+                          (i.e. `trusted` matched) is a reviewed, backbone-joined
+                          record → show a GREEN "Verified" badge. Only plates with
+                          NO trusted image, while the backbone endpoint is
+                          unpopulated, carry the orange "Unverified" badge. */}
                       {trusted ? (
                         <span
                           className="absolute top-2 left-2 inline-flex items-center gap-1 rounded bg-[#0c2a16]/80 px-1.5 py-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[#7ee0a0] backdrop-blur-sm"
@@ -618,6 +736,7 @@ const GenusDetail: React.FC = () => {
                           Unverified
                         </span>
                       ) : null}
+                      {/* Heart / bookmark — saves to the session favorites list. */}
                       <button
                         type="button"
                         aria-label={
@@ -675,6 +794,7 @@ const GenusDetail: React.FC = () => {
               })}
             </div>
 
+
             <div className="mt-8">
               <Link
                 to={`/species?genus=${encodeURIComponent(entry.genus)}`}
@@ -685,8 +805,13 @@ const GenusDetail: React.FC = () => {
             </div>
           </section>
 
+          {/* Co-occurring neighbour genera — full explorable view (overlap
+              map + relationship cards). Expands the homepage four-card
+              preview into the complete neighbour community for this genus. */}
           <NeighborGeneraSection genus={entry.genus} />
 
+
+          {/* Cross-platform nav */}
           <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-16 pt-10 border-t border-white/10">
             <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#a9b896] mb-4">
               Continue across the Continuum
