@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { atlasOccurrenceEvidenceCalyxHref } from '@/features/atlas-next/calyxHandoff';
 import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
+import { calyxQuestionContextFields } from '@/lib/calyxService';
 import {
   ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
@@ -97,6 +98,38 @@ describe('NAOCC demo continuity', () => {
       taxon_source: 'research-station',
       taxon_is_evidence: false,
     });
+  });
+
+  it('keeps Research taxon and Lexicon current-question context jointly non-evidentiary', () => {
+    const href = researchStationCalyxHref({
+      taxon: 'Phalaenopsis amabilis',
+      projectId: 'naocc-phalaenopsis',
+      conversationId: 'conversation-phalaenopsis',
+    });
+    const calyxUrl = new URL(href, 'https://orchidcontinuum.org');
+    const turnContext = buildCalyxTurnContext({
+      projectId: 'naocc-phalaenopsis',
+      uploadedFiles: [],
+      routeSearch: calyxUrl.search,
+    });
+    const questionContext = calyxQuestionContextFields(
+      '  What evidence supports its native habitat and pollination ecology?  ',
+    );
+
+    expect(turnContext.route_context).toMatchObject({
+      origin: 'research-station',
+      featured_taxon: { rank: 'genus', accepted_name: 'Phalaenopsis' },
+      taxon: 'Phalaenopsis amabilis',
+      taxon_source: 'research-station',
+      taxon_is_evidence: false,
+    });
+    expect(questionContext).toEqual({
+      current_question: 'What evidence supports its native habitat and pollination ecology?',
+      current_question_source: 'user',
+      current_question_is_evidence: false,
+    });
+    expect((turnContext.route_context as Record<string, unknown>).taxon_is_evidence).toBe(false);
+    expect(questionContext.current_question_is_evidence).toBe(false);
   });
 
   it('never promotes protected occurrence payload into Calyx route context', () => {
