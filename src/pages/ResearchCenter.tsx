@@ -11,11 +11,9 @@ import {
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
-import {
-  FEATURED_TAXON_ORIGIN,
-  featuredTaxonAtlasHref,
-  featuredTaxonCalyxHref,
-} from '@/lib/featuredTaxonNavigation';
+import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { parseResearchRouteContext } from '@/lib/researchRouteContext';
 
 /**
  * Research Center — advanced research surface for power users.
@@ -66,12 +64,18 @@ const PILLARS = [
 
 const ResearchCenter: React.FC = () => {
   // A project carried in from another module keeps the investigation intact.
+  //
+  // Both governed origins are read through the shared parser rather than by
+  // re-deriving the rule here. The previous inline read recognised only the
+  // featured-taxon origin, so Atlas Next arrivals were silently dropped, and it
+  // accepted any genus string truncated to 120 characters instead of validating
+  // the shape. The parser fails closed on a malformed genus, on an unbounded
+  // project id, and on any attempt to assert the context as evidence.
   const [searchParams] = useSearchParams();
-  const projectId = searchParams.get('project');
-  const routeGenus =
-    searchParams.get('origin') === FEATURED_TAXON_ORIGIN
-      ? String(searchParams.get('genus') ?? '').trim().slice(0, 120)
-      : '';
+  const routeContext = parseResearchRouteContext(searchParams);
+  const routeGenus = routeContext?.genus ?? '';
+  const projectId = routeContext?.projectId ?? null;
+  const arrivedFromAtlas = routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN;
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
@@ -110,7 +114,7 @@ const ResearchCenter: React.FC = () => {
             <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-5 md:flex md:items-center md:justify-between md:gap-6">
               <div>
                 <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/75">
-                  Continuing from Genus of the Day
+                  {arrivedFromAtlas ? 'Continuing from the Atlas' : 'Continuing from Genus of the Day'}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-white/75">
                   <span className="font-serif text-lg italic text-white">{routeGenus}</span>{' '}
