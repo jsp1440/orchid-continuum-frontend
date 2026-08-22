@@ -43,30 +43,47 @@ export type ExecutionLane =
 
 export type EvidenceKind = 'file' | 'route' | 'test' | 'pr' | 'issue' | 'ci' | 'doc' | 'commit';
 
+/** CI run outcome, distinguished so skipped/cancelled runs never read as a pass. */
+export type CiEvidenceState = 'success' | 'failure' | 'skipped' | 'cancelled' | 'pending';
+
+/** PR lifecycle state, distinguished so a stale/superseded PR never counts as active proof. */
+export type PrEvidenceState = 'merged' | 'open' | 'stale' | 'superseded' | 'closed';
+
 export type Evidence = {
   kind: EvidenceKind;
   ref: string;
   note?: string;
+  /** Only meaningful when kind === 'ci'. */
+  ciState?: CiEvidenceState;
+  /** Only meaningful when kind === 'pr'. */
+  prState?: PrEvidenceState;
 };
+
+/**
+ * A single acceptance-gate category's score.
+ *   1     = criterion confirmed met by cited evidence
+ *   0     = criterion confirmed NOT met/absent by cited evidence
+ *   null  = not yet evaluated in this pass (a real coverage gap for this node)
+ *   'N/A' = explicitly not applicable to this node (excluded from both the
+ *           percentage and the coverage denominator — distinct from `null`,
+ *           which still counts against coverage as unevaluated)
+ */
+export type GateScoreValue = 0 | 1 | null | 'N/A';
 
 /**
  * Acceptance-gate sub-scores, one per default weighting category.
  *
- * Value contract (deliberately coarse to avoid inventing precision we don't have):
- *   1    = criterion confirmed met by cited evidence
- *   0    = criterion confirmed NOT met/absent by cited evidence
- *   null = not yet evaluated in this pass, OR not applicable to this node
  * A leaf with no gateScores at all has not been scored — its status carries the
  * only signal (usually UNKNOWN) and its percentage must render as "not yet scored",
  * never as 0.
  */
 export type AcceptanceGateScores = {
-  architectureContracts: number | null;
-  implementationPresent: number | null;
-  integrationCanonicalBranch: number | null;
-  scientificProvenanceSecurity: number | null;
-  browserEndToEnd: number | null;
-  deployedOperational: number | null;
+  architectureContracts: GateScoreValue;
+  implementationPresent: GateScoreValue;
+  integrationCanonicalBranch: GateScoreValue;
+  scientificProvenanceSecurity: GateScoreValue;
+  browserEndToEnd: GateScoreValue;
+  deployedOperational: GateScoreValue;
 };
 
 export type CompletionNode = {

@@ -55,7 +55,7 @@ describe('computeGateScore', () => {
     expect(result.coverage).toBeCloseTo(0.9, 5);
   });
 
-  it('treats all-N/A as unscored, never as 0', () => {
+  it('treats all-unevaluated as unscored, never as 0', () => {
     const result = computeGateScore({
       architectureContracts: null,
       implementationPresent: null,
@@ -65,6 +65,51 @@ describe('computeGateScore', () => {
       deployedOperational: null,
     });
     expect(result.percentage).toBeNull();
+  });
+
+  it('excludes explicit N/A categories from the coverage denominator, unlike unevaluated (null) ones', () => {
+    // deployedOperational is explicitly inapplicable here, not merely unevaluated.
+    const naResult = computeGateScore({
+      architectureContracts: 1,
+      implementationPresent: 1,
+      integrationCanonicalBranch: 1,
+      scientificProvenanceSecurity: 1,
+      browserEndToEnd: 1,
+      deployedOperational: 'N/A',
+    });
+    expect(naResult.percentage).toBe(100);
+    expect(naResult.coverage).toBe(1); // fully covers everything that is actually applicable
+    expect(naResult.notApplicableCount).toBe(1);
+
+    // Same shape but deployedOperational is merely unevaluated — a real gap, not N/A.
+    const unevaluatedResult = computeGateScore({
+      architectureContracts: 1,
+      implementationPresent: 1,
+      integrationCanonicalBranch: 1,
+      scientificProvenanceSecurity: 1,
+      browserEndToEnd: 1,
+      deployedOperational: null,
+    });
+    expect(unevaluatedResult.percentage).toBe(100);
+    expect(unevaluatedResult.coverage).toBeCloseTo(0.9, 5); // .90 of the full 1.0 weighting evaluated
+    expect(unevaluatedResult.notApplicableCount).toBe(0);
+
+    // N/A reports strictly higher coverage than an equivalent unevaluated gap.
+    expect(naResult.coverage).toBeGreaterThan(unevaluatedResult.coverage);
+  });
+
+  it('renormalizes the percentage itself around N/A exclusions, not just coverage', () => {
+    const result = computeGateScore({
+      architectureContracts: 1,
+      implementationPresent: 0,
+      integrationCanonicalBranch: 'N/A',
+      scientificProvenanceSecurity: 'N/A',
+      browserEndToEnd: 'N/A',
+      deployedOperational: 'N/A',
+    });
+    // Only architecture (.20) and implementation (.25) are applicable: .20 / .45.
+    expect(result.percentage).toBe(Math.round((0.2 / 0.45) * 100));
+    expect(result.notApplicableCount).toBe(4);
   });
 });
 
@@ -91,6 +136,33 @@ describe('computeNodePercentage', () => {
     const unscoredB = gateNode({ id: 'b' });
     const branch: CompletionNode = { ...gateNode({ id: 'branch' }), type: 'module', children: [unscoredA, unscoredB] };
     expect(computeNodePercentage(branch)).toBeNull();
+  });
+
+  it('scores an integration leaf purely from its own gate scores, independent of sibling module scores', () => {
+    const integrationScores = {
+      architectureContracts: 1 as const,
+      implementationPresent: 0 as const,
+      integrationCanonicalBranch: null,
+      scientificProvenanceSecurity: null,
+      browserEndToEnd: null,
+      deployedOperational: null,
+    };
+    const integrationLeaf = gateNode({ id: 'int-a-b', type: 'integration', gateScores: integrationScores });
+    const expectedPercentage = computeGateScore(integrationScores).percentage;
+
+    const fullyScoredModule = gateNode({
+      id: 'module-a',
+      type: 'module',
+      gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: 1, browserEndToEnd: 1, deployedOperational: 1 },
+    });
+    const unscoredModule = gateNode({ id: 'module-b', type: 'module' });
+    const domain: CompletionNode = { ...gateNode({ id: 'domain' }), type: 'domain', children: [fullyScoredModule, unscoredModule, integrationLeaf] };
+
+    // Scoring the whole domain (which touches every sibling) must not change the
+    // integration leaf's own percentage — it is not derived from its endpoints.
+    computeNodePercentage(domain);
+    expect(computeNodePercentage(integrationLeaf)).toBe(expectedPercentage);
+    expect(computeNodePercentage(integrationLeaf)).not.toBe(computeNodePercentage(fullyScoredModule));
   });
 });
 

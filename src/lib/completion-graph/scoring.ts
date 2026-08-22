@@ -23,37 +23,57 @@ const GATE_KEYS = Object.keys(GATE_WEIGHTS) as (keyof AcceptanceGateScores)[];
 export type GateScoreResult = {
   /** Renormalized percentage across only the evaluated categories, or null if none evaluated. */
   percentage: number | null;
-  /** Fraction (0-1) of the total gate weighting that has actually been evaluated. */
+  /** Fraction (0-1) of the *applicable* (non-N/A) gate weighting that has actually been evaluated. */
   coverage: number;
   evaluatedCount: number;
   totalCount: number;
+  /** Categories explicitly marked 'N/A' — excluded from both percentage and coverage denominators. */
+  notApplicableCount: number;
 };
 
-const EMPTY_RESULT: GateScoreResult = { percentage: null, coverage: 0, evaluatedCount: 0, totalCount: GATE_KEYS.length };
+const EMPTY_RESULT: GateScoreResult = { percentage: null, coverage: 0, evaluatedCount: 0, totalCount: GATE_KEYS.length, notApplicableCount: 0 };
 
+/**
+ * A category marked 'N/A' is explicitly inapplicable to this node and is
+ * dropped from both the numerator and the denominator — it renormalizes
+ * coverage transparently rather than counting as either a pass or a gap.
+ * A category left `null` is still applicable but not yet evaluated: it
+ * counts against coverage as a real, visible gap. Conflating the two would
+ * let marking something "N/A" quietly substitute for doing the evaluation.
+ */
 export function computeGateScore(scores: AcceptanceGateScores | undefined): GateScoreResult {
   if (!scores) return EMPTY_RESULT;
 
-  let weightSum = 0;
+  let applicableWeight = 0;
+  let evaluatedWeight = 0;
   let valueSum = 0;
   let evaluatedCount = 0;
+  let notApplicableCount = 0;
 
   for (const key of GATE_KEYS) {
     const value = scores[key];
-    if (value === null || value === undefined) continue;
+    if (value === 'N/A') {
+      notApplicableCount += 1;
+      continue;
+    }
     const weight = GATE_WEIGHTS[key];
-    weightSum += weight;
+    applicableWeight += weight;
+    if (value === null || value === undefined) continue;
+    evaluatedWeight += weight;
     valueSum += weight * value;
     evaluatedCount += 1;
   }
 
-  if (weightSum === 0) return EMPTY_RESULT;
+  if (evaluatedWeight === 0) {
+    return { percentage: null, coverage: 0, evaluatedCount, totalCount: GATE_KEYS.length, notApplicableCount };
+  }
 
   return {
-    percentage: Math.round((valueSum / weightSum) * 100),
-    coverage: Math.round(weightSum * 100) / 100,
+    percentage: Math.round((valueSum / evaluatedWeight) * 100),
+    coverage: applicableWeight > 0 ? Math.round((evaluatedWeight / applicableWeight) * 100) / 100 : 0,
     evaluatedCount,
     totalCount: GATE_KEYS.length,
+    notApplicableCount,
   };
 }
 

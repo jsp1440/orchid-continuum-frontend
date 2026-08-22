@@ -42,12 +42,13 @@ function censusPending(opts: {
   nextAction: string;
   lane?: ExecutionLane;
   idHint: string;
+  type?: CompletionNode['type'];
 }): CompletionNode {
   return {
     id: nextId(opts.idHint),
     parentId: opts.parentId,
     name: opts.name,
-    type: 'capability',
+    type: opts.type ?? 'capability',
     status: 'UNKNOWN',
     threeLevels: { codeComplete: 'UNKNOWN', integratedComplete: 'UNKNOWN', productComplete: 'UNKNOWN' },
     lane: opts.lane,
@@ -66,12 +67,13 @@ function confirmedMissing(opts: {
   nextAction: string;
   lane?: ExecutionLane;
   idHint: string;
+  type?: CompletionNode['type'];
 }): CompletionNode {
   return {
     id: nextId(opts.idHint),
     parentId: opts.parentId,
     name: opts.name,
-    type: 'capability',
+    type: opts.type ?? 'capability',
     status: 'MISSING',
     threeLevels: { codeComplete: 'NOT_MET', integratedComplete: 'NOT_MET', productComplete: 'NOT_MET' },
     lane: opts.lane,
@@ -116,6 +118,107 @@ function branch(opts: {
   draft.threeLevels = rollupThreeLevels(children);
   return draft;
 }
+
+// ─── Homepage / Featured Genus / Public Calyx ──────────────────────────────
+// Real evidence: src/lib/featuredTaxonNavigation.ts (confirmed on origin/main,
+// commit e035b1a / #231) defines featuredTaxonAtlasHref / featuredTaxonCalyxHref /
+// featuredTaxonResearchHref, consumed by HomeAtlasContinuum.tsx,
+// DailyGenusFeatureContinuum.tsx, and HomepageStewardshipClose.tsx.
+
+const homepageToAtlasIntegration: CompletionNode = {
+  id: 'int-homepage-featured-genus-atlas',
+  parentId: 'module-homepage-core',
+  name: 'Homepage / Featured Genus -> Atlas handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/featuredTaxonNavigation.ts', note: 'featuredTaxonAtlasHref() — genus-only handoff; confirmed on origin/main.' },
+    { kind: 'file', ref: 'src/components/orchid/HomeAtlasContinuum.tsx' },
+    { kind: 'file', ref: 'src/components/orchid/DailyGenusFeatureContinuum.tsx' },
+    { kind: 'test', ref: 'src/lib/featuredTaxonNavigation.test.ts' },
+    { kind: 'test', ref: 'src/components/orchid/HomeAtlasContinuum.test.tsx' },
+    { kind: 'commit', ref: 'e035b1a', note: 'OC autonomous integration batch (#231) — file confirmed present on origin/main at this commit.' },
+  ],
+  nextAction: 'Run a live browser pass: click the Featured Genus Atlas link on the homepage and confirm Atlas mounts filtered to the same genus with no locality/coordinate leakage.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const homepageToCalyxIntegration: CompletionNode = {
+  id: 'int-homepage-featured-genus-calyx',
+  parentId: 'module-homepage-core',
+  name: 'Homepage / Featured Genus -> Calyx handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/featuredTaxonNavigation.ts', note: 'featuredTaxonCalyxHref() tags origin=homepage-featured-taxon so Calyx never treats it as evidence.' },
+    { kind: 'file', ref: 'src/components/orchid/HomeAtlasContinuum.tsx' },
+    { kind: 'file', ref: 'src/components/orchid/DailyGenusFeatureContinuum.tsx' },
+    { kind: 'file', ref: 'src/components/calyx/AtlasAwareCalyxRoute.tsx' },
+    { kind: 'test', ref: 'src/components/calyx/AtlasAwareCalyxRoute.test.ts' },
+    { kind: 'test', ref: 'src/lib/genusDayContextHandoff.test.ts' },
+  ],
+  nextAction: 'Confirm the /calyx?genus=...&origin=homepage-featured-taxon route renders a live Calyx conversation seeded with only genus context, then run a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const homepageToResearchIntegration: CompletionNode = {
+  id: 'int-homepage-featured-genus-research',
+  parentId: 'module-homepage-core',
+  name: 'Homepage / Featured Genus -> Research handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/featuredTaxonNavigation.ts', note: 'featuredTaxonResearchHref() — genus is interaction context only, never promoted to evidence.' },
+    { kind: 'file', ref: 'src/components/orchid/HomepageStewardshipClose.tsx' },
+    { kind: 'test', ref: 'src/lib/canonicalScientificJourney.test.ts' },
+  ],
+  nextAction: 'Confirm Research Center preloads the handed-off genus without treating it as a persisted project subject, then run a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const homepageDomain = branch({
+  id: 'domain-homepage',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Homepage / Featured Genus / Public Calyx',
+  type: 'domain',
+  nextAction: 'Audit Featured Genus rotation data sourcing; run browser passes for the three scored handoffs below.',
+}, [
+  branch({
+    id: 'module-homepage-core',
+    parentId: 'domain-homepage',
+    name: 'Homepage core',
+    type: 'module',
+    nextAction: 'See child capabilities and integrations.',
+  }, [
+    censusPending({
+      idHint: 'cap-homepage-featured-genus-rotation',
+      parentId: 'module-homepage-core',
+      name: 'Featured Genus rotation & Public Calyx entry surface',
+      evidence: [
+        { kind: 'route', ref: '/' },
+        { kind: 'file', ref: 'src/pages/Index.tsx' },
+        { kind: 'file', ref: 'src/components/orchid/DailyGenusFeatureContinuum.tsx' },
+      ],
+      nextAction: 'Audit whether the daily genus rotation sources real Continuum data or a fixed/fixture rotation list, and score deterministic-rotation + real-data gates.',
+      lane: 'PRODUCT_COMPLETION',
+    }),
+    homepageToAtlasIntegration,
+    homepageToCalyxIntegration,
+    homepageToResearchIntegration,
+  ]),
+]);
 
 // ─── Species Dossier / Federation ──────────────────────────────────────────
 // Real evidence: PR #293 (merged 2026-08-22 onto oc-autonomous-integration),
@@ -530,6 +633,25 @@ const universityAppliedAiGate: CompletionNode = {
   children: [],
 };
 
+const universityToCalyxIntegration: CompletionNode = {
+  id: 'int-university-calyx',
+  parentId: 'module-university-core',
+  name: 'University Applied AI & Data Science lab -> Calyx tutor handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/pages/AppliedAIDataScienceLab.tsx', note: '"askCalyx" mutation calls createCalyxConversation()/sendCalyxTurn() after lab execution; confirmed on origin/main.' },
+    { kind: 'file', ref: 'src/lib/calyxWorkspace.ts' },
+    { kind: 'file', ref: 'src/lib/appliedAiDataScience.ts', note: 'Declares calyx_tutor_contract and calyx_context types.' },
+  ],
+  nextAction: 'Confirm the Calyx tutor response is scoped to the executed lab\'s own evidence (no unrelated persisted context), then run a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
 const universityDomain = branch({
   id: 'domain-university',
   parentId: 'portfolio-orchid-continuum',
@@ -546,13 +668,233 @@ const universityDomain = branch({
   }, [
     universityCoreGate,
     universityAppliedAiGate,
+    universityToCalyxIntegration,
     censusPending({
-      idHint: 'cap-university-research-continuation',
+      idHint: 'int-university-research-continuation',
       parentId: 'module-university-core',
-      name: 'Research Station continuation handoff',
+      name: 'University -> Research Station continuation handoff',
       evidence: [{ kind: 'file', ref: 'src/pages/UniversityReviewerWorkspace.tsx', note: 'Not yet traced for a University -> Research Station handoff path this pass.' }],
       nextAction: 'Confirm whether a University -> Research Station continuity handoff exists and, if so, apply the same contract-based pattern as the Atlas -> Research handoff (#278).',
       lane: 'INTEGRATION_COMPLETION',
+      type: 'integration',
+    }),
+  ]),
+]);
+
+// ─── Cross-Module Integration Journeys ─────────────────────────────────────
+// The #296 integration census. Atlas -> Research is tracked separately under
+// the Atlas domain (int-atlas-research-handoff) to avoid duplicating that PR's
+// evidence. University -> Research and University -> Calyx are tracked under
+// the University domain for the same reason. Everything else lives here.
+
+const researchToCalyxIntegration: CompletionNode = {
+  id: 'int-research-calyx',
+  parentId: 'module-integration-journeys-core',
+  name: 'Research Station -> Calyx ("Ask Calyx") handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/pages/ResearchCenter.tsx', note: '"Ask Calyx" action uses featuredTaxonCalyxHref(routeGenus); confirmed on origin/main.' },
+    { kind: 'file', ref: 'src/lib/featuredTaxonNavigation.ts' },
+  ],
+  nextAction: 'Confirm the Ask Calyx link preserves only genus context (never coordinates/locality) with a dedicated regression, then run a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const matrixToLexiconIntegration: CompletionNode = {
+  id: 'int-matrix-lexicon',
+  parentId: 'module-integration-journeys-core',
+  name: 'Matrix Identification -> Lexicon glossary handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/components/matrix/MatrixLexiconGuide.tsx', note: 'Confirmed on origin/main; reachable from OrchidIdentificationNext.tsx.' },
+    { kind: 'file', ref: 'src/lib/matrixLexicon.ts' },
+    { kind: 'test', ref: 'src/lib/matrixLexicon.test.ts' },
+  ],
+  nextAction: 'Confirm glossary explanations reference real Lexicon entries (not inline copy), then run a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const literatureToKnowledgeGraphIntegration: CompletionNode = {
+  id: 'int-literature-knowledge-graph',
+  parentId: 'module-integration-journeys-core',
+  name: 'Literature -> Knowledge Graph integration',
+  type: 'integration',
+  status: 'MISSING',
+  threeLevels: { codeComplete: 'PARTIAL', integratedComplete: 'NOT_MET', productComplete: 'NOT_MET' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 0, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/knowledgeGraph.ts', note: "KNOWLEDGE_GRAPH_DOMAINS declares 'literature' as a domain — the architecture contract exists." },
+    { kind: 'file', ref: 'src/lib/scientific-intelligence/literature/adapter.ts', note: 'No import of knowledgeGraph.ts, or vice versa, found this pass (grep) — the contract exists but no code path connects them.' },
+  ],
+  nextAction: 'Wire the literature adapter\'s output into a real Knowledge Graph node/edge write path, or confirm KG sources literature evidence some other way this pass missed.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const speciesDossierToAtlasIntegration: CompletionNode = {
+  id: 'int-species-dossier-atlas',
+  parentId: 'module-integration-journeys-core',
+  name: 'Species Dossier -> Atlas handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/speciesDossier.ts', note: 'SpeciesDossierEnvelope declares atlas: SpeciesAtlasEnvelope and fetchSpeciesAtlas().' },
+    { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx', note: '"View on Atlas" action links to /atlas?species=<slug>.' },
+  ],
+  nextAction: 'Confirm /atlas?species=<slug> actually filters Atlas to the dossier species with a browser pass.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const speciesDossierToMatrixIntegration: CompletionNode = {
+  id: 'int-species-dossier-matrix',
+  parentId: 'module-integration-journeys-core',
+  name: 'Species Dossier -> Matrix Identification handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'PARTIAL', integratedComplete: 'NOT_MET', productComplete: 'NOT_MET' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 0, integrationCanonicalBranch: null, scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/speciesDossier.ts', note: 'SpeciesDossierEnvelope declares matrix_url: string in its contract.' },
+    { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx', note: 'matrix_url is not read or rendered anywhere in this file this pass (grep found no reference) — the contract field is unused.' },
+  ],
+  nextAction: 'Render the dossier\'s matrix_url as a "Continue in Matrix Identification" action, or confirm the field is intentionally deferred.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const speciesDossierToCalyxIntegration: CompletionNode = {
+  id: 'int-species-dossier-calyx',
+  parentId: 'module-integration-journeys-core',
+  name: 'Species Dossier -> Calyx narrative handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'NOT_MET' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1, scientificProvenanceSecurity: 1, browserEndToEnd: 0, deployedOperational: null },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/speciesDossier.ts', note: 'DossierSection calyx_narrative field.' },
+    { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx' },
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#293', note: 'Same evidence-receipt rendering already scored under the Species Dossier domain.', prState: 'merged' },
+  ],
+  nextAction: 'Same as the Evidence dossier rendering gate — run a live browser smoke test against a real Calyx backend.',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const integrationJourneysDomain = branch({
+  id: 'domain-integration-journeys',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Cross-Module Integration Journeys',
+  type: 'domain',
+  nextAction: 'Close the browser/live-acceptance gap on every PARTIAL journey below; resolve the UNKNOWN journeys with direct code tracing.',
+}, [
+  branch({
+    id: 'module-integration-journeys-core',
+    parentId: 'domain-integration-journeys',
+    name: 'Integration journeys',
+    type: 'module',
+    nextAction: 'See child integration nodes. Atlas -> Research lives under the Atlas domain; University -> Research and University -> Calyx live under the University domain — not duplicated here.',
+  }, [
+    researchToCalyxIntegration,
+    censusPending({
+      idHint: 'int-calyx-verification-workbench',
+      parentId: 'module-integration-journeys-core',
+      name: 'Calyx reasoning -> Verification Workbench handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/components/calyx/CalyxVerificationWorkbench.tsx' },
+        { kind: 'file', ref: 'src/components/calyx/ScientificSynthesis.tsx' },
+      ],
+      nextAction: 'Trace whether a live Calyx conversation turn actually opens/feeds the Verification Workbench, or whether the two components are only sibling routes.',
+      lane: 'INTEGRATION_COMPLETION',
+      type: 'integration',
+    }),
+    censusPending({
+      idHint: 'int-research-verification-workbench',
+      parentId: 'module-integration-journeys-core',
+      name: 'Research Station -> Verification Workbench handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/pages/ResearchCenter.tsx', note: 'No import of CalyxVerificationWorkbench or a verification route found in this file this pass.' },
+      ],
+      nextAction: 'Confirm whether Research Station findings can be sent into the Verification Workbench at all; if no such path exists, reclassify this leaf as MISSING with evidence.',
+      lane: 'INTEGRATION_COMPLETION',
+      type: 'integration',
+    }),
+    matrixToLexiconIntegration,
+    censusPending({
+      idHint: 'int-matrix-calyx',
+      parentId: 'module-integration-journeys-core',
+      name: 'Matrix Identification -> Calyx Vision handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/components/matrix/MatrixVisionReviewPanel.tsx', note: 'References "Calyx Vision · Review gate" copy; no direct Calyx backend call traced this pass.' },
+      ],
+      nextAction: 'Trace whether MatrixVisionReviewPanel actually calls a Calyx Vision backend endpoint or only displays static review-gate copy.',
+      lane: 'INTEGRATION_COMPLETION',
+      type: 'integration',
+    }),
+    literatureToKnowledgeGraphIntegration,
+    censusPending({
+      idHint: 'int-literature-calyx',
+      parentId: 'module-integration-journeys-core',
+      name: 'Literature -> Calyx handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/lib/scientific-intelligence/literature/adapter.ts', note: 'No Calyx import or reference found in this frontend file this pass. Calyx retrieval of literature evidence may happen entirely backend-side, which this repository cannot observe — treated as genuinely unknown, not confirmed missing.' },
+      ],
+      nextAction: 'Ask the backend team whether Calyx retrieves literature evidence server-side; a frontend-only census cannot resolve this leaf.',
+      lane: 'SCIENTIFIC_DATA_COMPLETION',
+      type: 'integration',
+    }),
+    speciesDossierToAtlasIntegration,
+    speciesDossierToMatrixIntegration,
+    speciesDossierToCalyxIntegration,
+    censusPending({
+      idHint: 'int-species-dossier-research',
+      parentId: 'module-integration-journeys-core',
+      name: 'Species Dossier -> Research Station handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx', note: 'No link/action to /research found in this file this pass.' },
+      ],
+      nextAction: 'Confirm whether a dossier -> Research Station continuation path exists or should be added, matching the pattern already used for Atlas.',
+      lane: 'INTEGRATION_COMPLETION',
+      type: 'integration',
+    }),
+    confirmedMissing({
+      idHint: 'int-conservatory-calyx',
+      parentId: 'module-integration-journeys-core',
+      name: 'Conservatory / OASIS -> Calyx handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/pages/MyConservatory.tsx', note: 'No calyx/Calyx reference found (grep).' },
+        { kind: 'file', ref: 'src/pages/OACS.tsx', note: 'No calyx/Calyx reference found (grep).' },
+      ],
+      nextAction: 'Build a Conservatory -> Calyx handoff (e.g. "Ask Calyx about this plant") following the same bounded-context contract pattern as the homepage/Research handoffs.',
+      lane: 'PRODUCT_COMPLETION',
+      type: 'integration',
+    }),
+    confirmedMissing({
+      idHint: 'int-buying-companion-conservatory',
+      parentId: 'module-integration-journeys-core',
+      name: 'Orchid Buying Companion -> Conservatory handoff',
+      evidence: [
+        { kind: 'file', ref: 'src/App.tsx', note: 'Depends on the Orchid Buying Companion module, which does not exist anywhere in src/ this pass (see the Orchid Buying Companion domain).' },
+      ],
+      nextAction: 'Blocked on the Orchid Buying Companion module itself being built first; revisit once that module exists.',
+      lane: 'PRODUCT_COMPLETION',
+      type: 'integration',
     }),
   ]),
 ]);
@@ -571,18 +913,6 @@ type StubDomainSpec = {
 };
 
 const STUB_DOMAINS: StubDomainSpec[] = [
-  {
-    idHint: 'domain-homepage',
-    name: 'Homepage / Featured Genus / Public Calyx',
-    evidence: [
-      { kind: 'route', ref: '/' },
-      { kind: 'file', ref: 'src/pages/Index.tsx' },
-      { kind: 'route', ref: '/calyx' },
-      { kind: 'file', ref: 'src/components/calyx/AtlasAwareCalyxRoute.tsx' },
-    ],
-    nextAction: 'Decompose into Homepage, Featured Genus rotation, and Public Calyx capabilities with real acceptance gates.',
-    lane: 'PRODUCT_COMPLETION',
-  },
   {
     idHint: 'domain-calyx-verification',
     name: 'Calyx reasoning + Verification Workbench',
@@ -784,11 +1114,13 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   type: 'portfolio',
   nextAction: 'Select the next unmet gate via selectNextUnmetGate() and continue the per-domain census.',
 }, [
+  homepageDomain,
   speciesDossierDomain,
   atlasDomain,
   literatureDomain,
   matrixDomain,
   universityDomain,
+  integrationJourneysDomain,
   ...stubDomains,
 ]);
 
