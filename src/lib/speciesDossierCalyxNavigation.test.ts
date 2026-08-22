@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   SPECIES_DOSSIER_CALYX_ORIGIN,
+  parseSpeciesDossierCalyxContext,
   speciesDossierCalyxHref,
 } from '@/lib/speciesDossierCalyxNavigation';
 
@@ -19,6 +20,13 @@ describe('Species Dossier → Calyx navigation', () => {
     expect(url.searchParams.get('taxon')).toBe('Phalaenopsis amabilis');
     expect(url.searchParams.get('origin')).toBe(SPECIES_DOSSIER_CALYX_ORIGIN);
     expect(url.searchParams.get('context_is_evidence')).toBe('false');
+
+    expect(parseSpeciesDossierCalyxContext(url.search)).toEqual({
+      origin: SPECIES_DOSSIER_CALYX_ORIGIN,
+      genus: 'Phalaenopsis',
+      taxon: 'Phalaenopsis amabilis',
+      contextIsEvidence: false,
+    });
   });
 
   it('exposes only the bounded subject-context keys', () => {
@@ -51,6 +59,40 @@ describe('Species Dossier → Calyx navigation', () => {
     }
   });
 
+  it('ignores hostile appended detail instead of admitting it to accepted Calyx context', () => {
+    const parsed = parseSpeciesDossierCalyxContext(
+      '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx&context_is_evidence=false&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private&evidence=promote-me',
+    );
+
+    expect(parsed).toEqual({
+      origin: SPECIES_DOSSIER_CALYX_ORIGIN,
+      genus: 'Phalaenopsis',
+      taxon: 'Phalaenopsis amabilis',
+      contextIsEvidence: false,
+    });
+    expect(Object.keys(parsed ?? {}).sort()).toEqual(
+      ['contextIsEvidence', 'genus', 'origin', 'taxon'].sort(),
+    );
+  });
+
+  it('fails closed unless the dedicated origin explicitly declares non-evidence context', () => {
+    expect(
+      parseSpeciesDossierCalyxContext(
+        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx',
+      ),
+    ).toBeNull();
+    expect(
+      parseSpeciesDossierCalyxContext(
+        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=species-dossier-calyx&context_is_evidence=true',
+      ),
+    ).toBeNull();
+    expect(
+      parseSpeciesDossierCalyxContext(
+        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=research-station&context_is_evidence=false',
+      ),
+    ).toBeNull();
+  });
+
   it('fails closed on malformed or mismatched species identity', () => {
     expect(
       speciesDossierCalyxHref({ genus: 'Phalaenopsis', taxon: 'Cattleya labiata' }),
@@ -62,5 +104,11 @@ describe('Species Dossier → Calyx navigation', () => {
       speciesDossierCalyxHref({ genus: 'Phalaenopsis amabilis', taxon: 'Phalaenopsis amabilis' }),
     ).toBeNull();
     expect(speciesDossierCalyxHref({ genus: 'Phalaenopsis', taxon: null })).toBeNull();
+
+    expect(
+      parseSpeciesDossierCalyxContext(
+        '?genus=Phalaenopsis&taxon=Cattleya%20labiata&origin=species-dossier-calyx&context_is_evidence=false',
+      ),
+    ).toBeNull();
   });
 });
