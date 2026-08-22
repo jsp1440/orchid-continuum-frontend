@@ -27,6 +27,7 @@ import {
   type EvidenceReceipt,
   type EvidenceState,
 } from '@/lib/speciesDossier';
+import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -132,6 +133,13 @@ const SpeciesDossier: React.FC = () => {
   const atlasQuery = encodeURIComponent(
     data?.canonical_name || data?.scientific_name || taxonomyId,
   );
+  const matrixHref = dossier
+    ? speciesDossierMatrixHref(dossier.matrix_url, {
+        taxonId: dossier.identity.taxon_id || taxonomyId,
+        taxonLabel:
+          dossier.identity.accepted_name || dossier.identity.full_scientific_name || name,
+      })
+    : null;
 
   return (
     <div
@@ -188,6 +196,14 @@ const SpeciesDossier: React.FC = () => {
                 >
                   <MapIcon className="h-4 w-4" /> View on Atlas
                 </Link>
+                {matrixHref && (
+                  <Link
+                    to={matrixHref}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full border border-[#c9a24a]/50 bg-[#c9a24a]/[0.08] text-[#c9a24a] hover:bg-[#c9a24a]/[0.14] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
+                  >
+                    <FileCheck2 className="h-4 w-4" /> Continue in Matrix
+                  </Link>
+                )}
               </div>
 
               {/* Detail */}
