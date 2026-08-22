@@ -22,6 +22,11 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          # Full history so the pull request's base branch is present and the
+          # changed range can be computed. The default depth-1 checkout has no
+          # base to diff against.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,3 +45,10 @@ jobs:
 
       - name: Lint frontend
         run: npm run lint
+
+      # Runs from the always-on gate rather than a path-filtered workflow, so a
+      # whitespace defect fails on the pull request that introduces it whatever
+      # files it touches. See scripts/check-diff-hygiene.mjs for why this was
+      # previously invisible until promotion to main.
+      - name: Diff hygiene
+        run: node scripts/check-diff-hygiene.mjs
