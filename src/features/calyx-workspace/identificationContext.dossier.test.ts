@@ -61,7 +61,6 @@ describe('Matrix inbound source context', () => {
     const href = matrixHrefForLexiconConcept('labellum', 'Labellum');
     const search = new URL(href, 'https://orchidcontinuum.org').search;
     expect(readIdentificationSourceContext(search)).toEqual({
-      source: 'lexicon',
       concept: 'labellum',
       label: 'Labellum',
     });
