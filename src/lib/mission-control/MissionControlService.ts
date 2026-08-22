@@ -1,5 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
-import { grantItems, loadIntelligenceStore } from '@/lib/missionControlIntelligence';
+import { grantItems, loadIntelligenceStore, type IntelligenceItem } from '@/lib/missionControlIntelligence';
 import {
   fetchMissionControlOperations,
   type ContinuumSubsystem,
@@ -8,7 +8,7 @@ import {
   type Recommendation,
   type RepositoryStatus,
 } from '@/lib/missionControlOps';
-import { researchInbox } from '@/lib/ownerOperationsConsole';
+import { researchInbox, type ResearchInboxItem } from '@/lib/ownerOperationsConsole';
 import type { MissionControlSnapshot } from '@/lib/mission-control/MissionControlTypes';
 
 const EXECUTIVE_STATE_PATH = '/api/executive/state';
@@ -71,7 +71,7 @@ function mergeLiveRecommendations(dashboard: MissionControlOperations): Recommen
   // treating the function reference as an array and causing the production
   // runtime error: "Ju.slice is not a function".
   const loadedGrantItems = grantItems(loadIntelligenceStore().intelligenceItems);
-  const grantDriven = safeArr(loadedGrantItems).slice(0, 1).map((item): Recommendation => ({
+  const grantDriven = safeArr<IntelligenceItem>(loadedGrantItems).slice(0, 1).map((item): Recommendation => ({
     id: `grant-${item.id}`,
     title: `${item.organization ?? item.title ?? 'Unknown'}: evidence package readiness`,
     priority: item.priority === 'critical' ? 'critical' : 'high',
@@ -80,7 +80,7 @@ function mergeLiveRecommendations(dashboard: MissionControlOperations): Recommen
     nextBuild: '/mission-control#mission-control-grants',
   }));
 
-  const inboxDriven = safeArr(researchInbox).slice(0, 1).map((item): Recommendation => ({
+  const inboxDriven = safeArr<ResearchInboxItem>(researchInbox).slice(0, 1).map((item): Recommendation => ({
     id: `inbox-${item.id}`,
     title: `${item.title}: owner triage`,
     priority: item.status === 'waiting_owner' ? 'high' : 'medium',
