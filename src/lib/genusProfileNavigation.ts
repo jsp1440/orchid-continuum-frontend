@@ -38,3 +38,18 @@ export function genusProfileCalyxHref(genus: string): string {
   });
   return `/calyx?${params.toString()}`;
 }
+
+/**
+ * Continue from a dedicated Genus Profile into Research Center while carrying
+ * only the canonical genus identity. The profile is the provenance source;
+ * this must never be re-labelled as Genus of the Day, and the genus remains
+ * navigation context rather than scientific evidence.
+ */
+export function genusProfileResearchHref(genus: string): string {
+  const params = new URLSearchParams({
+    genus: boundedGenus(genus),
+    origin: GENUS_PROFILE_ORIGIN,
+    context_is_evidence: 'false',
+  });
+  return `/research?${params.toString()}`;
+}
