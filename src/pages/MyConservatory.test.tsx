@@ -1965,6 +1965,160 @@ describe("MyConservatory collection review", () => {
   });
 });
 
+/**
+ * Could I grow this? — the buying companion.
+ *
+ * The pressure on this screen is the pull towards an answer it cannot support:
+ * "yes, buy it, it goes on bench 3". Whether a bench has room, whether its
+ * readings are current, whether the grower can hold those conditions through a
+ * season — none of it is in the data. So most of these tests are about what
+ * the page must not imply.
+ */
+describe("MyConservatory could I grow this", () => {
+  const warmRow = {
+    location_id: "warm", name: "Warm bench", kind: "greenhouse_bench",
+    assessments: [{ variable: "temperature_c", outcome: "within" as const, condition: { value: 20 } }],
+    counts: { within: 1, outside: 0, unassessable: 0, conflicting: 0 },
+    anything_assessed: true, oldest_verdict_condition_age_days: 1,
+  };
+  const coldRow = {
+    location_id: "cold", name: "Cold bench", kind: "greenhouse_bench",
+    assessments: [{
+      variable: "temperature_c", outcome: "outside" as const,
+      breached: [{ bound: "minimum", limit: 15 }], condition: { value: 8 },
+    }],
+    counts: { within: 0, outside: 1, unassessable: 0, conflicting: 0 },
+    anything_assessed: true, oldest_verdict_condition_age_days: 212,
+  };
+  const blankRow = {
+    location_id: "blank", name: "New bench", kind: "shelf",
+    assessments: [{ variable: "temperature_c", outcome: "unassessable" as const, reason: "NO_CONDITION_RECORDED" }],
+    counts: { within: 0, outside: 0, unassessable: 1, conflicting: 0 },
+    anything_assessed: false, oldest_verdict_condition_age_days: null,
+  };
+
+  function searchFetch(body: unknown, status = 200) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/locations/suitability")) {
+        return { ok: status === 200, status, json: async () => body } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ plants: [], count: 0 }) } as Response;
+    });
+  }
+
+  async function search(body: unknown, status = 200, query = "Cattleya skinneri") {
+    const fetchMock = searchFetch(body, status);
+    renderAt("/conservatory/could-i-grow-this", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    const input = container.querySelector('[data-testid="taxon-search-input"]') as HTMLInputElement;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, query);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const form = container.querySelector('[data-testid="taxon-search-form"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+    return fetchMock;
+  }
+
+  const result = (locations: unknown[], overrides = {}) => ({
+    taxon: "Cattleya skinneri", locations,
+    requirements: { claim_class: "literature_derived" },
+    anything_assessed: true, is_recommendation: false, ...overrides,
+  });
+
+  it("compares each location and names the bound a bench misses", async () => {
+    await search(result([coldRow, warmRow]));
+
+    expect(container.querySelector('[data-testid="taxon-variable-cold-temperature_c"]')?.textContent)
+      .toMatch(/past the known minimum of 15/i);
+    expect(container.querySelector('[data-testid="taxon-variable-warm-temperature_c"]')?.getAttribute("data-outcome"))
+      .toBe("within");
+  });
+
+  it("does not rank the locations", async () => {
+    // The breaching bench is listed first by the backend. Reordering it below
+    // the passing one would be a recommendation wearing a sort order.
+    await search(result([coldRow, warmRow]));
+
+    const listed = [...container.querySelectorAll('[data-testid^="taxon-location-"]')]
+      .map((el) => el.getAttribute("data-testid"))
+      .filter((id) => id === "taxon-location-cold" || id === "taxon-location-warm");
+    expect(listed).toEqual(["taxon-location-cold", "taxon-location-warm"]);
+  });
+
+  it("says nothing could be compared before listing any location", async () => {
+    await search(result([blankRow], { anything_assessed: false }));
+
+    const banner = container.querySelector('[data-testid="taxon-nothing-assessed"]')?.textContent ?? "";
+    expect(banner).toMatch(/nothing could be compared/i);
+    expect(banner).toMatch(/says nothing about whether you could grow it/i);
+  });
+
+  it("blames the store, not the species, when the store could not be read", async () => {
+    await search(result([blankRow], {
+      anything_assessed: false,
+      requirements: { claim_class: "absent", reason: "TRAIT_SOURCE_UNAVAILABLE", source_consulted: false },
+    }));
+
+    const banner = container.querySelector('[data-testid="taxon-nothing-assessed"]')?.textContent ?? "";
+    expect(banner).toMatch(/could not be read/i);
+    expect(banner).toMatch(/nobody looked/i);
+    expect(banner).not.toMatch(/holds no cultivation evidence/i);
+  });
+
+  it("marks an unassessable bench as unassessable, not as one that will do", async () => {
+    await search(result([warmRow, blankRow]));
+
+    expect(container.querySelector('[data-testid="taxon-location-unassessed-blank"]')?.textContent)
+      .toMatch(/not the same as this location suiting the plant/i);
+    // Stated on the row itself, even though something elsewhere was assessed.
+    expect(container.querySelector('[data-testid="taxon-nothing-assessed"]')).toBeNull();
+  });
+
+  it("carries the age of the readings behind each location", async () => {
+    await search(result([coldRow]));
+
+    expect(container.querySelector('[data-testid="taxon-age-cold"]')?.textContent)
+      .toMatch(/taken 7 months ago/i);
+  });
+
+  it("states it is not advice about buying", async () => {
+    await search(result([warmRow]));
+    const note = container.querySelector('[data-testid="taxon-not-advice"]')?.textContent ?? "";
+    expect(note).toMatch(/not advice about buying/i);
+    expect(note).toMatch(/not ranked/i);
+  });
+
+  it("sends the taxon it was given, encoded", async () => {
+    const fetchMock = await search(result([warmRow]), 200, "Cattleya × dolosa");
+
+    const call = fetchMock.mock.calls.find((c) => String(c[0]).includes("/locations/suitability"));
+    expect(String(call?.[0])).toContain(`taxon=${encodeURIComponent("Cattleya × dolosa")}`);
+  });
+
+  it("will not search for an empty name", async () => {
+    renderAt("/conservatory/could-i-grow-this", searchFetch(result([])) as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    const submit = container.querySelector('[data-testid="taxon-search-submit"]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+  });
+
+  it("keeps a backend without the route distinct from a collection that cannot house it", async () => {
+    await search({ detail: "not found" }, 404);
+    expect(container.querySelector('[data-testid="taxon-search-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="taxon-search-result"]')).toBeNull();
+  });
+
+  it("keeps a malformed response distinct too", async () => {
+    // 200 with the wrong body is the failure that looks like success.
+    await search({ taxon: "Cattleya skinneri" });
+    expect(container.querySelector('[data-testid="taxon-search-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="taxon-location-list"]')).toBeNull();
+  });
+});
+
 describe("MyConservatory placement assessment", () => {
   function assessmentFetch(body: unknown, status = 200) {
     return vi.fn(async (input: RequestInfo | URL) => {
