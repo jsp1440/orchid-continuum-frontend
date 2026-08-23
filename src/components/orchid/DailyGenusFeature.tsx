@@ -4,6 +4,7 @@ import DailyGenusFeatureContinuum from './DailyGenusFeatureContinuum';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import {
   featuredTaxonAtlasNextHref,
+  featuredTaxonCalyxHref,
   featuredTaxonResearchHref,
   featuredTaxonSpeciesHref,
 } from '@/lib/featuredTaxonNavigation';
@@ -12,16 +13,17 @@ import {
  * Mounted homepage Genus-of-the-Day entrypoint.
  *
  * DailyGenusFeatureContinuum owns the evidence-rich featured-genus surface.
- * This wrapper adds canonical continuations into Atlas Next, Research Station,
- * and the Species browser using the same bounded featured-taxon navigation
- * boundary. Only genus identity crosses these boundaries; coordinates,
- * locality, occurrence ids, collectors, catalogue numbers, and other
- * Atlas-level record detail have no channel. Research additionally receives
- * the explicit non-evidence declaration required by its trust boundary.
+ * This wrapper adds canonical continuations into Atlas Next, Calyx, Research
+ * Station, and the Species browser using the same bounded featured-taxon
+ * navigation boundary. Only genus identity crosses these boundaries;
+ * coordinates, locality, occurrence ids, collectors, catalogue numbers, and
+ * other Atlas-level record detail have no channel. Calyx and Research receive
+ * the explicit non-evidence declaration required by their trust boundaries.
  */
 const DailyGenusFeature: React.FC = () => {
   const { genus } = useDailyGenus();
   const atlasNextHref = featuredTaxonAtlasNextHref(genus);
+  const calyxHref = featuredTaxonCalyxHref(genus);
   const researchHref = featuredTaxonResearchHref(genus);
   const speciesHref = featuredTaxonSpeciesHref(genus);
 
@@ -35,7 +37,7 @@ const DailyGenusFeature: React.FC = () => {
               Continue the investigation
             </p>
             <p className="mt-1 text-sm leading-6 text-[#526046]">
-              Carry {genus} into Atlas Next, Research Station, or its Species dossiers as bounded navigation context.
+              Carry {genus} into Atlas Next, Calyx, Research Station, or its Species dossiers as bounded navigation context.
             </p>
           </div>
           <div className="mt-3 flex shrink-0 flex-wrap gap-2 sm:mt-0">
@@ -44,6 +46,12 @@ const DailyGenusFeature: React.FC = () => {
               className="inline-flex items-center rounded-lg border border-[#b59a58] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#665321] hover:bg-[#fff7df]"
             >
               Explore in Atlas Next
+            </Link>
+            <Link
+              to={calyxHref}
+              className="inline-flex items-center rounded-lg border border-[#b59a58] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#665321] hover:bg-[#fff7df]"
+            >
+              Ask Calyx about {genus}
             </Link>
             <Link
               to={speciesHref}
