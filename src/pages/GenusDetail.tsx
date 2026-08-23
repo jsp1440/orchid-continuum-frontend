@@ -33,7 +33,11 @@ import {
   type EcologicalEvidence,
 } from '@/lib/genusProfileDataQuality';
 import { fetchGenusGraphEvidence, type GenusGraphResult } from '@/lib/knowledgeGraph';
-import { genusProfileAtlasHref, genusProfileCalyxHref } from '@/lib/genusProfileNavigation';
+import {
+  genusProfileAtlasHref,
+  genusProfileCalyxHref,
+  genusProfileResearchHref,
+} from '@/lib/genusProfileNavigation';
 import {
   lookupGenus,
   fetchGenusImagesWithSource,
@@ -61,6 +65,7 @@ import {
 const PLATFORM_LINKS = (genus: string): { label: string; to: string }[] => [
   { label: 'Atlas', to: genusProfileAtlasHref(genus) },
   { label: 'Ask Calyx', to: genusProfileCalyxHref(genus) },
+  { label: 'Research', to: genusProfileResearchHref(genus) },
   { label: 'Conservatory', to: '/zoo' },
   { label: 'Field Station', to: '/ecosystems' },
   { label: 'Deception Lab', to: '/pollinators' },
