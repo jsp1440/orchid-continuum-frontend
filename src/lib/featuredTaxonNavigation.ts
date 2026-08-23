@@ -39,6 +39,16 @@ export function featuredTaxonCalyxHref(genus: string): string {
 }
 
 /**
+ * Canonical handoff from the homepage featured genus into the Species browser.
+ * Species already owns `genus` as its receiving filter, so this route carries
+ * exactly the bounded genus identity and nothing that could be mistaken for
+ * evidence, locality, occurrence, collector, confidence, or conclusion state.
+ */
+export function featuredTaxonSpeciesHref(genus: string): string {
+  return `/species?genus=${encodeURIComponent(normalizedGenus(genus))}`;
+}
+
+/**
  * Continue from the mounted Atlas workspace into Calyx while preserving only
  * the active genus identity. Atlas coordinates, locality text, occurrence IDs,
  * collector fields, and other record-level details remain in Atlas. The genus
