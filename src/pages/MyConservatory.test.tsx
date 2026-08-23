@@ -1915,6 +1915,35 @@ describe("MyConservatory collection review", () => {
     expect(container.querySelector('[data-testid="review-source-unread"]')).toBeNull();
   });
 
+  it("carries the age of the reading behind each row", async () => {
+    // The row shows none of the underlying readings, so without this a
+    // season-old number passes as this morning's.
+    await open(review({
+      groups: {
+        outside: [{ ...breachedPlant, oldest_verdict_condition_age_days: 212 }],
+        conflicting: [], within: [], unassessed: [],
+      },
+      counts: { outside: 1, conflicting: 0, within: 0, unassessed: 0 },
+      plant_count: 1, anything_assessed: true,
+    }));
+
+    expect(container.querySelector('[data-testid="review-age-p1"]')?.textContent)
+      .toMatch(/oldest reading behind this: taken 7 months ago/i);
+  });
+
+  it("shows no age rather than today when the reading has no timestamp", async () => {
+    await open(review({
+      groups: {
+        outside: [{ ...breachedPlant, oldest_verdict_condition_age_days: null }],
+        conflicting: [], within: [], unassessed: [],
+      },
+      counts: { outside: 1, conflicting: 0, within: 0, unassessed: 0 },
+      plant_count: 1, anything_assessed: true,
+    }));
+
+    expect(container.querySelector('[data-testid="review-age-p1"]')).toBeNull();
+  });
+
   it("states it is not advice and not ordered by severity", async () => {
     await open(review());
     const note = container.querySelector('[data-testid="review-not-advice"]')?.textContent ?? "";
@@ -2122,6 +2151,120 @@ describe("MyConservatory placement assessment", () => {
     await open(unassessable);
     expect(container.querySelector('[data-testid="requirement-source-unread"]')).toBeNull();
     expect(container.querySelector('[data-testid="nothing-assessed"]')).not.toBeNull();
+  });
+
+  /**
+   * When the number behind a verdict was taken.
+   *
+   * A bench measured at 8C in January and never since still puts a plant
+   * "outside" a 15C minimum in August. Without the age on the screen that reads
+   * as a fact about where the plant is now. The reverse is worse: a warm spring
+   * reading shows a clean row all summer for a bench the thermometer has not
+   * been near since April.
+   *
+   * No cutoff and no "stale" badge. Choosing one would be a policy nobody
+   * agreed to, and the backend refuses to pick one for the same reason.
+   */
+  it("shows how long ago the reading behind a breach was taken", async () => {
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "outside",
+        breached: [{ bound: "minimum", limit: 15 }],
+        condition: { value: 8, unit: "degrees Celsius", origin: "measured" },
+        condition_age_days: 212,
+        bounds: { minimum: [{ value: 15 }] },
+      }],
+      counts: { within: 0, outside: 1, unassessable: 0, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+      oldest_verdict_condition_age_days: 212,
+    });
+
+    expect(container.querySelector('[data-testid="assessment-condition-temperature_c"]')?.textContent)
+      .toMatch(/taken 7 months ago/i);
+    expect(container.querySelector('[data-testid="assessment-oldest-reading"]')?.textContent)
+      .toMatch(/oldest reading behind these comparisons was taken 7 months ago/i);
+  });
+
+  it("does not claim a reading with no timestamp was taken today", async () => {
+    // The one thing an unknown age must never render as.
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "within",
+        condition: { value: 20, unit: "degrees Celsius", origin: "measured" },
+        condition_age_days: null,
+        bounds: {},
+      }],
+      counts: { within: 1, outside: 0, unassessable: 0, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+      oldest_verdict_condition_age_days: null,
+    });
+
+    const line = container.querySelector('[data-testid="assessment-condition-temperature_c"]')?.textContent ?? "";
+    expect(line).toContain("Recorded: 20");
+    // The origin label beside it legitimately says "measured by an instrument",
+    // so this pins the age phrasing specifically.
+    expect(line).not.toMatch(/taken (today|yesterday|\d+ (days|months) ago)/i);
+    expect(line).not.toMatch(/timestamped in the future/i);
+    expect(container.querySelector('[data-testid="assessment-oldest-reading"]')).toBeNull();
+  });
+
+  it("says a fresh reading is fresh without inventing a precision", async () => {
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "within",
+        condition: { value: 20, unit: "degrees Celsius", origin: "measured" },
+        condition_age_days: 0.3, bounds: {},
+      }],
+      counts: { within: 1, outside: 0, unassessable: 0, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+      oldest_verdict_condition_age_days: 0.3,
+    });
+
+    expect(container.querySelector('[data-testid="assessment-condition-temperature_c"]')?.textContent)
+      .toMatch(/taken today/i);
+  });
+
+  it("surfaces a reading stamped in the future rather than hiding it", async () => {
+    // A clock or data problem. Silently omitting the line would remove the
+    // only sign of it.
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "within",
+        condition: { value: 20, unit: "degrees Celsius", origin: "measured" },
+        condition_age_days: -4, bounds: {},
+      }],
+      counts: { within: 1, outside: 0, unassessable: 0, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+      oldest_verdict_condition_age_days: -4,
+    });
+
+    expect(container.querySelector('[data-testid="assessment-condition-temperature_c"]')?.textContent)
+      .toMatch(/timestamped in the future/i);
+  });
+
+  it("never refuses a verdict for being old", async () => {
+    // The panel reports the age; it does not overrule the comparison. A
+    // "too old to say" badge here would be a cutoff nobody chose.
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "outside",
+        breached: [{ bound: "minimum", limit: 15 }],
+        condition: { value: 8, unit: "degrees Celsius", origin: "measured" },
+        condition_age_days: 3000, bounds: { minimum: [{ value: 15 }] },
+      }],
+      counts: { within: 0, outside: 1, unassessable: 0, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+      oldest_verdict_condition_age_days: 3000,
+    });
+
+    const row = container.querySelector('[data-testid="assessment-temperature_c"]');
+    expect(row?.getAttribute("data-outcome")).toBe("outside");
+    // The label the grower actually reads, not just the attribute. A "cannot
+    // be assessed" here would be a cutoff nobody chose, applied silently.
+    expect(row?.textContent).toMatch(/outside the known range/i);
+    expect(row?.textContent).not.toMatch(/cannot be assessed/i);
+    expect(container.querySelector('[data-testid="assessment-summary"]')?.textContent)
+      .toMatch(/falls outside a known range/i);
   });
 
   it("keeps a backend without the route distinct from a plant with nothing to assess", async () => {

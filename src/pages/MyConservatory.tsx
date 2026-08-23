@@ -67,6 +67,13 @@ type Assessment = {
   breached?: { bound: string; limit: number }[];
   condition?: { value?: number; unit?: string; origin?: string };
   bounds?: Record<string, { value: number; evidence_strength?: string }[]>;
+  /**
+   * How old the reading behind this verdict is, in days.
+   *
+   * Absent or null means the reading carries no usable timestamp. That is not
+   * the same as "just measured", and it must never render as a fresh reading.
+   */
+  condition_age_days?: number | null;
 };
 
 type PlacementAssessment = {
@@ -82,6 +89,8 @@ type PlacementAssessment = {
    * and must never be rendered as a fact about the literature.
    */
   requirement_source_consulted?: boolean;
+  /** The age of the oldest reading that produced a verdict, in days. */
+  oldest_verdict_condition_age_days?: number | null;
   is_recommendation: boolean;
 };
 
@@ -92,6 +101,8 @@ type CollectionReviewRow = {
   accepted_scientific_name: string | null;
   breaches: Array<{ variable: string; breached: Array<{ bound: string; limit: number }> }>;
   requirement_source_consulted: boolean;
+  /** The age of the oldest reading behind this plant's verdicts, in days. */
+  oldest_verdict_condition_age_days?: number | null;
 };
 
 type CollectionReview = {
@@ -1380,6 +1391,31 @@ function CultivationContext({ plantId }: { plantId: string }) {
   </section>;
 }
 
+/**
+ * How long ago a reading was taken, in words a grower reads at a glance.
+ *
+ * Returns null when there is no age. Rendering "0 days ago" for a reading whose
+ * age nobody can establish would claim it was taken just now, which is the one
+ * thing it must not say.
+ *
+ * No threshold and no "stale" badge. Choosing a cutoff — a month, a season —
+ * would be a policy nobody agreed to, and the backend refuses to pick one for
+ * exactly the same reason. The number is shown; the grower decides.
+ */
+function readingAge(days: number | null | undefined): string | null {
+  if (typeof days !== "number" || !Number.isFinite(days)) return null;
+  // A reading stamped in the future is a clock or data problem, and saying so
+  // is more use than a silently absent line.
+  if (days < 0) return "timestamped in the future";
+  // "taken", not "measured": the origin label right beside this already says
+  // "measured by an instrument", and repeating the word made the line read as
+  // though it were describing the instrument twice.
+  if (days < 1) return "taken today";
+  if (days < 2) return "taken yesterday";
+  if (days < 60) return `taken ${Math.round(days)} days ago`;
+  return `taken ${Math.round(days / 30)} months ago`;
+}
+
 const OUTCOME_COPY: Record<string, { label: string; detail: string }> = {
   within: {
     label: "Inside the known range",
@@ -1496,6 +1532,13 @@ function PlacementAssessmentPanel({ plantId }: { plantId: string }) {
       </p>
     )}
 
+    {readingAge(assessment.oldest_verdict_condition_age_days) && (
+      <p className="mt-2 text-xs text-muted-foreground" data-testid="assessment-oldest-reading">
+        The oldest reading behind these comparisons was{" "}
+        {readingAge(assessment.oldest_verdict_condition_age_days)}.
+      </p>
+    )}
+
     <ul className="mt-3 space-y-2" data-testid="assessment-list">
       {assessment.assessments.map((row) => (
         <li key={row.variable} className="rounded-lg border p-3 text-sm"
@@ -1518,6 +1561,10 @@ function PlacementAssessmentPanel({ plantId }: { plantId: string }) {
                   hand-entered number is a weaker finding than one against an
                   instrument, and the grower is entitled to see which. */}
               {row.condition.origin ? ` (${ORIGIN_LABEL[row.condition.origin] ?? row.condition.origin})` : ""}
+              {/* When the number was taken travels with it. A verdict about
+                  where the plant is now, resting on a reading from January, is
+                  a different claim from the same verdict on this morning's. */}
+              {readingAge(row.condition_age_days) ? ` · ${readingAge(row.condition_age_days)}` : ""}
             </p>
           )}
           {row.breached?.map((breach) => (
@@ -1765,6 +1812,14 @@ function CollectionReviewPage() {
                     {breach.breached.map((limit) => ` · past the known ${limit.bound} of ${limit.limit}`).join("")}
                   </p>
                 ))}
+                {readingAge(row.oldest_verdict_condition_age_days) && (
+                  // The row shows none of the underlying readings, so if the
+                  // age is not here a season-old number passes as this
+                  // morning's.
+                  <p className="mt-1 text-xs text-muted-foreground" data-testid={`review-age-${row.plant_id}`}>
+                    Oldest reading behind this: {readingAge(row.oldest_verdict_condition_age_days)}.
+                  </p>
+                )}
                 {!row.requirement_source_consulted && (
                   <p className="mt-1 text-xs text-muted-foreground" data-testid={`review-unread-${row.plant_id}`}>
                     The evidence store could not be read for this plant.
