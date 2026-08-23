@@ -36,6 +36,16 @@ describe('Atlas Next → Research Station wiring', () => {
     expect(atlasNextResearchHref({ genus: 'not a genus' })).toBeNull();
   });
 
+  it('fails closed rather than silently dropping a malformed persisted project', () => {
+    expect(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'bad project id' })).toBeNull();
+    expect(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: '/research?project=p1' })).toBeNull();
+    expect(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'x'.repeat(161) })).toBeNull();
+
+    // An absent project is still a legitimate genus-only continuation.
+    const genusOnly = atlasNextResearchHref({ genus: 'Phalaenopsis' });
+    expect(genusOnly).toBe('/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false');
+  });
+
   it('routes the Atlas affordance through the governed builder', () => {
     const shell = src('features/atlas-next/AtlasNextShell.tsx');
     expect(shell).toContain('atlasNextResearchHref');
