@@ -27,6 +27,7 @@
 
 import { rollupStatus, rollupThreeLevels } from './scoring';
 import type { EvidenceSnapshot } from './evidenceFreshness';
+import { buildJourneyContinuityDomain } from './journeyContinuityDomain';
 import type { CompletionNode, Evidence, ExecutionLane } from './types';
 
 const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
@@ -44,7 +45,7 @@ const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: '9b327af58885bf786807eabf58765de71e3ba487',
+  reconciledAgainstSha: '00d3b3c2d08149df2dcafb97dc2b7e990263b118',
   reconciledAt: '2026-08-23T00:00:00.000Z',
   scope:
     'Initial census (#281) plus the mounted-journey, Verification Workbench, Classroom and legacy-salvage work landed through this commit. Not every domain has been re-scored — census coverage is reported alongside each percentage.',
@@ -1406,6 +1407,7 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   calyxVerificationDomain,
   knowledgeGraphDomain,
   conservatoryDomain,
+  buildJourneyContinuityDomain(branch),
   ...stubDomains,
 ]);
 
