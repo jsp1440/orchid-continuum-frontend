@@ -43,6 +43,26 @@ const DOMAIN_ORDER: readonly KnowledgeGraphDomain[] = [
   'conservation',
 ];
 
+const SAFE_FEATURED_GENUS = /^[A-Z][A-Za-z-]+$/;
+const MAX_FEATURED_GENUS_LENGTH = 120;
+
+/**
+ * Featured-genus reads cross the same trust boundary as featured-genus route
+ * handoffs. Keep the accepted shape aligned: one bounded canonical genus token,
+ * never a binomial, route fragment, locality string, or arbitrary prompt text.
+ */
+export function normalizeFeaturedTaxonGenus(value: unknown): string {
+  const genus = String(value ?? '').trim();
+  if (
+    !genus ||
+    genus.length > MAX_FEATURED_GENUS_LENGTH ||
+    !SAFE_FEATURED_GENUS.test(genus)
+  ) {
+    throw new Error('A bounded canonical featured-taxon genus is required');
+  }
+  return genus;
+}
+
 function domainStates(graph: GenusGraphResult): ContinuumDomainState[] {
   if (graph.status !== 'ok') {
     return DOMAIN_ORDER.map((domain) => ({ domain, state: 'unavailable', nodes: null, edges: null }));
@@ -82,8 +102,7 @@ export async function fetchFeaturedTaxonFungalEvidence(
   genus: string,
   displayedSpecies: string | null,
 ): Promise<FungalEvidence> {
-  const requested = genus.trim();
-  if (!requested) throw new Error('Featured taxon genus is required');
+  const requested = normalizeFeaturedTaxonGenus(genus);
   return fetchFungalEvidence(requested, displayedSpecies);
 }
 
@@ -100,8 +119,7 @@ export async function fetchFeaturedTaxonContinuum(
   genus: string,
   signal?: AbortSignal,
 ): Promise<FeaturedTaxonContinuum> {
-  const requested = genus.trim();
-  if (!requested) throw new Error('Featured taxon genus is required');
+  const requested = normalizeFeaturedTaxonGenus(genus);
 
   const [media, graph, relationships] = await Promise.all([
     fetchCalyxGenusMedia(requested, signal),
