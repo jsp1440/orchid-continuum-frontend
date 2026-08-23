@@ -116,7 +116,7 @@ function useApi() {
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen bg-background text-foreground">
     <style>{`@media print { body * { visibility: hidden !important; } .print-zone, .print-zone * { visibility: visible !important; } .print-zone { position: absolute; inset: 0; background: white; color: black; padding: 0.25in; } .no-print { display: none !important; } .plant-label { break-inside: avoid; page-break-inside: avoid; } }`}</style>
-    <header className="no-print border-b bg-card"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Orchid Continuum</p><h1 className="text-2xl font-semibold">My Conservatory</h1></div><nav className="flex flex-wrap gap-2 text-sm"><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory">Dashboard</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/plants">My Plants</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/labels">Print Labels</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/readiness">Readiness</Link><Link className="rounded-md bg-primary px-3 py-2 text-primary-foreground" to="/conservatory/plants/new">Add Plant</Link></nav></div></header>
+    <header className="no-print border-b bg-card"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Orchid Continuum</p><h1 className="text-2xl font-semibold">My Conservatory</h1></div><nav className="flex flex-wrap gap-2 text-sm"><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory">Dashboard</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/plants">My Plants</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/locations">Locations</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/labels">Print Labels</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/readiness">Readiness</Link><Link className="rounded-md bg-primary px-3 py-2 text-primary-foreground" to="/conservatory/plants/new">Add Plant</Link></nav></div></header>
     <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
   </div>;
 }
@@ -200,6 +200,136 @@ const ORIGIN_LABEL: Record<string, string> = {
   inferred: "inferred, not measured",
   unknown: "not recorded",
 };
+
+/**
+ * The kinds of place a grower actually keeps orchids.
+ *
+ * Two benches in one greenhouse can differ more than two greenhouses do, so a
+ * bench is its own kind rather than a detail buried in a name. `custom` exists
+ * so the vocabulary never blocks a real collection.
+ */
+const LOCATION_KINDS: { value: string; label: string }[] = [
+  { value: "greenhouse", label: "Greenhouse" },
+  { value: "greenhouse_bench", label: "Greenhouse bench" },
+  { value: "shade_house", label: "Shade house" },
+  { value: "lath_house", label: "Lath house" },
+  { value: "outdoor", label: "Outdoor area" },
+  { value: "windowsill", label: "Windowsill" },
+  { value: "indoor_growing_area", label: "Indoor growing area" },
+  { value: "shelf", label: "Shelf" },
+  { value: "zone", label: "Named zone" },
+  { value: "custom", label: "Something else" },
+];
+
+/**
+ * Creating and listing growing locations.
+ *
+ * Conditions typed here are the grower's own assessment of a place. The form
+ * says so, because the same field read later as a measurement would give every
+ * comparison built on it a precision nobody ever took. The backend stamps the
+ * origin; this surface has to be honest about what it is asking for.
+ */
+function Locations() {
+  const request = useApi();
+  const [locations, setLocations] = useState<GrowingLocation[]>();
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState("");
+  const [described, setDescribed] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+  const [loadError, setLoadError] = useState<string>();
+
+  const load = useCallback(() => {
+    request<{ locations: GrowingLocation[] }>("/api/conservatory/locations")
+      .then((result) => setLocations(result.locations ?? []))
+      .catch((reason) => setLoadError(reason instanceof Error ? reason.message : "Locations could not be loaded"));
+  }, [request]);
+
+  useEffect(() => { load(); }, [load]);
+
+  async function submit(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    if (!name.trim() || !kind) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      const created = await request<GrowingLocation>("/api/conservatory/locations", {
+        method: "POST",
+        body: JSON.stringify({ name: name.trim(), kind, described_conditions: described.trim() || null }),
+      });
+      setLocations((current) => [...(current ?? []), created]);
+      setName(""); setKind(""); setDescribed("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The location could not be created");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (loadError) return <Status loading={false} error={loadError} />;
+
+  const active = (locations ?? []).filter((location) => !location.retired_at);
+  const retired = (locations ?? []).filter((location) => location.retired_at);
+
+  return <div className="space-y-6">
+    <div>
+      <h2 className="text-3xl font-semibold">Growing locations</h2>
+      <p className="mt-2 text-muted-foreground">Where plants actually live. A plant can move between them without losing its history.</p>
+    </div>
+
+    <form className="rounded-xl border p-5 space-y-3" onSubmit={submit} data-testid="create-location">
+      <div className="flex flex-wrap gap-3">
+        <label className="text-sm">
+          <span className="block text-xs text-muted-foreground">Name</span>
+          <input className="mt-1 rounded-md border px-3 py-2" value={name} data-testid="location-name"
+            onChange={(changed) => setName(changed.target.value)} placeholder="Cool bench" />
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs text-muted-foreground">Kind of place</span>
+          <select className="mt-1 rounded-md border px-3 py-2" value={kind} data-testid="location-kind"
+            onChange={(changed) => setKind(changed.target.value)}>
+            <option value="">Choose…</option>
+            {LOCATION_KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+      </div>
+      <label className="block text-sm">
+        <span className="block text-xs text-muted-foreground">How you would describe the conditions (optional)</span>
+        <input className="mt-1 w-full rounded-md border px-3 py-2" value={described} data-testid="location-described"
+          onChange={(changed) => setDescribed(changed.target.value)} placeholder="Bright shade, cool nights" />
+      </label>
+      <p className="text-[11px] text-muted-foreground" data-testid="described-disclaimer">
+        This is recorded as your description of the place, not as a measurement. Instrument readings
+        are entered separately and stay distinguishable from it.
+      </p>
+      {error && <p className="text-xs text-destructive" role="alert" data-testid="location-error">{error}</p>}
+      <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+        disabled={saving || !name.trim() || !kind} data-testid="location-submit">
+        {saving ? "Creating…" : "Create location"}
+      </button>
+    </form>
+
+    {locations === undefined ? <Status loading error={undefined} /> : active.length ? (
+      <ul className="grid gap-3 md:grid-cols-2" data-testid="location-list">
+        {active.map((location) => <li key={location.id} className="rounded-xl border p-4">
+          <strong className="block">{location.name}</strong>
+          <span className="text-xs text-muted-foreground">{LOCATION_KINDS.find((k) => k.value === location.kind)?.label ?? location.kind}</span>
+        </li>)}
+      </ul>
+    ) : (
+      <p className="text-sm text-muted-foreground" data-testid="no-locations-yet">No growing locations yet. Create one above before placing a plant.</p>
+    )}
+
+    {retired.length > 0 && <div data-testid="retired-locations">
+      <h3 className="text-sm font-semibold">Retired</h3>
+      {/* Kept visible: placement history points at these, and hiding them
+          would make a plant's past read as though it happened nowhere. */}
+      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
+        {retired.map((location) => <li key={location.id}>{location.name} — no longer in use</li>)}
+      </ul>
+    </div>}
+  </div>;
+}
 
 /**
  * Recording where a plant went, or correcting where it was said to be.
@@ -538,6 +668,7 @@ export default function MyConservatory() {
   if (path === "/conservatory/plants") content = <PlantList />;
   else if (path === "/conservatory/plants/new") content = <AddPlant />;
   else if (path === "/conservatory/labels") content = <Labels />;
+  else if (path === "/conservatory/locations") content = <Locations />;
   else if (path === "/conservatory/readiness") content = <ConservatoryReadinessPage />;
   else {
     const detailMatch = /^\/conservatory\/plants\/([^/]+)$/.exec(path);

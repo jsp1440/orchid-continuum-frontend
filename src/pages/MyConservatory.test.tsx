@@ -708,3 +708,118 @@ describe("MyConservatory recording a placement", () => {
     expect(container.querySelector('[data-testid="record-placement"]')).toBeNull();
   });
 });
+
+/**
+ * Creating growing locations.
+ *
+ * The gap this closes: a collection with no locations could never place its
+ * first plant. The property worth defending is that conditions typed here are
+ * asked for, and stored, as the grower's description — a field later read as a
+ * measurement gives every comparison built on it a precision nobody took.
+ */
+describe("MyConservatory growing locations", () => {
+  function locationsFetch(existing: unknown[] = [], onPost?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/api/conservatory/locations") && init?.method === "POST") {
+        const result = onPost ?? { ok: true, status: 201, body: { id: "new", name: "Cool bench", kind: "greenhouse_bench" } };
+        return { ok: result.ok, status: result.status ?? 201, json: async () => result.body } as Response;
+      }
+      if (url.includes("/api/conservatory/locations")) {
+        return { ok: true, status: 200, json: async () => ({ locations: existing }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement | HTMLSelectElement;
+    act(() => {
+      const proto = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+    });
+  }
+
+  it("tells a grower with no locations to create one before placing a plant", async () => {
+    renderAt("/conservatory/locations", locationsFetch() as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    expect(container.querySelector('[data-testid="no-locations-yet"]')).not.toBeNull();
+  });
+
+  it("will not create a location without a name and a kind", async () => {
+    renderAt("/conservatory/locations", locationsFetch() as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    const submit = () => container.querySelector('[data-testid="location-submit"]') as HTMLButtonElement;
+    expect(submit().disabled).toBe(true);
+    set("location-name", "Cool bench");
+    expect(submit().disabled).toBe(true);
+    set("location-kind", "greenhouse_bench");
+    expect(submit().disabled).toBe(false);
+  });
+
+  it("posts the name, kind and description the grower entered", async () => {
+    const fetchMock = locationsFetch();
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    set("location-name", "Cool bench");
+    set("location-kind", "greenhouse_bench");
+    set("location-described", "Bright shade, cool nights");
+    const form = container.querySelector('[data-testid="create-location"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit)?.method === "POST");
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({
+      name: "Cool bench",
+      kind: "greenhouse_bench",
+      described_conditions: "Bright shade, cool nights",
+    });
+  });
+
+  it("says the description is not a measurement", async () => {
+    // The same field read later as a measurement would give every comparison
+    // built on it a precision nobody took.
+    renderAt("/conservatory/locations", locationsFetch() as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    const disclaimer = container.querySelector('[data-testid="described-disclaimer"]')?.textContent ?? "";
+    expect(disclaimer).toMatch(/not as a measurement/i);
+    expect(disclaimer).toMatch(/instrument readings are entered separately/i);
+  });
+
+  it("offers a bench as its own kind of place", async () => {
+    // Two benches in one greenhouse can differ more than two greenhouses do.
+    renderAt("/conservatory/locations", locationsFetch() as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    const kinds = [...container.querySelectorAll('[data-testid="location-kind"] option')].map((o) => o.getAttribute("value"));
+    expect(kinds).toEqual(expect.arrayContaining(["greenhouse_bench", "lath_house", "shelf", "zone", "custom"]));
+  });
+
+  it("reports a refused name instead of showing it as created", async () => {
+    const fetchMock = locationsFetch([], { ok: false, status: 409, body: { detail: { code: "LOCATION_NAME_ALREADY_USED" } } });
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    set("location-name", "Cool bench");
+    set("location-kind", "greenhouse_bench");
+    const form = container.querySelector('[data-testid="create-location"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="location-error"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="location-list"]')).toBeNull();
+  });
+
+  it("keeps retired locations visible", async () => {
+    // Placement history points at these; hiding them would make a plant's
+    // past read as though it happened nowhere.
+    renderAt("/conservatory/locations", locationsFetch([
+      { id: "a", name: "Live bench", kind: "greenhouse_bench" },
+      { id: "b", name: "Dismantled bench", kind: "greenhouse_bench", retired_at: "2026-05-01T00:00:00Z" },
+    ]) as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+
+    expect(container.querySelector('[data-testid="location-list"]')?.textContent).toContain("Live bench");
+    expect(container.querySelector('[data-testid="location-list"]')?.textContent).not.toContain("Dismantled bench");
+    expect(container.querySelector('[data-testid="retired-locations"]')?.textContent).toContain("Dismantled bench");
+  });
+});
