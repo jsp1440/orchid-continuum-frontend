@@ -62,10 +62,11 @@ export function atlasWorkspaceSpeciesHref(genus: string): string {
  * Canonical handoff from the homepage evidence journey into the Research Center.
  * The genus is interaction context only: Research Center may preload it for the
  * visitor, but it must not treat the value as evidence or as the subject of an
- * unrelated persisted research project.
+ * unrelated persisted research project. The non-evidence boundary is explicit
+ * on the URL so the receiver can fail closed if that declaration is removed.
  */
 export function featuredTaxonResearchHref(genus: string): string {
-  return `/research?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}`;
+  return `/research?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false`;
 }
 
 export { FEATURED_TAXON_ORIGIN };

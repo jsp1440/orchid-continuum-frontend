@@ -41,6 +41,21 @@ describe('Research Center route context', () => {
     });
   });
 
+  it('requires the homepage featured genus to declare itself non-evidentiary', () => {
+    const href = featuredTaxonResearchHref('Phalaenopsis');
+    const params = new URLSearchParams(searchOf(href));
+    expect(params.get('context_is_evidence')).toBe('false');
+
+    expect(
+      parseResearchRouteContext('?genus=Phalaenopsis&origin=homepage-featured-taxon'),
+    ).toBeNull();
+    expect(
+      parseResearchRouteContext(
+        '?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=true',
+      ),
+    ).toBeNull();
+  });
+
   it('fails closed if Atlas attempts to assert evidentiary context', () => {
     expect(
       parseResearchRouteContext(

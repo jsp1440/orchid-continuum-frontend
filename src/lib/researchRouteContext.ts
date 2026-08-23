@@ -73,8 +73,8 @@ function boundedProject(value: string | null): string | null {
  * occurrence/catalogue identifiers, collector/site/grid/GPS/elevation data,
  * and all other route material are ignored at this module boundary.
  *
- * Atlas and Genus Profile arrivals that declare a non-evidence boundary must
- * retain that declaration or fail closed.
+ * Homepage Featured Taxon, Atlas and Genus Profile arrivals must explicitly
+ * retain the non-evidence declaration made by their producers or fail closed.
  */
 export function parseResearchRouteContext(search: string | URLSearchParams): ResearchRouteContext | null {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
@@ -116,7 +116,8 @@ export function parseResearchRouteContext(search: string | URLSearchParams): Res
 
   const evidenceFlag = params.get('context_is_evidence');
   if (
-    (origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
+    (origin === FEATURED_TAXON_ORIGIN ||
+      origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
       origin === ATLAS_WORKSPACE_ORIGIN ||
       origin === GENUS_PROFILE_ORIGIN) &&
     evidenceFlag !== 'false'

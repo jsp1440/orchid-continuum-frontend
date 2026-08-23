@@ -143,7 +143,9 @@ describe('species dossier → research → calyx', () => {
 
   it('leaves the other governed origins working', () => {
     // A new origin must not shadow the existing ones through the shared parser.
-    const featured = parseResearchRouteContext('?genus=Phalaenopsis&origin=homepage-featured-taxon');
+    const featured = parseResearchRouteContext(
+      '?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false',
+    );
     expect(featured?.origin).toBe('homepage-featured-taxon');
     const atlas = parseResearchRouteContext(
       '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false',
