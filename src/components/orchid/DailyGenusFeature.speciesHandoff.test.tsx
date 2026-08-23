@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe('Genus of the Day continuation', () => {
-  it('mounts bounded Atlas Next, Species, and Research handoffs', () => {
+  it('mounts bounded Atlas Next, Calyx, Species, and Research handoffs', () => {
     act(() => {
       root.render(
         <MemoryRouter>
@@ -44,10 +44,14 @@ describe('Genus of the Day continuation', () => {
 
     const links = Array.from(container.querySelectorAll('a')) as HTMLAnchorElement[];
     const atlasNext = links.find((link) => link.textContent?.includes('Explore in Atlas Next'));
+    const calyx = links.find((link) => link.textContent?.includes('Ask Calyx about Phalaenopsis'));
     const species = links.find((link) => link.textContent?.includes('Browse Phalaenopsis species'));
     const research = links.find((link) => link.textContent?.includes('Continue in Research Station'));
 
     expect(atlasNext?.getAttribute('href')).toBe('/atlas-next?genera=Phalaenopsis');
+    expect(calyx?.getAttribute('href')).toBe(
+      '/calyx?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false',
+    );
     expect(species?.getAttribute('href')).toBe('/species?genus=Phalaenopsis');
     expect(research?.getAttribute('href')).toBe(
       '/research?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false',
@@ -57,6 +61,13 @@ describe('Genus of the Day continuation', () => {
     expect([...atlasNextUrl.searchParams.keys()]).toEqual(['genera']);
     expect(atlasNextUrl.search).not.toMatch(
       /locality|latitude|longitude|occurrence|record|collector|catalog|evidence|confidence|conclusion/i,
+    );
+
+    const calyxUrl = new URL(calyx?.getAttribute('href') ?? '', 'https://orchid.test');
+    expect([...calyxUrl.searchParams.keys()]).toEqual(['genus', 'origin', 'context_is_evidence']);
+    expect(calyxUrl.searchParams.get('context_is_evidence')).toBe('false');
+    expect(calyxUrl.search).not.toMatch(
+      /locality|latitude|longitude|occurrence|record|collector|catalog|confidence|conclusion/i,
     );
 
     const speciesUrl = new URL(species?.getAttribute('href') ?? '', 'https://orchid.test');
