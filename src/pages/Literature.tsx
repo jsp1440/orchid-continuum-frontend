@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, BookOpen, FileWarning } from 'lucide-react';
 
 import PageShell from '@/components/orchid/PageShell';
@@ -57,7 +58,15 @@ function PaperRow({ paper }: { paper: LiteratureSummary }) {
 
   return (
     <li className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-      <h3 className="font-serif text-lg text-white">{paper.title ?? 'Untitled extraction'}</h3>
+      <h3 className="font-serif text-lg text-white">
+        <Link
+          to={`/literature/${encodeURIComponent(paper.paper_id)}`}
+          className="hover:text-emerald-200"
+          data-testid="paper-link"
+        >
+          {paper.title ?? 'Untitled extraction'}
+        </Link>
+      </h3>
       <p className="mt-1 text-xs text-white/50">
         {paper.authors?.length ? paper.authors.join(', ') : 'Authors not recorded'}
         {paper.journal ? ` · ${paper.journal}` : ''}

@@ -4,6 +4,7 @@ import { COMPLETION_GRAPH, COMPLETION_GRAPH_SNAPSHOT } from '@/lib/completion-gr
 import { assessFreshness, readBuildSha } from '@/lib/completion-graph/evidenceFreshness';
 import { countIncompleteLeaves, countLeavesByStatus, getLeaves, groupLeavesByLane, listBlockers, listOwnerActions, selectNextUnmetGate } from '@/lib/completion-graph/graphOps';
 import { computeGateScore, computeNodeCensusCoverage, computeNodePercentage } from '@/lib/completion-graph/scoring';
+import GateEvidenceBreakdown from './GateEvidenceBreakdown';
 import type { CompletionNode, CompletionStatus, Evidence, ExecutionLane } from '@/lib/completion-graph/types';
 
 const STATUS_LABEL: Record<CompletionStatus, string> = {
@@ -228,6 +229,8 @@ export default function CompletionObservatory() {
           </div>
         </div>
       </div>
+
+      <GateEvidenceBreakdown root={root} />
 
       {nextGate ? (
         <div className="rounded-lg border border-[#d4b34a]/30 bg-gradient-to-br from-[#0d1d13]/95 to-[#0b1a10]/90 p-4">
