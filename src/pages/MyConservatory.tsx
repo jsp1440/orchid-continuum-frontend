@@ -142,6 +142,19 @@ type TaxonPlacementSearch = {
   reason?: string;
 };
 
+type PlantPhotograph = {
+  id: string;
+  plant_id: string;
+  content_type: string;
+  byte_size: number;
+  /** When the camera says it was taken. Null when the file did not say. */
+  taken_at: string | null;
+  /** When it reached the Continuum. A different claim, always. */
+  recorded_at: string;
+  caption: string | null;
+  exif_stripped?: boolean;
+};
+
 type LocationChange = {
   id: string;
   change: string;
@@ -1229,6 +1242,145 @@ function RecordPlacement({
   </form>;
 }
 
+const PHOTOGRAPH_FAILURE: Record<string, string> = {
+  IMAGE_PROCESSING_UNAVAILABLE:
+    "This service cannot strip location data from photographs right now, so it will not store one. Nothing was saved.",
+  CONTENT_TYPE_NOT_ACCEPTED: "Only JPEG, PNG and WebP photographs can be stored.",
+  PHOTOGRAPH_TOO_LARGE: "That file is too large to store.",
+  PHOTOGRAPH_UNREADABLE: "That file could not be read as an image, so it was not stored.",
+  EMPTY_UPLOAD: "That file was empty.",
+};
+
+/**
+ * A plant's photographs, oldest capture first.
+ *
+ * Two things this panel must keep straight. The first is which clock a date
+ * came from: a chronology of a plant is a chronology of when the pictures were
+ * taken, and a photograph whose file carried no capture time says so rather
+ * than borrowing the upload date and claiming a position it has not earned.
+ *
+ * The second is what a refused upload means. "This service cannot strip
+ * location data right now" is a very different message from "that file was too
+ * big", because the first one is the service protecting the grower's home
+ * address and the second is a file problem. Collapsing them into "upload
+ * failed" invites somebody to retry until something sticks.
+ */
+function Photographs({ plantId }: { plantId: string }) {
+  const request = useApi();
+  const { session } = useAuth();
+  const [photographs, setPhotographs] = useState<PlantPhotograph[]>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [caption, setCaption] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string>();
+  const [reloads, setReloads] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    request<{ photographs: PlantPhotograph[] }>(
+      `/api/conservatory/plants/${encodeURIComponent(plantId)}/photographs`,
+    )
+      .then((result) => {
+        if (!active) return;
+        // A response missing its list is a contract the service did not
+        // honour. Coercing it to an empty array would render as "no
+        // photographs yet", which is a claim about the plant.
+        if (!result || !Array.isArray(result.photographs)) { setUnavailable(true); return; }
+        setPhotographs(result.photographs);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        if (cause instanceof ApiError && cause.status === 404) setUnavailable(true);
+        else setError(cause instanceof Error ? cause.message : "Photographs could not be loaded");
+      });
+    return () => { active = false; };
+  }, [plantId, request, reloads]);
+
+  async function upload(changed: React.ChangeEvent<HTMLInputElement>) {
+    const file = changed.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError(undefined);
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      if (caption.trim()) body.append("caption", caption.trim());
+      // Sent as multipart, so no JSON Content-Type: the browser sets the
+      // boundary and overriding it makes the request unparseable.
+      const response = await fetch(
+        `${API_BASE}/api/conservatory/plants/${encodeURIComponent(plantId)}/photographs`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+          body,
+        },
+      );
+      if (!response.ok) {
+        const failure = await response.json().catch(() => ({}));
+        const code = failure?.detail?.code;
+        setError(PHOTOGRAPH_FAILURE[code] ?? `The photograph could not be stored (${response.status}).`);
+        return;
+      }
+      setCaption("");
+      setReloads((count) => count + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The photograph could not be stored");
+    } finally {
+      setUploading(false);
+      changed.target.value = "";
+    }
+  }
+
+  if (unavailable) return <section className="mt-6 rounded-xl border border-dashed p-5" data-testid="photographs-unavailable">
+    <h3 className="text-sm font-semibold">Photographs are not available from this backend</h3>
+    <p className="mt-1 text-xs text-muted-foreground">This says nothing about whether this plant has been photographed.</p>
+  </section>;
+
+  return <section className="mt-6 rounded-xl border p-5" data-testid="photographs">
+    <h3 className="text-sm font-semibold">Photographs</h3>
+    <p className="mt-1 text-[11px] text-muted-foreground" data-testid="photographs-privacy">
+      Location data is removed from every photograph before it is stored. If that cannot be done,
+      the photograph is refused rather than saved.
+    </p>
+
+    <label className="mt-4 block text-sm">
+      <span className="block text-xs text-muted-foreground">Caption (optional)</span>
+      <input className="mt-1 w-full rounded-md border px-3 py-2" value={caption} data-testid="photograph-caption"
+        onChange={(changed) => setCaption(changed.target.value)} />
+    </label>
+    <input type="file" className="mt-3 block text-sm" accept="image/jpeg,image/png,image/webp"
+      data-testid="photograph-file" disabled={uploading} onChange={upload} />
+    {uploading && <p className="mt-2 text-xs text-muted-foreground" role="status">Storing…</p>}
+    {error && <p className="mt-2 text-xs text-destructive" role="alert" data-testid="photograph-error">{error}</p>}
+
+    {!photographs ? (
+      <p className="mt-4 text-sm text-muted-foreground" role="status">Loading photographs…</p>
+    ) : photographs.length ? (
+      <ul className="mt-4 grid gap-4 sm:grid-cols-2" data-testid="photograph-list">
+        {photographs.map((photograph) => (
+          <li key={photograph.id} className="rounded-lg border p-3" data-testid={`photograph-${photograph.id}`}>
+            <img className="w-full rounded-md" alt={photograph.caption || "Photograph of this plant"}
+              src={`${API_BASE}/api/conservatory/photographs/${encodeURIComponent(photograph.id)}`} />
+            {photograph.caption && <p className="mt-2 text-sm">{photograph.caption}</p>}
+            <p className="mt-1 text-xs text-muted-foreground" data-testid={`photograph-when-${photograph.id}`}>
+              {photograph.taken_at
+                // Which clock this came from is stated, not implied by a bare
+                // date sitting where a capture time would go.
+                ? `Taken ${new Date(photograph.taken_at).toLocaleDateString()}`
+                : `No capture date in the file · added ${new Date(photograph.recorded_at).toLocaleDateString()}`}
+            </p>
+          </li>
+        ))}
+      </ul>
+    ) : (
+      <p className="mt-4 text-sm text-muted-foreground" data-testid="photographs-none">
+        No photographs recorded for this plant.
+      </p>
+    )}
+  </section>;
+}
+
 /**
  * Cultivation context for one plant: where it is, where it has been, and what
  * is known about the conditions there.
@@ -1619,6 +1771,7 @@ function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: 
     <p className="text-xs uppercase tracking-wide text-muted-foreground">{plant.accession_number}</p>
     <div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div>
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
+    <Photographs plantId={plant.id} />
     <CultivationContext plantId={plant.id} />
     <PlacementAssessmentPanel plantId={plant.id} />
     <PlantLedger plantId={plant.id} />

@@ -2119,6 +2119,157 @@ describe("MyConservatory could I grow this", () => {
   });
 });
 
+/**
+ * Photographs of a plant.
+ *
+ * Two things this panel must keep straight, and both are about not making a
+ * claim nobody supports. A photograph whose file carried no capture time must
+ * not borrow the upload date and take a position in the chronology it has not
+ * earned. And a refusal because the service cannot strip location data is a
+ * completely different message from "that file was too big" — the first is the
+ * service protecting the grower's home address, and collapsing them into
+ * "upload failed" invites somebody to retry until something sticks.
+ */
+describe("MyConservatory photographs", () => {
+  const dated = {
+    id: "ph1", plant_id: "p1", content_type: "image/jpeg", byte_size: 1024,
+    taken_at: "2024-03-17T14:05:00", recorded_at: "2026-08-23T10:00:00Z",
+    caption: "First flowering", exif_stripped: true,
+  };
+  const undated = {
+    id: "ph2", plant_id: "p1", content_type: "image/png", byte_size: 512,
+    taken_at: null, recorded_at: "2026-08-23T11:00:00Z",
+    caption: null, exif_stripped: true,
+  };
+
+  function photoFetch(photographs: unknown, opts: { listStatus?: number; post?: { status: number; body?: unknown } } = {}) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/photographs") && init?.method === "POST") {
+        const status = opts.post?.status ?? 201;
+        return { ok: status < 400, status, json: async () => opts.post?.body ?? {} } as Response;
+      }
+      if (url.includes("/photographs")) {
+        const status = opts.listStatus ?? 200;
+        return { ok: status === 200, status, json: async () => photographs } as Response;
+      }
+      if (url.includes("/placement-assessment")) return { ok: true, status: 200, json: async () => ({ assessments: [], counts: {}, anything_assessed: false, is_recommendation: false }) } as Response;
+      if (url.includes("/events")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", standing: [], corrected: [], event_count: 0, is_scientific_evidence: false }) } as Response;
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", current: null, history: [] }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => ({ locations: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+  }
+
+  async function open(photographs: unknown, opts = {}) {
+    const fetchMock = photoFetch(photographs, opts);
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  async function uploadFile(fetchMock: ReturnType<typeof photoFetch>) {
+    const input = container.querySelector('[data-testid="photograph-file"]') as HTMLInputElement;
+    const file = new File([new Uint8Array([1, 2, 3])], "orchid.jpg", { type: "image/jpeg" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    await act(async () => { input.dispatchEvent(new Event("change", { bubbles: true })); });
+    await flush();
+    return fetchMock;
+  }
+
+  it("says location data is removed, and that a failure to do so refuses the upload", async () => {
+    await open({ photographs: [] });
+    const note = container.querySelector('[data-testid="photographs-privacy"]')?.textContent ?? "";
+    expect(note).toMatch(/location data is removed/i);
+    expect(note).toMatch(/refused rather than saved/i);
+  });
+
+  it("says when a photograph was taken, from the file's own clock", async () => {
+    await open({ photographs: [dated] });
+    expect(container.querySelector('[data-testid="photograph-when-ph1"]')?.textContent)
+      .toMatch(/^Taken /);
+  });
+
+  it("does not present an upload date as a capture date", async () => {
+    // The whole point of carrying two clocks.
+    await open({ photographs: [undated] });
+    const when = container.querySelector('[data-testid="photograph-when-ph2"]')?.textContent ?? "";
+    expect(when).toMatch(/no capture date in the file/i);
+    expect(when).toMatch(/added /i);
+    expect(when).not.toMatch(/^Taken /);
+  });
+
+  it("renders the caption and an alt text a screen reader can use", async () => {
+    await open({ photographs: [dated] });
+    const image = container.querySelector('[data-testid="photograph-ph1"] img') as HTMLImageElement;
+    expect(image.getAttribute("alt")).toBe("First flowering");
+    expect(image.getAttribute("src")).toContain("/api/conservatory/photographs/ph1");
+  });
+
+  it("still gives an alt text when there is no caption", async () => {
+    await open({ photographs: [undated] });
+    const image = container.querySelector('[data-testid="photograph-ph2"] img') as HTMLImageElement;
+    expect(image.getAttribute("alt")).toBe("Photograph of this plant");
+  });
+
+  it("says a plant has no photographs rather than showing nothing", async () => {
+    await open({ photographs: [] });
+    expect(container.querySelector('[data-testid="photographs-none"]')?.textContent)
+      .toMatch(/no photographs recorded/i);
+  });
+
+  it("posts the file as multipart without overriding the content type", async () => {
+    // Setting Content-Type by hand drops the multipart boundary and makes the
+    // request unparseable at the other end.
+    const fetchMock = await open({ photographs: [] });
+    await uploadFile(fetchMock);
+
+    const post = fetchMock.mock.calls.find(
+      (call) => String(call[0]).includes("/photographs") && (call[1] as RequestInit)?.method === "POST",
+    );
+    expect(post).toBeDefined();
+    const init = post?.[1] as RequestInit;
+    expect(init.body).toBeInstanceOf(FormData);
+    expect(Object.keys(init.headers ?? {})).not.toContain("Content-Type");
+  });
+
+  it("explains a refusal to strip location data instead of saying upload failed", async () => {
+    const fetchMock = await open({ photographs: [] }, {
+      post: { status: 503, body: { detail: { code: "IMAGE_PROCESSING_UNAVAILABLE" } } },
+    });
+    await uploadFile(fetchMock);
+
+    const message = container.querySelector('[data-testid="photograph-error"]')?.textContent ?? "";
+    expect(message).toMatch(/cannot strip location data/i);
+    expect(message).toMatch(/nothing was saved/i);
+  });
+
+  it("distinguishes a rejected file type from a stripping failure", async () => {
+    const fetchMock = await open({ photographs: [] }, {
+      post: { status: 415, body: { detail: { code: "CONTENT_TYPE_NOT_ACCEPTED" } } },
+    });
+    await uploadFile(fetchMock);
+
+    const message = container.querySelector('[data-testid="photograph-error"]')?.textContent ?? "";
+    expect(message).toMatch(/only jpeg, png and webp/i);
+    expect(message).not.toMatch(/location data/i);
+  });
+
+  it("keeps a backend without the route distinct from a plant with no photographs", async () => {
+    await open({ detail: "not found" }, { listStatus: 404 });
+    expect(container.querySelector('[data-testid="photographs-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="photographs-none"]')).toBeNull();
+  });
+
+  it("keeps a malformed listing distinct too", async () => {
+    await open({ count: 0 });
+    expect(container.querySelector('[data-testid="photographs-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="photograph-list"]')).toBeNull();
+  });
+});
+
 describe("MyConservatory placement assessment", () => {
   function assessmentFetch(body: unknown, status = 200) {
     return vi.fn(async (input: RequestInfo | URL) => {
