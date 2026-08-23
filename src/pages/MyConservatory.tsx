@@ -658,6 +658,41 @@ function LocationHistory({ locationId }: { locationId: string }) {
   </div>;
 }
 
+/**
+ * Bringing a retired location back.
+ *
+ * A bench that returns is the same bench. Un-retiring keeps its identity, so
+ * every placement recorded before it was retired still points here and a
+ * plant's earlier time on it stays one continuous record — which is exactly
+ * what creating a replacement with the same name would destroy.
+ */
+function UnretireLocation({ location, onChanged }: { location: GrowingLocation; onChanged: () => void }) {
+  const request = useApi();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function unretire() {
+    setBusy(true); setError(undefined);
+    try {
+      await request(`/api/conservatory/locations/${encodeURIComponent(location.id)}/unretire`, {
+        method: "POST", body: JSON.stringify({}),
+      });
+      onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The location could not be brought back");
+    } finally { setBusy(false); }
+  }
+
+  return <span className="ml-2">
+    <button type="button" className="text-xs underline" disabled={busy}
+      data-testid={`unretire-${location.id}`} onClick={unretire}>Bring back into use</button>
+    <span className="ml-2 text-[11px]" data-testid={`unretire-note-${location.id}`}>
+      It keeps its identity, so plants that were here still show it in their history.
+    </span>
+    {error && <span className="ml-2 text-xs text-destructive" role="alert" data-testid={`unretire-error-${location.id}`}>{error}</span>}
+  </span>;
+}
+
 function LocationAdmin({ location, onChanged }: { location: GrowingLocation; onChanged: () => void }) {
   const request = useApi();
   const [renaming, setRenaming] = useState(false);
@@ -821,8 +856,11 @@ function Locations() {
       <h3 className="text-sm font-semibold">Retired</h3>
       {/* Kept visible: placement history points at these, and hiding them
           would make a plant's past read as though it happened nowhere. */}
-      <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
-        {retired.map((location) => <li key={location.id}>{location.name} — no longer in use</li>)}
+      <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+        {retired.map((location) => <li key={location.id} data-testid={`retired-${location.id}`}>
+          {location.name} — no longer in use
+          <UnretireLocation location={location} onChanged={load} />
+        </li>)}
       </ul>
     </div>}
   </div>;
