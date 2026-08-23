@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { parseCalyxRouteContext } from '@/lib/calyxConversation';
+import { rejectsCalyxNavigationContext } from '@/lib/calyxRouteTrustBoundary';
 import {
   ATLAS_NEXT_CALYX_CONTEXT_IS_EVIDENCE,
   ATLAS_NEXT_CALYX_ORIGIN,
@@ -91,6 +93,27 @@ describe('Atlas Next → Calyx handoff', () => {
     expect(url.searchParams.get('origin')).toBe(ATLAS_NEXT_CALYX_ORIGIN);
     expect(url.searchParams.get('context_is_evidence')).toBe('false');
     expect(ATLAS_NEXT_CALYX_CONTEXT_IS_EVIDENCE).toBe(false);
+  });
+
+  it('round-trips through the Calyx receiver only with the explicit non-evidence declaration', () => {
+    const href = atlasNextCalyxHref({ genus: 'Phalaenopsis' })!;
+    const search = href.slice('/calyx'.length);
+
+    expect(rejectsCalyxNavigationContext(search)).toBe(false);
+    expect(parseCalyxRouteContext(search)).toEqual({
+      origin: ATLAS_NEXT_CALYX_ORIGIN,
+      featuredTaxon: { rank: 'genus', name: 'Phalaenopsis' },
+      questionContext: null,
+    });
+
+    expect(
+      rejectsCalyxNavigationContext('?genus=Phalaenopsis&origin=atlas-next'),
+    ).toBe(true);
+    expect(
+      rejectsCalyxNavigationContext(
+        '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=true',
+      ),
+    ).toBe(true);
   });
 
   it('fails closed for malformed or oversized genus context', () => {
