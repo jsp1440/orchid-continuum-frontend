@@ -116,6 +116,32 @@ type CollectionReview = {
   is_recommendation: boolean;
 };
 
+type TaxonPlacementLocation = {
+  location_id: string;
+  name: string | null;
+  kind: string | null;
+  assessments: Assessment[];
+  counts: Record<string, number>;
+  /** False when nothing at this location could be compared. Stated per row. */
+  anything_assessed: boolean;
+  oldest_verdict_condition_age_days?: number | null;
+};
+
+type TaxonPlacementSearch = {
+  taxon: string | null;
+  locations: TaxonPlacementLocation[];
+  requirements: {
+    value?: unknown;
+    claim_class?: string;
+    reason?: string;
+    source_consulted?: boolean;
+  };
+  /** False when nothing anywhere could be compared. */
+  anything_assessed: boolean;
+  is_recommendation: boolean;
+  reason?: string;
+};
+
 type LocationChange = {
   id: string;
   change: string;
@@ -223,7 +249,7 @@ function useApi() {
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen bg-background text-foreground">
     <style>{`@media print { body * { visibility: hidden !important; } .print-zone, .print-zone * { visibility: visible !important; } .print-zone { position: absolute; inset: 0; background: white; color: black; padding: 0.25in; } .no-print { display: none !important; } .plant-label { break-inside: avoid; page-break-inside: avoid; } }`}</style>
-    <header className="no-print border-b bg-card"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Orchid Continuum</p><h1 className="text-2xl font-semibold">My Conservatory</h1></div><nav className="flex flex-wrap gap-2 text-sm"><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory">Dashboard</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/plants">My Plants</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/locations">Locations</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/review">Review</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/labels">Print Labels</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/readiness">Readiness</Link><Link className="rounded-md bg-primary px-3 py-2 text-primary-foreground" to="/conservatory/plants/new">Add Plant</Link></nav></div></header>
+    <header className="no-print border-b bg-card"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Orchid Continuum</p><h1 className="text-2xl font-semibold">My Conservatory</h1></div><nav className="flex flex-wrap gap-2 text-sm"><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory">Dashboard</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/plants">My Plants</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/locations">Locations</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/review">Review</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/could-i-grow-this">Could I grow this?</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/labels">Print Labels</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/readiness">Readiness</Link><Link className="rounded-md bg-primary px-3 py-2 text-primary-foreground" to="/conservatory/plants/new">Add Plant</Link></nav></div></header>
     <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
   </div>;
 }
@@ -1842,6 +1868,142 @@ function CollectionReviewPage() {
   </div>;
 }
 
+/**
+ * Where a plant the grower does not own yet could go.
+ *
+ * The buying question, answered from what their benches actually measure. The
+ * pressure on this screen is the pull towards an answer it cannot support —
+ * "yes, buy it, it goes on bench 3". Whether a bench has room, whether its
+ * readings are current enough to act on, whether they can hold those
+ * conditions through a season: none of that is in this data.
+ *
+ * So locations are listed in the order the backend gave them, never ranked,
+ * and the page says outright that it is not advice. "Nothing could be
+ * compared" — the common answer, because the Continuum holds trait evidence
+ * for very few taxa — is stated before any location, because a list of grey
+ * rows with nothing red reads as a list of benches that will do.
+ */
+function TaxonPlacementSearchPage() {
+  const request = useApi();
+  const [taxon, setTaxon] = useState("");
+  const [submitted, setSubmitted] = useState("");
+  const [result, setResult] = useState<TaxonPlacementSearch>();
+  const [searching, setSearching] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function submit(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    const query = taxon.trim();
+    if (!query) return;
+    setSearching(true);
+    setError(undefined);
+    setUnavailable(false);
+    setResult(undefined);
+    try {
+      const found = await request<TaxonPlacementSearch>(
+        `/api/conservatory/locations/suitability?taxon=${encodeURIComponent(query)}`,
+      );
+      // A response without its locations array is a contract the service did
+      // not honour. Coercing it to an empty list would render as "no location
+      // here suits this plant", which is a claim about the collection rather
+      // than about the response.
+      if (!found || !Array.isArray(found.locations)) { setUnavailable(true); return; }
+      setResult(found);
+      setSubmitted(query);
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.status === 404) setUnavailable(true);
+      else setError(cause instanceof Error ? cause.message : "The search could not be run");
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  return <div data-testid="taxon-placement-search">
+    <h2 className="text-3xl font-semibold">Could I grow this?</h2>
+    <p className="mt-2 text-muted-foreground">
+      Compare what your locations actually measure against published requirements for a
+      species you are thinking of buying.
+    </p>
+
+    <form className="mt-6 flex flex-wrap gap-3" onSubmit={submit} data-testid="taxon-search-form">
+      <input className="min-w-[18rem] flex-1 rounded-md border bg-background px-3 py-2"
+        aria-label="Scientific name" placeholder="Cattleya skinneri" value={taxon}
+        data-testid="taxon-search-input"
+        onChange={(changed) => setTaxon(changed.target.value)} />
+      <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+        disabled={searching || !taxon.trim()} data-testid="taxon-search-submit">
+        {searching ? "Comparing…" : "Compare with my locations"}
+      </button>
+    </form>
+
+    {unavailable && <section className="mt-6 rounded-xl border border-dashed p-5" data-testid="taxon-search-unavailable">
+      <h3 className="text-sm font-semibold">This search is not available from this backend</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        This says nothing about whether your locations suit this plant.
+      </p>
+    </section>}
+
+    {error && <section className="mt-6 rounded-xl border border-destructive/40 bg-destructive/5 p-5" role="alert" data-testid="taxon-search-error">
+      <p className="text-xs">{error}</p>
+    </section>}
+
+    {result && <section className="mt-7" data-testid="taxon-search-result">
+      <h3 className="text-lg font-semibold">
+        <span className="italic">{submitted}</span> against your locations
+      </h3>
+
+      {!result.anything_assessed && (
+        // Said before any location. A screen of grey rows with nothing red
+        // reads as a screen of benches that will do.
+        <p className="mt-3 rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm" data-testid="taxon-nothing-assessed">
+          {result.requirements?.source_consulted === false
+            ? "The store holding cultivation evidence could not be read, so nothing was compared. This is not a statement about this species: nobody looked."
+            : "Nothing could be compared. The Continuum holds no cultivation evidence for this species, or your locations have no readings for the variables it would need — so this says nothing about whether you could grow it."}
+        </p>
+      )}
+
+      <ul className="mt-4 space-y-3" data-testid="taxon-location-list">
+        {result.locations.map((row) => (
+          <li key={row.location_id} className="rounded-xl border p-4" data-testid={`taxon-location-${row.location_id}`}>
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="font-medium">{row.name || row.location_id}</span>
+              {row.kind && <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{row.kind.replace(/_/g, " ")}</span>}
+            </div>
+            {!row.anything_assessed ? (
+              // Repeated per row rather than trusted from the heading above:
+              // a reader scanning one bench must not have to remember it.
+              <p className="mt-1 text-xs text-muted-foreground" data-testid={`taxon-location-unassessed-${row.location_id}`}>
+                Nothing could be compared here. That is not the same as this location suiting the plant.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1">
+                {row.assessments.filter((a) => a.outcome === "within" || a.outcome === "outside").map((a) => (
+                  <li key={a.variable} className="text-xs" data-testid={`taxon-variable-${row.location_id}-${a.variable}`}
+                    data-outcome={a.outcome}>
+                    {a.variable.replace(/_/g, " ")} — {OUTCOME_COPY[a.outcome]?.label ?? a.outcome}
+                    {a.breached?.map((breach) => ` · past the known ${breach.bound} of ${breach.limit}`).join("")}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {readingAge(row.oldest_verdict_condition_age_days) && (
+              <p className="mt-1 text-xs text-muted-foreground" data-testid={`taxon-age-${row.location_id}`}>
+                Oldest reading behind this: {readingAge(row.oldest_verdict_condition_age_days)}.
+              </p>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      <p className="mt-6 text-[11px] text-muted-foreground" data-testid="taxon-not-advice">
+        A comparison, not advice about buying the plant. Locations are not ranked, and nothing here
+        knows whether a bench has room or whether you can hold those conditions through a season.
+      </p>
+    </section>}
+  </div>;
+}
+
 export default function MyConservatory() {
   const location = useLocation();
   const path = location.pathname.replace(/\/$/, "");
@@ -1851,6 +2013,7 @@ export default function MyConservatory() {
   else if (path === "/conservatory/labels") content = <Labels />;
   else if (path === "/conservatory/locations") content = <Locations />;
   else if (path === "/conservatory/review") content = <CollectionReviewPage />;
+  else if (path === "/conservatory/could-i-grow-this") content = <TaxonPlacementSearchPage />;
   else if (path === "/conservatory/readiness") content = <ConservatoryReadinessPage />;
   else {
     const detailMatch = /^\/conservatory\/plants\/([^/]+)$/.exec(path);
