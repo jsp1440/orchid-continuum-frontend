@@ -26,9 +26,29 @@
  */
 
 import { rollupStatus, rollupThreeLevels } from './scoring';
+import type { EvidenceSnapshot } from './evidenceFreshness';
 import type { CompletionNode, Evidence, ExecutionLane } from './types';
 
 const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
+
+/**
+ * The integration commit this graph's evidence was checked against.
+ *
+ * CENSUS_DATE above says when nodes were last written. It says nothing about
+ * whether they still describe the running code, which is the question an owner
+ * reading a percentage is actually asking. This snapshot answers that: the
+ * Observatory compares it to the commit the build was made from and refuses to
+ * present the numbers as current when they cannot be confirmed.
+ *
+ * Update BOTH fields whenever evidence is reconciled. Leaving the SHA behind
+ * makes the dashboard report drift, which is the correct and safe failure.
+ */
+export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
+  reconciledAgainstSha: '9b327af58885bf786807eabf58765de71e3ba487',
+  reconciledAt: '2026-08-23T00:00:00.000Z',
+  scope:
+    'Initial census (#281) plus the mounted-journey, Verification Workbench, Classroom and legacy-salvage work landed through this commit. Not every domain has been re-scored — census coverage is reported alongside each percentage.',
+};
 
 let autoId = 0;
 function nextId(prefix: string): string {
