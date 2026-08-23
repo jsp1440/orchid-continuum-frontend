@@ -137,7 +137,7 @@ describe('research center carries the arriving subject onward', () => {
   it('still filters by genus when only a genus arrived', async () => {
     // Genus-of-the-day and Atlas arrivals carry no species. They must keep
     // working exactly as before rather than degrading to an unfiltered view.
-    await renderAt(featuredTaxonResearchHref({ genus: GENUS }));
+    await renderAt(featuredTaxonResearchHref(GENUS));
 
     const atlas = new URLSearchParams(searchOf(hrefFor(/return to atlas/i)));
     expect(atlas.get('genera')).toBe(GENUS);
@@ -199,7 +199,7 @@ describe('research center attributes the subject to where it came from', () => {
     container?.remove();
 
     // Genus of the Day is still correct for the featured-taxon origin.
-    await renderAt(featuredTaxonResearchHref({ genus: GENUS }));
+    await renderAt(featuredTaxonResearchHref(GENUS));
     expect(container.textContent).toContain('Continuing from Genus of the Day');
   });
 
