@@ -575,6 +575,82 @@ const LOCATION_KINDS: { value: string; label: string }[] = [
  * comparison built on it a precision nobody ever took. The backend stamps the
  * origin; this surface has to be honest about what it is asking for.
  */
+/**
+ * Renaming and retiring a location.
+ *
+ * Both are offered here because both are things that happen to real
+ * collections — benches get renamed when their purpose becomes clearer, and
+ * dismantled when the greenhouse is rebuilt — and neither is a thing that
+ * happens to a plant. Nothing either button does touches any plant's placement
+ * history, and the copy says so, because "rename the bench" and "move the
+ * plant" produce the same visible change beside a plant and mean entirely
+ * different things.
+ */
+function LocationAdmin({ location, onChanged }: { location: GrowingLocation; onChanged: () => void }) {
+  const request = useApi();
+  const [renaming, setRenaming] = useState(false);
+  const [name, setName] = useState(location.name);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function rename(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    if (!name.trim() || name.trim() === location.name) return;
+    setBusy(true); setError(undefined);
+    try {
+      await request(`/api/conservatory/locations/${encodeURIComponent(location.id)}/rename`, {
+        method: "POST", body: JSON.stringify({ name: name.trim() }),
+      });
+      setRenaming(false);
+      onChanged();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The location could not be renamed");
+    } finally { setBusy(false); }
+  }
+
+  async function retire() {
+    setBusy(true); setError(undefined);
+    try {
+      await request(`/api/conservatory/locations/${encodeURIComponent(location.id)}/retire`, {
+        method: "POST", body: JSON.stringify({}),
+      });
+      onChanged();
+    } catch (cause) {
+      // The common refusal is that plants are still here, which is a fact
+      // about the collection the grower needs to act on rather than a bug.
+      setError(cause instanceof Error ? cause.message : "The location could not be retired");
+    } finally { setBusy(false); }
+  }
+
+  return <div className="mt-3 border-t pt-3" data-testid={`location-admin-${location.id}`}>
+    {renaming ? (
+      <form onSubmit={rename} className="space-y-2" data-testid={`rename-form-${location.id}`}>
+        <input className="w-full rounded-md border px-3 py-2 text-sm" value={name}
+          data-testid={`rename-input-${location.id}`} onChange={(changed) => setName(changed.target.value)} />
+        <p className="text-[11px] text-muted-foreground" data-testid={`rename-note-${location.id}`}>
+          Renaming changes what this place is called. It is not a move: no plant&rsquo;s history changes.
+        </p>
+        <div className="flex gap-2">
+          <button type="submit" className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
+            disabled={busy || !name.trim() || name.trim() === location.name} data-testid={`rename-save-${location.id}`}>Save name</button>
+          <button type="button" className="text-xs underline" data-testid={`rename-cancel-${location.id}`}
+            // No name reset here: reopening the form sets it from the location,
+          // so doing it again on cancel is unreachable.
+          onClick={() => { setRenaming(false); setError(undefined); }}>Cancel</button>
+        </div>
+      </form>
+    ) : (
+      <div className="flex gap-3 text-xs">
+        <button type="button" className="underline" data-testid={`rename-${location.id}`}
+          onClick={() => { setRenaming(true); setName(location.name); setError(undefined); }}>Rename</button>
+        <button type="button" className="underline" disabled={busy} data-testid={`retire-${location.id}`}
+          onClick={retire}>Retire</button>
+      </div>
+    )}
+    {error && <p className="mt-2 text-xs text-destructive" role="alert" data-testid={`location-admin-error-${location.id}`}>{error}</p>}
+  </div>;
+}
+
 function Locations() {
   const request = useApi();
   const [locations, setLocations] = useState<GrowingLocation[]>();
@@ -661,6 +737,7 @@ function Locations() {
           <strong className="block">{location.name}</strong>
           <span className="text-xs text-muted-foreground">{LOCATION_KINDS.find((k) => k.value === location.kind)?.label ?? location.kind}</span>
           <RecordReading locationId={location.id} onRecorded={load} />
+          <LocationAdmin location={location} onChanged={load} />
         </li>)}
       </ul>
     ) : (

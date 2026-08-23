@@ -1250,3 +1250,124 @@ describe("MyConservatory correcting an observation", () => {
     expect(container.querySelector('[data-testid="corrected-events"]')).toBeNull();
   });
 });
+
+/**
+ * Renaming and retiring a location.
+ *
+ * Both happen to real collections — benches get renamed when their purpose
+ * becomes clearer, dismantled when the greenhouse is rebuilt — and neither
+ * happens to a plant. "Rename the bench" and "move the plant" produce the same
+ * visible change beside a plant and mean entirely different things, so the
+ * interface has to say which one it is doing.
+ */
+describe("MyConservatory location administration", () => {
+  const bench = { id: "loc-1", name: "Cool bench", kind: "greenhouse_bench" };
+
+  function adminFetch(handlers: { rename?: { ok: boolean; status?: number; body: unknown }; retire?: { ok: boolean; status?: number; body: unknown } } = {}) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/rename") && init?.method === "POST") {
+        const r = handlers.rename ?? { ok: true, status: 200, body: { ...bench, name: "The cold end" } };
+        return { ok: r.ok, status: r.status ?? 200, json: async () => r.body } as Response;
+      }
+      if (url.includes("/retire") && init?.method === "POST") {
+        const r = handlers.retire ?? { ok: true, status: 200, body: { ...bench, retired_at: "2026-08-23T00:00:00Z" } };
+        return { ok: r.ok, status: r.status ?? 200, json: async () => r.body } as Response;
+      }
+      if (url.includes("/api/conservatory/locations")) {
+        return { ok: true, status: 200, json: async () => ({ locations: [bench] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+  }
+
+  function click(testid: string) {
+    const el = container.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+    act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  }
+
+  function setInput(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  async function open(handlers?: Parameters<typeof adminFetch>[0]) {
+    const fetchMock = adminFetch(handlers);
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    return fetchMock;
+  }
+
+  it("says a rename is not a move", async () => {
+    // The distinction the whole placement model rests on.
+    await open();
+    click("rename-loc-1");
+    const note = container.querySelector('[data-testid="rename-note-loc-1"]')?.textContent ?? "";
+    expect(note).toMatch(/it is not a move/i);
+    expect(note).toMatch(/no plant.s history changes/i);
+  });
+
+  it("posts the new name to the rename endpoint", async () => {
+    const fetchMock = await open();
+    click("rename-loc-1");
+    setInput("rename-input-loc-1", "The cold end");
+    const form = container.querySelector('[data-testid="rename-form-loc-1"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => String(call[0]).includes("/rename"));
+    expect(post).toBeDefined();
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toEqual({ name: "The cold end" });
+  });
+
+  it("will not submit a rename that changes nothing", async () => {
+    // A no-op rename would put a change in the location's log that never
+    // happened.
+    await open();
+    click("rename-loc-1");
+    expect((container.querySelector('[data-testid="rename-save-loc-1"]') as HTMLButtonElement).disabled).toBe(true);
+    setInput("rename-input-loc-1", "The cold end");
+    expect((container.querySelector('[data-testid="rename-save-loc-1"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("posts a retire request", async () => {
+    const fetchMock = await open();
+    click("retire-loc-1");
+    await flush();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/retire"))).toBe(true);
+  });
+
+  it("reports that a bench still has plants on it rather than failing silently", async () => {
+    // A fact about the collection the grower must act on, not a bug.
+    await open({ retire: { ok: false, status: 409, body: { detail: { code: "LOCATION_STILL_OCCUPIED" } } } });
+    click("retire-loc-1");
+    await flush();
+    expect(container.querySelector('[data-testid="location-admin-error-loc-1"]')).not.toBeNull();
+  });
+
+  it("reports a refused rename and keeps the form open", async () => {
+    await open({ rename: { ok: false, status: 409, body: { detail: { code: "LOCATION_NAME_ALREADY_USED" } } } });
+    click("rename-loc-1");
+    setInput("rename-input-loc-1", "Warm bench");
+    const form = container.querySelector('[data-testid="rename-form-loc-1"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="location-admin-error-loc-1"]')).not.toBeNull();
+    // Still editable, so the grower can pick another name.
+    expect(container.querySelector('[data-testid="rename-form-loc-1"]')).not.toBeNull();
+  });
+
+  it("can cancel a rename back to the original name", async () => {
+    await open();
+    click("rename-loc-1");
+    setInput("rename-input-loc-1", "Something else");
+    click("rename-cancel-loc-1");
+    expect(container.querySelector('[data-testid="rename-form-loc-1"]')).toBeNull();
+    click("rename-loc-1");
+    expect((container.querySelector('[data-testid="rename-input-loc-1"]') as HTMLInputElement).value).toBe("Cool bench");
+  });
+});
