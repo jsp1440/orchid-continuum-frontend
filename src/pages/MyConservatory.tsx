@@ -56,6 +56,23 @@ type PlantTimeline = {
   is_scientific_evidence: boolean;
 };
 
+type Assessment = {
+  variable: string;
+  outcome: "within" | "outside" | "unassessable" | "conflicting";
+  reason?: string;
+  breached?: { bound: string; limit: number }[];
+  condition?: { value?: number; unit?: string; origin?: string };
+  bounds?: Record<string, { value: number; evidence_strength?: string }[]>;
+};
+
+type PlacementAssessment = {
+  assessments: Assessment[];
+  counts: Record<string, number>;
+  /** False when nothing could be compared at all — not the same as "fine". */
+  anything_assessed: boolean;
+  is_recommendation: boolean;
+};
+
 type LocationChange = {
   id: string;
   change: string;
@@ -1115,6 +1132,145 @@ function CultivationContext({ plantId }: { plantId: string }) {
   </section>;
 }
 
+const OUTCOME_COPY: Record<string, { label: string; detail: string }> = {
+  within: {
+    label: "Inside the known range",
+    detail: "The recorded condition falls within a bound the Continuum has evidence for.",
+  },
+  outside: {
+    label: "Outside the known range",
+    detail: "The recorded condition falls outside a bound the Continuum has evidence for.",
+  },
+  unassessable: {
+    label: "Cannot be assessed",
+    detail: "Something needed for the comparison is missing.",
+  },
+  conflicting: {
+    label: "Sources disagree",
+    detail: "The evidence gives more than one bound, so no single comparison is possible.",
+  },
+};
+
+const UNASSESSABLE_REASON: Record<string, string> = {
+  NO_CONDITION_RECORDED: "Nothing has been recorded for this variable at this location.",
+  NO_REQUIREMENT_EVIDENCE: "The Continuum holds no cultivation evidence for this taxon.",
+  NO_CONDITION_AND_NO_REQUIREMENT: "Neither a reading here nor evidence for this taxon.",
+  CONDITION_NOT_NUMERIC: "The recorded value cannot be compared numerically.",
+};
+
+/**
+ * How this plant's conditions compare with what its taxon is known to need.
+ *
+ * The headline is deliberately the thing that is easiest to get wrong. A
+ * comparison that finds nothing to complain about is not the same as a plant
+ * that is well placed, and when nothing could be assessed the panel says so
+ * first — before any per-variable detail — because a reader who skims a list
+ * of grey rows and sees no red will otherwise conclude everything is fine.
+ *
+ * It offers no advice. Whether to move a plant depends on what else is on the
+ * bench, what the grower can do and the season, none of which the backend has.
+ */
+function PlacementAssessmentPanel({ plantId }: { plantId: string }) {
+  const request = useApi();
+  const [assessment, setAssessment] = useState<PlacementAssessment>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    request<PlacementAssessment>(`/api/conservatory/plants/${encodeURIComponent(plantId)}/placement-assessment`)
+      .then((result) => {
+        if (!active) return;
+        if (!result || !Array.isArray(result.assessments)) { setUnavailable(true); return; }
+        setAssessment(result);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        if (cause instanceof ApiError && cause.status === 404) setUnavailable(true);
+        else setError(cause instanceof Error ? cause.message : "The assessment could not be loaded");
+      });
+    return () => { active = false; };
+  }, [plantId, request]);
+
+  if (unavailable) return <section className="mt-6 rounded-xl border border-dashed p-5" data-testid="assessment-unavailable">
+    <h3 className="text-sm font-semibold">Placement assessment is not available from this backend</h3>
+    <p className="mt-1 text-xs text-muted-foreground">This says nothing about how the plant is doing.</p>
+  </section>;
+
+  if (error) return <section className="mt-6 rounded-xl border border-destructive/40 bg-destructive/5 p-5" role="alert" data-testid="assessment-error">
+    <p className="text-xs">{error}</p>
+  </section>;
+
+  if (!assessment) return <p className="mt-6 text-sm text-muted-foreground" role="status">Loading placement assessment…</p>;
+
+  const breaches = assessment.assessments.filter((row) => row.outcome === "outside");
+
+  return <section className="mt-6 rounded-xl border p-5" data-testid="placement-assessment">
+    <h3 className="text-sm font-semibold">How this place compares with what the taxon needs</h3>
+
+    {!assessment.anything_assessed ? (
+      // Stated first and plainly. A reader skimming grey rows and seeing no
+      // red would otherwise conclude the plant is fine.
+      <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-testid="nothing-assessed">
+        Nothing could be compared. This is not a sign that the plant is well placed — it means the
+        conditions here, the evidence for this taxon, or both, are missing.
+      </p>
+    ) : breaches.length ? (
+      <p className="mt-2 text-sm" data-testid="assessment-summary">
+        {breaches.length} recorded condition{breaches.length === 1 ? " falls" : "s fall"} outside a
+        known range.
+      </p>
+    ) : (
+      <p className="mt-2 text-sm" data-testid="assessment-summary">
+        Everything that could be compared is inside its known range. Variables that could not be
+        compared are listed below.
+      </p>
+    )}
+
+    <ul className="mt-3 space-y-2" data-testid="assessment-list">
+      {assessment.assessments.map((row) => (
+        <li key={row.variable} className="rounded-lg border p-3 text-sm"
+          data-testid={`assessment-${row.variable}`} data-outcome={row.outcome}>
+          <div className="flex flex-wrap items-baseline gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">
+              {row.variable.replace(/_/g, " ")}
+            </span>
+            <span className="font-medium">{OUTCOME_COPY[row.outcome]?.label ?? row.outcome}</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {row.outcome === "unassessable" && row.reason
+              ? UNASSESSABLE_REASON[row.reason] ?? OUTCOME_COPY.unassessable.detail
+              : OUTCOME_COPY[row.outcome]?.detail}
+          </p>
+          {row.condition?.value !== undefined && (
+            <p className="mt-1 text-xs" data-testid={`assessment-condition-${row.variable}`}>
+              Recorded: {row.condition.value} {row.condition.unit}
+              {/* The origin travels here too: a breach found against a
+                  hand-entered number is a weaker finding than one against an
+                  instrument, and the grower is entitled to see which. */}
+              {row.condition.origin ? ` (${ORIGIN_LABEL[row.condition.origin] ?? row.condition.origin})` : ""}
+            </p>
+          )}
+          {row.breached?.map((breach) => (
+            <p key={breach.bound} className="mt-1 text-xs text-amber-600 dark:text-amber-400"
+              data-testid={`assessment-breach-${row.variable}-${breach.bound}`}>
+              Past the known {breach.bound} of {breach.limit}
+              {row.bounds?.[breach.bound]?.[0]?.evidence_strength
+                ? ` — evidence: ${row.bounds[breach.bound][0].evidence_strength}`
+                : ""}
+            </p>
+          ))}
+        </li>
+      ))}
+    </ul>
+
+    <p className="mt-3 text-[11px] text-muted-foreground" data-testid="assessment-not-advice">
+      This is a comparison, not advice. Whether to move a plant depends on what else is on the
+      bench, what you can actually do, and the season — none of which are in this data.
+    </p>
+  </section>;
+}
+
 function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: boolean }) {
   return <div className="rounded-xl border bg-card p-6">
     {arrivedByScan && <p className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-testid="scan-arrival">Opened by scanning this plant&rsquo;s tag.</p>}
@@ -1122,6 +1278,7 @@ function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: 
     <div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div>
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
     <CultivationContext plantId={plant.id} />
+    <PlacementAssessmentPanel plantId={plant.id} />
     <PlantLedger plantId={plant.id} />
   </div>;
 }
