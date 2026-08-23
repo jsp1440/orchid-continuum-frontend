@@ -4,6 +4,7 @@ import {
   GENUS_PROFILE_ORIGIN,
   genusProfileAtlasHref,
   genusProfileCalyxHref,
+  genusProfileSpeciesHref,
 } from '@/lib/genusProfileNavigation';
 
 describe('Genus Profile navigation', () => {
@@ -33,6 +34,30 @@ describe('Genus Profile navigation', () => {
     expect(received.featuredTaxon).toEqual({ rank: 'genus', name: 'Phalaenopsis' });
   });
 
+  it('preserves only the genus when continuing into Species', () => {
+    const url = new URL(genusProfileSpeciesHref('Phalaenopsis'), 'https://orchid-continuum.invalid');
+
+    expect(url.pathname).toBe('/species');
+    expect(url.searchParams.get('genus')).toBe('Phalaenopsis');
+    expect([...url.searchParams.keys()]).toEqual(['genus']);
+    for (const forbidden of [
+      'origin',
+      'context_is_evidence',
+      'lat',
+      'lng',
+      'locality',
+      'occurrence_id',
+      'record_id',
+      'collector',
+      'catalogue',
+      'evidence',
+      'confidence',
+      'conclusion',
+    ]) {
+      expect(url.searchParams.has(forbidden)).toBe(false);
+    }
+  });
+
   it('emits only bounded non-evidentiary Atlas navigation keys', () => {
     const url = new URL(genusProfileAtlasHref('Cattleya'), 'https://orchid-continuum.invalid');
     expect([...url.searchParams.keys()].sort()).toEqual(
@@ -49,5 +74,6 @@ describe('Genus Profile navigation', () => {
   ])('fails closed on malformed genus %j', (genus) => {
     expect(() => genusProfileAtlasHref(genus)).toThrow();
     expect(() => genusProfileCalyxHref(genus)).toThrow();
+    expect(() => genusProfileSpeciesHref(genus)).toThrow();
   });
 });
