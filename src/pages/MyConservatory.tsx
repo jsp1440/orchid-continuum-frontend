@@ -98,7 +98,24 @@ type EnvironmentVariable = {
   reason?: string;
 };
 
-type EnvironmentView = { location_id: string; variables: Record<string, EnvironmentVariable> };
+type EnvironmentReading = {
+  id: string;
+  variable: string;
+  unit: string;
+  value: number | null;
+  origin: string;
+  instrument: string | null;
+  observed_at: string;
+  note: string | null;
+  supersedes_id: string | null;
+  superseded_by_id: string | null;
+};
+
+type EnvironmentView = {
+  location_id: string;
+  variables: Record<string, EnvironmentVariable>;
+  readings?: EnvironmentReading[];
+};
 
 type PlantInput = {
   display_name: string;
@@ -483,7 +500,17 @@ const ENVIRONMENT_VARIABLES: { value: string; label: string; unit: string }[] = 
  * for it at the point the grower makes that claim rather than letting them
  * discover the refusal after typing everything else.
  */
-function RecordReading({ locationId, onRecorded }: { locationId: string; onRecorded: () => void }) {
+function RecordReading({
+  locationId,
+  onRecorded,
+  correcting,
+  onCancelCorrection,
+}: {
+  locationId: string;
+  onRecorded: () => void;
+  correcting?: EnvironmentReading;
+  onCancelCorrection?: () => void;
+}) {
   const request = useApi();
   const [variable, setVariable] = useState("");
   const [value, setValue] = useState("");
@@ -495,7 +522,13 @@ function RecordReading({ locationId, onRecorded }: { locationId: string; onRecor
 
   const today = new Date().toISOString().slice(0, 10);
   const needsInstrument = origin === "measured";
-  const ready = Boolean(variable && origin && day && value.trim() && (!needsInstrument || instrument.trim()));
+  // A correction keeps the variable of the reading it replaces. Letting it
+  // change would turn one claim into a different one wearing the same
+  // identity, and the backend refuses it.
+  const effectiveVariable = correcting ? correcting.variable : variable;
+  const ready = Boolean(
+    effectiveVariable && origin && day && value.trim() && (!needsInstrument || instrument.trim()),
+  );
 
   async function submit(formEvent: FormEvent) {
     formEvent.preventDefault();
@@ -506,10 +539,11 @@ function RecordReading({ locationId, onRecorded }: { locationId: string; onRecor
       await request(`/api/conservatory/locations/${encodeURIComponent(locationId)}/environment`, {
         method: "POST",
         body: JSON.stringify({
-          variable,
+          variable: effectiveVariable,
           value: Number(value),
           origin,
           observed_at: new Date(`${day}T00:00:00Z`).toISOString(),
+          supersedes_id: correcting ? correcting.id : null,
           // Only a measured reading may carry an instrument; sending one
           // otherwise is refused, and would be a lie if it were not.
           instrument: needsInstrument ? instrument.trim() : null,
@@ -525,15 +559,22 @@ function RecordReading({ locationId, onRecorded }: { locationId: string; onRecor
   }
 
   return <form className="mt-3 space-y-3 border-t pt-3" onSubmit={submit} data-testid="record-reading">
+    {correcting && <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs" data-testid="correcting-reading">
+      Correcting the {correcting.variable.replace(/_/g, " ")} reading of {correcting.value} from{" "}
+      {(correcting.observed_at || "").slice(0, 10)}. The original stays in the record, marked as
+      corrected, and stops being used — it is not deleted.
+      <button type="button" className="ml-2 underline" data-testid="cancel-reading-correction"
+        onClick={() => onCancelCorrection?.()}>Cancel</button>
+    </div>}
     <div className="flex flex-wrap gap-3">
-      <label className="text-sm">
+      {!correcting && <label className="text-sm">
         <span className="block text-xs text-muted-foreground">What</span>
         <select className="mt-1 rounded-md border px-3 py-2" value={variable} data-testid="reading-variable"
           onChange={(changed) => setVariable(changed.target.value)}>
           <option value="">Choose…</option>
           {ENVIRONMENT_VARIABLES.map((option) => <option key={option.value} value={option.value}>{option.label} ({option.unit})</option>)}
         </select>
-      </label>
+      </label>}
       <label className="text-sm">
         <span className="block text-xs text-muted-foreground">Value</span>
         <input type="number" step="any" className="mt-1 w-28 rounded-md border px-3 py-2" value={value}
@@ -568,9 +609,94 @@ function RecordReading({ locationId, onRecorded }: { locationId: string; onRecor
     {error && <p className="text-xs text-destructive" role="alert" data-testid="reading-error">{error}</p>}
     <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
       disabled={saving || !ready} data-testid="reading-submit">
-      {saving ? "Recording…" : "Record reading"}
+      {saving ? "Recording…" : correcting ? "Record correction" : "Record reading"}
     </button>
   </form>;
+}
+
+/**
+ * The readings recorded at one location, and the way back from a typo.
+ *
+ * Without this list a correction was unreachable: the form could send one but
+ * nothing showed a grower which reading to correct. A mistyped number matters
+ * here more than most places, because readings feed the placement assessment —
+ * a stray 120 can put a plant "outside" a bound it never breached.
+ *
+ * Corrected readings stay visible, struck through. They are part of the record
+ * of what the grower believed at the time, and hiding them would leave someone
+ * unable to see that a number they remember has already been revised.
+ */
+function LocationReadings({ locationId }: { locationId: string }) {
+  const request = useApi();
+  const [readings, setReadings] = useState<EnvironmentReading[]>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState<string>();
+  const [correcting, setCorrecting] = useState<EnvironmentReading>();
+
+  const load = useCallback(() => {
+    setError(undefined);
+    request<EnvironmentView>(`/api/conservatory/locations/${encodeURIComponent(locationId)}/environment`)
+      .then((result) => {
+        // A response without a readings array is a contract the service did
+        // not honour. Rendering it as an empty list would claim this bench has
+        // never been measured, on the strength of a broken payload.
+        if (!result || !Array.isArray(result.readings)) { setUnavailable(true); return; }
+        setReadings(result.readings);
+      })
+      .catch((cause) => {
+        if (cause instanceof ApiError && cause.status === 404) setUnavailable(true);
+        else setError(cause instanceof Error ? cause.message : "Readings could not be loaded");
+      });
+  }, [locationId, request]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const standing = (readings ?? []).filter((row) => !row.superseded_by_id);
+  const corrected = (readings ?? []).filter((row) => row.superseded_by_id);
+
+  return <div className="mt-3" data-testid={`readings-${locationId}`}>
+    {unavailable ? (
+      <p className="text-xs text-muted-foreground" data-testid={`readings-unavailable-${locationId}`}>
+        Readings are not available from this backend. This says nothing about what has been measured here.
+      </p>
+    ) : error ? (
+      <p className="text-xs text-destructive" role="alert" data-testid={`readings-error-${locationId}`}>{error}</p>
+    ) : !readings ? (
+      <p className="text-xs text-muted-foreground" role="status">Loading readings…</p>
+    ) : standing.length === 0 && corrected.length === 0 ? (
+      <p className="text-xs text-muted-foreground" data-testid={`no-readings-${locationId}`}>Nothing measured here yet.</p>
+    ) : (
+      <>
+        {standing.length > 0 && <ul className="space-y-1 text-xs" data-testid={`reading-list-${locationId}`}>
+          {standing.map((reading) => (
+            <li key={reading.id} data-testid={`reading-${reading.id}`}>
+              {reading.variable.replace(/_/g, " ")}: {reading.value} {reading.unit}
+              <span className="text-muted-foreground">
+                {" "}({ORIGIN_LABEL[reading.origin] ?? reading.origin}
+                {reading.instrument ? `, ${reading.instrument}` : ""}) — {(reading.observed_at || "").slice(0, 10)}
+              </span>
+              <button type="button" className="ml-2 underline" data-testid={`correct-reading-${reading.id}`}
+                onClick={() => setCorrecting(reading)}>Correct this</button>
+            </li>
+          ))}
+        </ul>}
+        {corrected.length > 0 && <div className="mt-2" data-testid={`corrected-readings-${locationId}`}>
+          <span className="text-[11px] font-semibold text-muted-foreground">Corrected</span>
+          <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground line-through">
+            {corrected.map((reading) => (
+              <li key={reading.id}>{reading.variable.replace(/_/g, " ")}: {reading.value} {reading.unit}</li>
+            ))}
+          </ul>
+        </div>}
+      </>
+    )}
+    <RecordReading
+      locationId={locationId}
+      correcting={correcting}
+      onCancelCorrection={() => setCorrecting(undefined)}
+      onRecorded={() => { setCorrecting(undefined); load(); }}
+    />
+  </div>;
 }
 
 /**
@@ -860,7 +986,7 @@ function Locations() {
         {active.map((location) => <li key={location.id} className="rounded-xl border p-4" data-testid={`location-card-${location.id}`}>
           <strong className="block">{location.name}</strong>
           <span className="text-xs text-muted-foreground">{LOCATION_KINDS.find((k) => k.value === location.kind)?.label ?? location.kind}</span>
-          <RecordReading locationId={location.id} onRecorded={load} />
+          <LocationReadings locationId={location.id} />
           <LocationAdmin location={location} onChanged={load} />
           <LocationHistory locationId={location.id} />
         </li>)}
