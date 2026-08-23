@@ -214,3 +214,107 @@ describe("MyConservatory Add Plant — readiness gate", () => {
     expect(JSON.parse((postCall![1] as RequestInit).body as string).display_name).toBe("Vanda coerulea");
   });
 });
+
+/**
+ * Scanning a tag, and the dossier it lands on.
+ *
+ * The dossier bug these tests pin was real and silent: this route is mounted
+ * under a `/conservatory/*` splat, which declares no `:plantId`, so useParams
+ * returned undefined and every plant page requested
+ * `/api/conservatory/plants/` — the list endpoint, whose shape is not a plant.
+ * No test caught it because none asserted which URL was requested.
+ */
+
+const scannedPlant = {
+  id: "p1",
+  accession_number: "OC-2026-0001",
+  display_name: "Phalaenopsis amabilis",
+  accepted_scientific_name: "Phalaenopsis amabilis",
+  location: "Greenhouse bench 2",
+  notes: "Repotted in spring.",
+  qr_identifier: "calyx:plant:p1",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+function trackingFetch(handler: (url: string) => { ok: boolean; status?: number; body: unknown }) {
+  const seen: string[] = [];
+  const mock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    seen.push(url);
+    if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+    const result = handler(url);
+    return { ok: result.ok, status: result.status ?? (result.ok ? 200 : 404), json: async () => result.body } as Response;
+  });
+  return { mock, seen };
+}
+
+describe("MyConservatory plant dossier", () => {
+  it("requests the plant named in the address, not the collection", async () => {
+    // The regression. `/plants/` (no id) is the list endpoint and silently
+    // renders a dossier from the wrong shape.
+    const { mock, seen } = trackingFetch(() => ({ ok: true, body: scannedPlant }));
+    renderAt("/conservatory/plants/p1", mock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+
+    const plantCalls = seen.filter((url) => /\/api\/conservatory\/plants\//.test(url) && !url.includes("qr.svg"));
+    expect(plantCalls).toContain("https://calyx.example.test/api/conservatory/plants/p1");
+    expect(plantCalls).not.toContain("https://calyx.example.test/api/conservatory/plants/");
+    expect(container.textContent).toContain("Phalaenopsis amabilis");
+    expect(container.textContent).toContain("OC-2026-0001");
+  });
+});
+
+describe("MyConservatory scan landing", () => {
+  it("resolves the scanned identity and shows that plant", async () => {
+    const { mock, seen } = trackingFetch(() => ({ ok: true, body: scannedPlant }));
+    renderAt("/conservatory/scan/calyx:plant:p1", mock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+
+    expect(seen.some((url) => url.includes("/api/conservatory/resolve/"))).toBe(true);
+    expect(container.textContent).toContain("Phalaenopsis amabilis");
+    expect(container.querySelector('[data-testid="scan-arrival"]')).not.toBeNull();
+  });
+
+  it("sends the whole remaining path as the identity when the tag is a URL", async () => {
+    // A scanned tag can itself be a URL. Truncating at the first slash would
+    // resolve some prefix of the identity, or nothing at all.
+    const { mock, seen } = trackingFetch(() => ({ ok: true, body: scannedPlant }));
+    renderAt("/conservatory/scan/https://continuum.example/conservatory/scan/p1", mock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+
+    const resolveCall = seen.find((url) => url.includes("/api/conservatory/resolve/"));
+    expect(resolveCall).toBeDefined();
+    expect(decodeURIComponent(resolveCall as string)).toContain("continuum.example/conservatory/scan/p1");
+  });
+
+  it("says a tag is unrecognised without claiming the plant is gone", async () => {
+    const { mock } = trackingFetch(() => ({ ok: false, status: 404, body: { detail: { code: "ACCESSION_NOT_RESOLVED" } } }));
+    renderAt("/conservatory/scan/calyx:plant:unknown", mock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+
+    const panel = container.querySelector('[data-testid="scan-unresolved"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.textContent).toMatch(/not matched approximately/i);
+    // The recovery path a grower with a damaged tag actually has.
+    expect(panel?.textContent).toMatch(/accession number is still legible/i);
+  });
+
+  it("keeps an unreachable service distinct from an unrecognised tag", async () => {
+    // Rendering an outage as "no such plant" tells a grower their record is
+    // missing when the service is merely down.
+    const { mock } = trackingFetch(() => ({ ok: false, status: 503, body: { detail: "backend unavailable" } }));
+    renderAt("/conservatory/scan/calyx:plant:p1", mock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+
+    expect(container.querySelector('[data-testid="scan-unresolved"]')).toBeNull();
+    expect(container.textContent).toMatch(/could not be loaded|backend unavailable/i);
+  });
+
+  it("does not render a dossier before the identity resolves", async () => {
+    const { mock } = trackingFetch(() => ({ ok: false, status: 404, body: { detail: { code: "ACCESSION_NOT_RESOLVED" } } }));
+    renderAt("/conservatory/scan/calyx:plant:unknown", mock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    expect(container.querySelector('[data-testid="scan-arrival"]')).toBeNull();
+  });
+});

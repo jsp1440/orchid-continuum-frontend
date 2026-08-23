@@ -1,5 +1,5 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ConservatoryReadinessBanner,
@@ -28,6 +28,25 @@ type PlantInput = {
   notes?: string;
 };
 
+/**
+ * A failed request, with the status kept alongside the message.
+ *
+ * Callers need to tell "this collection has no such plant" from "the service
+ * did not answer", and those differ only by status. Without it the distinction
+ * has to be recovered by pattern-matching prose, which breaks the moment the
+ * wording changes.
+ */
+class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  constructor(message: string, status: number, code?: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 function useApi() {
   const { session } = useAuth();
   return useCallback(async <T,>(path: string, init?: RequestInit): Promise<T> => {
@@ -43,7 +62,20 @@ function useApi() {
     });
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
-      throw new Error(String(body.detail || body.message || `Request failed (${response.status})`));
+      const detail = body.detail;
+      // `detail` is a string on some endpoints and a {code, message} object on
+      // others. Stringifying an object yields "[object Object]", so read the
+      // shape rather than coercing it.
+      const described =
+        typeof detail === "string" ? detail
+        : detail && typeof detail === "object" ? String(detail.message || detail.code || "")
+        : "";
+      const error = new ApiError(
+        described || String(body.message || `Request failed (${response.status})`),
+        response.status,
+        detail && typeof detail === "object" && typeof detail.code === "string" ? detail.code : undefined,
+      );
+      throw error;
     }
     return response.json() as Promise<T>;
   }, [session?.access_token]);
@@ -129,14 +161,75 @@ function QrImage({ plant }: { plant: Plant }) {
   return source ? <img src={source} alt={`QR code for ${plant.accession_number}`} className="h-28 w-28" /> : <div className="flex h-28 w-28 items-center justify-center border text-center text-xs">QR unavailable</div>;
 }
 
-function Detail() {
-  const { plantId = "" } = useParams();
+function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: boolean }) {
+  return <div className="rounded-xl border bg-card p-6">
+    {arrivedByScan && <p className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-testid="scan-arrival">Opened by scanning this plant&rsquo;s tag.</p>}
+    <p className="text-xs uppercase tracking-wide text-muted-foreground">{plant.accession_number}</p>
+    <div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div>
+    <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
+  </div>;
+}
+
+/**
+ * The plant id comes from the path, not from useParams.
+ *
+ * This route is mounted under a `/conservatory/*` splat, which declares no
+ * `:plantId`, so useParams returned undefined here and every dossier requested
+ * `/api/conservatory/plants/` with an empty id — the list endpoint, whose shape
+ * is not a plant. The page could never show a specific plant. The surrounding
+ * router already matches paths by hand, so the id is passed down the same way.
+ */
+function Detail({ plantId }: { plantId: string }) {
   const request = useApi();
   const [plant, setPlant] = useState<Plant>();
   const [error, setError] = useState<string>();
-  useEffect(() => { request<Plant>(`/api/conservatory/plants/${encodeURIComponent(plantId)}`).then(setPlant).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load plant")); }, [plantId, request]);
+  useEffect(() => {
+    if (!plantId) { setError("No plant was identified in this address."); return; }
+    request<Plant>(`/api/conservatory/plants/${encodeURIComponent(plantId)}`).then(setPlant).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load plant"));
+  }, [plantId, request]);
   if (error || !plant) return <Status loading={!error} error={error} />;
-  return <div className="rounded-xl border bg-card p-6"><p className="text-xs uppercase tracking-wide text-muted-foreground">{plant.accession_number}</p><div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div><p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p></div>;
+  return <PlantDossier plant={plant} />;
+}
+
+/**
+ * Where a scanned tag lands.
+ *
+ * The tag carries a durable identity rather than a page address, so arriving
+ * here means resolving that identity to an accession before anything can be
+ * shown. Three outcomes are kept apart on purpose: the plant, a tag this
+ * collection does not know, and a failure to ask. Rendering the middle one as
+ * an error would tell a grower their plant is missing when the service is
+ * merely unreachable.
+ */
+function Scan({ identifier }: { identifier: string }) {
+  const request = useApi();
+  const [plant, setPlant] = useState<Plant>();
+  const [unresolved, setUnresolved] = useState(false);
+  const [error, setError] = useState<string>();
+  useEffect(() => {
+    let active = true;
+    setPlant(undefined); setUnresolved(false); setError(undefined);
+    request<Plant>(`/api/conservatory/resolve/${encodeURIComponent(identifier)}`)
+      .then((result) => { if (active) setPlant(result); })
+      .catch((reason) => {
+        if (!active) return;
+        // A tag we cannot match is a different fact from a service we cannot
+        // reach, and only one of them is about the plant. The status says
+        // which; the message is for the reader, not for this branch.
+        if (reason instanceof ApiError && reason.status === 404) setUnresolved(true);
+        else setError(reason instanceof Error && reason.message ? reason.message : "Unable to resolve this tag");
+      });
+    return () => { active = false; };
+  }, [identifier, request]);
+
+  if (plant) return <PlantDossier plant={plant} arrivedByScan />;
+  if (unresolved) return <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-6" role="alert" data-testid="scan-unresolved">
+    <h2 className="text-xl font-semibold">This tag does not match a plant in your collection</h2>
+    <p className="mt-2 text-sm text-muted-foreground">It was not matched approximately. A near miss would attach one plant&rsquo;s history to another, so nothing is shown rather than the wrong record.</p>
+    <p className="mt-3 text-sm">If the tag is damaged but its accession number is still legible, search for that number in <Link className="underline" to="/conservatory/plants">My Plants</Link>.</p>
+    <p className="mt-3 break-all font-mono text-xs text-muted-foreground">Scanned: {identifier}</p>
+  </div>;
+  return <Status loading={!error} error={error} />;
 }
 
 function Labels() {
@@ -156,6 +249,14 @@ export default function MyConservatory() {
   else if (path === "/conservatory/plants/new") content = <AddPlant />;
   else if (path === "/conservatory/labels") content = <Labels />;
   else if (path === "/conservatory/readiness") content = <ConservatoryReadinessPage />;
-  else if (/^\/conservatory\/plants\/[^/]+$/.test(path)) content = <Detail />;
+  else {
+    const detailMatch = /^\/conservatory\/plants\/([^/]+)$/.exec(path);
+    const scanMatch = /^\/conservatory\/scan\/(.+)$/.exec(path);
+    if (detailMatch) content = <Detail plantId={decodeURIComponent(detailMatch[1])} />;
+    // The identifier is matched greedily: a scanned tag may itself be a URL,
+    // so the remainder of the path is the identity and must not be truncated
+    // at its first slash.
+    else if (scanMatch) content = <Scan identifier={decodeURIComponent(scanMatch[1])} />;
+  }
   return <Shell>{content}</Shell>;
 }
