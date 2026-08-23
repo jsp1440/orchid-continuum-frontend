@@ -1471,3 +1471,74 @@ describe("MyConservatory location history", () => {
     expect(container.querySelector('[data-testid="history-loc-1"]')).toBeNull();
   });
 });
+
+/**
+ * Bringing a retired location back.
+ *
+ * A bench that returns is the same bench. Un-retiring keeps its identity, so
+ * every placement recorded before it was retired still points here — which is
+ * exactly what creating a replacement with the same name would destroy.
+ */
+describe("MyConservatory un-retiring a location", () => {
+  const gone = { id: "loc-gone", name: "Winter bench", kind: "greenhouse_bench", retired_at: "2026-05-01T00:00:00Z" };
+  const active = { id: "loc-active", name: "Summer bench", kind: "greenhouse_bench" };
+
+  function unretireFetch(result?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/unretire") && init?.method === "POST") {
+        const r = result ?? { ok: true, status: 200, body: { ...gone, retired_at: null } };
+        return { ok: r.ok, status: r.status ?? 200, json: async () => r.body } as Response;
+      }
+      if (url.includes("/api/conservatory/locations")) {
+        // Both an active and a retired bench, so "only on a retired one" is a
+        // real assertion rather than one about an id the fixture never had.
+        return { ok: true, status: 200, json: async () => ({ locations: [active, gone] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+  }
+
+  function click(testid: string) {
+    const el = container.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+    act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  }
+
+  async function open(result?: Parameters<typeof unretireFetch>[0]) {
+    const fetchMock = unretireFetch(result);
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    return fetchMock;
+  }
+
+  it("offers the option only on a retired location", async () => {
+    await open();
+    expect(container.querySelector('[data-testid="unretire-loc-gone"]')).not.toBeNull();
+    // The active bench is present and must NOT offer it: it has retire instead.
+    expect(container.querySelector('[data-testid="location-card-loc-active"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="unretire-loc-active"]')).toBeNull();
+  });
+
+  it("posts to the unretire endpoint", async () => {
+    const fetchMock = await open();
+    click("unretire-loc-gone");
+    await flush();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/unretire"))).toBe(true);
+  });
+
+  it("says the identity is kept, since that is the point", async () => {
+    // Creating a replacement with the same name would split one place's
+    // history in two.
+    await open();
+    const note = container.querySelector('[data-testid="unretire-note-loc-gone"]')?.textContent ?? "";
+    expect(note).toMatch(/keeps its identity/i);
+    expect(note).toMatch(/plants that were here still show it in their history/i);
+  });
+
+  it("reports a refusal rather than appearing to succeed", async () => {
+    await open({ ok: false, status: 409, body: { detail: { code: "LOCATION_NOT_RETIRED" } } });
+    click("unretire-loc-gone");
+    await flush();
+    expect(container.querySelector('[data-testid="unretire-error-loc-gone"]')).not.toBeNull();
+  });
+});
