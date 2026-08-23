@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 describe('Genus of the Day continuation', () => {
-  it('mounts the canonical featured-genus Species and Research handoffs', () => {
+  it('mounts bounded Atlas Next, Species, and Research handoffs', () => {
     act(() => {
       root.render(
         <MemoryRouter>
@@ -43,12 +43,20 @@ describe('Genus of the Day continuation', () => {
     });
 
     const links = Array.from(container.querySelectorAll('a')) as HTMLAnchorElement[];
+    const atlasNext = links.find((link) => link.textContent?.includes('Explore in Atlas Next'));
     const species = links.find((link) => link.textContent?.includes('Browse Phalaenopsis species'));
     const research = links.find((link) => link.textContent?.includes('Continue in Research Station'));
 
+    expect(atlasNext?.getAttribute('href')).toBe('/atlas-next?genera=Phalaenopsis');
     expect(species?.getAttribute('href')).toBe('/species?genus=Phalaenopsis');
     expect(research?.getAttribute('href')).toBe(
       '/research?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false',
+    );
+
+    const atlasNextUrl = new URL(atlasNext?.getAttribute('href') ?? '', 'https://orchid.test');
+    expect([...atlasNextUrl.searchParams.keys()]).toEqual(['genera']);
+    expect(atlasNextUrl.search).not.toMatch(
+      /locality|latitude|longitude|occurrence|record|collector|catalog|evidence|confidence|conclusion/i,
     );
 
     const speciesUrl = new URL(species?.getAttribute('href') ?? '', 'https://orchid.test');

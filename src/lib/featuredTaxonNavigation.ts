@@ -27,6 +27,15 @@ export function featuredTaxonAtlasHref(genus: string): string {
 }
 
 /**
+ * Bounded handoff from the homepage featured genus into Atlas Next.
+ * Atlas Next consumes the same shared AtlasFilterContext contract as the
+ * canonical Atlas, so only the canonical genus filter crosses this boundary.
+ */
+export function featuredTaxonAtlasNextHref(genus: string): string {
+  return `/atlas-next?genera=${encodeURIComponent(normalizedGenus(genus))}`;
+}
+
+/**
  * Canonical handoff from a featured-taxon surface into Calyx.
  *
  * The route carries only bounded navigation context. The explicit
