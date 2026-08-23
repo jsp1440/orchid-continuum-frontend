@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight, ExternalLink } from 'lucide-react';
-import { COMPLETION_GRAPH, COMPLETION_GRAPH_CENSUS_DATE } from '@/lib/completion-graph/completionGraphData';
+import { COMPLETION_GRAPH, COMPLETION_GRAPH_SNAPSHOT } from '@/lib/completion-graph/completionGraphData';
+import { assessFreshness, readBuildSha } from '@/lib/completion-graph/evidenceFreshness';
 import { countIncompleteLeaves, countLeavesByStatus, getLeaves, groupLeavesByLane, listBlockers, listOwnerActions, selectNextUnmetGate } from '@/lib/completion-graph/graphOps';
 import { computeGateScore, computeNodeCensusCoverage, computeNodePercentage } from '@/lib/completion-graph/scoring';
 import type { CompletionNode, CompletionStatus, Evidence, ExecutionLane } from '@/lib/completion-graph/types';
@@ -152,6 +153,13 @@ function GraphNodeRow({ node, depth }: { node: CompletionNode; depth: number }) 
 export default function CompletionObservatory() {
   const root = COMPLETION_GRAPH;
 
+  // Evaluated once per mount rather than per render: the verdict must not
+  // flicker between states while the owner is reading it.
+  const freshness = useMemo(
+    () => assessFreshness(COMPLETION_GRAPH_SNAPSHOT, { buildSha: readBuildSha(), now: new Date() }),
+    [],
+  );
+
   const overallPercentage = useMemo(() => computeNodePercentage(root), [root]);
   const overallCoverage = useMemo(() => Math.round(computeNodeCensusCoverage(root) * 100), [root]);
   const incompleteCount = useMemo(() => countIncompleteLeaves(root), [root]);
@@ -175,6 +183,20 @@ export default function CompletionObservatory() {
               ? 'No leaves scored yet'
               : `Leaf-count-weighted across scored subtrees — only ${overallCoverage}% of all tracked leaves have been evaluated`}
           </div>
+          {/* The number itself carries the qualifier. A reader who never looks
+              at the snapshot card must not take this figure as current. */}
+          {!freshness.presentAsCurrent ? (
+            <div
+              className="mt-2 rounded border border-[#d4b34a]/40 bg-[#241c08]/60 px-2 py-1 font-mono text-[9px] uppercase tracking-[0.14em] text-[#f6dc82]"
+              data-testid="percentage-qualifier"
+            >
+              {freshness.state === 'stale'
+                ? 'Stale — refresh required'
+                : freshness.state === 'indeterminate'
+                  ? 'Not verifiable against this build'
+                  : 'Not current — build has moved past the evidence'}
+            </div>
+          ) : null}
         </div>
         <div className="rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4">
           <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Incomplete leaves</div>
@@ -186,10 +208,24 @@ export default function CompletionObservatory() {
           <div className="mt-2 text-3xl font-semibold text-[#f5f0e8]">{blockers.length + ownerActions.length}</div>
           <div className="mt-1 text-[11px] text-[#cfc8b8]/60">{blockers.length} blocked, {ownerActions.length} awaiting owner</div>
         </div>
-        <div className="rounded-lg border border-white/[0.08] bg-[#0b1c11]/85 p-4">
-          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Census as of</div>
-          <div className="mt-2 text-lg font-semibold text-[#f5f0e8]">{new Date(COMPLETION_GRAPH_CENSUS_DATE).toLocaleDateString()}</div>
-          <div className="mt-1 text-[11px] text-[#cfc8b8]/60">First-pass census — see remaining census-pending leaves below</div>
+        <div
+          className={'rounded-lg border p-4 ' + (freshness.presentAsCurrent
+            ? 'border-white/[0.08] bg-[#0b1c11]/85'
+            : 'border-[#d4b34a]/45 bg-[#241c08]/70')}
+          data-testid="evidence-freshness"
+          data-freshness-state={freshness.state}
+        >
+          <div className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#c9a24a]">Evidence snapshot</div>
+          <div className="mt-2 text-lg font-semibold text-[#f5f0e8]">{freshness.headline}</div>
+          <div className="mt-1 text-[11px] leading-4 text-[#cfc8b8]/70">{freshness.detail}</div>
+          <div className="mt-2 font-mono text-[9px] leading-4 text-[#cfc8b8]/45">
+            <div>evidence @ {freshness.snapshotSha.slice(0, 12)}</div>
+            <div>build @ {freshness.buildSha ? freshness.buildSha.slice(0, 12) : 'not attested'}</div>
+            <div>
+              reconciled {new Date(COMPLETION_GRAPH_SNAPSHOT.reconciledAt).toLocaleDateString()}
+              {freshness.ageDays === null ? '' : ` · ${freshness.ageDays}d ago`}
+            </div>
+          </div>
         </div>
       </div>
 
