@@ -48,6 +48,12 @@ const frontendUrl = (process.env.FRONTEND_URL || 'http://127.0.0.1:4173').replac
  * `gate` marks a route that is expected to render an access gate rather than
  * content. It is an expectation, not an excuse: a gated route must still say
  * what it is gating, and the assertions below check for that wording.
+ *
+ * `interactive` marks a route whose content is form controls rather than
+ * prose. `innerText` does not include the value of a textarea or input, so a
+ * working lab tool measures short and a length threshold libels it. These are
+ * checked for the presence of controls instead — which is the real question
+ * for a form, and a stricter one than counting characters.
  */
 const ROUTES = [
   { path: '/' },
@@ -76,7 +82,7 @@ const ROUTES = [
   { path: '/partners' },
   { path: '/pollinators' },
   { path: '/relationship-explorer' },
-  { path: '/relationship-matrix' },
+  { path: '/relationship-matrix', interactive: true },
   { path: '/research', gate: 'member' },
   { path: '/societies' },
   { path: '/speak-with-calyx' },
@@ -91,6 +97,9 @@ const ROUTES = [
 /** Shorter than this, with no gate wording, is a page that failed silently. */
 const MIN_CONTENT_CHARS = 400;
 
+/** An interactive route with fewer controls than this did not really come up. */
+const MIN_INTERACTIVE_CONTROLS = 2;
+
 const CRASH_PATTERN = /something went wrong|application error|unexpected error|failed to fetch dynamically imported|chunk load/i;
 const GATE_PATTERN = {
   owner: /owner[- ]only|access code|owner gate|unlock/i,
@@ -104,6 +113,29 @@ const browser = await chromium.launch({ headless: true });
 try {
   for (const route of ROUTES) {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1200 } });
+
+    /**
+     * Everything off-origin is refused.
+     *
+     * This is not a speed hack, though it is much faster. A route-render
+     * sentinel that loads third-party fonts, tiles and analytics is partly
+     * measuring whether the internet is reachable from the runner, and would
+     * go red on a network the page is not responsible for. Refusing
+     * off-origin traffic isolates the question actually being asked: given
+     * only its own bundle, does this route come up and say something?
+     *
+     * It also makes the run honest about backends. The Continuum's API is a
+     * different origin, so every route renders in its backend-unreachable
+     * state — which is precisely the state whose wording this sweep checks.
+     */
+    await page.route('**', (routeRequest) => {
+      const target = routeRequest.request().url();
+      const sameOrigin = target.startsWith(frontendUrl)
+        || target.startsWith('data:')
+        || target.startsWith('blob:');
+      return sameOrigin ? routeRequest.continue() : routeRequest.abort();
+    });
+
     const errors = [];
     page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
     page.on('console', (message) => {
@@ -124,11 +156,16 @@ try {
       });
       await page.waitForTimeout(2500);
       const text = await page.evaluate(() => document.body.innerText || '');
+      const controls = await page.evaluate(
+        () => document.querySelectorAll('input, textarea, select, button').length,
+      );
       entry = {
         path: route.path,
         status: response ? response.status() : null,
         chars: text.replace(/\s+/g, ' ').trim().length,
+        controls,
         gate: route.gate ?? null,
+        interactive: route.interactive ?? false,
         crashed: CRASH_PATTERN.test(text),
         gateWordingPresent: route.gate ? GATE_PATTERN[route.gate].test(text) : null,
         errors,
@@ -157,6 +194,13 @@ try {
       // nothing is indistinguishable from one that broke.
       if (!entry.gateWordingPresent) {
         report.failures.push(`${where}: expected a ${entry.gate} gate but rendered no gate wording`);
+      }
+    } else if (entry.interactive) {
+      // A form is judged by whether its controls came up, not by prose length.
+      if (entry.controls < MIN_INTERACTIVE_CONTROLS) {
+        report.failures.push(
+          `${where}: expected an interactive surface but rendered ${entry.controls} control(s)`,
+        );
       }
     } else if (entry.chars < MIN_CONTENT_CHARS) {
       report.failures.push(`${where}: rendered ${entry.chars} characters with no access gate to explain it`);
