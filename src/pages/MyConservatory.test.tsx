@@ -1371,3 +1371,103 @@ describe("MyConservatory location administration", () => {
     expect((container.querySelector('[data-testid="rename-input-loc-1"]') as HTMLInputElement).value).toBe("Cool bench");
   });
 });
+
+/**
+ * A location's own history.
+ *
+ * This is where the distinction the placement model rests on becomes visible.
+ * A rename belongs here and nowhere near a plant, so a grower puzzled by a
+ * bench having changed names can see when it happened without finding a
+ * phantom move in a plant's record.
+ */
+describe("MyConservatory location history", () => {
+  const bench = { id: "loc-1", name: "The cold end", kind: "greenhouse_bench" };
+  const changes = [
+    { id: "c1", change: "created", previous_name: null, new_name: "Cool bench", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+    { id: "c2", change: "renamed", previous_name: "Cool bench", new_name: "The cold end", note: null, recorded_at: "2026-05-01T00:00:00Z" },
+  ];
+
+  function historyFetch(result?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/history")) {
+        const r = result ?? { ok: true, status: 200, body: { location_id: "loc-1", history: changes } };
+        return { ok: r.ok, status: r.status ?? 200, json: async () => r.body } as Response;
+      }
+      if (url.includes("/api/conservatory/locations")) {
+        return { ok: true, status: 200, json: async () => ({ locations: [bench] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+  }
+
+  function click(testid: string) {
+    const el = container.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+    act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  }
+
+  async function open(result?: Parameters<typeof historyFetch>[0]) {
+    const fetchMock = historyFetch(result);
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    return fetchMock;
+  }
+
+  it("is not fetched until the grower asks for it", async () => {
+    const fetchMock = await open();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/history"))).toBe(false);
+    click("history-toggle-loc-1");
+    await flush();
+    expect(fetchMock.mock.calls.some((call) => String(call[0]).includes("/history"))).toBe(true);
+  });
+
+  it("shows a rename as a rename, with both names", async () => {
+    await open();
+    click("history-toggle-loc-1");
+    await flush();
+    const renamed = container.querySelector('[data-testid="history-entry-renamed"]')?.textContent ?? "";
+    expect(renamed).toContain("Cool bench");
+    expect(renamed).toContain("The cold end");
+    expect(renamed).toMatch(/renamed/i);
+  });
+
+  it("says no plant moved because of any of it", async () => {
+    // The whole reason this view exists separately from placement history.
+    await open();
+    click("history-toggle-loc-1");
+    await flush();
+    const scope = container.querySelector('[data-testid="history-scope-loc-1"]')?.textContent ?? "";
+    expect(scope).toMatch(/changes to the place itself/i);
+    expect(scope).toMatch(/no plant moved/i);
+  });
+
+  it("reports a failure to load rather than showing an empty history", async () => {
+    // An empty list would claim nothing ever happened to this bench.
+    await open({ ok: false, status: 503, body: { detail: "unavailable" } });
+    click("history-toggle-loc-1");
+    await flush();
+    expect(container.querySelector('[data-testid="history-error-loc-1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="history-entry-created"]')).toBeNull();
+  });
+
+  it("reports a malformed history rather than claiming nothing happened", async () => {
+    // Fourth time this shape of gap has appeared this session: a
+    // contract-shaped failure (200, wrong body) reaches the component by a
+    // different path than a transport-shaped one (503), and covering one says
+    // nothing about the other.
+    await open({ ok: true, status: 200, body: { location_id: "loc-1" } });
+    click("history-toggle-loc-1");
+    await flush();
+    expect(container.querySelector('[data-testid="history-error-loc-1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="history-loc-1"]')?.textContent).not.toMatch(/no changes recorded/i);
+  });
+
+  it("can be hidden again", async () => {
+    await open();
+    click("history-toggle-loc-1");
+    await flush();
+    expect(container.querySelector('[data-testid="history-loc-1"]')).not.toBeNull();
+    click("history-toggle-loc-1");
+    expect(container.querySelector('[data-testid="history-loc-1"]')).toBeNull();
+  });
+});
