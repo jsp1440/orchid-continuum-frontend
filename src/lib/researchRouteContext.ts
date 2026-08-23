@@ -75,6 +75,9 @@ function boundedProject(value: string | null): string | null {
  *
  * Homepage Featured Taxon, Atlas and Genus Profile arrivals must explicitly
  * retain the non-evidence declaration made by their producers or fail closed.
+ * If a caller explicitly supplies persisted-project identity, malformed project
+ * context fails the entire arrival instead of silently widening it to a
+ * genus-only research session.
  */
 export function parseResearchRouteContext(search: string | URLSearchParams): ResearchRouteContext | null {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
@@ -125,10 +128,14 @@ export function parseResearchRouteContext(search: string | URLSearchParams): Res
     return null;
   }
 
+  const hasExplicitProject = params.has('project');
+  const projectId = boundedProject(params.get('project'));
+  if (hasExplicitProject && !projectId) return null;
+
   return {
     origin,
     genus,
-    projectId: boundedProject(params.get('project')),
+    projectId,
     contextIsEvidence: false,
   };
 }
