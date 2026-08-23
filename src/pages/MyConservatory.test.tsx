@@ -318,3 +318,240 @@ describe("MyConservatory scan landing", () => {
     expect(container.querySelector('[data-testid="scan-arrival"]')).toBeNull();
   });
 });
+
+/**
+ * Cultivation context on the dossier.
+ *
+ * The chain this completes: scan a tag, resolve the plant, see where it is,
+ * where it has been, and what is known about the conditions there.
+ *
+ * The property worth defending is that a number never loses its origin. A
+ * hand-entered temperature and an instrument reading look identical once the
+ * origin is dropped, and a grower deciding whether to move a plant is entitled
+ * to know which one they are acting on.
+ */
+
+const contextPlant = {
+  id: "p1",
+  accession_number: "OC-2026-0001",
+  display_name: "Cattleya skinneri",
+  accepted_scientific_name: "Cattleya skinneri",
+  location: "Greenhouse bench 2",
+  notes: null,
+  qr_identifier: "calyx:plant:p1",
+  created_at: "2026-01-01T00:00:00Z",
+  updated_at: "2026-01-01T00:00:00Z",
+};
+
+function contextFetch(overrides: {
+  placement?: unknown;
+  locations?: unknown;
+  environment?: unknown;
+  placementStatus?: number;
+} = {}) {
+  return vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+    if (url.includes("/placement")) {
+      const status = overrides.placementStatus ?? 200;
+      return {
+        ok: status === 200,
+        status,
+        json: async () => overrides.placement ?? { plant_id: "p1", current: null, history: [] },
+      } as Response;
+    }
+    if (url.includes("/environment")) {
+      return { ok: true, status: 200, json: async () => overrides.environment ?? { location_id: "loc-1", variables: {} } } as Response;
+    }
+    if (url.includes("/locations")) {
+      return { ok: true, status: 200, json: async () => overrides.locations ?? { locations: [] } } as Response;
+    }
+    return { ok: true, status: 200, json: async () => contextPlant } as Response;
+  });
+}
+
+const twoLocations = {
+  locations: [
+    { id: "loc-warm", name: "Warm bench", kind: "greenhouse_bench" },
+    { id: "loc-cool", name: "Cool bench", kind: "greenhouse_bench" },
+  ],
+};
+
+describe("MyConservatory cultivation context", () => {
+  it("shows where the plant is and where it has been", async () => {
+    const fetchMock = contextFetch({
+      locations: twoLocations,
+      placement: {
+        plant_id: "p1",
+        current: { id: "e2", location_id: "loc-cool", reason: "move", note: "Not flowering", recorded_at: "2026-02-01T00:00:00Z" },
+        history: [
+          { id: "e1", location_id: "loc-warm", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+          { id: "e2", location_id: "loc-cool", reason: "move", note: "Not flowering", recorded_at: "2026-02-01T00:00:00Z" },
+        ],
+      },
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    expect(container.querySelector('[data-testid="current-location"]')?.textContent).toContain("Cool bench");
+    const history = container.querySelectorAll('[data-testid="placement-history"] > li');
+    expect(history).toHaveLength(2);
+    // The earlier bench survives the move.
+    expect(history[0].textContent).toContain("Warm bench");
+  });
+
+  it("shows a correction as a corrected record, never as a move", async () => {
+    // A plant wrongly entered on the wrong bench never went anywhere.
+    const fetchMock = contextFetch({
+      locations: twoLocations,
+      placement: {
+        plant_id: "p1",
+        current: { id: "e2", location_id: "loc-cool", reason: "correction", note: null, recorded_at: "2026-02-01T00:00:00Z" },
+        history: [
+          { id: "e1", location_id: "loc-warm", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+          { id: "e2", location_id: "loc-cool", reason: "correction", note: null, recorded_at: "2026-02-01T00:00:00Z" },
+        ],
+      },
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    expect(container.querySelector('[data-testid="placement-reason-correction"]')?.textContent).toMatch(/record corrected/i);
+    expect(container.querySelector('[data-testid="placement-history"]')?.textContent).not.toMatch(/\bmove\b/);
+  });
+
+  it("keeps every environmental number attached to how it was obtained", async () => {
+    const fetchMock = contextFetch({
+      locations: twoLocations,
+      placement: {
+        plant_id: "p1",
+        current: { id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+        history: [{ id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" }],
+      },
+      environment: {
+        location_id: "loc-cool",
+        variables: {
+          temperature_c: { unit: "degrees Celsius", known: true, value: 12.5, origin: "measured", instrument: "Probe A", is_summary: true, summary_kind: "min" },
+          relative_humidity_pct: { unit: "percent", known: true, value: 60, origin: "manual", instrument: null },
+          light_ppfd_umol_m2_s: { unit: "micromole per square metre per second", known: false, origin: "unknown", reason: "NO_READING_RECORDED" },
+        },
+      },
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    expect(container.querySelector('[data-testid="env-origin-temperature_c"]')?.textContent).toMatch(/measured by an instrument/i);
+    expect(container.querySelector('[data-testid="env-origin-temperature_c"]')?.textContent).toContain("Probe A");
+    // A hand-entered number must not read as an instrument reading.
+    expect(container.querySelector('[data-testid="env-origin-relative_humidity_pct"]')?.textContent).toMatch(/entered by hand/i);
+    expect(container.querySelector('[data-testid="env-origin-relative_humidity_pct"]')?.textContent).not.toMatch(/instrument/i);
+  });
+
+  it("says a nightly minimum is a summary, not a spot reading", async () => {
+    const fetchMock = contextFetch({
+      locations: twoLocations,
+      placement: {
+        plant_id: "p1",
+        current: { id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+        history: [{ id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" }],
+      },
+      environment: {
+        location_id: "loc-cool",
+        variables: {
+          temperature_c: { unit: "degrees Celsius", known: true, value: 12.5, origin: "measured", instrument: "Probe A", is_summary: true, summary_kind: "min" },
+        },
+      },
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    expect(container.querySelector('[data-testid="env-origin-temperature_c"]')?.textContent).toMatch(/over a window, not a spot reading/i);
+  });
+
+  it("renders an unrecorded variable as unrecorded, never as zero or blank", async () => {
+    // An empty slot reads as "nothing to consider here", which is exactly
+    // wrong when the truth is that no sensor exists.
+    const fetchMock = contextFetch({
+      locations: twoLocations,
+      placement: {
+        plant_id: "p1",
+        current: { id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+        history: [{ id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" }],
+      },
+      environment: {
+        location_id: "loc-cool",
+        variables: {
+          relative_humidity_pct: { unit: "percent", known: false, origin: "unknown", reason: "NO_READING_RECORDED" },
+        },
+      },
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    const cell = container.querySelector('[data-testid="env-relative_humidity_pct"]');
+    expect(cell?.getAttribute("data-known")).toBe("false");
+    // Assert on the value cell itself. Checking the whole card is too weak:
+    // its text concatenates to "...pct0 percent...", where a word-boundary
+    // check for a stray zero never fires.
+    const value = cell?.querySelector("dd")?.textContent ?? "";
+    expect(value).toMatch(/not recorded/i);
+    expect(value).not.toMatch(/[0-9]/);
+  });
+
+  it("states that collection records are not scientific evidence", async () => {
+    const fetchMock = contextFetch({
+      locations: twoLocations,
+      placement: {
+        plant_id: "p1",
+        current: { id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+        history: [{ id: "e1", location_id: "loc-cool", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" }],
+      },
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    expect(container.querySelector('[data-testid="context-provenance"]')?.textContent).toMatch(/not scientific evidence/i);
+  });
+
+  it("keeps a backend without these routes distinct from a plant never placed", async () => {
+    // Rendering an absent contract as "no placement recorded" would tell a
+    // grower their record is missing when the service simply lacks the route.
+    const fetchMock = contextFetch({ placementStatus: 404 });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    expect(container.querySelector('[data-testid="context-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="no-current-location"]')).toBeNull();
+  });
+
+  it("keeps a malformed placement response distinct from a plant never placed", async () => {
+    // A 200 whose body lacks `history` is a contract the service did not
+    // honour. Rendering it as an empty history would claim "no moves have been
+    // recorded" — a statement about the plant, from a broken response.
+    const fetchMock = contextFetch({ placement: { plant_id: "p1" } });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    expect(container.querySelector('[data-testid="context-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="placement-history"]')).toBeNull();
+    expect(container.querySelector('[data-testid="no-current-location"]')).toBeNull();
+  });
+
+  it("does not ask for conditions when the plant is in no location", async () => {
+    // Asking for the conditions of nowhere is not a meaningful question.
+    const fetchMock = contextFetch({ placement: { plant_id: "p1", current: null, history: [] } });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    const urls = fetchMock.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((url) => url.includes("/environment"))).toBe(false);
+    expect(container.querySelector('[data-testid="no-current-location"]')).not.toBeNull();
+  });
+});

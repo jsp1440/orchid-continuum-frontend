@@ -21,6 +21,38 @@ type Plant = {
   updated_at: string;
 };
 
+type Placement = {
+  id: string;
+  location_id: string | null;
+  reason: string;
+  note: string | null;
+  recorded_at: string;
+};
+
+type PlacementView = {
+  plant_id: string;
+  current: Placement | null;
+  history: Placement[];
+};
+
+type GrowingLocation = { id: string; name: string; kind: string; retired_at?: string | null };
+
+/** One environmental variable, carrying how it came to be known. */
+type EnvironmentVariable = {
+  unit: string;
+  known: boolean;
+  value?: number;
+  /** measured | manual | inferred | unknown — never flattened away. */
+  origin: string;
+  instrument?: string | null;
+  observed_at?: string | null;
+  is_summary?: boolean;
+  summary_kind?: string | null;
+  reason?: string;
+};
+
+type EnvironmentView = { location_id: string; variables: Record<string, EnvironmentVariable> };
+
 type PlantInput = {
   display_name: string;
   accepted_scientific_name?: string;
@@ -161,12 +193,160 @@ function QrImage({ plant }: { plant: Plant }) {
   return source ? <img src={source} alt={`QR code for ${plant.accession_number}`} className="h-28 w-28" /> : <div className="flex h-28 w-28 items-center justify-center border text-center text-xs">QR unavailable</div>;
 }
 
+/** How a number was obtained, said plainly. A reader must never have to guess. */
+const ORIGIN_LABEL: Record<string, string> = {
+  measured: "measured by an instrument",
+  manual: "entered by hand",
+  inferred: "inferred, not measured",
+  unknown: "not recorded",
+};
+
+/**
+ * Cultivation context for one plant: where it is, where it has been, and what
+ * is known about the conditions there.
+ *
+ * Every environmental number is shown with its origin. A hand-entered
+ * temperature and an instrument reading look identical once the origin is
+ * dropped, and a grower deciding whether to move a plant is entitled to know
+ * which one they are acting on.
+ *
+ * A variable nobody has recorded is rendered as not recorded, never as a
+ * blank or a zero. An empty slot reads as "nothing to consider here", which is
+ * exactly the wrong conclusion when the truth is that no sensor exists.
+ */
+function CultivationContext({ plantId }: { plantId: string }) {
+  const request = useApi();
+  const [placement, setPlacement] = useState<PlacementView>();
+  const [locations, setLocations] = useState<GrowingLocation[]>([]);
+  const [environment, setEnvironment] = useState<EnvironmentView>();
+  const [error, setError] = useState<string>();
+  const [unavailable, setUnavailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      request<PlacementView>(`/api/conservatory/plants/${encodeURIComponent(plantId)}/placement`),
+      request<{ locations: GrowingLocation[] }>(`/api/conservatory/locations`),
+    ])
+      .then(async ([placementView, locationList]) => {
+        if (!active) return;
+        // A response missing its history is a contract the service did not
+        // honour. Coercing it to an empty list would render as "no moves have
+        // been recorded", which is a claim about the plant rather than about
+        // the response — so it is reported as unavailable instead.
+        if (!placementView || !Array.isArray(placementView.history)) {
+          setUnavailable(true);
+          return;
+        }
+        setPlacement(placementView);
+        setLocations(locationList.locations ?? []);
+        const currentId = placementView.current?.location_id;
+        if (!currentId) return;
+        // Environment is fetched only once a current location is known; asking
+        // for the conditions of nowhere is not a meaningful question.
+        const env = await request<EnvironmentView>(
+          `/api/conservatory/locations/${encodeURIComponent(currentId)}/environment`,
+        );
+        if (active) setEnvironment(env);
+      })
+      .catch((reason) => {
+        if (!active) return;
+        // A backend without these routes yet is a different fact from a plant
+        // with no recorded location, and it must not read as "never placed".
+        if (reason instanceof ApiError && reason.status === 404) setUnavailable(true);
+        else setError(reason instanceof Error ? reason.message : "Cultivation context unavailable");
+      });
+    return () => { active = false; };
+  }, [plantId, request]);
+
+  const nameFor = (id: string | null | undefined) =>
+    locations.find((location) => location.id === id)?.name ?? (id ? "A location no longer listed" : null);
+
+  if (unavailable) return <section className="mt-6 rounded-xl border border-dashed p-5" data-testid="context-unavailable">
+    <h3 className="text-sm font-semibold">Cultivation context is not available from this backend</h3>
+    <p className="mt-1 text-xs text-muted-foreground">This says nothing about where the plant is. It means the service did not offer the placement record.</p>
+  </section>;
+
+  if (error) return <section className="mt-6 rounded-xl border border-destructive/40 bg-destructive/5 p-5" role="alert" data-testid="context-error">
+    <h3 className="text-sm font-semibold">Cultivation context could not be loaded</h3>
+    <p className="mt-1 text-xs">{error}</p>
+  </section>;
+
+  if (!placement) return <p className="mt-6 text-sm text-muted-foreground" role="status">Loading cultivation context…</p>;
+
+  return <section className="mt-6 space-y-5" data-testid="cultivation-context">
+    <div className="rounded-xl border p-5">
+      <h3 className="text-sm font-semibold">Where it is now</h3>
+      {placement.current ? (
+        <p className="mt-1 text-lg" data-testid="current-location">{nameFor(placement.current.location_id)}</p>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground" data-testid="no-current-location">
+          {placement.history.length
+            ? "Not currently in any location. Its earlier placements are below."
+            : "No placement has been recorded for this plant."}
+        </p>
+      )}
+    </div>
+
+    <div className="rounded-xl border p-5">
+      <h3 className="text-sm font-semibold">Where it has been</h3>
+      {placement.history.length ? (
+        <ol className="mt-3 space-y-2" data-testid="placement-history">
+          {placement.history.map((event) => (
+            <li key={event.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+              <span className="rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide" data-testid={`placement-reason-${event.reason}`}>
+                {/* A correction is not a move: the plant never went anywhere. */}
+                {event.reason === "correction" ? "record corrected" : event.reason}
+              </span>
+              <span>{nameFor(event.location_id) ?? "Removed from the collection"}</span>
+              {event.note && <span className="text-muted-foreground">— {event.note}</span>}
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground">No moves have been recorded.</p>
+      )}
+    </div>
+
+    <div className="rounded-xl border p-5">
+      <h3 className="text-sm font-semibold">Conditions where it is</h3>
+      {!placement.current ? (
+        <p className="mt-1 text-sm text-muted-foreground">The plant is not in a location, so there are no conditions to report.</p>
+      ) : environment ? (
+        <dl className="mt-3 grid gap-3 sm:grid-cols-2" data-testid="environment-variables">
+          {Object.entries(environment.variables).map(([variable, reading]) => (
+            <div key={variable} className="rounded-lg border p-3" data-testid={`env-${variable}`} data-known={reading.known ? "true" : "false"}>
+              <dt className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground">{variable.replace(/_/g, " ")}</dt>
+              <dd className="mt-1 text-lg">
+                {reading.known ? `${reading.value} ${reading.unit}` : "Not recorded"}
+              </dd>
+              <p className="mt-1 text-[11px] text-muted-foreground" data-testid={`env-origin-${variable}`}>
+                {/* The origin travels with the number, always. */}
+                {ORIGIN_LABEL[reading.origin] ?? reading.origin}
+                {reading.known && reading.instrument ? ` · ${reading.instrument}` : ""}
+                {reading.known && reading.is_summary ? ` · ${reading.summary_kind} over a window, not a spot reading` : ""}
+              </p>
+            </div>
+          ))}
+        </dl>
+      ) : (
+        <p className="mt-1 text-sm text-muted-foreground" role="status">Loading conditions…</p>
+      )}
+      <p className="mt-3 text-[11px] text-muted-foreground" data-testid="context-provenance">
+        These are collection records, not scientific evidence. Values entered by hand and values
+        measured by an instrument are both shown, labelled, and are not interchangeable.
+      </p>
+    </div>
+  </section>;
+}
+
 function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: boolean }) {
   return <div className="rounded-xl border bg-card p-6">
     {arrivedByScan && <p className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-testid="scan-arrival">Opened by scanning this plant&rsquo;s tag.</p>}
     <p className="text-xs uppercase tracking-wide text-muted-foreground">{plant.accession_number}</p>
     <div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div>
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
+    <CultivationContext plantId={plant.id} />
   </div>;
 }
 
