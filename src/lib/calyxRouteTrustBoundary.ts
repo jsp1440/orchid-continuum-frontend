@@ -13,6 +13,23 @@ const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
 ]);
 
 /**
+ * True only when a governed generic-genus producer has preserved its explicit
+ * `context_is_evidence=false` declaration all the way to the Calyx route.
+ *
+ * Callers use this to carry the already-validated boundary into the turn
+ * context. Unknown origins never acquire a non-evidence attestation merely by
+ * supplying a lookalike query parameter.
+ */
+export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string): boolean {
+  const params = new URLSearchParams(search);
+  const origin = params.get('origin')?.trim() ?? '';
+  return (
+    NON_EVIDENTIARY_GENUS_ORIGINS.has(origin) &&
+    params.get('context_is_evidence') === 'false'
+  );
+}
+
+/**
  * Fail closed when a governed genus-navigation origin reaches Calyx without
  * the explicit non-evidence declaration its producer promises.
  *
@@ -25,5 +42,5 @@ export function rejectsCalyxNavigationContext(search: string): boolean {
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
   if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) return false;
-  return params.get('context_is_evidence') !== 'false';
+  return !calyxNavigationContextIsExplicitlyNonEvidentiary(search);
 }
