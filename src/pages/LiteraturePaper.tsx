@@ -232,7 +232,9 @@ export default function LiteraturePaper() {
           </div>
           <p className="text-xs leading-relaxed text-white/65" data-testid="policy-summary">
             {view === null
-              ? 'Loading the source binding…'
+              ? state.status === 'failed'
+                ? 'The extraction could not be loaded, so no source binding was read. Nothing is being released from this paper.'
+                : 'Loading the source binding…'
               : view.bindingStatus === 'present'
                 ? `This source is bound with the policy ${String(view.binding?.display_policy ?? 'unrecognised')}. Text is released only as far as that policy allows.`
                 : view.bindingStatus === 'absent'

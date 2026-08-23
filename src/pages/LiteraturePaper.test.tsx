@@ -238,6 +238,20 @@ describe('failures', () => {
     expect([...container.querySelectorAll('button')].some((b) => /try again/i.test(b.textContent ?? ''))).toBe(false);
   });
 
+  it('stops claiming the binding is loading once the load has failed', async () => {
+    // Caught in a real browser: the policy panel kept saying "Loading the
+    // source binding…" after the request had failed, which asserts an
+    // operation that is no longer running.
+    globalThis.fetch = vi.fn(
+      async () => new Response('', { status: 503 }),
+    ) as typeof globalThis.fetch;
+    await mount();
+
+    const summary = container.querySelector('[data-testid="policy-summary"]');
+    expect(summary?.textContent).not.toMatch(/loading the source binding/i);
+    expect(summary?.textContent).toMatch(/no source binding was read/i);
+  });
+
   it('renders an outage as an outage, with a retry', async () => {
     globalThis.fetch = vi.fn(
       async () => new Response('', { status: 503 }),
