@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 
 import GovernedEvidenceSearch from "@/components/calyx/GovernedEvidenceSearch";
+import ReasoningLedgerInspector from "@/components/calyx/ReasoningLedgerInspector";
 import type { BrainMission, MissionConclusion } from "@/lib/calyxWorkspace";
 import {
   checkCalyxMissionClaim,
@@ -318,10 +319,13 @@ export default function CalyxVerificationWorkbench({
                 make the reasoning readable from here, and a verification
                 surface that implies otherwise is the failure it exists to
                 prevent. */}
-            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-              The reasoning ledger is identified but cannot be retrieved from this surface. Its
-              existence is verified; its contents are not.
-            </p>
+            {/* Replaced by a real retrieval path: the ledger contract landed
+                as backend #1135, so the Workbench no longer has to state that
+                the contents are unreachable. */}
+            <ReasoningLedgerInspector
+              ledgerId={result.provenance.reasoningLedgerId}
+              version={result.provenance.reasoningLedgerVersion}
+            />
           </section>
         </div>
       ) : null}

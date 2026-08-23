@@ -347,7 +347,7 @@ export function checkCalyxMissionClaim(
       "Reasoning audit trail",
       ledgerPresent ? "pass" : "fail",
       ledgerPresent
-        ? "A versioned reasoning ledger is recorded. Its contents are not retrievable from this surface, so the reasoning itself has not been inspected here — only its existence and version."
+        ? "A versioned reasoning ledger is recorded, and this exact revision can be requested for inspection below. Recording is still not review: this check confirms the ledger exists, not that its reasoning was read or found sound."
         : "No versioned reasoning ledger is attached to this mission.",
     ),
     check(
