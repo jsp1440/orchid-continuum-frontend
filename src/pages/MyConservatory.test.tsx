@@ -984,3 +984,135 @@ describe("MyConservatory plant ledger", () => {
     expect(container.querySelector('[data-testid="no-events"]')).toBeNull();
   });
 });
+
+/**
+ * Entering an environmental reading.
+ *
+ * The property under test: the grower says where the number came from, and the
+ * form never says it for them. A measurement and a hand-entered estimate are
+ * different claims about the same number, and defaulting to "measured" would
+ * give every guess an instrument's authority for as long as the record lives.
+ */
+describe("MyConservatory recording an environmental reading", () => {
+  const oneBench = [{ id: "loc-1", name: "Cool bench", kind: "greenhouse_bench" }];
+
+  function readingFetch(onPost?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/environment") && init?.method === "POST") {
+        const result = onPost ?? { ok: true, status: 201, body: { id: "r1" } };
+        return { ok: result.ok, status: result.status ?? 201, json: async () => result.body } as Response;
+      }
+      if (url.includes("/api/conservatory/locations")) {
+        return { ok: true, status: 200, json: async () => ({ locations: oneBench }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement | HTMLSelectElement;
+    act(() => {
+      const proto = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+    });
+  }
+
+  async function open(onPost?: Parameters<typeof readingFetch>[0]) {
+    const fetchMock = readingFetch(onPost);
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    return fetchMock;
+  }
+
+  it("does not preselect how the number was obtained", async () => {
+    await open();
+    expect((container.querySelector('[data-testid="reading-origin"]') as HTMLSelectElement).value).toBe("");
+  });
+
+  it("asks which instrument only once the grower claims a measurement", async () => {
+    await open();
+    expect(container.querySelector('[data-testid="instrument-field"]')).toBeNull();
+    set("reading-origin", "measured");
+    expect(container.querySelector('[data-testid="instrument-field"]')).not.toBeNull();
+    set("reading-origin", "manual");
+    expect(container.querySelector('[data-testid="instrument-field"]')).toBeNull();
+  });
+
+  it("will not submit a measurement without an instrument", async () => {
+    // The backend refuses it outright rather than downgrading it, so asking
+    // here saves the grower discovering that after typing everything else.
+    await open();
+    set("reading-variable", "temperature_c");
+    set("reading-value", "12.5");
+    set("reading-day", "2026-08-20");
+    set("reading-origin", "measured");
+    expect((container.querySelector('[data-testid="reading-submit"]') as HTMLButtonElement).disabled).toBe(true);
+    set("reading-instrument", "Probe A");
+    expect((container.querySelector('[data-testid="reading-submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("submits a hand-entered reading without an instrument", async () => {
+    const fetchMock = await open();
+    set("reading-variable", "relative_humidity_pct");
+    set("reading-value", "60");
+    set("reading-day", "2026-08-20");
+    set("reading-origin", "manual");
+    const form = container.querySelector('[data-testid="record-reading"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit)?.method === "POST");
+    const body = JSON.parse(String((post?.[1] as RequestInit).body));
+    expect(body).toMatchObject({ variable: "relative_humidity_pct", value: 60, origin: "manual" });
+    // Only a measured reading may carry an instrument.
+    expect(body.instrument).toBeNull();
+  });
+
+  it("sends the instrument with a measured reading", async () => {
+    const fetchMock = await open();
+    set("reading-variable", "temperature_c");
+    set("reading-value", "12.5");
+    set("reading-day", "2026-08-20");
+    set("reading-origin", "measured");
+    set("reading-instrument", "Probe A");
+    const form = container.querySelector('[data-testid="record-reading"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit)?.method === "POST");
+    const body = JSON.parse(String((post?.[1] as RequestInit).body));
+    expect(body).toMatchObject({ origin: "measured", instrument: "Probe A", value: 12.5 });
+    expect(body.observed_at).toContain("2026-08-20");
+  });
+
+  it("says why an instrument is required", async () => {
+    await open();
+    set("reading-origin", "measured");
+    const hint = container.querySelector('[data-testid="instrument-required"]')?.textContent ?? "";
+    expect(hint).toMatch(/a measurement has to say what measured it/i);
+    expect(hint).toMatch(/a reading you took\s+yourself/i);
+  });
+
+  it("refuses a future observation date", async () => {
+    await open();
+    expect((container.querySelector('[data-testid="reading-day"]') as HTMLInputElement).getAttribute("max"))
+      .toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it("reports a refused reading instead of clearing the form as if saved", async () => {
+    await open({ ok: false, status: 422, body: { detail: { code: "MEASURED_REQUIRES_INSTRUMENT" } } });
+    set("reading-variable", "temperature_c");
+    set("reading-value", "12.5");
+    set("reading-day", "2026-08-20");
+    set("reading-origin", "manual");
+    const form = container.querySelector('[data-testid="record-reading"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="reading-error"]')).not.toBeNull();
+    // The grower's input survives so they can correct it.
+    expect((container.querySelector('[data-testid="reading-value"]') as HTMLInputElement).value).toBe("12.5");
+  });
+});
