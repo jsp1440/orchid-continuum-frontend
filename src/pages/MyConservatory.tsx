@@ -401,6 +401,116 @@ function PlantLedger({ plantId }: { plantId: string }) {
   </section>;
 }
 
+const ENVIRONMENT_VARIABLES: { value: string; label: string; unit: string }[] = [
+  { value: "temperature_c", label: "Temperature", unit: "\u00B0C" },
+  { value: "relative_humidity_pct", label: "Relative humidity", unit: "%" },
+  { value: "light_ppfd_umol_m2_s", label: "Light (PPFD)", unit: "\u00B5mol/m\u00B2/s" },
+  { value: "daily_light_integral_mol_m2_d", label: "Daily light integral", unit: "mol/m\u00B2/d" },
+];
+
+/**
+ * Entering a reading for a location, and saying honestly where it came from.
+ *
+ * The grower picks the origin, and the form will not pick it for them. A
+ * measurement and a hand-entered estimate are different claims about the same
+ * number, and defaulting to "measured" would give every guess an instrument's
+ * authority for as long as the record survives.
+ *
+ * Choosing "measured" requires naming the instrument. Without one the backend
+ * refuses the reading outright rather than downgrading it, so the form asks
+ * for it at the point the grower makes that claim rather than letting them
+ * discover the refusal after typing everything else.
+ */
+function RecordReading({ locationId, onRecorded }: { locationId: string; onRecorded: () => void }) {
+  const request = useApi();
+  const [variable, setVariable] = useState("");
+  const [value, setValue] = useState("");
+  const [origin, setOrigin] = useState("");
+  const [instrument, setInstrument] = useState("");
+  const [day, setDay] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  const today = new Date().toISOString().slice(0, 10);
+  const needsInstrument = origin === "measured";
+  const ready = Boolean(variable && origin && day && value.trim() && (!needsInstrument || instrument.trim()));
+
+  async function submit(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    if (!ready) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      await request(`/api/conservatory/locations/${encodeURIComponent(locationId)}/environment`, {
+        method: "POST",
+        body: JSON.stringify({
+          variable,
+          value: Number(value),
+          origin,
+          observed_at: new Date(`${day}T00:00:00Z`).toISOString(),
+          // Only a measured reading may carry an instrument; sending one
+          // otherwise is refused, and would be a lie if it were not.
+          instrument: needsInstrument ? instrument.trim() : null,
+        }),
+      });
+      setVariable(""); setValue(""); setOrigin(""); setInstrument(""); setDay("");
+      onRecorded();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The reading could not be recorded");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <form className="mt-3 space-y-3 border-t pt-3" onSubmit={submit} data-testid="record-reading">
+    <div className="flex flex-wrap gap-3">
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">What</span>
+        <select className="mt-1 rounded-md border px-3 py-2" value={variable} data-testid="reading-variable"
+          onChange={(changed) => setVariable(changed.target.value)}>
+          <option value="">Choose…</option>
+          {ENVIRONMENT_VARIABLES.map((option) => <option key={option.value} value={option.value}>{option.label} ({option.unit})</option>)}
+        </select>
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">Value</span>
+        <input type="number" step="any" className="mt-1 w-28 rounded-md border px-3 py-2" value={value}
+          data-testid="reading-value" onChange={(changed) => setValue(changed.target.value)} />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">When</span>
+        <input type="date" max={today} className="mt-1 rounded-md border px-3 py-2" value={day}
+          data-testid="reading-day" onChange={(changed) => setDay(changed.target.value)} />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">How you got it</span>
+        {/* Unset on purpose. Defaulting to "measured" would give every guess
+            an instrument's authority for as long as the record survives. */}
+        <select className="mt-1 rounded-md border px-3 py-2" value={origin} data-testid="reading-origin"
+          onChange={(changed) => setOrigin(changed.target.value)}>
+          <option value="">Choose…</option>
+          <option value="measured">An instrument measured it</option>
+          <option value="manual">I read or judged it myself</option>
+        </select>
+      </label>
+    </div>
+    {needsInstrument && <label className="block text-sm" data-testid="instrument-field">
+      <span className="block text-xs text-muted-foreground">Which instrument</span>
+      <input className="mt-1 w-full rounded-md border px-3 py-2" value={instrument} data-testid="reading-instrument"
+        onChange={(changed) => setInstrument(changed.target.value)} placeholder="SensorPush HT.w #A31" />
+      <span className="mt-1 block text-[11px] text-muted-foreground" data-testid="instrument-required">
+        A measurement has to say what measured it. Without an instrument this is a reading you took
+        yourself, which is a different and equally useful claim.
+      </span>
+    </label>}
+    {error && <p className="text-xs text-destructive" role="alert" data-testid="reading-error">{error}</p>}
+    <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+      disabled={saving || !ready} data-testid="reading-submit">
+      {saving ? "Recording…" : "Record reading"}
+    </button>
+  </form>;
+}
+
 /**
  * The kinds of place a grower actually keeps orchids.
  *
@@ -511,9 +621,10 @@ function Locations() {
 
     {locations === undefined ? <Status loading error={undefined} /> : active.length ? (
       <ul className="grid gap-3 md:grid-cols-2" data-testid="location-list">
-        {active.map((location) => <li key={location.id} className="rounded-xl border p-4">
+        {active.map((location) => <li key={location.id} className="rounded-xl border p-4" data-testid={`location-card-${location.id}`}>
           <strong className="block">{location.name}</strong>
           <span className="text-xs text-muted-foreground">{LOCATION_KINDS.find((k) => k.value === location.kind)?.label ?? location.kind}</span>
+          <RecordReading locationId={location.id} onRecorded={load} />
         </li>)}
       </ul>
     ) : (
