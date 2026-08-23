@@ -555,3 +555,156 @@ describe("MyConservatory cultivation context", () => {
     expect(container.querySelector('[data-testid="no-current-location"]')).not.toBeNull();
   });
 });
+
+/**
+ * Recording where a plant went.
+ *
+ * The property under test is that the form refuses to choose the reason for
+ * the grower. A move and a correction both change where the record says the
+ * plant is, and only one of them means the plant physically went somewhere.
+ * Defaulting to "move" would manufacture husbandry every time somebody fixed a
+ * typo, and that invented history would later read as a cause of whatever the
+ * plant did next.
+ */
+describe("MyConservatory recording a placement", () => {
+  const placedContext = {
+    locations: twoLocations,
+    placement: {
+      plant_id: "p1",
+      current: { id: "e1", location_id: "loc-warm", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" },
+      history: [{ id: "e1", location_id: "loc-warm", reason: "initial", note: null, recorded_at: "2026-01-01T00:00:00Z" }],
+    },
+  };
+
+  async function open(overrides = placedContext) {
+    const fetchMock = contextFetch(overrides);
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLSelectElement | HTMLInputElement;
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(
+        field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      setter?.call(field, value);
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+
+  it("will not submit until the grower says what happened", async () => {
+    await open();
+    const submit = container.querySelector('[data-testid="placement-submit"]') as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+
+    set("placement-location", "loc-cool");
+    expect((container.querySelector('[data-testid="placement-submit"]') as HTMLButtonElement).disabled).toBe(true);
+
+    set("placement-reason-select", "move");
+    expect((container.querySelector('[data-testid="placement-submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("does not preselect a reason", async () => {
+    // Choosing for the grower is how a typo becomes husbandry history.
+    await open();
+    const select = container.querySelector('[data-testid="placement-reason-select"]') as HTMLSelectElement;
+    expect(select.value).toBe("");
+  });
+
+  it("posts the reason the grower chose", async () => {
+    const fetchMock = await open();
+    set("placement-location", "loc-cool");
+    set("placement-reason-select", "correction");
+    const form = container.querySelector('[data-testid="record-placement"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find(
+      (call) => String(call[0]).includes("/placement") && (call[1] as RequestInit)?.method === "POST",
+    );
+    expect(post).toBeDefined();
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({
+      location_id: "loc-cool",
+      reason: "correction",
+    });
+  });
+
+  it("offers a first placement only when the plant has none", async () => {
+    await open({
+      locations: twoLocations,
+      placement: { plant_id: "p1", current: null, history: [] },
+    });
+    const options = [...container.querySelectorAll('[data-testid="placement-reason-select"] option')].map((o) => o.getAttribute("value"));
+    expect(options).toContain("initial");
+
+    act(() => root.unmount());
+    container.remove();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+
+    await open();
+    const laterOptions = [...container.querySelectorAll('[data-testid="placement-reason-select"] option')].map((o) => o.getAttribute("value"));
+    // Already placed: a "first placement" would contradict the history.
+    expect(laterOptions).not.toContain("initial");
+  });
+
+  it("does not offer a retired location", async () => {
+    // The backend refuses it, so offering it only produces a failure the
+    // grower cannot act on.
+    await open({
+      locations: { locations: [
+        { id: "loc-warm", name: "Warm bench", kind: "greenhouse_bench" },
+        { id: "loc-gone", name: "Dismantled bench", kind: "greenhouse_bench", retired_at: "2026-05-01T00:00:00Z" },
+      ] },
+      placement: placedContext.placement,
+    });
+    const options = [...container.querySelectorAll('[data-testid="placement-location"] option')].map((o) => o.getAttribute("value"));
+    expect(options).toContain("loc-warm");
+    expect(options).not.toContain("loc-gone");
+  });
+
+  it("says a move is husbandry and a correction is not", async () => {
+    await open();
+    const guidance = container.querySelector('[data-testid="placement-guidance"]')?.textContent ?? "";
+    expect(guidance).toMatch(/move becomes part of this plant/i);
+    expect(guidance).toMatch(/the plant never went anywhere/i);
+  });
+
+  it("reports a rejected placement instead of pretending it saved", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/placement") && init?.method === "POST") {
+        return { ok: false, status: 409, json: async () => ({ detail: { code: "LOCATION_RETIRED" } }) } as Response;
+      }
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => placedContext.placement } as Response;
+      if (url.includes("/environment")) return { ok: true, status: 200, json: async () => ({ location_id: "loc-warm", variables: {} }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => twoLocations } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    set("placement-location", "loc-cool");
+    set("placement-reason-select", "move");
+    const form = container.querySelector('[data-testid="record-placement"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="placement-error"]')).not.toBeNull();
+    // The history must not gain an entry that the backend refused.
+    expect(container.querySelectorAll('[data-testid="placement-history"] > li')).toHaveLength(1);
+  });
+
+  it("says so when there is nowhere to put the plant", async () => {
+    await open({ locations: { locations: [] }, placement: placedContext.placement });
+    expect(container.querySelector('[data-testid="no-locations"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="record-placement"]')).toBeNull();
+  });
+});

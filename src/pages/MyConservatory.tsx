@@ -202,6 +202,102 @@ const ORIGIN_LABEL: Record<string, string> = {
 };
 
 /**
+ * Recording where a plant went, or correcting where it was said to be.
+ *
+ * The reason is the grower's to choose and the form refuses to choose it for
+ * them, because the two are not interchangeable: a move says the plant
+ * physically went somewhere and becomes part of its husbandry history, while a
+ * correction says the record was wrong and the plant never went anywhere.
+ * Defaulting to "move" would quietly manufacture husbandry every time somebody
+ * fixed a typo, and that invented history would later read as a cause of
+ * whatever the plant did next.
+ *
+ * Retired locations are not offered. A plant cannot be put somewhere that no
+ * longer exists, and the backend refuses it — offering it would only produce a
+ * failure the grower cannot act on.
+ */
+function RecordPlacement({
+  plantId,
+  locations,
+  hasPlacement,
+  onRecorded,
+}: {
+  plantId: string;
+  locations: GrowingLocation[];
+  hasPlacement: boolean;
+  onRecorded: (event: Placement) => void;
+}) {
+  const request = useApi();
+  const [locationId, setLocationId] = useState("");
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function submit(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    if (!locationId || !reason) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      const event = await request<Placement>(
+        `/api/conservatory/plants/${encodeURIComponent(plantId)}/placement`,
+        { method: "POST", body: JSON.stringify({ location_id: locationId, reason, note: note || null }) },
+      );
+      onRecorded(event);
+      setNote("");
+      setReason("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The placement could not be recorded");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (!locations.length) return <p className="mt-4 text-xs text-muted-foreground" data-testid="no-locations">
+    No growing locations have been created yet, so this plant cannot be placed.
+  </p>;
+
+  return <form className="mt-4 space-y-3 border-t pt-4" onSubmit={submit} data-testid="record-placement">
+    <div className="flex flex-wrap gap-3">
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">Location</span>
+        <select className="mt-1 rounded-md border px-3 py-2" value={locationId} data-testid="placement-location"
+          onChange={(changed) => setLocationId(changed.target.value)}>
+          <option value="">Choose a location…</option>
+          {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
+        </select>
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">What happened</span>
+        <select className="mt-1 rounded-md border px-3 py-2" value={reason} data-testid="placement-reason-select"
+          onChange={(changed) => setReason(changed.target.value)}>
+          {/* Deliberately unset. Choosing for the grower would invent history. */}
+          <option value="">Choose…</option>
+          {!hasPlacement && <option value="initial">First placement — where it started</option>}
+          <option value="move">The plant moved here</option>
+          <option value="correction">Correction — it was always here, the record was wrong</option>
+        </select>
+      </label>
+    </div>
+    <label className="block text-sm">
+      <span className="block text-xs text-muted-foreground">Note (optional)</span>
+      <input className="mt-1 w-full rounded-md border px-3 py-2" value={note} data-testid="placement-note"
+        onChange={(changed) => setNote(changed.target.value)} />
+    </label>
+    <p className="text-[11px] text-muted-foreground" data-testid="placement-guidance">
+      A move becomes part of this plant&rsquo;s husbandry history. A correction does not: it records
+      that the earlier entry was wrong, and the plant never went anywhere.
+    </p>
+    {error && <p className="text-xs text-destructive" role="alert" data-testid="placement-error">{error}</p>}
+    <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+      disabled={saving || !locationId || !reason} data-testid="placement-submit">
+      {saving ? "Recording…" : "Record placement"}
+    </button>
+  </form>;
+}
+
+/**
  * Cultivation context for one plant: where it is, where it has been, and what
  * is known about the conditions there.
  *
@@ -274,6 +370,8 @@ function CultivationContext({ plantId }: { plantId: string }) {
 
   if (!placement) return <p className="mt-6 text-sm text-muted-foreground" role="status">Loading cultivation context…</p>;
 
+  const usable = locations.filter((location) => !location.retired_at);
+
   return <section className="mt-6 space-y-5" data-testid="cultivation-context">
     <div className="rounded-xl border p-5">
       <h3 className="text-sm font-semibold">Where it is now</h3>
@@ -286,6 +384,18 @@ function CultivationContext({ plantId }: { plantId: string }) {
             : "No placement has been recorded for this plant."}
         </p>
       )}
+      <RecordPlacement
+        plantId={plantId}
+        locations={usable}
+        hasPlacement={placement.history.length > 0}
+        onRecorded={(event) =>
+          setPlacement((current) =>
+            current
+              ? { ...current, current: event, history: [...current.history, event] }
+              : current,
+          )
+        }
+      />
     </div>
 
     <div className="rounded-xl border p-5">
