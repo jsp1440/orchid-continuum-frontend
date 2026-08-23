@@ -17,6 +17,7 @@ import {
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { ATLAS_WORKSPACE_ORIGIN } from '@/lib/featuredTaxonNavigation';
+import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
 import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
 import { MATRIX_RESEARCH_ORIGIN } from '@/lib/matrixResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
@@ -82,6 +83,7 @@ const ResearchCenter: React.FC = () => {
   const arrivedFromAtlas =
     routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
     routeContext?.origin === ATLAS_WORKSPACE_ORIGIN;
+  const arrivedFromGenusProfile = routeContext?.origin === GENUS_PROFILE_ORIGIN;
   const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
   // A Matrix arrival previously fell through to "Continuing from Genus of the
   // Day" — a curated editorial pick, which is not where this subject came from.
@@ -151,9 +153,11 @@ const ResearchCenter: React.FC = () => {
                     ? 'Continuing from the Species Dossier'
                     : arrivedFromAtlas
                       ? 'Continuing from the Atlas'
-                      : arrivedFromMatrix
-                        ? 'Continuing from a Matrix candidate'
-                        : 'Continuing from Genus of the Day'}
+                      : arrivedFromGenusProfile
+                        ? 'Continuing from the Genus Profile'
+                        : arrivedFromMatrix
+                          ? 'Continuing from a Matrix candidate'
+                          : 'Continuing from Genus of the Day'}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-white/75">
                   <span className="font-serif text-lg italic text-white">{subjectLabel}</span>{' '}
