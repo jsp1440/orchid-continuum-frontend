@@ -70,6 +70,14 @@ type PlacementAssessment = {
   counts: Record<string, number>;
   /** False when nothing could be compared at all — not the same as "fine". */
   anything_assessed: boolean;
+  /**
+   * False when the store holding cultivation evidence could not be read.
+   *
+   * Absent means the backend predates the distinction and did consult it. Only
+   * an explicit false says nobody looked, which is a fact about our plumbing
+   * and must never be rendered as a fact about the literature.
+   */
+  requirement_source_consulted?: boolean;
   is_recommendation: boolean;
 };
 
@@ -1282,6 +1290,13 @@ const UNASSESSABLE_REASON: Record<string, string> = {
   NO_REQUIREMENT_EVIDENCE: "The Continuum holds no cultivation evidence for this taxon.",
   NO_CONDITION_AND_NO_REQUIREMENT: "Neither a reading here nor evidence for this taxon.",
   CONDITION_NOT_NUMERIC: "The recorded value cannot be compared numerically.",
+  // Deliberately worded away from the taxon. "No evidence exists" is a claim
+  // about the literature; this is a claim about our own plumbing, and a grower
+  // deciding whether to move a plant is entitled to know which one they read.
+  REQUIREMENT_SOURCE_UNAVAILABLE:
+    "The store holding cultivation evidence could not be read, so nothing was looked up for this taxon.",
+  NO_CONDITION_AND_REQUIREMENT_SOURCE_UNAVAILABLE:
+    "Nothing has been recorded here, and the store holding cultivation evidence could not be read.",
 };
 
 /**
@@ -1330,11 +1345,25 @@ function PlacementAssessmentPanel({ plantId }: { plantId: string }) {
   if (!assessment) return <p className="mt-6 text-sm text-muted-foreground" role="status">Loading placement assessment…</p>;
 
   const breaches = assessment.assessments.filter((row) => row.outcome === "outside");
+  // Absent is the pre-existing shape and means the store was consulted. Only an
+  // explicit false says otherwise; anything else here would make an older
+  // backend look like a broken one.
+  const sourceUnread = assessment.requirement_source_consulted === false;
 
   return <section className="mt-6 rounded-xl border p-5" data-testid="placement-assessment">
     <h3 className="text-sm font-semibold">How this place compares with what the taxon needs</h3>
 
-    {!assessment.anything_assessed ? (
+    {sourceUnread ? (
+      // Rendered ahead of everything else, because every other line on this
+      // panel would otherwise describe this taxon's literature — and none of
+      // it was consulted. Saying "no evidence for this taxon" here would turn
+      // an outage into a scientific claim.
+      <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-testid="requirement-source-unread">
+        The store holding cultivation evidence could not be read, so nothing was compared against
+        what this taxon needs. This is not a statement about the taxon: nobody looked. Whatever you
+        have recorded here is unaffected and is shown below.
+      </p>
+    ) : !assessment.anything_assessed ? (
       // Stated first and plainly. A reader skimming grey rows and seeing no
       // red would otherwise conclude the plant is fine.
       <p className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-testid="nothing-assessed">
