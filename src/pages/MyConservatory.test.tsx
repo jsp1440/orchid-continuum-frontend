@@ -1542,3 +1542,141 @@ describe("MyConservatory un-retiring a location", () => {
     expect(container.querySelector('[data-testid="unretire-error-loc-gone"]')).not.toBeNull();
   });
 });
+
+/**
+ * The placement assessment on the dossier.
+ *
+ * The failure this panel exists to prevent: a grower skims a list of grey rows,
+ * sees no red, and concludes the plant is fine — when in fact nothing could be
+ * compared at all. "Nothing to complain about" and "well placed" are different
+ * claims, and only one of them is supported by two absences.
+ */
+describe("MyConservatory placement assessment", () => {
+  function assessmentFetch(body: unknown, status = 200) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/placement-assessment")) {
+        return { ok: status === 200, status, json: async () => body } as Response;
+      }
+      if (url.includes("/events")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", standing: [], corrected: [], event_count: 0, is_scientific_evidence: false }) } as Response;
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", current: null, history: [] }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => ({ locations: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+  }
+
+  async function open(body: unknown, status = 200) {
+    const fetchMock = assessmentFetch(body, status);
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  const unassessable = {
+    assessments: [
+      { variable: "temperature_c", outcome: "unassessable", reason: "NO_REQUIREMENT_EVIDENCE" },
+      { variable: "relative_humidity_pct", outcome: "unassessable", reason: "NO_CONDITION_RECORDED" },
+    ],
+    counts: { within: 0, outside: 0, unassessable: 2, conflicting: 0 },
+    anything_assessed: false,
+    is_recommendation: false,
+  };
+
+  it("says plainly when nothing could be compared", async () => {
+    // The whole point of the panel.
+    await open(unassessable);
+    const banner = container.querySelector('[data-testid="nothing-assessed"]')?.textContent ?? "";
+    expect(banner).toMatch(/nothing could be compared/i);
+    expect(banner).toMatch(/not a sign that the plant is well placed/i);
+    expect(container.querySelector('[data-testid="assessment-summary"]')).toBeNull();
+  });
+
+  it("explains why each variable could not be assessed", async () => {
+    await open(unassessable);
+    expect(container.querySelector('[data-testid="assessment-temperature_c"]')?.textContent)
+      .toMatch(/no cultivation evidence for this taxon/i);
+    expect(container.querySelector('[data-testid="assessment-relative_humidity_pct"]')?.textContent)
+      .toMatch(/nothing has been recorded for this variable/i);
+  });
+
+  it("reports a breach with the bound it passed and the evidence behind it", async () => {
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "outside",
+        breached: [{ bound: "minimum", limit: 15 }],
+        condition: { value: 10, unit: "degrees Celsius", origin: "measured" },
+        bounds: { minimum: [{ value: 15, evidence_strength: "verified" }] },
+      }],
+      counts: { within: 0, outside: 1, unassessable: 0, conflicting: 0 },
+      anything_assessed: true,
+      is_recommendation: false,
+    });
+    const breach = container.querySelector('[data-testid="assessment-breach-temperature_c-minimum"]')?.textContent ?? "";
+    expect(breach).toMatch(/past the known minimum of 15/i);
+    expect(breach).toMatch(/evidence: verified/i);
+    expect(container.querySelector('[data-testid="assessment-summary"]')?.textContent).toMatch(/1 recorded condition falls outside/i);
+  });
+
+  it("shows how the breached condition was obtained", async () => {
+    // A breach found against a hand-entered number is a weaker finding than
+    // one against an instrument.
+    await open({
+      assessments: [{
+        variable: "temperature_c", outcome: "outside",
+        breached: [{ bound: "minimum", limit: 15 }],
+        condition: { value: 10, unit: "degrees Celsius", origin: "manual" },
+        bounds: { minimum: [{ value: 15 }] },
+      }],
+      counts: { within: 0, outside: 1, unassessable: 0, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+    });
+    expect(container.querySelector('[data-testid="assessment-condition-temperature_c"]')?.textContent)
+      .toMatch(/entered by hand/i);
+  });
+
+  it("does not claim everything is fine when some variables were skipped", async () => {
+    await open({
+      assessments: [
+        { variable: "temperature_c", outcome: "within", condition: { value: 20, unit: "degrees Celsius", origin: "measured" }, bounds: {} },
+        { variable: "relative_humidity_pct", outcome: "unassessable", reason: "NO_CONDITION_RECORDED" },
+      ],
+      counts: { within: 1, outside: 0, unassessable: 1, conflicting: 0 },
+      anything_assessed: true, is_recommendation: false,
+    });
+    const summary = container.querySelector('[data-testid="assessment-summary"]')?.textContent ?? "";
+    expect(summary).toMatch(/everything that could be compared/i);
+    expect(summary).toMatch(/could not be compared are listed below/i);
+  });
+
+  it("shows a conflict as a conflict, not as a pass", async () => {
+    await open({
+      assessments: [{ variable: "temperature_c", outcome: "conflicting", reason: "SOURCES_DISAGREE_ABOUT_THE_BOUND" }],
+      counts: { within: 0, outside: 0, unassessable: 0, conflicting: 1 },
+      anything_assessed: false, is_recommendation: false,
+    });
+    const row = container.querySelector('[data-testid="assessment-temperature_c"]');
+    expect(row?.getAttribute("data-outcome")).toBe("conflicting");
+    expect(row?.textContent).toMatch(/sources disagree/i);
+  });
+
+  it("states it is not advice", async () => {
+    await open(unassessable);
+    const note = container.querySelector('[data-testid="assessment-not-advice"]')?.textContent ?? "";
+    expect(note).toMatch(/a comparison, not advice/i);
+    expect(note).toMatch(/what else is on the bench/i);
+  });
+
+  it("keeps a backend without the route distinct from a plant with nothing to assess", async () => {
+    await open({ detail: "not found" }, 404);
+    expect(container.querySelector('[data-testid="assessment-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="nothing-assessed"]')).toBeNull();
+  });
+
+  it("keeps a malformed assessment distinct too", async () => {
+    await open({ counts: {} });
+    expect(container.querySelector('[data-testid="assessment-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="assessment-list"]')).toBeNull();
+  });
+});
