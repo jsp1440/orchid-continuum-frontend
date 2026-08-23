@@ -1777,6 +1777,165 @@ describe("MyConservatory correcting a placement", () => {
   });
 });
 
+/**
+ * The whole collection at once.
+ *
+ * A list invites the failure the per-plant panel was built to prevent, only
+ * worse: a grower scans four headings, sees nothing red, and stops. On one
+ * plant "cannot be assessed" is a paragraph they read; across two hundred it is
+ * a grey block they skip. So the tests here are almost entirely about what the
+ * page must say when it has nothing to report.
+ */
+describe("MyConservatory collection review", () => {
+  const breachedPlant = {
+    plant_id: "p1", accession_number: "OC-2026-0001", display_name: "Cold one",
+    accepted_scientific_name: "Cattleya skinneri",
+    breaches: [{ variable: "temperature_c", breached: [{ bound: "minimum", limit: 15 }] }],
+    requirement_source_consulted: true,
+  };
+  const unassessedPlant = {
+    plant_id: "p2", accession_number: "OC-2026-0002", display_name: "Unknown one",
+    accepted_scientific_name: null, breaches: [], requirement_source_consulted: true,
+  };
+
+  function review(overrides: Partial<Record<string, unknown>> = {}) {
+    return {
+      groups: { outside: [], conflicting: [], within: [], unassessed: [] },
+      counts: { outside: 0, conflicting: 0, within: 0, unassessed: 0 },
+      plant_count: 0,
+      anything_assessed: false,
+      requirement_source_unread_for: 0,
+      is_recommendation: false,
+      ...overrides,
+    };
+  }
+
+  function reviewFetch(body: unknown, status = 200) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/collection/review")) {
+        return { ok: status === 200, status, json: async () => body } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({ plants: [], count: 0 }) } as Response;
+    });
+  }
+
+  async function open(body: unknown, status = 200) {
+    renderAt("/conservatory/review", reviewFetch(body, status) as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+  }
+
+  it("says nothing could be compared before showing any group", async () => {
+    // The assertion that matters most on this page.
+    await open(review({ groups: { outside: [], conflicting: [], within: [], unassessed: [unassessedPlant] }, counts: { outside: 0, conflicting: 0, within: 0, unassessed: 1 }, plant_count: 1 }));
+
+    const banner = container.querySelector('[data-testid="review-nothing-assessed"]')?.textContent ?? "";
+    expect(banner).toMatch(/nothing in this collection could be compared/i);
+    expect(banner).toMatch(/not a sign that the plants are well placed/i);
+  });
+
+  it("does not claim nothing was assessed once something was", async () => {
+    await open(review({
+      groups: { outside: [breachedPlant], conflicting: [], within: [], unassessed: [] },
+      counts: { outside: 1, conflicting: 0, within: 0, unassessed: 0 },
+      plant_count: 1, anything_assessed: true,
+    }));
+
+    expect(container.querySelector('[data-testid="review-nothing-assessed"]')).toBeNull();
+  });
+
+  it("lists a breach with the bound it passed, linked to the plant", async () => {
+    await open(review({
+      groups: { outside: [breachedPlant], conflicting: [], within: [], unassessed: [] },
+      counts: { outside: 1, conflicting: 0, within: 0, unassessed: 0 },
+      plant_count: 1, anything_assessed: true,
+    }));
+
+    expect(container.querySelector('[data-testid="review-breach-p1-temperature_c"]')?.textContent)
+      .toMatch(/past the known minimum of 15/i);
+    const link = container.querySelector('[data-testid="review-plant-p1"] a') as HTMLAnchorElement;
+    expect(link.getAttribute("href")).toBe("/conservatory/plants/p1");
+  });
+
+  it("gives unassessed plants a heading of their own, not a silent remainder", async () => {
+    await open(review({
+      groups: { outside: [breachedPlant], conflicting: [], within: [], unassessed: [unassessedPlant] },
+      counts: { outside: 1, conflicting: 0, within: 0, unassessed: 1 },
+      plant_count: 2, anything_assessed: true,
+    }));
+
+    const group = container.querySelector('[data-testid="review-group-unassessed"]')?.textContent ?? "";
+    expect(group).toMatch(/nothing could be compared/i);
+    expect(group).toMatch(/says nothing about how these plants are doing/i);
+    expect(container.querySelector('[data-testid="review-plant-p2"]')).not.toBeNull();
+  });
+
+  it("shows every group even when empty", async () => {
+    // A group that vanishes when empty reads as a category that does not apply.
+    await open(review());
+    for (const key of ["outside", "conflicting", "within", "unassessed"]) {
+      expect(container.querySelector(`[data-testid="review-group-${key}"]`)).not.toBeNull();
+      expect(container.querySelector(`[data-testid="review-empty-${key}"]`)).not.toBeNull();
+    }
+  });
+
+  it("keeps disagreement out of the passing group", async () => {
+    await open(review({
+      groups: { outside: [], conflicting: [breachedPlant], within: [], unassessed: [] },
+      counts: { outside: 0, conflicting: 1, within: 0, unassessed: 0 },
+      plant_count: 1, anything_assessed: true,
+    }));
+
+    expect(container.querySelector('[data-testid="review-count-conflicting"]')?.textContent).toContain("1");
+    expect(container.querySelector('[data-testid="review-count-within"]')?.textContent).toContain("0");
+    expect(container.querySelector('[data-testid="review-group-conflicting"]')?.textContent).toMatch(/not a pass/i);
+  });
+
+  it("says how many plants were assessed against a store nobody could read", async () => {
+    await open(review({
+      groups: { outside: [], conflicting: [], within: [], unassessed: [{ ...unassessedPlant, requirement_source_consulted: false }] },
+      counts: { outside: 0, conflicting: 0, within: 0, unassessed: 1 },
+      plant_count: 1, requirement_source_unread_for: 1,
+    }));
+
+    const banner = container.querySelector('[data-testid="review-source-unread"]')?.textContent ?? "";
+    expect(banner).toMatch(/could not be read/i);
+    expect(banner).toMatch(/not a statement about the plants or their taxa/i);
+    expect(container.querySelector('[data-testid="review-unread-p2"]')).not.toBeNull();
+  });
+
+  it("does not mention an unreadable store when every plant was looked up", async () => {
+    await open(review({
+      groups: { outside: [], conflicting: [], within: [unassessedPlant], unassessed: [] },
+      counts: { outside: 0, conflicting: 0, within: 1, unassessed: 0 },
+      plant_count: 1, anything_assessed: true,
+    }));
+
+    expect(container.querySelector('[data-testid="review-source-unread"]')).toBeNull();
+  });
+
+  it("states it is not advice and not ordered by severity", async () => {
+    await open(review());
+    const note = container.querySelector('[data-testid="review-not-advice"]')?.textContent ?? "";
+    expect(note).toMatch(/not advice/i);
+    expect(note).toMatch(/not ordered by severity/i);
+  });
+
+  it("keeps a backend without the route distinct from a collection with nothing wrong", async () => {
+    await open({ detail: "not found" }, 404);
+    expect(container.querySelector('[data-testid="review-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="collection-review"]')).toBeNull();
+  });
+
+  it("keeps a malformed review distinct too", async () => {
+    // 200 with the wrong body is the failure that looks like success.
+    await open({ plant_count: 0 });
+    expect(container.querySelector('[data-testid="review-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="collection-review"]')).toBeNull();
+  });
+});
+
 describe("MyConservatory placement assessment", () => {
   function assessmentFetch(body: unknown, status = 200) {
     return vi.fn(async (input: RequestInfo | URL) => {

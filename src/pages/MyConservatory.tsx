@@ -85,6 +85,26 @@ type PlacementAssessment = {
   is_recommendation: boolean;
 };
 
+type CollectionReviewRow = {
+  plant_id: string;
+  accession_number: string | null;
+  display_name: string | null;
+  accepted_scientific_name: string | null;
+  breaches: Array<{ variable: string; breached: Array<{ bound: string; limit: number }> }>;
+  requirement_source_consulted: boolean;
+};
+
+type CollectionReview = {
+  groups: Record<string, CollectionReviewRow[]>;
+  counts: Record<string, number>;
+  plant_count: number;
+  /** False when nothing in the whole collection could be compared. */
+  anything_assessed: boolean;
+  /** How many plants were assessed against a knowledge store nobody could read. */
+  requirement_source_unread_for: number;
+  is_recommendation: boolean;
+};
+
 type LocationChange = {
   id: string;
   change: string;
@@ -192,7 +212,7 @@ function useApi() {
 function Shell({ children }: { children: React.ReactNode }) {
   return <div className="min-h-screen bg-background text-foreground">
     <style>{`@media print { body * { visibility: hidden !important; } .print-zone, .print-zone * { visibility: visible !important; } .print-zone { position: absolute; inset: 0; background: white; color: black; padding: 0.25in; } .no-print { display: none !important; } .plant-label { break-inside: avoid; page-break-inside: avoid; } }`}</style>
-    <header className="no-print border-b bg-card"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Orchid Continuum</p><h1 className="text-2xl font-semibold">My Conservatory</h1></div><nav className="flex flex-wrap gap-2 text-sm"><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory">Dashboard</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/plants">My Plants</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/locations">Locations</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/labels">Print Labels</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/readiness">Readiness</Link><Link className="rounded-md bg-primary px-3 py-2 text-primary-foreground" to="/conservatory/plants/new">Add Plant</Link></nav></div></header>
+    <header className="no-print border-b bg-card"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-5"><div><p className="text-xs font-semibold uppercase tracking-[0.22em] text-muted-foreground">Orchid Continuum</p><h1 className="text-2xl font-semibold">My Conservatory</h1></div><nav className="flex flex-wrap gap-2 text-sm"><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory">Dashboard</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/plants">My Plants</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/locations">Locations</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/review">Review</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/labels">Print Labels</Link><Link className="rounded-md px-3 py-2 hover:bg-muted" to="/conservatory/readiness">Readiness</Link><Link className="rounded-md bg-primary px-3 py-2 text-primary-foreground" to="/conservatory/plants/new">Add Plant</Link></nav></div></header>
     <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
   </div>;
 }
@@ -1603,6 +1623,170 @@ function Labels() {
   return <><div className="no-print flex flex-wrap items-center justify-between gap-4"><div><h2 className="text-3xl font-semibold">Print QR Labels</h2><p className="mt-2 text-muted-foreground">Select plants or print the full collection. Browser print settings control the final label stock.</p></div><button type="button" className="rounded-md bg-primary px-4 py-2 text-primary-foreground" onClick={() => window.print()}>Print {visible.length} label{visible.length === 1 ? "" : "s"}</button></div><div className="no-print mt-6 grid gap-2 md:grid-cols-2">{plants.map((plant) => <label key={plant.id} className="flex items-center gap-3 rounded-lg border p-3"><input type="checkbox" checked={selected.has(plant.id)} onChange={() => toggleSelection(plant.id)} /><span><strong>{plant.accession_number}</strong> — <em>{plant.display_name}</em></span></label>)}</div><div className="print-zone mt-8 grid grid-cols-2 gap-3 md:grid-cols-3">{visible.map((plant) => <article key={plant.id} className="plant-label flex min-h-[1.45in] items-center gap-3 border border-black p-2 text-black"><QrImage plant={plant} /><div><strong className="block text-sm">{plant.accession_number}</strong><em className="mt-1 block text-sm">{plant.display_name}</em>{plant.location && <span className="mt-1 block text-xs">{plant.location}</span>}</div></article>)}</div></>;
 }
 
+const REVIEW_GROUP_COPY: Array<{
+  key: string;
+  heading: string;
+  detail: string;
+  tone: string;
+}> = [
+  {
+    key: "outside",
+    heading: "Outside a known range",
+    detail:
+      "A condition recorded where this plant is falls outside a bound the Continuum has evidence for.",
+    tone: "border-destructive/40 bg-destructive/5",
+  },
+  {
+    key: "conflicting",
+    heading: "Sources disagree",
+    detail:
+      "The evidence gives more than one bound, so no single comparison is possible. Not a pass.",
+    tone: "border-amber-500/40 bg-amber-500/5",
+  },
+  {
+    key: "within",
+    heading: "Inside the known range",
+    detail:
+      "Everything that could be compared was compared, and was inside. Variables that could not be compared are not counted here.",
+    tone: "",
+  },
+  {
+    key: "unassessed",
+    heading: "Nothing could be compared",
+    detail:
+      "No condition recorded, no evidence for the taxon, or both. This says nothing about how these plants are doing.",
+    tone: "",
+  },
+];
+
+/**
+ * The whole collection, grouped by what its assessments established.
+ *
+ * The failure this view exists to prevent is the one a list invites: a grower
+ * scans it, sees nothing red, and stops. On one plant "cannot be assessed" is a
+ * paragraph they read; across two hundred it is a grey block they skip.
+ *
+ * So "nothing could be compared" is a group with a heading of its own, and when
+ * nothing in the entire collection could be assessed that is stated at the top
+ * before any group is rendered. The groups are shown in a fixed order and never
+ * sorted by severity: which plant to deal with first depends on the season,
+ * the bench and what the grower can do, none of which is here, and a severity
+ * sort would be advice wearing a sort order.
+ */
+function CollectionReviewPage() {
+  const request = useApi();
+  const [review, setReview] = useState<CollectionReview>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    request<CollectionReview>("/api/conservatory/collection/review")
+      .then((result) => {
+        if (!active) return;
+        // A response without its groups is a contract the service did not
+        // honour. Coercing it to empty groups would render as "no plant is
+        // outside a known range", which is a claim about the collection rather
+        // than about the response.
+        if (!result || !result.groups || !result.counts) { setUnavailable(true); return; }
+        setReview(result);
+      })
+      .catch((cause) => {
+        if (!active) return;
+        if (cause instanceof ApiError && cause.status === 404) setUnavailable(true);
+        else setError(cause instanceof Error ? cause.message : "The collection review could not be loaded");
+      });
+    return () => { active = false; };
+  }, [request]);
+
+  if (unavailable) return <section className="rounded-xl border border-dashed p-6" data-testid="review-unavailable">
+    <h2 className="text-2xl font-semibold">Collection review is not available from this backend</h2>
+    <p className="mt-2 text-sm text-muted-foreground">This says nothing about how the collection is doing.</p>
+  </section>;
+
+  if (error) return <section className="rounded-xl border border-destructive/40 bg-destructive/5 p-6" role="alert" data-testid="review-error">
+    <p className="text-sm">{error}</p>
+  </section>;
+
+  if (!review) return <Status loading />;
+
+  return <div data-testid="collection-review">
+    <h2 className="text-3xl font-semibold">How your collection compares</h2>
+    <p className="mt-2 text-muted-foreground">
+      Each plant&rsquo;s recorded conditions against bounds the Continuum has evidence for.
+      Not a work list and not advice.
+    </p>
+
+    {!review.anything_assessed && (
+      // Stated before any group. A reader who scrolls past four headings and
+      // sees nothing red would otherwise conclude the collection is fine.
+      <p className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm" data-testid="review-nothing-assessed">
+        Nothing in this collection could be compared. This is not a sign that the plants are well
+        placed &mdash; it means the conditions, the evidence for these taxa, or both, are missing.
+      </p>
+    )}
+
+    {review.requirement_source_unread_for > 0 && (
+      <p className="mt-4 rounded-md border border-amber-500/40 bg-amber-500/5 p-4 text-sm" data-testid="review-source-unread">
+        For {review.requirement_source_unread_for} plant
+        {review.requirement_source_unread_for === 1 ? "" : "s"} the store holding cultivation
+        evidence could not be read. Those are unassessed because nobody looked, which is not a
+        statement about the plants or their taxa.
+      </p>
+    )}
+
+    <div className="mt-7 grid gap-4 md:grid-cols-4">
+      {REVIEW_GROUP_COPY.map((group) => (
+        <div key={group.key} className={`rounded-xl border bg-card p-5 ${group.tone}`} data-testid={`review-count-${group.key}`}>
+          <p className="text-sm text-muted-foreground">{group.heading}</p>
+          <strong className="mt-2 block text-3xl">{review.counts[group.key] ?? 0}</strong>
+        </div>
+      ))}
+    </div>
+
+    {REVIEW_GROUP_COPY.map((group) => {
+      const rows = review.groups[group.key] ?? [];
+      return <section key={group.key} className="mt-8" data-testid={`review-group-${group.key}`}>
+        <h3 className="text-sm font-semibold">{group.heading}</h3>
+        <p className="mt-1 text-xs text-muted-foreground">{group.detail}</p>
+        {rows.length ? (
+          <ul className="mt-3 space-y-2">
+            {rows.map((row) => (
+              <li key={row.plant_id} className="rounded-lg border p-3 text-sm" data-testid={`review-plant-${row.plant_id}`}>
+                <Link className="font-medium text-primary" to={`/conservatory/plants/${encodeURIComponent(row.plant_id)}`}>
+                  {row.display_name || row.accession_number || row.plant_id}
+                </Link>
+                {row.accepted_scientific_name && (
+                  <span className="ml-2 italic text-muted-foreground">{row.accepted_scientific_name}</span>
+                )}
+                {row.breaches.map((breach) => (
+                  <p key={breach.variable} className="mt-1 text-xs" data-testid={`review-breach-${row.plant_id}-${breach.variable}`}>
+                    {breach.variable.replace(/_/g, " ")}
+                    {breach.breached.map((limit) => ` · past the known ${limit.bound} of ${limit.limit}`).join("")}
+                  </p>
+                ))}
+                {!row.requirement_source_consulted && (
+                  <p className="mt-1 text-xs text-muted-foreground" data-testid={`review-unread-${row.plant_id}`}>
+                    The evidence store could not be read for this plant.
+                  </p>
+                )}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground" data-testid={`review-empty-${group.key}`}>No plants.</p>
+        )}
+      </section>;
+    })}
+
+    <p className="mt-8 text-[11px] text-muted-foreground" data-testid="review-not-advice">
+      A grouping of comparisons, not advice. Which plant to deal with first depends on what else is
+      on the bench, what you can do, and the season, none of which is in this data. The groups are
+      not ordered by severity.
+    </p>
+  </div>;
+}
+
 export default function MyConservatory() {
   const location = useLocation();
   const path = location.pathname.replace(/\/$/, "");
@@ -1611,6 +1795,7 @@ export default function MyConservatory() {
   else if (path === "/conservatory/plants/new") content = <AddPlant />;
   else if (path === "/conservatory/labels") content = <Labels />;
   else if (path === "/conservatory/locations") content = <Locations />;
+  else if (path === "/conservatory/review") content = <CollectionReviewPage />;
   else if (path === "/conservatory/readiness") content = <ConservatoryReadinessPage />;
   else {
     const detailMatch = /^\/conservatory\/plants\/([^/]+)$/.exec(path);
