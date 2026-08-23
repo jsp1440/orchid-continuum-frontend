@@ -1680,3 +1680,153 @@ describe("MyConservatory placement assessment", () => {
     expect(container.querySelector('[data-testid="assessment-list"]')).toBeNull();
   });
 });
+
+/**
+ * Correcting an environmental reading.
+ *
+ * Until this list existed a correction was unreachable: the form could send one
+ * but nothing showed a grower which reading to correct. A typo matters here
+ * more than most places — readings feed the placement assessment, so a stray
+ * 120 can put a plant "outside" a bound it never breached.
+ */
+describe("MyConservatory correcting a reading", () => {
+  const bench = { id: "loc-1", name: "Cool bench", kind: "greenhouse_bench" };
+  const wrongReading = {
+    id: "r1", variable: "temperature_c", unit: "degrees Celsius", value: 120,
+    origin: "manual", instrument: null, observed_at: "2026-08-20T00:00:00Z",
+    note: null, supersedes_id: null, superseded_by_id: null,
+  };
+
+  /** "omit" means the response carries no readings key at all. Passing
+   *  `undefined` cannot express that: it selects `open`'s default parameter,
+   *  which is how this case silently stopped being tested. */
+  function readingsFetch(readings: unknown[] | "omit", onPost?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("/environment") && init?.method === "POST") {
+        const r = onPost ?? { ok: true, status: 201, body: { id: "r2" } };
+        return { ok: r.ok, status: r.status ?? 201, json: async () => r.body } as Response;
+      }
+      if (url.includes("/environment")) {
+        const body: Record<string, unknown> = { location_id: "loc-1", variables: {} };
+        if (readings !== "omit") body.readings = readings;
+        return { ok: true, status: 200, json: async () => body } as Response;
+      }
+      if (url.includes("/api/conservatory/locations")) {
+        return { ok: true, status: 200, json: async () => ({ locations: [bench] }) } as Response;
+      }
+      return { ok: true, status: 200, json: async () => ({}) } as Response;
+    });
+  }
+
+  function click(testid: string) {
+    const el = container.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+    act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement | HTMLSelectElement;
+    act(() => {
+      const proto = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+    });
+  }
+
+  async function open(readings: unknown[] | "omit" = [wrongReading], onPost?: Parameters<typeof readingsFetch>[1]) {
+    const fetchMock = readingsFetch(readings, onPost);
+    renderAt("/conservatory/locations", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  it("lists what has been measured here, so a typo can be found", async () => {
+    await open();
+    const entry = container.querySelector('[data-testid="reading-r1"]')?.textContent ?? "";
+    expect(entry).toContain("120");
+    expect(entry).toMatch(/entered by hand/i);
+    expect(container.querySelector('[data-testid="correct-reading-r1"]')).not.toBeNull();
+  });
+
+  it("says the original is kept and stops being used", async () => {
+    await open();
+    click("correct-reading-r1");
+    const banner = container.querySelector('[data-testid="correcting-reading"]')?.textContent ?? "";
+    expect(banner).toMatch(/stays in the record, marked as\s+corrected/i);
+    expect(banner).toMatch(/stops being used/i);
+    expect(banner).toMatch(/not deleted/i);
+  });
+
+  it("posts a correction naming the reading it supersedes", async () => {
+    const fetchMock = await open();
+    click("correct-reading-r1");
+    set("reading-value", "12");
+    set("reading-day", "2026-08-20");
+    set("reading-origin", "manual");
+    const form = container.querySelector('[data-testid="record-reading"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => (call[1] as RequestInit)?.method === "POST");
+    const body = JSON.parse(String((post?.[1] as RequestInit).body));
+    expect(body.supersedes_id).toBe("r1");
+    // The variable is fixed by the reading being corrected; changing it would
+    // make one claim into a different one, and the backend refuses it.
+    expect(body.variable).toBe("temperature_c");
+    expect(body.value).toBe(12);
+  });
+
+  it("hides the variable chooser while correcting", async () => {
+    await open();
+    expect(container.querySelector('[data-testid="reading-variable"]')).not.toBeNull();
+    click("correct-reading-r1");
+    expect(container.querySelector('[data-testid="reading-variable"]')).toBeNull();
+  });
+
+  it("can be cancelled back to recording a new reading", async () => {
+    await open();
+    click("correct-reading-r1");
+    click("cancel-reading-correction");
+    expect(container.querySelector('[data-testid="correcting-reading"]')).toBeNull();
+    expect(container.querySelector('[data-testid="reading-variable"]')).not.toBeNull();
+  });
+
+  it("keeps corrected readings visible, struck through", async () => {
+    // A grower must be able to see that a number they remember was revised.
+    await open([
+      { ...wrongReading, superseded_by_id: "r2" },
+      { ...wrongReading, id: "r2", value: 12, supersedes_id: "r1" },
+    ]);
+    const corrected = container.querySelector('[data-testid="corrected-readings-loc-1"]');
+    expect(corrected?.textContent).toContain("120");
+    // And the corrected one is not offered for correction again.
+    expect(container.querySelector('[data-testid="correct-reading-r1"]')).toBeNull();
+    expect(container.querySelector('[data-testid="correct-reading-r2"]')).not.toBeNull();
+  });
+
+  it("reports a refused correction instead of appearing to save", async () => {
+    await open([wrongReading], { ok: false, status: 409, body: { detail: { code: "READING_ALREADY_SUPERSEDED" } } });
+    click("correct-reading-r1");
+    set("reading-value", "12");
+    set("reading-day", "2026-08-20");
+    set("reading-origin", "manual");
+    const form = container.querySelector('[data-testid="record-reading"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+    expect(container.querySelector('[data-testid="reading-error"]')).not.toBeNull();
+  });
+
+  it("says nothing measured yet rather than showing an empty list", async () => {
+    await open([]);
+    expect(container.querySelector('[data-testid="no-readings-loc-1"]')).not.toBeNull();
+  });
+
+  it("keeps a malformed readings response distinct from an unmeasured bench", async () => {
+    // An empty list would claim this bench has never been measured, on the
+    // strength of a broken payload.
+    await open("omit");
+    expect(container.querySelector('[data-testid="readings-unavailable-loc-1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="no-readings-loc-1"]')).toBeNull();
+  });
+});
