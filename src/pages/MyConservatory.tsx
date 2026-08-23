@@ -27,6 +27,10 @@ type Placement = {
   reason: string;
   note: string | null;
   recorded_at: string;
+  /** For a correction, the placement it corrects. */
+  corrects_id?: string | null;
+  /** Set on an entry a later correction says was wrong. Derived by the backend. */
+  corrected_by_id?: string | null;
 };
 
 type PlacementView = {
@@ -1032,15 +1036,39 @@ function Locations() {
  * longer exists, and the backend refuses it — offering it would only produce a
  * failure the grower cannot act on.
  */
+/**
+ * What went wrong, in terms a grower can act on.
+ *
+ * A refused correction has three quite different causes and only one of them
+ * is worth retrying. Rendering the raw code, or one generic sentence, leaves
+ * somebody re-submitting a request that can never succeed.
+ */
+function placementFailure(cause: unknown): string {
+  if (cause instanceof ApiError) {
+    if (cause.code === "PLACEMENT_ALREADY_CORRECTED")
+      return "Somebody has already corrected that entry. Reload the history to see the correction that stands.";
+    if (cause.code === "CORRECTION_TARGET_NOT_FOUND")
+      return "The entry being corrected is no longer in this plant's history. Reload the page and try again.";
+    if (cause.code === "LOCATION_RETIRED")
+      return "That location has been retired, so a plant cannot be moved there now.";
+  }
+  return cause instanceof Error ? cause.message : "The placement could not be recorded";
+}
+
 function RecordPlacement({
   plantId,
   locations,
   hasPlacement,
+  correcting,
+  onCancelCorrection,
   onRecorded,
 }: {
   plantId: string;
   locations: GrowingLocation[];
   hasPlacement: boolean;
+  /** The history entry being corrected, when the grower started from one. */
+  correcting?: Placement;
+  onCancelCorrection?: () => void;
   onRecorded: (event: Placement) => void;
 }) {
   const request = useApi();
@@ -1050,21 +1078,35 @@ function RecordPlacement({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
 
+  // A correction fixes what it is correcting. Leaving the reason selectable
+  // here would let a grower who clicked "this entry is wrong" file a move,
+  // which records a journey the plant never made.
+  const effectiveReason = correcting ? "correction" : reason;
+
   async function submit(formEvent: FormEvent) {
     formEvent.preventDefault();
-    if (!locationId || !reason) return;
+    if (!locationId || !effectiveReason) return;
     setSaving(true);
     setError(undefined);
     try {
       const event = await request<Placement>(
         `/api/conservatory/plants/${encodeURIComponent(plantId)}/placement`,
-        { method: "POST", body: JSON.stringify({ location_id: locationId, reason, note: note || null }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            location_id: locationId,
+            reason: effectiveReason,
+            note: note || null,
+            ...(correcting ? { corrects_id: correcting.id } : {}),
+          }),
+        },
       );
       onRecorded(event);
       setNote("");
       setReason("");
+      setLocationId("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The placement could not be recorded");
+      setError(placementFailure(cause));
     } finally {
       setSaving(false);
     }
@@ -1075,6 +1117,21 @@ function RecordPlacement({
   </p>;
 
   return <form className="mt-4 space-y-3 border-t pt-4" onSubmit={submit} data-testid="record-placement">
+    {correcting && (
+      <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm" data-testid="correcting-placement">
+        <p>
+          Correcting the entry recorded on{" "}
+          {new Date(correcting.recorded_at).toLocaleDateString()}. Say where the plant actually was:
+          this records that the entry was wrong, not that the plant went anywhere.
+        </p>
+        {onCancelCorrection && (
+          <button type="button" className="mt-2 text-xs underline" data-testid="cancel-correction"
+            onClick={onCancelCorrection}>
+            Record something else instead
+          </button>
+        )}
+      </div>
+    )}
     <div className="flex flex-wrap gap-3">
       <label className="text-sm">
         <span className="block text-xs text-muted-foreground">Location</span>
@@ -1084,17 +1141,19 @@ function RecordPlacement({
           {locations.map((location) => <option key={location.id} value={location.id}>{location.name}</option>)}
         </select>
       </label>
-      <label className="text-sm">
-        <span className="block text-xs text-muted-foreground">What happened</span>
-        <select className="mt-1 rounded-md border px-3 py-2" value={reason} data-testid="placement-reason-select"
-          onChange={(changed) => setReason(changed.target.value)}>
-          {/* Deliberately unset. Choosing for the grower would invent history. */}
-          <option value="">Choose…</option>
-          {!hasPlacement && <option value="initial">First placement — where it started</option>}
-          <option value="move">The plant moved here</option>
-          <option value="correction">Correction — it was always here, the record was wrong</option>
-        </select>
-      </label>
+      {!correcting && (
+        <label className="text-sm">
+          <span className="block text-xs text-muted-foreground">What happened</span>
+          <select className="mt-1 rounded-md border px-3 py-2" value={reason} data-testid="placement-reason-select"
+            onChange={(changed) => setReason(changed.target.value)}>
+            {/* Deliberately unset. Choosing for the grower would invent history. */}
+            <option value="">Choose…</option>
+            {!hasPlacement && <option value="initial">First placement — where it started</option>}
+            <option value="move">The plant moved here</option>
+            <option value="correction">Correction — it was always here, the record was wrong</option>
+          </select>
+        </label>
+      )}
     </div>
     <label className="block text-sm">
       <span className="block text-xs text-muted-foreground">Note (optional)</span>
@@ -1107,8 +1166,8 @@ function RecordPlacement({
     </p>
     {error && <p className="text-xs text-destructive" role="alert" data-testid="placement-error">{error}</p>}
     <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-      disabled={saving || !locationId || !reason} data-testid="placement-submit">
-      {saving ? "Recording…" : "Record placement"}
+      disabled={saving || !locationId || !effectiveReason} data-testid="placement-submit">
+      {saving ? "Recording…" : correcting ? "Record correction" : "Record placement"}
     </button>
   </form>;
 }
@@ -1133,6 +1192,9 @@ function CultivationContext({ plantId }: { plantId: string }) {
   const [environment, setEnvironment] = useState<EnvironmentView>();
   const [error, setError] = useState<string>();
   const [unavailable, setUnavailable] = useState(false);
+  const [correcting, setCorrecting] = useState<Placement>();
+  // Bumped after a correction to refetch rather than guess. See below.
+  const [reloads, setReloads] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -1169,7 +1231,7 @@ function CultivationContext({ plantId }: { plantId: string }) {
         else setError(reason instanceof Error ? reason.message : "Cultivation context unavailable");
       });
     return () => { active = false; };
-  }, [plantId, request]);
+  }, [plantId, request, reloads]);
 
   const nameFor = (id: string | null | undefined) =>
     locations.find((location) => location.id === id)?.name ?? (id ? "A location no longer listed" : null);
@@ -1202,15 +1264,28 @@ function CultivationContext({ plantId }: { plantId: string }) {
       )}
       <RecordPlacement
         plantId={plantId}
-        locations={usable}
+        locations={correcting ? locations : usable}
         hasPlacement={placement.history.length > 0}
-        onRecorded={(event) =>
+        correcting={correcting}
+        onCancelCorrection={() => setCorrecting(undefined)}
+        onRecorded={(event) => {
+          if (event.corrects_id) {
+            // Where the plant is after a correction depends on what the
+            // correction targeted: correcting an old entry leaves the plant
+            // wherever it has since moved. Only the backend applies that rule,
+            // so the view is refetched rather than guessed. Assuming the
+            // correction is the new current location is the same defect the
+            // backend just stopped making.
+            setCorrecting(undefined);
+            setReloads((count) => count + 1);
+            return;
+          }
           setPlacement((current) =>
             current
               ? { ...current, current: event, history: [...current.history, event] }
               : current,
-          )
-        }
+          );
+        }}
       />
     </div>
 
@@ -1219,13 +1294,32 @@ function CultivationContext({ plantId }: { plantId: string }) {
       {placement.history.length ? (
         <ol className="mt-3 space-y-2" data-testid="placement-history">
           {placement.history.map((event) => (
-            <li key={event.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+            <li key={event.id} className="flex flex-wrap items-baseline gap-2 text-sm"
+              data-testid={`placement-entry-${event.id}`}
+              data-corrected={event.corrected_by_id ? "true" : "false"}>
               <span className="rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide" data-testid={`placement-reason-${event.reason}`}>
                 {/* A correction is not a move: the plant never went anywhere. */}
                 {event.reason === "correction" ? "record corrected" : event.reason}
               </span>
-              <span>{nameFor(event.location_id) ?? "Removed from the collection"}</span>
+              <span className={event.corrected_by_id ? "line-through text-muted-foreground" : undefined}>
+                {nameFor(event.location_id) ?? "Removed from the collection"}
+              </span>
               {event.note && <span className="text-muted-foreground">— {event.note}</span>}
+              {event.corrected_by_id ? (
+                // Struck through, not removed. Somebody checking why the
+                // records disagree with their memory needs to see what misled
+                // them, and a deleted entry leaves the correction explaining
+                // nothing.
+                <span className="text-xs text-amber-700 dark:text-amber-400" data-testid={`placement-superseded-${event.id}`}>
+                  a later correction says this was wrong
+                </span>
+              ) : (
+                <button type="button" className="text-xs underline text-muted-foreground"
+                  data-testid={`correct-placement-${event.id}`}
+                  onClick={() => setCorrecting(event)}>
+                  This entry is wrong
+                </button>
+              )}
             </li>
           ))}
         </ol>
