@@ -20,6 +20,12 @@ export type AtlasNextCalyxContext = {
   genus: string;
 };
 
+export type AtlasNextContinuumAction = {
+  id: 'research' | 'calyx';
+  label: string;
+  href: string;
+};
+
 function boundedGenus(value: string): string | null {
   const genus = String(value ?? '').trim();
   if (!genus || genus.length > MAX_TAXON_CHARACTERS || !SAFE_GENUS.test(genus)) return null;
@@ -76,4 +82,26 @@ export function atlasNextCalyxHref(context: AtlasNextCalyxContext): string | nul
   });
 
   return `/calyx?${params.toString()}`;
+}
+
+/**
+ * Resolve every cross-Continuum action Atlas Next may expose for its active
+ * genus. Keeping this as one model prevents the mounted shell from constructing
+ * one safe Research link and a subtly different Calyx link by hand.
+ *
+ * The action set is all-or-nothing on genus validity: malformed active context
+ * yields no continuation affordances at all rather than letting one consumer
+ * fail open. Project identity remains Research-only and never enters Calyx.
+ */
+export function atlasNextContinuumActions(
+  context: AtlasNextResearchContext,
+): AtlasNextContinuumAction[] {
+  const researchHref = atlasNextResearchHref(context);
+  const calyxHref = atlasNextCalyxHref({ genus: context.genus });
+  if (!researchHref || !calyxHref) return [];
+
+  return [
+    { id: 'research', label: 'Continue in Research Station', href: researchHref },
+    { id: 'calyx', label: 'Ask Calyx about this genus', href: calyxHref },
+  ];
 }
