@@ -25,3 +25,8 @@ dist-ssr
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Generated verification reports. Never committed: a report in the tree
+# reads as a durable fact, and a stale one would assert a run that no
+# longer describes this code.
+artifacts/

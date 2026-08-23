@@ -13,7 +13,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:deployment": "node scripts/verify-deployment-contract.mjs",
-    "verify:university-production": "node scripts/verify-university-production.mjs"
+    "verify:university-production": "node scripts/verify-university-production.mjs",
+    "verify:routes": "node scripts/browser-route-sweep.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
