@@ -56,6 +56,15 @@ type PlantTimeline = {
   is_scientific_evidence: boolean;
 };
 
+type LocationChange = {
+  id: string;
+  change: string;
+  previous_name: string | null;
+  new_name: string | null;
+  note: string | null;
+  recorded_at: string;
+};
+
 type GrowingLocation = { id: string; name: string; kind: string; retired_at?: string | null };
 
 /** One environmental variable, carrying how it came to be known. */
@@ -586,6 +595,69 @@ const LOCATION_KINDS: { value: string; label: string }[] = [
  * plant" produce the same visible change beside a plant and mean entirely
  * different things.
  */
+const CHANGE_LABEL: Record<string, string> = {
+  created: "Created",
+  renamed: "Renamed",
+  retired: "Retired",
+  unretired: "Brought back into use",
+};
+
+/**
+ * A location's own history, which is emphatically not any plant's history.
+ *
+ * This is the surface where the distinction the placement model rests on
+ * becomes visible: a rename appears here and nowhere near a plant, so a grower
+ * puzzled by a bench having changed names can see when it happened without
+ * finding a phantom move in a plant's record.
+ */
+function LocationHistory({ locationId }: { locationId: string }) {
+  const request = useApi();
+  const [open, setOpen] = useState(false);
+  const [changes, setChanges] = useState<LocationChange[]>();
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    if (!open || changes || error) return;
+    request<{ history: LocationChange[] }>(`/api/conservatory/locations/${encodeURIComponent(locationId)}/history`)
+      .then((result) => {
+        // A 200 without a history array is a contract the service did not
+        // honour. Falling back to an empty list would render "no changes
+        // recorded", which is a claim about this bench made from a broken
+        // payload rather than from anything the service said.
+        if (!result || !Array.isArray(result.history)) {
+          setError("The history could not be read from the response.");
+          return;
+        }
+        setChanges(result.history);
+      })
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "The history could not be loaded"));
+  }, [open, changes, error, locationId, request]);
+
+  return <div className="mt-2">
+    <button type="button" className="text-xs underline" data-testid={`history-toggle-${locationId}`}
+      onClick={() => setOpen((current) => !current)}>
+      {open ? "Hide history" : "History of this place"}
+    </button>
+    {open && <div className="mt-2" data-testid={`history-${locationId}`}>
+      {error ? <p className="text-xs text-destructive" role="alert" data-testid={`history-error-${locationId}`}>{error}</p>
+        : !changes ? <p className="text-xs text-muted-foreground" role="status">Loading…</p>
+        : changes.length === 0 ? <p className="text-xs text-muted-foreground">No changes recorded.</p>
+        : <ol className="space-y-1 text-xs text-muted-foreground">
+            {changes.map((change) => <li key={change.id} data-testid={`history-entry-${change.change}`}>
+              <span className="font-medium">{CHANGE_LABEL[change.change] ?? change.change}</span>
+              {change.change === "renamed" && change.previous_name
+                ? ` — ${change.previous_name} → ${change.new_name}`
+                : change.new_name ? ` — ${change.new_name}` : ""}
+              {" "}<span>({(change.recorded_at || "").slice(0, 10)})</span>
+            </li>)}
+          </ol>}
+      <p className="mt-2 text-[11px] text-muted-foreground" data-testid={`history-scope-${locationId}`}>
+        These are changes to the place itself. No plant moved because of any of them.
+      </p>
+    </div>}
+  </div>;
+}
+
 function LocationAdmin({ location, onChanged }: { location: GrowingLocation; onChanged: () => void }) {
   const request = useApi();
   const [renaming, setRenaming] = useState(false);
@@ -738,6 +810,7 @@ function Locations() {
           <span className="text-xs text-muted-foreground">{LOCATION_KINDS.find((k) => k.value === location.kind)?.label ?? location.kind}</span>
           <RecordReading locationId={location.id} onRecorded={load} />
           <LocationAdmin location={location} onChanged={load} />
+          <LocationHistory locationId={location.id} />
         </li>)}
       </ul>
     ) : (
