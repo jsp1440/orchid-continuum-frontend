@@ -1,9 +1,20 @@
 const FEATURED_TAXON_ORIGIN = 'homepage-featured-taxon';
 export const ATLAS_WORKSPACE_ORIGIN = 'atlas-workspace';
 
+const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
+const MAX_CANONICAL_GENUS_LENGTH = 120;
+
 function normalizedGenus(genus: string): string {
-  const value = genus.trim();
-  if (!value) throw new Error('Featured taxon genus is required for navigation');
+  const value = String(genus ?? '').trim();
+  if (
+    !value ||
+    value.length > MAX_CANONICAL_GENUS_LENGTH ||
+    !SAFE_CANONICAL_GENUS.test(value)
+  ) {
+    throw new Error(
+      'Featured taxon genus is required and must be a bounded canonical genus for navigation',
+    );
+  }
   return value;
 }
 
