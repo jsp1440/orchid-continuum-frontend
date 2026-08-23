@@ -1551,6 +1551,232 @@ describe("MyConservatory un-retiring a location", () => {
  * compared at all. "Nothing to complain about" and "well placed" are different
  * claims, and only one of them is supported by two absences.
  */
+/**
+ * Correcting a placement from the history that is wrong.
+ *
+ * Until this existed a correction was reachable only by scrolling to the form
+ * and knowing to pick "Correction" — with nothing tying it to the entry that
+ * was wrong. The link matters twice over: an unlinked correction says the
+ * record was wrong without saying which record, and the backend can only keep
+ * a correction from moving the plant when it knows what the correction targets.
+ */
+describe("MyConservatory correcting a placement", () => {
+  const wrongStart = {
+    id: "e1", location_id: "loc-warm", reason: "initial", note: null,
+    recorded_at: "2026-01-01T00:00:00Z", corrects_id: null, corrected_by_id: null,
+  };
+  const realMove = {
+    id: "e2", location_id: "loc-cool", reason: "move", note: null,
+    recorded_at: "2026-02-01T00:00:00Z", corrects_id: null, corrected_by_id: null,
+  };
+  const movedContext = {
+    locations: twoLocations,
+    placement: { plant_id: "p1", current: realMove, history: [wrongStart, realMove] },
+  };
+
+  function correctionFetch(overrides: {
+    placement?: unknown;
+    locations?: unknown;
+    postStatus?: number;
+    postBody?: unknown;
+    afterPost?: unknown;
+  } = {}) {
+    let posted = false;
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/placement") && init?.method === "POST") {
+        posted = true;
+        const status = overrides.postStatus ?? 201;
+        return {
+          ok: status < 400, status,
+          json: async () => overrides.postBody ?? { id: "e3", location_id: "loc-cool", reason: "correction", note: null, recorded_at: "2026-03-01T00:00:00Z", corrects_id: "e1" },
+        } as Response;
+      }
+      if (url.includes("/placement")) {
+        const body = posted && overrides.afterPost ? overrides.afterPost : (overrides.placement ?? movedContext.placement);
+        return { ok: true, status: 200, json: async () => body } as Response;
+      }
+      if (url.includes("/environment")) return { ok: true, status: 200, json: async () => ({ location_id: "loc-cool", variables: {} }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => overrides.locations ?? twoLocations } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+  }
+
+  async function open(overrides = {}) {
+    const fetchMock = correctionFetch(overrides);
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  function click(testid: string) {
+    const el = container.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+    act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLSelectElement | HTMLInputElement;
+    act(() => {
+      const proto = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+
+  async function submit() {
+    const form = container.querySelector('[data-testid="record-placement"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+  }
+
+  it("offers a way to say a history entry is wrong", async () => {
+    await open();
+    expect(container.querySelector('[data-testid="correct-placement-e1"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="correct-placement-e2"]')).not.toBeNull();
+  });
+
+  it("sends the entry being corrected, not just a bare correction", async () => {
+    const fetchMock = await open();
+    click("correct-placement-e1");
+    set("placement-location", "loc-cool");
+    await submit();
+
+    const post = fetchMock.mock.calls.find(
+      (call) => String(call[0]).includes("/placement") && (call[1] as RequestInit)?.method === "POST",
+    );
+    expect(JSON.parse(String((post?.[1] as RequestInit).body))).toMatchObject({
+      location_id: "loc-cool",
+      reason: "correction",
+      corrects_id: "e1",
+    });
+  });
+
+  it("does not let a correction be filed as a move", async () => {
+    // Somebody who clicked "this entry is wrong" and then picked "move" would
+    // record a journey the plant never made.
+    await open();
+    click("correct-placement-e1");
+    expect(container.querySelector('[data-testid="placement-reason-select"]')).toBeNull();
+    expect(container.querySelector('[data-testid="correcting-placement"]')?.textContent)
+      .toMatch(/not that the plant went anywhere/i);
+  });
+
+  it("refetches instead of assuming the correction is where the plant is now", async () => {
+    /**
+     * The frontend mirror of the defect the backend just fixed. Correcting how
+     * a plant started leaves it wherever it has since moved, and only the
+     * backend applies that rule — so a client that optimistically shows the
+     * correction as the current location contradicts the record it just wrote.
+     */
+    const afterPost = {
+      plant_id: "p1",
+      current: realMove,
+      history: [
+        { ...wrongStart, corrected_by_id: "e3" },
+        realMove,
+        { id: "e3", location_id: "loc-warm", reason: "correction", note: null, recorded_at: "2026-03-01T00:00:00Z", corrects_id: "e1", corrected_by_id: null },
+      ],
+    };
+    await open({
+      afterPost,
+      // The correction names the warm bench. Shown optimistically it would
+      // become the current location; the refetch says the plant is still on
+      // the cool bench it moved to.
+      postBody: {
+        id: "e3", location_id: "loc-warm", reason: "correction", note: null,
+        recorded_at: "2026-03-01T00:00:00Z", corrects_id: "e1",
+      },
+    });
+    click("correct-placement-e1");
+    set("placement-location", "loc-warm");
+    await submit();
+    await flush();
+
+    // Still on the bench it actually moved to.
+    expect(container.querySelector('[data-testid="current-location"]')?.textContent).toContain("Cool bench");
+    expect(container.querySelector('[data-testid="current-location"]')?.textContent).not.toContain("Warm bench");
+  });
+
+  it("marks a corrected entry rather than removing it", async () => {
+    await open({
+      placement: {
+        plant_id: "p1",
+        current: realMove,
+        history: [
+          { ...wrongStart, corrected_by_id: "e3" },
+          realMove,
+          { id: "e3", location_id: "loc-cool", reason: "correction", note: null, recorded_at: "2026-03-01T00:00:00Z", corrects_id: "e1", corrected_by_id: null },
+        ],
+      },
+    });
+
+    expect(container.querySelector('[data-testid="placement-superseded-e1"]')?.textContent)
+      .toMatch(/a later correction says this was wrong/i);
+    // The entry that misled the grower stays visible, and is marked as
+    // superseded in the DOM so styling cannot be the only signal.
+    const entry = container.querySelector('[data-testid="placement-entry-e1"]');
+    expect(entry?.textContent).toContain("Warm bench");
+    expect(entry?.getAttribute("data-corrected")).toBe("true");
+    expect(container.querySelector('[data-testid="placement-entry-e2"]')?.getAttribute("data-corrected")).toBe("false");
+    // And cannot be corrected a second time from here.
+    expect(container.querySelector('[data-testid="correct-placement-e1"]')).toBeNull();
+  });
+
+  it("says plainly when somebody already corrected that entry", async () => {
+    // A 409 is not worth retrying, and a generic failure invites exactly that.
+    await open({ postStatus: 409, postBody: { detail: { code: "PLACEMENT_ALREADY_CORRECTED" } } });
+    click("correct-placement-e1");
+    set("placement-location", "loc-cool");
+    await submit();
+
+    expect(container.querySelector('[data-testid="placement-error"]')?.textContent)
+      .toMatch(/already corrected that entry/i);
+  });
+
+  it("distinguishes a vanished target from an already-corrected one", async () => {
+    await open({ postStatus: 404, postBody: { detail: { code: "CORRECTION_TARGET_NOT_FOUND" } } });
+    click("correct-placement-e1");
+    set("placement-location", "loc-cool");
+    await submit();
+
+    const message = container.querySelector('[data-testid="placement-error"]')?.textContent ?? "";
+    expect(message).toMatch(/no longer in this plant's history/i);
+    expect(message).not.toMatch(/already corrected/i);
+  });
+
+  it("lets a correction name a retired location", async () => {
+    // The plant really was there. Refusing to say so forces a false history.
+    await open({
+      locations: { locations: [...twoLocations.locations, { id: "loc-gone", name: "Old bench", kind: "greenhouse_bench", retired_at: "2026-02-01T00:00:00Z" }] },
+    });
+    click("correct-placement-e1");
+
+    const options = [...container.querySelectorAll('[data-testid="placement-location"] option')].map((o) => o.getAttribute("value"));
+    expect(options).toContain("loc-gone");
+  });
+
+  it("does not offer a retired location for an ordinary move", async () => {
+    await open({
+      locations: { locations: [...twoLocations.locations, { id: "loc-gone", name: "Old bench", kind: "greenhouse_bench", retired_at: "2026-02-01T00:00:00Z" }] },
+    });
+
+    const options = [...container.querySelectorAll('[data-testid="placement-location"] option')].map((o) => o.getAttribute("value"));
+    expect(options).not.toContain("loc-gone");
+  });
+
+  it("lets the grower back out of a correction", async () => {
+    await open();
+    click("correct-placement-e1");
+    expect(container.querySelector('[data-testid="placement-reason-select"]')).toBeNull();
+
+    click("cancel-correction");
+    expect(container.querySelector('[data-testid="placement-reason-select"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="correcting-placement"]')).toBeNull();
+  });
+});
+
 describe("MyConservatory placement assessment", () => {
   function assessmentFetch(body: unknown, status = 200) {
     return vi.fn(async (input: RequestInfo | URL) => {
