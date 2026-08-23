@@ -53,3 +53,14 @@ export function genusProfileResearchHref(genus: string): string {
   });
   return `/research?${params.toString()}`;
 }
+
+/**
+ * Continue from a dedicated Genus Profile into the Species browser using the
+ * receiver's existing genus filter. This carries only the bounded genus name;
+ * no provenance, evidence, locality, or occurrence material is promoted into
+ * the Species surface.
+ */
+export function genusProfileSpeciesHref(genus: string): string {
+  const params = new URLSearchParams({ genus: boundedGenus(genus) });
+  return `/species?${params.toString()}`;
+}
