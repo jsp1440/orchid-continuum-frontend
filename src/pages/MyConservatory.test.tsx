@@ -1668,6 +1668,77 @@ describe("MyConservatory placement assessment", () => {
     expect(note).toMatch(/what else is on the bench/i);
   });
 
+  /**
+   * An unreachable evidence store must never read as settled scientific silence.
+   *
+   * "The Continuum holds no cultivation evidence for this taxon" is a claim
+   * about the literature. If a routine outage can produce that sentence, the
+   * sentence is worthless — and a grower may leave a plant on a cold bench
+   * believing nobody has ever published a minimum for it.
+   */
+  const sourceUnread = {
+    assessments: [
+      { variable: "temperature_c", outcome: "unassessable", reason: "REQUIREMENT_SOURCE_UNAVAILABLE" },
+      {
+        variable: "relative_humidity_pct",
+        outcome: "unassessable",
+        reason: "NO_CONDITION_AND_REQUIREMENT_SOURCE_UNAVAILABLE",
+      },
+    ],
+    counts: { within: 0, outside: 0, unassessable: 2, conflicting: 0 },
+    anything_assessed: false,
+    requirement_source_consulted: false,
+    is_recommendation: false,
+  };
+
+  it("says the evidence store could not be read rather than that the taxon is unstudied", async () => {
+    await open(sourceUnread);
+    const banner = container.querySelector('[data-testid="requirement-source-unread"]')?.textContent ?? "";
+    expect(banner).toMatch(/could not be read/i);
+    expect(banner).toMatch(/nobody looked/i);
+    // The generic "nothing could be compared" copy blames the taxon and the
+    // bench. Neither is what happened.
+    expect(container.querySelector('[data-testid="nothing-assessed"]')).toBeNull();
+  });
+
+  it("never says there is no evidence for the taxon when nothing was consulted", async () => {
+    await open(sourceUnread);
+    const panel = container.querySelector('[data-testid="placement-assessment"]')?.textContent ?? "";
+    expect(panel).not.toMatch(/holds no cultivation evidence for this taxon/i);
+    expect(container.querySelector('[data-testid="assessment-temperature_c"]')?.textContent)
+      .toMatch(/store holding cultivation evidence could not be read/i);
+    // The variable with neither a reading nor a lookup has to say both, and
+    // still must not imply the taxon was checked and found wanting.
+    const humidity = container.querySelector('[data-testid="assessment-relative_humidity_pct"]')?.textContent ?? "";
+    expect(humidity).toMatch(/nothing has been recorded here/i);
+    expect(humidity).toMatch(/could not be read/i);
+    expect(humidity).not.toMatch(/evidence for this taxon/i);
+  });
+
+  it("still lists what the grower recorded when the evidence store is unreadable", async () => {
+    // Their own readings are theirs. A literature outage does not take them
+    // away, and hiding them would make an outage look like data loss.
+    await open({
+      ...sourceUnread,
+      assessments: [{
+        variable: "temperature_c",
+        outcome: "unassessable",
+        reason: "REQUIREMENT_SOURCE_UNAVAILABLE",
+        condition: { value: 8, unit: "degrees Celsius", origin: "measured" },
+      }],
+    });
+    expect(container.querySelector('[data-testid="assessment-condition-temperature_c"]')?.textContent)
+      .toMatch(/recorded: 8/i);
+  });
+
+  it("treats a backend that omits the flag as having consulted the store", async () => {
+    // The field is new. An older backend that never carried it did read its
+    // store, and rendering an outage banner for it would invent a fault.
+    await open(unassessable);
+    expect(container.querySelector('[data-testid="requirement-source-unread"]')).toBeNull();
+    expect(container.querySelector('[data-testid="nothing-assessed"]')).not.toBeNull();
+  });
+
   it("keeps a backend without the route distinct from a plant with nothing to assess", async () => {
     await open({ detail: "not found" }, 404);
     expect(container.querySelector('[data-testid="assessment-unavailable"]')).not.toBeNull();
