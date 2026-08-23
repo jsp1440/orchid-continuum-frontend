@@ -2,8 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { parseCalyxRouteContext } from '@/lib/calyxConversation';
 import {
   FEATURED_TAXON_ORIGIN,
+  atlasWorkspaceCalyxHref,
+  atlasWorkspaceResearchHref,
+  atlasWorkspaceSpeciesHref,
   featuredTaxonAtlasHref,
   featuredTaxonCalyxHref,
+  featuredTaxonResearchHref,
 } from '@/lib/featuredTaxonNavigation';
 
 describe('featured taxon navigation contracts', () => {
@@ -48,5 +52,24 @@ describe('featured taxon navigation contracts', () => {
   it('fails closed when no featured genus is available', () => {
     expect(() => featuredTaxonAtlasHref('   ')).toThrow('Featured taxon genus is required');
     expect(() => featuredTaxonCalyxHref('')).toThrow('Featured taxon genus is required');
+  });
+
+  it('accepts only a bounded canonical genus across homepage and Atlas handoffs', () => {
+    const handoffs = [
+      featuredTaxonAtlasHref,
+      featuredTaxonCalyxHref,
+      featuredTaxonResearchHref,
+      atlasWorkspaceCalyxHref,
+      atlasWorkspaceResearchHref,
+      atlasWorkspaceSpeciesHref,
+    ];
+
+    for (const handoff of handoffs) {
+      expect(() => handoff('Phalaenopsis amabilis')).toThrow('bounded canonical genus');
+      expect(() => handoff('phalaenopsis')).toThrow('bounded canonical genus');
+      expect(() => handoff('Phalaenopsis?locality=hidden')).toThrow('bounded canonical genus');
+      expect(() => handoff(`A${'a'.repeat(120)}`)).toThrow('bounded canonical genus');
+      expect(() => handoff(null as unknown as string)).toThrow('bounded canonical genus');
+    }
   });
 });
