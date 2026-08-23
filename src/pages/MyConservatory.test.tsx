@@ -823,3 +823,164 @@ describe("MyConservatory growing locations", () => {
     expect(container.querySelector('[data-testid="retired-locations"]')?.textContent).toContain("Dismantled bench");
   });
 });
+
+/**
+ * The plant ledger on the dossier.
+ *
+ * Two properties carry the weight: the two clocks stay apart, and a correction
+ * stays visible. A grower noticing on Sunday that a plant spiked last week is
+ * making one claim about the plant and a weaker one about timing; showing only
+ * the occurrence hides how late the record was made.
+ */
+describe("MyConservatory plant ledger", () => {
+  const emptyTimeline = { plant_id: "p1", standing: [], corrected: [], event_count: 0, is_scientific_evidence: false };
+
+  function ledgerFetch(timeline: unknown = emptyTimeline, onPost?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/events") && init?.method === "POST") {
+        const result = onPost ?? { ok: true, status: 201, body: { id: "new", kind: "watered", occurred_at: "2026-08-20T00:00:00Z", recorded_at: "2026-08-20T00:00:00Z", recorder_kind: "grower", note: null, supersedes_id: null, superseded_by_id: null } };
+        return { ok: result.ok, status: result.status ?? 201, json: async () => result.body } as Response;
+      }
+      if (url.includes("/events")) return { ok: true, status: 200, json: async () => timeline } as Response;
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", current: null, history: [] }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => ({ locations: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement | HTMLSelectElement;
+    act(() => {
+      const proto = field instanceof HTMLSelectElement ? HTMLSelectElement.prototype : HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event(field instanceof HTMLSelectElement ? "change" : "input", { bubbles: true }));
+    });
+  }
+
+  async function open(timeline: unknown = emptyTimeline, onPost?: Parameters<typeof ledgerFetch>[1]) {
+    const fetchMock = ledgerFetch(timeline, onPost);
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  it("shows both clocks when the record was made later than the event", async () => {
+    // The gap is the fact: an event recorded six days late is a weaker claim
+    // about timing than one recorded the same hour.
+    await open({
+      ...emptyTimeline,
+      event_count: 1,
+      standing: [{ id: "e1", kind: "spike_observed", occurred_at: "2026-08-16T00:00:00Z", recorded_at: "2026-08-22T00:00:00Z", recorder_kind: "grower", note: null, supersedes_id: null, superseded_by_id: null }],
+    });
+    const entry = container.querySelector('[data-testid="event-spike_observed"]')?.textContent ?? "";
+    expect(entry).toContain("2026-08-16");
+    expect(entry).toMatch(/recorded 2026-08-22/);
+  });
+
+  it("does not clutter an entry recorded the same day", async () => {
+    await open({
+      ...emptyTimeline,
+      event_count: 1,
+      standing: [{ id: "e1", kind: "watered", occurred_at: "2026-08-20T00:00:00Z", recorded_at: "2026-08-20T06:00:00Z", recorder_kind: "grower", note: null, supersedes_id: null, superseded_by_id: null }],
+    });
+    expect(container.querySelector('[data-testid="event-recorded-late-e1"]')).toBeNull();
+  });
+
+  it("will not record an observation without saying when it happened", async () => {
+    // Defaulting to today would forge the plant's timeline.
+    await open();
+    const submit = () => container.querySelector('[data-testid="event-submit"]') as HTMLButtonElement;
+    expect(submit().disabled).toBe(true);
+    set("event-kind", "watered");
+    expect(submit().disabled).toBe(true);
+    set("event-day", "2026-08-20");
+    expect(submit().disabled).toBe(false);
+  });
+
+  it("does not prefill the occurrence date", async () => {
+    await open();
+    expect((container.querySelector('[data-testid="event-day"]') as HTMLInputElement).value).toBe("");
+  });
+
+  it("refuses a future occurrence date", async () => {
+    await open();
+    const field = container.querySelector('[data-testid="event-day"]') as HTMLInputElement;
+    expect(field.getAttribute("max")).toBe(new Date().toISOString().slice(0, 10));
+  });
+
+  it("posts the kind and occurrence the grower chose", async () => {
+    const fetchMock = await open();
+    set("event-kind", "repotted");
+    set("event-day", "2026-08-20");
+    const form = container.querySelector('[data-testid="record-event"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => String(call[0]).includes("/events") && (call[1] as RequestInit)?.method === "POST");
+    const body = JSON.parse(String((post?.[1] as RequestInit).body));
+    expect(body.kind).toBe("repotted");
+    expect(body.occurred_at).toContain("2026-08-20");
+  });
+
+  it("keeps corrected records visible", async () => {
+    // "I thought it flowered in March and I was wrong" is itself information.
+    await open({
+      ...emptyTimeline,
+      event_count: 2,
+      standing: [],
+      corrected: [{ id: "e1", kind: "flowering_observed", occurred_at: "2026-03-01T00:00:00Z", recorded_at: "2026-03-02T00:00:00Z", recorder_kind: "grower", note: null, supersedes_id: null, superseded_by_id: "e2" }],
+    });
+    const corrected = container.querySelector('[data-testid="corrected-events"]');
+    expect(corrected).not.toBeNull();
+    expect(corrected?.textContent).toContain("Flowering");
+  });
+
+  it("states these are not scientific evidence", async () => {
+    await open();
+    const provenance = container.querySelector('[data-testid="ledger-provenance"]')?.textContent ?? "";
+    expect(provenance).toMatch(/not scientific evidence/i);
+    expect(provenance).toMatch(/not published as observations of the species/i);
+  });
+
+  it("reports a refused observation instead of showing it as recorded", async () => {
+    await open(emptyTimeline, { ok: false, status: 422, body: { detail: { code: "EVENT_KIND_UNRECOGNISED" } } });
+    set("event-kind", "watered");
+    set("event-day", "2026-08-20");
+    const form = container.querySelector('[data-testid="record-event"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="event-error"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="event-list"]')).toBeNull();
+  });
+
+  it("keeps a malformed ledger response distinct from a plant with no events", async () => {
+    // A 200 whose body has no standing list is a contract the service did not
+    // honour. Rendering it as "nothing has been recorded" would be a claim
+    // about the plant, made on the strength of a broken payload.
+    await open({ plant_id: "p1" });
+    expect(container.querySelector('[data-testid="ledger-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="no-events"]')).toBeNull();
+    expect(container.querySelector('[data-testid="record-event"]')).toBeNull();
+  });
+
+  it("keeps a backend without the ledger distinct from a plant with no events", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/events")) return { ok: false, status: 404, json: async () => ({ detail: "not found" }) } as Response;
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", current: null, history: [] }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => ({ locations: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+
+    expect(container.querySelector('[data-testid="ledger-unavailable"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="no-events"]')).toBeNull();
+  });
+});

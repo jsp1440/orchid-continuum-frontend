@@ -35,6 +35,27 @@ type PlacementView = {
   history: Placement[];
 };
 
+type PlantEvent = {
+  id: string;
+  kind: string;
+  /** When it happened in the world. */
+  occurred_at: string;
+  /** When somebody wrote it down. Never the same fact as occurred_at. */
+  recorded_at: string;
+  recorder_kind: string;
+  note: string | null;
+  supersedes_id: string | null;
+  superseded_by_id: string | null;
+};
+
+type PlantTimeline = {
+  plant_id: string;
+  standing: PlantEvent[];
+  corrected: PlantEvent[];
+  event_count: number;
+  is_scientific_evidence: boolean;
+};
+
 type GrowingLocation = { id: string; name: string; kind: string; retired_at?: string | null };
 
 /** One environmental variable, carrying how it came to be known. */
@@ -200,6 +221,185 @@ const ORIGIN_LABEL: Record<string, string> = {
   inferred: "inferred, not measured",
   unknown: "not recorded",
 };
+
+/** What a grower actually does to a plant. A generic "note" is deliberately absent. */
+const EVENT_KINDS: { value: string; label: string }[] = [
+  { value: "watered", label: "Watered" },
+  { value: "fertilised", label: "Fertilised" },
+  { value: "repotted", label: "Repotted" },
+  { value: "mounted", label: "Mounted" },
+  { value: "spike_observed", label: "Spike seen" },
+  { value: "flowering_observed", label: "Flowering" },
+  { value: "leaf_observation", label: "Leaf observation" },
+  { value: "root_observation", label: "Root observation" },
+  { value: "pest_observation", label: "Pest seen" },
+  { value: "disease_observation", label: "Disease seen" },
+  { value: "treatment_applied", label: "Treatment applied" },
+  { value: "photograph_taken", label: "Photograph taken" },
+  { value: "died", label: "Died" },
+  { value: "disposed", label: "Disposed of" },
+];
+
+const EVENT_LABEL = new Map(EVENT_KINDS.map((kind) => [kind.value, kind.label]));
+
+/** A date input yields YYYY-MM-DD; the ledger stores an instant. */
+function asOccurredAt(day: string): string {
+  return new Date(`${day}T00:00:00Z`).toISOString();
+}
+
+function asDay(instant: string): string {
+  return (instant || "").slice(0, 10);
+}
+
+/**
+ * The plant's ledger: what happened, and when anybody wrote it down.
+ *
+ * Both timestamps are shown whenever they disagree. A grower noticing on
+ * Sunday that a plant spiked last week is making one claim about the plant and
+ * a weaker one about timing, and showing only the occurrence hides how late
+ * the record was made.
+ *
+ * The form will not let a grower record an event as happening in the future,
+ * and it does not silently substitute today: an occurrence date is the one
+ * fact only the grower knows.
+ *
+ * Corrections are shown, not hidden. "I thought it flowered in March and I was
+ * wrong" is itself information about the collection.
+ */
+function PlantLedger({ plantId }: { plantId: string }) {
+  const request = useApi();
+  const [timeline, setTimeline] = useState<PlantTimeline>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [loadError, setLoadError] = useState<string>();
+  const [kind, setKind] = useState("");
+  const [day, setDay] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string>();
+
+  useEffect(() => {
+    let active = true;
+    request<PlantTimeline>(`/api/conservatory/plants/${encodeURIComponent(plantId)}/events`)
+      .then((result) => {
+        if (!active) return;
+        // A response without a standing list is a contract the service did not
+        // honour, and must not render as "nothing has happened to this plant".
+        if (!result || !Array.isArray(result.standing)) { setUnavailable(true); return; }
+        setTimeline(result);
+      })
+      .catch((reason) => {
+        if (!active) return;
+        if (reason instanceof ApiError && reason.status === 404) setUnavailable(true);
+        else setLoadError(reason instanceof Error ? reason.message : "The ledger could not be loaded");
+      });
+    return () => { active = false; };
+  }, [plantId, request]);
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  async function submit(formEvent: FormEvent) {
+    formEvent.preventDefault();
+    if (!kind || !day) return;
+    setSaving(true);
+    setError(undefined);
+    try {
+      const created = await request<PlantEvent>(
+        `/api/conservatory/plants/${encodeURIComponent(plantId)}/events`,
+        { method: "POST", body: JSON.stringify({ kind, occurred_at: asOccurredAt(day), note: note || null }) },
+      );
+      setTimeline((current) =>
+        current
+          ? { ...current, standing: [...current.standing, created], event_count: current.event_count + 1 }
+          : current,
+      );
+      setKind(""); setDay(""); setNote("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The observation could not be recorded");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (unavailable) return <section className="mt-6 rounded-xl border border-dashed p-5" data-testid="ledger-unavailable">
+    <h3 className="text-sm font-semibold">The plant ledger is not available from this backend</h3>
+    <p className="mt-1 text-xs text-muted-foreground">This says nothing about what has happened to the plant.</p>
+  </section>;
+
+  if (loadError) return <section className="mt-6 rounded-xl border border-destructive/40 bg-destructive/5 p-5" role="alert" data-testid="ledger-error">
+    <p className="text-xs">{loadError}</p>
+  </section>;
+
+  if (!timeline) return <p className="mt-6 text-sm text-muted-foreground" role="status">Loading the plant ledger…</p>;
+
+  return <section className="mt-6 rounded-xl border p-5" data-testid="plant-ledger">
+    <h3 className="text-sm font-semibold">What has happened to this plant</h3>
+
+    <form className="mt-3 space-y-3 border-b pb-4" onSubmit={submit} data-testid="record-event">
+      <div className="flex flex-wrap gap-3">
+        <label className="text-sm">
+          <span className="block text-xs text-muted-foreground">What happened</span>
+          <select className="mt-1 rounded-md border px-3 py-2" value={kind} data-testid="event-kind"
+            onChange={(changed) => setKind(changed.target.value)}>
+            <option value="">Choose…</option>
+            {EVENT_KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+        </label>
+        <label className="text-sm">
+          <span className="block text-xs text-muted-foreground">When it happened</span>
+          {/* Not defaulted to today: when it happened is the one fact only the
+              grower knows, and guessing it would forge the plant's timeline. */}
+          <input type="date" max={today} className="mt-1 rounded-md border px-3 py-2" value={day}
+            data-testid="event-day" onChange={(changed) => setDay(changed.target.value)} />
+        </label>
+      </div>
+      <label className="block text-sm">
+        <span className="block text-xs text-muted-foreground">Note (optional)</span>
+        <input className="mt-1 w-full rounded-md border px-3 py-2" value={note} data-testid="event-note"
+          onChange={(changed) => setNote(changed.target.value)} />
+      </label>
+      {error && <p className="text-xs text-destructive" role="alert" data-testid="event-error">{error}</p>}
+      <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
+        disabled={saving || !kind || !day} data-testid="event-submit">
+        {saving ? "Recording…" : "Record observation"}
+      </button>
+    </form>
+
+    {timeline.standing.length ? (
+      <ol className="mt-4 space-y-2" data-testid="event-list">
+        {timeline.standing.map((event) => (
+          <li key={event.id} className="text-sm" data-testid={`event-${event.kind}`}>
+            <span className="font-medium">{EVENT_LABEL.get(event.kind) ?? event.kind}</span>
+            <span className="text-muted-foreground"> — {asDay(event.occurred_at)}</span>
+            {asDay(event.recorded_at) !== asDay(event.occurred_at) && (
+              // Shown only when they disagree, because that gap is the fact.
+              <span className="text-muted-foreground" data-testid={`event-recorded-late-${event.id}`}>
+                {" "}(recorded {asDay(event.recorded_at)})
+              </span>
+            )}
+            {event.note && <span className="text-muted-foreground"> — {event.note}</span>}
+          </li>
+        ))}
+      </ol>
+    ) : (
+      <p className="mt-4 text-sm text-muted-foreground" data-testid="no-events">Nothing has been recorded for this plant yet.</p>
+    )}
+
+    {timeline.corrected.length > 0 && <div className="mt-4 border-t pt-3" data-testid="corrected-events">
+      <h4 className="text-xs font-semibold text-muted-foreground">Corrected</h4>
+      <ul className="mt-1 space-y-1 text-xs text-muted-foreground line-through">
+        {timeline.corrected.map((event) => (
+          <li key={event.id}>{EVENT_LABEL.get(event.kind) ?? event.kind} — {asDay(event.occurred_at)}</li>
+        ))}
+      </ul>
+      <p className="mt-1 text-[11px] text-muted-foreground">Kept because a corrected record is itself part of the collection&rsquo;s history.</p>
+    </div>}
+
+    <p className="mt-4 text-[11px] text-muted-foreground" data-testid="ledger-provenance">
+      These are your records of your own plant. They are not scientific evidence and are not
+      published as observations of the species.
+    </p>
+  </section>;
+}
 
 /**
  * The kinds of place a grower actually keeps orchids.
@@ -587,6 +787,7 @@ function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: 
     <div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div>
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
     <CultivationContext plantId={plant.id} />
+    <PlantLedger plantId={plant.id} />
   </div>;
 }
 
