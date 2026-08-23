@@ -276,6 +276,8 @@ function PlantLedger({ plantId }: { plantId: string }) {
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string>();
+  /** The standing event a correction is about to supersede, if any. */
+  const [correcting, setCorrecting] = useState<PlantEvent>();
 
   useEffect(() => {
     let active = true;
@@ -299,20 +301,44 @@ function PlantLedger({ plantId }: { plantId: string }) {
 
   async function submit(formEvent: FormEvent) {
     formEvent.preventDefault();
-    if (!kind || !day) return;
+    // A correction fixes the kind for us, so only a new observation needs one.
+    // This guard and the submit button's must agree; when they drifted apart,
+    // the button enabled itself and the handler silently did nothing.
+    if ((!correcting && !kind) || !day) return;
     setSaving(true);
     setError(undefined);
     try {
       const created = await request<PlantEvent>(
         `/api/conservatory/plants/${encodeURIComponent(plantId)}/events`,
-        { method: "POST", body: JSON.stringify({ kind, occurred_at: asOccurredAt(day), note: note || null }) },
+        {
+          method: "POST",
+          body: JSON.stringify({
+            // A correction is its own kind of event. Sending the corrected
+            // event's kind instead would leave two competing claims with
+            // nothing saying which supersedes which.
+            kind: correcting ? "correction" : kind,
+            occurred_at: asOccurredAt(day),
+            note: note || null,
+            supersedes_id: correcting ? correcting.id : null,
+          }),
+        },
       );
-      setTimeline((current) =>
-        current
-          ? { ...current, standing: [...current.standing, created], event_count: current.event_count + 1 }
-          : current,
-      );
-      setKind(""); setDay(""); setNote("");
+      setTimeline((current) => {
+        if (!current) return current;
+        if (!correcting) {
+          return { ...current, standing: [...current.standing, created], event_count: current.event_count + 1 };
+        }
+        // The superseded record moves out of what stands and into what was
+        // corrected. It is never removed: a corrected entry is part of the
+        // collection's history.
+        return {
+          ...current,
+          standing: current.standing.filter((event) => event.id !== correcting.id),
+          corrected: [...current.corrected, { ...correcting, superseded_by_id: created.id }],
+          event_count: current.event_count + 1,
+        };
+      });
+      setKind(""); setDay(""); setNote(""); setCorrecting(undefined);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The observation could not be recorded");
     } finally {
@@ -335,15 +361,21 @@ function PlantLedger({ plantId }: { plantId: string }) {
     <h3 className="text-sm font-semibold">What has happened to this plant</h3>
 
     <form className="mt-3 space-y-3 border-b pb-4" onSubmit={submit} data-testid="record-event">
+      {correcting && <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-xs" data-testid="correcting-banner">
+        Correcting: <strong>{EVENT_LABEL.get(correcting.kind) ?? correcting.kind}</strong> on {asDay(correcting.occurred_at)}.
+        The original stays in the record, marked as corrected — it is not deleted.
+        <button type="button" className="ml-2 underline" data-testid="cancel-correction"
+          onClick={() => { setCorrecting(undefined); setDay(""); setNote(""); }}>Cancel</button>
+      </div>}
       <div className="flex flex-wrap gap-3">
-        <label className="text-sm">
+        {!correcting && <label className="text-sm">
           <span className="block text-xs text-muted-foreground">What happened</span>
           <select className="mt-1 rounded-md border px-3 py-2" value={kind} data-testid="event-kind"
             onChange={(changed) => setKind(changed.target.value)}>
             <option value="">Choose…</option>
             {EVENT_KINDS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-        </label>
+        </label>}
         <label className="text-sm">
           <span className="block text-xs text-muted-foreground">When it happened</span>
           {/* Not defaulted to today: when it happened is the one fact only the
@@ -359,8 +391,8 @@ function PlantLedger({ plantId }: { plantId: string }) {
       </label>
       {error && <p className="text-xs text-destructive" role="alert" data-testid="event-error">{error}</p>}
       <button type="submit" className="rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
-        disabled={saving || !kind || !day} data-testid="event-submit">
-        {saving ? "Recording…" : "Record observation"}
+        disabled={saving || (!correcting && !kind) || !day} data-testid="event-submit">
+        {saving ? "Recording…" : correcting ? "Record correction" : "Record observation"}
       </button>
     </form>
 
@@ -377,6 +409,10 @@ function PlantLedger({ plantId }: { plantId: string }) {
               </span>
             )}
             {event.note && <span className="text-muted-foreground"> — {event.note}</span>}
+            <button type="button" className="ml-2 text-xs underline" data-testid={`correct-${event.id}`}
+              onClick={() => { setCorrecting(event); setDay(""); setNote(""); setError(undefined); }}>
+              Correct this
+            </button>
           </li>
         ))}
       </ol>

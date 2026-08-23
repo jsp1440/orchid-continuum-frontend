@@ -1116,3 +1116,137 @@ describe("MyConservatory recording an environmental reading", () => {
     expect((container.querySelector('[data-testid="reading-value"]') as HTMLInputElement).value).toBe("12.5");
   });
 });
+
+/**
+ * Correcting an observation.
+ *
+ * The ledger is append-only, so a correction is a new event naming the one it
+ * supersedes. The interface has to make that visible: a grower who thinks they
+ * are editing will not understand why the old entry is still on screen, and a
+ * grower who thinks they are deleting will be wrong about what the record now
+ * says.
+ */
+describe("MyConservatory correcting an observation", () => {
+  const standing = {
+    id: "e1",
+    kind: "flowering_observed",
+    occurred_at: "2026-03-01T00:00:00Z",
+    recorded_at: "2026-03-02T00:00:00Z",
+    recorder_kind: "grower",
+    note: null,
+    supersedes_id: null,
+    superseded_by_id: null,
+  };
+  const timelineWithOne = { plant_id: "p1", standing: [standing], corrected: [], event_count: 1, is_scientific_evidence: false };
+
+  function ledgerFetch(onPost?: { ok: boolean; status?: number; body: unknown }) {
+    return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (url.includes("/events") && init?.method === "POST") {
+        const result = onPost ?? { ok: true, status: 201, body: { ...standing, id: "e2", kind: "correction", supersedes_id: "e1" } };
+        return { ok: result.ok, status: result.status ?? 201, json: async () => result.body } as Response;
+      }
+      if (url.includes("/events")) return { ok: true, status: 200, json: async () => timelineWithOne } as Response;
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", current: null, history: [] }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => ({ locations: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+  }
+
+  function click(testid: string) {
+    const el = container.querySelector(`[data-testid="${testid}"]`) as HTMLButtonElement;
+    act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
+  }
+
+  function set(testid: string, value: string) {
+    const field = container.querySelector(`[data-testid="${testid}"]`) as HTMLInputElement;
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(field, value);
+      field.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+
+  async function open(onPost?: Parameters<typeof ledgerFetch>[0]) {
+    const fetchMock = ledgerFetch(onPost);
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    return fetchMock;
+  }
+
+  it("says the original is kept, not deleted", async () => {
+    // A grower who thinks they are deleting will be wrong about what the
+    // record now says.
+    await open();
+    click("correct-e1");
+    const banner = container.querySelector('[data-testid="correcting-banner"]')?.textContent ?? "";
+    expect(banner).toMatch(/stays in the record, marked as corrected/i);
+    expect(banner).toMatch(/not deleted/i);
+  });
+
+  it("posts a correction naming the event it supersedes", async () => {
+    const fetchMock = await open();
+    click("correct-e1");
+    set("event-day", "2026-03-05");
+    const form = container.querySelector('[data-testid="record-event"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    const post = fetchMock.mock.calls.find((call) => String(call[0]).includes("/events") && (call[1] as RequestInit)?.method === "POST");
+    const body = JSON.parse(String((post?.[1] as RequestInit).body));
+    // A correction is its own kind; sending the corrected event's kind would
+    // leave two competing claims with nothing saying which supersedes which.
+    expect(body.kind).toBe("correction");
+    expect(body.supersedes_id).toBe("e1");
+  });
+
+  it("moves the corrected entry out of what stands and into what was corrected", async () => {
+    await open();
+    click("correct-e1");
+    set("event-day", "2026-03-05");
+    const form = container.querySelector('[data-testid="record-event"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="corrected-events"]')?.textContent).toContain("Flowering");
+    expect(container.querySelector('[data-testid="event-flowering_observed"]')).toBeNull();
+  });
+
+  it("hides the kind chooser while correcting, since the kind is fixed", async () => {
+    await open();
+    expect(container.querySelector('[data-testid="event-kind"]')).not.toBeNull();
+    click("correct-e1");
+    expect(container.querySelector('[data-testid="event-kind"]')).toBeNull();
+  });
+
+  it("still requires a date for the correction", async () => {
+    await open();
+    click("correct-e1");
+    expect((container.querySelector('[data-testid="event-submit"]') as HTMLButtonElement).disabled).toBe(true);
+    set("event-day", "2026-03-05");
+    expect((container.querySelector('[data-testid="event-submit"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("can be cancelled back to recording a new observation", async () => {
+    await open();
+    click("correct-e1");
+    click("cancel-correction");
+    expect(container.querySelector('[data-testid="correcting-banner"]')).toBeNull();
+    expect(container.querySelector('[data-testid="event-kind"]')).not.toBeNull();
+  });
+
+  it("leaves the timeline alone when the correction is refused", async () => {
+    await open({ ok: false, status: 409, body: { detail: { code: "EVENT_ALREADY_SUPERSEDED" } } });
+    click("correct-e1");
+    set("event-day", "2026-03-05");
+    const form = container.querySelector('[data-testid="record-event"]') as HTMLFormElement;
+    await act(async () => { form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush();
+
+    expect(container.querySelector('[data-testid="event-error"]')).not.toBeNull();
+    // The original still stands: nothing was superseded.
+    expect(container.querySelector('[data-testid="event-flowering_observed"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="corrected-events"]')).toBeNull();
+  });
+});
