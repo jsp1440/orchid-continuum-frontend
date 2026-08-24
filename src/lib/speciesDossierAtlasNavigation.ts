@@ -25,3 +25,32 @@ export function speciesDossierAtlasHref(species: unknown): string | null {
   const params = new URLSearchParams({ species: canonical });
   return `/atlas?${params.toString()}`;
 }
+
+export interface SpeciesDossierAtlasIdentity {
+  acceptedName?: unknown;
+  fullScientificName?: unknown;
+  canonicalName?: unknown;
+  scientificName?: unknown;
+}
+
+/**
+ * Resolve the Species Dossier's Atlas subject without ever falling back to the
+ * route/taxonomy id. The first identity field actually supplied is treated as
+ * authoritative; if that field is malformed, fail closed rather than skipping
+ * past it to a lower-priority value that could describe a different taxon.
+ */
+export function speciesDossierAtlasHrefFromIdentity(
+  identity: SpeciesDossierAtlasIdentity,
+): string | null {
+  for (const candidate of [
+    identity.acceptedName,
+    identity.fullScientificName,
+    identity.canonicalName,
+    identity.scientificName,
+  ]) {
+    if (candidate === null || candidate === undefined || candidate === '') continue;
+    return speciesDossierAtlasHref(candidate);
+  }
+
+  return null;
+}
