@@ -441,3 +441,72 @@ test("12. everything survives a reload and a sign-out / sign-in cycle", async ()
   await expect(page.getByTestId("event-list")).toBeVisible();
   await expect(page.getByTestId("photograph-list")).toBeVisible();
 });
+
+/* ---------------------------------------------------------------- 13 ----- */
+
+test("13. the signed-in Conservatory pages fit an iPad in portrait", async () => {
+  // The mounted-layout suite cannot reach any of these: they sit behind
+  // authentication, so its route list stops at the public site. That left the
+  // one module the owner uses most as the only part of the product never
+  // checked at a tablet width, which is the width a grower stands at a bench
+  // holding.
+  //
+  // This runs last on purpose. By now the collection has plants, two benches,
+  // readings, events, a photograph and a placement history, so the pages are
+  // measured full rather than empty — an empty table fits anything.
+  const context = await page.context().browser()!.newContext({
+    viewport: { width: 834, height: 1112 },
+    storageState: await page.context().storageState(),
+  });
+  const tablet = await context.newPage();
+  await tablet.route("**/*", (route) => {
+    const host = new URL(route.request().url()).hostname;
+    return host === "127.0.0.1" || host === "localhost" ? route.continue() : route.abort();
+  });
+
+  const routes = [
+    "/conservatory",
+    "/conservatory/plants",
+    "/conservatory/locations",
+    "/conservatory/review",
+    "/conservatory/could-i-grow-this",
+    "/conservatory/labels",
+    "/conservatory/readiness",
+    "/conservatory/plants/new",
+    plantUrl,
+  ];
+
+  const offenders: string[] = [];
+  for (const route of routes) {
+    await tablet.goto(route, { waitUntil: "domcontentloaded" });
+    await tablet.waitForTimeout(900);
+    // A page that failed to render fits any viewport, so a fitting check on
+    // its own would pass on nine blank screens. Require the module's own
+    // chrome, and require that this is not the signed-out wall.
+    await expect(tablet.getByRole("heading", { name: "My Conservatory" })).toBeVisible();
+    await expect(tablet.getByText("RESTRICTED · CONTINUUM MEMBERS")).toHaveCount(0);
+    const measurement = await tablet.evaluate(() => {
+      const doc = document.documentElement;
+      const widest: string[] = [];
+      if (doc.scrollWidth > doc.clientWidth + 1) {
+        for (const element of document.querySelectorAll("body *")) {
+          const style = getComputedStyle(element);
+          if (style.position === "fixed" || style.pointerEvents === "none") continue;
+          const box = element.getBoundingClientRect();
+          if (box.width > 0 && box.right > doc.clientWidth + 1) {
+            widest.push(String(element.className || element.tagName).slice(0, 70));
+          }
+        }
+      }
+      return { scrollWidth: doc.scrollWidth, clientWidth: doc.clientWidth, widest: widest.slice(0, 3) };
+    });
+    if (measurement.scrollWidth > measurement.clientWidth + 1) {
+      offenders.push(
+        `${route}: scrollWidth ${measurement.scrollWidth} > ${measurement.clientWidth} — ${measurement.widest.join(" | ")}`,
+      );
+    }
+  }
+
+  await context.close();
+  expect(offenders, offenders.join("\n")).toEqual([]);
+});
