@@ -24,6 +24,44 @@ function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
   );
 }
 
+export type GovernedCalyxGenusTurnContext = {
+  origin: string;
+  featured_taxon: {
+    rank: 'genus';
+    accepted_name: string;
+  };
+  featured_taxon_is_evidence: false;
+};
+
+/**
+ * Resolve a generic genus-navigation arrival into the exact bounded context
+ * that may enter a Calyx backend turn.
+ *
+ * `undefined` means this URL does not belong to the generic genus boundary and
+ * another dedicated adapter may handle it. `null` means it does belong here but
+ * violates the producer contract, so callers must fail closed rather than
+ * forwarding a partial genus/origin pair.
+ */
+export function governedCalyxGenusTurnContext(
+  search: string,
+): GovernedCalyxGenusTurnContext | null | undefined {
+  const params = new URLSearchParams(search);
+  const origin = params.get('origin')?.trim() ?? '';
+  if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) return undefined;
+  if (!hasBoundedCanonicalGenus(params) || params.get('context_is_evidence') !== 'false') {
+    return null;
+  }
+
+  return {
+    origin,
+    featured_taxon: {
+      rank: 'genus',
+      accepted_name: params.get('genus')!.trim(),
+    },
+    featured_taxon_is_evidence: false,
+  };
+}
+
 /**
  * True only when a governed generic-genus producer has preserved both its
  * canonical genus identity and the explicit `context_is_evidence=false`
@@ -34,13 +72,7 @@ function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
  * supplying a lookalike query parameter.
  */
 export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string): boolean {
-  const params = new URLSearchParams(search);
-  const origin = params.get('origin')?.trim() ?? '';
-  return (
-    NON_EVIDENTIARY_GENUS_ORIGINS.has(origin) &&
-    hasBoundedCanonicalGenus(params) &&
-    params.get('context_is_evidence') === 'false'
-  );
+  return Boolean(governedCalyxGenusTurnContext(search));
 }
 
 /**
@@ -54,8 +86,5 @@ export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string)
  * `context_is_evidence=false` are enforced here.
  */
 export function rejectsCalyxNavigationContext(search: string): boolean {
-  const params = new URLSearchParams(search);
-  const origin = params.get('origin')?.trim() ?? '';
-  if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) return false;
-  return !calyxNavigationContextIsExplicitlyNonEvidentiary(search);
+  return governedCalyxGenusTurnContext(search) === null;
 }
