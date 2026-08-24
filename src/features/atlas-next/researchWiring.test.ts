@@ -46,10 +46,11 @@ describe('Atlas Next → Research Station wiring', () => {
     expect(genusOnly).toBe('/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false');
   });
 
-  it('routes the Atlas affordance through the governed builder', () => {
+  it('routes the Atlas affordances through the governed continuation model', () => {
     const shell = src('features/atlas-next/AtlasNextShell.tsx');
-    expect(shell).toContain('atlasNextResearchHref');
-    expect(shell).toContain('to={researchHref}');
+    expect(shell).toContain('atlasNextContinuumActions');
+    expect(shell).toContain('continuumActions.map');
+    expect(shell).toContain('to={action.href}');
     // No hand-written research URL may bypass the contract.
     expect(shell).not.toContain('to="/research"');
     expect(shell).not.toContain("to='/research'");
