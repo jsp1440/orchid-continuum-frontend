@@ -37,6 +37,7 @@ import {
   type MissionEvidence,
   type MissionSource,
 } from "@/lib/calyxWorkspace";
+import { citationIdentifierParts } from "@/lib/calyxCitationSource";
 
 const emptySnapshot: CalyxWorkspaceSnapshot = {
   capabilities: null,
@@ -213,7 +214,7 @@ function MissionResult({ mission }: { mission: BrainMission }) {
   );
 }
 
-function CitationList({ items }: { items: CalyxCitation[] }) {
+export function CitationList({ items }: { items: CalyxCitation[] }) {
   if (!items.length) return null;
   return (
     <details className="mt-2 rounded-xl border bg-background px-4 py-3">
@@ -223,7 +224,33 @@ function CitationList({ items }: { items: CalyxCitation[] }) {
           <li key={`${item.doi ?? item.pmid ?? item.title}-${index}`}>
             <p className="font-medium text-foreground">{item.title}</p>
             <p>{[item.authors, item.publication_date, item.journal].filter(Boolean).join(" · ")}</p>
-            <p>{[item.doi ? `DOI ${item.doi}` : null, item.pmid ? `PMID ${item.pmid}` : null, item.pmcid ? `PMCID ${item.pmcid}` : null].filter(Boolean).join(" · ") || "Persistent identifier not supplied"}</p>
+            <p data-testid="citation-identifiers">
+              {(() => {
+                const parts = citationIdentifierParts(item);
+                if (!parts.length) return "Persistent identifier not supplied";
+                // Each well-formed identifier links to its canonical resolver so
+                // the reader can follow the evidence to the source; a malformed
+                // one stays plain text rather than becoming a broken link.
+                return parts.map((part, partIndex) => (
+                  <span key={part.kind}>
+                    {partIndex > 0 ? " · " : ""}
+                    {part.url ? (
+                      <a
+                        href={part.url}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="underline hover:text-foreground"
+                        data-testid={`citation-link-${part.kind}`}
+                      >
+                        {part.label}
+                      </a>
+                    ) : (
+                      part.label
+                    )}
+                  </span>
+                ));
+              })()}
+            </p>
             <p>{item.canonical_evidence ? "Canonical Continuum evidence" : (item.review_state ?? "REVIEW_REQUIRED").replaceAll("_", " ")}</p>
           </li>
         ))}
