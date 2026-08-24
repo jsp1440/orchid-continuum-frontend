@@ -1,6 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
 import { atlasNextResearchHref } from './researchHandoff';
+import { resolveAtlasNextIncomingGenus } from './incomingGenus';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import AtlasGlobe, { type GlobeMark } from './AtlasGlobe';
 import OccurrenceCard from './OccurrenceCard';
@@ -76,6 +78,11 @@ const zoomForScale = (level: ScaleLevel): number =>
   ] ?? 6;
 
 const AtlasNextShell: React.FC = () => {
+  const { filters, setFilters } = useAtlasFilters();
+  const incomingGenus = useMemo(
+    () => resolveAtlasNextIncomingGenus(filters.genera as string[] | undefined),
+    [filters.genera],
+  );
   const data = useAtlasData();
   // Stable identity: an inline `: []` would be a new array every render and
   // would invalidate every memo below it.
@@ -85,7 +92,7 @@ const AtlasNextShell: React.FC = () => {
   const [question, setQuestion] = useState<QuestionId>('where-it-lives');
   const [time] = useState<AtlasTimeState>(DEFAULT_TIME_STATE);
   const [guideStep, setGuideStep] = useState<StepId | null>(null);
-  const [genus, setGenus] = useState<string | null>(null);
+  const [genus, setGenus] = useState<string | null>(() => incomingGenus);
   const [country, setCountry] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
@@ -93,6 +100,17 @@ const AtlasNextShell: React.FC = () => {
   const [showContext, setShowContext] = useState(false);
   const [regionalView, setRegionalView] = useState<RegionalView | null>(null);
   const [hover, setHover] = useState<{ text: string; x: number; y: number } | null>(null);
+
+  // The shared Atlas URL contract can arrive while this route remains mounted.
+  // Keep the shell's one active genus aligned with that contract, but never
+  // choose one genus out of a multi-genus filter: that would silently narrow a
+  // query. Malformed or multi-genus context therefore hydrates no local subject
+  // and cannot open the Research continuation.
+  useEffect(() => {
+    setGenus(incomingGenus);
+    setCountry(null);
+    setSelectedId(null);
+  }, [incomingGenus]);
 
   const availability = useMemo(() => resolveScaleAvailability(points), [points]);
   const availableLevels = useMemo(
@@ -516,6 +534,10 @@ const AtlasNextShell: React.FC = () => {
                 value={genus ?? ''}
                 onChange={(e) => {
                   const v = e.target.value || null;
+                  setFilters((previous) => ({
+                    ...previous,
+                    genera: v ? [v] : undefined,
+                  }));
                   setGenus(v);
                   setCountry(null);
                   setSelectedId(null);
