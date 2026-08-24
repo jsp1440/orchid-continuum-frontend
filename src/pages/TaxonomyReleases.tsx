@@ -15,6 +15,11 @@ import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import { validateOwnerSession } from '@/lib/ownerOperationsConsole';
+import HasslerReleaseLifecyclePanel from '@/components/mission-control/HasslerReleaseLifecyclePanel';
+import {
+  fetchHasslerReleaseStatus,
+  type HasslerReleaseStatusResult,
+} from '@/lib/hasslerReleaseLifecycle';
 
 type TaxonomyReleaseReport = {
   release_id: string;
@@ -95,6 +100,8 @@ export default function TaxonomyReleases() {
   const [ownerAuthenticated, setOwnerAuthenticated] = useState(false);
   const [readiness, setReadiness] = useState<TaxonomyReadiness | null>(null);
   const [stage, setStage] = useState<UploadStage>('idle');
+  const [hasslerStatus, setHasslerStatus] = useState<HasslerReleaseStatusResult | null>(null);
+  const [hasslerLoading, setHasslerLoading] = useState(true);
 
   const uploadEnabled = connection === 'ready' && ownerAuthenticated && Boolean(selectedFile) && !uploading;
 
@@ -149,12 +156,25 @@ export default function TaxonomyReleases() {
     }
   }, []);
 
+  // The exact-release lifecycle is a read-only view. It is fetched independently
+  // of upload readiness: an owner may inspect where the release stands even when
+  // intake is blocked, and the consumer fails closed if the backend cannot answer.
+  const loadHasslerStatus = useCallback(async () => {
+    setHasslerLoading(true);
+    try {
+      setHasslerStatus(await fetchHasslerReleaseStatus());
+    } finally {
+      setHasslerLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     void (async () => {
       const ready = await checkAccessAndReadiness();
       if (ready) await loadReleases();
+      await loadHasslerStatus();
     })();
-  }, [checkAccessAndReadiness, loadReleases]);
+  }, [checkAccessAndReadiness, loadReleases, loadHasslerStatus]);
 
   const uploadRelease = async () => {
     if (!selectedFile) {
@@ -260,6 +280,10 @@ export default function TaxonomyReleases() {
             ) : null}
           </div>
         ) : null}
+
+        <div className="mb-6">
+          <HasslerReleaseLifecyclePanel result={hasslerStatus} loading={hasslerLoading} />
+        </div>
 
         <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
           <section className="rounded-[2rem] border border-white/10 bg-[#0b1c11]/90 p-6 shadow-2xl">
