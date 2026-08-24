@@ -142,7 +142,12 @@ describe('Atlas Next → Calyx handoff', () => {
 
   it('exposes no route channel for Atlas occurrence, locality, project, or evidence material', () => {
     const href = atlasNextCalyxHref({ genus: 'Phalaenopsis' }) ?? '';
+    const parameters = Array.from(new URL(href, 'https://orchidcontinuum.org').searchParams.keys());
 
+    // Parameter names, not substrings of the whole address. Searching the
+    // address for 'evidence=' matches inside `context_is_evidence=false`,
+    // which is the flag that marks this context as *not* evidence — the
+    // opposite of the leak this test exists to catch.
     for (const forbidden of [
       'lat',
       'lng',
@@ -163,7 +168,11 @@ describe('Atlas Next → Calyx handoff', () => {
       'confidence',
       'conclusion',
     ]) {
-      expect(href.toLowerCase()).not.toContain(`${forbidden}=`);
+      expect(parameters).not.toContain(forbidden);
     }
+
+    // And nothing beyond the three the handoff is allowed to carry, so a
+    // parameter nobody thought to forbid cannot slip through either.
+    expect(parameters.sort()).toEqual(['context_is_evidence', 'genus', 'origin']);
   });
 });
