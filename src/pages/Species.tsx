@@ -6,6 +6,7 @@ import Footer from '@/components/orchid/Footer';
 import { searchSpecies, type SpeciesSearchResult } from '@/lib/ocBackend';
 import {
   resolveSpeciesGenusFilter,
+  speciesQueryAfterGenusRouteChange,
   speciesQueryPreservesGenusFilter,
 } from '@/lib/speciesRouteContext';
 
@@ -38,10 +39,18 @@ const Species: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const ctrlRef = useRef<AbortController | null>(null);
+  const previousGenusFilterRef = useRef(genusFilter);
 
-  // Keep the search box in sync when the genus filter changes via URL.
+  // Keep the search box aligned with browser/history navigation. A newly
+  // arrived canonical genus owns the route-derived query. If history removes
+  // that genus, clear the query only when it is still the old route-owned
+  // genus; never erase an independent free-text search.
   useEffect(() => {
-    if (genusFilter) setQuery(genusFilter);
+    const previousGenus = previousGenusFilterRef.current;
+    setQuery((currentQuery) =>
+      speciesQueryAfterGenusRouteChange(previousGenus, genusFilter, currentQuery),
+    );
+    previousGenusFilterRef.current = genusFilter;
   }, [genusFilter]);
 
   const clearGenusFilter = () => {
