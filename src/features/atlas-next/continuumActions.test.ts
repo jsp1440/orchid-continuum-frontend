@@ -22,7 +22,7 @@ const FORBIDDEN_KEYS = [
 ];
 
 describe('Atlas Next cross-Continuum actions', () => {
-  it('emits governed Research and Calyx continuations for one canonical genus', () => {
+  it('emits governed Research, Calyx, and Species continuations for one canonical genus', () => {
     const actions = atlasNextContinuumActions({ genus: 'Phalaenopsis', projectId: 'naocc-demo' });
 
     expect(actions).toEqual([
@@ -36,10 +36,16 @@ describe('Atlas Next cross-Continuum actions', () => {
         label: 'Ask Calyx about this genus',
         href: '/calyx?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false',
       },
+      {
+        id: 'species',
+        label: 'Browse this genus in Species',
+        href: '/species?genus=Phalaenopsis',
+      },
     ]);
 
-    const research = new URL(actions[0].href, 'https://orchid.test');
-    const calyx = new URL(actions[1].href, 'https://orchid.test');
+    const research = new URL(actions.find((action) => action.id === 'research')!.href, 'https://orchid.test');
+    const calyx = new URL(actions.find((action) => action.id === 'calyx')!.href, 'https://orchid.test');
+    const species = new URL(actions.find((action) => action.id === 'species')!.href, 'https://orchid.test');
 
     expect([...research.searchParams.keys()].sort()).toEqual(
       ['context_is_evidence', 'genus', 'origin', 'project'].sort(),
@@ -47,10 +53,12 @@ describe('Atlas Next cross-Continuum actions', () => {
     expect([...calyx.searchParams.keys()].sort()).toEqual(
       ['context_is_evidence', 'genus', 'origin'].sort(),
     );
+    expect([...species.searchParams.keys()]).toEqual(['genus']);
 
     for (const key of FORBIDDEN_KEYS) {
       expect(research.searchParams.has(key)).toBe(false);
       expect(calyx.searchParams.has(key)).toBe(false);
+      expect(species.searchParams.has(key)).toBe(false);
     }
   });
 
@@ -65,10 +73,12 @@ describe('Atlas Next cross-Continuum actions', () => {
     expect(atlasNextContinuumActions({ genus })).toEqual([]);
   });
 
-  it('never carries Research project identity into Calyx', () => {
+  it('never carries Research project identity into Calyx or Species', () => {
     const actions = atlasNextContinuumActions({ genus: 'Phalaenopsis', projectId: 'project-123' });
     const calyx = new URL(actions.find((action) => action.id === 'calyx')!.href, 'https://orchid.test');
+    const species = new URL(actions.find((action) => action.id === 'species')!.href, 'https://orchid.test');
 
     expect(calyx.searchParams.has('project')).toBe(false);
+    expect(species.searchParams.has('project')).toBe(false);
   });
 });
