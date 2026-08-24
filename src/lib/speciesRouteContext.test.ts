@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSpeciesGenusFilter } from './speciesRouteContext';
+import {
+  resolveSpeciesGenusFilter,
+  speciesQueryPreservesGenusFilter,
+} from './speciesRouteContext';
 
 describe('resolveSpeciesGenusFilter', () => {
   it('preserves one bounded canonical genus', () => {
@@ -23,5 +26,23 @@ describe('resolveSpeciesGenusFilter', () => {
     'P'.repeat(121),
   ])('fails closed on malformed route-derived genus context: %s', (value) => {
     expect(resolveSpeciesGenusFilter(value)).toBe('');
+  });
+});
+
+describe('speciesQueryPreservesGenusFilter', () => {
+  it('keeps the route-derived genus only while the search still names that genus', () => {
+    expect(speciesQueryPreservesGenusFilter('Phalaenopsis', 'Phalaenopsis')).toBe(true);
+    expect(speciesQueryPreservesGenusFilter('Phalaenopsis', '  Phalaenopsis  ')).toBe(true);
+  });
+
+  it.each(['Dracula', 'Phalaenopsis amabilis', '', '   '])(
+    'clears the route-derived genus when the visitor changes the search to %s',
+    (query) => {
+      expect(speciesQueryPreservesGenusFilter('Phalaenopsis', query)).toBe(false);
+    },
+  );
+
+  it('never invents a filter when no route-derived genus is active', () => {
+    expect(speciesQueryPreservesGenusFilter('', 'Phalaenopsis')).toBe(false);
   });
 });
