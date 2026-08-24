@@ -445,7 +445,6 @@ describe("CalyxWorkspace conversation lifecycle", () => {
   });
 
   it("offers an immediate retry path during cold-start recovery", async () => {
-    vi.useFakeTimers();
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
     mocks.sendCalyxTurn
       .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
@@ -500,7 +499,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Recovered answer");
   });
 
-  it("cancels a pending cold-start retry when the draft message changes", async () => {
+  it("cancels a pending cold-start retry from the retry controls", async () => {
     vi.useFakeTimers();
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
     mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
@@ -523,10 +522,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
     await act(async () => {
-      textarea.value = "Edited message";
-      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      getButton(container, "Cancel").click();
     });
     await flush(2);
 
@@ -537,7 +534,9 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
     expect(container.textContent).not.toContain("Automatic retry in");
-    expect(textarea.value).toBe("Edited message");
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
+      "Original retry message",
+    );
   });
 
   it("does not restore a committed message when the post-turn refresh fails", async () => {

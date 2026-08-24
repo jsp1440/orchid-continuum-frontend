@@ -422,6 +422,7 @@ export default function CalyxWorkspace() {
   const [conversations, setConversations] = useState<Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<{ message: string; projectId: string } | null>(null);
 
   const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -433,12 +434,9 @@ export default function CalyxWorkspace() {
   const conversationIdRef = useRef<string | null>(null);
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
   const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
-  const retryMessageRef = useRef<string | null>(null);
-  const retryProjectIdRef = useRef<string | null>(null);
 
   const cancelAutoRetry = useCallback(() => {
-    retryMessageRef.current = null;
-    retryProjectIdRef.current = null;
+    setPendingRetry(null);
     setAutoRetryCountdown(null);
   }, []);
 
@@ -478,8 +476,6 @@ export default function CalyxWorkspace() {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      retryMessageRef.current = null;
-      retryProjectIdRef.current = null;
       cancelSpeech();
       stopListening();
     };
@@ -659,8 +655,7 @@ export default function CalyxWorkspace() {
       setAuthRequired(isAuth);
       setConversationError(detail);
       if (isNetwork) {
-        retryMessageRef.current = text;
-        retryProjectIdRef.current = activeProjectId;
+        setPendingRetry({ message: text, projectId: activeProjectId });
         setAutoRetryCountdown(NETWORK_RETRY_SECONDS);
       }
       setMessage(text);
@@ -672,23 +667,23 @@ export default function CalyxWorkspace() {
 
   useEffect(() => {
     if (autoRetryCountdown === null) return;
-    if (!retryMessageRef.current) {
+    if (!pendingRetry) {
       cancelAutoRetry();
       return;
     }
-    if (retryProjectIdRef.current && retryProjectIdRef.current !== normalizedProjectId) {
+    if (pendingRetry.projectId !== normalizedProjectId) {
       cancelAutoRetry();
       return;
     }
     if (autoRetryCountdown <= 0) {
-      void sendMessage(retryMessageRef.current);
+      void sendMessage(pendingRetry.message);
       return;
     }
     const timeoutId = window.setTimeout(() => {
       setAutoRetryCountdown((current) => (current === null ? null : current - 1));
     }, 1000);
     return () => window.clearTimeout(timeoutId);
-  }, [autoRetryCountdown, cancelAutoRetry, normalizedProjectId, sendMessage]);
+  }, [autoRetryCountdown, cancelAutoRetry, normalizedProjectId, pendingRetry, sendMessage]);
 
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); await sendMessage(); }
 
@@ -855,7 +850,7 @@ export default function CalyxWorkspace() {
               </div>
               {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The visible thread belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean CALYX thread for <strong>{normalizedProjectId}</strong>.</p> : null}
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
-              {conversationError ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{autoRetryCountdown !== null ? <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span>Automatic retry in {autoRetryCountdown}s.</span><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={() => void sendMessage(retryMessageRef.current ?? message)} type="button">Retry now</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={cancelAutoRetry} type="button">Cancel</button></div> : null}</div> : null}
+              {conversationError ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{pendingRetry ? <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span>Automatic retry in {autoRetryCountdown ?? NETWORK_RETRY_SECONDS}s.</span><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={() => void sendMessage(pendingRetry.message)} type="button">Retry now</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={cancelAutoRetry} type="button">Cancel</button></div> : null}</div> : null}
             </form>
           </section>
 
