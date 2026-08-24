@@ -30,7 +30,14 @@ describe('citationIdentifierParts', () => {
   });
 
   it('keeps a malformed identifier as text with no link, rather than a broken or unsafe URL', () => {
-    for (const bad of ['not-a-doi', 'javascript:alert(1)', '10.x/nope', 'https://evil.example/10.1/x']) {
+    for (const bad of [
+      'not-a-doi',
+      'javascript:alert(1)',
+      '10.x/nope',
+      'https://evil.example/10.1/x',
+      '10.1234/<script>',
+      '10.1234/orchid>next',
+    ]) {
       const [part] = citationIdentifierParts(citation({ doi: bad }));
       expect(part).toMatchObject({ kind: 'doi', url: null });
       expect(part.label).toBe(`DOI ${bad}`);
