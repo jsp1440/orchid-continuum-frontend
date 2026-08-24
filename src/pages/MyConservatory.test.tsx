@@ -6,7 +6,7 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  useAuth: vi.fn(() => ({ session: null })),
+  useAuth: vi.fn(() => ({ session: null, loading: false })),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -18,6 +18,14 @@ const { default: MyConservatory } = await import("@/pages/MyConservatory");
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
+
+// jsdom implements neither half of the object-URL API, and the conservatory
+// fetches private images as blobs so the request can carry credentials.
+let objectUrlSeq = 0;
+if (!URL.createObjectURL) {
+  URL.createObjectURL = () => `blob:conservatory/${++objectUrlSeq}`;
+  URL.revokeObjectURL = () => {};
+}
 
 const readyReport = {
   ready_for_collection_entry: true,
@@ -2146,6 +2154,11 @@ describe("MyConservatory photographs", () => {
     return vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      // The image itself is fetched as a blob, and lives at a path without
+      // /plants/ in it. Answering it with JSON would look like a corrupt file.
+      if (/\/api\/conservatory\/photographs\/[^/]+$/.test(url)) {
+        return { ok: true, status: 200, blob: async () => new Blob([new Uint8Array([0xff, 0xd8])], { type: "image/jpeg" }) } as unknown as Response;
+      }
       if (url.includes("/photographs") && init?.method === "POST") {
         const status = opts.post?.status ?? 201;
         return { ok: status < 400, status, json: async () => opts.post?.body ?? {} } as Response;
@@ -2205,7 +2218,56 @@ describe("MyConservatory photographs", () => {
     await open({ photographs: [dated] });
     const image = container.querySelector('[data-testid="photograph-ph1"] img') as HTMLImageElement;
     expect(image.getAttribute("alt")).toBe("First flowering");
-    expect(image.getAttribute("src")).toContain("/api/conservatory/photographs/ph1");
+    // The bytes arrive through an authenticated fetch, so the rendered src is
+    // an object URL rather than the API path.
+    expect(image.getAttribute("src")).toMatch(/^blob:/);
+  });
+
+  it("fetches a private photograph with credentials rather than as a bare img src", async () => {
+    // A bare <img src> is issued without the Authorization header and, cross
+    // origin, without cookies. A private photograph then answers 401 and shows
+    // a broken-image icon, which reads to a grower as data loss.
+    mocks.useAuth.mockReturnValue({ session: { access_token: "token-abc" }, loading: false });
+    const fetchMock = await open({ photographs: [dated] });
+    const call = fetchMock.mock.calls.find(([input]) =>
+      /\/api\/conservatory\/photographs\/ph1$/.test(String(input)));
+    expect(call).toBeTruthy();
+    const headers = (call?.[1]?.headers ?? {}) as Record<string, string>;
+    expect(headers.Authorization).toBe("Bearer token-abc");
+    expect(call?.[1]?.credentials).toBe("include");
+    mocks.useAuth.mockReturnValue({ session: null, loading: false });
+  });
+
+  it("does not ask for a private photograph before the session has hydrated", async () => {
+    // An unauthenticated request hands the id of a private image to the
+    // service for nothing, and shows the reader a failure it then retries.
+    mocks.useAuth.mockReturnValue({ session: null, loading: true });
+    const fetchMock = await open({ photographs: [dated] });
+    expect(fetchMock.mock.calls.some(([input]) =>
+      /\/api\/conservatory\/photographs\/ph1$/.test(String(input)))).toBe(false);
+    mocks.useAuth.mockReturnValue({ session: null, loading: false });
+  });
+
+  it("says a photograph could not be loaded rather than showing a broken image", async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
+      if (/\/api\/conservatory\/photographs\/[^/]+$/.test(url)) return { ok: false, status: 502, json: async () => ({}) } as Response;
+      if (url.includes("/photographs")) return { ok: true, status: 200, json: async () => ({ photographs: [dated] }) } as Response;
+      if (url.includes("/placement-assessment")) return { ok: true, status: 200, json: async () => ({ assessments: [], counts: {}, anything_assessed: false, is_recommendation: false }) } as Response;
+      if (url.includes("/events")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", standing: [], corrected: [], event_count: 0, is_scientific_evidence: false }) } as Response;
+      if (url.includes("/placement")) return { ok: true, status: 200, json: async () => ({ plant_id: "p1", current: null, history: [] }) } as Response;
+      if (url.includes("/locations")) return { ok: true, status: 200, json: async () => ({ locations: [] }) } as Response;
+      return { ok: true, status: 200, json: async () => contextPlant } as Response;
+    });
+    renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
+    await flush();
+    await flush();
+    expect(container.querySelector('[data-testid="photograph-unreachable-ph1"]')?.textContent)
+      .toMatch(/could not be loaded/i);
+    // And it must not claim the photograph is gone from the collection.
+    expect(container.querySelector('[data-testid="photograph-unreachable-ph1"]')?.textContent)
+      .toMatch(/has not been removed/i);
   });
 
   it("still gives an alt text when there is no caption", async () => {

@@ -14,7 +14,9 @@
     "test:watch": "vitest",
     "validate:deployment": "node scripts/verify-deployment-contract.mjs",
     "verify:university-production": "node scripts/verify-university-production.mjs",
-    "verify:routes": "node scripts/browser-route-sweep.mjs"
+    "verify:routes": "node scripts/browser-route-sweep.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:report": "playwright show-report"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -80,6 +82,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.0",
+    "@playwright/test": "^1.62.1",
     "@tailwindcss/typography": "^0.5.16",
     "@types/leaflet": "^1.9.22",
     "@types/mapbox-gl": "^3.4.1",

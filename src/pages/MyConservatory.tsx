@@ -328,15 +328,77 @@ function AddPlant() {
   return <><ConservatoryReadinessBanner /><h2 className="text-3xl font-semibold">Add Test Plant</h2><p className="mt-2 text-muted-foreground">Readiness passed. Begin with three test plants before entering the production collection.</p><form className="mt-7 max-w-2xl space-y-5 rounded-xl border bg-card p-6" onSubmit={submit}>{error && <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive" role="alert">{error}</p>}<label className="block"><span className="text-sm font-medium">Display name</span><input required minLength={2} className="mt-2 w-full rounded-md border bg-background px-3 py-2" value={form.display_name} onChange={(event) => field("display_name", event.target.value)} /></label><label className="block"><span className="text-sm font-medium">Accepted scientific name</span><input className="mt-2 w-full rounded-md border bg-background px-3 py-2" value={form.accepted_scientific_name || ""} onChange={(event) => field("accepted_scientific_name", event.target.value)} /></label><label className="block"><span className="text-sm font-medium">Location</span><input className="mt-2 w-full rounded-md border bg-background px-3 py-2" placeholder="Greenhouse bench 2" value={form.location || ""} onChange={(event) => field("location", event.target.value)} /></label><label className="block"><span className="text-sm font-medium">Notes</span><textarea rows={5} className="mt-2 w-full rounded-md border bg-background px-3 py-2" value={form.notes || ""} onChange={(event) => field("notes", event.target.value)} /></label><button className="rounded-md bg-primary px-4 py-2 text-primary-foreground" disabled={saving}>{saving ? "Saving…" : "Save and assign accession"}</button></form></>;
 }
 
-function QrImage({ plant }: { plant: Plant }) {
-  const { session } = useAuth();
-  const [source, setSource] = useState<string>();
+/**
+ * Fetch an image the collection owner alone may see, and hand back an object
+ * URL for it.
+ *
+ * A bare `<img src>` cannot do this. The browser issues that request without
+ * the Authorization header and, cross-origin, without cookies, so a private
+ * image answers 401 and renders as a broken-image icon — which reads to a
+ * grower as "this photograph is gone" rather than "the browser did not ask
+ * properly".
+ *
+ * `undefined` means still loading and `null` means it could not be fetched;
+ * collapsing the two would render the failure state for a moment on every
+ * successful load.
+ */
+function useAuthenticatedImage(path: string): string | null | undefined {
+  const { session, loading } = useAuth();
+  const [source, setSource] = useState<string | null>();
   useEffect(() => {
-    let active = true; let objectUrl = "";
-    fetch(`${API_BASE}/api/conservatory/plants/${encodeURIComponent(plant.id)}/qr.svg`, { credentials: "include", headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {} }).then((response) => { if (!response.ok) throw new Error("QR image unavailable"); return response.blob(); }).then((blob) => { objectUrl = URL.createObjectURL(blob); if (active) setSource(objectUrl); }).catch(() => { if (active) setSource(undefined); });
-    return () => { active = false; if (objectUrl) URL.revokeObjectURL(objectUrl); };
-  }, [plant.id, session?.access_token]);
+    let active = true;
+    let objectUrl = "";
+    setSource(undefined);
+    // Asking before the session has hydrated sends the request without
+    // credentials: the service answers 401, the reader is shown a failure for
+    // the moment it takes to retry, and the id of a private image has been
+    // handed over by an unauthenticated caller for nothing.
+    if (loading) return () => { active = false; };
+    fetch(`${API_BASE}${path}`, {
+      credentials: "include",
+      headers: session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {},
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(`Image unavailable (${response.status})`);
+        return response.blob();
+      })
+      .then((blob) => {
+        if (!active) return;
+        objectUrl = URL.createObjectURL(blob);
+        setSource(objectUrl);
+      })
+      .catch(() => { if (active) setSource(null); });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [path, session?.access_token, loading]);
+  return source;
+}
+
+function QrImage({ plant }: { plant: Plant }) {
+  const source = useAuthenticatedImage(`/api/conservatory/plants/${encodeURIComponent(plant.id)}/qr.svg`);
   return source ? <img src={source} alt={`QR code for ${plant.accession_number}`} className="h-28 w-28" /> : <div className="flex h-28 w-28 items-center justify-center border text-center text-xs">QR unavailable</div>;
+}
+
+/**
+ * One stored photograph.
+ *
+ * Split out so the image can be fetched with the collection owner's
+ * credentials. A photograph that cannot be fetched says so in words: an
+ * unexplained broken-image icon in a private collection reads as data loss.
+ */
+function PlantPhotographImage({ photograph }: { photograph: PlantPhotograph }) {
+  const source = useAuthenticatedImage(`/api/conservatory/photographs/${encodeURIComponent(photograph.id)}`);
+  if (source === undefined) {
+    return <div className="flex h-32 w-full items-center justify-center rounded-md border text-xs text-muted-foreground" role="status">Loading photograph…</div>;
+  }
+  if (source === null) {
+    return <div className="flex h-32 w-full items-center justify-center rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground" data-testid={`photograph-unreachable-${photograph.id}`}>
+      This photograph could not be loaded. It has not been removed from the collection.
+    </div>;
+  }
+  return <img className="w-full rounded-md" alt={photograph.caption || "Photograph of this plant"} src={source} />;
 }
 
 /** How a number was obtained, said plainly. A reader must never have to guess. */
@@ -374,6 +436,18 @@ function asOccurredAt(day: string): string {
 
 function asDay(instant: string): string {
   return (instant || "").slice(0, 10);
+}
+
+/**
+ * Whether two instants fall on the same day.
+ *
+ * Used to decide whether a photograph's two clocks need saying separately. On
+ * the same day the distinction is noise; on different days it is the whole
+ * point.
+ */
+function sameDay(left: string | null, right: string | null): boolean {
+  if (!left || !right) return false;
+  return asDay(left) === asDay(right);
 }
 
 /**
@@ -1360,14 +1434,19 @@ function Photographs({ plantId }: { plantId: string }) {
       <ul className="mt-4 grid gap-4 sm:grid-cols-2" data-testid="photograph-list">
         {photographs.map((photograph) => (
           <li key={photograph.id} className="rounded-lg border p-3" data-testid={`photograph-${photograph.id}`}>
-            <img className="w-full rounded-md" alt={photograph.caption || "Photograph of this plant"}
-              src={`${API_BASE}/api/conservatory/photographs/${encodeURIComponent(photograph.id)}`} />
+            <PlantPhotographImage photograph={photograph} />
             {photograph.caption && <p className="mt-2 text-sm">{photograph.caption}</p>}
             <p className="mt-1 text-xs text-muted-foreground" data-testid={`photograph-when-${photograph.id}`}>
               {photograph.taken_at
                 // Which clock this came from is stated, not implied by a bare
-                // date sitting where a capture time would go.
-                ? `Taken ${new Date(photograph.taken_at).toLocaleDateString()}`
+                // date sitting where a capture time would go. When the two
+                // disagree, both are shown: a photograph taken in 2019 and
+                // uploaded today is a claim about the plant and a much weaker
+                // one about when anybody looked, and showing only the capture
+                // date hides how late the record was made.
+                ? sameDay(photograph.taken_at, photograph.recorded_at)
+                  ? `Taken ${new Date(photograph.taken_at).toLocaleDateString()}`
+                  : `Taken ${new Date(photograph.taken_at).toLocaleDateString()} · added ${new Date(photograph.recorded_at).toLocaleDateString()}`
                 : `No capture date in the file · added ${new Date(photograph.recorded_at).toLocaleDateString()}`}
             </p>
           </li>
