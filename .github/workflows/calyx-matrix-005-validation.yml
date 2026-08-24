@@ -7,6 +7,11 @@ on:
     branches: [oc-autonomous-integration]
   workflow_dispatch:
 
+# Read-only: this workflow installs, lints, tests and builds. It writes
+# nothing back to the repository and needs no token beyond fetching the tree.
+permissions:
+  contents: read
+
 jobs:
   guided-identification:
     runs-on: ubuntu-latest
