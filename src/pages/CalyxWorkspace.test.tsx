@@ -61,6 +61,7 @@ vi.mock("@/lib/calyxWorkspace", async () => {
 });
 
 import { STORAGE_KEY } from "@/lib/calyxConversation";
+import { CalyxApiError } from "@/lib/calyxWorkspace";
 import CalyxWorkspace from "./CalyxWorkspace";
 
 type ConversationMessage = {
@@ -747,5 +748,97 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+
+  it("starts an auto-retry countdown on a network error and retries when triggered manually", async () => {
+    vi.useFakeTimers();
+
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
+    mocks.sendCalyxTurn.mockRejectedValueOnce(
+      new CalyxApiError("network_error", "Network unreachable"),
+    );
+    mocks.sendCalyxTurn.mockResolvedValueOnce(buildTurnResult("retry-thread", "Retry answer"));
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("retry-thread", [
+        { message_id: "op-1", conversation_id: "retry-thread", role: "operator", content: "Retry question", created_at: "2026-08-10T00:00:02Z" },
+        { message_id: "cx-1", conversation_id: "retry-thread", role: "calyx", content: "Retry answer", created_at: "2026-08-10T00:00:03Z" },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Retry question");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    // Network error should show the countdown and "Retry now" button.
+    expect(container.textContent).toMatch(/waking up/i);
+    expect(container.textContent).toMatch(/retrying automatically/i);
+    expect(Array.from(container.querySelectorAll("button")).some((b) => b.textContent?.includes("Retry now"))).toBe(true);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    // Clicking "Retry now" immediately re-sends.
+    await act(async () => {
+      getButton(container, "Retry now").click();
+    });
+    await flush(4);
+
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Retry answer");
+
+    vi.useRealTimers();
+  });
+
+  it("cancels auto-retry when the user edits the message input", async () => {
+    vi.useFakeTimers();
+
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("cancel-retry-thread"));
+    mocks.sendCalyxTurn.mockRejectedValueOnce(
+      new CalyxApiError("network_error", "Network unreachable"),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Message that triggers retry");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(container.textContent).toMatch(/retrying automatically/i);
+
+    // Clicking "Cancel" clears the countdown immediately.
+    await act(async () => {
+      const cancelBtn = Array.from(container.querySelectorAll("button")).find((b) => b.textContent?.trim() === "Cancel");
+      if (cancelBtn) cancelBtn.click();
+    });
+    await flush(2);
+
+    expect(container.textContent).not.toMatch(/retrying automatically/i);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
   });
 });
