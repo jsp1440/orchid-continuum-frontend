@@ -33,6 +33,37 @@ export interface SpeciesDossierAtlasIdentity {
   scientificName?: unknown;
 }
 
+export interface SpeciesDossierCanonicalSubject {
+  genus: string;
+  taxon: string;
+}
+
+/**
+ * Resolve the dossier's canonical downstream subject once, using the same
+ * authoritative-field rule for Atlas, Research, and Calyx. The first identity
+ * field actually supplied wins; if it is malformed, fail closed rather than
+ * skipping to a lower-priority value that may describe another taxon.
+ *
+ * Route/taxonomy ids are deliberately not part of this interface.
+ */
+export function resolveSpeciesDossierCanonicalSubject(
+  identity: SpeciesDossierAtlasIdentity,
+): SpeciesDossierCanonicalSubject | null {
+  for (const candidate of [
+    identity.acceptedName,
+    identity.fullScientificName,
+    identity.canonicalName,
+    identity.scientificName,
+  ]) {
+    if (candidate === null || candidate === undefined || candidate === '') continue;
+    const taxon = boundedCanonicalSpecies(candidate);
+    if (!taxon) return null;
+    return { genus: taxon.split(' ', 1)[0], taxon };
+  }
+
+  return null;
+}
+
 /**
  * Resolve the Species Dossier's Atlas subject without ever falling back to the
  * route/taxonomy id. The first identity field actually supplied is treated as
@@ -42,15 +73,6 @@ export interface SpeciesDossierAtlasIdentity {
 export function speciesDossierAtlasHrefFromIdentity(
   identity: SpeciesDossierAtlasIdentity,
 ): string | null {
-  for (const candidate of [
-    identity.acceptedName,
-    identity.fullScientificName,
-    identity.canonicalName,
-    identity.scientificName,
-  ]) {
-    if (candidate === null || candidate === undefined || candidate === '') continue;
-    return speciesDossierAtlasHref(candidate);
-  }
-
-  return null;
+  const subject = resolveSpeciesDossierCanonicalSubject(identity);
+  return subject ? speciesDossierAtlasHref(subject.taxon) : null;
 }
