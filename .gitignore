@@ -34,3 +34,6 @@ artifacts/
 # Playwright browser-journey output.
 e2e/.artifacts/
 playwright-report/
+
+# Throwaway probe scripts written while investigating in a browser.
+*.tmp.mjs
