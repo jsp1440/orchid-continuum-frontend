@@ -19,8 +19,10 @@ describe('Atlas Next canonical incoming genus wiring', () => {
     expect(shell).toContain('genera: v ? [v] : undefined');
   });
 
-  it('uses the hydrated genus for the mounted Research continuation', () => {
-    expect(shell).toContain('atlasNextResearchHref({ genus })');
-    expect(shell).toContain('Continue in Research Station');
+  it('uses the hydrated genus for the unified mounted Research and Calyx continuations', () => {
+    expect(shell).toContain("import { atlasNextContinuumActions } from './researchHandoff';");
+    expect(shell).toContain('atlasNextContinuumActions({ genus })');
+    expect(shell).toContain('continuumActions.map((action) =>');
+    expect(shell).toContain("action.id === 'calyx'");
   });
 });
