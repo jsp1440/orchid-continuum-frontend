@@ -21,9 +21,10 @@ export interface CitationIdentifierPart {
 }
 
 // DOI: "10." then a 4-9 digit registrant, "/", then a suffix restricted to a
-// conservative safe set so nothing that could reshape a URL/attribute is echoed
-// into an href.
-const DOI_PATTERN = /^10\.\d{4,9}\/[A-Za-z0-9._;()/:<>+-]+$/;
+// conservative URL-safe set. In particular, angle brackets and whitespace are
+// rejected rather than echoed into an href; malformed-but-present identifiers
+// remain visible as plain text through `url: null`.
+const DOI_PATTERN = /^10\.\d{4,9}\/[A-Za-z0-9._;()/:+-]+$/;
 const PMID_PATTERN = /^\d{1,9}$/;
 const PMCID_PATTERN = /^PMC\d{1,12}$/i;
 
