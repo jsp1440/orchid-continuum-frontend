@@ -18,3 +18,17 @@ export function resolveSpeciesGenusFilter(value: string | null | undefined): str
 
   return genus;
 }
+
+/**
+ * A route-derived genus filter is truthful only while the search box still
+ * represents that same genus. As soon as a visitor edits the query to another
+ * subject, the URL filter must be cleared rather than leaving a "Filtering by
+ * Genus" badge beside results produced by unrelated free-text input.
+ */
+export function speciesQueryPreservesGenusFilter(
+  activeGenus: string,
+  nextQuery: string,
+): boolean {
+  if (!activeGenus) return false;
+  return String(nextQuery ?? '').trim() === activeGenus;
+}
