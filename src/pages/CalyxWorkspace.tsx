@@ -394,6 +394,16 @@ function CalyxMessageContent({ content }: { content: string }) {
   );
 }
 
+const NETWORK_RETRY_SECONDS = 20;
+
+const CALYX_STARTER_QUESTIONS = [
+  "What are the most distinctive floral features used to identify orchids?",
+  "Explain the relationship between orchids and their mycorrhizal fungi.",
+  "What evidence supports the diversity estimates for Orchidaceae?",
+  "How does pseudobulb morphology vary across epiphytic genera?",
+  "What are the current conservation priorities for orchids in South America?",
+];
+
 export default function CalyxWorkspace() {
   const [snapshot, setSnapshot] = useState<CalyxWorkspaceSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
@@ -404,6 +414,7 @@ export default function CalyxWorkspace() {
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
   const [speakReplies, setSpeakReplies] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
@@ -416,6 +427,7 @@ export default function CalyxWorkspace() {
 
   const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
@@ -423,6 +435,7 @@ export default function CalyxWorkspace() {
   const conversationIdRef = useRef<string | null>(null);
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
   const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
+  const retryMessageRef = useRef<string | null>(null);
 
   const { speak, cancel: cancelSpeech, supported: ttsSupported } = useCalyxSpeechOutput();
   const { state: micState, interimTranscript, error: speechInputError, startListening, stopListening } = useCalyxSpeechInput(
@@ -553,6 +566,34 @@ export default function CalyxWorkspace() {
 
   useEffect(() => { void refreshConversationHistory(); }, [refreshConversationHistory]);
 
+  // Auto-focus the message input after the workspace finishes its initial load
+  // so the owner can start typing without an extra click.
+  useEffect(() => {
+    if (!loading) messageInputRef.current?.focus();
+  }, [loading]);
+
+  // Countdown auto-retry for network/cold-start failures. Fires sendMessage
+  // once the counter reaches zero so the owner does not have to watch the
+  // backend wake up and manually press Send again.
+  useEffect(() => {
+    if (autoRetryCountdown === null) return;
+    if (autoRetryCountdown <= 0) {
+      setAutoRetryCountdown(null);
+      if (retryMessageRef.current !== null) void sendMessage();
+      return;
+    }
+    const id = window.setTimeout(() => setAutoRetryCountdown((c) => (c !== null ? c - 1 : null)), 1000);
+    return () => window.clearTimeout(id);
+  // sendMessage is defined below; the dependency is intentionally omitted to
+  // avoid a circular effect. The ref provides the stable callsite.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRetryCountdown]);
+
+  function cancelAutoRetry() {
+    setAutoRetryCountdown(null);
+    retryMessageRef.current = null;
+  }
+
   function isActiveLifecycleRequest(requestId: number, targetProjectId: string) {
     return mountedRef.current && requestIdRef.current === requestId && activeProjectIdRef.current === targetProjectId;
   }
@@ -580,7 +621,9 @@ export default function CalyxWorkspace() {
   }
 
   async function sendMessage() {
-    const text = message.trim();
+    const text = retryMessageRef.current ?? message.trim();
+    retryMessageRef.current = null;
+    setAutoRetryCountdown(null);
     if (!text || submissionLockRef.current !== null) return;
     const activeProjectId = normalizeProjectId(projectId);
     const requestId = requestIdRef.current + 1;
@@ -625,10 +668,15 @@ export default function CalyxWorkspace() {
       }
       const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
       const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the CALYX backend may be waking up; your message has been restored so you can retry.` : error.message) : "Calyx could not complete that turn.";
+      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — CALYX backend may be waking up.` : error.message) : "Calyx could not complete that turn.";
       setAuthRequired(isAuth);
       setConversationError(detail);
-      setMessage(text);
+      if (isNetwork) {
+        retryMessageRef.current = text;
+        setAutoRetryCountdown(NETWORK_RETRY_SECONDS);
+      } else {
+        setMessage(text);
+      }
     } finally {
       if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
@@ -641,6 +689,7 @@ export default function CalyxWorkspace() {
     requestIdRef.current += 1;
     cancelSpeech();
     stopListening();
+    cancelAutoRetry();
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
@@ -690,6 +739,7 @@ export default function CalyxWorkspace() {
     const requestId = requestIdRef.current;
     cancelSpeech();
     stopListening();
+    cancelAutoRetry();
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
@@ -751,7 +801,25 @@ export default function CalyxWorkspace() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <section className="rounded-xl border bg-card">
             <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
-              {!messages.length ? <div className="mx-auto max-w-2xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p></div> : messages.map((turn) => {
+              {!messages.length ? (
+                <div className="mx-auto max-w-2xl py-14 text-center">
+                  <h2 className="text-2xl font-semibold">What would you like to work on?</h2>
+                  <p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p>
+                  <ul className="mt-6 space-y-2">
+                    {CALYX_STARTER_QUESTIONS.map((q) => (
+                      <li key={q}>
+                        <button
+                          className="w-full rounded-xl border px-4 py-2.5 text-left text-sm hover:bg-muted"
+                          onClick={() => { setMessage(q); messageInputRef.current?.focus(); }}
+                          type="button"
+                        >
+                          {q}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : messages.map((turn) => {
                 const citations = turn.role === "calyx" && Array.isArray(turn.metadata?.citations) ? turn.metadata.citations as CalyxCitation[] : [];
                 return (
                   <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
@@ -774,7 +842,7 @@ export default function CalyxWorkspace() {
             <form className="border-t p-4" onSubmit={submit}>
               {interimTranscript ? <p className="mb-2 text-xs italic text-muted-foreground">{interimTranscript}…</p> : null}
               <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
-              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => setMessage(event.target.value)} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" value={message} />
+              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => { setMessage(event.target.value); if (autoRetryCountdown !== null) cancelAutoRetry(); }} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" ref={messageInputRef} value={message} />
               <div className="mt-1 flex flex-wrap justify-between gap-2"><p className="text-xs text-muted-foreground">No word-count cap; the backend uses model token budgets and preserves long research prompts.</p><p className={`text-xs ${message.length >= MAX_CALYX_MESSAGE_CHARS * 0.9 ? "text-amber-600" : "text-muted-foreground"}`}>{message.length.toLocaleString()} / {MAX_CALYX_MESSAGE_CHARS.toLocaleString()} characters</p></div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -788,11 +856,25 @@ export default function CalyxWorkspace() {
                   <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
                 </div>
-                <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim()} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
+                <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || autoRetryCountdown !== null || (!message.trim() && retryMessageRef.current === null)} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
               </div>
               {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The visible thread belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean CALYX thread for <strong>{normalizedProjectId}</strong>.</p> : null}
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
-              {conversationError ? <p className="mt-3 text-sm text-destructive" role="alert">{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p> : null}
+              {conversationError ? (
+                <div className="mt-3 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
+                  <p className="text-sm text-destructive" role="alert">
+                    {conversationError}
+                    {authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}
+                  </p>
+                  {autoRetryCountdown !== null ? (
+                    <div className="mt-2 flex items-center gap-3">
+                      <p className="text-xs text-muted-foreground">Retrying automatically in {autoRetryCountdown}s…</p>
+                      <button className="rounded-md border px-2 py-1 text-xs hover:bg-muted" onClick={() => void sendMessage()} type="button">Retry now</button>
+                      <button className="rounded-md border px-2 py-1 text-xs hover:bg-muted" onClick={cancelAutoRetry} type="button">Cancel</button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </form>
           </section>
 
