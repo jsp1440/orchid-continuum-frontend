@@ -4,7 +4,10 @@ import { Search, Loader2, Leaf, ShieldAlert, ArrowRight, X } from 'lucide-react'
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { searchSpecies, type SpeciesSearchResult } from '@/lib/ocBackend';
-import { resolveSpeciesGenusFilter } from '@/lib/speciesRouteContext';
+import {
+  resolveSpeciesGenusFilter,
+  speciesQueryPreservesGenusFilter,
+} from '@/lib/speciesRouteContext';
 
 /**
  * Species — orchid species dossiers search.
@@ -42,9 +45,23 @@ const Species: React.FC = () => {
   }, [genusFilter]);
 
   const clearGenusFilter = () => {
-    searchParams.delete('genus');
-    setSearchParams(searchParams, { replace: true });
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('genus');
+    setSearchParams(nextParams, { replace: true });
     setQuery('');
+  };
+
+  const handleQueryChange = (nextQuery: string) => {
+    // The route-derived genus chip describes the query that produced the
+    // results. If the visitor changes subjects, clear that route context at the
+    // same moment so the UI never claims "Filtering by Phalaenopsis" while the
+    // backend is actually searching Dracula (or any other free-text subject).
+    if (genusFilter && !speciesQueryPreservesGenusFilter(genusFilter, nextQuery)) {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('genus');
+      setSearchParams(nextParams, { replace: true });
+    }
+    setQuery(nextQuery);
   };
 
   // Debounced live search.
@@ -108,7 +125,7 @@ const Species: React.FC = () => {
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => handleQueryChange(e.target.value)}
               placeholder="Search 30,000 orchid species..."
               className="w-full pl-14 pr-5 py-4 rounded-full bg-[#0a0d1c]/70 border border-white/[0.1] focus:border-[#c9a24a]/60 outline-none font-body text-[15px] text-[#faf7f2] placeholder:text-[#7a7466]"
             />
@@ -150,7 +167,7 @@ const Species: React.FC = () => {
                 <button
                   key={s}
                   type="button"
-                  onClick={() => setQuery(s)}
+                  onClick={() => handleQueryChange(s)}
                   className="px-3 py-1 rounded-full border border-white/10 hover:border-[#c9a24a]/50 font-mono text-[10px] tracking-[0.14em] uppercase text-[#cfc8b8]/75 hover:text-[#faf7f2]"
                 >
                   {s}
