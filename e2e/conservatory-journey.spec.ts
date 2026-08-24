@@ -289,6 +289,27 @@ test("7. the dossier shows location, history, conditions and the taxon compariso
   await expect(assessment.getByTestId("assessment-not-advice")).toBeVisible();
   // The age of the number behind the verdict is stated, not implied.
   await expect(assessment.getByTestId("assessment-oldest-reading")).toBeVisible();
+
+  // The plant record offers a governed continuation into the public scientific
+  // record for its species, carrying only the accepted species identity — never
+  // the grower's private plant data.
+  const continuum = page.getByTestId("plant-species-continuum");
+  await expect(continuum).toBeVisible();
+  await expect(continuum.getByTestId("plant-continuum-atlas")).toHaveAttribute(
+    "href",
+    "/atlas?species=Phalaenopsis+amabilis",
+  );
+  const calyxHref = await continuum.getByTestId("plant-continuum-calyx").getAttribute("href");
+  expect(calyxHref).toContain("genus=Phalaenopsis");
+  expect(calyxHref).toContain("context_is_evidence=false");
+  // No private plant data (accession, location) may appear in any continuation.
+  for (const href of await continuum.getByRole("link").evaluateAll((links) =>
+    links.map((link) => link.getAttribute("href") || ""),
+  )) {
+    expect(href).not.toContain("OC-");
+    expect(href).not.toContain(locationName);
+    expect(href).not.toContain("ocq_");
+  }
 });
 
 /* ----------------------------------------------------------------- 8 ----- */

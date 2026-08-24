@@ -1,5 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { speciesDossierContinuumActions } from "@/lib/speciesDossierContinuumNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   ConservatoryReadinessBanner,
@@ -1844,12 +1845,56 @@ function PlacementAssessmentPanel({ plantId }: { plantId: string }) {
   </section>;
 }
 
+/**
+ * Continuation from a plant the grower owns into the public scientific record
+ * for its species.
+ *
+ * Only the plant's accepted SPECIES identity crosses this boundary, and only as
+ * navigational context (`context_is_evidence=false`), never as evidence about
+ * this plant. The accession, location, environmental readings, photographs, and
+ * notes are the grower's private record and are deliberately not sent: what the
+ * Continuum knows about a species is a different claim from what this grower has
+ * observed on their bench. Fails closed — no action is offered — when the plant
+ * carries no bounded canonical binomial, rather than widening a display name or
+ * a partial identity into a search for a different taxon.
+ */
+export function PlantSpeciesContinuum({ plant }: { plant: Plant }) {
+  const actions = speciesDossierContinuumActions({
+    acceptedName: plant.accepted_scientific_name,
+  });
+  if (!actions) return null;
+  const linkClass =
+    "inline-flex items-center rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted";
+  return (
+    <section className="mt-6 rounded-lg border p-4" data-testid="plant-species-continuum">
+      <h3 className="text-sm font-semibold">Explore this species in the Continuum</h3>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Opens the public scientific record for{" "}
+        <span className="italic">{plant.accepted_scientific_name}</span>. Your plant&rsquo;s own
+        location, readings, and notes stay private and are not sent.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Link className={linkClass} data-testid="plant-continuum-atlas" to={actions.atlas}>
+          View on Atlas
+        </Link>
+        <Link className={linkClass} data-testid="plant-continuum-research" to={actions.research}>
+          Open in Research
+        </Link>
+        <Link className={linkClass} data-testid="plant-continuum-calyx" to={actions.calyx}>
+          Ask Calyx
+        </Link>
+      </div>
+    </section>
+  );
+}
+
 function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: boolean }) {
   return <div className="rounded-xl border bg-card p-6">
     {arrivedByScan && <p className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-testid="scan-arrival">Opened by scanning this plant&rsquo;s tag.</p>}
     <p className="text-xs uppercase tracking-wide text-muted-foreground">{plant.accession_number}</p>
     <div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div>
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
+    <PlantSpeciesContinuum plant={plant} />
     <Photographs plantId={plant.id} />
     <CultivationContext plantId={plant.id} />
     <PlacementAssessmentPanel plantId={plant.id} />
