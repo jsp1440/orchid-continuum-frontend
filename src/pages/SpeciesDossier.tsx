@@ -30,9 +30,7 @@ import {
   type EvidenceState,
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
-import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
-import { speciesDossierCalyxHref } from '@/lib/speciesDossierCalyxNavigation';
-import { speciesDossierAtlasHrefFromIdentity } from '@/lib/speciesDossierAtlasNavigation';
+import { speciesDossierContinuumActions } from '@/lib/speciesDossierContinuumNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -135,33 +133,19 @@ const SpeciesDossier: React.FC = () => {
     decodeURIComponent(taxonomyId);
 
   const image = data?.hero_image_url || data?.representative_image_url || null;
-  // Into Atlas on the dossier's own canonical species identity only. The
-  // resolver treats the first identity field actually supplied as authoritative
-  // and fails closed on a malformed value rather than widening an opaque
-  // route/taxonomy id into an Atlas search, so a dossier without a bounded
-  // canonical binomial simply does not offer the action.
-  const atlasHref = speciesDossierAtlasHrefFromIdentity({
+  // Resolve one governed canonical species identity for every public
+  // continuation. Atlas, Research, and Calyx therefore either receive the same
+  // exact subject or all fail closed; none may widen an opaque route/taxonomy
+  // id or independently choose a different identity fallback.
+  const continuumActions = speciesDossierContinuumActions({
     acceptedName: dossier?.identity.accepted_name,
     fullScientificName: dossier?.identity.full_scientific_name,
     canonicalName: data?.canonical_name,
     scientificName: data?.scientific_name,
   });
-  // Into Research on the dossier's own subject, so the visitor does not have to
-  // retype the organism they are already looking at. Genus drives the query
-  // builder; the accepted binomial rides along as context only.
-  const researchHref = speciesDossierResearchHref({
-    genus: dossier?.identity.genus ?? data?.genus,
-    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
-  });
-
-  // Straight into Calyx on this exact species. The producer fails closed unless
-  // it gets a bounded binomial that agrees with the genus, so a dossier whose
-  // identity is incomplete simply does not offer the action rather than opening
-  // a conversation about the wrong organism.
-  const calyxHref = speciesDossierCalyxHref({
-    genus: dossier?.identity.genus ?? data?.genus,
-    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
-  });
+  const atlasHref = continuumActions?.atlas ?? null;
+  const researchHref = continuumActions?.research ?? null;
+  const calyxHref = continuumActions?.calyx ?? null;
 
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
