@@ -4,6 +4,7 @@ import { Search, Loader2, Leaf, ShieldAlert, ArrowRight, X } from 'lucide-react'
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { searchSpecies, type SpeciesSearchResult } from '@/lib/ocBackend';
+import { resolveSpeciesGenusFilter } from '@/lib/speciesRouteContext';
 
 /**
  * Species — orchid species dossiers search.
@@ -27,8 +28,8 @@ const SUGGESTIONS = [
 
 const Species: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  // Read the genus filter synchronously so there is no flash of unfiltered content.
-  const genusFilter = searchParams.get('genus')?.trim() || '';
+  // Only a bounded canonical genus may become a route-derived search/filter.
+  const genusFilter = resolveSpeciesGenusFilter(searchParams.get('genus'));
   const [query, setQuery] = useState(() => genusFilter);
   const [results, setResults] = useState<SpeciesSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,7 +46,6 @@ const Species: React.FC = () => {
     setSearchParams(searchParams, { replace: true });
     setQuery('');
   };
-
 
   // Debounced live search.
   useEffect(() => {
@@ -103,7 +103,6 @@ const Species: React.FC = () => {
             the Orchid Continuum species database.
           </p>
 
-          {/* Search bar */}
           <div className="mt-8 relative">
             <Search className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-[#c9a24a]" />
             <input
@@ -118,7 +117,6 @@ const Species: React.FC = () => {
             )}
           </div>
 
-          {/* Active genus filter chip */}
           {genusFilter && (
             <div className="mt-5 flex flex-wrap items-center gap-3">
               <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-[#7a7466]">
@@ -143,10 +141,7 @@ const Species: React.FC = () => {
             </div>
           )}
 
-
-          {/* Suggestions */}
           {!searched && !genusFilter && (
-
             <div className="mt-5 flex flex-wrap items-center gap-2">
               <span className="font-mono text-[10px] tracking-[0.2em] uppercase text-[#7a7466]">
                 Try
@@ -164,7 +159,6 @@ const Species: React.FC = () => {
             </div>
           )}
 
-          {/* Results */}
           {heading && (
             <div className="mt-10 font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">
               {heading}
@@ -192,8 +186,7 @@ const Species: React.FC = () => {
                         {name}
                       </div>
                       <div className="mt-1.5 font-mono text-[10px] tracking-[0.2em] uppercase text-[#7a7466]">
-                        {[r.genus, r.family].filter(Boolean).join(' · ') ||
-                          'Orchidaceae'}
+                        {[r.genus, r.family].filter(Boolean).join(' · ') || 'Orchidaceae'}
                       </div>
                     </div>
                     <Leaf className="h-4 w-4 text-[#c9a24a]/60 shrink-0 mt-1" />
