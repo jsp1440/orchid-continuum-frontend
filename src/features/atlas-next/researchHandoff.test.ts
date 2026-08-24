@@ -37,13 +37,29 @@ describe('Atlas Next → Research Center handoff', () => {
     expect(atlasNextResearchHref({ genus: `P${'x'.repeat(120)}` })).toBeNull();
   });
 
-  it('drops malformed project identity rather than forwarding arbitrary route material', () => {
+  it('refuses the handoff outright when a supplied project identity is malformed', () => {
+    // This used to drop the project and hand off the genus alone. Both
+    // choices keep locality out of the route, which is what the assertion
+    // below is for, but they differ on continuity: silently dropping the
+    // project widens "this genus in this research project" into an unrelated
+    // genus-only session, and the arriving reader cannot see that it happened.
+    // Refusing says so instead of quietly changing which project they are in.
     expect(
       atlasNextResearchHref({
         genus: 'Phalaenopsis',
         projectId: 'project?lat=1&lng=2',
       }),
-    ).toBe('/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false');
+    ).toBeNull();
+  });
+
+  it('still hands off the genus when no project was supplied at all', () => {
+    // Absent is not malformed. A grower arriving from a genus with no project
+    // context has nothing to lose by continuing, so the stricter rule above
+    // must not swallow the ordinary case.
+    expect(atlasNextResearchHref({ genus: 'Phalaenopsis' }))
+      .toBe('/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false');
+    expect(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: null }))
+      .toBe('/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false');
   });
 
   it('has no route channel for locality, occurrence, collector, or elevation data', () => {
