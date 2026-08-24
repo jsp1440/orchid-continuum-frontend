@@ -26,6 +26,10 @@ function boundedProject(value: string | null | undefined): string | null {
   return project;
 }
 
+function projectWasSupplied(value: string | null | undefined): boolean {
+  return value !== null && value !== undefined && String(value).trim().length > 0;
+}
+
 /**
  * Build the Atlas Next → Research Center handoff.
  *
@@ -34,12 +38,20 @@ function boundedProject(value: string | null | undefined): string | null {
  * coordinate, locality, collector, catalogue number, site, grid, GPS value, or
  * elevation can cross the module boundary. Research receives the subject as
  * navigation context and must never promote it to scientific evidence.
+ *
+ * If a project was explicitly supplied but is malformed, the entire handoff
+ * fails closed. Silently dropping a malformed persisted-project identity would
+ * widen the arrival from “this genus in this research project” to an unrelated
+ * genus-only Research session, which is a continuity error rather than a safe
+ * fallback.
  */
 export function atlasNextResearchHref(context: AtlasNextResearchContext): string | null {
   const genus = boundedGenus(context.genus);
   if (!genus) return null;
 
   const project = boundedProject(context.projectId);
+  if (projectWasSupplied(context.projectId) && !project) return null;
+
   const params = new URLSearchParams({
     genus,
     origin: ATLAS_NEXT_RESEARCH_ORIGIN,
