@@ -748,4 +748,59 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
   });
+
+  it("shows a pre-flight auth banner when the backend signals authentication_required before any message is sent", async () => {
+    mocks.loadCalyxWorkspace.mockResolvedValue({
+      capabilities: null,
+      homepage: null,
+      orchestrator: null,
+      orchestratorState: "authentication_required" as const,
+      errors: [],
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    const banner = container.querySelector('[role="status"]');
+    expect(banner).not.toBeNull();
+    expect(banner?.textContent).toContain("Sign in at Mission Control");
+
+    const link = banner?.querySelector("a");
+    expect(link?.getAttribute("href")).toBe("/mission-control");
+  });
+
+  it("does not show the pre-flight auth banner once a conversation exists", async () => {
+    mocks.loadCalyxWorkspace.mockResolvedValue({
+      capabilities: null,
+      homepage: null,
+      orchestrator: null,
+      orchestratorState: "authentication_required" as const,
+      errors: [],
+    });
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ conversationId: "existing-thread", projectId: "calyx-speak" }),
+    );
+    mocks.getCalyxConversation.mockResolvedValue(buildConversation("existing-thread"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(4);
+
+    const banners = Array.from(container.querySelectorAll('[role="status"]')).filter(
+      (el) => el.textContent?.includes("Sign in at Mission Control"),
+    );
+    expect(banners).toHaveLength(0);
+  });
 });

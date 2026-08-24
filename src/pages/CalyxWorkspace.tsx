@@ -792,6 +792,7 @@ export default function CalyxWorkspace() {
               </div>
               {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The visible thread belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean CALYX thread for <strong>{normalizedProjectId}</strong>.</p> : null}
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
+              {!loading && snapshot.orchestratorState === "authentication_required" && !conversation && !conversationError ? <p className="mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200" role="status">The CALYX backend requires authentication. <Link className="font-medium underline underline-offset-2" to="/mission-control">Sign in at Mission Control</Link> to start a conversation.</p> : null}
               {conversationError ? <p className="mt-3 text-sm text-destructive" role="alert">{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p> : null}
             </form>
           </section>
