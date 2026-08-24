@@ -32,6 +32,7 @@ import {
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
 import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
 import { speciesDossierCalyxHref } from '@/lib/speciesDossierCalyxNavigation';
+import { speciesDossierAtlasHrefFromIdentity } from '@/lib/speciesDossierAtlasNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -134,9 +135,17 @@ const SpeciesDossier: React.FC = () => {
     decodeURIComponent(taxonomyId);
 
   const image = data?.hero_image_url || data?.representative_image_url || null;
-  const atlasQuery = encodeURIComponent(
-    data?.canonical_name || data?.scientific_name || taxonomyId,
-  );
+  // Into Atlas on the dossier's own canonical species identity only. The
+  // resolver treats the first identity field actually supplied as authoritative
+  // and fails closed on a malformed value rather than widening an opaque
+  // route/taxonomy id into an Atlas search, so a dossier without a bounded
+  // canonical binomial simply does not offer the action.
+  const atlasHref = speciesDossierAtlasHrefFromIdentity({
+    acceptedName: dossier?.identity.accepted_name,
+    fullScientificName: dossier?.identity.full_scientific_name,
+    canonicalName: data?.canonical_name,
+    scientificName: data?.scientific_name,
+  });
   // Into Research on the dossier's own subject, so the visitor does not have to
   // retype the organism they are already looking at. Genus drives the query
   // builder; the accepted binomial rides along as context only.
@@ -211,12 +220,14 @@ const SpeciesDossier: React.FC = () => {
                   )}
                 </div>
 
-                <Link
-                  to={`/atlas?species=${atlasQuery}`}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
-                >
-                  <MapIcon className="h-4 w-4" /> View on Atlas
-                </Link>
+                {atlasHref && (
+                  <Link
+                    to={atlasHref}
+                    className="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
+                  >
+                    <MapIcon className="h-4 w-4" /> View on Atlas
+                  </Link>
+                )}
                 {researchHref && (
                   <Link
                     to={researchHref}
