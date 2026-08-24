@@ -4,7 +4,12 @@ import { Link, useLocation } from "react-router-dom";
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
 import { rejectsCalyxNavigationContext } from "@/lib/calyxRouteTrustBoundary";
-import { ATLAS_WORKSPACE_ORIGIN, featuredTaxonAtlasHref } from "@/lib/featuredTaxonNavigation";
+import {
+  ATLAS_WORKSPACE_ORIGIN,
+  FEATURED_TAXON_ORIGIN,
+  featuredTaxonAtlasHref,
+} from "@/lib/featuredTaxonNavigation";
+import { GENUS_PROFILE_ORIGIN } from "@/lib/genusProfileNavigation";
 import {
   parseResearchCalyxRouteBridge,
   researchReturnHref,
@@ -45,6 +50,8 @@ export default function AtlasAwareCalyxRoute() {
   const fromAtlas =
     routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN ||
     routeContext.origin === ATLAS_WORKSPACE_ORIGIN;
+  const fromFeaturedTaxon = routeContext.origin === FEATURED_TAXON_ORIGIN;
+  const fromGenusProfile = routeContext.origin === GENUS_PROFILE_ORIGIN;
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
   const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
@@ -141,6 +148,37 @@ export default function AtlasAwareCalyxRoute() {
               This is a learner&apos;s working draft, not a reviewed record. The subject and question
               came from a student; their hypothesis, observations and conclusion did not travel and
               are not evidence. Nothing said here enters the Continuum&apos;s scientific record.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
+      {(fromFeaturedTaxon || fromGenusProfile) && genus ? (
+        <section
+          aria-label="Genus handoff context"
+          className="border-b bg-muted/50 px-5 py-3 text-foreground"
+        >
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                {fromFeaturedTaxon
+                  ? "Continuing from Genus of the Day"
+                  : "Continuing from the Genus Profile"}
+              </p>
+              <p className="mt-1 text-sm">
+                <strong>Genus:</strong> <i>{genus}</i>
+              </p>
+              <Link
+                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                to={featuredTaxonAtlasHref(genus)}
+              >
+                Explore {genus} in Atlas
+              </Link>
+            </div>
+            <p className="max-w-md text-xs text-muted-foreground">
+              This genus is bounded navigation context carried between Continuum modules. It names
+              the subject you chose; it is not scientific evidence, and no locality, occurrence, or
+              conclusion was promoted into Calyx with it.
             </p>
           </div>
         </section>
