@@ -30,3 +30,7 @@ dist-ssr
 # reads as a durable fact, and a stale one would assert a run that no
 # longer describes this code.
 artifacts/
+
+# Playwright browser-journey output.
+e2e/.artifacts/
+playwright-report/
