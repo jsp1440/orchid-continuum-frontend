@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { speciesDossierAtlasHref } from './speciesDossierAtlasNavigation';
+import {
+  speciesDossierAtlasHref,
+  speciesDossierAtlasHrefFromIdentity,
+} from './speciesDossierAtlasNavigation';
 
 describe('speciesDossierAtlasHref', () => {
   it('preserves exactly one bounded canonical species identity', () => {
@@ -55,5 +58,47 @@ describe('speciesDossierAtlasHref', () => {
     ]) {
       expect(url.searchParams.has(forbidden)).toBe(false);
     }
+  });
+});
+
+describe('speciesDossierAtlasHrefFromIdentity', () => {
+  it('uses the dossier accepted name before lower-priority identity fields', () => {
+    expect(
+      speciesDossierAtlasHrefFromIdentity({
+        acceptedName: 'Phalaenopsis amabilis',
+        canonicalName: 'Phalaenopsis aphrodite',
+      }),
+    ).toBe('/atlas?species=Phalaenopsis+amabilis');
+  });
+
+  it('uses the next identity source only when higher-priority identity is absent', () => {
+    expect(
+      speciesDossierAtlasHrefFromIdentity({
+        acceptedName: null,
+        fullScientificName: undefined,
+        canonicalName: 'Phalaenopsis amabilis',
+      }),
+    ).toBe('/atlas?species=Phalaenopsis+amabilis');
+  });
+
+  it('fails closed when the first supplied identity is malformed instead of skipping to a different taxon', () => {
+    expect(
+      speciesDossierAtlasHrefFromIdentity({
+        acceptedName: '/species/opaque-route-id',
+        canonicalName: 'Phalaenopsis amabilis',
+      }),
+    ).toBeNull();
+  });
+
+  it('never invents an Atlas subject when canonical identity is unavailable', () => {
+    expect(speciesDossierAtlasHrefFromIdentity({})).toBeNull();
+    expect(
+      speciesDossierAtlasHrefFromIdentity({
+        acceptedName: null,
+        fullScientificName: null,
+        canonicalName: null,
+        scientificName: null,
+      }),
+    ).toBeNull();
   });
 });
