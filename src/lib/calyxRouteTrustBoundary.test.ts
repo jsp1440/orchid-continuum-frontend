@@ -2,6 +2,10 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+import {
+  ATLAS_NEXT_CALYX_ORIGIN,
+  atlasNextCalyxHref,
+} from '@/features/atlas-next/researchHandoff';
 import { rejectsCalyxNavigationContext } from '@/lib/calyxRouteTrustBoundary';
 import {
   ATLAS_WORKSPACE_ORIGIN,
@@ -18,13 +22,19 @@ const routeSource = readFileSync(
 const genusProfileSource = readFileSync(resolve(process.cwd(), 'src/pages/GenusDetail.tsx'), 'utf8');
 
 describe('Calyx governed genus route trust boundary', () => {
-  it('accepts the canonical Atlas workspace, featured-taxon, and Genus Profile producers', () => {
+  it('accepts the canonical Atlas workspace, featured-taxon, Genus Profile, and Atlas Next producers', () => {
     expect(rejectsCalyxNavigationContext(new URL(atlasWorkspaceCalyxHref('Phalaenopsis'), 'https://orchidcontinuum.org').search)).toBe(false);
     expect(rejectsCalyxNavigationContext(new URL(featuredTaxonCalyxHref('Phalaenopsis'), 'https://orchidcontinuum.org').search)).toBe(false);
     expect(rejectsCalyxNavigationContext(new URL(genusProfileCalyxHref('Phalaenopsis'), 'https://orchidcontinuum.org').search)).toBe(false);
+    expect(rejectsCalyxNavigationContext(new URL(atlasNextCalyxHref({ genus: 'Phalaenopsis' })!, 'https://orchidcontinuum.org').search)).toBe(false);
   });
 
-  it.each([ATLAS_WORKSPACE_ORIGIN, FEATURED_TAXON_ORIGIN, GENUS_PROFILE_ORIGIN])(
+  it.each([
+    ATLAS_WORKSPACE_ORIGIN,
+    FEATURED_TAXON_ORIGIN,
+    GENUS_PROFILE_ORIGIN,
+    ATLAS_NEXT_CALYX_ORIGIN,
+  ])(
     'rejects %s when the non-evidence declaration is missing or promoted',
     (origin) => {
       expect(rejectsCalyxNavigationContext(`?genus=Phalaenopsis&origin=${origin}`)).toBe(true);
