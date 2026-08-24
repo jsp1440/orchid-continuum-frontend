@@ -20,8 +20,13 @@ export type AtlasNextCalyxContext = {
   genus: string;
 };
 
+export type AtlasNextSpeciesContext = {
+  /** Canonical genus selected in Atlas Next. Navigation context only. */
+  genus: string;
+};
+
 export type AtlasNextContinuumAction = {
-  id: 'research' | 'calyx';
+  id: 'research' | 'calyx' | 'species';
   label: string;
   href: string;
 };
@@ -97,23 +102,41 @@ export function atlasNextCalyxHref(context: AtlasNextCalyxContext): string | nul
 }
 
 /**
+ * Continue from Atlas Next into the Species browser without widening or
+ * enriching the route context. The Species receiver already owns the genus
+ * filter contract, so this handoff carries exactly one query key: `genus`.
+ * Atlas occurrence selections, locality, project identity and evidence state
+ * deliberately have no channel here.
+ */
+export function atlasNextSpeciesHref(context: AtlasNextSpeciesContext): string | null {
+  const genus = boundedGenus(context.genus);
+  if (!genus) return null;
+
+  const params = new URLSearchParams({ genus });
+  return `/species?${params.toString()}`;
+}
+
+/**
  * Resolve every cross-Continuum action Atlas Next may expose for its active
  * genus. Keeping this as one model prevents the mounted shell from constructing
- * one safe Research link and a subtly different Calyx link by hand.
+ * one safe Research link and subtly different downstream links by hand.
  *
  * The action set is all-or-nothing on genus validity: malformed active context
  * yields no continuation affordances at all rather than letting one consumer
- * fail open. Project identity remains Research-only and never enters Calyx.
+ * fail open. Project identity remains Research-only and never enters Calyx or
+ * the Species browser.
  */
 export function atlasNextContinuumActions(
   context: AtlasNextResearchContext,
 ): AtlasNextContinuumAction[] {
   const researchHref = atlasNextResearchHref(context);
   const calyxHref = atlasNextCalyxHref({ genus: context.genus });
-  if (!researchHref || !calyxHref) return [];
+  const speciesHref = atlasNextSpeciesHref({ genus: context.genus });
+  if (!researchHref || !calyxHref || !speciesHref) return [];
 
   return [
     { id: 'research', label: 'Continue in Research Station', href: researchHref },
     { id: 'calyx', label: 'Ask Calyx about this genus', href: calyxHref },
+    { id: 'species', label: 'Browse this genus in Species', href: speciesHref },
   ];
 }
