@@ -1,0 +1,100 @@
+# Governed dependency updates for the Orchid Continuum frontend.
+#
+# This exists because of what #410 did. Every third-party GitHub Action in this
+# repository is now pinned to an immutable commit SHA, which removes the
+# supply-chain risk of a mutable tag being moved under us. It also freezes
+# those actions: without something proposing bumps, the pins quietly rot and
+# the repository ends up running year-old actions with known issues, which is a
+# different failure in the same place.
+#
+# Two rules shape the schedule below.
+#
+# Nothing is promoted the day it ships. Updates land weekly, not daily, so a
+# release that is yanked or patched within hours is never picked up in that
+# window. A same-day promotion gives a compromised or broken release the
+# shortest possible path into CI, and CI here holds a repository token.
+#
+# Nothing reaches `main` this way. `main` is an explicit owner gate — see
+# .github/DO_NOT_AUTOMERGE_MAIN and .github/orchestration-policy.json — so
+# every update PR targets the integration branch and goes through the same
+# validation as any other change. Auto-merge is deliberately not enabled.
+#
+# Updates are grouped so a week's patches arrive as one reviewable PR rather
+# than fifteen. Majors are excluded from the groups and raised individually,
+# because a major is a decision and should not ride along inside a batch
+# somebody skims.
+
+version: 2
+
+updates:
+  # The actions the pinned SHAs in .github/workflows/ point at. Dependabot
+  # rewrites the SHA and the trailing version comment together, so the pins
+  # stay readable and stay immutable.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    target-branch: "oc-autonomous-integration"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "security"
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "security(ci)"
+    groups:
+      action-patch-and-minor:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+  # Application dependencies. Majors are ignored here rather than grouped: a
+  # React, Vite, or Tailwind major is a piece of work with its own validation,
+  # not something to accept from a batch PR.
+  - package-ecosystem: "npm"
+    directory: "/"
+    target-branch: "oc-autonomous-integration"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "08:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      production-patch-and-minor:
+        dependency-type: "production"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+      development-patch-and-minor:
+        dependency-type: "development"
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      # Framework majors are deliberate migrations, raised by a person.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "vite"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "tailwindcss"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
