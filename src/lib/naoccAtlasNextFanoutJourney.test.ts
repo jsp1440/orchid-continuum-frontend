@@ -24,8 +24,8 @@ const FORBIDDEN_ROUTE_KEYS = [
   'conclusion',
 ];
 
-describe('NAOCC Genus of the Day → Atlas Next → Research/Calyx fan-out', () => {
-  it('preserves one canonical featured genus through Atlas Next into both governed receivers', () => {
+describe('NAOCC Genus of the Day → Atlas Next → Research/Calyx/Species fan-out', () => {
+  it('preserves one canonical featured genus through Atlas Next into all governed receivers', () => {
     const atlasUrl = new URL(
       featuredTaxonAtlasNextHref(DEMO_GENUS),
       'https://orchidcontinuum.org',
@@ -38,12 +38,14 @@ describe('NAOCC Genus of the Day → Atlas Next → Research/Calyx fan-out', () 
     expect(incomingGenus).toBe(DEMO_GENUS);
 
     const actions = atlasNextContinuumActions({ genus: incomingGenus as string });
-    expect(actions.map((action) => action.id)).toEqual(['research', 'calyx']);
+    expect(actions.map((action) => action.id)).toEqual(['research', 'calyx', 'species']);
 
     const researchAction = actions.find((action) => action.id === 'research');
     const calyxAction = actions.find((action) => action.id === 'calyx');
+    const speciesAction = actions.find((action) => action.id === 'species');
     expect(researchAction).toBeDefined();
     expect(calyxAction).toBeDefined();
+    expect(speciesAction).toBeDefined();
 
     const researchUrl = new URL(researchAction!.href, 'https://orchidcontinuum.org');
     expect(parseResearchRouteContext(researchUrl.search)).toEqual({
@@ -60,13 +62,20 @@ describe('NAOCC Genus of the Day → Atlas Next → Research/Calyx fan-out', () 
       questionContext: null,
     });
 
+    const speciesUrl = new URL(speciesAction!.href, 'https://orchidcontinuum.org');
+    expect(speciesUrl.pathname).toBe('/species');
+    expect([...speciesUrl.searchParams.keys()]).toEqual(['genus']);
+    expect(speciesUrl.searchParams.get('genus')).toBe(DEMO_GENUS);
+
     expect(researchUrl.searchParams.get('context_is_evidence')).toBe('false');
     expect(calyxUrl.searchParams.get('context_is_evidence')).toBe('false');
     expect(calyxUrl.searchParams.has('project')).toBe(false);
+    expect(speciesUrl.searchParams.has('project')).toBe(false);
 
     for (const key of FORBIDDEN_ROUTE_KEYS) {
       expect(researchUrl.searchParams.has(key), `Research must not receive ${key}`).toBe(false);
       expect(calyxUrl.searchParams.has(key), `Calyx must not receive ${key}`).toBe(false);
+      expect(speciesUrl.searchParams.has(key), `Species must not receive ${key}`).toBe(false);
     }
   });
 
