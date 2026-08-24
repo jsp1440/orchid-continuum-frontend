@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   resolveSpeciesGenusFilter,
+  speciesQueryAfterGenusRouteChange,
   speciesQueryPreservesGenusFilter,
 } from './speciesRouteContext';
 
@@ -44,5 +45,22 @@ describe('speciesQueryPreservesGenusFilter', () => {
 
   it('never invents a filter when no route-derived genus is active', () => {
     expect(speciesQueryPreservesGenusFilter('', 'Phalaenopsis')).toBe(false);
+  });
+});
+
+describe('speciesQueryAfterGenusRouteChange', () => {
+  it('hydrates a newly arrived canonical genus into the search box', () => {
+    expect(speciesQueryAfterGenusRouteChange('', 'Phalaenopsis', 'Dracula')).toBe('Phalaenopsis');
+    expect(speciesQueryAfterGenusRouteChange('Dracula', 'Phalaenopsis', 'Dracula')).toBe('Phalaenopsis');
+  });
+
+  it('clears an old route-owned genus when browser navigation removes the filter', () => {
+    expect(speciesQueryAfterGenusRouteChange('Phalaenopsis', '', 'Phalaenopsis')).toBe('');
+    expect(speciesQueryAfterGenusRouteChange('Phalaenopsis', '', '  Phalaenopsis  ')).toBe('');
+  });
+
+  it('does not erase an independent free-text query when the route filter disappears', () => {
+    expect(speciesQueryAfterGenusRouteChange('Phalaenopsis', '', 'Dracula')).toBe('Dracula');
+    expect(speciesQueryAfterGenusRouteChange('', '', 'Vanilla')).toBe('Vanilla');
   });
 });
