@@ -1,5 +1,7 @@
 export const ATLAS_NEXT_RESEARCH_ORIGIN = 'atlas-next';
 export const ATLAS_NEXT_RESEARCH_CONTEXT_IS_EVIDENCE = false;
+export const ATLAS_NEXT_CALYX_ORIGIN = 'atlas-next';
+export const ATLAS_NEXT_CALYX_CONTEXT_IS_EVIDENCE = false;
 
 const MAX_TAXON_CHARACTERS = 120;
 const MAX_PROJECT_CHARACTERS = 160;
@@ -11,6 +13,11 @@ export type AtlasNextResearchContext = {
   genus: string;
   /** Persisted research project when the Atlas was entered from one. */
   projectId?: string | null;
+};
+
+export type AtlasNextCalyxContext = {
+  /** Canonical genus selected in Atlas Next. Navigation context only. */
+  genus: string;
 };
 
 function boundedGenus(value: string): string | null {
@@ -60,4 +67,25 @@ export function atlasNextResearchHref(context: AtlasNextResearchContext): string
   if (project) params.set('project', project);
 
   return `/research?${params.toString()}`;
+}
+
+/**
+ * Build the Atlas Next → Calyx handoff for the active genus.
+ *
+ * Only the bounded canonical genus crosses this boundary. Atlas occurrence
+ * selections, coordinates, locality, project identity, collector/catalogue
+ * fields, evidence, confidence and conclusions deliberately have no channel.
+ * The genus is navigation context and is explicitly marked non-evidentiary.
+ */
+export function atlasNextCalyxHref(context: AtlasNextCalyxContext): string | null {
+  const genus = boundedGenus(context.genus);
+  if (!genus) return null;
+
+  const params = new URLSearchParams({
+    genus,
+    origin: ATLAS_NEXT_CALYX_ORIGIN,
+    context_is_evidence: String(ATLAS_NEXT_CALYX_CONTEXT_IS_EVIDENCE),
+  });
+
+  return `/calyx?${params.toString()}`;
 }

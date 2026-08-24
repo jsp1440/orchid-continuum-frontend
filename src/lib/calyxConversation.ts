@@ -5,6 +5,7 @@ import {
   CLASSROOM_INVESTIGATION_ORIGIN,
   classroomCalyxTurnRouteContext,
 } from "@/lib/classroomInvestigationNavigation";
+import { calyxNavigationContextIsExplicitlyNonEvidentiary } from "@/lib/calyxRouteTrustBoundary";
 import { speciesDossierCalyxTurnRouteContext } from "@/lib/speciesDossierCalyxNavigation";
 import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
@@ -360,6 +361,8 @@ export function buildCalyxTurnContext(options: {
   const classroomRouteContext = classroomCalyxTurnRouteContext(routeSearch);
 
   const routeContext = parseCalyxRouteContext(routeSearch);
+  const featuredTaxonIsExplicitlyNonEvidentiary =
+    calyxNavigationContextIsExplicitlyNonEvidentiary(routeSearch);
   const researchTaxon = parseResearchExactTaxon(routeSearch, routeContext.origin);
   const invalidClassroomArrival =
     routeContext.origin === CLASSROOM_INVESTIGATION_ORIGIN && !classroomRouteContext;
@@ -386,6 +389,9 @@ export function buildCalyxTurnContext(options: {
       featured_taxon: routeContext.featuredTaxon
         ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
         : undefined,
+      ...(routeContext.featuredTaxon && featuredTaxonIsExplicitlyNonEvidentiary
+        ? { featured_taxon_is_evidence: false }
+        : {}),
       ...(researchTaxon
         ? {
             taxon: researchTaxon,
