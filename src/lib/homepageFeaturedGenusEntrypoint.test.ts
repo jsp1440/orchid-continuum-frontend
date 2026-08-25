@@ -14,8 +14,14 @@ const CONTINUUM_SOURCE = readFileSync(
 describe('homepage featured genus canonical entrypoint', () => {
   it('keeps the live homepage mounted on the Continuum-backed genus feature', () => {
     expect(ENTRYPOINT_SOURCE).toContain("import DailyGenusFeatureContinuum from './DailyGenusFeatureContinuum'");
-    expect(ENTRYPOINT_SOURCE).toContain('<DailyGenusFeatureContinuum />');
+    expect(ENTRYPOINT_SOURCE).toContain('<DailyGenusFeatureContinuum');
     expect(ENTRYPOINT_SOURCE).not.toContain('DailyGenusFeatureV5');
+    // The continuation actions are handed to the panel rather than rendered as
+    // a second band beside it, so the homepage offers this genus once. This is
+    // stricter than the self-closing tag it replaced: that only said the panel
+    // was mounted, this also says the handoffs are inside it.
+    expect(ENTRYPOINT_SOURCE).toContain('continuation={');
+    expect(ENTRYPOINT_SOURCE).not.toMatch(/<DailyGenusFeatureContinuum \/>\s*<section/);
   });
 
   it('keeps Atlas and Calyx navigation on canonical featured-taxon helpers', () => {

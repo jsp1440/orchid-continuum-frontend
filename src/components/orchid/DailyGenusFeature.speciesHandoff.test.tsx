@@ -12,8 +12,14 @@ vi.mock('@/lib/dailyGenusContext', () => ({
   useDailyGenus: () => ({ genus: 'Phalaenopsis' }),
 }));
 
+// The panel now hosts the continuation actions in a footer slot rather than
+// having them as a sibling band. A stub that swallowed the slot would report
+// the governed handoffs as missing when they are simply somewhere else, so it
+// renders what it is handed — which is all this test ever needed from it.
 vi.mock('@/components/orchid/DailyGenusFeatureContinuum', () => ({
-  default: () => <div data-testid="continuum" />,
+  default: ({ continuation }: { continuation?: React.ReactNode }) => (
+    <div data-testid="continuum">{continuation}</div>
+  ),
 }));
 
 const { default: DailyGenusFeature } = await import('@/components/orchid/DailyGenusFeature');
