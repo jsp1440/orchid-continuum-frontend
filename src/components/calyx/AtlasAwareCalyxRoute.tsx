@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
+import CultivationEvaluationFrame from "@/components/calyx/CultivationEvaluationFrame";
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
 import {
@@ -146,6 +147,8 @@ export default function AtlasAwareCalyxRoute() {
           </div>
         </section>
       ) : null}
+
+      {cultivationContext ? <CultivationEvaluationFrame context={cultivationContext} /> : null}
 
       {/* A dossier arrival is not a Research project, and saying "Project not
           supplied" at someone who never had one describes a missing thing that
