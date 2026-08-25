@@ -539,6 +539,21 @@ test("14. a plant can be taken to Calyx for a cultivation evaluation", async () 
   // where they are keeping a plant suits it. The neighbouring "Ask Calyx"
   // deliberately sends nothing private and so cannot answer that; this action
   // sends the readings on purpose, and has to say so before it is clicked.
+  // Give the second bench a reading of its own first. A place nobody has
+  // measured is deliberately not offered as a destination — suggesting a move
+  // to somewhere with no readings would be a recommendation with no basis —
+  // so without this the alternative is correctly absent.
+  await page.getByRole("link", { name: "Locations" }).click();
+  const shelfReadings = page.getByTestId(`readings-${shelfId}`);
+  const shelfForm = shelfReadings.getByTestId("record-reading");
+  await shelfForm.getByTestId("reading-variable").selectOption("temperature_c");
+  await shelfForm.getByTestId("reading-value").fill("18");
+  await shelfForm.getByTestId("reading-day").fill(new Date().toISOString().slice(0, 10));
+  await shelfForm.getByTestId("reading-origin").selectOption("measured");
+  await shelfForm.getByTestId("reading-instrument").fill("Shelf datalogger");
+  await shelfForm.getByTestId("reading-submit").click();
+  await expect(shelfReadings.getByTestId(`reading-list-${shelfId}`)).toContainText("18");
+
   await visit(plantUrl);
 
   const action = page.getByTestId("cultivation-calyx-action");
@@ -550,6 +565,13 @@ test("14. a plant can be taken to Calyx for a cultivation evaluation", async () 
   await expect(disclosure).toContainText(PLANT.taxon);
   await expect(disclosure).toContainText(/do not travel/i);
   await expect(disclosure).toContainText(/not.*scientific evidence|cultivation observations/i);
+
+  // The grower's other benches are offered as letters, with the legend shown
+  // here so a recommendation naming "B" is actionable without B's name being
+  // sent anywhere.
+  const legend = page.getByTestId("cultivation-calyx-legend");
+  await expect(legend).toBeVisible();
+  await expect(page.getByTestId("cultivation-calyx-legend-B")).toContainText("South bench");
 
   await page.getByTestId("cultivation-calyx-submit").click();
 
@@ -573,6 +595,13 @@ test("14. a plant can be taken to Calyx for a cultivation evaluation", async () 
   await expect(banner).toContainText(/temperature c 21°C \(measured/i);
   await expect(banner).toContainText(/not scientific evidence and not occurrence records/i);
   await expect(banner).toContainText(/notes, photographs .* did not travel/i);
+
+  // The alternative travels as its letter and its kind, never its name, so a
+  // move can be recommended without the Continuum learning what the grower
+  // calls the place or where it is.
+  await expect(banner).toContainText(/other places you could move it/i);
+  await expect(page.getByTestId("cultivation-handoff-alternatives")).toContainText(/\bB\b.*shelf.*18°C/i);
+  expect(await banner.textContent()).not.toContain("South bench");
 
   // Reloading must not resurrect the observations: the handoff is single-use,
   // and a reloaded page is a pasted link as far as this boundary is concerned.

@@ -84,6 +84,13 @@ export type CultivationObservation = {
   observed_on: string;
 };
 
+export type CultivationAlternative = {
+  /** A, B, C… in the grower's own ordering. Never a name, never an id. */
+  ref: string;
+  kind: (typeof PERMITTED_LOCATION_KINDS)[number];
+  observations: CultivationObservation[];
+};
+
 export type CultivationHandoff = {
   origin: typeof CONSERVATORY_CULTIVATION_ORIGIN;
   taxon: string;
@@ -92,6 +99,17 @@ export type CultivationHandoff = {
   taxon_is_evidence: false;
   location: { kind: (typeof PERMITTED_LOCATION_KINDS)[number] };
   observations: CultivationObservation[];
+  /**
+   * The grower's other places, so a recommendation to move can name one.
+   *
+   * Each carries a short reference rather than its name, for the same reason
+   * the current location does: a name is free text somebody may have written
+   * an address into. The reference is the grower's own ordering of their
+   * locations, and the Conservatory shows them the legend before they send, so
+   * "B is cooler" is something they can act on without B's name ever leaving
+   * their collection.
+   */
+  alternatives: CultivationAlternative[];
   /** A grower's readings are facts about their greenhouse, not about the species. */
   observations_are_evidence: false;
   /** And they are not occurrence records. Absence of a locality is not enough to say so. */
@@ -167,10 +185,30 @@ function boundedObservation(candidate: unknown): CultivationObservation | null {
  * taxon cannot be answered against requirements, and one with no readings would
  * ask Calyx to assess conditions nobody recorded.
  */
+const SAFE_ALTERNATIVE_REF = /^[A-Z]$/;
+const MAX_ALTERNATIVES = 8;
+
+/** Bound a reading list, keeping one standing value per variable. */
+function boundedObservations(readings: Array<Record<string, unknown>> | undefined): CultivationObservation[] {
+  const observations: CultivationObservation[] = [];
+  for (const reading of readings ?? []) {
+    const bounded = boundedObservation(reading);
+    // One per variable: the caller passes standing readings, and a superseded
+    // value arriving beside its correction would have Calyx compare against a
+    // number the grower has already withdrawn.
+    if (bounded && !observations.some((existing) => existing.variable === bounded.variable)) {
+      observations.push(bounded);
+    }
+    if (observations.length >= MAX_OBSERVATIONS) break;
+  }
+  return observations;
+}
+
 export function buildCultivationHandoff(input: {
   acceptedScientificName: string | null | undefined;
   locationKind: string | null | undefined;
   readings: Array<{ variable?: unknown; value?: unknown; origin?: unknown; observed_at?: unknown }>;
+  alternatives?: Array<{ ref?: unknown; kind?: unknown; readings?: unknown }>;
 }): CultivationHandoff | null {
   const taxon = boundedTaxon(input.acceptedScientificName);
   if (!taxon) return null;
@@ -180,18 +218,25 @@ export function buildCultivationHandoff(input: {
   const kind = String(input.locationKind ?? '');
   if (!(PERMITTED_LOCATION_KINDS as readonly string[]).includes(kind)) return null;
 
-  const observations: CultivationObservation[] = [];
-  for (const reading of input.readings ?? []) {
-    const bounded = boundedObservation(reading);
-    // One reading per variable: the caller passes standing readings, and a
-    // superseded value arriving alongside its correction would have Calyx
-    // compare against a number the grower has already withdrawn.
-    if (bounded && !observations.some((existing) => existing.variable === bounded.variable)) {
-      observations.push(bounded);
-    }
-    if (observations.length >= MAX_OBSERVATIONS) break;
-  }
+  const observations = boundedObservations(input.readings as Array<Record<string, unknown>>);
   if (!observations.length) return null;
+
+  // A place nobody has measured cannot be compared, so it is dropped rather
+  // than offered as a destination with unknown conditions.
+  const alternatives: CultivationAlternative[] = [];
+  for (const candidate of input.alternatives ?? []) {
+    const ref = String(candidate?.ref ?? '');
+    const kind = String(candidate?.kind ?? '');
+    if (!SAFE_ALTERNATIVE_REF.test(ref)) continue;
+    if (!(PERMITTED_LOCATION_KINDS as readonly string[]).includes(kind)) continue;
+    if (alternatives.some((existing) => existing.ref === ref)) continue;
+    const theirs = boundedObservations(
+      Array.isArray(candidate?.readings) ? (candidate.readings as Array<Record<string, unknown>>) : [],
+    );
+    if (!theirs.length) continue;
+    alternatives.push({ ref, kind: kind as CultivationAlternative['kind'], observations: theirs });
+    if (alternatives.length >= MAX_ALTERNATIVES) break;
+  }
 
   return {
     origin: CONSERVATORY_CULTIVATION_ORIGIN,
@@ -200,6 +245,7 @@ export function buildCultivationHandoff(input: {
     taxon_is_evidence: false,
     location: { kind: kind as CultivationHandoff['location']['kind'] },
     observations,
+    alternatives,
     observations_are_evidence: false,
     observations_are_occurrence_data: false,
   };
@@ -294,6 +340,13 @@ export function readCultivationHandoff(
     locationKind: (candidate.location as { kind?: unknown } | undefined)?.kind as string | undefined,
     readings: Array.isArray(candidate.observations)
       ? (candidate.observations as Array<Record<string, unknown>>)
+      : [],
+    alternatives: Array.isArray(candidate.alternatives)
+      ? (candidate.alternatives as Array<Record<string, unknown>>).map((row) => ({
+          ref: row?.ref,
+          kind: row?.kind,
+          readings: row?.observations,
+        }))
       : [],
   });
 }

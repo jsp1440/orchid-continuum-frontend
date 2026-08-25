@@ -1496,13 +1496,28 @@ function CultivationCalyxAction({
   acceptedScientificName,
   locationKind,
   readings,
+  alternativeLocations,
 }: {
   acceptedScientificName?: string | null;
   locationKind?: string | null;
   readings: EnvironmentReading[];
+  /** The grower's other locations in use, in their own order. */
+  alternativeLocations: GrowingLocation[];
 }) {
+  const request = useApi();
   const navigate = useNavigate();
   const [refused, setRefused] = useState<string>();
+  const [preparing, setPreparing] = useState(false);
+
+  // A, B, C… assigned here and shown to the grower below, so a recommendation
+  // naming "B" is something they can act on without B's name being sent.
+  const legend = useMemo(
+    () =>
+      alternativeLocations
+        .slice(0, 8)
+        .map((location, index) => ({ location, ref: String.fromCharCode(66 + index) })),
+    [alternativeLocations],
+  );
 
   const handoff = useMemo(
     () =>
@@ -1532,23 +1547,61 @@ function CultivationCalyxAction({
     );
   }
 
-  function evaluate() {
+  async function evaluate() {
     setRefused(undefined);
-    const token = crypto.randomUUID().replace(/-/g, "");
-    // Seed first. Navigating after a refused write would arrive as a
-    // cultivation question carrying no observations.
-    if (!seedCultivationHandoff(window.sessionStorage, token, handoff!)) {
-      setRefused(
-        "Your browser would not let this page store the readings for the handoff, so nothing was sent.",
+    setPreparing(true);
+    try {
+      // The other places are read only at this point. Loading every location's
+      // readings just to render a button would cost a request per bench on
+      // every dossier view.
+      const alternatives = await Promise.all(
+        legend.map(async ({ location, ref }) => {
+          try {
+            const view = await request<EnvironmentView>(
+              `/api/conservatory/locations/${encodeURIComponent(location.id)}/environment`,
+            );
+            return {
+              ref,
+              kind: location.kind,
+              readings: (view.readings ?? []).filter((reading) => !reading.superseded_by_id),
+            };
+          } catch {
+            // A place whose readings cannot be read is simply not offered as a
+            // destination; it is not a reason to refuse the whole question.
+            return null;
+          }
+        }),
       );
-      return;
+
+      const withAlternatives = buildCultivationHandoff({
+        acceptedScientificName,
+        locationKind,
+        readings: readings.filter((reading) => !reading.superseded_by_id),
+        alternatives: alternatives.filter(Boolean) as NonNullable<(typeof alternatives)[number]>[],
+      });
+      if (!withAlternatives) {
+        setRefused("These growing conditions could not be prepared, so nothing was sent.");
+        return;
+      }
+
+      const token = crypto.randomUUID().replace(/-/g, "");
+      // Seed first. Navigating after a refused write would arrive as a
+      // cultivation question carrying no observations.
+      if (!seedCultivationHandoff(window.sessionStorage, token, withAlternatives)) {
+        setRefused(
+          "Your browser would not let this page store the readings for the handoff, so nothing was sent.",
+        );
+        return;
+      }
+      const href = cultivationCalyxHref(withAlternatives.taxon, token);
+      if (!href) {
+        setRefused("The handoff could not be addressed, so nothing was sent.");
+        return;
+      }
+      navigate(href);
+    } finally {
+      setPreparing(false);
     }
-    const href = cultivationCalyxHref(handoff!.taxon, token);
-    if (!href) {
-      setRefused("The handoff could not be addressed, so nothing was sent.");
-      return;
-    }
-    navigate(href);
   }
 
   return (
@@ -1556,10 +1609,11 @@ function CultivationCalyxAction({
       <button
         type="button"
         className="inline-flex items-center rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted"
-        onClick={evaluate}
+        onClick={() => { void evaluate(); }}
+        disabled={preparing}
         data-testid="cultivation-calyx-submit"
       >
-        Evaluate growing conditions with Calyx
+        {preparing ? "Preparing…" : "Evaluate growing conditions with Calyx"}
       </button>
       <p className="mt-2 text-xs text-muted-foreground" data-testid="cultivation-calyx-disclosure">
         Sends <i>{handoff.taxon}</i>, that this is a{" "}
@@ -1569,6 +1623,21 @@ function CultivationCalyxAction({
         travel, and these readings are sent as cultivation observations — not as scientific
         evidence or occurrence records.
       </p>
+      {legend.length > 0 && (
+        <div className="mt-2 text-xs text-muted-foreground" data-testid="cultivation-calyx-legend">
+          <p>
+            Your other places are sent as letters, not names, so Calyx can suggest one without
+            being told what you call it or where it is:
+          </p>
+          <ul className="mt-1 space-y-0.5">
+            {legend.map(({ location, ref }) => (
+              <li key={location.id} data-testid={`cultivation-calyx-legend-${ref}`}>
+                <strong>{ref}</strong> — {location.name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {refused && (
         <p className="mt-2 text-xs text-destructive" role="alert" data-testid="cultivation-calyx-refused">
           {refused}
@@ -1663,6 +1732,7 @@ function CultivationContext({ plantId, acceptedScientificName }: { plantId: stri
         acceptedScientificName={acceptedScientificName}
         locationKind={currentLocation?.kind}
         readings={environment?.readings ?? []}
+        alternativeLocations={usable.filter((candidate) => candidate.id !== currentLocation?.id)}
       />
       <RecordPlacement
         plantId={plantId}

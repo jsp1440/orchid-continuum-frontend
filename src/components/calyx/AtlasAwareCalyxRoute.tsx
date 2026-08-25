@@ -131,6 +131,14 @@ export default function AtlasAwareCalyxRoute() {
                   .map((row) => `${row.variable.replace(/_/g, " ")} ${row.value}${row.unit} (${row.origin}, ${row.observed_on})`)
                   .join(" · ")}
               </p>
+              {cultivationContext.alternatives.length > 0 ? (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="cultivation-handoff-alternatives">
+                  Other places you could move it to:{" "}
+                  {cultivationContext.alternatives
+                    .map((row) => `${row.ref} (a ${row.kind.replace(/_/g, " ")}: ${row.observations.map((o) => `${o.variable.replace(/_/g, " ")} ${o.value}${o.unit}`).join(", ")})`)
+                    .join(" · ")}
+                </p>
+              ) : null}
               <Link
                 className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
                 to="/conservatory/plants"
