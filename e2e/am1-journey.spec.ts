@@ -357,7 +357,10 @@ test("7. the evaluation carries the species outward and the cross inward", async
     .filter(([key]) => key !== "cultivation")
     .map(([, value]) => value)
     .join(" ");
-  for (const secret of ["Daniela", "Maria", "Cool bench", "Warm shelf", accession, qrIdentifier, "28", "21"]) {
+  for (const secret of [
+    "Daniela", "Maria", "Cool bench", "Warm shelf", "Unmeasured corner",
+    accession, qrIdentifier, "28", "21",
+  ]) {
     expect(carried, `"${secret}" reached the address`).not.toContain(secret);
   }
 
@@ -376,6 +379,18 @@ test("7. the evaluation carries the species outward and the cross inward", async
   await expect(banner).toContainText(/temperature c 28/i);
   await expect(page.getByTestId("cultivation-handoff-alternatives")).toContainText(/\bB\b.*shelf.*21/i);
   expect(await banner.textContent()).not.toContain("Warm shelf");
+
+  // The unmeasured place is not here at all — not as a letter, not as a kind,
+  // not as an empty row. Sending it with no observations would invite a
+  // comparison against conditions nobody recorded.
+  // Matched against how an entry actually renders — "B (a shelf: …)" — rather
+  // than against a bare letter: this panel also prints "temperature C", and a
+  // \bC\b check passes or fails on the Celsius unit instead of on a place.
+  const alternatives = (await page.getByTestId("cultivation-handoff-alternatives").textContent()) ?? "";
+  expect(alternatives).not.toContain("Unmeasured corner");
+  expect(alternatives).toContain("B (a ");
+  expect(alternatives).not.toContain("C (a ");
+  expect(alternatives.split(" \u00b7 ")).toHaveLength(1);
 });
 
 /* --------------------------------------------------------------- 7b ----- */
