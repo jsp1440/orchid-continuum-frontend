@@ -20,6 +20,20 @@
  * evidence for a plant nothing has been published about. Those resolve to no
  * species-level identity at all, which callers must treat as "cannot look this
  * up" rather than as a reason to guess.
+ *
+ * Labels are not written out in full. A grower states the genus once and lets
+ * the rest of the line inherit it, which is what the standard notations mean:
+ *
+ *   Phragmipedium kovachii 'Daniela' × 'Maria'
+ *   Phragmipedium kovachii ('Daniela' × 'Maria')
+ *   Phragmipedium besseae × kovachii
+ *
+ * Each is read here the way a grower means it, because refusing the shorthand
+ * refuses the plant. What is never supplied is a genus nobody wrote: an
+ * epithet on its own is not a species name, more than one genus can carry the
+ * same epithet, and inventing one would be fabricating taxonomy to make a
+ * lookup succeed. That case says the genus is missing, which is something the
+ * grower can act on, rather than claiming their plant is not a species.
  */
 
 const MAX_IDENTITY_CHARACTERS = 240;
@@ -83,28 +97,116 @@ function expandGenus(word: string): string {
   return GENUS_ABBREVIATIONS[word.toLowerCase()] ?? word;
 }
 
+/** What an earlier part of the line established, for a later part to inherit. */
+type ParentContext = { genus: string | null; species: string | null };
+
 /**
- * Reduce one side of a cross to `Genus species`, or null when that side is not
- * a species — a grex epithet is capitalised where a species epithet is not, and
- * that difference is the whole signal.
+ * Reduce one side of a cross to `Genus species`.
+ *
+ * `context` carries what the line has already said. A side written as just a
+ * cultivar inherits the whole species; a side written as a bare epithet
+ * inherits the genus. Neither invents anything the line did not contain.
+ *
+ * The two named outcomes distinguish returns of nothing that the grower can
+ * act on from ones they cannot: `missingGenus` is a bare epithet with no genus
+ * anywhere, and `ambiguousCapital` is a single capitalised word that is either
+ * a grex or an epithet somebody shifted-typed. A plain null is a grex.
  */
-function speciesOfOneParent(part: string): string | null {
+function speciesOfOneParent(
+  part: string,
+  context: ParentContext,
+): { species: string | null; missingGenus?: string; ambiguousCapital?: string } {
   const withoutCultivar = part.replace(CULTIVAR_EPITHET, ' ').trim();
   const words = withoutCultivar.split(/\s+/).filter(Boolean);
-  if (words.length < 2) return null;
+
+  // Written as a cultivar alone: `… × 'Maria'`. The species is the one the
+  // line already named, which is exactly what that notation means.
+  if (words.length === 0) return { species: context.species };
+
+  if (words.length === 1) {
+    const only = words[0];
+    // A bare epithet: `… × kovachii`. The genus is inherited when the line has
+    // one, and is otherwise the thing that is missing.
+    if (SPECIES_EPITHET.test(only)) {
+      if (context.genus) return { species: `${context.genus} ${only}` };
+      return { species: null, missingGenus: only };
+    }
+    // A genus on its own, or a capitalised grex word. Neither is a species.
+    return { species: null };
+  }
 
   const genus = expandGenus(words[0]);
-  if (!GENUS.test(genus)) return null;
+  if (!GENUS.test(genus)) return { species: null };
 
   const epithet = words[1];
   // `Phragmipedium Memoria Dick Clements` is a grex, not a species. Its epithet
   // is capitalised, and no cultivation literature is published about it.
-  if (!SPECIES_EPITHET.test(epithet)) return null;
+  if (!SPECIES_EPITHET.test(epithet)) {
+    // One capitalised word is the ambiguous case, and it is common: growers
+    // write `Phrag Kovachii` for the species all the time, while `Phrag
+    // Schroderae` is a real grex written identically. Capitalisation is the
+    // only thing separating them, so this is reported as a capitalisation
+    // question the grower can settle rather than silently read either way.
+    // Guessing "species" here would hand a grex a species' requirements.
+    if (words.length === 2 && GENUS.test(epithet)) {
+      return { species: null, ambiguousCapital: epithet };
+    }
+    return { species: null };
+  }
 
   // Anything after the species epithet that is not a cultivar has already been
   // stripped; a trailing authority or variety is not a different species, but
   // it is also not something this resolver is willing to interpret.
-  return `${genus} ${epithet}`;
+  return { species: `${genus} ${epithet}` };
+}
+
+/**
+ * Split a line into the parents to be compared, and the genus they inherit.
+ *
+ * A bracketed line is one of two different things, and reading one as the
+ * other invents a plant. Both appear on labels in the same collection:
+ *
+ *   Phragmipedium kovachii ('Daniela' × 'Maria')     a sibling cross
+ *   Phrag. Ingrid Suarez (humboldtii × kovachii)     a grex, with its parentage
+ *
+ * In the first, the bracket holds **cultivars** and the prefix is the taxon
+ * they are clones of, so each parent inherits the whole prefix. In the second,
+ * the bracket holds **species** and the prefix is a grex name — a name given to
+ * the cross, about which no cultivation literature exists. There only the
+ * genus carries; the grex words must not.
+ *
+ * Prepending the whole prefix in the second case is not merely useless, it
+ * fabricates. `Phragmipedium kovachii (humboldtii × besseae)` became the pair
+ * `Phragmipedium kovachii humboldtii` / `Phragmipedium kovachii besseae`, and
+ * since only the first two words of a part are read, both sides reduced to
+ * `Phragmipedium kovachii` — so a humboldtii × besseae cross resolved to
+ * kovachii and would have been shown kovachii's published requirements.
+ */
+function partsOfCross(cultivated: string): { parts: string[]; seedGenus: string | null } {
+  const split = (line: string) =>
+    line.split(HYBRID_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+
+  const bracketed = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(cultivated);
+  if (!bracketed) return { parts: split(cultivated), seedGenus: null };
+
+  const [, rawPrefix, inner] = bracketed;
+  const prefix = rawPrefix.trim();
+  if (!prefix || !HYBRID_SEPARATOR.test(inner)) return { parts: split(cultivated), seedGenus: null };
+
+  const sides = split(inner);
+  // Cultivars on both sides means the bracket is a sibling cross of the prefix.
+  const everySideIsCultivarOnly = sides.every((side) => {
+    CULTIVAR_EPITHET.lastIndex = 0;
+    return side.replace(CULTIVAR_EPITHET, ' ').trim() === '';
+  });
+  if (everySideIsCultivarOnly) {
+    return { parts: sides.map((side) => `${prefix} ${side}`), seedGenus: null };
+  }
+
+  // Otherwise the bracket is the parentage of a hybrid. The prefix names the
+  // cross, not a parent of it, so only its genus reaches the comparison.
+  const genus = expandGenus(prefix.split(/\s+/)[0] ?? '');
+  return { parts: sides, seedGenus: GENUS.test(genus) ? genus : null };
 }
 
 /**
@@ -126,10 +228,31 @@ export function resolveCultivatedIdentity(
     return null;
   }
 
-  const parts = cultivated.split(HYBRID_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+  const { parts, seedGenus } = partsOfCross(cultivated);
+
+  /** The genus is missing rather than the plant being unidentifiable. */
+  const genusMissing = (epithet: string): CultivatedIdentity => ({
+    cultivated,
+    species: null,
+    genus: null,
+    relationship: 'none',
+    reason: `No genus is written, so "${epithet}" cannot be matched to a species — more than one genus can carry the same epithet. Add the genus in front of it.`,
+  });
+
+  /** One capital letter is all that separates a grex from a species here. */
+  const capitalAmbiguous = (word: string): CultivatedIdentity => ({
+    cultivated,
+    species: null,
+    genus: null,
+    relationship: 'none',
+    reason: `"${word}" is capitalised, which marks a grex — a name given to a cross — rather than a species. If you meant the species, write it as "${word.toLowerCase()}"; if this really is the grex, no species-level cultivation evidence applies to it.`,
+  });
 
   if (parts.length === 1) {
-    const species = speciesOfOneParent(parts[0]);
+    const first = speciesOfOneParent(parts[0], { genus: seedGenus, species: null });
+    if (first.missingGenus) return genusMissing(first.missingGenus);
+    if (first.ambiguousCapital) return capitalAmbiguous(first.ambiguousCapital);
+    const species = first.species;
     if (!species) {
       return {
         cultivated,
@@ -160,7 +283,20 @@ export function resolveCultivatedIdentity(
     };
   }
 
-  const [left, right] = parts.map(speciesOfOneParent);
+  // The first parent establishes what the second may inherit. A line that
+  // never names a genus establishes nothing, and says so.
+  const first = speciesOfOneParent(parts[0], { genus: seedGenus, species: null });
+  if (first.missingGenus) return genusMissing(first.missingGenus);
+  if (first.ambiguousCapital) return capitalAmbiguous(first.ambiguousCapital);
+  const left = first.species;
+  const second = speciesOfOneParent(parts[1], {
+    genus: left ? left.split(' ')[0] : seedGenus,
+    species: left,
+  });
+  if (second.missingGenus) return genusMissing(second.missingGenus);
+  if (second.ambiguousCapital) return capitalAmbiguous(second.ambiguousCapital);
+  const right = second.species;
+
   if (!left || !right) {
     return {
       cultivated,

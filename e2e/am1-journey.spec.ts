@@ -135,10 +135,20 @@ test("2b. AM1's ruler-backed flower measurement is recorded with its provenance"
   await form.getByTestId("measurement-method").selectOption("ruler_photograph");
   await form.getByTestId("measurement-day").fill(new Date().toISOString().slice(0, 10));
   await form.getByTestId("measurement-instrument").fill("12 in rule");
+
+  // The method claims a photograph, so the form asks which one. Naming it is
+  // the whole reason this method is trusted above an estimate: somebody can
+  // open that photograph and check the reading against the rule in it.
+  const chooser = form.getByTestId("measurement-photograph");
+  await expect(chooser).toBeVisible();
+  const offered = chooser.locator("option", { hasText: "Flower, ruler-backed" });
+  await expect(offered).toHaveCount(1);
+  await chooser.selectOption((await offered.getAttribute("value")) ?? "");
   await form.getByTestId("measurement-submit").click();
 
   const list = page.getByTestId("measurement-list");
   await expect(list).toBeVisible();
+  await expect(list).toContainText(/from photograph: Flower, ruler-backed/i);
 
   // The reading is kept in the unit it was read in, and the conversion claims
   // no more precision than a ruler had: 14.2 cm, never 14.224.
@@ -149,6 +159,31 @@ test("2b. AM1's ruler-backed flower measurement is recorded with its provenance"
   // How it was obtained is most of what the number is worth.
   await expect(list).toContainText(/by ruler photograph/i);
   await expect(list).toContainText("Natural spread, horizontal");
+});
+
+/* --------------------------------------------------------------- 2c ----- */
+
+test("2c. a photograph-read measurement that names no photograph says so", async () => {
+  // Growers measure before they upload, so this is recorded rather than
+  // refused. What must not happen is it sitting in the list looking exactly
+  // as checkable as the reading above, when nothing can be checked.
+  await visit(plantUrl);
+  const form = page.getByTestId("record-measurement");
+  await form.getByTestId("measurement-trait").selectOption("petal_width");
+  await form.getByTestId("measurement-value").fill("4.1");
+  await form.getByTestId("measurement-unit").selectOption("in");
+  await form.getByTestId("measurement-method").selectOption("ruler_photograph");
+  await form.getByTestId("measurement-day").fill(new Date().toISOString().slice(0, 10));
+  await form.getByTestId("measurement-photograph").selectOption("");
+  await form.getByTestId("measurement-submit").click();
+
+  const list = page.getByTestId("measurement-list");
+  await expect(list).toContainText("4.1 in");
+  await expect(list).toContainText(/is not named here, so it cannot be checked against one/i);
+
+  // And the reading that did name one still reads as named — the warning is
+  // per reading, not a banner over the section.
+  await expect(list).toContainText(/from photograph: Flower, ruler-backed/i);
 });
 
 /* ----------------------------------------------------------------- 3 ----- */
@@ -180,6 +215,14 @@ test("3. two growing locations exist, each with its own measured conditions", as
     await form.getByTestId("reading-submit").click();
     await expect(readings.getByTestId(`reading-list-${id}`)).toContainText(value);
   }
+
+  // A third place, deliberately never measured. It must not be ranked against
+  // the other two on nothing, and it must not vanish either — the grower is
+  // shown a letter for it and has to be told why no answer mentions it.
+  await page.getByTestId("location-name").fill("Unmeasured corner");
+  await page.getByTestId("location-kind").selectOption("shade_house");
+  await page.getByTestId("location-submit").click();
+  await expect(page.getByTestId("location-list").getByText("Unmeasured corner", { exact: true })).toBeVisible();
 });
 
 /* ----------------------------------------------------------------- 4 ----- */
@@ -219,11 +262,123 @@ test("6. the dossier offers the evaluation, naming both identities", async () =>
 
   // The other bench is offered as a letter, its name kept in the collection.
   await expect(page.getByTestId("cultivation-calyx-legend-B")).toContainText("Warm shelf");
+
+  // The unmeasured shade house gets a letter too, and the panel says plainly
+  // that a place with no readings is not sent — otherwise the grower reads
+  // the legend as a promise that all three were weighed.
+  await expect(page.getByTestId("cultivation-calyx-legend-C")).toContainText("Unmeasured corner");
+  await expect(page.getByTestId("cultivation-calyx-legend"))
+    .toContainText(/A place with no readings of its own is not sent at all/i);
+});
+
+/* --------------------------------------------------------------- 6b ----- */
+
+test("6b. the same plant recorded in label shorthand resolves the same way", async () => {
+  // A grower writes the genus once and lets the line inherit it. This is the
+  // same cross as AM1, written the way a label actually carries it, and it has
+  // to reach the same species — otherwise the feature works only for records
+  // typed out in full.
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("AM1 sib, shorthand label");
+  await page.getByLabel("Accepted scientific name").fill("Phrag. kovachii 'Daniela' x 'Maria'");
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+  const shorthandUrl = new URL(page.url()).pathname;
+
+  // It needs a place and a reading before the action can appear at all.
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+
+  await visit(shorthandUrl);
+  const disclosure = page.getByTestId("cultivation-calyx-disclosure");
+  await expect(disclosure).toBeVisible();
+  await expect(disclosure).toContainText("Phrag. kovachii 'Daniela' x 'Maria'");
+  await expect(disclosure).toContainText(AM1_SPECIES);
+  await expect(disclosure).toContainText(/both parents belong to/i);
+});
+
+/* --------------------------------------------------------------- 6c ----- */
+
+test("6c. a record with no genus is refused, and says which word to add", async () => {
+  // An epithet on its own is not a species name. Supplying the genus would be
+  // fabricating taxonomy to make a lookup succeed, so the plant is refused —
+  // but the refusal has to tell the grower what to do about it.
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("Unlabelled sib cross");
+  await page.getByLabel("Accepted scientific name").fill("kovachii 'Daniela' x kovachii 'Maria'");
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+
+  const refusal = page.getByTestId("cultivation-calyx-unavailable");
+  await expect(refusal).toBeVisible();
+  await expect(refusal).toContainText(/No genus is written/i);
+  await expect(refusal).toContainText("kovachii");
+  await expect(refusal).toContainText(/Add the genus in front of it/i);
+  // Not the misleading claim it used to make.
+  await expect(refusal).not.toContainText(/is not a species/i);
+  await expect(page.getByTestId("cultivation-calyx-submit")).toHaveCount(0);
+});
+
+/* --------------------------------------------------------------- 6d ----- */
+
+test("6d. a grex is not given one of its parents' requirements", async () => {
+  // A real plant in this collection, written the way its tag is written:
+  // a grex name followed by its parentage. The two parents are different
+  // species, so nothing published describes this plant — and handing it
+  // either parent's requirements would be evidence about a different one.
+  //
+  // The bracket is the trap. In "kovachii ('Daniela' x 'Maria')" it holds
+  // cultivars and the line is a sibling cross of kovachii; here it holds
+  // species and the words in front are a grex name. Reading the second as
+  // the first resolved this plant to a species it is not.
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("Ingrid Suarez");
+  await page.getByLabel("Accepted scientific name")
+    .fill("Phrag. Ingrid Suarez (humboldtii \u00d7 kovachii)");
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+
+  const refusal = page.getByTestId("cultivation-calyx-unavailable");
+  await expect(refusal).toBeVisible();
+  // Both parents named, so the grower can see what the plant actually is.
+  await expect(refusal).toContainText("Phragmipedium humboldtii");
+  await expect(refusal).toContainText("Phragmipedium kovachii");
+  await expect(refusal).toContainText(/evidence about a different plant/i);
+  await expect(page.getByTestId("cultivation-calyx-submit")).toHaveCount(0);
+
+  // And the assessment panel must not have quietly compared it against
+  // kovachii either — that is the same fabrication one surface further on.
+  const assessment = page.getByTestId("placement-assessment");
+  await expect(assessment.getByTestId("nothing-assessed")).toBeVisible();
 });
 
 /* ----------------------------------------------------------------- 7 ----- */
 
 test("7. the evaluation carries the species outward and the cross inward", async () => {
+  // Back to AM1: the two steps before this one recorded other plants.
+  await visit(plantUrl);
+  await expect(page.getByTestId("cultivation-calyx-disclosure")).toContainText(AM1_IDENTITY);
   await page.getByTestId("cultivation-calyx-submit").click();
   await expect(page).toHaveURL(/\/calyx\?/);
   const arrived = new URL(page.url());
@@ -243,7 +398,10 @@ test("7. the evaluation carries the species outward and the cross inward", async
     .filter(([key]) => key !== "cultivation")
     .map(([, value]) => value)
     .join(" ");
-  for (const secret of ["Daniela", "Maria", "Cool bench", "Warm shelf", accession, qrIdentifier, "28", "21"]) {
+  for (const secret of [
+    "Daniela", "Maria", "Cool bench", "Warm shelf", "Unmeasured corner",
+    accession, qrIdentifier, "28", "21",
+  ]) {
     expect(carried, `"${secret}" reached the address`).not.toContain(secret);
   }
 
@@ -262,6 +420,18 @@ test("7. the evaluation carries the species outward and the cross inward", async
   await expect(banner).toContainText(/temperature c 28/i);
   await expect(page.getByTestId("cultivation-handoff-alternatives")).toContainText(/\bB\b.*shelf.*21/i);
   expect(await banner.textContent()).not.toContain("Warm shelf");
+
+  // The unmeasured place is not here at all — not as a letter, not as a kind,
+  // not as an empty row. Sending it with no observations would invite a
+  // comparison against conditions nobody recorded.
+  // Matched against how an entry actually renders — "B (a shelf: …)" — rather
+  // than against a bare letter: this panel also prints "temperature C", and a
+  // \bC\b check passes or fails on the Celsius unit instead of on a place.
+  const alternatives = (await page.getByTestId("cultivation-handoff-alternatives").textContent()) ?? "";
+  expect(alternatives).not.toContain("Unmeasured corner");
+  expect(alternatives).toContain("B (a ");
+  expect(alternatives).not.toContain("C (a ");
+  expect(alternatives.split(" \u00b7 ")).toHaveLength(1);
 });
 
 /* --------------------------------------------------------------- 7b ----- */
@@ -282,6 +452,13 @@ test("7b. the evaluation is kept in AM1's own history", async () => {
   await expect(entries.first()).toContainText(/greenhouse bench/i);
   await expect(entries.first()).toContainText(/temperature c 28/i);
   await expect(entries.first()).toContainText(/1 other place considered/i);
+
+  // The shade house had a letter and no readings. The history says it went
+  // uncompared rather than omitting it, because a bench that simply never
+  // appears in the answer reads as one that lost the comparison.
+  await expect(entries.first()).toContainText(/1 that could not be compared for lack of readings/i);
+  // And it is still not ranked: only the measured alternative travelled.
+  await expect(entries.first()).not.toContainText(/2 other places considered/i);
 
   // A log of asking, not of findings.
   await expect(page.getByTestId("evaluation-history-basis")).toContainText(/nothing here is evidence/i);

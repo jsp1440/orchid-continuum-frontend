@@ -17,6 +17,7 @@
  */
 import { createServer } from "node:http";
 import { randomUUID, createHash } from "node:crypto";
+import { speciesOfStoredIdentity } from "./species-of-stored-identity.mjs";
 
 const store = {
   users: new Map(),      // email -> { id, email, password }
@@ -56,35 +57,6 @@ const REQUIREMENTS = {
     relative_humidity_pct: { min: [{ value: 50, evidence_strength: "moderate" }], max: [{ value: 85, evidence_strength: "moderate" }] },
   },
 };
-
-/**
- * Reduce a stored collection identity to the species requirements are about.
- *
- * The server has the same problem the client does: a real record reads
- * `Phragmipedium kovachii 'Daniela' x Phragmipedium kovachii 'Maria'`, and
- * looking that string up finds nothing. Both parents being clones of one
- * species means the species is what is published; two different species means
- * nothing published describes the plant, and returning either parent's bounds
- * would be evidence about something else.
- *
- * This mirrors src/lib/cultivatedTaxonIdentity.ts. The deployed backend needs
- * the same rule; see the pull request for that gap.
- */
-function speciesOfStoredIdentity(stored) {
-  const cultivated = String(stored ?? "").replace(/\s+/g, " ").trim();
-  if (!cultivated) return null;
-  const sideOf = (part) => {
-    const words = part.replace(/\s*(?:'[^']*'|"[^"]*")\s*/g, " ").trim().split(/\s+/).filter(Boolean);
-    if (words.length < 2) return null;
-    if (!/^[A-Z][a-z-]+$/.test(words[0]) || !/^[a-z][a-z-]+$/.test(words[1])) return null;
-    return `${words[0]} ${words[1]}`;
-  };
-  const parts = cultivated.split(/\s(?:\u00d7|x|X)\s/).map((p) => p.trim()).filter(Boolean);
-  if (parts.length === 1) return sideOf(parts[0]);
-  if (parts.length !== 2) return null;
-  const [left, right] = parts.map(sideOf);
-  return left && right && left === right ? left : null;
-}
 
 function requirementsFor(taxon) {
   const direct = REQUIREMENTS[(taxon || "").trim().toLowerCase()];
@@ -496,6 +468,10 @@ async function conservatoryRoute(req, res, url) {
         location_kind: input.location_kind ?? null,
         observations: Array.isArray(input.observations) ? input.observations : [],
         alternatives_considered: Number(input.alternatives_considered) || 0,
+        // Places that had a letter but no readings behind them. Kept so the
+        // history can say a bench went uncompared, rather than leaving the
+        // grower to read that silence as a verdict about it.
+        alternatives_unassessable: Number(input.alternatives_unassessable) || 0,
         // Recording that an assessment happened does not make its inputs
         // evidence, and does not make the assessment a finding.
         is_scientific_evidence: false,
@@ -546,6 +522,18 @@ async function conservatoryRoute(req, res, url) {
       if (measurement.supersedes_id) {
         const corrected = collection.measurements.find((row) => row.id === measurement.supersedes_id);
         if (!corrected) return fail(res, 404, "supersedes_not_found", "The measurement being corrected is not in this record.");
+      }
+      // A photograph is provenance only if it is a photograph of this plant.
+      // Accepting any id would let a reading cite another plant's photograph
+      // and read as checkable when checking it would show something else.
+      if (measurement.photograph_id) {
+        const shown = collection.photographs.find(
+          (row) => row.id === measurement.photograph_id && row.plant_id === plantId,
+        );
+        if (!shown) {
+          return fail(res, 422, "photograph_not_of_this_plant",
+            "A measurement can only cite a photograph of the plant it measures.");
+        }
       }
       collection.measurements.push(measurement);
       return json(res, 201, measurement);

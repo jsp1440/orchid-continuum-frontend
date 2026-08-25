@@ -9,7 +9,9 @@ import {
   MEASUREMENT_UNITS,
   buildPlantMeasurement,
   describeMeasurement,
+  measurementPhotographProvenance,
 } from "@/lib/plantMeasurementObservation";
+import type { PlantMeasurement } from "@/lib/plantMeasurementObservation";
 import {
   buildCultivationHandoff,
   cultivationCalyxHref,
@@ -222,6 +224,8 @@ type StoredMeasurement = {
   method: string;
   measured_on: string;
   instrument: string | null;
+  /** The photograph the ruler is in, when the reading was taken off one. */
+  photograph_id: string | null;
   supersedes_id: string | null;
 };
 
@@ -235,6 +239,8 @@ type StoredEvaluation = {
   location_kind: string | null;
   observations: Array<{ variable: string; value: number; unit: string }>;
   alternatives_considered: number;
+  /** Places that had a letter but no readings, so nothing could be compared. */
+  alternatives_unassessable?: number | null;
 };
 
 type PlantInput = {
@@ -1659,6 +1665,11 @@ function CultivationCalyxAction({
           location_kind: withAlternatives.location.kind,
           observations: withAlternatives.observations,
           alternatives_considered: withAlternatives.alternatives.length,
+          // A place the grower saw a letter for, which had no readings to
+          // compare. Recorded as a count rather than a letter: the letters are
+          // assigned from the current list order, so one stored today would
+          // name a different bench after the next place is added.
+          alternatives_unassessable: legend.length - withAlternatives.alternatives.length,
         }),
       }).catch(() => {
         // The history is a record, not a gate.
@@ -1702,7 +1713,9 @@ function CultivationCalyxAction({
         <div className="mt-2 text-xs text-muted-foreground" data-testid="cultivation-calyx-legend">
           <p>
             Your other places are sent as letters, not names, so Calyx can suggest one without
-            being told what you call it or where it is:
+            being told what you call it or where it is. A place with no readings of its own is
+            not sent at all — it cannot be compared, and offering it as a destination with
+            unknown conditions would be a guess:
           </p>
           <ul className="mt-1 space-y-0.5">
             {legend.map(({ location, ref }) => (
@@ -2169,6 +2182,8 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
   const [method, setMethod] = useState("");
   const [day, setDay] = useState("");
   const [instrument, setInstrument] = useState("");
+  const [photographId, setPhotographId] = useState("");
+  const [photographs, setPhotographs] = useState<PlantPhotograph[]>([]);
   const [saving, setSaving] = useState(false);
   const [reloads, setReloads] = useState(0);
 
@@ -2190,13 +2205,38 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
     return () => { active = false; };
   }, [plantId, request, reloads]);
 
+  // Only so a photograph-read measurement can name the photograph. A failure
+  // here leaves the choice unavailable rather than blocking the measurement.
+  useEffect(() => {
+    let active = true;
+    request<{ photographs: PlantPhotograph[] }>(
+      `/api/conservatory/plants/${encodeURIComponent(plantId)}/photographs`,
+    )
+      .then((result) => {
+        if (active && result && Array.isArray(result.photographs)) setPhotographs(result.photographs);
+      })
+      .catch(() => { if (active) setPhotographs([]); });
+    return () => { active = false; };
+  }, [plantId, request, reloads]);
+
   const today = new Date().toISOString().slice(0, 10);
   const ready = Boolean(trait && value.trim() && unit && method && day);
+  const fromPhotograph = method === "ruler_photograph";
+  const photographLabel = (photograph: PlantPhotograph) => {
+    const when = photograph.taken_at ?? photograph.recorded_at;
+    const day = when ? new Date(when).toLocaleDateString() : "date unknown";
+    return photograph.caption ? `${photograph.caption} — ${day}` : day;
+  };
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const measurement = buildPlantMeasurement({
       trait, value, unit, method, measuredOn: day, instrument: instrument.trim() || null,
+      // Only a photograph of this plant, and only when the method claims one.
+      photographId:
+        method === "ruler_photograph" && photographs.some((row) => row.id === photographId)
+          ? photographId
+          : null,
     });
     if (!measurement) { setError("That measurement is not complete enough to record."); return; }
     setSaving(true); setError(undefined);
@@ -2210,9 +2250,10 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
           method: measurement.method,
           measured_on: measurement.measured_on,
           instrument: measurement.instrument,
+          photograph_id: measurement.photograph_id,
         }),
       });
-      setTrait(""); setValue(""); setMethod(""); setDay(""); setInstrument("");
+      setTrait(""); setValue(""); setMethod(""); setDay(""); setInstrument(""); setPhotographId("");
       setReloads((count) => count + 1);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "The measurement could not be recorded");
@@ -2233,6 +2274,33 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
     return built ? describeMeasurement(built) : `${row.trait}: ${row.value} ${row.unit}`;
   };
 
+  /**
+   * Where a photograph-read reading came from, said on the reading itself.
+   *
+   * A photograph this collection no longer has is reported as unidentified
+   * rather than as a name nobody can open — the id alone tells the grower
+   * nothing and would read as provenance it does not have.
+   */
+  const provenance = (row: StoredMeasurement) => {
+    const state = measurementPhotographProvenance({
+      method: row.method as PlantMeasurement["method"],
+      photograph_id: row.photograph_id ?? null,
+    });
+    if (state.state === "not_from_photograph") return null;
+    const named =
+      state.state === "identified"
+        ? photographs.find((photograph) => photograph.id === state.photographId)
+        : undefined;
+    if (named) {
+      return <span className="text-muted-foreground" data-testid={`measurement-photograph-${row.id}`}>
+        {" "}· from photograph: {photographLabel(named)}
+      </span>;
+    }
+    return <span className="text-muted-foreground" data-testid={`measurement-photograph-missing-${row.id}`}>
+      {" "}· read from a photograph that is not named here, so it cannot be checked against one
+    </span>;
+  };
+
   return <section className="mt-6 rounded-xl border p-5" data-testid="plant-measurements">
     <h3 className="text-sm font-semibold">Measurements</h3>
     <p className="mt-1 text-[11px] text-muted-foreground" data-testid="measurements-provenance">
@@ -2251,7 +2319,7 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
       <>
         {record.standing.length > 0 && <ul className="mt-3 space-y-1 text-xs" data-testid="measurement-list">
           {record.standing.map((row) => (
-            <li key={row.id} data-testid={`measurement-${row.id}`}>{line(row)}</li>
+            <li key={row.id} data-testid={`measurement-${row.id}`}>{line(row)}{provenance(row)}</li>
           ))}
         </ul>}
         {record.superseded.length > 0 && <div className="mt-2" data-testid="superseded-measurements">
@@ -2306,6 +2374,29 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
         <input className="mt-1 rounded-md border px-3 py-2" value={instrument} data-testid="measurement-instrument"
           onChange={(changed) => setInstrument(changed.target.value)} />
       </label>
+      {/*
+        Offered only when the method claims a photograph, because that is the
+        only method whose reliability rests on one. Naming it is what makes the
+        reading re-checkable; leaving it unnamed is allowed and then said out
+        loud on the reading, since growers measure before they upload.
+      */}
+      {fromPhotograph && (photographs.length > 0 ? (
+        <label className="text-sm">
+          <span className="block text-xs text-muted-foreground">Which photograph</span>
+          <select className="mt-1 max-w-[16rem] rounded-md border px-3 py-2" value={photographId}
+            data-testid="measurement-photograph" onChange={(changed) => setPhotographId(changed.target.value)}>
+            <option value="">Not identified</option>
+            {photographs.map((photograph) => (
+              <option key={photograph.id} value={photograph.id}>{photographLabel(photograph)}</option>
+            ))}
+          </select>
+        </label>
+      ) : (
+        <p className="max-w-[16rem] text-[11px] text-muted-foreground" data-testid="measurement-photograph-none">
+          No photograph of this plant has been added yet, so this reading cannot name the one the
+          ruler is in. It will be recorded saying so.
+        </p>
+      ))}
       <button className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50"
         disabled={saving || !ready} data-testid="measurement-submit">
         {saving ? "Recording…" : "Record measurement"}
@@ -2375,6 +2466,16 @@ function CultivationEvaluationHistory({ plantId }: { plantId: string }) {
           {entry.alternatives_considered
             ? `, and ${entry.alternatives_considered} other place${entry.alternatives_considered === 1 ? "" : "s"} considered`
             : ""}
+          {/*
+            Said, rather than left as a gap between the letters the grower saw
+            and the places the answer mentions. Silence there reads as "that
+            bench lost the comparison" when nothing about it was compared.
+          */}
+          {entry.alternatives_unassessable
+            ? <span data-testid={`evaluation-unassessable-${entry.id}`}>
+                {`, and ${entry.alternatives_unassessable} that could not be compared for lack of readings`}
+              </span>
+            : null}
         </li>
       ))}
     </ul>

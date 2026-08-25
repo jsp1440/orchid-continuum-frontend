@@ -200,6 +200,38 @@ export function describeMeasurement(measurement: PlantMeasurement): string {
 }
 
 /**
+ * What can be said about where a photograph-read measurement came from.
+ *
+ * `ruler_photograph` is ranked above `estimated` for one reason: the
+ * photograph can be looked at again. That is only true if the record says
+ * which photograph. A reading marked as read off a photograph that names no
+ * photograph is not re-checkable, and presenting it as though it were would
+ * be claiming a provenance the record does not have — so it is stated as a
+ * gap the grower can close, not left silent.
+ *
+ * `unidentified` is deliberately not a refusal. Growers measure before they
+ * upload, and a reading is worth keeping; what is not acceptable is letting
+ * it pass as verifiable.
+ */
+export type MeasurementPhotographProvenance =
+  | { state: 'not_from_photograph' }
+  | { state: 'identified'; photographId: string }
+  | { state: 'unidentified'; note: string };
+
+export function measurementPhotographProvenance(
+  measurement: Pick<PlantMeasurement, 'method' | 'photograph_id'>,
+): MeasurementPhotographProvenance {
+  if (measurement.photograph_id) {
+    return { state: 'identified', photographId: measurement.photograph_id };
+  }
+  if (measurement.method !== 'ruler_photograph') return { state: 'not_from_photograph' };
+  return {
+    state: 'unidentified',
+    note: 'read from a photograph that is not named here, so it cannot be checked against one',
+  };
+}
+
+/**
  * The measurements that still stand, and the ones a correction replaced.
  *
  * Nothing is dropped. A superseded reading is part of what the collection

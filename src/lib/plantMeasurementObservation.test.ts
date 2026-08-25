@@ -4,6 +4,7 @@ import {
   buildPlantMeasurement,
   convertedMeasurement,
   describeMeasurement,
+  measurementPhotographProvenance,
   partitionMeasurements,
 } from "@/lib/plantMeasurementObservation";
 
@@ -136,5 +137,54 @@ describe("later flowerings add, and never overwrite", () => {
   it("ties a measurement to the photograph the ruler is in", () => {
     const measurement = buildPlantMeasurement({ ...AM1_SPREAD, photographId: "photo-3" })!;
     expect(measurement.photograph_id).toBe("photo-3");
+  });
+});
+
+describe("a reading off a photograph says which photograph", () => {
+  /**
+   * `ruler_photograph` outranks `estimated` for one reason: the photograph can
+   * be looked at again. These assertions are about whether the record actually
+   * supports that claim, not about how it reads.
+   */
+  it("names the photograph when the reading was taken off one", () => {
+    const measurement = buildPlantMeasurement({ ...AM1_SPREAD, photographId: "photo-3" })!;
+    expect(measurementPhotographProvenance(measurement)).toEqual({
+      state: "identified",
+      photographId: "photo-3",
+    });
+  });
+
+  it("says so, rather than staying silent, when no photograph is named", () => {
+    // The reading is kept — growers measure before they upload — but it must
+    // not pass as re-checkable when nothing can be re-checked.
+    const measurement = buildPlantMeasurement(AM1_SPREAD)!;
+    const provenance = measurementPhotographProvenance(measurement);
+    expect(provenance.state).toBe("unidentified");
+    expect(provenance.state === "unidentified" && provenance.note).toMatch(/cannot be checked/i);
+  });
+
+  it("asks nothing of a reading taken with a ruler in hand", () => {
+    const measurement = buildPlantMeasurement({ ...AM1_SPREAD, method: "ruler_direct" })!;
+    expect(measurementPhotographProvenance(measurement)).toEqual({ state: "not_from_photograph" });
+  });
+
+  it("reports a named photograph on any method, since the naming is the claim", () => {
+    // A calipers reading with the plant photographed beside them is still
+    // evidence of what was in front of the person; the method is a separate
+    // fact from whether a photograph exists.
+    const measurement = buildPlantMeasurement({
+      ...AM1_SPREAD,
+      method: "calipers",
+      photographId: "photo-9",
+    })!;
+    expect(measurementPhotographProvenance(measurement).state).toBe("identified");
+  });
+
+  it("does not let a photograph reference smuggle in free text", () => {
+    // photograph_id is bounded like every other stored string; an id that
+    // failed those bounds must read as unnamed, not as a name.
+    const measurement = buildPlantMeasurement({ ...AM1_SPREAD, photographId: "<script>" })!;
+    expect(measurement.photograph_id).toBeNull();
+    expect(measurementPhotographProvenance(measurement).state).toBe("unidentified");
   });
 });
