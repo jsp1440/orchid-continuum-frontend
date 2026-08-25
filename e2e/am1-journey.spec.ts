@@ -215,6 +215,14 @@ test("3. two growing locations exist, each with its own measured conditions", as
     await form.getByTestId("reading-submit").click();
     await expect(readings.getByTestId(`reading-list-${id}`)).toContainText(value);
   }
+
+  // A third place, deliberately never measured. It must not be ranked against
+  // the other two on nothing, and it must not vanish either — the grower is
+  // shown a letter for it and has to be told why no answer mentions it.
+  await page.getByTestId("location-name").fill("Unmeasured corner");
+  await page.getByTestId("location-kind").selectOption("shade_house");
+  await page.getByTestId("location-submit").click();
+  await expect(page.getByTestId("location-list").getByText("Unmeasured corner", { exact: true })).toBeVisible();
 });
 
 /* ----------------------------------------------------------------- 4 ----- */
@@ -254,6 +262,13 @@ test("6. the dossier offers the evaluation, naming both identities", async () =>
 
   // The other bench is offered as a letter, its name kept in the collection.
   await expect(page.getByTestId("cultivation-calyx-legend-B")).toContainText("Warm shelf");
+
+  // The unmeasured shade house gets a letter too, and the panel says plainly
+  // that a place with no readings is not sent — otherwise the grower reads
+  // the legend as a promise that all three were weighed.
+  await expect(page.getByTestId("cultivation-calyx-legend-C")).toContainText("Unmeasured corner");
+  await expect(page.getByTestId("cultivation-calyx-legend"))
+    .toContainText(/A place with no readings of its own is not sent at all/i);
 });
 
 /* --------------------------------------------------------------- 6b ----- */
@@ -381,6 +396,13 @@ test("7b. the evaluation is kept in AM1's own history", async () => {
   await expect(entries.first()).toContainText(/greenhouse bench/i);
   await expect(entries.first()).toContainText(/temperature c 28/i);
   await expect(entries.first()).toContainText(/1 other place considered/i);
+
+  // The shade house had a letter and no readings. The history says it went
+  // uncompared rather than omitting it, because a bench that simply never
+  // appears in the answer reads as one that lost the comparison.
+  await expect(entries.first()).toContainText(/1 that could not be compared for lack of readings/i);
+  // And it is still not ranked: only the measured alternative travelled.
+  await expect(entries.first()).not.toContainText(/2 other places considered/i);
 
   // A log of asking, not of findings.
   await expect(page.getByTestId("evaluation-history-basis")).toContainText(/nothing here is evidence/i);

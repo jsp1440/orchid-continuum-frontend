@@ -468,6 +468,10 @@ async function conservatoryRoute(req, res, url) {
         location_kind: input.location_kind ?? null,
         observations: Array.isArray(input.observations) ? input.observations : [],
         alternatives_considered: Number(input.alternatives_considered) || 0,
+        // Places that had a letter but no readings behind them. Kept so the
+        // history can say a bench went uncompared, rather than leaving the
+        // grower to read that silence as a verdict about it.
+        alternatives_unassessable: Number(input.alternatives_unassessable) || 0,
         // Recording that an assessment happened does not make its inputs
         // evidence, and does not make the assessment a finding.
         is_scientific_evidence: false,

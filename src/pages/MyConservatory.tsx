@@ -239,6 +239,8 @@ type StoredEvaluation = {
   location_kind: string | null;
   observations: Array<{ variable: string; value: number; unit: string }>;
   alternatives_considered: number;
+  /** Places that had a letter but no readings, so nothing could be compared. */
+  alternatives_unassessable?: number | null;
 };
 
 type PlantInput = {
@@ -1663,6 +1665,11 @@ function CultivationCalyxAction({
           location_kind: withAlternatives.location.kind,
           observations: withAlternatives.observations,
           alternatives_considered: withAlternatives.alternatives.length,
+          // A place the grower saw a letter for, which had no readings to
+          // compare. Recorded as a count rather than a letter: the letters are
+          // assigned from the current list order, so one stored today would
+          // name a different bench after the next place is added.
+          alternatives_unassessable: legend.length - withAlternatives.alternatives.length,
         }),
       }).catch(() => {
         // The history is a record, not a gate.
@@ -1706,7 +1713,9 @@ function CultivationCalyxAction({
         <div className="mt-2 text-xs text-muted-foreground" data-testid="cultivation-calyx-legend">
           <p>
             Your other places are sent as letters, not names, so Calyx can suggest one without
-            being told what you call it or where it is:
+            being told what you call it or where it is. A place with no readings of its own is
+            not sent at all — it cannot be compared, and offering it as a destination with
+            unknown conditions would be a guess:
           </p>
           <ul className="mt-1 space-y-0.5">
             {legend.map(({ location, ref }) => (
@@ -2457,6 +2466,16 @@ function CultivationEvaluationHistory({ plantId }: { plantId: string }) {
           {entry.alternatives_considered
             ? `, and ${entry.alternatives_considered} other place${entry.alternatives_considered === 1 ? "" : "s"} considered`
             : ""}
+          {/*
+            Said, rather than left as a gap between the letters the grower saw
+            and the places the answer mentions. Silence there reads as "that
+            bench lost the comparison" when nothing about it was compared.
+          */}
+          {entry.alternatives_unassessable
+            ? <span data-testid={`evaluation-unassessable-${entry.id}`}>
+                {`, and ${entry.alternatives_unassessable} that could not be compared for lack of readings`}
+              </span>
+            : null}
         </li>
       ))}
     </ul>
