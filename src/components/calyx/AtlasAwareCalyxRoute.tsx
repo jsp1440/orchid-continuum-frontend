@@ -1,8 +1,12 @@
-import { useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
+import {
+  adoptCultivationHandoff,
+  type CultivationHandoff,
+} from "@/lib/conservatoryCultivationCalyx";
 import { rejectsCalyxNavigationContext } from "@/lib/calyxRouteTrustBoundary";
 import {
   ATLAS_WORKSPACE_ORIGIN,
@@ -46,6 +50,15 @@ export default function AtlasAwareCalyxRoute() {
     if (!researchContext) return;
     seedResearchCalyxPersistence(location.search, window.localStorage);
   }, [location.search, researchContext]);
+
+  // Adopt the cultivation observations before the workspace mounts, so the very
+  // first turn already carries them. `useLayoutEffect` for the same reason the
+  // research seed uses one: a paint in between would be a cultivation question
+  // rendered with nothing behind it.
+  const [cultivationContext, setCultivationContext] = useState<CultivationHandoff | null>(null);
+  useLayoutEffect(() => {
+    setCultivationContext(adoptCultivationHandoff(location.search, window.sessionStorage));
+  }, [location.search]);
 
   // Rejection is decided before anything is derived from the carried context.
   // `featuredTaxonAtlasHref` throws on a genus that is not canonical, and the
@@ -91,6 +104,49 @@ export default function AtlasAwareCalyxRoute() {
 
   return (
     <>
+      {/* A grower's own readings are in this conversation. They are facts about
+          their greenhouse, not about the species, and the difference has to be
+          on screen — not only in the payload — or the answer reads as though
+          the Continuum holds evidence it does not. */}
+      {cultivationContext ? (
+        <section
+          aria-label="Conservatory cultivation context"
+          className="border-b bg-muted/50 px-5 py-3 text-foreground"
+          data-testid="cultivation-handoff-banner"
+        >
+          <div className="mx-auto flex max-w-7xl flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
+                Evaluating growing conditions from your collection
+              </p>
+              <p className="mt-1 text-sm">
+                <strong>Subject:</strong> <i>{cultivationContext.taxon}</i>
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {cultivationContext.observations.length} reading
+                {cultivationContext.observations.length === 1 ? "" : "s"} from a{" "}
+                {cultivationContext.location.kind.replace(/_/g, " ")}:{" "}
+                {cultivationContext.observations
+                  .map((row) => `${row.variable.replace(/_/g, " ")} ${row.value}${row.unit} (${row.origin}, ${row.observed_on})`)
+                  .join(" · ")}
+              </p>
+              <Link
+                className="mt-2 inline-flex text-xs font-medium underline underline-offset-4 hover:text-foreground"
+                to="/conservatory/plants"
+              >
+                Back to My Plants
+              </Link>
+            </div>
+            <p className="max-w-md text-xs text-muted-foreground">
+              These are your own cultivation observations, carried privately from your collection.
+              They are not scientific evidence and not occurrence records, and nothing said here
+              adds them to the Continuum&rsquo;s scientific record. Your plant&rsquo;s identity,
+              notes, photographs and the name of the place it grows did not travel.
+            </p>
+          </div>
+        </section>
+      ) : null}
+
       {/* A dossier arrival is not a Research project, and saying "Project not
           supplied" at someone who never had one describes a missing thing that
           was never expected. Each governed origin gets the banner that is true
