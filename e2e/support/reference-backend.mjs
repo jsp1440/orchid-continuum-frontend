@@ -27,7 +27,7 @@ const store = {
 function collectionFor(userId) {
   if (!store.data.has(userId)) {
     store.data.set(userId, {
-      plants: [], locations: [], placements: [], events: [],
+      plants: [], locations: [], placements: [], events: [], measurements: [],
       readings: [], photographs: [], locationHistory: [], accessionSeq: 0,
     });
   }
@@ -475,6 +475,55 @@ async function conservatoryRoute(req, res, url) {
       standing: mine.filter((event) => !event.superseded_by_id),
       corrected: mine.filter((event) => event.superseded_by_id),
       event_count: mine.length,
+      is_scientific_evidence: false,
+    });
+  }
+
+  /* --- measurements --- */
+  match = /^\/api\/conservatory\/plants\/([^/]+)\/measurements$/.exec(path);
+  if (match) {
+    const plantId = decodeURIComponent(match[1]);
+    if (req.method === "POST") {
+      const input = asJson();
+      if (!input.trait || !input.unit || !input.method) {
+        return fail(res, 422, "measurement_incomplete", "A measurement needs a trait, a unit and a method.");
+      }
+      const value = Number(input.value);
+      if (!Number.isFinite(value) || value <= 0) {
+        return fail(res, 422, "measurement_value_invalid", "A measurement needs a positive length.");
+      }
+      const measurement = {
+        id: randomUUID(),
+        plant_id: plantId,
+        trait: String(input.trait),
+        value,
+        unit: String(input.unit),
+        method: String(input.method),
+        measured_on: String(input.measured_on || "").slice(0, 10),
+        flowering_event_id: input.flowering_event_id ?? null,
+        photograph_id: input.photograph_id ?? null,
+        instrument: input.instrument ?? null,
+        note: input.note ?? null,
+        supersedes_id: input.supersedes_id ?? null,
+        recorded_at: now(),
+        // A grower's reading of their own plant, never a species description.
+        is_scientific_evidence: false,
+      };
+      if (measurement.supersedes_id) {
+        const corrected = collection.measurements.find((row) => row.id === measurement.supersedes_id);
+        if (!corrected) return fail(res, 404, "supersedes_not_found", "The measurement being corrected is not in this record.");
+      }
+      collection.measurements.push(measurement);
+      return json(res, 201, measurement);
+    }
+    // Append-only: a later flowering adds an entry, and a correction leaves the
+    // entry it corrected in place.
+    const mine = collection.measurements.filter((row) => row.plant_id === plantId);
+    const replaced = new Set(mine.map((row) => row.supersedes_id).filter(Boolean));
+    return json(res, 200, {
+      plant_id: plantId,
+      standing: mine.filter((row) => !replaced.has(row.id)),
+      superseded: mine.filter((row) => replaced.has(row.id)),
       is_scientific_evidence: false,
     });
   }
