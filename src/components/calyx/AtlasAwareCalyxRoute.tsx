@@ -47,15 +47,14 @@ export default function AtlasAwareCalyxRoute() {
     seedResearchCalyxPersistence(location.search, window.localStorage);
   }, [location.search, researchContext]);
 
-  const fromAtlas =
-    routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN ||
-    routeContext.origin === ATLAS_WORKSPACE_ORIGIN;
-  const fromFeaturedTaxon = routeContext.origin === FEATURED_TAXON_ORIGIN;
-  const fromGenusProfile = routeContext.origin === GENUS_PROFILE_ORIGIN;
-  const genus = routeContext.featuredTaxon?.name ?? null;
-  const question = routeContext.questionContext?.question ?? null;
-  const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
-
+  // Rejection is decided before anything is derived from the carried context.
+  // `featuredTaxonAtlasHref` throws on a genus that is not canonical, and the
+  // route parser is more permissive about what it surfaces than the boundary
+  // is about what it accepts — so a URL like
+  // `?genus=phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false`
+  // is rejected by the boundary and then threw here while building a link back
+  // to Atlas, several lines before the refusal could be rendered. A boundary
+  // that fails closed into a thrown render is not failing closed.
   if (rejectedNavigationContext) {
     return (
       <section
@@ -80,6 +79,15 @@ export default function AtlasAwareCalyxRoute() {
       </section>
     );
   }
+
+  const fromAtlas =
+    routeContext.origin === ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN ||
+    routeContext.origin === ATLAS_WORKSPACE_ORIGIN;
+  const fromFeaturedTaxon = routeContext.origin === FEATURED_TAXON_ORIGIN;
+  const fromGenusProfile = routeContext.origin === GENUS_PROFILE_ORIGIN;
+  const genus = routeContext.featuredTaxon?.name ?? null;
+  const question = routeContext.questionContext?.question ?? null;
+  const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
 
   return (
     <>
