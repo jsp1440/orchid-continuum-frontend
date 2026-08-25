@@ -161,7 +161,7 @@ function ContinuumPhotograph({
   );
 }
 
-const DailyGenusFeatureContinuum: React.FC = () => {
+const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> = ({ continuation }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = React.useMemo(() => continuum?.media.items ?? [], [continuum]);
 
@@ -380,6 +380,17 @@ const DailyGenusFeatureContinuum: React.FC = () => {
             serviceAnswered={relationshipServiceAnswered}
           />
         </div>
+
+        {/* The continuation actions belong to this panel, not to a second band
+            beneath it. Two adjacent cream cards read as two separate offers of
+            the same genus; one card with a footer reads as one. It is passed in
+            rather than built here so each handoff keeps its own governed
+            producer and its own tests. */}
+        {continuation ? (
+          <div className="mt-6 border-t border-[#d1bd8e] pt-5" data-testid="featured-genus-continuation">
+            {continuation}
+          </div>
+        ) : null}
       </div>
     </section>
   );
