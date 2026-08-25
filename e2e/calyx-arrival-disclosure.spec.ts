@@ -39,30 +39,42 @@ const DISCLOSURE_LABELS = [
   "Research Station handoff context",
 ];
 
-const GOVERNED_ARRIVALS: ReadonlyArray<{ producer: string; href: string }> = [
+type GovernedArrival = {
+  producer: string;
+  href: string;
+  expectedDisclosure: string;
+};
+
+const GOVERNED_ARRIVALS: ReadonlyArray<GovernedArrival> = [
   {
     producer: "homepage featured taxon",
     href: "/calyx?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false",
+    expectedDisclosure: "Genus handoff context",
   },
   {
     producer: "Atlas workspace",
     href: "/calyx?genus=Phalaenopsis&origin=atlas-workspace&context_is_evidence=false",
+    expectedDisclosure: "Atlas handoff context",
   },
   {
     producer: "Genus Profile",
     href: "/calyx?genus=Phalaenopsis&origin=genus-profile&context_is_evidence=false",
+    expectedDisclosure: "Genus handoff context",
   },
   {
     producer: "Atlas Next genus",
     href: "/calyx?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false",
+    expectedDisclosure: "Genus handoff context",
   },
   {
     producer: "Research Station",
     href: "/calyx?genus=Phalaenopsis&taxon=Phalaenopsis+amabilis&origin=research-station",
+    expectedDisclosure: "Research Station handoff context",
   },
   {
     producer: "Species Dossier",
     href: "/calyx?genus=Phalaenopsis&taxon=Phalaenopsis+amabilis&origin=species-dossier-calyx&context_is_evidence=false",
+    expectedDisclosure: "Species Dossier handoff context",
   },
   {
     producer: "Classroom investigation",
@@ -70,10 +82,12 @@ const GOVERNED_ARRIVALS: ReadonlyArray<{ producer: string; href: string }> = [
     // matches this literal against what the producer builds, and a split string
     // would make that pin pass on nothing.
     href: "/calyx?genus=Phalaenopsis&taxon=Phalaenopsis+amabilis&origin=classroom-investigation&context_is_evidence=false&context_is_learner_draft=true&question=Why+here%3F&question_source=user&question_is_evidence=false",
+    expectedDisclosure: "Classroom investigation context",
   },
   {
     producer: "Atlas Next occurrence evidence",
     href: "/calyx?genus=Phalaenopsis&origin=atlas-next-occurrence-evidence&question=Where+does+it+live%3F&question_source=user&question_is_evidence=false",
+    expectedDisclosure: "Atlas handoff context",
   },
 ];
 
@@ -106,21 +120,21 @@ async function disclosuresOn(href: string): Promise<string[]> {
     .toBeGreaterThan(0);
   const shown: string[] = [];
   for (const label of DISCLOSURE_LABELS) {
-    if (await page.getByLabel(label).count()) shown.push(label);
+    if (await page.getByLabel(label).isVisible()) shown.push(label);
   }
-  if (await page.getByLabel("Rejected Calyx navigation context").count()) {
+  if (await page.getByLabel("Rejected Calyx navigation context").isVisible()) {
     shown.push("Rejected Calyx navigation context");
   }
   return shown;
 }
 
-for (const { producer, href } of GOVERNED_ARRIVALS) {
-  test(`${producer} does not arrive silently`, async () => {
+for (const { producer, href, expectedDisclosure } of GOVERNED_ARRIVALS) {
+  test(`${producer} discloses its own arrival context`, async () => {
     const shown = await disclosuresOn(href);
     expect(
       shown,
-      `${producer} carried a subject into Calyx and told the reader nothing`,
-    ).not.toHaveLength(0);
+      `${producer} did not show its producer-specific disclosure (${expectedDisclosure})`,
+    ).toContain(expectedDisclosure);
   });
 }
 
