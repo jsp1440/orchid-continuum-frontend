@@ -357,3 +357,72 @@ describe("alternate places a plant could go", () => {
     expect(read.alternatives.map((row) => row.ref)).toEqual(["B"]);
   });
 });
+
+describe("the acceptance specimen AM1", () => {
+  const AM1 = "Phragmipedium kovachii 'Daniela' × Phragmipedium kovachii 'Maria'";
+
+  function am1() {
+    return buildCultivationHandoff({
+      acceptedScientificName: AM1,
+      locationKind: "greenhouse_bench",
+      readings: READINGS,
+    });
+  }
+
+  it("can be evaluated at all, which its full name previously prevented", () => {
+    // The taxon guard required a bare binomial, so a real cross was refused
+    // outright and this plant could not use the feature.
+    expect(am1()).not.toBeNull();
+  });
+
+  it("asks about the plant the grower has, and looks up the species", () => {
+    const built = am1()!;
+    expect(built.cultivated_identity).toBe(AM1);
+    expect(built.taxon).toBe("Phragmipedium kovachii");
+    expect(built.featured_taxon).toEqual({ rank: "genus", accepted_name: "Phragmipedium" });
+  });
+
+  it("says the species was reached through a cross", () => {
+    // Without this an answer could present evidence about the species as
+    // evidence about this exact cross.
+    expect(am1()!.taxon_relationship).toBe("cross_within_species");
+  });
+
+  it("still denies evidence status for the cultivated subject", () => {
+    const built = am1()!;
+    expect(built.taxon_is_evidence).toBe(false);
+    expect(built.observations_are_evidence).toBe(false);
+    expect(built.observations_are_occurrence_data).toBe(false);
+  });
+
+  it("addresses the handoff by the species, never by the cultivar names", () => {
+    const href = cultivationCalyxHref(am1()!.taxon, TOKEN)!;
+    expect(href).toContain("taxon=Phragmipedium+kovachii");
+    expect(href).not.toContain("Daniela");
+    expect(href).not.toContain("Maria");
+  });
+
+  it("re-derives the relationship on arrival rather than trusting storage", () => {
+    const search = `?genus=Phragmipedium&taxon=Phragmipedium+kovachii&origin=${CONSERVATORY_CULTIVATION_ORIGIN}&context_is_evidence=false&cultivation=${TOKEN}`;
+    const storage = memoryStorage({
+      [`${CULTIVATION_HANDOFF_STORAGE_PREFIX}${TOKEN}`]: JSON.stringify({
+        ...am1()!,
+        taxon_relationship: "species",
+      }),
+    });
+    // Storage claimed the plant simply is the species. It is not, and the
+    // rebuild says so.
+    expect(readCultivationHandoff(search, storage)!.taxon_relationship).toBe("cross_within_species");
+  });
+
+  it("refuses a cross between two species rather than borrowing a parent's requirements", () => {
+    // Nothing is published about such a plant. Sending it would invite an
+    // answer built on evidence about something else.
+    const crossed = buildCultivationHandoff({
+      acceptedScientificName: "Phragmipedium besseae × Phragmipedium kovachii",
+      locationKind: "greenhouse_bench",
+      readings: READINGS,
+    });
+    expect(crossed).toBeNull();
+  });
+});

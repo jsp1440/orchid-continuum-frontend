@@ -44,14 +44,53 @@ function collectionFor(userId) {
  * produces `unassessable` rather than a quiet pass.
  */
 const REQUIREMENTS = {
+  // Fixture bounds, not published evidence. This server is a test double, and
+  // nothing here should ever be cited as what the literature says about a
+  // species. The numbers exist so the comparison has two sides.
+  "phragmipedium kovachii": {
+    temperature_c: { min: [{ value: 13, evidence_strength: "moderate" }], max: [{ value: 24, evidence_strength: "moderate" }] },
+    relative_humidity_pct: { min: [{ value: 60, evidence_strength: "moderate" }], max: [{ value: 85, evidence_strength: "moderate" }] },
+  },
   "phalaenopsis amabilis": {
     temperature_c: { min: [{ value: 16, evidence_strength: "strong" }], max: [{ value: 24, evidence_strength: "strong" }] },
     relative_humidity_pct: { min: [{ value: 50, evidence_strength: "moderate" }], max: [{ value: 85, evidence_strength: "moderate" }] },
   },
 };
 
+/**
+ * Reduce a stored collection identity to the species requirements are about.
+ *
+ * The server has the same problem the client does: a real record reads
+ * `Phragmipedium kovachii 'Daniela' x Phragmipedium kovachii 'Maria'`, and
+ * looking that string up finds nothing. Both parents being clones of one
+ * species means the species is what is published; two different species means
+ * nothing published describes the plant, and returning either parent's bounds
+ * would be evidence about something else.
+ *
+ * This mirrors src/lib/cultivatedTaxonIdentity.ts. The deployed backend needs
+ * the same rule; see the pull request for that gap.
+ */
+function speciesOfStoredIdentity(stored) {
+  const cultivated = String(stored ?? "").replace(/\s+/g, " ").trim();
+  if (!cultivated) return null;
+  const sideOf = (part) => {
+    const words = part.replace(/\s*(?:'[^']*'|"[^"]*")\s*/g, " ").trim().split(/\s+/).filter(Boolean);
+    if (words.length < 2) return null;
+    if (!/^[A-Z][a-z-]+$/.test(words[0]) || !/^[a-z][a-z-]+$/.test(words[1])) return null;
+    return `${words[0]} ${words[1]}`;
+  };
+  const parts = cultivated.split(/\s(?:\u00d7|x|X)\s/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 1) return sideOf(parts[0]);
+  if (parts.length !== 2) return null;
+  const [left, right] = parts.map(sideOf);
+  return left && right && left === right ? left : null;
+}
+
 function requirementsFor(taxon) {
-  return REQUIREMENTS[(taxon || "").trim().toLowerCase()] || null;
+  const direct = REQUIREMENTS[(taxon || "").trim().toLowerCase()];
+  if (direct) return direct;
+  const species = speciesOfStoredIdentity(taxon);
+  return species ? REQUIREMENTS[species.toLowerCase()] || null : null;
 }
 
 /* ------------------------------------------------------------- helpers ---- */

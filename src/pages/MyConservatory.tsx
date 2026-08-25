@@ -2,6 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { speciesDossierContinuumActions } from "@/lib/speciesDossierContinuumNavigation";
 import { useAuth } from "@/contexts/AuthContext";
+import { resolveCultivatedIdentity } from "@/lib/cultivatedTaxonIdentity";
 import {
   buildCultivationHandoff,
   cultivationCalyxHref,
@@ -1535,14 +1536,23 @@ function CultivationCalyxAction({
   // Say which part is missing. "Unavailable" sends a grower looking for a
   // fault when what they need is to record a reading or link a name.
   if (!handoff) {
+    const identity = resolveCultivatedIdentity(acceptedScientificName);
+    // A cross between two species is not a gap the grower can close by typing
+    // something. Nothing is published about such a plant, and saying so is the
+    // honest answer rather than "not yet".
+    const unresolvableTaxon = identity && !identity.species ? identity.reason : null;
     const missing = !acceptedScientificName
       ? "this plant needs an accepted scientific name"
-      : !locationKind
-        ? "this plant needs to be placed somewhere first"
-        : "no standing readings have been recorded where it is";
+      : unresolvableTaxon
+        ? null
+        : !locationKind
+          ? "this plant needs to be placed somewhere first"
+          : "no standing readings have been recorded where it is";
     return (
       <p className="mt-3 text-xs text-muted-foreground" data-testid="cultivation-calyx-unavailable">
-        Calyx cannot evaluate these growing conditions yet — {missing}.
+        {unresolvableTaxon
+          ? `Calyx will not evaluate these growing conditions against a species. ${unresolvableTaxon}`
+          : `Calyx cannot evaluate these growing conditions yet \u2014 ${missing}.`}
       </p>
     );
   }
@@ -1616,7 +1626,16 @@ function CultivationCalyxAction({
         {preparing ? "Preparing…" : "Evaluate growing conditions with Calyx"}
       </button>
       <p className="mt-2 text-xs text-muted-foreground" data-testid="cultivation-calyx-disclosure">
-        Sends <i>{handoff.taxon}</i>, that this is a{" "}
+        Sends <i>{handoff.cultivated_identity}</i>
+        {handoff.taxon_relationship !== "species" && (
+          <>
+            {" "}(looked up as <i>{handoff.taxon}</i>, the species
+            {handoff.taxon_relationship === "cross_within_species"
+              ? " both parents belong to"
+              : " it is a named clone of"})
+          </>
+        )}
+        , that this is a{" "}
         {handoff.location.kind.replace(/_/g, " ")}, and {handoff.observations.length} reading
         {handoff.observations.length === 1 ? "" : "s"} with how each was obtained. Your
         plant&rsquo;s name, accession, notes, photographs and the name of the place it grows do not
