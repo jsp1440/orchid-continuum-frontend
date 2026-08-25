@@ -332,6 +332,47 @@ test("6c. a record with no genus is refused, and says which word to add", async 
   await expect(page.getByTestId("cultivation-calyx-submit")).toHaveCount(0);
 });
 
+/* --------------------------------------------------------------- 6d ----- */
+
+test("6d. a grex is not given one of its parents' requirements", async () => {
+  // A real plant in this collection, written the way its tag is written:
+  // a grex name followed by its parentage. The two parents are different
+  // species, so nothing published describes this plant — and handing it
+  // either parent's requirements would be evidence about a different one.
+  //
+  // The bracket is the trap. In "kovachii ('Daniela' x 'Maria')" it holds
+  // cultivars and the line is a sibling cross of kovachii; here it holds
+  // species and the words in front are a grex name. Reading the second as
+  // the first resolved this plant to a species it is not.
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("Ingrid Suarez");
+  await page.getByLabel("Accepted scientific name")
+    .fill("Phrag. Ingrid Suarez (humboldtii \u00d7 kovachii)");
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+
+  const refusal = page.getByTestId("cultivation-calyx-unavailable");
+  await expect(refusal).toBeVisible();
+  // Both parents named, so the grower can see what the plant actually is.
+  await expect(refusal).toContainText("Phragmipedium humboldtii");
+  await expect(refusal).toContainText("Phragmipedium kovachii");
+  await expect(refusal).toContainText(/evidence about a different plant/i);
+  await expect(page.getByTestId("cultivation-calyx-submit")).toHaveCount(0);
+
+  // And the assessment panel must not have quietly compared it against
+  // kovachii either — that is the same fabrication one surface further on.
+  const assessment = page.getByTestId("placement-assessment");
+  await expect(assessment.getByTestId("nothing-assessed")).toBeVisible();
+});
+
 /* ----------------------------------------------------------------- 7 ----- */
 
 test("7. the evaluation carries the species outward and the cross inward", async () => {

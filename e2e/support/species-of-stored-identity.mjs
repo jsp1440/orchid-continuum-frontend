@@ -51,16 +51,41 @@ function hasControlCharacter(value) {
   });
 }
 
-/** `Genus species ('A' x 'B')` is how a sibling cross is normally written. */
-function expandParentheticalCross(cultivated) {
+/**
+ * Split a line into the parents to compare, and the genus they inherit.
+ *
+ * A bracketed line is one of two different things:
+ *
+ *   Phragmipedium kovachii ('Daniela' x 'Maria')   a sibling cross
+ *   Phrag. Ingrid Suarez (humboldtii x kovachii)   a grex, with its parentage
+ *
+ * In the first the bracket holds cultivars and each parent inherits the whole
+ * prefix. In the second it holds species and the prefix is a grex name, so
+ * only the genus carries — prepending the grex words made both sides collapse
+ * to the prefix and resolved an interspecific cross to one of its parents.
+ */
+function partsOfCross(cultivated) {
+  const split = (line) => line.split(HYBRID_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+
   const bracketed = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(cultivated);
-  if (!bracketed) return cultivated;
-  const [, prefix, inner] = bracketed;
-  if (!prefix.trim() || !HYBRID_SEPARATOR.test(inner)) return cultivated;
-  return inner
-    .split(HYBRID_SEPARATOR)
-    .map((side) => `${prefix.trim()} ${side.trim()}`)
-    .join(" \u00d7 ");
+  if (!bracketed) return { parts: split(cultivated), seedGenus: null };
+
+  const prefix = bracketed[1].trim();
+  const inner = bracketed[2];
+  if (!prefix || !HYBRID_SEPARATOR.test(inner)) return { parts: split(cultivated), seedGenus: null };
+
+  const sides = split(inner);
+  const everySideIsCultivarOnly = sides.every((side) => {
+    CULTIVAR_EPITHET.lastIndex = 0;
+    return side.replace(CULTIVAR_EPITHET, " ").trim() === "";
+  });
+  if (everySideIsCultivarOnly) {
+    return { parts: sides.map((side) => `${prefix} ${side}`), seedGenus: null };
+  }
+
+  const genus = GENUS_ABBREVIATIONS[(prefix.split(/\s+/)[0] ?? "").toLowerCase()]
+    ?? (prefix.split(/\s+/)[0] ?? "");
+  return { parts: sides, seedGenus: GENUS.test(genus) ? genus : null };
 }
 
 /**
@@ -92,16 +117,13 @@ export function speciesOfStoredIdentity(stored) {
     return null;
   }
 
-  const parts = expandParentheticalCross(cultivated)
-    .split(HYBRID_SEPARATOR)
-    .map((part) => part.trim())
-    .filter(Boolean);
+  const { parts, seedGenus } = partsOfCross(cultivated);
 
-  const left = speciesOfOnePart(parts[0], { genus: null, species: null });
+  const left = speciesOfOnePart(parts[0], { genus: seedGenus, species: null });
   if (parts.length === 1) return left;
   if (parts.length !== 2) return null;
   const right = speciesOfOnePart(parts[1], {
-    genus: left ? left.split(" ")[0] : null,
+    genus: left ? left.split(" ")[0] : seedGenus,
     species: left,
   });
   // Two different species means nothing published describes the plant, and

@@ -69,6 +69,22 @@ const LABEL_FORMS: readonly string[] = [
   "Paph. rothschildianum 'A' \u00d7 'B'",
   "Phal. amabilis 'A' \u00d7 'B'",
   "Phrag. kovachii 'A' \u00d7 'B'",
+  // Bracketed lines mean two different things, and both are in this collection.
+  // A grex with its parentage must reduce the same way on both sides, or a
+  // hybrid resolves on screen and finds another species' bounds on the server.
+  'Phrag. Ingrid Suarez Ecuagenera (humboldtii \u00d7 kovachii)',
+  'Phrag. Ingrid Suarez (kovachii \u00d7 kovachii)',
+  'Phragmipedium kovachii (humboldtii \u00d7 besseae)',
+  'Phragmipedium besseae (dalessandroi \u00d7 besseae)',
+  "Phragmipedium kovachii ('Daniela' \u00d7 'Maria')",
+  'Phragmipedium kovachii (humboldtii)',
+  'Phragmipedium kovachii ()',
+  // Capitalisation is the only thing separating a species from a grex.
+  'Phrag Kovachii',
+  'Phragmipedium Kovachii',
+  'Phragmipedium Memoria Dick Clements',
+  // Provenance written onto the tag is not part of the name.
+  'Phrag. kovachii Ecuagenera',
 ];
 
 describe('stored identity reduces the same way on both sides of the contract', () => {

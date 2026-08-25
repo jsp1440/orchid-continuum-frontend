@@ -188,3 +188,90 @@ describe("a line that never names a genus", () => {
     expect(identity.reason).toMatch(/No genus is written/);
   });
 });
+
+describe("labels from the collection this was built for", () => {
+  /**
+   * Written off the plants' own tags rather than invented. The bracketed form
+   * turned out to mean two different things in the same collection, and
+   * reading one as the other invents a plant.
+   */
+
+  it("refuses a grex whose parentage is two different species, and says which", () => {
+    // Phrag. Ingrid Suarez is a grex; the bracket is its parentage, not a
+    // sibling cross. Nothing is published about the grex, and neither parent's
+    // requirements describe it.
+    const identity = resolveCultivatedIdentity(
+      "Phrag. Ingrid Suarez Ecuagenera (humboldtii \u00d7 kovachii)",
+    )!;
+    expect(identity.species).toBeNull();
+    expect(identity.relationship).toBe("none");
+    expect(identity.reason).toMatch(/Phragmipedium humboldtii/);
+    expect(identity.reason).toMatch(/Phragmipedium kovachii/);
+    // The old message claimed a parent was not a species. Both are.
+    expect(identity.reason).not.toMatch(/not a species/i);
+  });
+
+  it("does not let a bracketed parentage inherit the words in front of it", () => {
+    // The defect this test exists for: the prefix was prepended to each
+    // parent, and since only a part's first two words are read, both sides
+    // collapsed to the prefix. A humboldtii x besseae cross resolved to
+    // kovachii and would have been shown kovachii's published requirements.
+    const identity = resolveCultivatedIdentity(
+      "Phragmipedium kovachii (humboldtii \u00d7 besseae)",
+    )!;
+    expect(identity.species).toBeNull();
+    expect(identity.relationship).toBe("none");
+  });
+
+  it("still reads a bracketed sibling cross as the species it is a cross within", () => {
+    // The other meaning of the same punctuation: cultivars in the bracket.
+    const identity = resolveCultivatedIdentity(
+      "Phragmipedium kovachii ('Daniela' \u00d7 'Maria')",
+    )!;
+    expect(identity.species).toBe("Phragmipedium kovachii");
+    expect(identity.relationship).toBe("cross_within_species");
+  });
+
+  it("resolves a grex whose parents are both the same species", () => {
+    // The grex name says nothing, but its parentage does: both parents are
+    // kovachii, so kovachii is what has been published about this plant.
+    const identity = resolveCultivatedIdentity("Phrag. Ingrid Suarez (kovachii \u00d7 kovachii)")!;
+    expect(identity.species).toBe("Phragmipedium kovachii");
+    expect(identity.relationship).toBe("cross_within_species");
+  });
+
+  it("treats a capitalised epithet as a question rather than deciding it", () => {
+    // A real tag in this collection reads "Phrag Kovachii". Capitalisation is
+    // the only thing separating a species from a grex, so this is neither read
+    // as the species nor dismissed: the grower is told which character to fix.
+    const identity = resolveCultivatedIdentity("Phrag Kovachii")!;
+    expect(identity.species).toBeNull();
+    expect(identity.relationship).toBe("none");
+    expect(identity.reason).toMatch(/capitalised/i);
+    expect(identity.reason).toMatch(/"kovachii"/);
+  });
+
+  it("does not mistake a multi-word grex for a capitalisation slip", () => {
+    // Two capitalised words are a grex by any reading; offering to lowercase
+    // one of them would be nonsense advice.
+    const identity = resolveCultivatedIdentity("Phragmipedium Memoria Dick Clements")!;
+    expect(identity.species).toBeNull();
+    expect(identity.reason).not.toMatch(/capitalised/i);
+  });
+
+  it("ignores a nursery name appended to the epithet", () => {
+    // Tags carry where the plant came from. That is provenance, not taxonomy.
+    const identity = resolveCultivatedIdentity("Phrag. kovachii Ecuagenera")!;
+    expect(identity.species).toBe("Phragmipedium kovachii");
+  });
+
+  it("keeps the stored line exactly as written in every one of these", () => {
+    for (const label of [
+      "Phrag. Ingrid Suarez Ecuagenera (humboldtii \u00d7 kovachii)",
+      "Phrag Kovachii",
+      "Phrag. kovachii Ecuagenera",
+    ]) {
+      expect(resolveCultivatedIdentity(label)!.cultivated).toBe(label);
+    }
+  });
+});
