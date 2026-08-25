@@ -519,6 +519,18 @@ async function conservatoryRoute(req, res, url) {
         const corrected = collection.measurements.find((row) => row.id === measurement.supersedes_id);
         if (!corrected) return fail(res, 404, "supersedes_not_found", "The measurement being corrected is not in this record.");
       }
+      // A photograph is provenance only if it is a photograph of this plant.
+      // Accepting any id would let a reading cite another plant's photograph
+      // and read as checkable when checking it would show something else.
+      if (measurement.photograph_id) {
+        const shown = collection.photographs.find(
+          (row) => row.id === measurement.photograph_id && row.plant_id === plantId,
+        );
+        if (!shown) {
+          return fail(res, 422, "photograph_not_of_this_plant",
+            "A measurement can only cite a photograph of the plant it measures.");
+        }
+      }
       collection.measurements.push(measurement);
       return json(res, 201, measurement);
     }

@@ -135,10 +135,20 @@ test("2b. AM1's ruler-backed flower measurement is recorded with its provenance"
   await form.getByTestId("measurement-method").selectOption("ruler_photograph");
   await form.getByTestId("measurement-day").fill(new Date().toISOString().slice(0, 10));
   await form.getByTestId("measurement-instrument").fill("12 in rule");
+
+  // The method claims a photograph, so the form asks which one. Naming it is
+  // the whole reason this method is trusted above an estimate: somebody can
+  // open that photograph and check the reading against the rule in it.
+  const chooser = form.getByTestId("measurement-photograph");
+  await expect(chooser).toBeVisible();
+  const offered = chooser.locator("option", { hasText: "Flower, ruler-backed" });
+  await expect(offered).toHaveCount(1);
+  await chooser.selectOption((await offered.getAttribute("value")) ?? "");
   await form.getByTestId("measurement-submit").click();
 
   const list = page.getByTestId("measurement-list");
   await expect(list).toBeVisible();
+  await expect(list).toContainText(/from photograph: Flower, ruler-backed/i);
 
   // The reading is kept in the unit it was read in, and the conversion claims
   // no more precision than a ruler had: 14.2 cm, never 14.224.
@@ -149,6 +159,31 @@ test("2b. AM1's ruler-backed flower measurement is recorded with its provenance"
   // How it was obtained is most of what the number is worth.
   await expect(list).toContainText(/by ruler photograph/i);
   await expect(list).toContainText("Natural spread, horizontal");
+});
+
+/* --------------------------------------------------------------- 2c ----- */
+
+test("2c. a photograph-read measurement that names no photograph says so", async () => {
+  // Growers measure before they upload, so this is recorded rather than
+  // refused. What must not happen is it sitting in the list looking exactly
+  // as checkable as the reading above, when nothing can be checked.
+  await visit(plantUrl);
+  const form = page.getByTestId("record-measurement");
+  await form.getByTestId("measurement-trait").selectOption("petal_width");
+  await form.getByTestId("measurement-value").fill("4.1");
+  await form.getByTestId("measurement-unit").selectOption("in");
+  await form.getByTestId("measurement-method").selectOption("ruler_photograph");
+  await form.getByTestId("measurement-day").fill(new Date().toISOString().slice(0, 10));
+  await form.getByTestId("measurement-photograph").selectOption("");
+  await form.getByTestId("measurement-submit").click();
+
+  const list = page.getByTestId("measurement-list");
+  await expect(list).toContainText("4.1 in");
+  await expect(list).toContainText(/is not named here, so it cannot be checked against one/i);
+
+  // And the reading that did name one still reads as named — the warning is
+  // per reading, not a banner over the section.
+  await expect(list).toContainText(/from photograph: Flower, ruler-backed/i);
 });
 
 /* ----------------------------------------------------------------- 3 ----- */
