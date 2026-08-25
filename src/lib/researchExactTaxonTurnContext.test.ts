@@ -31,13 +31,16 @@ describe("Research Station exact taxon → Calyx turn context", () => {
     const turnContext = buildCalyxTurnContext({
       projectId: "naocc-demo",
       uploadedFiles: [],
-      routeSearch: "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon",
+      routeSearch:
+        "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon&context_is_evidence=false",
     });
 
     expect(turnContext.route_context).toEqual({
       origin: "homepage-featured-taxon",
       featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
+      featured_taxon_is_evidence: false,
     });
+    expect(turnContext.route_context).not.toHaveProperty("taxon");
   });
 
   it("fails closed for malformed exact taxon values", () => {
