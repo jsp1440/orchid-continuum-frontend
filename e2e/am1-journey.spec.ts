@@ -457,6 +457,15 @@ test("7b. the evaluation is kept in AM1's own history", async () => {
   // uncompared rather than omitting it, because a bench that simply never
   // appears in the answer reads as one that lost the comparison.
   await expect(entries.first()).toContainText(/1 that could not be compared for lack of readings/i);
+
+  // And the row says outright that it holds no answer. Nothing in this
+  // repository retains what Calyx replied, so a row that read as a completed
+  // consultation would be the record claiming more than it holds — the same
+  // failure as every other one this journey guards against.
+  await expect(entries.first()).toContainText(/what was asked, not what was answered/i);
+  await expect(entries.first().locator('[data-testid^="evaluation-answer-missing-"]')).toBeVisible();
+  // Fails closed: the row must not claim a reply is on file when none is.
+  await expect(entries.first()).not.toContainText(/reply is kept with this record/i);
   // And it is still not ranked: only the measured alternative travelled.
   await expect(entries.first()).not.toContainText(/2 other places considered/i);
 
