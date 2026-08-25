@@ -61,6 +61,7 @@ vi.mock("@/lib/calyxWorkspace", async () => {
 });
 
 import { STORAGE_KEY } from "@/lib/calyxConversation";
+import { CalyxApiError } from "@/lib/calyxWorkspace";
 import CalyxWorkspace from "./CalyxWorkspace";
 
 type ConversationMessage = {
@@ -747,5 +748,49 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+
+  it("shows the sign-in banner when the backend preflight signals authentication required", async () => {
+    mocks.listCalyxConversations.mockRejectedValue(
+      new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Owner sign-in required.");
+    expect(container.textContent).toContain("Sign in at Mission Control");
+  });
+
+  it("clears the sign-in banner after a successful history refresh", async () => {
+    mocks.listCalyxConversations
+      .mockRejectedValueOnce(
+        new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+      )
+      .mockResolvedValue({ conversations: [], persistence_mode: "memory" });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Owner sign-in required.");
+
+    await act(async () => {
+      getButton(container, "Refresh").click();
+    });
+    await flush(3);
+
+    expect(container.textContent).not.toContain("Owner sign-in required.");
   });
 });
