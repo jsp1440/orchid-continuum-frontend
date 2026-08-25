@@ -834,6 +834,399 @@ async function conservatoryRoute(req, res, url) {
   return fail(res, 404, "no_such_endpoint", `The reference backend does not answer ${req.method} ${path}.`);
 }
 
+/* ------------------------------------------------ Calyx fixtures ----- */
+
+/**
+ * Missions for the scientific-demonstration journey.
+ *
+ * FIXTURES, NOT FINDINGS. Every trait, citation, confidence and gap below is
+ * invented for this test double. None of it is a claim about any orchid, and a
+ * passing journey says the frontend renders a governed mission correctly —
+ * never that the Continuum holds this evidence.
+ *
+ * Two missions, because the pair is the point. One question has enough fixture
+ * evidence to reach bounded conclusions and also carries evidence against
+ * them; the other does not, and must come back with no conclusions at all
+ * rather than a hedged sentence. A demo that only ever shows the answering
+ * case cannot show that the product declines to answer.
+ */
+
+const COOL_WARM_QUESTION = /cool[- ]?growing.*warm[- ]?growing|warm[- ]?growing.*cool[- ]?growing/i;
+
+function missionShell(question, extra) {
+  return {
+    mission_id: randomUUID(),
+    project_id: "reference-demonstration",
+    question,
+    state: "completed",
+    current_stage: "synthesis",
+    steps_executed: 4,
+    sources: [],
+    supporting_evidence: [],
+    contradicting_evidence: [],
+    missing_evidence: [],
+    confidence: null,
+    conclusions: [],
+    reasoning_ledger: { ledger_id: randomUUID(), version: 1 },
+    validation: { valid: true, blockers: [] },
+    review_status: "awaiting_review",
+    // Never true. Nothing in this repository publishes science automatically.
+    publication_eligibility: { eligible: false, automatic_publication: false, blockers: ["human_review_required"] },
+    blockers: [],
+    partial: true,
+    created_at: isoNow(),
+    updated_at: isoNow(),
+    ...extra,
+  };
+}
+
+function coolVersusWarmMission(question) {
+  return missionShell(question, {
+    sources: [
+      {
+        result_id: "fixture-src-1",
+        title: "Fixture: cultivation notes, Phalaenopsis section Phalaenopsis",
+        object_type: "taxonomic-treatment",
+        authorized_excerpt:
+          "Fixture text. Plants from higher-elevation collections were maintained at lower night temperatures.",
+        citation: { revision_id: 11, source_anchor_ids: [3, 4] },
+      },
+      {
+        result_id: "fixture-src-2",
+        title: "Fixture: growth trial summary",
+        object_type: "result",
+        // Withheld on purpose: the display policy is part of what is demonstrated.
+        authorized_excerpt: null,
+        citation: { revision_id: 12, source_anchor_ids: [7] },
+      },
+    ],
+    supporting_evidence: [
+      {
+        candidate_id: 501,
+        candidate_version: 1,
+        subject: "Phalaenopsis, cool-growing collections (fixture)",
+        predicate: "associated_night_temperature_minimum_c",
+        value: 14,
+        source_revision_id: 11,
+        source_anchor_ids: [3],
+        provenance: { mission_id: "fixture", extraction: "fixture" },
+      },
+      {
+        candidate_id: 502,
+        candidate_version: 1,
+        subject: "Phalaenopsis, cool-growing collections (fixture)",
+        predicate: "associated_leaf_texture",
+        value: "more rigid, mottled",
+        source_revision_id: 11,
+        source_anchor_ids: [4],
+        provenance: { mission_id: "fixture", extraction: "fixture" },
+      },
+    ],
+    // The half that makes this a demonstration rather than a summary.
+    contradicting_evidence: [
+      {
+        candidate_id: 601,
+        candidate_version: 1,
+        subject: "Phalaenopsis, cool-growing collections (fixture)",
+        predicate: "associated_leaf_texture",
+        value: "no consistent difference observed",
+        source_revision_id: 12,
+        source_anchor_ids: [7],
+        provenance: { mission_id: "fixture", extraction: "fixture" },
+      },
+    ],
+    missing_evidence: [
+      "No fixture source measures both groups under one protocol, so the comparison rests on separate studies.",
+      "No fixture source reports provenance elevation for the warm-growing group.",
+    ],
+    confidence: 0.42,
+    conclusions: [
+      {
+        type: "bounded_conclusion",
+        text:
+          "In the fixture corpus, cool-growing accessions are associated with lower recorded night temperatures. Leaf texture is NOT separated: one source reports a difference and another reports none.",
+        claim_ids: [501, 502, 601],
+      },
+    ],
+  });
+}
+
+function insufficientEvidenceMission(question) {
+  // The abstention case. No conclusions, no confidence, and gaps that say why.
+  return missionShell(question, {
+    sources: [],
+    supporting_evidence: [],
+    contradicting_evidence: [],
+    missing_evidence: [
+      "The fixture corpus holds no record addressing this question.",
+      "No conclusion is offered, because none is supported.",
+    ],
+    confidence: null,
+    conclusions: [],
+    validation: { valid: true, blockers: [] },
+    partial: true,
+  });
+}
+
+function missionForQuestion(question) {
+  const answering = COOL_WARM_QUESTION.test(question);
+  const mission = answering
+    ? coolVersusWarmMission(question)
+    : insufficientEvidenceMission(question);
+  calyxStore.missions.set(mission.mission_id, mission);
+
+  return {
+    mission,
+    subject: answering ? "Phalaenopsis (fixture corpus)" : null,
+    answer: answering
+      ? "Fixture answer. One trait separates the two groups in this corpus and one does not; see the conclusion, the contradicting evidence and the gaps."
+      : "Fixture answer. The corpus holds nothing that addresses this question, so no conclusion is offered.",
+    citations: answering
+      ? [
+          {
+            title: "Fixture: cultivation notes, Phalaenopsis section Phalaenopsis",
+            authors: "Reference Fixture",
+            publication_date: "2019-01-01",
+            journal: "Reference Fixtures",
+          },
+        ]
+      : [],
+  };
+}
+
+/**
+ * Governed-corpus retrieval, in the shape src/lib/evidenceRetrieval.ts declares.
+ *
+ * Three outcomes are reachable, because all three are governance behaviour the
+ * frontend has to render distinctly and none of them is an error:
+ *   • results, one of which withholds its excerpt by display policy;
+ *   • zero eligible results WITH exclusion counts — a filtered corpus, which is
+ *     not the same claim as an empty one;
+ *   • 403 and 503, which must never render as "no evidence found".
+ */
+function evidenceFor(query, route) {
+  return {
+    normalized_query: query.toLowerCase(),
+    retrieval_mode: route,
+    active_collections: ["reference-fixture-corpus"],
+    ranking_configuration_version: "fixture-1",
+    total_candidates: 4,
+    total_eligible_results: /\bno eligible\b/i.test(query) ? 0 : 2,
+    excluded_counts: { RETRACTED: 1, AWAITING_REVIEW: 1 },
+    deduplicated_count: 0,
+    results: /\bno eligible\b/i.test(query)
+      ? []
+      : [
+          {
+            rank: 1,
+            scores: { hybrid: 0.81 },
+            object_type: "claim",
+            title: "Fixture claim: night temperature association",
+            authorized_excerpt: "Fixture excerpt. Lower night temperatures were recorded for that group.",
+            matched_terms: ["temperature"],
+            citation: {
+              document_id: "fixture-doc-1",
+              document_title: "Fixture: cultivation notes",
+              authors: ["Reference Fixture"],
+              publication_date: "2019-01-01",
+              revision_id: 11,
+              source_anchor_ids: [3],
+            },
+            reliability_signals: {
+              peer_reviewed: true,
+              ai_generated: false,
+              citations_verified: true,
+              evidence_type: "observational",
+            },
+            review_state: "reviewed",
+            verification_state: "verified",
+            temporal_status: "current",
+            display_policy: "excerpt_allowed",
+            collections: ["reference-fixture-corpus"],
+            active: true,
+          },
+          {
+            rank: 2,
+            scores: { hybrid: 0.62 },
+            object_type: "result",
+            title: "Fixture result: growth trial",
+            // Withheld by policy, not missing. The UI must say which.
+            authorized_excerpt: null,
+            citation: {
+              document_id: "fixture-doc-2",
+              document_title: "Fixture: growth trial summary",
+              revision_id: 12,
+            },
+            reliability_signals: { peer_reviewed: false, ai_generated: false, citations_verified: false },
+            review_state: "awaiting_review",
+            verification_state: "unverified",
+            temporal_status: "current",
+            display_policy: "excerpt_withheld",
+            collections: ["reference-fixture-corpus"],
+            active: true,
+          },
+        ],
+    warnings: [],
+    elapsed_ms: 3,
+  };
+}
+
+
+/* ----------------------------------------------------------- calyx ----- */
+
+/**
+ * Conversations and missions live here rather than in a per-user collection.
+ * A Calyx conversation is not private collection data, and putting it behind
+ * the collection's bearer gate would make the workspace unreachable signed
+ * out — which is not how the mounted route behaves.
+ */
+const calyxStore = { conversations: new Map(), missions: new Map() };
+
+/** Module-level, because the fixtures below are built outside any request. */
+const isoNow = () => new Date().toISOString();
+
+async function calyxRoute(req, res, url) {
+  const path = url.pathname;
+  const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : Buffer.alloc(0);
+  const asJson = () => safeJson(body);
+  const now = () => new Date().toISOString();
+  let match;
+
+  /* ------------------------------------------------- Calyx / Brain ----- */
+
+  // Conversation, turn, mission and evidence retrieval, in the shapes
+  // src/lib/calyxWorkspace.ts and src/lib/evidenceRetrieval.ts declare.
+  //
+  // FIXTURES, NOT FINDINGS. Every trait, citation and confidence below is
+  // invented for this test double. None of it is a claim about Phalaenopsis,
+  // and a passing journey here says the frontend renders a governed mission
+  // correctly — never that the Continuum holds this evidence.
+
+  match = /^\/api\/calyx\/speak\/conversations$/.exec(path);
+  if (match) {
+    if (req.method === "POST") {
+      const input = asJson();
+      const conversation = {
+        conversation_id: randomUUID(),
+        owner: "reference-operator",
+        project_id: input.project_id ?? null,
+        title: input.title ?? null,
+        created_at: now(),
+        updated_at: now(),
+        context: input.context ?? {},
+        status: "open",
+        messages: [],
+      };
+      calyxStore.conversations.set(conversation.conversation_id, conversation);
+      return json(res, 201, conversation);
+    }
+    return json(res, 200, {
+      conversations: [...calyxStore.conversations.values()].map(({ messages, ...rest }) => ({
+        ...rest,
+        message_count: messages.length,
+      })),
+      persistence_mode: "in_process",
+    });
+  }
+
+  match = /^\/api\/calyx\/speak\/conversations\/([^/]+)$/.exec(path);
+  if (match) {
+    const conversation = calyxStore.conversations.get(decodeURIComponent(match[1]));
+    if (!conversation) return fail(res, 404, "conversation_not_found", "No such conversation.");
+    return json(res, 200, conversation);
+  }
+
+  match = /^\/api\/calyx\/speak\/conversations\/([^/]+)\/turns$/.exec(path);
+  if (match && req.method === "POST") {
+    const conversation = calyxStore.conversations.get(decodeURIComponent(match[1]));
+    if (!conversation) return fail(res, 404, "conversation_not_found", "No such conversation.");
+    const input = asJson();
+    const question = String(input.message ?? input.content ?? "").trim();
+    const mission = missionForQuestion(question);
+
+    const operator_message = {
+      message_id: randomUUID(),
+      conversation_id: conversation.conversation_id,
+      role: "operator",
+      content: question,
+      created_at: now(),
+    };
+    const calyx_message = {
+      message_id: randomUUID(),
+      conversation_id: conversation.conversation_id,
+      role: "calyx",
+      content: mission.answer,
+      created_at: now(),
+      // The workspace discovers the mission from here, not from the turn body:
+      // it reads metadata.mission_id and then fetches /brain/missions/{id}.
+      // Both carry it, because both are in the contract the frontend reads.
+      metadata: { citations: mission.citations, mission_id: mission.mission.mission_id },
+    };
+    conversation.messages.push(operator_message, calyx_message);
+    conversation.updated_at = now();
+
+    return json(res, 201, {
+      conversation_id: conversation.conversation_id,
+      operator_message,
+      calyx_message,
+      answer: mission.answer,
+      provider: {
+        name: "reference-backend",
+        model: "reference-fixture",
+        request_hash: createHash("sha256").update(question).digest("hex").slice(0, 32),
+      },
+      research: {
+        casual: false,
+        mission: mission.mission,
+        mission_error: null,
+        retrieval: {},
+        citations: mission.citations,
+      },
+      synthesis_structure: {
+        composer_contract: "reference-fixture-v1",
+        // Composed from linked fixture evidence, not reasoned generatively.
+        generative: false,
+        degraded_composition: false,
+        resolved_subject: mission.subject,
+        missing_evidence: mission.mission.missing_evidence,
+      },
+    });
+  }
+
+  match = /^\/brain\/missions\/([^/]+)$/.exec(path);
+  if (match) {
+    const mission = calyxStore.missions.get(decodeURIComponent(match[1]));
+    if (!mission) return fail(res, 404, "mission_not_found", "No such mission.");
+    return json(res, 200, mission);
+  }
+
+  if (path === "/brain/orchestrator/status") {
+    return json(res, 200, { state: "available", persistence_mode: "in_process" });
+  }
+
+  match = /^\/api\/evidence-retrieval\/([a-z-]+)$/.exec(path);
+  if (match && req.method === "POST") {
+    const route = match[1];
+    const input = asJson();
+    const query = String(input.query ?? "").trim();
+    if (!query) {
+      return fail(res, 422, "query_rejected", "A retrieval needs a query.");
+    }
+    // 403 and 503 are governance outcomes the UI must render as themselves.
+    // Neither may ever reach the reader as "no evidence found".
+    if (/\bunauthori[sz]ed\b/i.test(query)) {
+      return fail(res, 403, "not_authorised", "This operator may not search the governed corpus.");
+    }
+    if (/\bindex unavailable\b/i.test(query)) {
+      return fail(res, 503, "index_unavailable", "The evidence index is not answering.");
+    }
+    return json(res, 200, evidenceFor(query, route));
+  }
+
+
+  return fail(res, 404, "no_such_endpoint", `The reference backend does not answer ${req.method} ${path}.`);
+}
+
 /* --------------------------------------------------------------- main ----- */
 
 let requestOrigin = "*";
@@ -855,6 +1248,13 @@ const server = createServer(async (req, res) => {
   try {
     if (url.pathname.startsWith("/auth/v1")) return await identityRoute(req, res, url);
     if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);
+    if (
+      url.pathname.startsWith("/api/calyx/") ||
+      url.pathname.startsWith("/brain/") ||
+      url.pathname.startsWith("/api/evidence-retrieval/")
+    ) {
+      return await calyxRoute(req, res, url);
+    }
     if (url.pathname === "/__reference/health") return json(res, 200, { ok: true });
     // The rest of the app reads a handful of tables through PostgREST. None of
     // them belong to the Conservatory journey, but leaving them to 404 fills
