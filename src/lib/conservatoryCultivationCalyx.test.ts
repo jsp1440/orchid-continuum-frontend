@@ -268,3 +268,92 @@ describe("the permitted vocabulary matches what the Conservatory offers", () => 
     expect(offered.sort()).toEqual([...PERMITTED_OBSERVATION_ORIGINS].sort());
   });
 });
+
+describe("alternate places a plant could go", () => {
+  const ALTERNATIVES = [
+    {
+      ref: "B",
+      kind: "shade_house",
+      readings: [{ variable: "temperature_c", value: 18, origin: "measured", observed_at: "2026-08-20T00:00:00Z" }],
+    },
+    {
+      ref: "C",
+      kind: "windowsill",
+      readings: [{ variable: "temperature_c", value: 26, origin: "manual", observed_at: "2026-08-19T00:00:00Z" }],
+    },
+  ];
+
+  function withAlternatives(alternatives: unknown[] = ALTERNATIVES) {
+    return buildCultivationHandoff({
+      acceptedScientificName: "Phalaenopsis amabilis",
+      locationKind: "greenhouse_bench",
+      readings: READINGS,
+      alternatives: alternatives as never,
+    });
+  }
+
+  it("carries each alternative as a reference and a kind, never a name", () => {
+    // Without these a recommendation can only say "somewhere cooler", which a
+    // grower cannot act on. With them it can say which of their own places,
+    // and why.
+    const built = withAlternatives()!;
+    expect(built.alternatives).toEqual([
+      { ref: "B", kind: "shade_house", observations: [{ variable: "temperature_c", value: 18, unit: "°C", origin: "measured", observed_on: "2026-08-20" }] },
+      { ref: "C", kind: "windowsill", observations: [{ variable: "temperature_c", value: 26, unit: "°C", origin: "manual", observed_on: "2026-08-19" }] },
+    ]);
+  });
+
+  it("drops a place nobody has measured rather than offering it blind", () => {
+    // Suggesting a move to somewhere with no readings would be a
+    // recommendation with no basis, dressed as one with a basis.
+    const built = withAlternatives([
+      ...ALTERNATIVES,
+      { ref: "D", kind: "shelf", readings: [] },
+      { ref: "E", kind: "shelf" },
+    ])!;
+    expect(built.alternatives.map((row) => row.ref)).toEqual(["B", "C"]);
+  });
+
+  it("refuses a reference or kind outside the permitted shape", () => {
+    const built = withAlternatives([
+      { ref: "South bench", kind: "shelf", readings: ALTERNATIVES[0].readings },
+      { ref: "b", kind: "shelf", readings: ALTERNATIVES[0].readings },
+      { ref: "B", kind: "a friend's flat", readings: ALTERNATIVES[0].readings },
+      ALTERNATIVES[0],
+    ])!;
+    expect(built.alternatives.map((row) => row.ref)).toEqual(["B"]);
+  });
+
+  it("keeps one entry per reference", () => {
+    const built = withAlternatives([ALTERNATIVES[0], { ...ALTERNATIVES[0], kind: "shelf" }])!;
+    expect(built.alternatives).toHaveLength(1);
+    expect(built.alternatives[0].kind).toBe("shade_house");
+  });
+
+  it("still works for a grower with only one place", () => {
+    expect(handoff()!.alternatives).toEqual([]);
+  });
+
+  it("carries no location name through the alternatives either", () => {
+    const built = withAlternatives([
+      { ref: "B", kind: "shade_house", name: "Home greenhouse, 12 Any Street", readings: ALTERNATIVES[0].readings },
+    ])!;
+    expect(JSON.stringify(built)).not.toContain("Any Street");
+    expect(JSON.stringify(built)).not.toContain("Home greenhouse");
+  });
+
+  it("re-validates alternatives on arrival rather than trusting storage", () => {
+    const search = `?genus=Phalaenopsis&taxon=Phalaenopsis+amabilis&origin=${CONSERVATORY_CULTIVATION_ORIGIN}&context_is_evidence=false&cultivation=${TOKEN}`;
+    const storage = memoryStorage({
+      [`${CULTIVATION_HANDOFF_STORAGE_PREFIX}${TOKEN}`]: JSON.stringify({
+        ...withAlternatives()!,
+        alternatives: [
+          { ref: "B", kind: "shade_house", observations: ALTERNATIVES[0].readings },
+          { ref: "../etc", kind: "shelf", observations: ALTERNATIVES[0].readings },
+        ],
+      }),
+    });
+    const read = readCultivationHandoff(search, storage)!;
+    expect(read.alternatives.map((row) => row.ref)).toEqual(["B"]);
+  });
+});
