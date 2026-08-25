@@ -117,6 +117,40 @@ test("2. a photograph is attached, and loses where it was taken", async () => {
   await expect(page.getByTestId("photograph-list")).toContainText("Flower, ruler-backed");
 });
 
+/* --------------------------------------------------------------- 2b ----- */
+
+test("2b. AM1's ruler-backed flower measurement is recorded with its provenance", async () => {
+  // The specimen's own reading: a 12 in rule held beside the flower and
+  // photographed, giving a natural horizontal spread of about 5.6 in.
+  await visit(plantUrl);
+  const section = page.getByTestId("plant-measurements");
+  await expect(section).toBeVisible();
+  await expect(page.getByTestId("measurements-provenance")).toContainText(/not a description of the species/i);
+  await expect(page.getByTestId("no-measurements")).toBeVisible();
+
+  const form = page.getByTestId("record-measurement");
+  await form.getByTestId("measurement-trait").selectOption("natural_spread_horizontal");
+  await form.getByTestId("measurement-value").fill("5.6");
+  await form.getByTestId("measurement-unit").selectOption("in");
+  await form.getByTestId("measurement-method").selectOption("ruler_photograph");
+  await form.getByTestId("measurement-day").fill(new Date().toISOString().slice(0, 10));
+  await form.getByTestId("measurement-instrument").fill("12 in rule");
+  await form.getByTestId("measurement-submit").click();
+
+  const list = page.getByTestId("measurement-list");
+  await expect(list).toBeVisible();
+
+  // The reading is kept in the unit it was read in, and the conversion claims
+  // no more precision than a ruler had: 14.2 cm, never 14.224.
+  await expect(list).toContainText("5.6 in");
+  await expect(list).toContainText("14.2 cm converted");
+  expect(await list.textContent()).not.toContain("14.224");
+
+  // How it was obtained is most of what the number is worth.
+  await expect(list).toContainText(/by ruler photograph/i);
+  await expect(list).toContainText("Natural spread, horizontal");
+});
+
 /* ----------------------------------------------------------------- 3 ----- */
 
 test("3. two growing locations exist, each with its own measured conditions", async () => {
@@ -199,9 +233,19 @@ test("7. the evaluation carries the species outward and the cross inward", async
   expect(arrived.searchParams.get("taxon")).toBe(AM1_SPECIES);
   expect(arrived.searchParams.get("genus")).toBe("Phragmipedium");
   expect(arrived.searchParams.get("context_is_evidence")).toBe("false");
-  expect(arrived.search).not.toContain("Daniela");
-  expect(arrived.search).not.toContain("Maria");
-  expect(arrived.search).not.toMatch(/Cool%20bench|Cool\+bench|Warm|28|21|OC-\d/);
+  // Checked as parameter values, not as substrings of the whole query string:
+  // the handoff token is random hex and will sooner or later contain any short
+  // digit sequence, which would fail a substring check for a reading.
+  expect([...arrived.searchParams.keys()].sort()).toEqual([
+    "context_is_evidence", "cultivation", "genus", "origin", "taxon",
+  ]);
+  const carried = [...arrived.searchParams.entries()]
+    .filter(([key]) => key !== "cultivation")
+    .map(([, value]) => value)
+    .join(" ");
+  for (const secret of ["Daniela", "Maria", "Cool bench", "Warm shelf", accession, qrIdentifier, "28", "21"]) {
+    expect(carried, `"${secret}" reached the address`).not.toContain(secret);
+  }
 
   // Inward, the subject is the plant the grower has.
   const banner = page.getByTestId("cultivation-handoff-banner");
@@ -259,4 +303,5 @@ test("9. everything about AM1 survives sign-out and sign-in", async () => {
   await expect(page.getByText(accession).first()).toBeVisible();
   await expect(page.getByTestId("current-location")).toContainText("Cool bench");
   await expect(page.getByTestId("photograph-list")).toBeVisible();
+  await expect(page.getByTestId("measurement-list")).toContainText("5.6 in");
 });

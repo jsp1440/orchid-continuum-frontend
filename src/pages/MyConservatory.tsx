@@ -4,6 +4,13 @@ import { speciesDossierContinuumActions } from "@/lib/speciesDossierContinuumNav
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveCultivatedIdentity } from "@/lib/cultivatedTaxonIdentity";
 import {
+  MEASURABLE_TRAITS,
+  MEASUREMENT_METHODS,
+  MEASUREMENT_UNITS,
+  buildPlantMeasurement,
+  describeMeasurement,
+} from "@/lib/plantMeasurementObservation";
+import {
   buildCultivationHandoff,
   cultivationCalyxHref,
   seedCultivationHandoff,
@@ -204,6 +211,18 @@ type EnvironmentView = {
   location_id: string;
   variables: Record<string, EnvironmentVariable>;
   readings?: EnvironmentReading[];
+};
+
+/** A measurement as the collection stores it, with its own identity. */
+type StoredMeasurement = {
+  id: string;
+  trait: string;
+  value: number;
+  unit: string;
+  method: string;
+  measured_on: string;
+  instrument: string | null;
+  supersedes_id: string | null;
 };
 
 type PlantInput = {
@@ -2090,6 +2109,173 @@ export function PlantSpeciesContinuum({ plant }: { plant: Plant }) {
   );
 }
 
+/**
+ * What the grower measured on this plant, and how.
+ *
+ * A flower's spread is a fact about one flower on one plant in one season. It
+ * belongs in the collection, and it is not a description of the species — so
+ * every entry carries how it was obtained, and the section says plainly that
+ * these are the grower's own readings.
+ *
+ * Nothing is overwritten. A later flowering adds an entry; a correction
+ * supersedes one and both stay visible, the same shape the event ledger uses.
+ */
+function PlantMeasurements({ plantId }: { plantId: string }) {
+  const request = useApi();
+  const [record, setRecord] = useState<{ standing: StoredMeasurement[]; superseded: StoredMeasurement[] }>();
+  const [unavailable, setUnavailable] = useState(false);
+  const [error, setError] = useState<string>();
+  const [trait, setTrait] = useState("");
+  const [value, setValue] = useState("");
+  const [unit, setUnit] = useState("cm");
+  const [method, setMethod] = useState("");
+  const [day, setDay] = useState("");
+  const [instrument, setInstrument] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [reloads, setReloads] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    request<{ standing: StoredMeasurement[]; superseded: StoredMeasurement[] }>(
+      `/api/conservatory/plants/${encodeURIComponent(plantId)}/measurements`,
+    )
+      .then((result) => {
+        if (!active) return;
+        if (!result || !Array.isArray(result.standing)) { setUnavailable(true); return; }
+        setRecord({ standing: result.standing, superseded: result.superseded ?? [] });
+      })
+      .catch((cause) => {
+        if (!active) return;
+        if (cause instanceof ApiError && cause.status === 404) setUnavailable(true);
+        else setError(cause instanceof Error ? cause.message : "Measurements could not be loaded");
+      });
+    return () => { active = false; };
+  }, [plantId, request, reloads]);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const ready = Boolean(trait && value.trim() && unit && method && day);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const measurement = buildPlantMeasurement({
+      trait, value, unit, method, measuredOn: day, instrument: instrument.trim() || null,
+    });
+    if (!measurement) { setError("That measurement is not complete enough to record."); return; }
+    setSaving(true); setError(undefined);
+    try {
+      await request(`/api/conservatory/plants/${encodeURIComponent(plantId)}/measurements`, {
+        method: "POST",
+        body: JSON.stringify({
+          trait: measurement.trait,
+          value: measurement.value,
+          unit: measurement.unit,
+          method: measurement.method,
+          measured_on: measurement.measured_on,
+          instrument: measurement.instrument,
+        }),
+      });
+      setTrait(""); setValue(""); setMethod(""); setDay(""); setInstrument("");
+      setReloads((count) => count + 1);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "The measurement could not be recorded");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (unavailable) return <section className="mt-6 rounded-xl border border-dashed p-5" data-testid="measurements-unavailable">
+    <h3 className="text-sm font-semibold">Measurements are not available from this backend</h3>
+    <p className="mt-1 text-xs text-muted-foreground">This says nothing about whether this plant has been measured.</p>
+  </section>;
+
+  const line = (row: StoredMeasurement) => {
+    const built = buildPlantMeasurement({
+      trait: row.trait, value: row.value, unit: row.unit, method: row.method, measuredOn: row.measured_on,
+    });
+    return built ? describeMeasurement(built) : `${row.trait}: ${row.value} ${row.unit}`;
+  };
+
+  return <section className="mt-6 rounded-xl border p-5" data-testid="plant-measurements">
+    <h3 className="text-sm font-semibold">Measurements</h3>
+    <p className="mt-1 text-[11px] text-muted-foreground" data-testid="measurements-provenance">
+      Your own readings of this plant, each with how it was obtained. They are collection
+      observations, not a description of the species, and a converted value is only ever shown to
+      the precision the reading itself had.
+    </p>
+
+    {error && <p className="mt-2 text-xs text-destructive" role="alert" data-testid="measurement-error">{error}</p>}
+
+    {!record ? (
+      <p className="mt-3 text-xs text-muted-foreground" role="status">Loading measurements…</p>
+    ) : record.standing.length === 0 && record.superseded.length === 0 ? (
+      <p className="mt-3 text-xs text-muted-foreground" data-testid="no-measurements">Nothing measured yet.</p>
+    ) : (
+      <>
+        {record.standing.length > 0 && <ul className="mt-3 space-y-1 text-xs" data-testid="measurement-list">
+          {record.standing.map((row) => (
+            <li key={row.id} data-testid={`measurement-${row.id}`}>{line(row)}</li>
+          ))}
+        </ul>}
+        {record.superseded.length > 0 && <div className="mt-2" data-testid="superseded-measurements">
+          <span className="text-[11px] font-semibold text-muted-foreground">Corrected</span>
+          <ul className="mt-1 space-y-1 text-[11px] text-muted-foreground line-through">
+            {record.superseded.map((row) => <li key={row.id}>{line(row)}</li>)}
+          </ul>
+        </div>}
+      </>
+    )}
+
+    <form className="mt-3 flex flex-wrap items-end gap-3 border-t pt-3" onSubmit={submit} data-testid="record-measurement">
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">What</span>
+        <select className="mt-1 rounded-md border px-3 py-2" value={trait} data-testid="measurement-trait"
+          onChange={(changed) => setTrait(changed.target.value)}>
+          <option value="">Choose…</option>
+          {Object.entries(MEASURABLE_TRAITS).map(([key, spec]) => (
+            <option key={key} value={key}>{spec.label}</option>
+          ))}
+        </select>
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">Reading</span>
+        <input type="number" step="any" min="0" className="mt-1 w-24 rounded-md border px-3 py-2" value={value}
+          data-testid="measurement-value" onChange={(changed) => setValue(changed.target.value)} />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">Unit</span>
+        <select className="mt-1 rounded-md border px-3 py-2" value={unit} data-testid="measurement-unit"
+          onChange={(changed) => setUnit(changed.target.value)}>
+          {MEASUREMENT_UNITS.map((option) => <option key={option} value={option}>{option}</option>)}
+        </select>
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">How</span>
+        <select className="mt-1 rounded-md border px-3 py-2" value={method} data-testid="measurement-method"
+          onChange={(changed) => setMethod(changed.target.value)}>
+          <option value="">Choose…</option>
+          {MEASUREMENT_METHODS.map((option) => (
+            <option key={option} value={option}>{option.replace(/_/g, " ")}</option>
+          ))}
+        </select>
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">Measured on</span>
+        <input type="date" max={today} className="mt-1 rounded-md border px-3 py-2" value={day}
+          data-testid="measurement-day" onChange={(changed) => setDay(changed.target.value)} />
+      </label>
+      <label className="text-sm">
+        <span className="block text-xs text-muted-foreground">Instrument (optional)</span>
+        <input className="mt-1 rounded-md border px-3 py-2" value={instrument} data-testid="measurement-instrument"
+          onChange={(changed) => setInstrument(changed.target.value)} />
+      </label>
+      <button className="rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted disabled:opacity-50"
+        disabled={saving || !ready} data-testid="measurement-submit">
+        {saving ? "Recording…" : "Record measurement"}
+      </button>
+    </form>
+  </section>;
+}
+
 function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: boolean }) {
   return <div className="rounded-xl border bg-card p-6">
     {arrivedByScan && <p className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-testid="scan-arrival">Opened by scanning this plant&rsquo;s tag.</p>}
@@ -2098,6 +2284,7 @@ function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: 
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
     <PlantSpeciesContinuum plant={plant} />
     <Photographs plantId={plant.id} />
+    <PlantMeasurements plantId={plant.id} />
     <CultivationContext plantId={plant.id} acceptedScientificName={plant.accepted_scientific_name} />
     <PlacementAssessmentPanel plantId={plant.id} />
     <PlantLedger plantId={plant.id} />
