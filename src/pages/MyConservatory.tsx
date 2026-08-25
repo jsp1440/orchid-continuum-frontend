@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { speciesDossierContinuumActions } from "@/lib/speciesDossierContinuumNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import { resolveCultivatedIdentity } from "@/lib/cultivatedTaxonIdentity";
+import { evaluationAnswerRetention } from "@/lib/evaluationAnswerRetention";
 import {
   MEASURABLE_TRAITS,
   MEASUREMENT_METHODS,
@@ -241,7 +242,21 @@ type StoredEvaluation = {
   alternatives_considered: number;
   /** Places that had a letter but no readings, so nothing could be compared. */
   alternatives_unassessable?: number | null;
+  /**
+   * Whether Calyx's reply to this question is held in the collection.
+   *
+   * A row that says only what was asked reads, a season later, as a record of
+   * a consultation — and a grower acting on a recommendation they half-recall
+   * has nothing behind it. Until the reply is actually retained, the row has
+   * to say that it is not, rather than letting the question stand in for an
+   * answer. Absent or unrecognised is read as `not_retained`: a record with no
+   * answer in it is not a record with an answer.
+   */
+  answer_state?: string | null;
+  /** Calyx's conversation, when one has been recorded against this question. */
+  answer_conversation_id?: string | null;
 };
+
 
 type PlantInput = {
   display_name: string;
@@ -2447,7 +2462,9 @@ function CultivationEvaluationHistory({ plantId }: { plantId: string }) {
       earlier one.
     </p>
     <ul className="mt-3 space-y-2 text-xs" data-testid="evaluation-history-list">
-      {entries.map((entry) => (
+      {entries.map((entry) => {
+        const answer = evaluationAnswerRetention(entry);
+        return (
         <li key={entry.id} data-testid={`evaluation-${entry.id}`}>
           <strong>{(entry.recorded_at || "").slice(0, 10)}</strong>
           {" — asked about "}<i>{entry.cultivated_identity}</i>
@@ -2476,8 +2493,25 @@ function CultivationEvaluationHistory({ plantId }: { plantId: string }) {
                 {`, and ${entry.alternatives_unassessable} that could not be compared for lack of readings`}
               </span>
             : null}
+          {/*
+            What came back, or that nothing did. Without this the row reads as
+            a record of a consultation when it is only a record of a question,
+            and a grower returning to it next season cannot tell which.
+          */}
+          {answer.retained === true ? (
+            <span data-testid={`evaluation-answer-${entry.id}`}>
+              {". Calyx's reply is kept with this record"}
+              {answer.conversationId ? ` (conversation ${answer.conversationId})` : ""}
+              {"."}
+            </span>
+          ) : (
+            <span className="text-muted-foreground" data-testid={`evaluation-answer-missing-${entry.id}`}>
+              {`. ${answer.note}`}
+            </span>
+          )}
         </li>
-      ))}
+        );
+      })}
     </ul>
   </section>;
 }

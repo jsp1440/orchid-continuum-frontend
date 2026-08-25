@@ -472,6 +472,14 @@ async function conservatoryRoute(req, res, url) {
         // history can say a bench went uncompared, rather than leaving the
         // grower to read that silence as a verdict about it.
         alternatives_unassessable: Number(input.alternatives_unassessable) || 0,
+        // Nothing in this repository retains what Calyx answered, so every
+        // record says so rather than letting the question stand in for an
+        // answer. The write-back that would set this to "retained", and the
+        // conversation identity it would carry, are tracked on issue #451;
+        // inventing either here would be claiming a capability that has not
+        // been shown to work.
+        answer_state: "not_retained",
+        answer_conversation_id: null,
         // Recording that an assessment happened does not make its inputs
         // evidence, and does not make the assessment a finding.
         is_scientific_evidence: false,
