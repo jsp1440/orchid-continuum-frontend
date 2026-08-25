@@ -6,6 +6,7 @@ import { atlasNextCalyxHref } from '@/features/atlas-next/researchHandoff';
 import { classroomCalyxHref } from '@/lib/classroomInvestigationNavigation';
 import { atlasWorkspaceCalyxHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
 import { genusProfileCalyxHref } from '@/lib/genusProfileNavigation';
+import { researchStationCalyxHref } from '@/lib/researchStationNavigation';
 import { speciesDossierCalyxHref } from '@/lib/speciesDossierCalyxNavigation';
 
 /**
@@ -37,6 +38,10 @@ const EXACT_PRODUCERS: ReadonlyArray<{ producer: string; href: string | null }> 
   { producer: 'Atlas workspace', href: atlasWorkspaceCalyxHref(GENUS) },
   { producer: 'Genus Profile', href: genusProfileCalyxHref(GENUS) },
   { producer: 'Atlas Next genus', href: atlasNextCalyxHref({ genus: GENUS }) },
+  {
+    producer: 'Research Station',
+    href: researchStationCalyxHref({ taxon: TAXON }),
+  },
   {
     producer: 'Species Dossier',
     href: speciesDossierCalyxHref({ taxon: TAXON, genus: GENUS }),
@@ -72,13 +77,5 @@ describe('the disclosure sweep visits addresses the producers really build', () 
     for (const { producer } of EXACT_PRODUCERS) {
       expect(SWEEP_SOURCE, `${producer} is pinned here but not swept`).toContain(producer);
     }
-  });
-
-  it('names the Research Station arrival, which carries no declaration of its own', () => {
-    // Research Station uses `taxon_is_evidence` inside the turn envelope rather
-    // than a `context_is_evidence` query parameter, so its address is built by
-    // a different contract and is asserted by presence, not by rebuild.
-    expect(SWEEP_SOURCE).toContain('origin=research-station');
-    expect(SWEEP_SOURCE).toContain('Research Station');
   });
 });
