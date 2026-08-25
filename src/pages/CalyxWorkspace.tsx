@@ -413,6 +413,7 @@ export default function CalyxWorkspace() {
   const [selectedDocumentText, setSelectedDocumentText] = useState("");
   const [conversations, setConversations] = useState<Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyAuthRequired, setHistoryAuthRequired] = useState(false);
 
   const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -434,6 +435,11 @@ export default function CalyxWorkspace() {
   const normalizedProjectId = normalizeProjectId(projectId);
   const projectMismatch = Boolean(conversation && !shouldReuseConversation(conversation, normalizedProjectId));
   const messages = conversation ? visibleConversationMessages(conversation.messages) : [];
+  // Show a pre-flight sign-in banner when the backend has signalled that authentication is
+  // required. Detection uses the history preflight (fires immediately on mount) rather than
+  // waiting for the first failing conversation turn, so the owner sees the prompt before
+  // typing. The banner is suppressed once a conversation exists — the session is established.
+  const signInRequired = !loading && !conversation && (historyAuthRequired || snapshot.orchestratorState === "authentication_required");
   const latestMission = useMemo(() => {
     const calyxMessages = conversation?.messages.filter((item) => item.role === "calyx") ?? [];
     for (let index = calyxMessages.length - 1; index >= 0; index -= 1) {
@@ -545,9 +551,12 @@ export default function CalyxWorkspace() {
       if (!mountedRef.current) return;
       setConversations(result.conversations);
       setHistoryError(null);
+      setHistoryAuthRequired(false);
     } catch (error) {
       if (!mountedRef.current) return;
-      setHistoryError(error instanceof CalyxApiError && error.kind === "authentication_required" ? "Sign in at Mission Control to load conversation history." : "Conversation history unavailable.");
+      const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
+      setHistoryAuthRequired(isAuth);
+      setHistoryError(isAuth ? "Sign in at Mission Control to load conversation history." : "Conversation history unavailable.");
     }
   }, []);
 
@@ -747,6 +756,16 @@ export default function CalyxWorkspace() {
             <button className="rounded-md border px-3 py-2 text-sm hover:bg-muted" onClick={newConversation} type="button">New conversation</button>
           </div>
         </header>
+
+        {signInRequired ? (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.06] px-5 py-4" role="alert">
+            <p className="text-sm">
+              <strong>Owner sign-in required.</strong> The CALYX backend is reporting that authentication is needed.{" "}
+              <Link className="underline" to="/mission-control">Sign in at Mission Control</Link>{" "}
+              first, then return here to start a conversation.
+            </p>
+          </div>
+        ) : null}
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <section className="rounded-xl border bg-card">
