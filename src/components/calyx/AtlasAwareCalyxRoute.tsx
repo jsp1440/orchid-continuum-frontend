@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 
 import CultivationEvaluationFrame from "@/components/calyx/CultivationEvaluationFrame";
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
+import { ATLAS_NEXT_CALYX_ORIGIN } from "@/features/atlas-next/researchHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
 import {
   adoptCultivationHandoff,
@@ -99,6 +100,12 @@ export default function AtlasAwareCalyxRoute() {
     routeContext.origin === ATLAS_WORKSPACE_ORIGIN;
   const fromFeaturedTaxon = routeContext.origin === FEATURED_TAXON_ORIGIN;
   const fromGenusProfile = routeContext.origin === GENUS_PROFILE_ORIGIN;
+  // Atlas Next's genus handoff is a different arrival from its occurrence
+  // evidence route above: it carries only the active genus. It needs the same
+  // on-screen statement as the other genus origins, and needs it most, because
+  // the reader has just come from a map of occurrence records and is the most
+  // likely of any arrival to read the carried subject as one of them.
+  const fromAtlasNextGenus = routeContext.origin === ATLAS_NEXT_CALYX_ORIGIN;
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
   const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
@@ -237,7 +244,7 @@ export default function AtlasAwareCalyxRoute() {
         </section>
       ) : null}
 
-      {(fromFeaturedTaxon || fromGenusProfile) && genus ? (
+      {(fromFeaturedTaxon || fromGenusProfile || fromAtlasNextGenus) && genus ? (
         <section
           aria-label="Genus handoff context"
           className="border-b bg-muted/50 px-5 py-3 text-foreground"
@@ -247,7 +254,9 @@ export default function AtlasAwareCalyxRoute() {
               <p className="text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">
                 {fromFeaturedTaxon
                   ? "Continuing from Genus of the Day"
-                  : "Continuing from the Genus Profile"}
+                  : fromGenusProfile
+                    ? "Continuing from the Genus Profile"
+                    : "Continuing from the Atlas Next map"}
               </p>
               <p className="mt-1 text-sm">
                 <strong>Genus:</strong> <i>{genus}</i>

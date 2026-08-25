@@ -150,3 +150,66 @@ test("5. an arrival that dropped the declaration is refused, not trusted", async
   await expect(page.getByText(/did not accept this carried genus/i)).toBeVisible();
   await expect(page.getByLabel("Genus handoff context")).toHaveCount(0);
 });
+
+/* ----------------------------------------------------------------- 6 ----- */
+
+test("6. Atlas Next hands its active genus to Calyx across the same boundary", async () => {
+  // Issue #406 required the receiving trust boundary to be closed before the
+  // Atlas Next producer was mounted live. Both halves are in the tree and are
+  // covered one hop at a time by unit tests; what those cannot show is that
+  // the mounted shell actually builds the governed address, rather than a
+  // hand-rolled one that happens to look similar.
+  //
+  // Atlas Next takes its active genus from the shared Atlas filter contract
+  // (`genera=`), not from a `genus=` parameter of its own.
+  await visit("/atlas-next?genera=Phalaenopsis");
+
+  // The shell mounts its map and resolves the active genus before the
+  // cross-Continuum actions appear, which is slower than domcontentloaded.
+  // The shell resolves its active genus and mounts the map before the
+  // cross-Continuum actions appear, which is later than domcontentloaded.
+  const toCalyx = page.getByRole("link", { name: "Ask Calyx about this genus" });
+  await expect(toCalyx).toBeVisible({ timeout: 30_000 });
+
+  // The exact address, asserted by parameter rather than by substring: the
+  // point is that Atlas Next adds nothing of its own — no occurrence id, no
+  // locality, no coordinates, no project — to a link that leaves the map.
+  const href = await toCalyx.getAttribute("href");
+  const carried = new URL(href ?? "", "http://127.0.0.1");
+  expect(carried.pathname).toBe("/calyx");
+  expect(carried.searchParams.get("genus")).toBe("Phalaenopsis");
+  expect(carried.searchParams.get("origin")).toBe("atlas-next");
+  expect(carried.searchParams.get("context_is_evidence")).toBe("false");
+  expect([...carried.searchParams.keys()].sort()).toEqual([
+    "context_is_evidence", "genus", "origin",
+  ]);
+
+  // And following it lands in a mounted workspace, not the rejection panel.
+  // Following it lands in a mounted workspace, not the rejection panel — and
+  // says on screen what the carried genus is. Atlas Next was the one governed
+  // genus origin that reached Calyx silently: the machine-readable
+  // non-evidence declaration was emitted, but the reader was told nothing,
+  // on the arrival that most needs telling.
+  await toCalyx.click();
+  await expect(page).toHaveURL(/\/calyx\?/);
+  await expect(page.getByLabel("Rejected Calyx navigation context")).toHaveCount(0);
+
+  const banner = page.getByLabel("Genus handoff context");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText("Phalaenopsis");
+  await expect(banner).toContainText(/Continuing from the Atlas Next map/i);
+  await expect(banner).toContainText(/not scientific evidence/i);
+  await expect(banner).toContainText(/no locality, occurrence, or conclusion/i);
+});
+
+/* ----------------------------------------------------------------- 7 ----- */
+
+test("7. an Atlas Next link with its declaration stripped is refused too", async () => {
+  // The boundary is a property of the receiver, not of who sent the link. A
+  // stale or hand-edited Atlas Next address gets the same refusal the
+  // homepage one does.
+  await visit("/calyx?genus=Phalaenopsis&origin=atlas-next");
+
+  await expect(page.getByLabel("Rejected Calyx navigation context")).toBeVisible();
+  await expect(page.getByLabel("Genus handoff context")).toHaveCount(0);
+});
