@@ -3,6 +3,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { speciesDossierContinuumActions } from "@/lib/speciesDossierContinuumNavigation";
 import { useAuth } from "@/contexts/AuthContext";
 import {
+  buildCultivationHandoff,
+  cultivationCalyxHref,
+  seedCultivationHandoff,
+} from "@/lib/conservatoryCultivationCalyx";
+import {
   ConservatoryReadinessBanner,
   ConservatoryReadinessPage,
   useConservatoryReadiness,
@@ -1474,7 +1479,106 @@ function Photographs({ plantId }: { plantId: string }) {
  * blank or a zero. An empty slot reads as "nothing to consider here", which is
  * exactly the wrong conclusion when the truth is that no sensor exists.
  */
-function CultivationContext({ plantId }: { plantId: string }) {
+/**
+ * Ask Calyx about this plant where it actually is.
+ *
+ * The neighbouring "Ask Calyx" opens a question about the species and sends
+ * nothing private, which is right for that question and useless for this one.
+ * A grower wants to know whether their bench suits the plant, and that cannot
+ * be answered without their readings.
+ *
+ * So this action hands the readings over deliberately, and says exactly what
+ * travels before it is clicked. The observations go through single-use session
+ * storage rather than the address, because a URL ends up in history, in
+ * `Referer`, and in pasted links.
+ */
+function CultivationCalyxAction({
+  acceptedScientificName,
+  locationKind,
+  readings,
+}: {
+  acceptedScientificName?: string | null;
+  locationKind?: string | null;
+  readings: EnvironmentReading[];
+}) {
+  const navigate = useNavigate();
+  const [refused, setRefused] = useState<string>();
+
+  const handoff = useMemo(
+    () =>
+      buildCultivationHandoff({
+        acceptedScientificName,
+        locationKind,
+        // Standing readings only. A superseded value is one the grower has
+        // already withdrawn, and comparing against it would answer about a
+        // number they corrected.
+        readings: readings.filter((reading) => !reading.superseded_by_id),
+      }),
+    [acceptedScientificName, locationKind, readings],
+  );
+
+  // Say which part is missing. "Unavailable" sends a grower looking for a
+  // fault when what they need is to record a reading or link a name.
+  if (!handoff) {
+    const missing = !acceptedScientificName
+      ? "this plant needs an accepted scientific name"
+      : !locationKind
+        ? "this plant needs to be placed somewhere first"
+        : "no standing readings have been recorded where it is";
+    return (
+      <p className="mt-3 text-xs text-muted-foreground" data-testid="cultivation-calyx-unavailable">
+        Calyx cannot evaluate these growing conditions yet — {missing}.
+      </p>
+    );
+  }
+
+  function evaluate() {
+    setRefused(undefined);
+    const token = crypto.randomUUID().replace(/-/g, "");
+    // Seed first. Navigating after a refused write would arrive as a
+    // cultivation question carrying no observations.
+    if (!seedCultivationHandoff(window.sessionStorage, token, handoff!)) {
+      setRefused(
+        "Your browser would not let this page store the readings for the handoff, so nothing was sent.",
+      );
+      return;
+    }
+    const href = cultivationCalyxHref(handoff!.taxon, token);
+    if (!href) {
+      setRefused("The handoff could not be addressed, so nothing was sent.");
+      return;
+    }
+    navigate(href);
+  }
+
+  return (
+    <div className="mt-3" data-testid="cultivation-calyx-action">
+      <button
+        type="button"
+        className="inline-flex items-center rounded-md border px-3 py-2 text-xs font-medium hover:bg-muted"
+        onClick={evaluate}
+        data-testid="cultivation-calyx-submit"
+      >
+        Evaluate growing conditions with Calyx
+      </button>
+      <p className="mt-2 text-xs text-muted-foreground" data-testid="cultivation-calyx-disclosure">
+        Sends <i>{handoff.taxon}</i>, that this is a{" "}
+        {handoff.location.kind.replace(/_/g, " ")}, and {handoff.observations.length} reading
+        {handoff.observations.length === 1 ? "" : "s"} with how each was obtained. Your
+        plant&rsquo;s name, accession, notes, photographs and the name of the place it grows do not
+        travel, and these readings are sent as cultivation observations — not as scientific
+        evidence or occurrence records.
+      </p>
+      {refused && (
+        <p className="mt-2 text-xs text-destructive" role="alert" data-testid="cultivation-calyx-refused">
+          {refused}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CultivationContext({ plantId, acceptedScientificName }: { plantId: string; acceptedScientificName?: string | null }) {
   const request = useApi();
   const [placement, setPlacement] = useState<PlacementView>();
   const [locations, setLocations] = useState<GrowingLocation[]>([]);
@@ -1539,6 +1643,10 @@ function CultivationContext({ plantId }: { plantId: string }) {
 
   const usable = locations.filter((location) => !location.retired_at);
 
+  const currentLocation = placement.current
+    ? locations.find((candidate) => candidate.id === placement.current!.location_id)
+    : undefined;
+
   return <section className="mt-6 space-y-5" data-testid="cultivation-context">
     <div className="rounded-xl border p-5">
       <h3 className="text-sm font-semibold">Where it is now</h3>
@@ -1551,6 +1659,11 @@ function CultivationContext({ plantId }: { plantId: string }) {
             : "No placement has been recorded for this plant."}
         </p>
       )}
+      <CultivationCalyxAction
+        acceptedScientificName={acceptedScientificName}
+        locationKind={currentLocation?.kind}
+        readings={environment?.readings ?? []}
+      />
       <RecordPlacement
         plantId={plantId}
         locations={correcting ? locations : usable}
@@ -1896,7 +2009,7 @@ function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: 
     <p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p>
     <PlantSpeciesContinuum plant={plant} />
     <Photographs plantId={plant.id} />
-    <CultivationContext plantId={plant.id} />
+    <CultivationContext plantId={plant.id} acceptedScientificName={plant.accepted_scientific_name} />
     <PlacementAssessmentPanel plantId={plant.id} />
     <PlantLedger plantId={plant.id} />
   </div>;

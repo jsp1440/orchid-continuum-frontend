@@ -531,3 +531,51 @@ test("13. the signed-in Conservatory pages fit an iPad in portrait", async () =>
   await context.close();
   expect(offenders, offenders.join("\n")).toEqual([]);
 });
+
+/* ---------------------------------------------------------------- 14 ----- */
+
+test("14. a plant can be taken to Calyx for a cultivation evaluation", async () => {
+  // The capability this journey exists to prove next: a grower asking whether
+  // where they are keeping a plant suits it. The neighbouring "Ask Calyx"
+  // deliberately sends nothing private and so cannot answer that; this action
+  // sends the readings on purpose, and has to say so before it is clicked.
+  await visit(plantUrl);
+
+  const action = page.getByTestId("cultivation-calyx-action");
+  await expect(action).toBeVisible();
+
+  // The disclosure is part of the capability, not decoration. A grower must be
+  // able to read what travels before choosing to send it.
+  const disclosure = page.getByTestId("cultivation-calyx-disclosure");
+  await expect(disclosure).toContainText(PLANT.taxon);
+  await expect(disclosure).toContainText(/do not travel/i);
+  await expect(disclosure).toContainText(/not.*scientific evidence|cultivation observations/i);
+
+  await page.getByTestId("cultivation-calyx-submit").click();
+
+  await expect(page).toHaveURL(/\/calyx\?/);
+  const arrived = new URL(page.url());
+
+  // Nothing private in the address: it is written to history and leaks through
+  // Referer. Only the public taxon, the markers, and an opaque token.
+  expect([...arrived.searchParams.keys()].sort()).toEqual([
+    "context_is_evidence", "cultivation", "genus", "origin", "taxon",
+  ]);
+  expect(arrived.searchParams.get("context_is_evidence")).toBe("false");
+  expect(arrived.searchParams.get("origin")).toBe("conservatory-cultivation");
+  expect(arrived.search).not.toMatch(/temperature|humidity|OC-\d|ocq_/i);
+
+  // The distinction has to be on screen, not only in the payload.
+  const banner = page.getByTestId("cultivation-handoff-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText(PLANT.taxon);
+  await expect(banner).toContainText(/greenhouse bench/i);
+  await expect(banner).toContainText(/temperature c 21°C \(measured/i);
+  await expect(banner).toContainText(/not scientific evidence and not occurrence records/i);
+  await expect(banner).toContainText(/notes, photographs .* did not travel/i);
+
+  // Reloading must not resurrect the observations: the handoff is single-use,
+  // and a reloaded page is a pasted link as far as this boundary is concerned.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await expect(page.getByTestId("cultivation-handoff-banner")).toHaveCount(0);
+});

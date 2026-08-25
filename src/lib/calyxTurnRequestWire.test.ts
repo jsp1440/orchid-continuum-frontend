@@ -3,6 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildCalyxTurnContext } from "@/lib/calyxConversation";
 import { createCalyxConversation, sendCalyxTurn } from "@/lib/calyxWorkspace";
 import { featuredTaxonCalyxHref } from "@/lib/featuredTaxonNavigation";
+import {
+  adoptCultivationHandoff,
+  buildCultivationHandoff,
+  cultivationCalyxHref,
+  resetAdoptedCultivationHandoffs,
+  seedCultivationHandoff,
+} from "@/lib/conservatoryCultivationCalyx";
 
 /**
  * What actually leaves the browser on a Calyx turn.
@@ -117,5 +124,84 @@ describe("Genus of the Day governed context reaches the request body", () => {
     for (const [key, value] of Object.entries(routeContext)) {
       expect(value, `route_context.${key} was undefined and vanished from the request`).not.toBeUndefined();
     }
+  });
+});
+
+describe("Conservatory cultivation context reaches the request body", () => {
+  const TOKEN = "cafe1234deadbeef";
+
+  function memoryStorage() {
+    const map = new Map<string, string>();
+    return {
+      getItem: (key: string) => map.get(key) ?? null,
+      setItem: (key: string, value: string) => { map.set(key, value); },
+      removeItem: (key: string) => { map.delete(key); },
+    };
+  }
+
+  function arrive() {
+    resetAdoptedCultivationHandoffs();
+    const handoff = buildCultivationHandoff({
+      acceptedScientificName: "Phalaenopsis amabilis",
+      locationKind: "greenhouse_bench",
+      readings: [
+        { variable: "temperature_c", value: 31, origin: "measured", observed_at: "2026-08-20T06:30:00Z" },
+        { variable: "relative_humidity_pct", value: 62, origin: "manual", observed_at: "2026-08-20T06:31:00Z" },
+      ],
+    })!;
+    const storage = memoryStorage();
+    seedCultivationHandoff(storage, TOKEN, handoff);
+    const search = new URL(cultivationCalyxHref(handoff.taxon, TOKEN)!, "https://orchidcontinuum.org").search;
+    // The route adopts before the workspace mounts; this is that step.
+    expect(adoptCultivationHandoff(search, storage)).not.toBeNull();
+    return search;
+  }
+
+  it("sends the grower's readings with their provenance and both denials", async () => {
+    const search = arrive();
+    const context = buildCalyxTurnContext({ projectId: "continuum", uploadedFiles: [], routeSearch: search });
+
+    await sendCalyxTurn("conversation-1", { message: "Is this bench too warm?", context });
+
+    const routeContext = (body().context as Record<string, unknown>).route_context as Record<string, unknown>;
+    expect(routeContext.origin).toBe("conservatory-cultivation");
+    expect(routeContext.taxon).toBe("Phalaenopsis amabilis");
+    expect(routeContext.location).toEqual({ kind: "greenhouse_bench" });
+    expect(routeContext.observations).toEqual([
+      { variable: "temperature_c", value: 31, unit: "°C", origin: "measured", observed_on: "2026-08-20" },
+      { variable: "relative_humidity_pct", value: 62, unit: "%", origin: "manual", observed_on: "2026-08-20" },
+    ]);
+
+    // The denials are the whole reason this is allowed to travel at all.
+    expect(routeContext.observations_are_evidence).toBe(false);
+    expect(routeContext.observations_are_occurrence_data).toBe(false);
+    expect(routeContext.taxon_is_evidence).toBe(false);
+  });
+
+  it("puts nothing private on the wire and nothing at all in the address", async () => {
+    const search = arrive();
+    const context = buildCalyxTurnContext({ projectId: "continuum", uploadedFiles: [], routeSearch: search });
+    await sendCalyxTurn("conversation-1", { message: "anything", context });
+
+    const wire = JSON.stringify(body());
+    for (const forbidden of ["accession", "OC-0001", "qr_identifier", "ocq_", "notes", "plant_id", "location_name", "latitude", "longitude", "locality"]) {
+      expect(wire.toLowerCase(), `"${forbidden}" reached the request`).not.toContain(forbidden.toLowerCase());
+    }
+    // The address carried a token, never the observations themselves.
+    expect(search).not.toMatch(/temperature|humidity|31|62/);
+  });
+
+  it("carries no cultivation context when the handoff was never adopted", async () => {
+    // Arriving with a token nobody seeded — a pasted link, or a reload after
+    // the single-use entry was consumed. It must be an ordinary Calyx session,
+    // not a cultivation question with invented conditions.
+    resetAdoptedCultivationHandoffs();
+    const search = "?genus=Phalaenopsis&taxon=Phalaenopsis+amabilis&origin=conservatory-cultivation&context_is_evidence=false&cultivation=cafe1234deadbeef";
+    const context = buildCalyxTurnContext({ projectId: "continuum", uploadedFiles: [], routeSearch: search });
+    await sendCalyxTurn("conversation-1", { message: "anything", context });
+
+    const routeContext = ((body().context as Record<string, unknown>).route_context ?? {}) as Record<string, unknown>;
+    expect(routeContext.observations).toBeUndefined();
+    expect(JSON.stringify(body())).not.toContain("greenhouse_bench");
   });
 });
