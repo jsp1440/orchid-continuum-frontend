@@ -26,6 +26,8 @@
  * address into, so the name never leaves; only its kind does.
  */
 
+import { resolveCultivatedIdentity } from '@/lib/cultivatedTaxonIdentity';
+
 export const CONSERVATORY_CULTIVATION_ORIGIN = 'conservatory-cultivation';
 export const CONSERVATORY_CULTIVATION_CALYX_PATH = '/calyx';
 
@@ -93,7 +95,21 @@ export type CultivationAlternative = {
 
 export type CultivationHandoff = {
   origin: typeof CONSERVATORY_CULTIVATION_ORIGIN;
+  /**
+   * What the grower actually has, in full.
+   *
+   * The acceptance specimen is labelled `Phragmipedium kovachii 'Daniela' x
+   * Phragmipedium kovachii 'Maria'`, and that is the plant being asked about.
+   * Reducing it to the species would ask about a different thing.
+   */
+  cultivated_identity: string;
+  /** The species published cultivation evidence is actually about. */
   taxon: string;
+  /**
+   * How the species relates to the plant, so an answer can never present
+   * evidence about the species as evidence about this exact cross.
+   */
+  taxon_relationship: 'species' | 'cultivar_of_species' | 'cross_within_species';
   featured_taxon: { rank: 'genus'; accepted_name: string };
   /** The subject is navigation context, not a scientific determination. */
   taxon_is_evidence: false;
@@ -210,7 +226,13 @@ export function buildCultivationHandoff(input: {
   readings: Array<{ variable?: unknown; value?: unknown; origin?: unknown; observed_at?: unknown }>;
   alternatives?: Array<{ ref?: unknown; kind?: unknown; readings?: unknown }>;
 }): CultivationHandoff | null {
-  const taxon = boundedTaxon(input.acceptedScientificName);
+  // The stored record may be a cross or a named clone. The species is what may
+  // be looked up; the full name is what is being asked about. A plant with no
+  // resolvable species — a cross between two species, a grex — is refused here
+  // rather than asked about against some other plant's requirements.
+  const identity = resolveCultivatedIdentity(input.acceptedScientificName);
+  if (!identity || !identity.species || identity.relationship === 'none') return null;
+  const taxon = boundedTaxon(identity.species);
   if (!taxon) return null;
   const genus = boundedGenus(taxon.split(/\s+/)[0]);
   if (!genus) return null;
@@ -240,7 +262,9 @@ export function buildCultivationHandoff(input: {
 
   return {
     origin: CONSERVATORY_CULTIVATION_ORIGIN,
+    cultivated_identity: identity.cultivated,
     taxon,
+    taxon_relationship: identity.relationship,
     featured_taxon: { rank: 'genus', accepted_name: genus },
     taxon_is_evidence: false,
     location: { kind: kind as CultivationHandoff['location']['kind'] },
@@ -336,7 +360,10 @@ export function readCultivationHandoff(
   if (!routeTaxon || !payloadTaxon || routeTaxon !== payloadTaxon) return null;
 
   return buildCultivationHandoff({
-    acceptedScientificName: payloadTaxon,
+    // Rebuilt from the recorded identity, not from the species, so the
+    // relationship is re-derived here rather than taken from storage.
+    acceptedScientificName:
+      typeof candidate.cultivated_identity === 'string' ? candidate.cultivated_identity : payloadTaxon,
     locationKind: (candidate.location as { kind?: unknown } | undefined)?.kind as string | undefined,
     readings: Array.isArray(candidate.observations)
       ? (candidate.observations as Array<Record<string, unknown>>)

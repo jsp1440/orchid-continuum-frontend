@@ -14,7 +14,11 @@ let root: Root;
 
 const context: CultivationHandoff = {
   origin: "conservatory-cultivation",
+  // A plain species: what the grower recorded and what is looked up are the
+  // same string here, which is the simplest of the three relationships.
+  cultivated_identity: "Phalaenopsis amabilis",
   taxon: "Phalaenopsis amabilis",
+  taxon_relationship: "species",
   featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
   taxon_is_evidence: false,
   location: { kind: "greenhouse_bench" },
@@ -34,6 +38,7 @@ const context: CultivationHandoff = {
       observed_on: "2026-08-24",
     },
   ],
+  alternatives: [],
   observations_are_evidence: false,
   observations_are_occurrence_data: false,
 };

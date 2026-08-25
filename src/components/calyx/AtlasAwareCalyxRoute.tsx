@@ -121,8 +121,17 @@ export default function AtlasAwareCalyxRoute() {
                 Evaluating growing conditions from your collection
               </p>
               <p className="mt-1 text-sm">
-                <strong>Subject:</strong> <i>{cultivationContext.taxon}</i>
+                <strong>Subject:</strong> <i>{cultivationContext.cultivated_identity}</i>
               </p>
+              {cultivationContext.taxon_relationship !== "species" ? (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="cultivation-handoff-taxon-basis">
+                  Requirements are looked up for <i>{cultivationContext.taxon}</i> \u2014 the species
+                  {cultivationContext.taxon_relationship === "cross_within_species"
+                    ? " both parents of this cross belong to"
+                    : " this plant is a named clone of"}. Evidence published about the species is not
+                  evidence about this exact plant.
+                </p>
+              ) : null}
               <p className="mt-1 text-xs text-muted-foreground">
                 {cultivationContext.observations.length} reading
                 {cultivationContext.observations.length === 1 ? "" : "s"} from a{" "}

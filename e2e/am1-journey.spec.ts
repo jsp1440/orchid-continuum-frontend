@@ -1,0 +1,262 @@
+import { expect, test, type Page } from "@playwright/test";
+
+import { geotaggedJpeg } from "./support/geotagged-jpeg";
+
+/**
+ * The acceptance specimen, walked end to end.
+ *
+ * AM1 is a real plant in a real collection, labelled
+ *
+ *   Phragmipedium kovachii 'Daniela' × Phragmipedium kovachii 'Maria'
+ *
+ * and it is the specimen this vertical slice is measured against. Two things
+ * about it are the point.
+ *
+ * Its recorded identity is a cross, not a binomial. Until the identity
+ * resolver landed, the taxon guard required a bare `Genus species` and refused
+ * this name outright, so the one feature built for growers could not be used by
+ * the plant it was built for. The journey therefore starts by recording AM1
+ * under its own name and never a tidied-up version of it.
+ *
+ * And the species is a lookup, not the subject. Published cultivation evidence
+ * is about Phragmipedium kovachii; this plant is two named clones of that
+ * species crossed. The journey requires both to be visible and distinguished
+ * at every point a person can see.
+ *
+ * Fixture readings and a synthetic photograph stand in for the grower's own,
+ * which is allowed. What is not allowed is a path that only works for AM1: the
+ * architecture underneath is the same one any cross or named clone uses.
+ */
+
+test.describe.configure({ mode: "serial" });
+
+const AM1_IDENTITY = "Phragmipedium kovachii 'Daniela' × Phragmipedium kovachii 'Maria'";
+const AM1_SPECIES = "Phragmipedium kovachii";
+
+const ACCOUNT = {
+  email: `am1-${Date.now()}@conservatory.test`,
+  password: "a-throwaway-password-1",
+};
+
+let page: Page;
+let plantUrl = "";
+let accession = "";
+let qrIdentifier = "";
+let benchId = "";
+let shelfId = "";
+
+test.beforeAll(async ({ browser }) => {
+  page = await browser.newPage();
+  page.on("pageerror", (error) => console.error(`[pageerror] ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") console.error(`[console] ${message.text()}`);
+  });
+});
+
+test.afterAll(async () => {
+  await page?.close();
+});
+
+async function visit(path: string) {
+  await page.goto(path, { waitUntil: "domcontentloaded" });
+}
+
+async function locationIdByName(name: string): Promise<string> {
+  const card = page.getByTestId("location-list").locator(`li:has(strong:text-is("${name}"))`).first();
+  await card.waitFor();
+  return ((await card.getAttribute("data-testid")) || "").replace("location-card-", "");
+}
+
+/* ----------------------------------------------------------------- 1 ----- */
+
+test("1. AM1 is recorded under its own name, not a tidied-up one", async () => {
+  await visit("/");
+  await page.getByRole("button", { name: /^sign in$/i }).first().click();
+  const modal = page.getByRole("dialog");
+  await expect(modal).toBeVisible();
+  await modal.getByRole("button", { name: "Create an account", exact: true }).click();
+  await modal.getByPlaceholder("you@orchidcontinuum.org").fill(ACCOUNT.email);
+  await modal.getByPlaceholder("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022").fill(ACCOUNT.password);
+  await modal.getByRole("button", { name: /^create account$/i }).last().click();
+  await expect(page.getByTestId("account-menu")).toBeVisible({ timeout: 20_000 });
+
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("AM1");
+  await page.getByLabel("Accepted scientific name").fill(AM1_IDENTITY);
+
+  const [created] = await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  const record = await created.json();
+  qrIdentifier = record.qr_identifier;
+  accession = record.accession_number;
+
+  // The whole cross is what was stored. Nothing reduced it to the species.
+  expect(record.accepted_scientific_name).toBe(AM1_IDENTITY);
+  expect(accession).toMatch(/^OC-\d{4}$/);
+  expect(qrIdentifier).toMatch(/^ocq_/);
+
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+  plantUrl = new URL(page.url()).pathname;
+  await expect(page.getByText(AM1_IDENTITY).first()).toBeVisible();
+});
+
+/* ----------------------------------------------------------------- 2 ----- */
+
+test("2. a photograph is attached, and loses where it was taken", async () => {
+  await visit(plantUrl);
+  await page.getByTestId("photograph-caption").fill("Flower, ruler-backed");
+  await page.getByTestId("photograph-file").setInputFiles({
+    name: "am1-flower.jpg",
+    mimeType: "image/jpeg",
+    buffer: geotaggedJpeg(),
+  });
+  await expect(page.getByTestId("photograph-list")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId("photograph-error")).toHaveCount(0);
+  await expect(page.getByTestId("photograph-list")).toContainText("Flower, ruler-backed");
+});
+
+/* ----------------------------------------------------------------- 3 ----- */
+
+test("3. two growing locations exist, each with its own measured conditions", async () => {
+  await visit("/conservatory/locations");
+  await page.getByTestId("location-name").fill("Cool bench");
+  await page.getByTestId("location-kind").selectOption("greenhouse_bench");
+  await page.getByTestId("location-submit").click();
+  await expect(page.getByTestId("location-list").getByText("Cool bench", { exact: true })).toBeVisible();
+  benchId = await locationIdByName("Cool bench");
+
+  await page.getByTestId("location-name").fill("Warm shelf");
+  await page.getByTestId("location-kind").selectOption("shelf");
+  await page.getByTestId("location-submit").click();
+  await expect(page.getByTestId("location-list").getByText("Warm shelf", { exact: true })).toBeVisible();
+  shelfId = await locationIdByName("Warm shelf");
+
+  // The bench runs above what the species tolerates; the shelf is inside it.
+  // The recommendation later has to be able to tell them apart.
+  for (const [id, value] of [[benchId, "28"], [shelfId, "21"]] as const) {
+    const readings = page.getByTestId(`readings-${id}`);
+    const form = readings.getByTestId("record-reading");
+    await form.getByTestId("reading-variable").selectOption("temperature_c");
+    await form.getByTestId("reading-value").fill(value);
+    await form.getByTestId("reading-day").fill(new Date().toISOString().slice(0, 10));
+    await form.getByTestId("reading-origin").selectOption("measured");
+    await form.getByTestId("reading-instrument").fill("Bench datalogger");
+    await form.getByTestId("reading-submit").click();
+    await expect(readings.getByTestId(`reading-list-${id}`)).toContainText(value);
+  }
+});
+
+/* ----------------------------------------------------------------- 4 ----- */
+
+test("4. AM1 is placed on the warm bench, and the dossier says so", async () => {
+  await visit(plantUrl);
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+  await expect(page.getByTestId("cultivation-context")).toBeVisible();
+});
+
+/* ----------------------------------------------------------------- 5 ----- */
+
+test("5. its QR tag resolves back to this exact plant", async () => {
+  await visit(`/conservatory/scan/${encodeURIComponent(qrIdentifier)}`);
+  await expect(page.getByTestId("scan-arrival")).toBeVisible();
+  await expect(page.getByText(AM1_IDENTITY).first()).toBeVisible();
+  await expect(page.getByText(accession).first()).toBeVisible();
+});
+
+/* ----------------------------------------------------------------- 6 ----- */
+
+test("6. the dossier offers the evaluation, naming both identities", async () => {
+  await visit(plantUrl);
+  const action = page.getByTestId("cultivation-calyx-action");
+  await expect(action).toBeVisible();
+
+  const disclosure = page.getByTestId("cultivation-calyx-disclosure");
+  // The plant being asked about, and the species being looked up, stated
+  // separately before anything is sent.
+  await expect(disclosure).toContainText(AM1_IDENTITY);
+  await expect(disclosure).toContainText(AM1_SPECIES);
+  await expect(disclosure).toContainText(/both parents belong to/i);
+  await expect(disclosure).toContainText(/do not travel/i);
+
+  // The other bench is offered as a letter, its name kept in the collection.
+  await expect(page.getByTestId("cultivation-calyx-legend-B")).toContainText("Warm shelf");
+});
+
+/* ----------------------------------------------------------------- 7 ----- */
+
+test("7. the evaluation carries the species outward and the cross inward", async () => {
+  await page.getByTestId("cultivation-calyx-submit").click();
+  await expect(page).toHaveURL(/\/calyx\?/);
+  const arrived = new URL(page.url());
+
+  // Outward, the address is the species. The cultivar names are the grower's
+  // record and stay out of a string that reaches history and Referer.
+  expect(arrived.searchParams.get("taxon")).toBe(AM1_SPECIES);
+  expect(arrived.searchParams.get("genus")).toBe("Phragmipedium");
+  expect(arrived.searchParams.get("context_is_evidence")).toBe("false");
+  expect(arrived.search).not.toContain("Daniela");
+  expect(arrived.search).not.toContain("Maria");
+  expect(arrived.search).not.toMatch(/Cool%20bench|Cool\+bench|Warm|28|21|OC-\d/);
+
+  // Inward, the subject is the plant the grower has.
+  const banner = page.getByTestId("cultivation-handoff-banner");
+  await expect(banner).toBeVisible();
+  await expect(banner).toContainText(AM1_IDENTITY);
+
+  // And the difference between the two is stated, not left to be inferred.
+  const basis = page.getByTestId("cultivation-handoff-taxon-basis");
+  await expect(basis).toContainText(AM1_SPECIES);
+  await expect(basis).toContainText(/both parents of this cross belong to/i);
+  await expect(basis).toContainText(/not evidence about this exact plant/i);
+
+  await expect(banner).toContainText(/not scientific evidence and not occurrence records/i);
+  await expect(banner).toContainText(/temperature c 28/i);
+  await expect(page.getByTestId("cultivation-handoff-alternatives")).toContainText(/\bB\b.*shelf.*21/i);
+  expect(await banner.textContent()).not.toContain("Warm shelf");
+});
+
+/* ----------------------------------------------------------------- 8 ----- */
+
+test("8. the Conservatory compares AM1 against species evidence and says which is which", async () => {
+  await visit(plantUrl);
+  const assessment = page.getByTestId("placement-assessment");
+  await expect(assessment).toBeVisible();
+
+  // 28 C is above the species bound the fixture backend holds, so a real
+  // verdict is reached rather than the "nothing could be compared" branch.
+  await expect(assessment.getByTestId("nothing-assessed")).toHaveCount(0);
+  await expect(assessment).toContainText(/temperature/i);
+  // A comparison is never advice, and the page keeps saying so.
+  await expect(assessment.getByTestId("assessment-not-advice")).toBeVisible();
+});
+
+/* ----------------------------------------------------------------- 9 ----- */
+
+test("9. everything about AM1 survives sign-out and sign-in", async () => {
+  await visit("/");
+  await page.getByTestId("account-menu").click();
+  await page.getByTestId("account-sign-out").click();
+  await expect(page.getByRole("button", { name: /^sign in$/i }).first()).toBeVisible({ timeout: 20_000 });
+
+  await visit("/conservatory");
+  await expect(page.getByText("RESTRICTED \u00b7 CONTINUUM MEMBERS")).toBeVisible();
+
+  await visit("/");
+  await page.getByRole("button", { name: /^sign in$/i }).first().click();
+  const modal = page.getByRole("dialog");
+  await modal.getByPlaceholder("you@orchidcontinuum.org").fill(ACCOUNT.email);
+  await modal.getByPlaceholder("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022").fill(ACCOUNT.password);
+  await modal.getByRole("button", { name: /^sign in$/i }).last().click();
+  await expect(page.getByTestId("account-menu")).toBeVisible({ timeout: 20_000 });
+
+  await visit(plantUrl);
+  await expect(page.getByText(AM1_IDENTITY).first()).toBeVisible();
+  await expect(page.getByText(accession).first()).toBeVisible();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+  await expect(page.getByTestId("photograph-list")).toBeVisible();
+});
