@@ -221,9 +221,73 @@ test("6. the dossier offers the evaluation, naming both identities", async () =>
   await expect(page.getByTestId("cultivation-calyx-legend-B")).toContainText("Warm shelf");
 });
 
+/* --------------------------------------------------------------- 6b ----- */
+
+test("6b. the same plant recorded in label shorthand resolves the same way", async () => {
+  // A grower writes the genus once and lets the line inherit it. This is the
+  // same cross as AM1, written the way a label actually carries it, and it has
+  // to reach the same species — otherwise the feature works only for records
+  // typed out in full.
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("AM1 sib, shorthand label");
+  await page.getByLabel("Accepted scientific name").fill("Phrag. kovachii 'Daniela' x 'Maria'");
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+  const shorthandUrl = new URL(page.url()).pathname;
+
+  // It needs a place and a reading before the action can appear at all.
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+
+  await visit(shorthandUrl);
+  const disclosure = page.getByTestId("cultivation-calyx-disclosure");
+  await expect(disclosure).toBeVisible();
+  await expect(disclosure).toContainText("Phrag. kovachii 'Daniela' x 'Maria'");
+  await expect(disclosure).toContainText(AM1_SPECIES);
+  await expect(disclosure).toContainText(/both parents belong to/i);
+});
+
+/* --------------------------------------------------------------- 6c ----- */
+
+test("6c. a record with no genus is refused, and says which word to add", async () => {
+  // An epithet on its own is not a species name. Supplying the genus would be
+  // fabricating taxonomy to make a lookup succeed, so the plant is refused —
+  // but the refusal has to tell the grower what to do about it.
+  await visit("/conservatory/plants/new");
+  await page.getByLabel("Display name").fill("Unlabelled sib cross");
+  await page.getByLabel("Accepted scientific name").fill("kovachii 'Daniela' x kovachii 'Maria'");
+  await Promise.all([
+    page.waitForResponse((r) => r.url().endsWith("/api/conservatory/plants") && r.request().method() === "POST"),
+    page.getByRole("button", { name: /save and assign accession/i }).click(),
+  ]);
+  await expect(page).toHaveURL(/\/conservatory\/plants\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+
+  await page.getByTestId("placement-location").selectOption({ label: "Cool bench" });
+  await page.getByTestId("placement-reason-select").selectOption("initial");
+  await page.getByTestId("placement-submit").click();
+  await expect(page.getByTestId("current-location")).toContainText("Cool bench");
+
+  const refusal = page.getByTestId("cultivation-calyx-unavailable");
+  await expect(refusal).toBeVisible();
+  await expect(refusal).toContainText(/No genus is written/i);
+  await expect(refusal).toContainText("kovachii");
+  await expect(refusal).toContainText(/Add the genus in front of it/i);
+  // Not the misleading claim it used to make.
+  await expect(refusal).not.toContainText(/is not a species/i);
+  await expect(page.getByTestId("cultivation-calyx-submit")).toHaveCount(0);
+});
+
 /* ----------------------------------------------------------------- 7 ----- */
 
 test("7. the evaluation carries the species outward and the cross inward", async () => {
+  // Back to AM1: the two steps before this one recorded other plants.
+  await visit(plantUrl);
+  await expect(page.getByTestId("cultivation-calyx-disclosure")).toContainText(AM1_IDENTITY);
   await page.getByTestId("cultivation-calyx-submit").click();
   await expect(page).toHaveURL(/\/calyx\?/);
   const arrived = new URL(page.url());

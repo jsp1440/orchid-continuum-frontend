@@ -116,3 +116,75 @@ describe("what it will not accept at all", () => {
     expect(identity.species).toBe("Phragmipedium kovachii");
   });
 });
+
+describe("the shorthand a label actually carries", () => {
+  // A grower states the genus once and lets the line inherit it. Refusing the
+  // shorthand refuses the plant, and every one of these is AM1.
+  const SIB_CROSS_FORMS = [
+    "Phragmipedium kovachii 'Daniela' × 'Maria'",
+    "Phrag. kovachii 'Daniela' x 'Maria'",
+    "Phragmipedium kovachii ('Daniela' × 'Maria')",
+    "Phrag. kovachii ('Daniela' x 'Maria')",
+  ];
+
+  for (const form of SIB_CROSS_FORMS) {
+    it(`reads ${JSON.stringify(form)} as one species crossed with itself`, () => {
+      const identity = resolveCultivatedIdentity(form)!;
+      expect(identity.species).toBe("Phragmipedium kovachii");
+      expect(identity.relationship).toBe("cross_within_species");
+      // And still keeps the line exactly as the grower wrote it.
+      expect(identity.cultivated).toBe(form);
+    });
+  }
+
+  it("lets a bare epithet inherit the genus the line already named", () => {
+    // `Phragmipedium besseae x kovachii` is how an interspecific cross is
+    // normally written. The genus carries across; the species does not.
+    const identity = resolveCultivatedIdentity("Phragmipedium besseae × kovachii")!;
+    expect(identity.species).toBeNull();
+    expect(identity.genus).toBe("Phragmipedium");
+    expect(identity.reason).toMatch(
+      /cross between Phragmipedium besseae and Phragmipedium kovachii/,
+    );
+  });
+
+  it("still refuses a cross between two species written in shorthand", () => {
+    // Inheriting the genus must not soften the rule that matters: nothing is
+    // published about this plant either way.
+    expect(resolveCultivatedIdentity("Phragmipedium besseae × kovachii")!.species).toBeNull();
+  });
+});
+
+describe("a line that never names a genus", () => {
+  const NO_GENUS = "kovachii 'Daniela' × kovachii 'Maria'";
+
+  it("refuses rather than supplying a genus nobody wrote", () => {
+    // An epithet on its own is not a species name, more than one genus can
+    // carry the same epithet, and inventing one would be fabricating taxonomy
+    // to make a lookup succeed.
+    const identity = resolveCultivatedIdentity(NO_GENUS)!;
+    expect(identity.species).toBeNull();
+    expect(identity.genus).toBeNull();
+  });
+
+  it("says the genus is missing, not that the plant is not a species", () => {
+    // The old message claimed "at least one parent of this cross is not a
+    // species", which is both wrong and unactionable: kovachii is a species
+    // epithet, and what the grower needs to hear is which word to add.
+    const identity = resolveCultivatedIdentity(NO_GENUS)!;
+    expect(identity.reason).toMatch(/No genus is written/);
+    expect(identity.reason).toContain("kovachii");
+    expect(identity.reason).toMatch(/Add the genus in front of it/);
+    expect(identity.reason).not.toMatch(/is not a species/);
+  });
+
+  it("keeps the line the grower wrote, so nothing is lost by refusing it", () => {
+    expect(resolveCultivatedIdentity(NO_GENUS)!.cultivated).toBe(NO_GENUS);
+  });
+
+  it("gives the same answer for a single parent written without a genus", () => {
+    const identity = resolveCultivatedIdentity("kovachii 'Daniela'")!;
+    expect(identity.species).toBeNull();
+    expect(identity.reason).toMatch(/No genus is written/);
+  });
+});

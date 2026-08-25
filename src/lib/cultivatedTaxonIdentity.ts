@@ -20,6 +20,20 @@
  * evidence for a plant nothing has been published about. Those resolve to no
  * species-level identity at all, which callers must treat as "cannot look this
  * up" rather than as a reason to guess.
+ *
+ * Labels are not written out in full. A grower states the genus once and lets
+ * the rest of the line inherit it, which is what the standard notations mean:
+ *
+ *   Phragmipedium kovachii 'Daniela' × 'Maria'
+ *   Phragmipedium kovachii ('Daniela' × 'Maria')
+ *   Phragmipedium besseae × kovachii
+ *
+ * Each is read here the way a grower means it, because refusing the shorthand
+ * refuses the plant. What is never supplied is a genus nobody wrote: an
+ * epithet on its own is not a species name, more than one genus can carry the
+ * same epithet, and inventing one would be fabricating taxonomy to make a
+ * lookup succeed. That case says the genus is missing, which is something the
+ * grower can act on, rather than claiming their plant is not a species.
  */
 
 const MAX_IDENTITY_CHARACTERS = 240;
@@ -83,28 +97,72 @@ function expandGenus(word: string): string {
   return GENUS_ABBREVIATIONS[word.toLowerCase()] ?? word;
 }
 
+/** What an earlier part of the line established, for a later part to inherit. */
+type ParentContext = { genus: string | null; species: string | null };
+
 /**
- * Reduce one side of a cross to `Genus species`, or null when that side is not
- * a species — a grex epithet is capitalised where a species epithet is not, and
- * that difference is the whole signal.
+ * Reduce one side of a cross to `Genus species`.
+ *
+ * `context` carries what the line has already said. A side written as just a
+ * cultivar inherits the whole species; a side written as a bare epithet
+ * inherits the genus. Neither invents anything the line did not contain.
+ *
+ * `missingGenus` distinguishes the two ways this returns nothing: a bare
+ * epithet with no genus anywhere is a fixable omission, while a grex is not.
  */
-function speciesOfOneParent(part: string): string | null {
+function speciesOfOneParent(
+  part: string,
+  context: ParentContext,
+): { species: string | null; missingGenus?: string } {
   const withoutCultivar = part.replace(CULTIVAR_EPITHET, ' ').trim();
   const words = withoutCultivar.split(/\s+/).filter(Boolean);
-  if (words.length < 2) return null;
+
+  // Written as a cultivar alone: `… × 'Maria'`. The species is the one the
+  // line already named, which is exactly what that notation means.
+  if (words.length === 0) return { species: context.species };
+
+  if (words.length === 1) {
+    const only = words[0];
+    // A bare epithet: `… × kovachii`. The genus is inherited when the line has
+    // one, and is otherwise the thing that is missing.
+    if (SPECIES_EPITHET.test(only)) {
+      if (context.genus) return { species: `${context.genus} ${only}` };
+      return { species: null, missingGenus: only };
+    }
+    // A genus on its own, or a capitalised grex word. Neither is a species.
+    return { species: null };
+  }
 
   const genus = expandGenus(words[0]);
-  if (!GENUS.test(genus)) return null;
+  if (!GENUS.test(genus)) return { species: null };
 
   const epithet = words[1];
   // `Phragmipedium Memoria Dick Clements` is a grex, not a species. Its epithet
   // is capitalised, and no cultivation literature is published about it.
-  if (!SPECIES_EPITHET.test(epithet)) return null;
+  if (!SPECIES_EPITHET.test(epithet)) return { species: null };
 
   // Anything after the species epithet that is not a cultivar has already been
   // stripped; a trailing authority or variety is not a different species, but
   // it is also not something this resolver is willing to interpret.
-  return `${genus} ${epithet}`;
+  return { species: `${genus} ${epithet}` };
+}
+
+/**
+ * Rewrite `Genus species ('A' × 'B')` into two full parents.
+ *
+ * The bracketed form is how a sibling cross is normally written, and splitting
+ * it on the hybrid sign without expanding it first leaves two fragments that
+ * are not parents of anything.
+ */
+function expandParentheticalCross(cultivated: string): string {
+  const bracketed = /^(.*?)\s*\(([^()]+)\)\s*$/.exec(cultivated);
+  if (!bracketed) return cultivated;
+  const [, prefix, inner] = bracketed;
+  if (!prefix.trim() || !HYBRID_SEPARATOR.test(inner)) return cultivated;
+  return inner
+    .split(HYBRID_SEPARATOR)
+    .map((side) => `${prefix.trim()} ${side.trim()}`)
+    .join(' × ');
 }
 
 /**
@@ -126,10 +184,24 @@ export function resolveCultivatedIdentity(
     return null;
   }
 
-  const parts = cultivated.split(HYBRID_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+  const parts = expandParentheticalCross(cultivated)
+    .split(HYBRID_SEPARATOR)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  /** The genus is missing rather than the plant being unidentifiable. */
+  const genusMissing = (epithet: string): CultivatedIdentity => ({
+    cultivated,
+    species: null,
+    genus: null,
+    relationship: 'none',
+    reason: `No genus is written, so "${epithet}" cannot be matched to a species — more than one genus can carry the same epithet. Add the genus in front of it.`,
+  });
 
   if (parts.length === 1) {
-    const species = speciesOfOneParent(parts[0]);
+    const first = speciesOfOneParent(parts[0], { genus: null, species: null });
+    if (first.missingGenus) return genusMissing(first.missingGenus);
+    const species = first.species;
     if (!species) {
       return {
         cultivated,
@@ -160,7 +232,18 @@ export function resolveCultivatedIdentity(
     };
   }
 
-  const [left, right] = parts.map(speciesOfOneParent);
+  // The first parent establishes what the second may inherit. A line that
+  // never names a genus establishes nothing, and says so.
+  const first = speciesOfOneParent(parts[0], { genus: null, species: null });
+  if (first.missingGenus) return genusMissing(first.missingGenus);
+  const left = first.species;
+  const second = speciesOfOneParent(parts[1], {
+    genus: left ? left.split(' ')[0] : null,
+    species: left,
+  });
+  if (second.missingGenus) return genusMissing(second.missingGenus);
+  const right = second.species;
+
   if (!left || !right) {
     return {
       cultivated,
