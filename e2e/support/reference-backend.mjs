@@ -27,7 +27,7 @@ const store = {
 function collectionFor(userId) {
   if (!store.data.has(userId)) {
     store.data.set(userId, {
-      plants: [], locations: [], placements: [], events: [], measurements: [],
+      plants: [], locations: [], placements: [], events: [], measurements: [], evaluations: [],
       readings: [], photographs: [], locationHistory: [], accessionSeq: 0,
     });
   }
@@ -475,6 +475,40 @@ async function conservatoryRoute(req, res, url) {
       standing: mine.filter((event) => !event.superseded_by_id),
       corrected: mine.filter((event) => event.superseded_by_id),
       event_count: mine.length,
+      is_scientific_evidence: false,
+    });
+  }
+
+  /* --- evaluation history --- */
+  match = /^\/api\/conservatory\/plants\/([^/]+)\/evaluations$/.exec(path);
+  if (match) {
+    const plantId = decodeURIComponent(match[1]);
+    if (req.method === "POST") {
+      const input = asJson();
+      const entry = {
+        id: randomUUID(),
+        plant_id: plantId,
+        recorded_at: now(),
+        // What was asked, and about what.
+        cultivated_identity: input.cultivated_identity ?? null,
+        species_consulted: input.species_consulted ?? null,
+        taxon_relationship: input.taxon_relationship ?? null,
+        location_kind: input.location_kind ?? null,
+        observations: Array.isArray(input.observations) ? input.observations : [],
+        alternatives_considered: Number(input.alternatives_considered) || 0,
+        // Recording that an assessment happened does not make its inputs
+        // evidence, and does not make the assessment a finding.
+        is_scientific_evidence: false,
+        observations_are_evidence: false,
+      };
+      collection.evaluations.push(entry);
+      return json(res, 201, entry);
+    }
+    // Append-only. An assessment is a dated act, and a later one does not
+    // correct an earlier one — conditions changed, the reading did not.
+    return json(res, 200, {
+      plant_id: plantId,
+      evaluations: collection.evaluations.filter((row) => row.plant_id === plantId),
       is_scientific_evidence: false,
     });
   }

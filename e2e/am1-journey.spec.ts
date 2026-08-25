@@ -264,6 +264,30 @@ test("7. the evaluation carries the species outward and the cross inward", async
   expect(await banner.textContent()).not.toContain("Warm shelf");
 });
 
+/* --------------------------------------------------------------- 7b ----- */
+
+test("7b. the evaluation is kept in AM1's own history", async () => {
+  // A recommendation a grower half-remembers has nothing behind it. The record
+  // that the question was asked, about which species, with which readings
+  // standing at the time, is what lets a later reader tell whether an answer
+  // still applies.
+  await visit(plantUrl);
+  const history = page.getByTestId("evaluation-history");
+  await expect(history).toBeVisible();
+
+  const entries = page.getByTestId("evaluation-history-list").locator("li");
+  await expect(entries).toHaveCount(1);
+  await expect(entries.first()).toContainText(AM1_IDENTITY);
+  await expect(entries.first()).toContainText(AM1_SPECIES);
+  await expect(entries.first()).toContainText(/greenhouse bench/i);
+  await expect(entries.first()).toContainText(/temperature c 28/i);
+  await expect(entries.first()).toContainText(/1 other place considered/i);
+
+  // A log of asking, not of findings.
+  await expect(page.getByTestId("evaluation-history-basis")).toContainText(/nothing here is evidence/i);
+  await expect(page.getByTestId("evaluation-history-basis")).toContainText(/does not correct an earlier one/i);
+});
+
 /* ----------------------------------------------------------------- 8 ----- */
 
 test("8. the Conservatory compares AM1 against species evidence and says which is which", async () => {
@@ -304,4 +328,6 @@ test("9. everything about AM1 survives sign-out and sign-in", async () => {
   await expect(page.getByTestId("current-location")).toContainText("Cool bench");
   await expect(page.getByTestId("photograph-list")).toBeVisible();
   await expect(page.getByTestId("measurement-list")).toContainText("5.6 in");
+  // The evaluation history is part of the plant's record, not the session's.
+  await expect(page.getByTestId("evaluation-history-list").locator("li")).toHaveCount(1);
 });
