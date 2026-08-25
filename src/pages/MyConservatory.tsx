@@ -225,6 +225,18 @@ type StoredMeasurement = {
   supersedes_id: string | null;
 };
 
+/** One recorded act of asking about this plant's conditions. */
+type StoredEvaluation = {
+  id: string;
+  recorded_at: string;
+  cultivated_identity: string | null;
+  species_consulted: string | null;
+  taxon_relationship: string | null;
+  location_kind: string | null;
+  observations: Array<{ variable: string; value: number; unit: string }>;
+  alternatives_considered: number;
+};
+
 type PlantInput = {
   display_name: string;
   accepted_scientific_name?: string;
@@ -1513,11 +1525,13 @@ function Photographs({ plantId }: { plantId: string }) {
  * `Referer`, and in pasted links.
  */
 function CultivationCalyxAction({
+  plantId,
   acceptedScientificName,
   locationKind,
   readings,
   alternativeLocations,
 }: {
+  plantId: string;
   acceptedScientificName?: string | null;
   locationKind?: string | null;
   readings: EnvironmentReading[];
@@ -1627,6 +1641,29 @@ function CultivationCalyxAction({
         setRefused("The handoff could not be addressed, so nothing was sent.");
         return;
       }
+
+      // Note in the plant's own record that this was asked, and on what. A
+      // grower looking back next season needs to know the question was put and
+      // what the conditions were at the time — otherwise a recommendation they
+      // half-remember has nothing behind it. Recording that an assessment
+      // happened does not make its inputs evidence.
+      //
+      // A failure here must not swallow the evaluation the grower asked for,
+      // so it is attempted and not awaited into the navigation path.
+      void request(`/api/conservatory/plants/${encodeURIComponent(plantId)}/evaluations`, {
+        method: "POST",
+        body: JSON.stringify({
+          cultivated_identity: withAlternatives.cultivated_identity,
+          species_consulted: withAlternatives.taxon,
+          taxon_relationship: withAlternatives.taxon_relationship,
+          location_kind: withAlternatives.location.kind,
+          observations: withAlternatives.observations,
+          alternatives_considered: withAlternatives.alternatives.length,
+        }),
+      }).catch(() => {
+        // The history is a record, not a gate.
+      });
+
       navigate(href);
     } finally {
       setPreparing(false);
@@ -1767,6 +1804,7 @@ function CultivationContext({ plantId, acceptedScientificName }: { plantId: stri
         </p>
       )}
       <CultivationCalyxAction
+        plantId={plantId}
         acceptedScientificName={acceptedScientificName}
         locationKind={currentLocation?.kind}
         readings={environment?.readings ?? []}
@@ -2276,6 +2314,73 @@ function PlantMeasurements({ plantId }: { plantId: string }) {
   </section>;
 }
 
+/**
+ * Every time this plant's conditions were put to Calyx, and what they were.
+ *
+ * A recommendation a grower half-remembers has nothing behind it. This is the
+ * record that the question was asked, about which species, with which readings
+ * standing at the time — so a later reader can tell whether an answer still
+ * applies or was about conditions that have since changed.
+ *
+ * It is a log of asking, not a log of findings. Nothing here is evidence, and
+ * a later entry does not correct an earlier one: the conditions changed, the
+ * earlier reading did not become wrong.
+ */
+function CultivationEvaluationHistory({ plantId }: { plantId: string }) {
+  const request = useApi();
+  const [entries, setEntries] = useState<StoredEvaluation[]>();
+  const [unavailable, setUnavailable] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    request<{ evaluations: StoredEvaluation[] }>(
+      `/api/conservatory/plants/${encodeURIComponent(plantId)}/evaluations`,
+    )
+      .then((result) => {
+        if (!active) return;
+        if (!result || !Array.isArray(result.evaluations)) { setUnavailable(true); return; }
+        setEntries(result.evaluations);
+      })
+      .catch(() => { if (active) setUnavailable(true); });
+    return () => { active = false; };
+  }, [plantId, request]);
+
+  if (unavailable || !entries) return null;
+  if (!entries.length) return null;
+
+  return <section className="mt-6 rounded-xl border p-5" data-testid="evaluation-history">
+    <h3 className="text-sm font-semibold">Growing-condition evaluations</h3>
+    <p className="mt-1 text-[11px] text-muted-foreground" data-testid="evaluation-history-basis">
+      When this plant&rsquo;s conditions were put to Calyx, and what they were at the time. A record
+      of asking, not of findings — nothing here is evidence, and a later entry does not correct an
+      earlier one.
+    </p>
+    <ul className="mt-3 space-y-2 text-xs" data-testid="evaluation-history-list">
+      {entries.map((entry) => (
+        <li key={entry.id} data-testid={`evaluation-${entry.id}`}>
+          <strong>{(entry.recorded_at || "").slice(0, 10)}</strong>
+          {" — asked about "}<i>{entry.cultivated_identity}</i>
+          {entry.species_consulted && entry.taxon_relationship !== "species" ? (
+            <> against <i>{entry.species_consulted}</i></>
+          ) : null}
+          {entry.location_kind ? <>, on a {entry.location_kind.replace(/_/g, " ")}</> : null}
+          {entry.observations?.length ? (
+            <>
+              {", with "}
+              {entry.observations
+                .map((row) => `${row.variable.replace(/_/g, " ")} ${row.value}${row.unit}`)
+                .join(", ")}
+            </>
+          ) : null}
+          {entry.alternatives_considered
+            ? `, and ${entry.alternatives_considered} other place${entry.alternatives_considered === 1 ? "" : "s"} considered`
+            : ""}
+        </li>
+      ))}
+    </ul>
+  </section>;
+}
+
 function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: boolean }) {
   return <div className="rounded-xl border bg-card p-6">
     {arrivedByScan && <p className="mb-4 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-xs" data-testid="scan-arrival">Opened by scanning this plant&rsquo;s tag.</p>}
@@ -2285,6 +2390,7 @@ function PlantDossier({ plant, arrivedByScan }: { plant: Plant; arrivedByScan?: 
     <PlantSpeciesContinuum plant={plant} />
     <Photographs plantId={plant.id} />
     <PlantMeasurements plantId={plant.id} />
+    <CultivationEvaluationHistory plantId={plant.id} />
     <CultivationContext plantId={plant.id} acceptedScientificName={plant.accepted_scientific_name} />
     <PlacementAssessmentPanel plantId={plant.id} />
     <PlantLedger plantId={plant.id} />
