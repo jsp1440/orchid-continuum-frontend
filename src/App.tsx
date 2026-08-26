@@ -55,6 +55,7 @@ import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
 import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
+import ScientificRagDiagnostics from "./pages/ScientificRagDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
 import AdminCenter from "./pages/AdminCenter";
 import MissionControlEntry from "./pages/MissionControlEntry";
@@ -128,6 +129,7 @@ const App = () => (
                   <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/ai-orchestration" element={<AIOrchestration />} />
                   <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
+                  <Route path="/diagnostics/scientific-rag" element={<ScientificRagDiagnostics />} />
                   <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
                   <Route path="/habitats/:biome" element={<HabitatJourney mode="biome" />} />
                   <Route path="/ecosystems/:species" element={<HabitatJourney mode="species" />} />
