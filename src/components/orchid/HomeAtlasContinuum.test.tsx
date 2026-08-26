@@ -27,6 +27,16 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('continuum?.relationships?.geography');
   });
 
+  it('surfaces canonical ecological graph domains without inventing biological claims', () => {
+    const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    expect(atlas).toContain("item.domain === 'habitat'");
+    expect(atlas).toContain("item.domain === 'climate'");
+    expect(atlas).toContain("item.domain === 'mycorrhiza'");
+    expect(atlas).toContain('habitat breadth');
+    expect(atlas).toContain('climate tolerances');
+    expect(atlas).toContain('association strength');
+  });
+
   it('preserves the featured genus when handing the visitor into the full Atlas through the canonical navigation contract', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
     const navigation = read('src/lib/featuredTaxonNavigation.ts');
