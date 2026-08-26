@@ -17,11 +17,32 @@ const HomeAtlasContinuum: React.FC = () => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const geography = continuum?.relationships?.geography ?? null;
   const occurrenceDomain = continuum?.domains.find((item) => item.domain === 'occurrences') ?? null;
+  const ecologicalDomains = continuum?.graph.status === 'ok'
+    ? (continuum.graph.evidence.ecologicalDomains ?? [])
+    : [];
+  const geographyGraph = ecologicalDomains.find((item) => item.domain === 'geography') ?? null;
+  const elevationGraph = ecologicalDomains.find((item) => item.domain === 'elevation') ?? null;
   const hero = publicGenusMediaItems(continuum?.media.items ?? [])[0] ?? null;
 
-  const evidenceAvailable = Boolean(geography?.hasData || occurrenceDomain?.state === 'known');
+  const geographyGraphLinked = Boolean(geographyGraph && (geographyGraph.nodes > 0 || geographyGraph.edges > 0));
+  const elevationGraphLinked = Boolean(elevationGraph && (elevationGraph.nodes > 0 || elevationGraph.edges > 0));
+  const evidenceAvailable = Boolean(
+    geography?.hasData ||
+    occurrenceDomain?.state === 'known' ||
+    geographyGraphLinked ||
+    elevationGraphLinked,
+  );
   const atlasHref = featuredTaxonAtlasHref(genus);
   const calyxHref = featuredTaxonCalyxHref(genus);
+
+  const graphCoverageSummary = [
+    geographyGraphLinked && geographyGraph
+      ? `geography ${geographyGraph.nodes} nodes · ${geographyGraph.edges} relationships`
+      : null,
+    elevationGraphLinked && elevationGraph
+      ? `elevation ${elevationGraph.nodes} nodes · ${elevationGraph.edges} relationships`
+      : null,
+  ].filter(Boolean).join(' · ');
 
   return (
     <section id="home-atlas" className="relative overflow-hidden border-y border-white/[0.08] bg-[#07110c] text-[#f5f0e8]">
@@ -72,13 +93,22 @@ const HomeAtlasContinuum: React.FC = () => {
             <div>
               <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#d4b34a]">Geographic evidence</p>
               <p className="mt-2 text-sm leading-6 text-[#d8cfbd]/82">
-                {continuumStatus === 'loading' && 'Loading connected occurrence and geography evidence…'}
+                {continuumStatus === 'loading' && 'Loading connected occurrence, geography, and elevation evidence…'}
                 {continuumStatus === 'unavailable' && 'Continuum evidence is temporarily unavailable. No geographic fallback has been substituted.'}
-                {continuumStatus === 'ready' && evidenceAvailable && (geography?.summary || 'Occurrence evidence is linked in the Continuum.')}
-                {continuumStatus === 'ready' && !evidenceAvailable && 'No geographic evidence is linked in the current Continuum view. This is a knowledge gap, not evidence that the orchid is absent.'}
+                {continuumStatus === 'ready' && evidenceAvailable && (
+                  geography?.summary || graphCoverageSummary || 'Occurrence evidence is linked in the Continuum.'
+                )}
+                {continuumStatus === 'ready' && !evidenceAvailable && 'No geographic or elevation evidence is linked in the current Continuum view. This is a knowledge gap, not evidence that the orchid is absent.'}
               </p>
             </div>
           </div>
+
+          {continuumStatus === 'ready' && graphCoverageSummary ? (
+            <div className="mt-4 rounded-xl border border-[#d4b34a]/20 bg-[#d4b34a]/[0.06] px-3 py-3">
+              <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">Canonical graph coverage</p>
+              <p className="mt-1 text-xs leading-5 text-[#d8cfbd]/78">{graphCoverageSummary}</p>
+            </div>
+          ) : null}
 
           {continuumStatus === 'ready' && geography?.items?.length ? (
             <div className="mt-5 grid gap-2 sm:grid-cols-3">
@@ -91,7 +121,7 @@ const HomeAtlasContinuum: React.FC = () => {
           ) : null}
 
           <div className="mt-5 border-t border-white/[0.08] pt-4 text-xs leading-5 text-[#9e978a]">
-            The full Atlas opens the current cartographic workspace for occurrence exploration. The homepage deliberately avoids precise locality claims and does not imply that locality-sensitivity safeguards are present until that Atlas work is integrated and validated.
+            Counts above are graph linkage, not occurrence totals or inferred range limits. The full Atlas opens the current cartographic workspace for occurrence exploration; precise locality remains governed there rather than being copied onto the homepage.
           </div>
         </div>
       </div>
