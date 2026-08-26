@@ -16,7 +16,7 @@ import { researchStationCalyxHref } from '@/lib/researchStationNavigation';
 
 const DEMO_GENUS = 'Phalaenopsis';
 
-describe('NAOCC demo continuity', () => {
+describe('canonical Continuum continuity', () => {
   it('carries the featured genus from the homepage into canonical Atlas filtering', () => {
     const atlasUrl = new URL(featuredTaxonAtlasHref(DEMO_GENUS), 'https://orchidcontinuum.org');
 
@@ -57,7 +57,7 @@ describe('NAOCC demo continuity', () => {
 
     const calyxUrl = new URL(href as string, 'https://orchidcontinuum.org');
     const turnContext = buildCalyxTurnContext({
-      projectId: 'naocc-demo',
+      projectId: 'continuum-demo',
       uploadedFiles: [],
       routeSearch: calyxUrl.search,
     });
@@ -74,7 +74,7 @@ describe('NAOCC demo continuity', () => {
   it('carries a Research species, project, and conversation into Calyx without promoting the species to evidence', () => {
     const href = researchStationCalyxHref({
       taxon: 'Phalaenopsis amabilis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'continuum-phalaenopsis',
       conversationId: 'conversation-phalaenopsis',
     });
     const calyxUrl = new URL(href, 'https://orchidcontinuum.org');
@@ -82,7 +82,7 @@ describe('NAOCC demo continuity', () => {
     expect(calyxUrl.pathname).toBe('/calyx');
     expect(calyxUrl.searchParams.get('genus')).toBe('Phalaenopsis');
     expect(calyxUrl.searchParams.get('taxon')).toBe('Phalaenopsis amabilis');
-    expect(calyxUrl.searchParams.get('project')).toBe('naocc-phalaenopsis');
+    expect(calyxUrl.searchParams.get('project')).toBe('continuum-phalaenopsis');
     expect(calyxUrl.searchParams.get('conversation')).toBe('conversation-phalaenopsis');
     expect(calyxUrl.searchParams.get('origin')).toBe('research-station');
 
@@ -92,7 +92,7 @@ describe('NAOCC demo continuity', () => {
       routeSearch: calyxUrl.search,
     });
 
-    expect(turnContext.project_id).toBe('naocc-phalaenopsis');
+    expect(turnContext.project_id).toBe('continuum-phalaenopsis');
     expect(turnContext.route_context).toEqual({
       origin: 'research-station',
       featured_taxon: { rank: 'genus', accepted_name: 'Phalaenopsis' },
@@ -105,12 +105,12 @@ describe('NAOCC demo continuity', () => {
   it('keeps Research taxon and Lexicon current-question context jointly non-evidentiary', () => {
     const href = researchStationCalyxHref({
       taxon: 'Phalaenopsis amabilis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'continuum-phalaenopsis',
       conversationId: 'conversation-phalaenopsis',
     });
     const calyxUrl = new URL(href, 'https://orchidcontinuum.org');
     const turnContext = buildCalyxTurnContext({
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'continuum-phalaenopsis',
       uploadedFiles: [],
       routeSearch: calyxUrl.search,
     });
@@ -137,12 +137,12 @@ describe('NAOCC demo continuity', () => {
   it('keeps context out of Check Calyx evidence while preserving source-bound provenance', () => {
     const href = researchStationCalyxHref({
       taxon: 'Phalaenopsis amabilis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'continuum-phalaenopsis',
       conversationId: 'conversation-phalaenopsis',
     });
     const calyxUrl = new URL(href, 'https://orchidcontinuum.org');
     const turnContext = buildCalyxTurnContext({
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'continuum-phalaenopsis',
       uploadedFiles: [],
       routeSearch: calyxUrl.search,
     });
@@ -151,8 +151,8 @@ describe('NAOCC demo continuity', () => {
     );
 
     const mission = {
-      mission_id: 'mission-naocc-phalaenopsis',
-      project_id: 'naocc-phalaenopsis',
+      mission_id: 'mission-continuum-phalaenopsis',
+      project_id: 'continuum-phalaenopsis',
       question: questionContext.current_question,
       state: 'AWAITING_HUMAN_REVIEW',
       current_stage: 'eligible_for_publication_state',
@@ -184,7 +184,7 @@ describe('NAOCC demo continuity', () => {
       missing_evidence: [],
       confidence: 0.8,
       conclusions: [],
-      reasoning_ledger: { ledger_id: 'ledger-naocc-phalaenopsis', version: 1 },
+      reasoning_ledger: { ledger_id: 'ledger-continuum-phalaenopsis', version: 1 },
       validation: { valid: true, blockers: [] },
       review_status: 'HUMAN_REVIEW_REQUIRED',
       publication_eligibility: {
@@ -237,8 +237,8 @@ describe('NAOCC demo continuity', () => {
     });
     expect(verification.evidence[0].statement).not.toContain(questionContext.current_question as string);
     expect(verification.provenance).toMatchObject({
-      missionId: 'mission-naocc-phalaenopsis',
-      reasoningLedgerId: 'ledger-naocc-phalaenopsis',
+      missionId: 'mission-continuum-phalaenopsis',
+      reasoningLedgerId: 'ledger-continuum-phalaenopsis',
       reasoningLedgerVersion: 1,
       sourceRevisionIds: ['4101'],
       automaticPublication: false,
@@ -259,7 +259,7 @@ describe('NAOCC demo continuity', () => {
     calyxUrl.searchParams.set('collector', 'Collector Name');
 
     const turnContext = buildCalyxTurnContext({
-      projectId: 'naocc-demo',
+      projectId: 'continuum-demo',
       uploadedFiles: [],
       routeSearch: calyxUrl.search,
     });
