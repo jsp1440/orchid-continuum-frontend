@@ -14,8 +14,34 @@ const GOVERNED_DIMENSIONS = [
   "elevation",
 ] as const;
 
+const SAFE_PROVENANCE_KEYS = [
+  "source_domain",
+  "source_query_id",
+  "source_pk",
+  "evidence_class",
+  "evidence_citation",
+  "citation",
+  "doi",
+  "year",
+  "trait_name",
+  "trait_value",
+  "support_count",
+  "confidence_label",
+  "iucn_category",
+  "cites_appendix",
+  "population_trend",
+  "assessment_year",
+  "region",
+  "source_name",
+  "country",
+  "event_date",
+  "basis_of_record",
+  "elevation",
+] as const;
+
 type GovernedDimension = (typeof GOVERNED_DIMENSIONS)[number];
 type SourceMode = "canonical" | "manual";
+type ProvenanceRecord = Record<string, unknown>;
 
 const SAMPLE_ASSERTIONS = JSON.stringify(
   [
@@ -50,6 +76,7 @@ type MatrixCell = {
   state: string;
   assertion_count: number;
   confidence?: number | null;
+  provenance?: ProvenanceRecord[];
 };
 
 type MatrixResult = {
@@ -68,6 +95,21 @@ function parseSubjectIds(value: string): string[] | undefined {
     .map((item) => item.trim())
     .filter(Boolean);
   return ids.length ? Array.from(new Set(ids)).slice(0, 1000) : undefined;
+}
+
+function formatProvenanceValue(value: unknown): string | undefined {
+  if (value === null || value === undefined || value === "") return undefined;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return String(value).slice(0, 500);
+  }
+  return undefined;
+}
+
+function safeProvenanceEntries(record: ProvenanceRecord): Array<[string, string]> {
+  return SAFE_PROVENANCE_KEYS.flatMap((key) => {
+    const value = formatProvenanceValue(record[key]);
+    return value === undefined ? [] : [[key, value] as [string, string]];
+  });
 }
 
 export default function RelationshipMatrixNext() {
@@ -220,6 +262,9 @@ export default function RelationshipMatrixNext() {
                 <p className="mt-3 text-sm text-muted-foreground">
                   Precise locality and coordinates are not requested or rendered here. A missing relationship is not evidence that the relationship is biologically absent.
                 </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Cell provenance is rendered from a bounded allowlist of source, citation, review, country and recorded-elevation fields; arbitrary provenance keys are never displayed.
+                </p>
               </div>
             ) : (
               <label className="block text-sm font-medium">
@@ -260,6 +305,10 @@ export default function RelationshipMatrixNext() {
                     <th className="border p-3 text-left">{subject.label}</th>
                     {result.objects.map((object) => {
                       const cell = cells.get(`${subject.id}:${object.id}`);
+                      const provenance =
+                        result.source_mode === "canonical_governed_source"
+                          ? (cell?.provenance || []).map(safeProvenanceEntries).filter((entries) => entries.length)
+                          : [];
                       return (
                         <td key={object.id} className="border p-3 align-top">
                           <strong className="block capitalize">{cell?.state.replaceAll("_", " ") || "not recorded"}</strong>
@@ -267,6 +316,25 @@ export default function RelationshipMatrixNext() {
                             {cell?.assertion_count || 0} assertion{cell?.assertion_count === 1 ? "" : "s"}
                             {cell?.confidence == null ? "" : ` · confidence ${cell.confidence.toFixed(2)}`}
                           </span>
+                          {provenance.length > 0 && (
+                            <details className="mt-3 text-xs">
+                              <summary className="cursor-pointer font-medium">Evidence provenance ({provenance.length})</summary>
+                              <ol className="mt-2 space-y-2">
+                                {provenance.map((entries, index) => (
+                                  <li key={`${cell?.subject_id}:${cell?.object_id}:${index}`} className="rounded border p-2">
+                                    <dl className="space-y-1">
+                                      {entries.map(([key, value]) => (
+                                        <div key={key} className="grid grid-cols-[8rem_1fr] gap-2">
+                                          <dt className="font-medium">{key.replaceAll("_", " ")}</dt>
+                                          <dd className="break-words text-muted-foreground">{value}</dd>
+                                        </div>
+                                      ))}
+                                    </dl>
+                                  </li>
+                                ))}
+                              </ol>
+                            </details>
+                          )}
                         </td>
                       );
                     })}
