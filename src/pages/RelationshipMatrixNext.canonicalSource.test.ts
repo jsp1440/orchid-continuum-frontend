@@ -32,12 +32,39 @@ describe("Relationship Matrix canonical-source mode", () => {
     }
   });
 
+  it("renders canonical cell provenance through an explicit bounded allowlist", () => {
+    expect(source).toContain("SAFE_PROVENANCE_KEYS");
+    expect(source).toContain("safeProvenanceEntries");
+    expect(source).toContain("Evidence provenance");
+    for (const key of [
+      "source_domain",
+      "source_query_id",
+      "source_pk",
+      "evidence_citation",
+      "citation",
+      "doi",
+      "support_count",
+      "confidence_label",
+      "iucn_category",
+      "cites_appendix",
+      "country",
+      "elevation",
+    ]) {
+      expect(source).toContain(`"${key}"`);
+    }
+    expect(source).toContain('result.source_mode === "canonical_governed_source"');
+    expect(source).toContain("arbitrary provenance keys are never displayed");
+  });
+
   it("preserves locality and epistemic boundaries", () => {
     expect(source).toContain("Geography is country-level only");
     expect(source).toContain("elevation is a recorded occurrence value, not an inferred range");
     expect(source).toContain("Precise locality and coordinates are not requested or rendered here");
     expect(source).toContain("A missing relationship is not evidence that the relationship is biologically absent");
-    expect(source).not.toContain("decimalLatitude");
-    expect(source).not.toContain("decimalLongitude");
+    expect(source).not.toContain('"decimalLatitude"');
+    expect(source).not.toContain('"decimalLongitude"');
+    expect(source).not.toContain('"latitude"');
+    expect(source).not.toContain('"longitude"');
+    expect(source).not.toContain('"locality"');
   });
 });
