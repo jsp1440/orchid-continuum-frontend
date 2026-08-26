@@ -36,6 +36,17 @@ export function featuredTaxonAtlasNextHref(genus: string): string {
 }
 
 /**
+ * Canonical handoff from the featured genus into its Genus Profile.
+ *
+ * Keep this route behind the same canonical-genus validator as Atlas, Calyx,
+ * Species, and Research so the homepage never creates a profile URL from
+ * malformed, binomial, route-shaped, locality-shaped, or oversized context.
+ */
+export function featuredTaxonGenusProfileHref(genus: string): string {
+  return `/genus/${encodeURIComponent(normalizedGenus(genus))}`;
+}
+
+/**
  * Canonical handoff from a featured-taxon surface into Calyx.
  *
  * The route carries only bounded navigation context. The explicit
