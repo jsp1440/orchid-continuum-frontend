@@ -11,6 +11,7 @@ Expected control-plane behavior after activation:
 - partial work requeues itself;
 - genuine external blockers release their lane;
 - stale running slots are reclaimed;
+- stale validating slots (CI/validation dispatch that never reported back) are reclaimed to repair rather than left occupying a lane indefinitely;
 - a planner refills the backlog before it empties;
 - one draft integration-to-main PR remains the explicit owner gate;
 - production deployment is never automated by this workflow.

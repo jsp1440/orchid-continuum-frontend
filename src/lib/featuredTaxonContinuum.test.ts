@@ -63,6 +63,38 @@ describe('fetchFeaturedTaxonContinuum', () => {
     expect(result.domains.find((d) => d.domain === 'taxonomy')?.state).toBe('known');
     expect(result.relationships?.pollinators.items).toEqual(['Melipona']);
     expect(result.relationships?.fungi.items).toEqual(['Tulasnella']);
+    expect(result.conservation.state).toBe('unknown');
+    expect(result.conservation.nodes).toBe(0);
+    expect(result.conservation.edges).toBe(0);
+    expect(result.conservation.relationship).toEqual(relationshipGraph.conservation);
+  });
+
+  it('exposes known conservation graph coverage without inventing an assessment', async () => {
+    vi.mocked(mediaModule.fetchCalyxGenusMedia).mockResolvedValue(emptyMedia);
+    vi.mocked(graphModule.fetchGenusGraphEvidence).mockResolvedValue({
+      status: 'ok',
+      evidence: {
+        genus: 'Vanilla', nodeCount: 4, edgeCount: 2, truncated: false, nextOffset: null,
+        domains: [
+          { domain: 'taxonomy', nodes: 1, edges: 0 }, { domain: 'media', nodes: 0, edges: 0 },
+          { domain: 'occurrences', nodes: 1, edges: 0 }, { domain: 'traits', nodes: 0, edges: 0 },
+          { domain: 'literature', nodes: 0, edges: 0 }, { domain: 'pollinators', nodes: 0, edges: 0 },
+          { domain: 'conservation', nodes: 2, edges: 2 },
+        ],
+      },
+    });
+    vi.mocked(ocModule.fetchContinuumGraph).mockResolvedValue({
+      ...relationshipGraph,
+      conservation: { count: 2, summary: '2 conservation records', items: ['Record A', 'Record B'], hasData: true },
+    });
+
+    const result = await fetchFeaturedTaxonContinuum('Vanilla');
+    expect(result.conservation).toEqual({
+      state: 'known',
+      nodes: 2,
+      edges: 2,
+      relationship: { count: 2, summary: '2 conservation records', items: ['Record A', 'Record B'], hasData: true },
+    });
   });
 
   it('marks graph domains unavailable when the Continuum graph cannot be read', async () => {
@@ -72,6 +104,8 @@ describe('fetchFeaturedTaxonContinuum', () => {
     expect(result.domains.every((d) => d.state === 'unavailable')).toBe(true);
     expect(result.gaps).toEqual([]);
     expect(result.relationships?.genus).toBe('Vanilla');
+    expect(result.conservation.state).toBe('unavailable');
+    expect(result.conservation.relationship).toEqual(relationshipGraph.conservation);
   });
 
   it('keeps relationship endpoint failure separate from graph evidence', async () => {
@@ -80,6 +114,7 @@ describe('fetchFeaturedTaxonContinuum', () => {
     vi.mocked(ocModule.fetchContinuumGraph).mockRejectedValue(new Error('offline'));
     const result = await fetchFeaturedTaxonContinuum('Vanilla');
     expect(result.relationships).toBeNull();
+    expect(result.conservation.relationship).toBeNull();
     expect(result.genus).toBe('Vanilla');
   });
 });

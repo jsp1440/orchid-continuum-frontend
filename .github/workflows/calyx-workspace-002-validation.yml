@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - 'src/lib/calyxWorkspace.ts'
+      - 'src/lib/calyxVerification.ts'
+      - 'src/lib/calyxVerification.test.ts'
+      - 'src/components/calyx/ScientificSynthesis.tsx'
+      - 'src/components/calyx/ScientificSynthesis.test.tsx'
+      - 'src/components/calyx/CalyxVerificationWorkbench.tsx'
       - 'src/pages/CalyxWorkspace.tsx'
       - 'src/App.tsx'
       - '.github/workflows/calyx-workspace-002-validation.yml'
@@ -16,11 +21,12 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx eslint src/lib/calyxWorkspace.ts src/pages/CalyxWorkspace.tsx src/App.tsx --max-warnings=0
+      - run: npx eslint src/lib/calyxWorkspace.ts src/lib/calyxVerification.ts src/lib/calyxVerification.test.ts src/components/calyx/ScientificSynthesis.tsx src/components/calyx/ScientificSynthesis.test.tsx src/components/calyx/CalyxVerificationWorkbench.tsx src/pages/CalyxWorkspace.tsx src/App.tsx --max-warnings=0
+      - run: npx vitest run src/lib/calyxVerification.test.ts src/components/calyx/ScientificSynthesis.test.tsx
       - run: npm run build

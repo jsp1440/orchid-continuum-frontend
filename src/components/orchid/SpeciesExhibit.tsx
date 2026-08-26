@@ -7,6 +7,7 @@ import {
   type SpeciesExhibitCard,
   type SpeciesExhibitFetchResult,
 } from '@/lib/speciesExhibit';
+import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';
 
 type SpeciesExhibitProps = {
   genus: string;
@@ -109,7 +110,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
         <div className="max-w-3xl">
           <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#8a8062]">Species Exhibit</p>
           <h3 className="mt-1 font-serif text-3xl leading-tight text-[#24321f]">
-            Nine evidence-grounded species stories
+            {result.items.length} evidence-grounded species {result.items.length === 1 ? 'story' : 'stories'}
           </h3>
           <p className="mt-2 text-sm leading-6 text-[#5d684c]">
             Every card is a distinct canonical species. Captions, facts, confidence, and caveats come from
@@ -127,8 +128,9 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
       <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {result.items.map((item) => {
           const selectedCard = item.taxon_id === selected.taxon_id;
-          const media = item.representative_media;
-          const imageFailed = !!media && failedImages.has(media.url);
+          const media = speciesExhibitMediaCandidates(item).find(
+            (candidate) => !failedImages.has(candidate.url),
+          ) ?? null;
           return (
             <button
               key={item.taxon_id}
@@ -139,20 +141,25 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
                 selectedCard ? 'border-[#8a6f2d] shadow-md' : 'border-[#dfd1ad] hover:border-[#b89b52]'
               }`}
             >
-              {media && !imageFailed ? (
-                <img
-                  src={media.url}
-                  alt={`Representative source image for ${item.display_name}`}
-                  className="h-44 w-full object-cover"
-                  loading="lazy"
-                  onError={() => {
-                    setFailedImages((current) => {
-                      const next = new Set(current);
-                      next.add(media.url);
-                      return next;
-                    });
-                  }}
-                />
+              {media ? (
+                <>
+                  <img
+                    src={media.url}
+                    alt={`Representative source image for ${item.display_name}`}
+                    className="h-44 w-full object-cover"
+                    loading="lazy"
+                    onError={() => {
+                      setFailedImages((current) => {
+                        const next = new Set(current);
+                        next.add(media.url);
+                        return next;
+                      });
+                    }}
+                  />
+                  <div className="border-t border-[#dfd1ad] bg-[#f6f0df] px-3 py-1.5 text-[10px] leading-4 text-[#686e5a]">
+                    {media.source ?? 'Source unavailable'}{media.license ? ` · ${media.license}` : ' · license unavailable'}
+                  </div>
+                </>
               ) : (
                 <div className="flex h-44 items-center justify-center gap-2 bg-[#efe7d2] px-4 text-center text-xs text-[#6c715e]">
                   <ImageOff className="h-4 w-4" />

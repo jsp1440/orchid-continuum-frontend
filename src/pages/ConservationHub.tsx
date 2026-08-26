@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trees, ScrollText, HandHeart, Network, Workflow } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
 import PageShell from '@/components/orchid/PageShell';
 import OrganizationCard from '@/components/orchid/OrganizationCard';
 import ProjectWorkspaceCard from '@/components/orchid/ProjectWorkspaceCard';
@@ -135,7 +136,17 @@ const protocols = [
   },
 ];
 
+const boundedGenus = (value: string | null): string | null => {
+  const genus = value?.trim() ?? '';
+  if (!genus || genus.length > 80) return null;
+  return /^[A-Za-z][A-Za-z .'-]*$/.test(genus) ? genus : null;
+};
+
 const ConservationHub: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const genus = boundedGenus(searchParams.get('genus'));
+  const fromAtlasEvidence = searchParams.get('origin') === 'atlas-next-occurrence-evidence';
+
   return (
     <PageShell
       eyebrow="Conservation Hub"
@@ -159,6 +170,25 @@ const ConservationHub: React.FC = () => {
         </div>
       }
     >
+      {fromAtlasEvidence && genus && (
+        <section className="max-w-7xl mx-auto px-6 lg:px-10 pt-10">
+          <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-5 md:p-6">
+            <div className="text-[10px] tracking-[0.28em] uppercase text-emerald-200/80">
+              Atlas evidence handoff
+            </div>
+            <h2 className="mt-2 font-serif text-2xl text-white">
+              Conservation context for <span className="italic text-emerald-200">{genus}</span>
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/70">
+              You arrived from a selected Atlas occurrence. This workspace carries forward only the genus-level context; precise coordinates, locality, and occurrence identifiers remain in Atlas.
+            </p>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">
+              Use the organization, project, and protocol surfaces below to continue the conservation investigation without treating an incomplete record as evidence of absence.
+            </p>
+          </div>
+        </section>
+      )}
+
       {/* Organizations */}
       <section className="max-w-7xl mx-auto px-6 lg:px-10 pt-16">
         <div className="flex items-end justify-between gap-6 mb-8">

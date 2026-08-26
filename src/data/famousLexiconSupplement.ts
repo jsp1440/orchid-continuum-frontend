@@ -37,17 +37,21 @@ const recovered = (
   category,
   quick_definition,
   maturity: ['core_definition'],
-  review_state: 'draft',
   certainty_summary: 'literature_review_pending',
   source_system: FULL_EXPORT_SOURCE,
+  ...extra,
+  // Pinned AFTER the spread, deliberately. `extra` carries per-term scientific
+  // layers, not review authority: a recovered migration record is draft content
+  // that canonical Concept Registry records supersede by slug, so it must not be
+  // able to describe itself as reviewed, validated or confident. Declaring these
+  // before the spread would let one `extra` upgrade an unreviewed record.
+  review_state: 'draft',
   provenance: {
     source: FULL_EXPORT_PROVENANCE,
     source_record_id: `famous-recovered-${slug}`,
     validation_status: 'draft',
     confidence: 'not_assessed',
   },
-  ...extra,
-  review_state: 'draft',
 });
 
 export const famousLexiconSupplement: LexiconEntry[] = [

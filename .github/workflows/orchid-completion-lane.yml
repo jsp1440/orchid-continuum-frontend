@@ -7,6 +7,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: orchid-completion-lane-${{ github.repository }}-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   issues: write
@@ -24,7 +28,7 @@ jobs:
       INTEGRATION_BRANCH: oc-autonomous-integration
     steps:
       - name: Checkout autonomous integration branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ env.INTEGRATION_BRANCH }}
           fetch-depth: 0
@@ -47,7 +51,7 @@ jobs:
 
       - name: Execute issue with Claude Code
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -83,28 +87,36 @@ jobs:
             --allowedTools "Edit,Read,Write,Bash(git diff:*),Bash(git status:*),Bash(git ls-files:*),Bash(git log:*),Bash(git rev-parse:*),Bash(git add:*),Bash(git commit:*),Bash(git push:*),Bash(git checkout:*),Bash(git switch:*),Bash(git branch:*),Bash(git fetch:*),Bash(git merge:*),Bash(npm:*),Bash(npx:*),Bash(test:*),Bash(gh pr:*),Bash(gh issue:*)"
             --append-system-prompt "Read CLAUDE.md and repository instructions before editing. Orchid Continuum Brain and GitHub are authoritative. BLOCKED DOES NOT MEAN STOPPED FOR THE PROGRAM. Deliver durable GitHub work, never runner-local-only claims. Preserve taxonomy, provenance, uncertainty and sensitive-locality rules."
 
+      - name: Diagnose the Claude run
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node scripts/diagnose-claude-run.mjs
+
       - name: Classify lane result and release slot
         if: always()
+        env:
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
         shell: bash
         run: |
           set -euo pipefail
           marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          # Same SIGPIPE hazard as the supervisor: under `set -o pipefail` head exits
-          # after one line, gh dies on the broken pipe once output passes 64KB, and
-          # set -e kills this step. This is the step that releases the lane's slot,
-          # so losing it leaves the issue claimed with nothing executing it.
           pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
           pr=${pr%%$'\n'*}
 
+          gh label create oc-runtime-backoff --repo "$GITHUB_REPOSITORY" --color 6e7781 --description "Worker parked after Claude runtime/provider failure; retry only after canary recovery" 2>/dev/null || true
           gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-running >/dev/null 2>&1 || true
 
           if [[ -n "$pr" ]]; then
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-queued --remove-label oc-blocked --add-label oc-validating >/dev/null 2>&1 || true
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-queued --remove-label oc-blocked --remove-label oc-runtime-backoff --add-label oc-validating >/dev/null 2>&1 || true
             head=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json headRefName --jq '.headRefName')
             gh workflow run frontend-ci.yml --repo "$GITHUB_REPOSITORY" --ref "$head" >/dev/null
             gh workflow run calyx-matrix-005-validation.yml --repo "$GITHUB_REPOSITORY" --ref "$head" >/dev/null
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane delivered/updated integration PR #$pr, dispatched independent validation, and released its execution slot. CI/integration supervision now owns the next transition." >/dev/null
+          elif [[ "$CLAUDE_OUTCOME" != "success" ]]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-queued --remove-label oc-validating --add-label oc-runtime-backoff >/dev/null 2>&1 || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude runtime failed before producing a durable PR (outcome=${CLAUDE_OUTCOME}). Issue parked in oc-runtime-backoff; it will not be redispatched every scheduler pulse. The scheduled runtime canary will return it to the priority queue only after Claude recovers." >/dev/null
           else
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Lane ended without a durable integration PR. Returned to the queue for retry while other modules continue." >/dev/null
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-validating --remove-label oc-runtime-backoff --add-label oc-queued >/dev/null 2>&1 || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude completed without a durable integration PR. Returned to the queue for a bounded implementation retry while other modules continue." >/dev/null
           fi

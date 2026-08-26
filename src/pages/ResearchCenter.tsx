@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   Filter,
   Network,
@@ -9,6 +10,17 @@ import {
   Database,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
+import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
+import {
+  researchStationAtlasHref,
+  researchStationCalyxHref,
+} from '@/lib/researchStationNavigation';
+import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { ATLAS_WORKSPACE_ORIGIN } from '@/lib/featuredTaxonNavigation';
+import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
+import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
+import { MATRIX_RESEARCH_ORIGIN } from '@/lib/matrixResearchNavigation';
+import { parseResearchRouteContext } from '@/lib/researchRouteContext';
 
 /**
  * Research Center — advanced research surface for power users.
@@ -58,12 +70,59 @@ const PILLARS = [
 ] as const;
 
 const ResearchCenter: React.FC = () => {
+  // A project carried in from another module keeps the investigation intact.
+  //
+  // Governed origins are read through the shared parser rather than by
+  // re-deriving the rule here. The parser fails closed on a malformed genus,
+  // on an unbounded project id, and on any attempt to assert governed Atlas
+  // navigation context as evidence.
+  const [searchParams] = useSearchParams();
+  const routeContext = parseResearchRouteContext(searchParams);
+  const routeGenus = routeContext?.genus ?? '';
+  const projectId = routeContext?.projectId ?? null;
+  const arrivedFromAtlas =
+    routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
+    routeContext?.origin === ATLAS_WORKSPACE_ORIGIN;
+  const arrivedFromGenusProfile = routeContext?.origin === GENUS_PROFILE_ORIGIN;
+  const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
+  // A Matrix arrival previously fell through to "Continuing from Genus of the
+  // Day" — a curated editorial pick, which is not where this subject came from.
+  // Misattributing provenance on the surface whose purpose is provenance is not
+  // a copy problem.
+  const arrivedFromMatrix = routeContext?.origin === MATRIX_RESEARCH_ORIGIN;
+  // The dossier supplies the accepted binomial; every other origin carries only
+  // a genus. Naming the subject the visitor actually arrived with is the point
+  // of the handoff - re-deriving it here would be the loss it exists to fix.
+  const routeTaxon =
+    routeContext && 'taxon' in routeContext ? (routeContext.taxon ?? null) : null;
+  const subjectLabel = routeTaxon ?? routeGenus;
+
+  // The onward links must carry the subject the banner just named, not the
+  // genus token it was derived from. A visitor arriving from a Species Dossier
+  // for Cattleya purpurata is studying that species; handing Atlas and Calyx
+  // only "Cattleya" silently widens the subject to every congener, which is
+  // precisely the identity loss these handoffs exist to prevent — and the page
+  // says the subject is preserved while doing it.
+  //
+  // researchStationAtlasHref/CalyxHref classify by name shape rather than
+  // assuming rank: a binomial becomes Atlas's species filter (matched against
+  // the canonical binomial) and reaches Calyx as an exact taxon alongside the
+  // derived genus; a bare genus resolves to the same genus filter as before.
+  // Calyx reads that exact taxon only under the research-station origin, and
+  // asserts taxon_is_evidence=false when it does.
+  const onwardContext = { taxon: subjectLabel, projectId };
+  const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
-    genus: '',
+    genus: routeGenus,
     country: '',
     biome: '',
     pollinator: '',
   });
+
+  useEffect(() => {
+    if (!routeGenus) return;
+    setActiveQuery((query) => ({ ...query, genus: routeGenus }));
+  }, [routeGenus]);
 
   return (
     <PageShell
@@ -84,6 +143,89 @@ const ResearchCenter: React.FC = () => {
         </div>
       }
     >
+      {routeGenus ? (
+        <section className="pt-10">
+          <div className="max-w-7xl mx-auto px-6 lg:px-10">
+            <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.06] p-5 md:flex md:items-center md:justify-between md:gap-6">
+              <div>
+                <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/75">
+                  {arrivedFromDossier
+                    ? 'Continuing from the Species Dossier'
+                    : arrivedFromAtlas
+                      ? 'Continuing from the Atlas'
+                      : arrivedFromGenusProfile
+                        ? 'Continuing from the Genus Profile'
+                        : arrivedFromMatrix
+                          ? 'Continuing from a Matrix candidate'
+                          : 'Continuing from Genus of the Day'}
+                </div>
+                <p className="mt-2 text-sm leading-6 text-white/75">
+                  <span className="font-serif text-lg italic text-white">{subjectLabel}</span>{' '}
+                  is preserved here as navigation context and preloaded into the research query builder.
+                  It is not scientific evidence and it does not imply that a persisted research project is
+                  about this genus.
+                </p>
+                {/* The Matrix contract asserts context_is_identification=false.
+                    That assertion was parsed and then never shown, so a ranked
+                    candidate read exactly like a determined one. */}
+                {arrivedFromMatrix ? (
+                  <p className="mt-2 text-sm leading-6 text-white/75">
+                    This subject came from a Matrix ranking, which is a candidate rather than a
+                    verified identification. Nothing here determines what the specimen is.
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
+                <Link
+                  to={researchStationAtlasHref(onwardContext)}
+                  className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
+                >
+                  Return to Atlas
+                </Link>
+                <Link
+                  to={researchStationCalyxHref(onwardContext)}
+                  className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-100 hover:bg-emerald-300/15"
+                >
+                  Ask Calyx
+                </Link>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
+
+      {/* Research Station — one investigation, read end to end against the
+          canonical Research Workspace contract. This is the live surface; the
+          query-builder pillars below remain a structural preview. */}
+      <section className="py-10">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          <div className="mb-6">
+            <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/70 mb-2">
+              Research Station · live
+            </div>
+            <h2 className="font-serif text-2xl md:text-3xl">
+              {featuredGenusWithoutProject ? 'No persisted investigation selected' : 'Your current investigation'}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-white/60">
+              {featuredGenusWithoutProject
+                ? 'The featured genus remains navigation context only. Choose or carry a project before the Research Station opens persisted evidence, so an unrelated project is never presented as if it belongs to this genus.'
+                : 'Subject, question, what the Continuum holds, where evidence disagrees, what remains unknown, and where to continue. Interpretation comes from Calyx over the governed evidence-synthesis path — never from this page.'}
+            </p>
+          </div>
+          {featuredGenusWithoutProject ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-[#142a1f] p-6">
+              <p className="max-w-3xl text-sm leading-6 text-white/65">
+                No research project identity came with this handoff. The Research Station will not auto-select
+                another persisted project merely because one exists. Continue with the genus in Atlas or Calyx,
+                or open Research with an explicit project to inspect its governed evidence.
+              </p>
+            </div>
+          ) : (
+            <ResearchStationWorkbench projectId={projectId} />
+          )}
+        </div>
+      </section>
+
       {/* Query builder mockup */}
       <section className="py-10">
         <div className="max-w-7xl mx-auto px-6 lg:px-10">

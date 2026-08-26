@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Globe2, MapPinned } from 'lucide-react';
+import { ArrowRight, Globe2, MapPinned, MessageCircle } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import { featuredTaxonAtlasHref } from '@/lib/featuredTaxonNavigation';
+import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
 
 /**
  * Homepage Atlas window.
@@ -16,10 +17,11 @@ const HomeAtlasContinuum: React.FC = () => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const geography = continuum?.relationships?.geography ?? null;
   const occurrenceDomain = continuum?.domains.find((item) => item.domain === 'occurrences') ?? null;
-  const hero = continuum?.media.items[0] ?? null;
+  const hero = publicGenusMediaItems(continuum?.media.items ?? [])[0] ?? null;
 
   const evidenceAvailable = Boolean(geography?.hasData || occurrenceDomain?.state === 'known');
   const atlasHref = featuredTaxonAtlasHref(genus);
+  const calyxHref = featuredTaxonCalyxHref(genus);
 
   return (
     <section id="home-atlas" className="relative overflow-hidden border-y border-white/[0.08] bg-[#07110c] text-[#f5f0e8]">
@@ -42,12 +44,24 @@ const HomeAtlasContinuum: React.FC = () => {
           <p className="mt-4 max-w-2xl text-base leading-7 text-[#d8cfbd]/82">
             The homepage uses the same Continuum evidence state as the featured orchid instead of maintaining a second set of Atlas statistics and fallback counts.
           </p>
-          <Link
-            to={atlasHref}
-            className="mt-6 inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/45 bg-[#d4b34a]/10 px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#d4b34a] transition-colors hover:bg-[#d4b34a]/18"
-          >
-            Explore {genus} in Atlas <ArrowRight className="h-4 w-4" />
-          </Link>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              to={atlasHref}
+              className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/45 bg-[#d4b34a]/10 px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#d4b34a] transition-colors hover:bg-[#d4b34a]/18"
+            >
+              Explore {genus} in Atlas <ArrowRight className="h-4 w-4" />
+            </Link>
+            <Link
+              to={calyxHref}
+              className="inline-flex items-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.04] px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#eee4d1] transition-colors hover:border-[#d4b34a]/35 hover:bg-[#d4b34a]/10 hover:text-[#d4b34a]"
+            >
+              <MessageCircle className="h-4 w-4" />
+              Ask Calyx about {genus}
+            </Link>
+          </div>
+          <p className="mt-3 max-w-2xl text-xs leading-5 text-[#9e978a]">
+            Both paths carry the same featured genus through the canonical Continuum handoff, so a demonstration can move from geographic evidence to a grounded Calyx inquiry without resetting scientific context.
+          </p>
         </div>
 
         <div className="rounded-[1.5rem] border border-white/[0.09] bg-black/20 p-5 shadow-[0_18px_45px_rgba(0,0,0,0.2)]">

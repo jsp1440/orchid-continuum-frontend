@@ -1,0 +1,75 @@
+name: Orchid Claude Runtime Recovery
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+concurrency:
+  group: orchid-claude-runtime-recovery-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    outputs:
+      count: ${{ steps.parked.outputs.count }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Count parked runtime failures
+        id: parked
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh label create oc-runtime-backoff --repo "$GITHUB_REPOSITORY" --color 6e7781 --description "Worker parked after Claude runtime/provider failure; retry only after canary recovery" 2>/dev/null || true
+          count=$(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label oc-runtime-backoff --limit 200 --json number --jq 'length')
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
+  canary:
+    needs: inspect
+    if: needs.inspect.outputs.count != '0'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 1
+      - name: Prove Claude runtime health without repository mutation
+        uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          prompt: |
+            ORCHID CONTINUUM RUNTIME CANARY. Read README.md and reply exactly RUNTIME_OK. Do not edit files, run network calls, create issues or pull requests, commit, push, merge, or deploy.
+          claude_args: |
+            --model claude-sonnet-5
+            --max-turns 2
+            --allowedTools "Read"
+
+      - name: Diagnose the Claude run
+        if: always()
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: node scripts/diagnose-claude-run.mjs
+
+  recover:
+    needs: [inspect, canary]
+    if: always() && needs.inspect.result == 'success' && needs.inspect.outputs.count != '0' && needs.canary.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Return parked issues to priority queue after successful canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t parked < <(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label oc-runtime-backoff --limit 200 --json number --jq '.[].number')
+          for issue in "${parked[@]:-}"; do
+            [[ -n "$issue" ]] || continue
+            gh issue edit "$issue" --repo "$GITHUB_REPOSITORY" --remove-label oc-runtime-backoff --add-label oc-queued >/dev/null 2>&1 || true
+            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude runtime canary succeeded. Runtime backoff cleared and issue returned to the priority portfolio." >/dev/null 2>&1 || true
+          done

@@ -63,12 +63,56 @@ describe('featured taxon source integrity', () => {
     expect(navigation).toContain('&origin=${FEATURED_TAXON_ORIGIN}');
   });
 
-  it('routes the stewardship Research Station handoff to a live application route', () => {
+  it('keeps the mounted Atlas CALYX navigation on the active single-genus context', () => {
+    const navbar = source('components/orchid/Navbar.tsx');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
+    const calyxRoute = source('components/calyx/AtlasAwareCalyxRoute.tsx');
+
+    expect(navbar).toContain('atlasWorkspaceCalyxHref');
+    expect(navbar).toContain("l.route === '/calyx' && atlasGenus");
+    expect(navigation).toContain("ATLAS_WORKSPACE_ORIGIN = 'atlas-workspace'");
+    expect(calyxRoute).toContain('routeContext.origin === ATLAS_WORKSPACE_ORIGIN');
+  });
+
+  it('fails relationship-service outages closed instead of converting them into knowledge claims', () => {
+    const featured = source('components/orchid/DailyGenusFeatureContinuum.tsx');
+    expect(featured).toContain('deriveEcologicalEvidence');
+    expect(featured).toContain('serviceAnswered');
+    expect(featured).toContain("evidence.reason === 'service-unavailable'");
+    expect(featured).toContain('No fallback relationship claim is substituted while the evidence service is unreachable.');
+    expect(featured).toContain('This is a knowledge gap, not evidence that the relationship is biologically absent.');
+  });
+
+  it('preserves featured genus context when stewardship hands off to the live Research Station', () => {
     const close = source('components/orchid/HomepageStewardshipClose.tsx');
+    const research = source('pages/ResearchCenter.tsx');
+    const navigation = source('lib/featuredTaxonNavigation.ts');
     const app = source('App.tsx');
-    expect(close).toContain('to="/research"');
-    expect(close).not.toContain('to="/research-station"');
+
+    expect(close).toContain('featuredTaxonResearchHref');
+    expect(close).toContain('const researchHref = featuredTaxonResearchHref(genus)');
+    expect(close).toContain('to={researchHref}');
+    expect(close).not.toContain('to="/research"');
+    expect(navigation).toContain('/research?genus=');
+    // Pinned to the governed contract, not to one hand-rolled origin comparison.
+    // ResearchCenter previously re-derived the rule inline, which recognised
+    // only this origin and truncated the genus instead of validating it; the
+    // shared parser now decides, so the assertion follows it there.
+    expect(research).toContain('parseResearchRouteContext');
+    expect(research).not.toContain("searchParams.get('origin') ===");
+    expect(research).toContain('is preserved here as navigation context');
+    expect(research).toContain('It is not scientific evidence');
+    expect(research).toContain('genus: routeGenus');
     expect(app).toContain('<Route path="/research"');
+  });
+
+  it('does not auto-select an unrelated persisted project for a featured-genus handoff', () => {
+    const research = source('pages/ResearchCenter.tsx');
+    expect(research).toContain('const featuredGenusWithoutProject = Boolean(routeGenus && !projectId)');
+    expect(research).toContain("featuredGenusWithoutProject ? 'No persisted investigation selected'");
+    expect(research).toContain('The Research Station will not auto-select');
+    expect(research).toContain('featuredGenusWithoutProject ? (');
+    expect(research).toContain('<ResearchStationWorkbench projectId={projectId} />');
   });
 
   it('keeps the public footer on live visitor routes and out of operator-only workspaces', () => {

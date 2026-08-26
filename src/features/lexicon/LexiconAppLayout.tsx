@@ -11,21 +11,7 @@ import { PartnersView } from '@/components/lexicon/PartnersView';
 import { AboutView } from '@/components/lexicon/AboutView';
 import { ValidationView } from '@/components/lexicon/ValidationView';
 import { DisplayPreferencesProvider } from '@/contexts/DisplayPreferences';
-
-interface RouteState { view: ViewKey; slug?: string; query?: string; }
-
-function parseRoute(pathname:string,search:string):RouteState {
-  const path=pathname.replace(/^\/lexicon\/?/,'');
-  const parts=path.split('/').filter(Boolean);
-  const query=new URLSearchParams(search).get('q')??undefined;
-  if(parts[0]==='entry'&&parts[1])return{view:'entry',slug:decodeURIComponent(parts[1])};
-  if(parts[0]==='browse'||parts[0]==='a-z')return{view:'lexicon',query};
-  if(parts[0]==='collection')return{view:'collection'};
-  if(parts[0]==='partners')return{view:'partners'};
-  if(parts[0]==='about')return{view:'about'};
-  if(parts[0]==='validation')return{view:'validation'};
-  return{view:'home'};
-}
+import { parseRoute } from './lexiconRoute';
 
 function pathFor(view:ViewKey,slug?:string,query?:string):string {
   switch(view){

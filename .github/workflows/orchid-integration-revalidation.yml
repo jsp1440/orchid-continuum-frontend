@@ -16,9 +16,6 @@ concurrency:
 
 jobs:
   dispatch:
-    # Quoted because the expression contains ": ". A plain YAML scalar may not,
-    # so unquoted this file failed to parse and GitHub created a failed run with
-    # zero jobs on every push - the workflow never executed once.
     if: "contains(github.event.pull_request.body || '', 'OC-AUTO-ISSUE: #')"
     runs-on: ubuntu-latest
     env:
@@ -26,12 +23,13 @@ jobs:
       REPO: ${{ github.repository }}
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
       - name: Dispatch exact-head autonomous validation
         shell: bash
         run: |
           set -euo pipefail
-          current_sha=$(gh pr view "${{ github.event.pull_request.number }}" --repo "$REPO" --json headRefOid --jq '.headRefOid')
+          current_sha=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid --jq '.headRefOid')
           if [[ "$current_sha" != "$HEAD_SHA" ]]; then
             echo "PR head moved from $HEAD_SHA to $current_sha; newer synchronize event owns validation."
             exit 0

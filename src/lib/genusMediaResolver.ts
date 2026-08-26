@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { normalizedMediaKey } from '@/lib/genusProfileDataQuality';
 
 export type GenusMediaItem = {
   media_id: string;
@@ -37,6 +38,20 @@ const empty = (genus: string, status: GenusMediaResponse['status']): GenusMediaR
   summary: { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
 });
 
+/**
+ * Public publication boundary for canonical genus media.
+ *
+ * The backend remains authoritative for scientific/media selection, but a
+ * public surface may only publish a returned photograph when the record also
+ * carries a non-empty source and license. Missing attribution is allowed and
+ * is rendered explicitly as unavailable; missing source/license is not.
+ */
+export function publicGenusMediaItems(items: readonly GenusMediaItem[]): GenusMediaItem[] {
+  return items.filter(
+    (item) => Boolean(item.source_name?.trim()) && Boolean(item.license?.trim()),
+  );
+}
+
 /** The only Featured Genus media request path. No external fallback is allowed. */
 export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal): Promise<GenusMediaResponse> {
   const requested = genus.trim();
@@ -54,8 +69,9 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
     if (payload.status !== 'ok' && payload.status !== 'no_approved_media' && payload.status !== 'invalid_genus') {
       return empty(requested, 'service_error');
     }
-    // Deduplicate by image_url so the same photograph never appears in both the
-    // hero slot and the gallery (which would look like a duplicate on the page).
+    // Deduplicate by NORMALISED media identity (host + path) so the same
+    // photograph never appears twice on the page — including when a source
+    // returns it under differing query strings or trailing slashes.
     const seenUrls = new Set<string>();
     return {
       status: payload.status,
@@ -71,8 +87,9 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
               /^https?:\/\//i.test(item.image_url),
             )
             .filter((item) => {
-              if (seenUrls.has(item.image_url)) return false;
-              seenUrls.add(item.image_url);
+              const mediaKey = normalizedMediaKey(item.image_url);
+              if (!mediaKey || seenUrls.has(mediaKey)) return false;
+              seenUrls.add(mediaKey);
               return true;
             })
         : [],

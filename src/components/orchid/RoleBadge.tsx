@@ -110,16 +110,19 @@ const RoleBadge: React.FC<RoleBadgeProps> = ({
       : 'h-3.5 w-3.5 text-[10px] tracking-[0.22em] px-2.5 py-1';
 
   return (
+    // `max-w-full` and a wrapping label: the longest role name, "Conservation
+    // Organization", is wider than a card on an iPad in portrait, and without
+    // these the badge pushed the whole page sideways rather than wrapping.
     <span
       className={
-        'inline-flex items-center gap-1.5 rounded-full border uppercase ' +
+        'inline-flex max-w-full items-center gap-1.5 rounded-full border uppercase ' +
         tone +
         ' ' +
         sz
       }
     >
-      <Icon className={size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
-      {withLabel && <span>{label}</span>}
+      <Icon className={'shrink-0 ' + (size === 'sm' ? 'h-3 w-3' : 'h-3.5 w-3.5')} />
+      {withLabel && <span className="min-w-0 break-words">{label}</span>}
     </span>
   );
 };

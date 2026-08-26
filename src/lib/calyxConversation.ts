@@ -1,5 +1,13 @@
 import { marked } from "marked";
 
+import { parseAtlasCalyxQuestionContext } from "@/features/atlas-next/calyxHandoff";
+import {
+  CLASSROOM_INVESTIGATION_ORIGIN,
+  classroomCalyxTurnRouteContext,
+} from "@/lib/classroomInvestigationNavigation";
+import { activeCultivationHandoff } from "@/lib/conservatoryCultivationCalyx";
+import { calyxNavigationContextIsExplicitlyNonEvidentiary } from "@/lib/calyxRouteTrustBoundary";
+import { speciesDossierCalyxTurnRouteContext } from "@/lib/speciesDossierCalyxNavigation";
 import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -26,6 +34,9 @@ const MAX_STRUCTURED_PREVIEW_COLUMNS = 6;
 const MAX_STRUCTURED_PREVIEW_POINTS = 12;
 const MAX_ROUTE_GENUS_CHARACTERS = 80;
 const MAX_ROUTE_ORIGIN_CHARACTERS = 80;
+const MAX_ROUTE_TAXON_CHARACTERS = 180;
+const RESEARCH_STATION_ORIGIN = "research-station";
+const SAFE_ROUTE_TAXON = /^[A-Za-z0-9][A-Za-z0-9 .:_()'×-]*$/;
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
   "&": "&amp;",
@@ -298,6 +309,11 @@ export function buildStructuredWorkspacePreview(
 export type CalyxRouteContext = {
   origin: string | null;
   featuredTaxon: { rank: "genus"; name: string } | null;
+  questionContext: {
+    question: string;
+    question_source: "user";
+    question_is_evidence: false;
+  } | null;
 };
 
 export function parseCalyxRouteContext(search: string): CalyxRouteContext {
@@ -313,7 +329,15 @@ export function parseCalyxRouteContext(search: string): CalyxRouteContext {
   return {
     origin: origin || null,
     featuredTaxon: genus ? { rank: "genus", name: genus } : null,
+    questionContext: parseAtlasCalyxQuestionContext(search),
   };
+}
+
+function parseResearchExactTaxon(search: string, origin: string | null): string | null {
+  if (origin !== RESEARCH_STATION_ORIGIN) return null;
+  const value = new URLSearchParams(search).get("taxon")?.trim() ?? "";
+  if (!value || value.length > MAX_ROUTE_TAXON_CHARACTERS || !SAFE_ROUTE_TAXON.test(value)) return null;
+  return value;
 }
 
 export function buildCalyxTurnContext(options: {
@@ -330,15 +354,70 @@ export function buildCalyxTurnContext(options: {
     project_id: normalizeProjectId(options.projectId),
   };
 
-  const routeContext = parseCalyxRouteContext(
-    options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : ""),
-  );
-  if (routeContext.origin || routeContext.featuredTaxon) {
+  const routeSearch = options.routeSearch ?? (typeof window !== "undefined" ? window.location.search : "");
+  // Governed origins that carry exact identity use their dedicated adapters so
+  // their evidence boundaries are validated in one place instead of re-derived
+  // from generic query parameters here.
+  const dossierRouteContext = speciesDossierCalyxTurnRouteContext(routeSearch);
+  const classroomRouteContext = classroomCalyxTurnRouteContext(routeSearch);
+  // A grower asking about their own plant. The observations were adopted by the
+  // Calyx route out of single-use storage; they are never in the address.
+  const cultivationRouteContext = activeCultivationHandoff(routeSearch);
+
+  const routeContext = parseCalyxRouteContext(routeSearch);
+  const featuredTaxonIsExplicitlyNonEvidentiary =
+    calyxNavigationContextIsExplicitlyNonEvidentiary(routeSearch);
+  const researchTaxon = parseResearchExactTaxon(routeSearch, routeContext.origin);
+  const invalidClassroomArrival =
+    routeContext.origin === CLASSROOM_INVESTIGATION_ORIGIN && !classroomRouteContext;
+
+  if (cultivationRouteContext) {
+    context.route_context = cultivationRouteContext;
+  } else if (dossierRouteContext) {
+    context.route_context = dossierRouteContext;
+  } else if (classroomRouteContext) {
+    context.route_context = {
+      ...classroomRouteContext,
+      ...(routeContext.questionContext
+        ? {
+            question: routeContext.questionContext.question,
+            question_source: routeContext.questionContext.question_source,
+            question_is_evidence: routeContext.questionContext.question_is_evidence,
+          }
+        : {}),
+    };
+  } else if (
+    !invalidClassroomArrival &&
+    (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext || researchTaxon)
+  ) {
     context.route_context = {
       origin: routeContext.origin ?? undefined,
       featured_taxon: routeContext.featuredTaxon
         ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
         : undefined,
+      ...(routeContext.featuredTaxon && featuredTaxonIsExplicitlyNonEvidentiary
+        ? { featured_taxon_is_evidence: false }
+        : {}),
+      ...(researchTaxon
+        ? {
+            taxon: researchTaxon,
+            taxon_source: RESEARCH_STATION_ORIGIN,
+            taxon_is_evidence: false,
+          }
+        : {}),
+      // Spread, not three optional reads. Assigning `undefined` still creates the
+      // key, so a rejected question left route_context carrying `question`,
+      // `question_source` and `question_is_evidence` - the exact fields the
+      // fail-closed rule exists to withhold. JSON.stringify happens to drop
+      // them on the wire, which is why this went unnoticed, but the contract is
+      // about what the object asserts, not what survives serialization.
+      ...(routeContext.questionContext
+        ? {
+            question: routeContext.questionContext.question,
+            question_source: routeContext.questionContext.question_source,
+            question_is_evidence: routeContext.questionContext.question_is_evidence,
+          }
+        : {}),
     };
   }
 

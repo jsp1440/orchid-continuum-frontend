@@ -10,6 +10,7 @@ import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
 import ProtectedRoute from "@/components/auth/ProtectedRoute";
 import FavoritesSync from "@/components/orchid/FavoritesSync";
 import { RootErrorBoundary } from "@/components/RootErrorBoundary";
+import AtlasAwareCalyxRoute from "@/components/calyx/AtlasAwareCalyxRoute";
 import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
 
 import Index from "./pages/Index";
@@ -33,8 +34,12 @@ import Ecosystems from "./pages/Ecosystems";
 import ConservationHub from "./pages/ConservationHub";
 import OrchidUniversity from "./pages/OrchidUniversity";
 import UniversityLabPrototype from "./pages/UniversityLabPrototype";
+import AppliedAIDataScienceLab from "./pages/AppliedAIDataScienceLab";
 import UniversityReviewerWorkspace from "./pages/UniversityReviewerWorkspace";
 import Classroom from "./pages/Classroom";
+import ScientificMethodLab from "./pages/ScientificMethodLab";
+import JudgingPractice from "./pages/JudgingPractice";
+import ScreenOrchids from "./pages/ScreenOrchids";
 import Societies from "./pages/Societies";
 import OrganizationProfile from "./pages/OrganizationProfile";
 import ProjectWorkspace from "./pages/ProjectWorkspace";
@@ -48,6 +53,8 @@ import Climate from "./pages/Climate";
 import EcuadorExpedition from "./pages/EcuadorExpedition";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
+import Literature from "./pages/Literature";
+import LiteraturePaper from "./pages/LiteraturePaper";
 import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
@@ -58,7 +65,7 @@ import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
 import ContinuumNext from "./pages/ContinuumNext";
 import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
-import OrchidIdentificationNext from "./pages/OrchidIdentificationNext";
+import OrchidIdentificationContinuum from "./pages/OrchidIdentificationContinuum";
 import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import HomepageReadiness from "./pages/HomepageReadiness";
@@ -81,8 +88,8 @@ const App = () => (
                   <Route path="/lexicon/*" element={<LexiconAppLayout />} />
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
-                  <Route path="/orchid-identification" element={<OrchidIdentificationNext />} />
-                  <Route path="/calyx" element={<CalyxWorkspace />} />
+                  <Route path="/orchid-identification" element={<OrchidIdentificationContinuum />} />
+                  <Route path="/calyx" element={<AtlasAwareCalyxRoute />} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
                   <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />
                   <Route path="/explore" element={<Explore />} />
@@ -134,7 +141,8 @@ const App = () => (
                   <Route path="/climate" element={<Climate />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
-                  <Route path="/literature" element={<ComingSoon />} />
+                  <Route path="/literature" element={<Literature />} />
+                  <Route path="/literature/:paperId" element={<LiteraturePaper />} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
@@ -153,8 +161,12 @@ const App = () => (
                   <Route path="/societies" element={<Societies />} />
                   <Route path="/university" element={<OrchidUniversity />} />
                   <Route path="/university/lab" element={<UniversityLabPrototype />} />
+                  <Route path="/university/applied-ai-data-science" element={<AppliedAIDataScienceLab />} />
                   <Route path="/university/review" element={<UniversityReviewerWorkspace />} />
                   <Route path="/classroom" element={<Classroom />} />
+                  <Route path="/education/judging-practice" element={<JudgingPractice />} />
+                  <Route path="/culture/orchids-on-screen" element={<ScreenOrchids />} />
+                  <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />

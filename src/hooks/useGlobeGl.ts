@@ -11,7 +11,61 @@ import { useEffect, useState } from 'react';
 
 const GLOBE_SRC = 'https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js';
 
-type GlobeFactory = (config?: { animateIn?: boolean }) => unknown;
+/** Orbit controls, as far as this app drives them. */
+export interface GlobeControls {
+  autoRotate: boolean;
+  autoRotateSpeed: number;
+  enableZoom: boolean;
+}
+
+/**
+ * The globe.gl surface this application actually depends on.
+ *
+ * Deliberately partial. globe.gl exposes several dozen chainable setters and we
+ * do not own the library, so declaring all of them would be inventing a
+ * contract. Declaring the fifteen we call documents the real dependency and
+ * lets TypeScript check the chain, which a blanket `any` could not.
+ *
+ * Accessors are typed over `TPoint` rather than `any` so point callbacks are
+ * checked against the data actually pushed in.
+ */
+export interface GlobeInstance<TPoint = unknown> {
+  globeImageUrl(url: string): this;
+  bumpImageUrl(url: string): this;
+  backgroundColor(color: string): this;
+  showAtmosphere(enabled: boolean): this;
+  atmosphereColor(color: string): this;
+  atmosphereAltitude(value: number): this;
+  pointsData(data: TPoint[]): this;
+  pointLat(accessor: (point: TPoint) => number): this;
+  pointLng(accessor: (point: TPoint) => number): this;
+  pointColor(accessor: (point: TPoint) => string): this;
+  pointLabel(accessor: (point: TPoint) => string): this;
+  pointAltitude(value: number | ((point: TPoint) => number)): this;
+  pointRadius(value: number | ((point: TPoint) => number)): this;
+  pointResolution(segments: number): this;
+  pointsTransitionDuration(ms: number): this;
+  pointOfView(view: { lat: number; lng: number; altitude: number }, ms?: number): this;
+  width(px: number): this;
+  height(px: number): this;
+  controls(): GlobeControls | null;
+  /**
+   * Undocumented globe.gl teardown hook. Optional because it is an internal
+   * that a future release may drop; the call site already invokes it
+   * defensively rather than assuming it exists.
+   */
+  _destructor?(): void;
+}
+
+/**
+ * globe.gl's UMD factory is a two-step generator: `Globe(config)` returns a
+ * mount function, and calling that with the container element yields the
+ * chainable instance. Typing the first step as `unknown` made the documented
+ * `Globe()(el)` call site a type error even though it is the library's only
+ * supported usage.
+ */
+type GlobeMount = <TPoint = unknown>(element: HTMLElement) => GlobeInstance<TPoint>;
+type GlobeFactory = (config?: { animateIn?: boolean }) => GlobeMount;
 
 declare global {
   interface Window {

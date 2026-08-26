@@ -25,3 +25,15 @@ dist-ssr
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Generated verification reports. Never committed: a report in the tree
+# reads as a durable fact, and a stale one would assert a run that no
+# longer describes this code.
+artifacts/
+
+# Playwright browser-journey output.
+e2e/.artifacts/
+playwright-report/
+
+# Throwaway probe scripts written while investigating in a browser.
+*.tmp.mjs
