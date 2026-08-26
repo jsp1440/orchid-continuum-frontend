@@ -6,7 +6,7 @@ import {
   classroomCalyxTurnRouteContext,
 } from "@/lib/classroomInvestigationNavigation";
 import { activeCultivationHandoff } from "@/lib/conservatoryCultivationCalyx";
-import { calyxNavigationContextIsExplicitlyNonEvidentiary } from "@/lib/calyxRouteTrustBoundary";
+import { governedCalyxGenusTurnContext } from "@/lib/calyxRouteTrustBoundary";
 import { speciesDossierCalyxTurnRouteContext } from "@/lib/speciesDossierCalyxNavigation";
 import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
@@ -363,10 +363,9 @@ export function buildCalyxTurnContext(options: {
   // A grower asking about their own plant. The observations were adopted by the
   // Calyx route out of single-use storage; they are never in the address.
   const cultivationRouteContext = activeCultivationHandoff(routeSearch);
+  const governedGenusRouteContext = governedCalyxGenusTurnContext(routeSearch);
 
   const routeContext = parseCalyxRouteContext(routeSearch);
-  const featuredTaxonIsExplicitlyNonEvidentiary =
-    calyxNavigationContextIsExplicitlyNonEvidentiary(routeSearch);
   const researchTaxon = parseResearchExactTaxon(routeSearch, routeContext.origin);
   const invalidClassroomArrival =
     routeContext.origin === CLASSROOM_INVESTIGATION_ORIGIN && !classroomRouteContext;
@@ -386,7 +385,10 @@ export function buildCalyxTurnContext(options: {
           }
         : {}),
     };
+  } else if (governedGenusRouteContext) {
+    context.route_context = governedGenusRouteContext;
   } else if (
+    governedGenusRouteContext === undefined &&
     !invalidClassroomArrival &&
     (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext || researchTaxon)
   ) {
@@ -395,9 +397,6 @@ export function buildCalyxTurnContext(options: {
       featured_taxon: routeContext.featuredTaxon
         ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
         : undefined,
-      ...(routeContext.featuredTaxon && featuredTaxonIsExplicitlyNonEvidentiary
-        ? { featured_taxon_is_evidence: false }
-        : {}),
       ...(researchTaxon
         ? {
             taxon: researchTaxon,
