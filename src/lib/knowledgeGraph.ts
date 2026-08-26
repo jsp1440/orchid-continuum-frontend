@@ -10,7 +10,16 @@ export const KNOWLEDGE_GRAPH_DOMAINS = [
   'conservation',
 ] as const;
 
+export const ECOLOGICAL_KNOWLEDGE_GRAPH_DOMAINS = [
+  'geography',
+  'habitat',
+  'climate',
+  'elevation',
+  'mycorrhiza',
+] as const;
+
 export type KnowledgeGraphDomain = (typeof KNOWLEDGE_GRAPH_DOMAINS)[number];
+export type EcologicalKnowledgeGraphDomain = (typeof ECOLOGICAL_KNOWLEDGE_GRAPH_DOMAINS)[number];
 
 export type DomainEvidence = {
   domain: KnowledgeGraphDomain;
@@ -18,9 +27,22 @@ export type DomainEvidence = {
   edges: number;
 };
 
+export type EcologicalDomainEvidence = {
+  domain: EcologicalKnowledgeGraphDomain;
+  nodes: number;
+  edges: number;
+};
+
 export type GenusGraphEvidence = {
   genus: string;
   domains: DomainEvidence[];
+  /**
+   * Canonical ecological coverage returned by the backend graph vocabulary.
+   * Optional only for compatibility with older deterministic fixtures; live
+   * normalized responses always populate all five entries, using zero for an
+   * unlinked domain rather than silently dropping it.
+   */
+  ecologicalDomains?: EcologicalDomainEvidence[];
   nodeCount: number;
   edgeCount: number;
   truncated: boolean;
@@ -43,6 +65,28 @@ function nonNegativeInteger(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : null;
 }
 
+function normalizeDomainCoverage<TDomain extends string>(
+  payload: JsonRecord,
+  domains: readonly TDomain[],
+): Array<{ domain: TDomain; nodes: number; edges: number }> | null {
+  const normalized: Array<{ domain: TDomain; nodes: number; edges: number }> = [];
+
+  for (const domain of domains) {
+    const rawCoverage = payload[domain];
+    if (rawCoverage === undefined) {
+      normalized.push({ domain, nodes: 0, edges: 0 });
+      continue;
+    }
+    if (!isRecord(rawCoverage)) return null;
+    const nodes = nonNegativeInteger(rawCoverage.nodes);
+    const edges = nonNegativeInteger(rawCoverage.edges);
+    if (nodes === null || edges === null) return null;
+    normalized.push({ domain, nodes, edges });
+  }
+
+  return normalized;
+}
+
 export function normalizeGenusGraphEvidence(payload: unknown): GenusGraphEvidence | null {
   if (!isRecord(payload) || !isRecord(payload.focal_node) || !isRecord(payload.graph)) return null;
   if (!isRecord(payload.pagination) || !isRecord(payload.domain_coverage)) return null;
@@ -57,21 +101,22 @@ export function normalizeGenusGraphEvidence(payload: unknown): GenusGraphEvidenc
   if (typeof genus !== 'string' || !genus.trim() || nodeCount === null || edgeCount === null) return null;
   if (typeof truncated !== 'boolean' || (rawNextOffset !== null && nextOffset === null)) return null;
 
-  const domains: DomainEvidence[] = [];
-  for (const domain of KNOWLEDGE_GRAPH_DOMAINS) {
-    const rawCoverage = payload.domain_coverage[domain];
-    if (rawCoverage === undefined) {
-      domains.push({ domain, nodes: 0, edges: 0 });
-      continue;
-    }
-    if (!isRecord(rawCoverage)) return null;
-    const nodes = nonNegativeInteger(rawCoverage.nodes);
-    const edges = nonNegativeInteger(rawCoverage.edges);
-    if (nodes === null || edges === null) return null;
-    domains.push({ domain, nodes, edges });
-  }
+  const domains = normalizeDomainCoverage(payload.domain_coverage, KNOWLEDGE_GRAPH_DOMAINS);
+  const ecologicalDomains = normalizeDomainCoverage(
+    payload.domain_coverage,
+    ECOLOGICAL_KNOWLEDGE_GRAPH_DOMAINS,
+  );
+  if (!domains || !ecologicalDomains) return null;
 
-  return { genus: genus.trim(), domains, nodeCount, edgeCount, truncated, nextOffset };
+  return {
+    genus: genus.trim(),
+    domains,
+    ecologicalDomains,
+    nodeCount,
+    edgeCount,
+    truncated,
+    nextOffset,
+  };
 }
 
 export async function fetchGenusGraphEvidence(
