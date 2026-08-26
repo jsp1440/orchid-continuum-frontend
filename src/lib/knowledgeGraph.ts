@@ -36,7 +36,13 @@ export type EcologicalDomainEvidence = {
 export type GenusGraphEvidence = {
   genus: string;
   domains: DomainEvidence[];
-  ecologicalDomains: EcologicalDomainEvidence[];
+  /**
+   * Canonical ecological coverage returned by the backend graph vocabulary.
+   * Optional only for compatibility with older deterministic fixtures; live
+   * normalized responses always populate all five entries, using zero for an
+   * unlinked domain rather than silently dropping it.
+   */
+  ecologicalDomains?: EcologicalDomainEvidence[];
   nodeCount: number;
   edgeCount: number;
   truncated: boolean;
