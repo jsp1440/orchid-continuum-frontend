@@ -4,6 +4,19 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE = (import.meta.env.VITE_CALYX_API_URL || "").replace(/\/$/, "");
 
+const GOVERNED_DIMENSIONS = [
+  "pollinator",
+  "mycorrhizal_partner",
+  "literature",
+  "trait",
+  "conservation_status",
+  "geography",
+  "elevation",
+] as const;
+
+type GovernedDimension = (typeof GOVERNED_DIMENSIONS)[number];
+type SourceMode = "canonical" | "manual";
+
 const SAMPLE_ASSERTIONS = JSON.stringify(
   [
     {
@@ -45,11 +58,23 @@ type MatrixResult = {
   objects: Array<{ id: string; label: string }>;
   cells: MatrixCell[];
   disclaimer: string;
+  source_mode?: string;
+  source_domain?: string;
 };
+
+function parseSubjectIds(value: string): string[] | undefined {
+  const ids = value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return ids.length ? Array.from(new Set(ids)).slice(0, 1000) : undefined;
+}
 
 export default function RelationshipMatrixNext() {
   const { session } = useAuth();
-  const [dimension, setDimension] = useState("pollinator");
+  const [sourceMode, setSourceMode] = useState<SourceMode>("canonical");
+  const [dimension, setDimension] = useState<GovernedDimension>("pollinator");
+  const [subjectIdsText, setSubjectIdsText] = useState("");
   const [assertionsText, setAssertionsText] = useState(SAMPLE_ASSERTIONS);
   const [result, setResult] = useState<MatrixResult>();
   const [error, setError] = useState<string>();
@@ -66,17 +91,35 @@ export default function RelationshipMatrixNext() {
     setError(undefined);
     try {
       if (!API_BASE) throw new Error("VITE_CALYX_API_URL is not configured.");
-      const assertions = JSON.parse(assertionsText);
-      if (!Array.isArray(assertions)) throw new Error("Assertions must be a JSON array.");
-      const response = await fetch(`${API_BASE}/api/matrix-relationship/build`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
-        },
-        body: JSON.stringify({ dimension, assertions }),
-      });
+
+      const headers = {
+        "Content-Type": "application/json",
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      };
+
+      let response: Response;
+      if (sourceMode === "canonical") {
+        response = await fetch(`${API_BASE}/api/matrix-relationship/build-from-canonical-source`, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: JSON.stringify({
+            dimension,
+            subject_ids: parseSubjectIds(subjectIdsText),
+            limit: 5000,
+          }),
+        });
+      } else {
+        const assertions = JSON.parse(assertionsText);
+        if (!Array.isArray(assertions)) throw new Error("Assertions must be a JSON array.");
+        response = await fetch(`${API_BASE}/api/matrix-relationship/build`, {
+          method: "POST",
+          credentials: "include",
+          headers,
+          body: JSON.stringify({ dimension, assertions }),
+        });
+      }
+
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(String(body.detail || `Request failed (${response.status})`));
       setResult(body as MatrixResult);
@@ -99,39 +142,111 @@ export default function RelationshipMatrixNext() {
 
         <form className="mt-8 grid gap-6 lg:grid-cols-[0.7fr_1.3fr]" onSubmit={submit}>
           <section className="rounded-2xl border bg-card p-6">
-            <label className="block text-sm font-medium">
+            <fieldset>
+              <legend className="text-sm font-medium">Evidence source</legend>
+              <div className="mt-2 grid gap-2">
+                <label className="flex items-start gap-3 rounded-lg border p-3">
+                  <input
+                    className="mt-1"
+                    type="radio"
+                    name="source-mode"
+                    checked={sourceMode === "canonical"}
+                    onChange={() => setSourceMode("canonical")}
+                  />
+                  <span>
+                    <strong className="block">Canonical Continuum sources</strong>
+                    <span className="text-xs text-muted-foreground">
+                      Read governed source-registry evidence directly. Missing rows remain not recorded.
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-3 rounded-lg border p-3">
+                  <input
+                    className="mt-1"
+                    type="radio"
+                    name="source-mode"
+                    checked={sourceMode === "manual"}
+                    onChange={() => setSourceMode("manual")}
+                  />
+                  <span>
+                    <strong className="block">Manual assertions</strong>
+                    <span className="text-xs text-muted-foreground">Review/test mode for explicitly supplied evidence JSON.</span>
+                  </span>
+                </label>
+              </div>
+            </fieldset>
+
+            <label className="mt-5 block text-sm font-medium">
               Relationship dimension
-              <input
+              <select
                 className="mt-2 w-full rounded-lg border bg-background px-3 py-2"
                 value={dimension}
-                onChange={(event) => setDimension(event.target.value)}
-              />
+                onChange={(event) => setDimension(event.target.value as GovernedDimension)}
+              >
+                {GOVERNED_DIMENSIONS.map((value) => (
+                  <option key={value} value={value}>{value.replaceAll("_", " ")}</option>
+                ))}
+              </select>
             </label>
-            <p className="mt-5 text-sm text-muted-foreground">
-              Examples: pollinator, mycorrhizal_partner, habitat, geography, parentage or collection_taxon.
-            </p>
+
+            {sourceMode === "canonical" && (
+              <label className="mt-5 block text-sm font-medium">
+                Canonical subject IDs (optional)
+                <textarea
+                  className="mt-2 min-h-28 w-full rounded-lg border bg-background p-3 font-mono text-xs"
+                  value={subjectIdsText}
+                  onChange={(event) => setSubjectIdsText(event.target.value)}
+                  placeholder="One canonical taxon ID per line or comma-separated"
+                />
+                <span className="mt-2 block text-xs text-muted-foreground">
+                  Leave blank for the backend&apos;s bounded source read. Geography is country-level only; elevation is a recorded occurrence value, not an inferred range.
+                </span>
+              </label>
+            )}
+
             <button className="mt-6 rounded-lg bg-primary px-4 py-2 text-primary-foreground" disabled={loading}>
-              {loading ? "Building matrix…" : "Build governed matrix"}
+              {loading ? "Building matrix…" : sourceMode === "canonical" ? "Build from canonical evidence" : "Build governed matrix"}
             </button>
             {error && <p className="mt-4 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
           </section>
 
           <section className="rounded-2xl border bg-card p-6">
-            <label className="block text-sm font-medium">
-              Evidence assertions JSON
-              <textarea
-                className="mt-2 min-h-[24rem] w-full rounded-lg border bg-background p-3 font-mono text-xs"
-                value={assertionsText}
-                onChange={(event) => setAssertionsText(event.target.value)}
-              />
-            </label>
+            {sourceMode === "canonical" ? (
+              <div>
+                <h2 className="text-lg font-semibold">Governed source contract</h2>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Canonical mode reads only backend-approved source-registry paths for pollinators, mycorrhiza, literature, normalized traits, conservation, country-level occurrence geography and recorded occurrence elevation.
+                </p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Precise locality and coordinates are not requested or rendered here. A missing relationship is not evidence that the relationship is biologically absent.
+                </p>
+              </div>
+            ) : (
+              <label className="block text-sm font-medium">
+                Evidence assertions JSON
+                <textarea
+                  className="mt-2 min-h-[24rem] w-full rounded-lg border bg-background p-3 font-mono text-xs"
+                  value={assertionsText}
+                  onChange={(event) => setAssertionsText(event.target.value)}
+                />
+              </label>
+            )}
           </section>
         </form>
 
         {result && (
           <section className="mt-8 overflow-x-auto rounded-2xl border bg-card p-6">
-            <h2 className="text-2xl font-semibold">{result.dimension.replaceAll("_", " ")}</h2>
-            <p className="mt-2 text-sm text-muted-foreground">{result.disclaimer}</p>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="text-2xl font-semibold">{result.dimension.replaceAll("_", " ")}</h2>
+                <p className="mt-2 text-sm text-muted-foreground">{result.disclaimer}</p>
+              </div>
+              {result.source_mode === "canonical_governed_source" && (
+                <p className="rounded-full border px-3 py-1 text-xs font-medium">
+                  Canonical governed source{result.source_domain ? ` · ${result.source_domain}` : ""}
+                </p>
+              )}
+            </div>
             <table className="mt-6 min-w-full border-collapse text-sm">
               <thead>
                 <tr>
