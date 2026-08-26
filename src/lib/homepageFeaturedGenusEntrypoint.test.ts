@@ -24,13 +24,17 @@ describe('homepage featured genus canonical entrypoint', () => {
     expect(ENTRYPOINT_SOURCE).not.toMatch(/<DailyGenusFeatureContinuum \/>\s*<section/);
   });
 
-  it('keeps Atlas and Calyx navigation on canonical featured-taxon helpers', () => {
+  it('keeps Atlas, Calyx, and Genus Profile navigation on canonical featured-taxon helpers', () => {
     expect(CONTINUUM_SOURCE).toContain('featuredTaxonAtlasHref');
     expect(CONTINUUM_SOURCE).toContain('featuredTaxonCalyxHref');
+    expect(CONTINUUM_SOURCE).toContain('featuredTaxonGenusProfileHref');
     expect(CONTINUUM_SOURCE).toContain('const atlasHref = featuredTaxonAtlasHref(genus)');
     expect(CONTINUUM_SOURCE).toContain('const calyxHref = featuredTaxonCalyxHref(genus)');
+    expect(CONTINUUM_SOURCE).toContain('const genusProfileHref = featuredTaxonGenusProfileHref(genus)');
     expect(CONTINUUM_SOURCE).toContain('to={atlasHref}');
     expect(CONTINUUM_SOURCE).toContain('to={calyxHref}');
+    expect(CONTINUUM_SOURCE).toContain('to={genusProfileHref}');
+    expect(CONTINUUM_SOURCE).not.toContain('to={`/genus/${encodeURIComponent(genus)}`}');
   });
 
   it('mounts the canonical featured-genus continuation into Research Station', () => {
