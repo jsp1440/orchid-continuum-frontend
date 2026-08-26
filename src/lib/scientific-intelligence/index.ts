@@ -40,3 +40,9 @@ export { fetchVisionIntelligence } from './vision/adapter'
 
 export type { GrantOpportunity, GrantsIntelligence } from './grants/adapter'
 export { fetchGrantsIntelligence } from './grants/adapter'
+
+// Event-driven scientific RAG vertical slice (deterministic reference pipeline:
+// ingestion → extraction → reconciliation → provenance → embedding → graph →
+// retrieval → grounded answer → verification, with a durable event ledger and
+// Mission Control metrics). See ./rag for the full surface.
+export * as rag from './rag'
