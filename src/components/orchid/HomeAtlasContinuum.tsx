@@ -121,7 +121,7 @@ const HomeAtlasContinuum: React.FC = () => {
           ) : null}
 
           <div className="mt-5 border-t border-white/[0.08] pt-4 text-xs leading-5 text-[#9e978a]">
-            Counts above are graph linkage, not occurrence totals or inferred range limits. The full Atlas opens the current cartographic workspace for occurrence exploration; precise locality remains governed there rather than being copied onto the homepage.
+            Counts above are graph linkage, not occurrence totals or inferred range limits. This public summary does not imply that locality-sensitivity safeguards are present here; precise locality remains governed inside the full Atlas rather than being copied onto the homepage.
           </div>
         </div>
       </div>
