@@ -7,13 +7,13 @@ describe("Research Station exact taxon → Calyx turn context", () => {
   it("carries an exact species subject alongside the derived genus as non-evidentiary context", () => {
     const href = researchStationCalyxHref({
       taxon: "Phalaenopsis amabilis",
-      projectId: "naocc-demo",
+      projectId: "oc-demo",
       conversationId: "conversation-1",
     });
     const url = new URL(href, "https://orchidcontinuum.org");
 
     const turnContext = buildCalyxTurnContext({
-      projectId: "naocc-demo",
+      projectId: "oc-demo",
       uploadedFiles: [],
       routeSearch: url.search,
     });
@@ -29,7 +29,7 @@ describe("Research Station exact taxon → Calyx turn context", () => {
 
   it("does not accept a taxon parameter from a non-Research route", () => {
     const turnContext = buildCalyxTurnContext({
-      projectId: "naocc-demo",
+      projectId: "oc-demo",
       uploadedFiles: [],
       routeSearch: "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon",
     });
@@ -42,7 +42,7 @@ describe("Research Station exact taxon → Calyx turn context", () => {
 
   it("fails closed for malformed exact taxon values", () => {
     const turnContext = buildCalyxTurnContext({
-      projectId: "naocc-demo",
+      projectId: "oc-demo",
       uploadedFiles: [],
       routeSearch: "?genus=Phalaenopsis&taxon=%3Cscript%3E&origin=research-station",
     });

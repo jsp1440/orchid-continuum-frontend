@@ -41,8 +41,8 @@ import {
 
 const CANONICAL_GENUS = "Phalaenopsis";
 const CANONICAL_TAXON = "Phalaenopsis amabilis";
-const PROJECT_ID = "naocc-phalaenopsis";
-const CONVERSATION_ID = "conv-naocc-phalaenopsis-1";
+const PROJECT_ID = "oc-demo-phalaenopsis";
+const CONVERSATION_ID = "conv-oc-demo-phalaenopsis-1";
 const CARRIED_QUESTION =
   "Which traits distinguish cool-growing from warm-growing Phalaenopsis after accounting for elevation?";
 
@@ -125,7 +125,7 @@ function synthesisStructure(): CalyxSynthesisStructure {
     ],
     unresolved_conflict: true,
     governed_provenance: {
-      mission_id: "naocc-phalaenopsis-mission",
+      mission_id: "oc-demo-phalaenopsis-mission",
       evidence_packet_id: "packet-4411",
       review_status: "HUMAN_REVIEW_REQUIRED",
     },
@@ -141,7 +141,7 @@ const conclusion: MissionConclusion = {
 /** The governed mission the Verification Workbench audits at the end of the journey. */
 function governedMission(): BrainMission {
   return {
-    mission_id: "naocc-phalaenopsis-mission",
+    mission_id: "oc-demo-phalaenopsis-mission",
     project_id: PROJECT_ID,
     question: CARRIED_QUESTION,
     state: "AWAITING_HUMAN_REVIEW",
@@ -149,7 +149,7 @@ function governedMission(): BrainMission {
     steps_executed: 12,
     sources: [
       {
-        result_id: "naocc-source-1",
+        result_id: "oc-demo-source-1",
         title: "Thermal niche and leaf persistence in Phalaenopsis",
         object_type: "literature",
         authorized_excerpt: "Seasonal leaf persistence covaried with thermal niche across sampled taxa.",
@@ -183,7 +183,7 @@ function governedMission(): BrainMission {
     missing_evidence: ["Species-level thermal niche estimates"],
     confidence: 0.72,
     conclusions: [conclusion],
-    reasoning_ledger: { ledger_id: "naocc-ledger-1", version: 2 },
+    reasoning_ledger: { ledger_id: "oc-demo-ledger-1", version: 2 },
     validation: { valid: true, blockers: [] },
     review_status: "HUMAN_REVIEW_REQUIRED",
     publication_eligibility: {
@@ -329,8 +329,8 @@ describe("canonical scientific journey (Phalaenopsis)", () => {
       expect(item.sourceRevisionId).toBeTruthy();
       expect(item.anchorIds.length).toBeGreaterThan(0);
     }
-    expect(verification.provenance.missionId).toBe("naocc-phalaenopsis-mission");
-    expect(verification.provenance.reasoningLedgerId).toBe("naocc-ledger-1");
+    expect(verification.provenance.missionId).toBe("oc-demo-phalaenopsis-mission");
+    expect(verification.provenance.reasoningLedgerId).toBe("oc-demo-ledger-1");
     expect(verification.provenance.reviewStatus).toBe("HUMAN_REVIEW_REQUIRED");
 
     // A journey never earns publication on its own.

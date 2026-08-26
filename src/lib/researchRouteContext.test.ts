@@ -20,11 +20,11 @@ describe('Research Center route context', () => {
     // drift apart unnoticed.
     expect(parseResearchRouteContext(searchOf(atlasNextResearchHref({
       genus: 'Phalaenopsis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
     })))).toEqual({
       origin: ATLAS_NEXT_RESEARCH_ORIGIN,
       genus: 'Phalaenopsis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
       contextIsEvidence: false,
     });
   });
@@ -44,7 +44,7 @@ describe('Research Center route context', () => {
   it('fails closed if Atlas attempts to assert evidentiary context', () => {
     expect(
       parseResearchRouteContext(
-        '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=true&project=naocc-phalaenopsis',
+        '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=true&project=oc-demo-phalaenopsis',
       ),
     ).toBeNull();
     expect(parseResearchRouteContext('?genus=Phalaenopsis&origin=atlas-next')).toBeNull();
@@ -65,13 +65,13 @@ describe('Research Center route context', () => {
 
   it('does not admit locality or occurrence material into the parsed context', () => {
     const parsed = parseResearchRouteContext(
-      '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false&project=naocc-phalaenopsis&lat=34.1&lng=-120.4&locality=secret&occurrence_id=123&collector=someone&elevation=400',
+      '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false&project=oc-demo-phalaenopsis&lat=34.1&lng=-120.4&locality=secret&occurrence_id=123&collector=someone&elevation=400',
     );
 
     expect(parsed).toEqual({
       origin: ATLAS_NEXT_RESEARCH_ORIGIN,
       genus: 'Phalaenopsis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
       contextIsEvidence: false,
     });
     expect(Object.keys(parsed ?? {})).toEqual(['origin', 'genus', 'projectId', 'contextIsEvidence']);
@@ -88,7 +88,7 @@ describe('Research Center route context', () => {
     // previous per-origin literals could each drift independently and silently.
     const featured = parseResearchRouteContext(searchOf(featuredTaxonResearchHref('Phalaenopsis')));
     const atlas = parseResearchRouteContext(
-      searchOf(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'naocc-phalaenopsis' })),
+      searchOf(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'oc-demo-phalaenopsis' })),
     );
 
     expect(featured?.origin).toBe(FEATURED_TAXON_ORIGIN);
@@ -107,7 +107,7 @@ describe('Research Center route context', () => {
     // parser ignoring a field is not the same as the contract never offering it.
     const hrefs = [
       featuredTaxonResearchHref('Phalaenopsis'),
-      atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'naocc-phalaenopsis' }),
+      atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'oc-demo-phalaenopsis' }),
     ];
     for (const href of hrefs) {
       const keys = [...new URLSearchParams(searchOf(href)).keys()];

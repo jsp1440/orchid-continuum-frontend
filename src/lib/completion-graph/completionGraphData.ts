@@ -961,7 +961,7 @@ const calyxVerificationWorkbenchGate: CompletionNode = {
     { kind: 'file', ref: 'src/lib/calyxVerification.ts', note: 'checkCalyxMissionClaim() structurally checks sourceRevisionId, anchorIds, locator, excerpt, and content hash per evidence item and fails/needs_review closed when any are absent -- genuine provenance enforcement, not a cosmetic pass-through.' },
     { kind: 'test', ref: 'src/lib/calyxVerification.test.ts' },
     { kind: 'test', ref: 'src/components/calyx/ScientificSynthesis.test.tsx' },
-    { kind: 'test', ref: 'src/lib/naoccGovernedVerificationContinuity.test.ts', note: 'Cross-checks checkCalyxMissionClaim against buildCalyxTurnContext and researchStationCalyxHref together, confirming Research identity stays non-evidentiary while Calyx audits only governed evidence.' },
+    { kind: 'test', ref: 'src/lib/partnerNeutralGovernedVerificationContinuity.test.ts', note: 'Cross-checks checkCalyxMissionClaim against buildCalyxTurnContext and researchStationCalyxHref together, confirming Research identity stays non-evidentiary while Calyx audits only governed evidence.' },
   ],
   nextAction: 'Run a live/browser pass auditing a real (not fixture) Calyx mission claim end to end (2 of 6 gate categories remain unevaluated: browser/e2e and deployed/operational).',
   lastUpdated: CENSUS_DATE,

@@ -476,7 +476,7 @@ Live Calyx integration is ready architecturally — AtlasContext v2 carries what
 guide needs — but it should follow item 1, because a guide that can only say
 "not recorded" is not yet worth the wiring.
 
-## 17. First NAOCC demonstration
+## 17. First partner-neutral Orchid Continuum demonstration
 
 **Lead with the gap, not the globe.**
 

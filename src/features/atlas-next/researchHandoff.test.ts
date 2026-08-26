@@ -10,15 +10,15 @@ describe('Atlas Next → Research Center handoff', () => {
   it('carries only canonical genus and optional project identity', () => {
     const href = atlasNextResearchHref({
       genus: 'Phalaenopsis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
     });
     expect(href).toBe(
-      '/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false&project=naocc-phalaenopsis',
+      '/research?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false&project=oc-demo-phalaenopsis',
     );
 
     const url = new URL(href!, 'https://orchidcontinuum.org');
     expect(url.searchParams.get('genus')).toBe('Phalaenopsis');
-    expect(url.searchParams.get('project')).toBe('naocc-phalaenopsis');
+    expect(url.searchParams.get('project')).toBe('oc-demo-phalaenopsis');
     expect(url.searchParams.get('origin')).toBe(ATLAS_NEXT_RESEARCH_ORIGIN);
     expect(url.searchParams.get('context_is_evidence')).toBe('false');
     expect(ATLAS_NEXT_RESEARCH_CONTEXT_IS_EVIDENCE).toBe(false);
@@ -49,7 +49,7 @@ describe('Atlas Next → Research Center handoff', () => {
   it('has no route channel for locality, occurrence, collector, or elevation data', () => {
     const href = atlasNextResearchHref({
       genus: 'Phalaenopsis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
     }) ?? '';
 
     for (const forbidden of [

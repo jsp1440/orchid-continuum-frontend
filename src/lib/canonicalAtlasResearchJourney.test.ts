@@ -7,7 +7,7 @@ import {
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
 
 const GENUS = 'Phalaenopsis';
-const PROJECT_ID = 'naocc-phalaenopsis';
+const PROJECT_ID = 'oc-demo-phalaenopsis';
 
 const PROTECTED_VALUES = [
   '14.5995',

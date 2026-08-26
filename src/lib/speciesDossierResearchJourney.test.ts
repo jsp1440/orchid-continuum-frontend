@@ -57,11 +57,11 @@ describe('species dossier → research → calyx', () => {
   it('continues from Research into Calyx with the subject still attached', () => {
     const calyxHref = researchStationCalyxHref({
       taxon: TAXON,
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
       conversationId: 'conv-1',
     });
     const turn = buildCalyxTurnContext({
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
       uploadedFiles: [],
       routeSearch: searchOf(calyxHref),
     });

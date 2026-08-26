@@ -17,14 +17,14 @@ const src = (path: string) => readFileSync(resolve(process.cwd(), 'src', path), 
  */
 describe('Atlas Next → Research Station wiring', () => {
   it('produces a handoff the Research parser accepts', () => {
-    const href = atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'naocc-phalaenopsis' });
+    const href = atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'oc-demo-phalaenopsis' });
     expect(href).not.toBeNull();
 
     const context = parseResearchRouteContext(href!.slice(href!.indexOf('?')));
     expect(context).toEqual({
       origin: 'atlas-next',
       genus: 'Phalaenopsis',
-      projectId: 'naocc-phalaenopsis',
+      projectId: 'oc-demo-phalaenopsis',
       contextIsEvidence: false,
     });
   });
