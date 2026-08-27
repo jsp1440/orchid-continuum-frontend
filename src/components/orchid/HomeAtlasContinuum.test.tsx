@@ -48,6 +48,18 @@ describe('homepage Atlas source integrity', () => {
     expect(navigation).toContain('/atlas?genera=');
   });
 
+  it('hands the featured genus into Relationship Matrix as read scope only', () => {
+    const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    const navigation = read('src/lib/featuredTaxonNavigation.ts');
+    expect(atlas).toContain('featuredTaxonMatrixHref');
+    expect(atlas).toContain('const matrixHref = featuredTaxonMatrixHref(genus)');
+    expect(atlas).toContain('to={matrixHref}');
+    expect(atlas).toContain('Matrix retrieves its own governed evidence');
+    expect(navigation).toContain('/relationship-matrix-next?genus=');
+    expect(navigation).not.toContain('/relationship-matrix-next?genus=${encodeURIComponent(normalizedGenus(genus))}&latitude=');
+    expect(navigation).not.toContain('/relationship-matrix-next?genus=${encodeURIComponent(normalizedGenus(genus))}&locality=');
+  });
+
   it('does not publicly claim Atlas locality protection before the Atlas Next safety lane is integrated', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
     expect(atlas).toContain('does not imply that locality-sensitivity safeguards are present');
