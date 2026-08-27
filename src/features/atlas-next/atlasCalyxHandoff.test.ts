@@ -117,6 +117,10 @@ describe('Atlas Next → Calyx handoff', () => {
     expect(atlasOccurrenceEvidenceCalyxHref('')).toBeNull();
     expect(atlasOccurrenceEvidenceCalyxHref('<script>')).toBeNull();
     expect(atlasOccurrenceEvidenceCalyxHref('A'.repeat(81))).toBeNull();
+    // Only a canonical single-token genus is forwarded. A binomial or any
+    // multi-word / lowercase value must not become a /calyx?genus=... link.
+    expect(atlasOccurrenceEvidenceCalyxHref('Cattleya labiata')).toBeNull();
+    expect(atlasOccurrenceEvidenceCalyxHref('laelia')).toBeNull();
   });
 
   it('does not pass occurrence coordinates, identifiers, or locality text through the Calyx URL', () => {
