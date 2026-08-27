@@ -1,8 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Globe2, MapPinned, MessageCircle } from 'lucide-react';
+import { ArrowRight, Globe2, MapPinned, MessageCircle, Network } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import {
+  featuredTaxonAtlasHref,
+  featuredTaxonCalyxHref,
+  featuredTaxonMatrixHref,
+} from '@/lib/featuredTaxonNavigation';
 import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
 
 /**
@@ -44,6 +48,7 @@ const HomeAtlasContinuum: React.FC = () => {
     mycorrhizaGraphLinked,
   );
   const atlasHref = featuredTaxonAtlasHref(genus);
+  const matrixHref = featuredTaxonMatrixHref(genus);
   const calyxHref = featuredTaxonCalyxHref(genus);
 
   const graphCoverageSummary = [
@@ -93,6 +98,13 @@ const HomeAtlasContinuum: React.FC = () => {
               Explore {genus} in Atlas <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
+              to={matrixHref}
+              className="inline-flex items-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.04] px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#eee4d1] transition-colors hover:border-[#d4b34a]/35 hover:bg-[#d4b34a]/10 hover:text-[#d4b34a]"
+            >
+              <Network className="h-4 w-4" />
+              Inspect {genus} relationships
+            </Link>
+            <Link
               to={calyxHref}
               className="inline-flex items-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.04] px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#eee4d1] transition-colors hover:border-[#d4b34a]/35 hover:bg-[#d4b34a]/10 hover:text-[#d4b34a]"
             >
@@ -101,7 +113,7 @@ const HomeAtlasContinuum: React.FC = () => {
             </Link>
           </div>
           <p className="mt-3 max-w-2xl text-xs leading-5 text-[#9e978a]">
-            Both paths carry the same featured genus through the canonical Continuum handoff, so a demonstration can move from geographic evidence to a grounded Calyx inquiry without resetting scientific context.
+            Atlas, Relationship Matrix, and Calyx receive only the same bounded featured genus. Matrix retrieves its own governed evidence; the homepage genus remains navigation context rather than scientific evidence.
           </p>
         </div>
 
