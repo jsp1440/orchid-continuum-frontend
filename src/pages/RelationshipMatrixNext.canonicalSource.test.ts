@@ -56,9 +56,10 @@ describe("Relationship Matrix canonical-source mode", () => {
     expect(source).toContain("arbitrary provenance keys are never displayed");
   });
 
-  it("continues canonical genus subjects through governed Atlas and Calyx helpers only", () => {
+  it("continues canonical genus subjects through governed Atlas and matrix-specific Calyx helpers only", () => {
     expect(source).toContain("featuredTaxonAtlasHref");
-    expect(source).toContain("featuredTaxonCalyxHref");
+    expect(source).toContain("relationshipMatrixCalyxHref");
+    expect(source).not.toContain("featuredTaxonCalyxHref");
     expect(source).toContain("governedGenusContinuation");
     expect(source).toContain("Genus continuation carries canonical genus context only; Matrix cells remain the evidence surface.");
     expect(source).not.toContain('to={`/atlas/');
