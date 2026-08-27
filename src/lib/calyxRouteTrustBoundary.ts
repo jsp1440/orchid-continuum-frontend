@@ -68,13 +68,23 @@ export type GovernedCalyxGenusTurnContext = {
  * or locality-shaped URL parameters are rejected instead of silently ignored,
  * preventing a producer regression or crafted URL from smuggling Matrix/Atlas
  * scientific state into a Calyx genus turn.
+ *
+ * Unknown origins remain available to legacy/dedicated adapters only when any
+ * supplied genus is itself a bounded canonical single-token genus. This stops
+ * the older generic Calyx parser from promoting lowercase, binomial, or other
+ * malformed taxon strings to `rank: genus` merely because an origin is unknown.
  */
 export function governedCalyxGenusTurnContext(
   search: string,
 ): GovernedCalyxGenusTurnContext | null | undefined {
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
-  if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) return undefined;
+
+  if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) {
+    if (params.has('genus') && !hasBoundedCanonicalGenus(params)) return null;
+    return undefined;
+  }
+
   if (
     !hasBoundedCanonicalGenus(params) ||
     params.get('context_is_evidence') !== 'false' ||
@@ -109,7 +119,8 @@ export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string)
 /**
  * Fail closed when a governed genus-navigation origin reaches Calyx without
  * the canonical genus identity and explicit non-evidence declaration promised
- * by its producer.
+ * by its producer, or when an unmanaged origin tries to supply a malformed
+ * genus that the older generic parser could otherwise misclassify.
  *
  * This is deliberately narrow. Atlas Next occurrence-evidence routes use a
  * separate question provenance contract, while dossier/classroom/research
