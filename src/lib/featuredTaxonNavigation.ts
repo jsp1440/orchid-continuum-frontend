@@ -66,9 +66,13 @@ export function featuredTaxonCalyxHref(genus: string): string {
  * locality, coordinates, confidence, conclusions, occurrence identifiers, or
  * graph state cross this boundary; the Matrix must retrieve its own canonical
  * evidence from the governed backend source contract.
+ *
+ * `/relationship-matrix` is the mounted application route. Keep navigation
+ * producers bound to that route rather than the component's internal "Next"
+ * name so homepage/demo handoffs cannot land on the 404 fallback.
  */
 export function featuredTaxonMatrixHref(genus: string): string {
-  return `/relationship-matrix-next?genus=${encodeURIComponent(normalizedGenus(genus))}`;
+  return `/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}`;
 }
 
 /**
