@@ -1,3 +1,4 @@
+import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from '@/features/atlas-next/calyxHandoff';
 import { ATLAS_NEXT_CALYX_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import {
   ATLAS_WORKSPACE_ORIGIN,
@@ -17,6 +18,7 @@ const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
 const RESEARCH_STATION_ORIGIN = 'research-station';
 const MAX_CANONICAL_GENUS_CHARACTERS = 120;
 const MAX_RESEARCH_TAXON_CHARACTERS = 180;
+const MAX_ATLAS_OCCURRENCE_QUESTION_CHARACTERS = 800;
 const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
 const SAFE_RESEARCH_TAXON = /^[A-Za-z0-9][A-Za-z0-9 .:_()'×-]*$/;
 const SAFE_RESEARCH_BINOMIAL = /^([A-Z][A-Za-z-]+)\s+[a-z][A-Za-z-]+$/;
@@ -37,6 +39,14 @@ const FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS = new Set([
   'conclusion',
   'citation',
   'provenance',
+]);
+
+const ATLAS_OCCURRENCE_ALLOWED_KEYS = new Set([
+  'genus',
+  'origin',
+  'question',
+  'question_source',
+  'question_is_evidence',
 ]);
 
 function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
@@ -79,6 +89,30 @@ function rejectsResearchStationIdentity(params: URLSearchParams, origin: string)
   return params.get('genus')!.trim() !== binomial[1];
 }
 
+function rejectsAtlasOccurrenceEvidenceContext(params: URLSearchParams, origin: string): boolean {
+  if (origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN) return false;
+  if (!hasBoundedCanonicalGenus(params)) return true;
+
+  for (const key of params.keys()) {
+    if (!ATLAS_OCCURRENCE_ALLOWED_KEYS.has(key)) return true;
+  }
+
+  const questionKeysPresent = [
+    'question',
+    'question_source',
+    'question_is_evidence',
+  ].filter((key) => params.has(key));
+  if (questionKeysPresent.length === 0) return false;
+  if (questionKeysPresent.length !== 3) return true;
+
+  const question = params.get('question')?.replace(/\s+/g, ' ').trim() ?? '';
+  if (!question || question.length > MAX_ATLAS_OCCURRENCE_QUESTION_CHARACTERS) return true;
+  if (params.get('question_source') !== 'user') return true;
+  if (params.get('question_is_evidence') !== 'false') return true;
+
+  return false;
+}
+
 export type GovernedCalyxGenusTurnContext = {
   origin: string;
   featured_taxon: {
@@ -113,6 +147,13 @@ export type GovernedCalyxGenusTurnContext = {
  * taxon must be an unambiguous binomial whose genus exactly matches the carried
  * genus. Invalid or contradictory arrivals fail closed instead of degrading to
  * a genus-only Calyx turn.
+ *
+ * Atlas occurrence-evidence is also a dedicated adapter. Its public route is an
+ * identity-plus-user-question channel only: canonical genus, origin, and either
+ * no question or the complete non-evidentiary question provenance triple. Any
+ * extra locality/evidence/record/project key, malformed question provenance, or
+ * non-canonical genus rejects the entire arrival instead of degrading to a
+ * genus-only generic Calyx context.
  */
 export function governedCalyxGenusTurnContext(
   search: string,
@@ -121,6 +162,7 @@ export function governedCalyxGenusTurnContext(
   const origin = params.get('origin')?.trim() ?? '';
 
   if (rejectsResearchStationIdentity(params, origin)) return null;
+  if (rejectsAtlasOccurrenceEvidenceContext(params, origin)) return null;
 
   if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) {
     if (params.has('genus') && !hasBoundedCanonicalGenus(params)) return null;
@@ -162,12 +204,9 @@ export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string)
  * Fail closed when a governed genus-navigation origin reaches Calyx without
  * the canonical genus identity and explicit non-evidence declaration promised
  * by its producer, when an unmanaged origin tries to supply a malformed genus,
- * or when a Research Station exact identity is malformed/contradictory.
- *
- * Atlas Next occurrence-evidence routes use a separate question provenance
- * contract, while dossier/classroom arrivals have dedicated adapters. Research
- * remains dedicated as well; this boundary only prevents its malformed exact
- * identity from falling through to the generic Calyx parser.
+ * when a Research Station exact identity is malformed/contradictory, or when
+ * Atlas occurrence-evidence carries malformed question provenance or any
+ * locality/evidence/record/project state outside its dedicated allowlist.
  */
 export function rejectsCalyxNavigationContext(search: string): boolean {
   return governedCalyxGenusTurnContext(search) === null;
