@@ -17,10 +17,19 @@ describe("Relationship Matrix canonical-source mode", () => {
     expect(source).toContain('searchParams.get("genus")');
     expect(source).toContain("SAFE_CANONICAL_GENUS");
     expect(source).toContain("parseCanonicalGenus");
-    expect(source).toContain("genus: parseCanonicalGenus(genusText)");
+    expect(source).toContain("genus: requestedGenus");
     expect(source).toContain("Canonical genus scope (optional)");
     expect(source).toContain("only scopes the evidence read; it is not itself evidence");
     expect(source).toContain("genus_scope?: string | null");
+  });
+
+  it("fails closed when a scoped canonical response does not attest the requested genus", () => {
+    expect(source).toContain("attestCanonicalGenusScope");
+    expect(source).toContain('result.source_mode !== "canonical_governed_source"');
+    expect(source).toContain("result.genus_scope !== requestedGenus");
+    expect(source).toContain("Canonical genus scope attestation failed; scoped evidence was not displayed.");
+    expect(source).toContain("A scoped response must attest the same genus before evidence is displayed.");
+    expect(source).toContain("if (sourceMode === \"canonical\") attestCanonicalGenusScope(requestedGenus, matrixResult)");
   });
 
   it("keeps manual assertions as an explicit secondary review/test mode", () => {
