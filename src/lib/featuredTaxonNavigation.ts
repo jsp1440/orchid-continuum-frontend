@@ -1,5 +1,6 @@
 const FEATURED_TAXON_ORIGIN = 'homepage-featured-taxon';
 export const ATLAS_WORKSPACE_ORIGIN = 'atlas-workspace';
+export const RELATIONSHIP_MATRIX_ORIGIN = 'relationship-matrix';
 
 const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
 const MAX_CANONICAL_GENUS_LENGTH = 120;
@@ -47,7 +48,7 @@ export function featuredTaxonGenusProfileHref(genus: string): string {
 }
 
 /**
- * Canonical handoff from a featured-taxon surface into Calyx.
+ * Canonical handoff from the featured genus into Calyx.
  *
  * The route carries only bounded navigation context. The explicit
  * `context_is_evidence=false` marker prevents the homepage-selected genus from
@@ -80,6 +81,15 @@ export function atlasWorkspaceCalyxHref(genus: string): string {
 }
 
 /**
+ * Continue from canonical Atlas into the Species dossiers while preserving
+ * only the active genus filter. Species already owns `genus` as its receiving
+ * query key, so no Atlas locality, record, origin, or evidence fields travel.
+ */
+export function atlasWorkspaceSpeciesHref(genus: string): string {
+  return `/species?genus=${encodeURIComponent(normalizedGenus(genus))}`;
+}
+
+/**
  * Continue from the canonical Atlas workspace into Research Center while
  * preserving only the active genus. The handoff shares the Atlas workspace
  * origin with Calyx and explicitly marks the subject as navigation context,
@@ -91,12 +101,16 @@ export function atlasWorkspaceResearchHref(genus: string): string {
 }
 
 /**
- * Continue from canonical Atlas into the Species dossiers while preserving
- * only the active genus filter. Species already owns `genus` as its receiving
- * query key, so no Atlas locality, record, origin, or evidence fields travel.
+ * Continue from a canonical Relationship Matrix genus row into Calyx.
+ *
+ * Matrix evidence stays in the Matrix. The handoff carries only the bounded
+ * genus identity plus a matrix-specific non-evidence origin marker so Calyx can
+ * distinguish this context from the homepage featured-taxon journey without
+ * receiving cell state, provenance, locality, coordinates, confidence, or
+ * conclusions through the URL.
  */
-export function atlasWorkspaceSpeciesHref(genus: string): string {
-  return `/species?genus=${encodeURIComponent(normalizedGenus(genus))}`;
+export function relationshipMatrixCalyxHref(genus: string): string {
+  return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${RELATIONSHIP_MATRIX_ORIGIN}&context_is_evidence=false`;
 }
 
 /**
