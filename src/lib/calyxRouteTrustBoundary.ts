@@ -14,8 +14,12 @@ const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
   RELATIONSHIP_MATRIX_ORIGIN,
 ]);
 
+const RESEARCH_STATION_ORIGIN = 'research-station';
 const MAX_CANONICAL_GENUS_CHARACTERS = 120;
+const MAX_RESEARCH_TAXON_CHARACTERS = 180;
 const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
+const SAFE_RESEARCH_TAXON = /^[A-Za-z0-9][A-Za-z0-9 .:_()'×-]*$/;
+const SAFE_RESEARCH_BINOMIAL = /^([A-Z][A-Za-z-]+)\s+[a-z][A-Za-z-]+$/;
 
 const FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS = new Set([
   'latitude',
@@ -51,6 +55,30 @@ function hasForbiddenGenericGenusContext(params: URLSearchParams): boolean {
   return false;
 }
 
+function rejectsResearchStationIdentity(params: URLSearchParams, origin: string): boolean {
+  if (origin !== RESEARCH_STATION_ORIGIN) return false;
+
+  const hasTaxon = params.has('taxon');
+  if (!hasTaxon) return false;
+
+  const taxon = params.get('taxon')?.trim() ?? '';
+  if (
+    !taxon ||
+    taxon.length > MAX_RESEARCH_TAXON_CHARACTERS ||
+    !SAFE_RESEARCH_TAXON.test(taxon)
+  ) {
+    return true;
+  }
+
+  if (!params.has('genus')) return false;
+  if (!hasBoundedCanonicalGenus(params)) return true;
+
+  const binomial = taxon.match(SAFE_RESEARCH_BINOMIAL);
+  if (!binomial) return true;
+
+  return params.get('genus')!.trim() !== binomial[1];
+}
+
 export type GovernedCalyxGenusTurnContext = {
   origin: string;
   featured_taxon: {
@@ -78,12 +106,21 @@ export type GovernedCalyxGenusTurnContext = {
  * supplied genus is itself a bounded canonical single-token genus. This stops
  * the older generic Calyx parser from promoting lowercase, binomial, or other
  * malformed taxon strings to `rank: genus` merely because an origin is unknown.
+ *
+ * Research Station is a dedicated adapter, but its exact identity is also
+ * guarded here before the generic fallback can run. A supplied `taxon` must be
+ * bounded/safe; when Research Station supplies both genus and exact taxon, the
+ * taxon must be an unambiguous binomial whose genus exactly matches the carried
+ * genus. Invalid or contradictory arrivals fail closed instead of degrading to
+ * a genus-only Calyx turn.
  */
 export function governedCalyxGenusTurnContext(
   search: string,
 ): GovernedCalyxGenusTurnContext | null | undefined {
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
+
+  if (rejectsResearchStationIdentity(params, origin)) return null;
 
   if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) {
     if (params.has('genus') && !hasBoundedCanonicalGenus(params)) return null;
@@ -124,13 +161,13 @@ export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string)
 /**
  * Fail closed when a governed genus-navigation origin reaches Calyx without
  * the canonical genus identity and explicit non-evidence declaration promised
- * by its producer, or when an unmanaged origin tries to supply a malformed
- * genus that the older generic parser could otherwise misclassify.
+ * by its producer, when an unmanaged origin tries to supply a malformed genus,
+ * or when a Research Station exact identity is malformed/contradictory.
  *
- * This is deliberately narrow. Atlas Next occurrence-evidence routes use a
- * separate question provenance contract, while dossier/classroom/research
- * arrivals have dedicated adapters. Only the generic genus origins that emit
- * `context_is_evidence=false` are enforced here.
+ * Atlas Next occurrence-evidence routes use a separate question provenance
+ * contract, while dossier/classroom arrivals have dedicated adapters. Research
+ * remains dedicated as well; this boundary only prevents its malformed exact
+ * identity from falling through to the generic Calyx parser.
  */
 export function rejectsCalyxNavigationContext(search: string): boolean {
   return governedCalyxGenusTurnContext(search) === null;
