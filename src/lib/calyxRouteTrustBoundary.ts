@@ -17,6 +17,19 @@ const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
 const MAX_CANONICAL_GENUS_CHARACTERS = 120;
 const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
 
+const FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS = new Set([
+  'latitude',
+  'longitude',
+  'locality',
+  'occurrence_id',
+  'state',
+  'evidence',
+  'confidence',
+  'conclusion',
+  'citation',
+  'provenance',
+]);
+
 function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
   const genus = params.get('genus')?.trim() ?? '';
   return (
@@ -24,6 +37,13 @@ function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
     genus.length <= MAX_CANONICAL_GENUS_CHARACTERS &&
     SAFE_CANONICAL_GENUS.test(genus)
   );
+}
+
+function hasForbiddenGenericGenusContext(params: URLSearchParams): boolean {
+  for (const key of FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS) {
+    if (params.has(key)) return true;
+  }
+  return false;
 }
 
 export type GovernedCalyxGenusTurnContext = {
@@ -43,6 +63,11 @@ export type GovernedCalyxGenusTurnContext = {
  * another dedicated adapter may handle it. `null` means it does belong here but
  * violates the producer contract, so callers must fail closed rather than
  * forwarding a partial genus/origin pair.
+ *
+ * Generic genus handoffs are identity/context channels only. Evidence-shaped
+ * or locality-shaped URL parameters are rejected instead of silently ignored,
+ * preventing a producer regression or crafted URL from smuggling Matrix/Atlas
+ * scientific state into a Calyx genus turn.
  */
 export function governedCalyxGenusTurnContext(
   search: string,
@@ -50,7 +75,11 @@ export function governedCalyxGenusTurnContext(
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
   if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) return undefined;
-  if (!hasBoundedCanonicalGenus(params) || params.get('context_is_evidence') !== 'false') {
+  if (
+    !hasBoundedCanonicalGenus(params) ||
+    params.get('context_is_evidence') !== 'false' ||
+    hasForbiddenGenericGenusContext(params)
+  ) {
     return null;
   }
 
