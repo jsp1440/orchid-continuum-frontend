@@ -12,6 +12,17 @@ describe("Relationship Matrix canonical-source mode", () => {
     expect(source).toContain('source_mode === "canonical_governed_source"');
   });
 
+  it("accepts a bounded canonical genus handoff and sends it only as backend scope", () => {
+    expect(source).toContain("useSearchParams");
+    expect(source).toContain('searchParams.get("genus")');
+    expect(source).toContain("SAFE_CANONICAL_GENUS");
+    expect(source).toContain("parseCanonicalGenus");
+    expect(source).toContain("genus: parseCanonicalGenus(genusText)");
+    expect(source).toContain("Canonical genus scope (optional)");
+    expect(source).toContain("only scopes the evidence read; it is not itself evidence");
+    expect(source).toContain("genus_scope?: string | null");
+  });
+
   it("keeps manual assertions as an explicit secondary review/test mode", () => {
     expect(source).toContain('type SourceMode = "canonical" | "manual"');
     expect(source).toContain("/api/matrix-relationship/build");
