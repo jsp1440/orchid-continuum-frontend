@@ -2,7 +2,13 @@ export const ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN = 'atlas-next-occurrence-evid
 
 const MAX_GENUS_CHARACTERS = 80;
 export const MAX_ATLAS_CALYX_QUESTION_CHARACTERS = 800;
-const SAFE_GENUS = /^[A-Za-z][A-Za-z -]*$/;
+// The handoff forwards genus-level identity only. Enforce a canonical
+// single-token genus (capitalised, no internal whitespace) so an occurrence
+// binomial or any multi-word value fails closed here instead of producing a
+// /calyx?genus=<binomial> link that asserts a species as a genus. Matches the
+// shared boundary in researchRouteContext, matrixResearchNavigation, and the
+// Calyx route consumer.
+const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
 
 export type AtlasCalyxQuestionContext = {
   question: string;
