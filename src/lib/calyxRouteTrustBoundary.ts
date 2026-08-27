@@ -2,6 +2,7 @@ import { ATLAS_NEXT_CALYX_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import {
   ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
+  RELATIONSHIP_MATRIX_ORIGIN,
 } from '@/lib/featuredTaxonNavigation';
 import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
 
@@ -10,6 +11,7 @@ const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
   ATLAS_WORKSPACE_ORIGIN,
   GENUS_PROFILE_ORIGIN,
   ATLAS_NEXT_CALYX_ORIGIN,
+  RELATIONSHIP_MATRIX_ORIGIN,
 ]);
 
 const MAX_CANONICAL_GENUS_CHARACTERS = 120;
