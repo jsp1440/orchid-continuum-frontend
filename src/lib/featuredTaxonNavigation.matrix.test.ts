@@ -7,12 +7,12 @@ import {
 } from "@/lib/featuredTaxonNavigation";
 
 describe("Relationship Matrix governed genus handoffs", () => {
-  it("carries only canonical genus read scope from the homepage into Matrix", () => {
+  it("carries only canonical genus read scope from the homepage into the mounted Matrix route", () => {
     expect(featuredTaxonMatrixHref("Phalaenopsis")).toBe(
-      "/relationship-matrix-next?genus=Phalaenopsis",
+      "/relationship-matrix?genus=Phalaenopsis",
     );
     expect(featuredTaxonMatrixHref("Paphiopedilum")).toBe(
-      "/relationship-matrix-next?genus=Paphiopedilum",
+      "/relationship-matrix?genus=Paphiopedilum",
     );
   });
 
@@ -42,5 +42,11 @@ describe("Relationship Matrix governed genus handoffs", () => {
     expect(href).not.toContain("confidence");
     expect(href).not.toContain("evidence");
     expect(href).not.toContain("conclusion");
+  });
+
+  it("does not target the unmounted internal component-name route", () => {
+    expect(featuredTaxonMatrixHref("Phalaenopsis")).not.toContain(
+      "/relationship-matrix-next",
+    );
   });
 });
