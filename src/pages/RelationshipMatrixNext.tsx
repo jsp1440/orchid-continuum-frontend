@@ -117,6 +117,13 @@ function initialGenusScope(value: string | null): string {
   return SAFE_CANONICAL_GENUS.test(value) ? value : "";
 }
 
+function attestCanonicalGenusScope(requestedGenus: string | undefined, result: MatrixResult): void {
+  if (!requestedGenus) return;
+  if (result.source_mode !== "canonical_governed_source" || result.genus_scope !== requestedGenus) {
+    throw new Error("Canonical genus scope attestation failed; scoped evidence was not displayed.");
+  }
+}
+
 function formatProvenanceValue(value: unknown): string | undefined {
   if (value === null || value === undefined || value === "") return undefined;
   if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
@@ -173,14 +180,16 @@ export default function RelationshipMatrixNext() {
       };
 
       let response: Response;
+      let requestedGenus: string | undefined;
       if (sourceMode === "canonical") {
+        requestedGenus = parseCanonicalGenus(genusText);
         response = await fetch(`${API_BASE}/api/matrix-relationship/build-from-canonical-source`, {
           method: "POST",
           credentials: "include",
           headers,
           body: JSON.stringify({
             dimension,
-            genus: parseCanonicalGenus(genusText),
+            genus: requestedGenus,
             subject_ids: parseSubjectIds(subjectIdsText),
             limit: 5000,
           }),
@@ -198,7 +207,9 @@ export default function RelationshipMatrixNext() {
 
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(String(body.detail || `Request failed (${response.status})`));
-      setResult(body as MatrixResult);
+      const matrixResult = body as MatrixResult;
+      if (sourceMode === "canonical") attestCanonicalGenusScope(requestedGenus, matrixResult);
+      setResult(matrixResult);
     } catch (reason) {
       setResult(undefined);
       setError(reason instanceof Error ? reason.message : "Matrix evaluation failed.");
@@ -277,7 +288,7 @@ export default function RelationshipMatrixNext() {
                     autoComplete="off"
                   />
                   <span className="mt-2 block text-xs text-muted-foreground">
-                    A featured/homepage genus can arrive through <code>?genus=...</code>. The value is validated before it is sent to the governed backend and only scopes the evidence read; it is not itself evidence.
+                    A featured/homepage genus can arrive through <code>?genus=...</code>. The value is validated before it is sent to the governed backend and only scopes the evidence read; it is not itself evidence. A scoped response must attest the same genus before evidence is displayed.
                   </span>
                 </label>
 
