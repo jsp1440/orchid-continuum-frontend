@@ -2,7 +2,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
-import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from "@/lib/featuredTaxonNavigation";
+import { featuredTaxonAtlasHref, relationshipMatrixCalyxHref } from "@/lib/featuredTaxonNavigation";
 
 const API_BASE = (import.meta.env.VITE_CALYX_API_URL || "").replace(/\/$/, "");
 
@@ -119,7 +119,7 @@ function governedGenusContinuation(label: string): GenusContinuation | null {
   try {
     return {
       atlasHref: featuredTaxonAtlasHref(label),
-      calyxHref: featuredTaxonCalyxHref(label),
+      calyxHref: relationshipMatrixCalyxHref(label),
     };
   } catch {
     return null;
