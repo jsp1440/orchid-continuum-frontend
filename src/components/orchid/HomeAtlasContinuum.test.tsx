@@ -55,9 +55,9 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('const matrixHref = featuredTaxonMatrixHref(genus)');
     expect(atlas).toContain('to={matrixHref}');
     expect(atlas).toContain('Matrix retrieves its own governed evidence');
-    expect(navigation).toContain('/relationship-matrix-next?genus=');
-    expect(navigation).not.toContain('/relationship-matrix-next?genus=${encodeURIComponent(normalizedGenus(genus))}&latitude=');
-    expect(navigation).not.toContain('/relationship-matrix-next?genus=${encodeURIComponent(normalizedGenus(genus))}&locality=');
+    expect(navigation).toContain('/relationship-matrix?genus=');
+    expect(navigation).not.toContain('/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}&latitude=');
+    expect(navigation).not.toContain('/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}&locality=');
   });
 
   it('does not publicly claim Atlas locality protection before the Atlas Next safety lane is integrated', () => {
