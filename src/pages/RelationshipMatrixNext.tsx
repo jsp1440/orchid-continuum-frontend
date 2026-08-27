@@ -1,6 +1,8 @@
 import { FormEvent, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
+import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from "@/lib/featuredTaxonNavigation";
 
 const API_BASE = (import.meta.env.VITE_CALYX_API_URL || "").replace(/\/$/, "");
 
@@ -42,6 +44,7 @@ const SAFE_PROVENANCE_KEYS = [
 type GovernedDimension = (typeof GOVERNED_DIMENSIONS)[number];
 type SourceMode = "canonical" | "manual";
 type ProvenanceRecord = Record<string, unknown>;
+type GenusContinuation = { atlasHref: string; calyxHref: string };
 
 const SAMPLE_ASSERTIONS = JSON.stringify(
   [
@@ -110,6 +113,17 @@ function safeProvenanceEntries(record: ProvenanceRecord): Array<[string, string]
     const value = formatProvenanceValue(record[key]);
     return value === undefined ? [] : [[key, value] as [string, string]];
   });
+}
+
+function governedGenusContinuation(label: string): GenusContinuation | null {
+  try {
+    return {
+      atlasHref: featuredTaxonAtlasHref(label),
+      calyxHref: featuredTaxonCalyxHref(label),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export default function RelationshipMatrixNext() {
@@ -285,6 +299,11 @@ export default function RelationshipMatrixNext() {
               <div>
                 <h2 className="text-2xl font-semibold">{result.dimension.replaceAll("_", " ")}</h2>
                 <p className="mt-2 text-sm text-muted-foreground">{result.disclaimer}</p>
+                {result.source_mode === "canonical_governed_source" && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Genus continuation carries canonical genus context only; Matrix cells remain the evidence surface.
+                  </p>
+                )}
               </div>
               {result.source_mode === "canonical_governed_source" && (
                 <p className="rounded-full border px-3 py-1 text-xs font-medium">
@@ -300,46 +319,60 @@ export default function RelationshipMatrixNext() {
                 </tr>
               </thead>
               <tbody>
-                {result.subjects.map((subject) => (
-                  <tr key={subject.id}>
-                    <th className="border p-3 text-left">{subject.label}</th>
-                    {result.objects.map((object) => {
-                      const cell = cells.get(`${subject.id}:${object.id}`);
-                      const provenance =
-                        result.source_mode === "canonical_governed_source"
-                          ? (cell?.provenance || []).map(safeProvenanceEntries).filter((entries) => entries.length)
-                          : [];
-                      return (
-                        <td key={object.id} className="border p-3 align-top">
-                          <strong className="block capitalize">{cell?.state.replaceAll("_", " ") || "not recorded"}</strong>
-                          <span className="mt-1 block text-xs text-muted-foreground">
-                            {cell?.assertion_count || 0} assertion{cell?.assertion_count === 1 ? "" : "s"}
-                            {cell?.confidence == null ? "" : ` · confidence ${cell.confidence.toFixed(2)}`}
+                {result.subjects.map((subject) => {
+                  const continuation =
+                    result.source_mode === "canonical_governed_source"
+                      ? governedGenusContinuation(subject.label)
+                      : null;
+                  return (
+                    <tr key={subject.id}>
+                      <th className="border p-3 text-left align-top">
+                        <span className="block">{subject.label}</span>
+                        {continuation && (
+                          <span className="mt-2 flex flex-wrap gap-2 text-xs font-normal">
+                            <Link className="underline underline-offset-2" to={continuation.atlasHref}>Atlas</Link>
+                            <Link className="underline underline-offset-2" to={continuation.calyxHref}>Ask Calyx</Link>
                           </span>
-                          {provenance.length > 0 && (
-                            <details className="mt-3 text-xs">
-                              <summary className="cursor-pointer font-medium">Evidence provenance ({provenance.length})</summary>
-                              <ol className="mt-2 space-y-2">
-                                {provenance.map((entries, index) => (
-                                  <li key={`${cell?.subject_id}:${cell?.object_id}:${index}`} className="rounded border p-2">
-                                    <dl className="space-y-1">
-                                      {entries.map(([key, value]) => (
-                                        <div key={key} className="grid grid-cols-[8rem_1fr] gap-2">
-                                          <dt className="font-medium">{key.replaceAll("_", " ")}</dt>
-                                          <dd className="break-words text-muted-foreground">{value}</dd>
-                                        </div>
-                                      ))}
-                                    </dl>
-                                  </li>
-                                ))}
-                              </ol>
-                            </details>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                        )}
+                      </th>
+                      {result.objects.map((object) => {
+                        const cell = cells.get(`${subject.id}:${object.id}`);
+                        const provenance =
+                          result.source_mode === "canonical_governed_source"
+                            ? (cell?.provenance || []).map(safeProvenanceEntries).filter((entries) => entries.length)
+                            : [];
+                        return (
+                          <td key={object.id} className="border p-3 align-top">
+                            <strong className="block capitalize">{cell?.state.replaceAll("_", " ") || "not recorded"}</strong>
+                            <span className="mt-1 block text-xs text-muted-foreground">
+                              {cell?.assertion_count || 0} assertion{cell?.assertion_count === 1 ? "" : "s"}
+                              {cell?.confidence == null ? "" : ` · confidence ${cell.confidence.toFixed(2)}`}
+                            </span>
+                            {provenance.length > 0 && (
+                              <details className="mt-3 text-xs">
+                                <summary className="cursor-pointer font-medium">Evidence provenance ({provenance.length})</summary>
+                                <ol className="mt-2 space-y-2">
+                                  {provenance.map((entries, index) => (
+                                    <li key={`${cell?.subject_id}:${cell?.object_id}:${index}`} className="rounded border p-2">
+                                      <dl className="space-y-1">
+                                        {entries.map(([key, value]) => (
+                                          <div key={key} className="grid grid-cols-[8rem_1fr] gap-2">
+                                            <dt className="font-medium">{key.replaceAll("_", " ")}</dt>
+                                            <dd className="break-words text-muted-foreground">{value}</dd>
+                                          </div>
+                                        ))}
+                                      </dl>
+                                    </li>
+                                  ))}
+                                </ol>
+                              </details>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </section>
