@@ -56,6 +56,17 @@ describe("Relationship Matrix canonical-source mode", () => {
     expect(source).toContain("arbitrary provenance keys are never displayed");
   });
 
+  it("continues canonical genus subjects through governed Atlas and Calyx helpers only", () => {
+    expect(source).toContain("featuredTaxonAtlasHref");
+    expect(source).toContain("featuredTaxonCalyxHref");
+    expect(source).toContain("governedGenusContinuation");
+    expect(source).toContain("Genus continuation carries canonical genus context only; Matrix cells remain the evidence surface.");
+    expect(source).not.toContain('to={`/atlas/');
+    expect(source).not.toContain('to={`/speak-with-calyx');
+    expect(source).not.toContain('href={`/atlas/');
+    expect(source).not.toContain('href={`/speak-with-calyx');
+  });
+
   it("preserves locality and epistemic boundaries", () => {
     expect(source).toContain("Geography is country-level only");
     expect(source).toContain("elevation is a recorded occurrence value, not an inferred range");
