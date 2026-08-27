@@ -33,7 +33,7 @@ function expectNoScientificStateInRoute(href: string): void {
   }
 }
 
-describe('NAOCC-ready canonical genus demo continuity', () => {
+describe('Canonical Continuum genus demo continuity', () => {
   it('keeps one canonical genus across Homepage → Atlas → Matrix → Calyx without promoting navigation context to evidence', () => {
     const genus = 'Phalaenopsis';
 
