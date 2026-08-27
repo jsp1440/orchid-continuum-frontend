@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { featuredTaxonAtlasHref, relationshipMatrixCalyxHref } from "@/lib/featuredTaxonNavigation";
@@ -40,6 +40,8 @@ const SAFE_PROVENANCE_KEYS = [
   "basis_of_record",
   "elevation",
 ] as const;
+
+const SAFE_CANONICAL_GENUS = /^[A-Z][a-z]+$/;
 
 type GovernedDimension = (typeof GOVERNED_DIMENSIONS)[number];
 type SourceMode = "canonical" | "manual";
@@ -90,6 +92,7 @@ type MatrixResult = {
   disclaimer: string;
   source_mode?: string;
   source_domain?: string;
+  genus_scope?: string | null;
 };
 
 function parseSubjectIds(value: string): string[] | undefined {
@@ -98,6 +101,20 @@ function parseSubjectIds(value: string): string[] | undefined {
     .map((item) => item.trim())
     .filter(Boolean);
   return ids.length ? Array.from(new Set(ids)).slice(0, 1000) : undefined;
+}
+
+function parseCanonicalGenus(value: string): string | undefined {
+  const genus = value.trim();
+  if (!genus) return undefined;
+  if (!SAFE_CANONICAL_GENUS.test(genus)) {
+    throw new Error("Genus scope must be one canonical genus such as Phalaenopsis.");
+  }
+  return genus;
+}
+
+function initialGenusScope(value: string | null): string {
+  if (!value) return "";
+  return SAFE_CANONICAL_GENUS.test(value) ? value : "";
 }
 
 function formatProvenanceValue(value: unknown): string | undefined {
@@ -128,8 +145,10 @@ function governedGenusContinuation(label: string): GenusContinuation | null {
 
 export default function RelationshipMatrixNext() {
   const { session } = useAuth();
+  const [searchParams] = useSearchParams();
   const [sourceMode, setSourceMode] = useState<SourceMode>("canonical");
   const [dimension, setDimension] = useState<GovernedDimension>("pollinator");
+  const [genusText, setGenusText] = useState(() => initialGenusScope(searchParams.get("genus")));
   const [subjectIdsText, setSubjectIdsText] = useState("");
   const [assertionsText, setAssertionsText] = useState(SAMPLE_ASSERTIONS);
   const [result, setResult] = useState<MatrixResult>();
@@ -161,6 +180,7 @@ export default function RelationshipMatrixNext() {
           headers,
           body: JSON.stringify({
             dimension,
+            genus: parseCanonicalGenus(genusText),
             subject_ids: parseSubjectIds(subjectIdsText),
             limit: 5000,
           }),
@@ -246,18 +266,34 @@ export default function RelationshipMatrixNext() {
             </label>
 
             {sourceMode === "canonical" && (
-              <label className="mt-5 block text-sm font-medium">
-                Canonical subject IDs (optional)
-                <textarea
-                  className="mt-2 min-h-28 w-full rounded-lg border bg-background p-3 font-mono text-xs"
-                  value={subjectIdsText}
-                  onChange={(event) => setSubjectIdsText(event.target.value)}
-                  placeholder="One canonical taxon ID per line or comma-separated"
-                />
-                <span className="mt-2 block text-xs text-muted-foreground">
-                  Leave blank for the backend&apos;s bounded source read. Geography is country-level only; elevation is a recorded occurrence value, not an inferred range.
-                </span>
-              </label>
+              <>
+                <label className="mt-5 block text-sm font-medium">
+                  Canonical genus scope (optional)
+                  <input
+                    className="mt-2 w-full rounded-lg border bg-background px-3 py-2 font-mono text-sm"
+                    value={genusText}
+                    onChange={(event) => setGenusText(event.target.value)}
+                    placeholder="Phalaenopsis"
+                    autoComplete="off"
+                  />
+                  <span className="mt-2 block text-xs text-muted-foreground">
+                    A featured/homepage genus can arrive through <code>?genus=...</code>. The value is validated before it is sent to the governed backend and only scopes the evidence read; it is not itself evidence.
+                  </span>
+                </label>
+
+                <label className="mt-5 block text-sm font-medium">
+                  Canonical subject IDs (optional)
+                  <textarea
+                    className="mt-2 min-h-28 w-full rounded-lg border bg-background p-3 font-mono text-xs"
+                    value={subjectIdsText}
+                    onChange={(event) => setSubjectIdsText(event.target.value)}
+                    placeholder="One canonical taxon ID per line or comma-separated"
+                  />
+                  <span className="mt-2 block text-xs text-muted-foreground">
+                    Leave blank for the backend&apos;s bounded source read. Geography is country-level only; elevation is a recorded occurrence value, not an inferred range.
+                  </span>
+                </label>
+              </>
             )}
 
             <button className="mt-6 rounded-lg bg-primary px-4 py-2 text-primary-foreground" disabled={loading}>
@@ -301,7 +337,7 @@ export default function RelationshipMatrixNext() {
                 <p className="mt-2 text-sm text-muted-foreground">{result.disclaimer}</p>
                 {result.source_mode === "canonical_governed_source" && (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Genus continuation carries canonical genus context only; Matrix cells remain the evidence surface.
+                    {result.genus_scope ? `${result.genus_scope} genus scope · ` : ""}Genus continuation carries canonical genus context only; Matrix cells remain the evidence surface.
                   </p>
                 )}
               </div>
