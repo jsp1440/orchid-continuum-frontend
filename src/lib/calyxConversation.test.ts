@@ -192,6 +192,37 @@ describe("calyxConversation helpers", () => {
     });
   });
 
+  it("fails closed on a multi-token genus so a binomial is never mislabelled as a genus", () => {
+    // A route `genus` becomes `featured_taxon: { rank: "genus" }`. Only a
+    // canonical single-token genus may make that assertion; a species binomial
+    // must not enter the governed turn labelled as a genus.
+    const parsed = parseCalyxRouteContext(
+      "?genus=Cattleya%20labiata&origin=homepage-featured-taxon",
+    );
+    expect(parsed.featuredTaxon).toBeNull();
+
+    const context = buildCalyxTurnContext({
+      projectId: "calyx-speak",
+      uploadedFiles: [],
+      routeSearch: "?genus=Cattleya%20labiata&origin=homepage-featured-taxon",
+    });
+    const routeContext = (context.route_context ?? {}) as Record<string, unknown>;
+    expect(routeContext).not.toHaveProperty("featured_taxon");
+  });
+
+  it("fails closed on a lowercase genus that is not in canonical genus form", () => {
+    expect(
+      parseCalyxRouteContext("?genus=cattleya&origin=homepage-featured-taxon").featuredTaxon,
+    ).toBeNull();
+  });
+
+  it("accepts a canonical single-token genus as genus context", () => {
+    expect(
+      parseCalyxRouteContext("?genus=Brassolaeliocattleya&origin=homepage-featured-taxon")
+        .featuredTaxon,
+    ).toEqual({ rank: "genus", name: "Brassolaeliocattleya" });
+  });
+
   it("extracts a structured preview for local datasets", () => {
     expect(
       buildStructuredWorkspacePreview("paper.csv", "species,count\nCattleya,12\nDracula,7"),

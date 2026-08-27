@@ -35,6 +35,12 @@ const MAX_ROUTE_ORIGIN_CHARACTERS = 80;
 const MAX_ROUTE_TAXON_CHARACTERS = 180;
 const RESEARCH_STATION_ORIGIN = "research-station";
 const SAFE_ROUTE_TAXON = /^[A-Za-z0-9][A-Za-z0-9 .:_()'×-]*$/;
+// A route `genus` becomes governed `featured_taxon: { rank: "genus" }` context.
+// Only a canonical single-token genus may make that assertion: capitalised, no
+// internal whitespace, matching the shared boundary in researchRouteContext and
+// matrixResearchNavigation. A binomial ("Cattleya labiata") or any multi-word
+// value must fail closed here rather than be mislabelled as a genus in the turn.
+const SAFE_ROUTE_GENUS = /^[A-Z][A-Za-z-]+$/;
 
 const HTML_ESCAPE_MAP: Record<string, string> = {
   "&": "&amp;",
@@ -318,7 +324,7 @@ export function parseCalyxRouteContext(search: string): CalyxRouteContext {
   const params = new URLSearchParams(search);
   const rawGenus = params.get("genus")?.trim() ?? "";
   const rawOrigin = params.get("origin")?.trim() ?? "";
-  const genus = rawGenus && rawGenus.length <= MAX_ROUTE_GENUS_CHARACTERS && /^[A-Za-z][A-Za-z -]*$/.test(rawGenus)
+  const genus = rawGenus && rawGenus.length <= MAX_ROUTE_GENUS_CHARACTERS && SAFE_ROUTE_GENUS.test(rawGenus)
     ? rawGenus
     : "";
   const origin = rawOrigin && rawOrigin.length <= MAX_ROUTE_ORIGIN_CHARACTERS && /^[a-z0-9-]+$/i.test(rawOrigin)
@@ -383,9 +389,18 @@ export function buildCalyxTurnContext(options: {
   ) {
     context.route_context = {
       origin: routeContext.origin ?? undefined,
-      featured_taxon: routeContext.featuredTaxon
-        ? { rank: routeContext.featuredTaxon.rank, accepted_name: routeContext.featuredTaxon.name }
-        : undefined,
+      // Spread, not an optional read. Assigning `undefined` still creates the
+      // key, which would leave `featured_taxon` asserted (as undefined) even
+      // when the route carried no canonical genus - the same fail-closed hazard
+      // called out for the question fields below.
+      ...(routeContext.featuredTaxon
+        ? {
+            featured_taxon: {
+              rank: routeContext.featuredTaxon.rank,
+              accepted_name: routeContext.featuredTaxon.name,
+            },
+          }
+        : {}),
       ...(researchTaxon
         ? {
             taxon: researchTaxon,
