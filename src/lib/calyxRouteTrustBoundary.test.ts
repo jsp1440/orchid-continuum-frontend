@@ -46,6 +46,17 @@ describe('Calyx governed genus route trust boundary', () => {
     },
   );
 
+  it.each(['taxon', 'species', 'subject_id', 'record_id', 'project_id'])(
+    'rejects a governed genus arrival that also carries conflicting %s identity',
+    (key) => {
+      expect(
+        rejectsCalyxNavigationContext(
+          `?genus=Phalaenopsis&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false&${key}=Phalaenopsis%20aphrodite`,
+        ),
+      ).toBe(true);
+    },
+  );
+
   it('does not reinterpret unrelated governed adapters through this generic boundary', () => {
     expect(
       rejectsCalyxNavigationContext(
