@@ -1,5 +1,6 @@
 import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from '@/features/atlas-next/calyxHandoff';
 import { ATLAS_NEXT_CALYX_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { CLASSROOM_INVESTIGATION_ORIGIN } from '@/lib/classroomInvestigationNavigation';
 import {
   ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
@@ -41,12 +42,16 @@ const FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS = new Set([
   'provenance',
 ]);
 
-const ATLAS_OCCURRENCE_ALLOWED_KEYS = new Set([
-  'genus',
-  'origin',
+const QUESTION_CONTEXT_KEYS = [
   'question',
   'question_source',
   'question_is_evidence',
+] as const;
+
+const ATLAS_OCCURRENCE_ALLOWED_KEYS = new Set([
+  'genus',
+  'origin',
+  ...QUESTION_CONTEXT_KEYS,
 ]);
 
 function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
@@ -63,6 +68,18 @@ function hasForbiddenGenericGenusContext(params: URLSearchParams): boolean {
     if (params.has(key)) return true;
   }
   return false;
+}
+
+function hasQuestionContext(params: URLSearchParams): boolean {
+  return QUESTION_CONTEXT_KEYS.some((key) => params.has(key));
+}
+
+function rejectsQuestionContextForOrigin(params: URLSearchParams, origin: string): boolean {
+  if (!hasQuestionContext(params)) return false;
+  return (
+    origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN &&
+    origin !== CLASSROOM_INVESTIGATION_ORIGIN
+  );
 }
 
 function rejectsResearchStationIdentity(params: URLSearchParams, origin: string): boolean {
@@ -97,13 +114,9 @@ function rejectsAtlasOccurrenceEvidenceContext(params: URLSearchParams, origin: 
     if (!ATLAS_OCCURRENCE_ALLOWED_KEYS.has(key)) return true;
   }
 
-  const questionKeysPresent = [
-    'question',
-    'question_source',
-    'question_is_evidence',
-  ].filter((key) => params.has(key));
+  const questionKeysPresent = QUESTION_CONTEXT_KEYS.filter((key) => params.has(key));
   if (questionKeysPresent.length === 0) return false;
-  if (questionKeysPresent.length !== 3) return true;
+  if (questionKeysPresent.length !== QUESTION_CONTEXT_KEYS.length) return true;
 
   const question = params.get('question')?.replace(/\s+/g, ' ').trim() ?? '';
   if (!question || question.length > MAX_ATLAS_OCCURRENCE_QUESTION_CHARACTERS) return true;
@@ -136,6 +149,13 @@ export type GovernedCalyxGenusTurnContext = {
  * instead of silently ignored, preventing a producer regression or crafted URL
  * from smuggling Matrix/Atlas scientific state into a Calyx genus turn.
  *
+ * Routed user-question context is producer-governed as well. Only the Atlas
+ * occurrence-evidence and Classroom investigation producers may carry the
+ * complete non-evidentiary question provenance triple. Research Station,
+ * generic genus navigation, and unmanaged origins fail closed if they attempt
+ * to attach question context, preventing the generic Calyx parser from
+ * accepting a question under the wrong workflow origin.
+ *
  * Unknown origins remain available to legacy/dedicated adapters only when any
  * supplied genus is itself a bounded canonical single-token genus. This stops
  * the older generic Calyx parser from promoting lowercase, binomial, or other
@@ -161,6 +181,7 @@ export function governedCalyxGenusTurnContext(
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
 
+  if (rejectsQuestionContextForOrigin(params, origin)) return null;
   if (rejectsResearchStationIdentity(params, origin)) return null;
   if (rejectsAtlasOccurrenceEvidenceContext(params, origin)) return null;
 
@@ -204,8 +225,9 @@ export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string)
  * Fail closed when a governed genus-navigation origin reaches Calyx without
  * the canonical genus identity and explicit non-evidence declaration promised
  * by its producer, when an unmanaged origin tries to supply a malformed genus,
- * when a Research Station exact identity is malformed/contradictory, or when
- * Atlas occurrence-evidence carries malformed question provenance or any
+ * when a Research Station exact identity is malformed/contradictory, when an
+ * unapproved origin carries routed user-question context, or when Atlas
+ * occurrence-evidence carries malformed question provenance or any
  * locality/evidence/record/project state outside its dedicated allowlist.
  */
 export function rejectsCalyxNavigationContext(search: string): boolean {
