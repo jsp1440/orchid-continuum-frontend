@@ -22,6 +22,11 @@ const FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS = new Set([
   'longitude',
   'locality',
   'occurrence_id',
+  'record_id',
+  'subject_id',
+  'project_id',
+  'taxon',
+  'species',
   'state',
   'evidence',
   'confidence',
@@ -64,10 +69,10 @@ export type GovernedCalyxGenusTurnContext = {
  * violates the producer contract, so callers must fail closed rather than
  * forwarding a partial genus/origin pair.
  *
- * Generic genus handoffs are identity/context channels only. Evidence-shaped
- * or locality-shaped URL parameters are rejected instead of silently ignored,
- * preventing a producer regression or crafted URL from smuggling Matrix/Atlas
- * scientific state into a Calyx genus turn.
+ * Generic genus handoffs are identity/context channels only. Evidence-shaped,
+ * locality-shaped, or conflicting exact-taxon/project identifiers are rejected
+ * instead of silently ignored, preventing a producer regression or crafted URL
+ * from smuggling Matrix/Atlas scientific state into a Calyx genus turn.
  *
  * Unknown origins remain available to legacy/dedicated adapters only when any
  * supplied genus is itself a bounded canonical single-token genus. This stops
