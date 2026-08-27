@@ -40,7 +40,7 @@ export function featuredTaxonAtlasNextHref(genus: string): string {
  * Canonical handoff from the featured genus into its Genus Profile.
  *
  * Keep this route behind the same canonical-genus validator as Atlas, Calyx,
- * Species, and Research so the homepage never creates a profile URL from
+ * Species, Research, and Matrix so the homepage never creates a URL from
  * malformed, binomial, route-shaped, locality-shaped, or oversized context.
  */
 export function featuredTaxonGenusProfileHref(genus: string): string {
@@ -57,6 +57,18 @@ export function featuredTaxonGenusProfileHref(genus: string): string {
  */
 export function featuredTaxonCalyxHref(genus: string): string {
   return `/calyx?genus=${encodeURIComponent(normalizedGenus(genus))}&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false`;
+}
+
+/**
+ * Canonical handoff from the homepage featured genus into Relationship Matrix.
+ *
+ * Matrix consumes `genus` only as a governed read scope. No homepage evidence,
+ * locality, coordinates, confidence, conclusions, occurrence identifiers, or
+ * graph state cross this boundary; the Matrix must retrieve its own canonical
+ * evidence from the governed backend source contract.
+ */
+export function featuredTaxonMatrixHref(genus: string): string {
+  return `/relationship-matrix-next?genus=${encodeURIComponent(normalizedGenus(genus))}`;
 }
 
 /**
