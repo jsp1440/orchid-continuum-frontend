@@ -97,6 +97,17 @@ export function atlasWorkspaceCalyxHref(genus: string): string {
 }
 
 /**
+ * Continue from canonical Atlas into Relationship Matrix while preserving only
+ * the active genus identity. Matrix treats `genus` as a governed read scope and
+ * retrieves its own evidence; Atlas locality, coordinates, occurrence IDs,
+ * selected layers, confidence, conclusions, and record-level state do not
+ * cross this route boundary.
+ */
+export function atlasWorkspaceMatrixHref(genus: string): string {
+  return `/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}`;
+}
+
+/**
  * Continue from canonical Atlas into the Species dossiers while preserving
  * only the active genus filter. Species already owns `genus` as its receiving
  * query key, so no Atlas locality, record, origin, or evidence fields travel.
