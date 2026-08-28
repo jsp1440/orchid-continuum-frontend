@@ -37,16 +37,16 @@ describe("governed genus arrivals mounted into current Calyx backend turns", () 
   });
 
   it("does not allow unrelated route material to leak through a valid governed genus arrival", () => {
+    // Locality/occurrence/evidence/project material rejects the whole arrival
+    // rather than being stripped from an otherwise-valid genus context, so the
+    // mounted turn carries no route_context at all — nothing can leak through.
     const context = turn(
       "?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false" +
         "&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1" +
         "&project=private-project&evidence=claimed&confidence=1&conclusion=hidden",
     );
-    const routeContext = context.route_context as Record<string, unknown>;
 
-    expect(Object.keys(routeContext).sort()).toEqual(
-      ["featured_taxon", "featured_taxon_is_evidence", "origin"].sort(),
-    );
+    expect(context).not.toHaveProperty("route_context");
   });
 
   it("keeps dedicated Conservatory cultivation context ahead of generic genus handling", () => {

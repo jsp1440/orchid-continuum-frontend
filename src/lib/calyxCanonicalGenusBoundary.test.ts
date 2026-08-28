@@ -46,9 +46,13 @@ describe('governed Calyx genus boundary', () => {
   });
 
   it('does not apply the generic genus rule to unrelated dedicated origins', () => {
+    // A canonical genus under a dedicated origin (research-station) is deferred
+    // to that origin's own adapter, not rejected and not promoted by the generic
+    // rule. (A malformed/lowercase genus is a separate concern and fails closed
+    // regardless of origin; see the malformed-genus cases above.)
     expect(
       rejectsCalyxNavigationContext(
-        '?genus=phalaenopsis&origin=research-station&context_is_evidence=false',
+        '?genus=Phalaenopsis&origin=research-station&context_is_evidence=false',
       ),
     ).toBe(false);
   });

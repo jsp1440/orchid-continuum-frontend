@@ -71,13 +71,12 @@ describe('governed generic genus → Calyx non-evidence boundary', () => {
     const search = `${new URL(href, 'https://orchidcontinuum.org').search}` +
       '&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1' +
       '&collector=private&evidence=claimed&confidence=0.99&conclusion=claimed';
+    // Any locality/occurrence/evidence/conclusion key outside the producer's
+    // allowlist rejects the entire arrival rather than being silently stripped,
+    // so none of it — and no manufactured genus context — reaches the turn.
+    expect(rejectsCalyxNavigationContext(search)).toBe(true);
     const context = routeContext(search);
 
-    expect(context).toMatchObject({
-      origin: 'atlas-next',
-      featured_taxon: { rank: 'genus', accepted_name: 'Phalaenopsis' },
-      featured_taxon_is_evidence: false,
-    });
     for (const forbidden of [
       'latitude',
       'longitude',
@@ -87,6 +86,8 @@ describe('governed generic genus → Calyx non-evidence boundary', () => {
       'evidence',
       'confidence',
       'conclusion',
+      'featured_taxon',
+      'featured_taxon_is_evidence',
     ]) {
       expect(context).not.toHaveProperty(forbidden);
     }

@@ -263,18 +263,15 @@ describe('canonical Continuum continuity', () => {
       uploadedFiles: [],
       routeSearch: calyxUrl.search,
     });
-    const routeContext = turnContext.route_context as Record<string, unknown>;
 
-    expect(routeContext).toMatchObject({
-      featured_taxon: { rank: 'genus', accepted_name: DEMO_GENUS },
-      question_source: 'user',
-      question_is_evidence: false,
-    });
-    expect(routeContext).not.toHaveProperty('lat');
-    expect(routeContext).not.toHaveProperty('lon');
-    expect(routeContext).not.toHaveProperty('locality');
-    expect(routeContext).not.toHaveProperty('occurrence_id');
-    expect(routeContext).not.toHaveProperty('record_id');
-    expect(routeContext).not.toHaveProperty('collector');
+    // The Atlas occurrence-evidence route is an identity-plus-question channel
+    // only. Any protected occurrence key (lat/lon/locality/occurrence_id/
+    // record_id/collector) outside its allowlist rejects the entire arrival, so
+    // the turn carries no route_context and none of that payload can be promoted.
+    expect(turnContext).not.toHaveProperty('route_context');
+    const routeContext = (turnContext.route_context ?? {}) as Record<string, unknown>;
+    for (const forbidden of ['lat', 'lon', 'locality', 'occurrence_id', 'record_id', 'collector']) {
+      expect(routeContext).not.toHaveProperty(forbidden);
+    }
   });
 });

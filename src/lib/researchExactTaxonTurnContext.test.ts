@@ -28,12 +28,11 @@ describe("Research Station exact taxon → Calyx turn context", () => {
   });
 
   it("does not accept a taxon parameter from a non-Research route", () => {
-    // The homepage featured-taxon producer declares its arrival non-evidentiary
-    // with the explicit `context_is_evidence=false` marker (see
-    // featuredTaxonCalyxHref). Under the governed genus boundary that marker is
-    // required, so a valid homepage arrival yields the bounded genus context —
-    // and the exact-species `taxon` parameter is still dropped because it only
-    // enters from the Research Station origin.
+    // An exact-species `taxon` parameter only enters from the Research Station
+    // origin. On the homepage featured-taxon route it is unrelated route material
+    // outside the generic genus allowlist, so the governed genus boundary rejects
+    // the whole arrival rather than silently dropping the taxon — the taxon is
+    // never accepted, and no route context is forwarded.
     const turnContext = buildCalyxTurnContext({
       projectId: "continuum-demo",
       uploadedFiles: [],
@@ -41,11 +40,7 @@ describe("Research Station exact taxon → Calyx turn context", () => {
         "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon&context_is_evidence=false",
     });
 
-    expect(turnContext.route_context).toEqual({
-      origin: "homepage-featured-taxon",
-      featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
-      featured_taxon_is_evidence: false,
-    });
+    expect(turnContext).not.toHaveProperty("route_context");
   });
 
   it("fails the governed genus turn closed when the non-evidence marker is absent", () => {
@@ -63,15 +58,15 @@ describe("Research Station exact taxon → Calyx turn context", () => {
   });
 
   it("fails closed for malformed exact taxon values", () => {
+    // A malformed Research Station exact taxon is a contradictory identity, so
+    // the arrival fails closed entirely rather than degrading to a genus-only
+    // turn — no route context is forwarded.
     const turnContext = buildCalyxTurnContext({
       projectId: "continuum-demo",
       uploadedFiles: [],
       routeSearch: "?genus=Phalaenopsis&taxon=%3Cscript%3E&origin=research-station",
     });
 
-    expect(turnContext.route_context).toEqual({
-      origin: "research-station",
-      featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
-    });
+    expect(turnContext).not.toHaveProperty("route_context");
   });
 });

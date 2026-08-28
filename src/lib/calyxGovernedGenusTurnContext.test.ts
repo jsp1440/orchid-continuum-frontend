@@ -71,24 +71,15 @@ describe('governed Calyx genus turn context', () => {
   });
 
   it('never forwards unrelated route material into the governed turn envelope', () => {
+    // Evidence-, locality-, and project-shaped keys reject the entire arrival
+    // rather than being silently stripped from an otherwise-valid genus context,
+    // so unrelated route material can never ride along into the turn envelope.
     const context = governedCalyxGenusTurnContext(
       `?genus=Phalaenopsis&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false` +
         '&latitude=34.2&longitude=-120.4&locality=protected&occurrence_id=secret-1' +
         '&project=private&evidence=asserted&confidence=1&conclusion=secret',
-    ) as Record<string, unknown>;
+    );
 
-    expect(Object.keys(context).sort()).toEqual([
-      'featured_taxon',
-      'featured_taxon_is_evidence',
-      'origin',
-    ]);
-    expect(context).not.toHaveProperty('latitude');
-    expect(context).not.toHaveProperty('longitude');
-    expect(context).not.toHaveProperty('locality');
-    expect(context).not.toHaveProperty('occurrence_id');
-    expect(context).not.toHaveProperty('project');
-    expect(context).not.toHaveProperty('evidence');
-    expect(context).not.toHaveProperty('confidence');
-    expect(context).not.toHaveProperty('conclusion');
+    expect(context).toBeNull();
   });
 });
