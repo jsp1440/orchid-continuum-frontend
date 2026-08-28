@@ -80,6 +80,11 @@ describe('Atlas Next → Calyx handoff', () => {
     const question = `  Why   does this matter? ${'x'.repeat(2000)}  `;
     const search = new URLSearchParams({
       question,
+      // The parser is origin-bound: only a governed producer may carry question
+      // context. This case exercises the normalization/bounding path, so it must
+      // supply a valid origin. Missing/other origins are covered separately by
+      // the "fails closed when question provenance is missing or malformed" case.
+      origin: ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN,
       question_source: 'user',
       question_is_evidence: 'false',
     }).toString();
