@@ -49,6 +49,14 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
 const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
 const MAX_CALYX_MESSAGE_CHARS = 100000;
 const MAX_HISTORICAL_MISSION_LOOKUPS = 3;
+const NETWORK_RETRY_SECONDS = 20;
+const CALYX_STARTER_QUESTIONS = [
+  "What are the most scientifically important open questions in orchid mycorrhizal symbiosis?",
+  "Compare epiphytic and terrestrial orchid adaptations using canonical evidence.",
+  "Prepare a chart-ready summary of pollination syndromes across major orchid lineages.",
+  "What papers should I read first for orchid resilience under climate change?",
+  "Help me investigate this paper, figure, or dataset step by step.",
+];
 
 type CalyxChartArtifact = {
   kind: "chart";
@@ -413,10 +421,13 @@ export default function CalyxWorkspace() {
   const [selectedDocumentText, setSelectedDocumentText] = useState("");
   const [conversations, setConversations] = useState<Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
+  const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
+  const [pendingRetry, setPendingRetry] = useState<{ message: string; projectId: string } | null>(null);
 
   const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement | null>(null);
   const mountedRef = useRef(true);
   const requestIdRef = useRef(0);
   const submissionLockRef = useRef<number | null>(null);
@@ -424,11 +435,21 @@ export default function CalyxWorkspace() {
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
   const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
 
+  const cancelAutoRetry = useCallback(() => {
+    setPendingRetry(null);
+    setAutoRetryCountdown(null);
+  }, []);
+
+  const focusMessageInput = useCallback(() => {
+    window.setTimeout(() => messageInputRef.current?.focus(), 0);
+  }, []);
+
   const { speak, cancel: cancelSpeech, supported: ttsSupported } = useCalyxSpeechOutput();
   const { state: micState, interimTranscript, error: speechInputError, startListening, stopListening } = useCalyxSpeechInput(
     useCallback((transcript: string) => {
+      cancelAutoRetry();
       setMessage((current) => (current ? `${current} ${transcript}`.trim() : transcript));
-    }, []),
+    }, [cancelAutoRetry]),
   );
 
   const normalizedProjectId = normalizeProjectId(projectId);
@@ -459,6 +480,10 @@ export default function CalyxWorkspace() {
       stopListening();
     };
   }, [cancelSpeech, stopListening]);
+
+  useEffect(() => {
+    if (!loading && !submitting) focusMessageInput();
+  }, [focusMessageInput, loading, submitting]);
 
   useEffect(() => {
     let active = true;
@@ -574,68 +599,6 @@ export default function CalyxWorkspace() {
     conversationIdRef.current = created.conversation_id;
     return created;
   }
-
-  function isCurrentRequest(requestId: number, targetConversationId: string | null, targetProjectId: string) {
-    return mountedRef.current && requestIdRef.current === requestId && conversationIdRef.current === targetConversationId && activeProjectIdRef.current === targetProjectId;
-  }
-
-  async function sendMessage() {
-    const text = message.trim();
-    if (!text || submissionLockRef.current !== null) return;
-    const activeProjectId = normalizeProjectId(projectId);
-    const requestId = requestIdRef.current + 1;
-    requestIdRef.current = requestId;
-    submissionLockRef.current = requestId;
-    setSubmitting(true);
-    setConversationError(null);
-    setAuthRequired(false);
-    setWorkspaceStatus(null);
-    setMessage("");
-    cancelSpeech();
-    stopListening();
-    let targetConversationId: string | null = null;
-    let turnCommitted = false;
-    try {
-      const thread = await ensureConversation(activeProjectId, requestId);
-      if (!thread) return;
-      targetConversationId = thread.conversation_id;
-      const result = await sendCalyxTurn(thread.conversation_id, {
-        message: text,
-        project_id: activeProjectId,
-        context: buildCalyxTurnContext({ projectId: activeProjectId, uploadedFiles, selectedAttachment, selectedDocumentText, documentContext, fileTextContent }),
-        research_mode: "auto",
-        retrieval_limit: 20,
-      });
-      turnCommitted = true;
-      if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
-      if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
-      const refreshed = await getCalyxConversation(thread.conversation_id);
-      if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
-      setConversation(refreshed);
-      conversationIdRef.current = refreshed.conversation_id;
-      void refreshConversationHistory();
-      if (speakReplies && result.answer) speak(result.answer);
-    } catch (error) {
-      if (!isActiveLifecycleRequest(requestId, activeProjectId)) return;
-      if (turnCommitted) {
-        setAuthRequired(false);
-        setConversationError("CALYX completed the turn, but the conversation could not be refreshed. Reload the thread before retrying so the same turn is not sent twice.");
-        void refreshConversationHistory();
-        return;
-      }
-      const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
-      const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the CALYX backend may be waking up; your message has been restored so you can retry.` : error.message) : "Calyx could not complete that turn.";
-      setAuthRequired(isAuth);
-      setConversationError(detail);
-      setMessage(text);
-    } finally {
-      if (submissionLockRef.current === requestId) submissionLockRef.current = null;
-      if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
-    }
-  }
-
-  async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); await sendMessage(); }
 
   function newConversation() {
     requestIdRef.current += 1;
