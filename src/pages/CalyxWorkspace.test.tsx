@@ -61,6 +61,7 @@ vi.mock("@/lib/calyxWorkspace", async () => {
 });
 
 import { STORAGE_KEY } from "@/lib/calyxConversation";
+import { CalyxApiError } from "@/lib/calyxWorkspace";
 import CalyxWorkspace from "./CalyxWorkspace";
 
 type ConversationMessage = {
@@ -747,5 +748,145 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+
+  it("offers an immediate retry path during cold-start recovery", async () => {
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
+    mocks.sendCalyxTurn
+      .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
+      .mockResolvedValueOnce(buildTurnResult("retry-thread", "Recovered answer"));
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("retry-thread", [
+        {
+          message_id: "operator-1",
+          conversation_id: "retry-thread",
+          role: "operator",
+          content: "Wake up please",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "calyx-1",
+          conversation_id: "retry-thread",
+          role: "calyx",
+          content: "Recovered answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Wake up please");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(container.textContent).toContain("Automatic retry in 20s.");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      getButton(container, "Retry now").click();
+    });
+    await flush(4);
+
+    expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Recovered answer");
+  });
+
+  it("cancels a pending cold-start retry from the retry controls", async () => {
+    vi.useFakeTimers();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
+    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Original retry message");
+    });
+
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    await act(async () => {
+      getButton(container, "Cancel").click();
+    });
+    await flush(2);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(21_000);
+    });
+    await flush(2);
+
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    expect(container.textContent).not.toContain("Automatic retry in");
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
+      "Original retry message",
+    );
+    vi.useRealTimers();
+  });
+
+  it("shows the sign-in banner when the backend preflight signals authentication required", async () => {
+    mocks.listCalyxConversations.mockRejectedValue(
+      new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Owner sign-in required.");
+    expect(container.textContent).toContain("Sign in at Mission Control");
+  });
+
+  it("clears the sign-in banner after a successful history refresh", async () => {
+    mocks.listCalyxConversations
+      .mockRejectedValueOnce(
+        new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+      )
+      .mockResolvedValue({ conversations: [], persistence_mode: "memory" });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Owner sign-in required.");
+
+    await act(async () => {
+      getButton(container, "Refresh").click();
+    });
+    await flush(3);
+
+    expect(container.textContent).not.toContain("Owner sign-in required.");
   });
 });
