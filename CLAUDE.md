@@ -9,17 +9,19 @@ Claude Code is an executor, not the source of truth for project state.
 - Orchid Continuum Brain owns architecture, governance, mission intent, scientific-integrity rules, and durable completion records.
 - GitHub owns code, issues, branches, pull requests, CI, reviews, and merge state.
 - Read `.github/copilot-instructions.md` first; it is the repository-local adapter to the shared Brain engineering policy.
+- Read `docs/AGENT-OPERATING-MEMORY.md` next. It contains durable corrections learned from repeated convergence failures. Current repository truth and explicit owner decisions outrank stale memory.
 - When a mission references Brain records, inspect those records before implementation.
 
 ## Startup sequence
 
 Before editing:
 1. Inspect current `main`.
-2. Inspect the linked issue/mission and its acceptance criteria.
-3. Search open issues and pull requests touching the same surface.
-4. Identify the governing Brain mission/architecture record.
-5. Classify the work as `NEW`, `CONTINUE`, `CONVERGE`, `SUPERSEDE`, or `ALREADY_DONE`.
-6. Reuse an existing authoritative branch/PR whenever technically sound.
+2. Read `.github/copilot-instructions.md` and `docs/AGENT-OPERATING-MEMORY.md` completely.
+3. Inspect the linked issue/mission and its acceptance criteria.
+4. Search open issues and pull requests touching the same surface.
+5. Identify the governing Brain mission/architecture record.
+6. Classify the work as `NEW`, `CONTINUE`, `CONVERGE`, `SUPERSEDE`, or `ALREADY_DONE`.
+7. Reuse an existing authoritative branch/PR whenever technically sound.
 
 ## Implementation posture
 
@@ -28,6 +30,7 @@ Before editing:
 - Preserve server-authoritative scientific state and fail closed when contracts are missing.
 - Reuse canonical API clients/contracts instead of introducing conflicting endpoint conventions.
 - Add focused tests for changed behavior.
+- When a repeated correction materially prevents wasted work, scientific error, privacy leakage, branch drift, or governance mistakes, persist it in repository instructions/tests instead of relying on chat memory.
 
 ## Validation
 
@@ -41,7 +44,7 @@ Default order:
 5. mission-specific validation such as `npm run validate:deployment` or `npm run verify:university-production` when relevant;
 6. required GitHub Actions checks.
 
-Distinguish implementation failure from CI/runner/infrastructure failure. Never claim a pass without execution evidence.
+Distinguish implementation failure from CI/runner/infrastructure failure. A workflow that receives no runner and executes zero repository steps is infrastructure-blocked, not a code failure and not green validation. Never claim a pass without execution evidence.
 
 ## Completion
 
@@ -53,6 +56,6 @@ Default output is a draft PR containing:
 - known limitations/blockers;
 - whether owner action is required.
 
-Continue routine implementation, testing, and repair autonomously. Stop after three unsuccessful attempts on the same deterministic failure class and escalate rather than consuming additional model budget.
+Continue routine implementation, testing, and repair autonomously. Completing one bounded PR is not completion of a larger mission if additional safe acceptance criteria remain executable. Stop after three unsuccessful attempts on the same deterministic failure class and escalate rather than consuming additional model budget.
 
 Do not merge/auto-merge, deploy production, mutate production DB/KG or scientific state, activate taxonomy, publish science, expose credentials, spend funds, force-push, or delete branches/repos without required owner authorization.
