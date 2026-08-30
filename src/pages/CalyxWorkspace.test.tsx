@@ -749,3 +749,217 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(storedWorkspace().conversationId).toBe("history-thread");
   });
 });
+
+describe("CalyxWorkspace — auth preflight banner", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    mocks.createCalyxConversation.mockReset();
+    mocks.getCalyxConversation.mockReset();
+    mocks.listCalyxConversations.mockReset();
+    mocks.sendCalyxTurn.mockReset();
+    mocks.getBrainMission.mockReset();
+    mocks.loadCalyxWorkspace.mockClear();
+    mocks.speechInputState = "unsupported";
+  });
+
+  afterEach(async () => {
+    await act(async () => { root.unmount(); });
+    container.remove();
+  });
+
+  it("shows the auth preflight banner when the history preflight returns 401", async () => {
+    const { CalyxApiError } = await import("@/lib/calyxWorkspace");
+    mocks.listCalyxConversations.mockRejectedValue(
+      new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    // Banner should appear because no conversation is established yet.
+    expect(container.textContent).toContain("Sign in to use CALYX");
+    expect(container.textContent).toContain("Sign in at Mission Control");
+  });
+
+  it("clears the banner after a successful history refresh", async () => {
+    const { CalyxApiError } = await import("@/lib/calyxWorkspace");
+    mocks.listCalyxConversations
+      .mockRejectedValueOnce(
+        new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+      )
+      .mockResolvedValue({ conversations: [], persistence_mode: "memory" });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    expect(container.textContent).toContain("Sign in to use CALYX");
+
+    // Trigger a manual refresh.
+    await act(async () => {
+      getButton(container, "Refresh").click();
+    });
+    await flush(3);
+
+    expect(container.textContent).not.toContain("Sign in to use CALYX");
+  });
+});
+
+describe("CalyxWorkspace — cold-start retry", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    mocks.createCalyxConversation.mockReset();
+    mocks.getCalyxConversation.mockReset();
+    mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
+    mocks.sendCalyxTurn.mockReset();
+    mocks.getBrainMission.mockReset();
+    mocks.loadCalyxWorkspace.mockClear();
+    mocks.speechInputState = "unsupported";
+  });
+
+  afterEach(async () => {
+    await act(async () => { root.unmount(); });
+    container.remove();
+  });
+
+  it("shows the retry UI after a network error and fires on Retry now", async () => {
+    const { CalyxApiError } = await import("@/lib/calyxWorkspace");
+    const createdConversation = buildConversation("retry-thread");
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn
+      .mockRejectedValueOnce(new CalyxApiError("network_error", "Failed to fetch"))
+      .mockResolvedValue(buildTurnResult("retry-thread", "Retry succeeded."));
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("retry-thread", [
+        { message_id: "op", conversation_id: "retry-thread", role: "operator", content: "Retry question", created_at: "2026-08-10T00:00:02Z" },
+        { message_id: "ca", conversation_id: "retry-thread", role: "calyx", content: "Retry succeeded.", created_at: "2026-08-10T00:00:03Z" },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => { mocks.pushTranscript("Retry question"); });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    // Retry UI should be visible.
+    expect(container.textContent).toContain("Retry now");
+    expect(container.textContent).toContain("waking up");
+
+    // Click Retry now.
+    await act(async () => { getButton(container, "Retry now").click(); });
+    await flush(4);
+
+    expect(container.textContent).toContain("Retry succeeded.");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+  });
+
+  it("clears the retry UI when Cancel is clicked", async () => {
+    const { CalyxApiError } = await import("@/lib/calyxWorkspace");
+    const createdConversation = buildConversation("cancel-retry-thread");
+    mocks.createCalyxConversation.mockResolvedValue(createdConversation);
+    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Failed to fetch"));
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => { mocks.pushTranscript("Cancel retry question"); });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(container.textContent).toContain("Retry now");
+
+    await act(async () => { getButton(container, "Cancel").click(); });
+    await flush(2);
+
+    expect(container.textContent).not.toContain("Retry now");
+    expect(container.textContent).not.toContain("waking up");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("CalyxWorkspace — starter prompts", () => {
+  let container: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    container = document.createElement("div");
+    document.body.appendChild(container);
+    root = createRoot(container);
+    mocks.listCalyxConversations.mockResolvedValue({ conversations: [], persistence_mode: "memory" });
+    mocks.loadCalyxWorkspace.mockClear();
+    mocks.speechInputState = "unsupported";
+  });
+
+  afterEach(async () => {
+    await act(async () => { root.unmount(); });
+    container.remove();
+  });
+
+  it("renders starter prompts on the empty state and clicking one fills the textarea", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    // The first starter prompt should appear.
+    expect(container.textContent).toContain("mycorrhizal symbiosis");
+
+    // Click the first starter prompt button.
+    const buttons = Array.from(container.querySelectorAll("button")).filter(
+      (button) => button.textContent?.includes("mycorrhizal symbiosis"),
+    );
+    expect(buttons.length).toBeGreaterThan(0);
+
+    await act(async () => { buttons[0].click(); });
+    await flush(1);
+
+    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+    expect(textarea.value).toContain("mycorrhizal symbiosis");
+  });
+});
