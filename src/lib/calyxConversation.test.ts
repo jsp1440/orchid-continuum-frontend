@@ -99,7 +99,11 @@ describe("calyxConversation helpers", () => {
   });
 
   it("grounds CALYX turns in bounded featured-genus route context", () => {
-    expect(parseCalyxRouteContext("?genus=Vanilla&origin=homepage-featured-taxon")).toEqual({
+    expect(
+      parseCalyxRouteContext(
+        "?genus=Vanilla&origin=homepage-featured-taxon&context_is_evidence=false",
+      ),
+    ).toEqual({
       origin: "homepage-featured-taxon",
       featuredTaxon: { rank: "genus", name: "Vanilla" },
       questionContext: null,
@@ -109,12 +113,14 @@ describe("calyxConversation helpers", () => {
       buildCalyxTurnContext({
         projectId: "calyx-speak",
         uploadedFiles: [],
-        routeSearch: "?genus=Vanilla&origin=homepage-featured-taxon",
+        routeSearch:
+          "?genus=Vanilla&origin=homepage-featured-taxon&context_is_evidence=false",
       }),
     ).toMatchObject({
       route_context: {
         origin: "homepage-featured-taxon",
         featured_taxon: { rank: "genus", accepted_name: "Vanilla" },
+        featured_taxon_is_evidence: false,
       },
     });
   });
