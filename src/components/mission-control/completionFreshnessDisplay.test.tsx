@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import CompletionObservatory from './CompletionObservatory';
 
@@ -58,6 +58,7 @@ afterEach(() => {
   container?.remove();
   meta?.remove();
   meta = null;
+  vi.useRealTimers();
 });
 
 describe('evidence freshness is visible on the dashboard', () => {
@@ -74,7 +75,12 @@ describe('evidence freshness is visible on the dashboard', () => {
     expect(qualifier()!.textContent).toMatch(/not verifiable against this build/i);
   });
 
-  it('reports drift when the build is a different commit from the evidence', () => {
+  it('reports drift when the build is a different commit from fresh evidence', () => {
+    // Freeze time near the evidence snapshot so this test exercises commit
+    // drift rather than eventually aging into the intentionally separate
+    // `stale` state as the calendar advances.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-08-23T12:00:00Z'));
     stampBuild('c'.repeat(40));
     render();
 
