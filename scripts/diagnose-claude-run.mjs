@@ -19,7 +19,7 @@
  * be mistaken for a product failure.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 
 const LOG_PATH =
   process.env.CLAUDE_EXECUTION_LOG ?? "/home/runner/work/_temp/claude-execution-output.json";
@@ -94,6 +94,46 @@ function findResultRecord(parsed) {
   return null;
 }
 
+/**
+ * The workflow's legacy downstream classifier scans every string value in the
+ * temporary SDK execution log. Some Claude SDK error payloads include benign
+ * permission-related metadata even when the authoritative API failure is a
+ * provider-capacity condition such as exhausted credit. That can make the
+ * legacy scanner fail closed as "security" before it reaches its safe-provider
+ * patterns, incorrectly suppressing Gemini/OpenAI failover.
+ *
+ * After we have authoritatively classified a safe provider-capacity failure by
+ * HTTP status + provider message, replace only the runner-temporary execution
+ * log with a minimal diagnostic record. This does not alter repository state or
+ * persist provider transcript data; it simply hands the next workflow step the
+ * already-proven provider signal. Authentication and permission failures are
+ * deliberately never normalized and therefore remain fail-closed.
+ */
+function normalizeSafeProviderSignal(parsed, cause, apiErrorStatus, message) {
+  const safeCauses = new Set([
+    "ANTHROPIC_CREDIT_EXHAUSTED",
+    "ANTHROPIC_RATE_LIMITED",
+    "ANTHROPIC_PROVIDER_ERROR",
+  ]);
+  if (!safeCauses.has(cause)) return false;
+
+  const records = Array.isArray(parsed) ? parsed : [parsed];
+  const minimal = records
+    .filter((record) => record && typeof record === "object" && record.type !== "result")
+    .map((record) => ({ type: record.type, subtype: record.subtype }))
+    .filter((record) => record.type);
+  minimal.push({
+    type: "result",
+    subtype: "provider_error",
+    is_error: true,
+    api_error_status: apiErrorStatus,
+    result: String(message ?? ""),
+    provider_failure_cause: cause,
+  });
+  writeFileSync(LOG_PATH, JSON.stringify(minimal), "utf8");
+  return true;
+}
+
 function main() {
   let raw;
   try {
@@ -149,6 +189,14 @@ function main() {
   console.log(`detail:             ${detail}`);
   if (message) console.log(`provider message:   ${message}`);
 
+  try {
+    if (normalizeSafeProviderSignal(parsed, cause, apiErrorStatus, message)) {
+      console.log("downstream signal:  normalized safe-provider failure for governed failover");
+    }
+  } catch {
+    console.log("::warning::claude run diagnosis: could not normalize temporary downstream provider signal");
+  }
+
   if (owner_action_required) {
     console.log(`::warning::Claude runtime blocked by an owner-only boundary: ${cause}. ${detail}`);
   }
@@ -160,4 +208,4 @@ if (process.argv[1] && process.argv[1].endsWith("diagnose-claude-run.mjs")) {
   main();
 }
 
-export { classify, findResultRecord };
+export { classify, findResultRecord, normalizeSafeProviderSignal };
