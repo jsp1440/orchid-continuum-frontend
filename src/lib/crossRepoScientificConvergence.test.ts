@@ -68,7 +68,7 @@ proofDescribe('cross-repository canonical evidence → Matrix → Atlas → Caly
       'locality',
       'occurrenceid',
     ]) {
-      expect(serialized).not.toContain(`\"${forbidden}\"`);
+      expect(serialized).not.toContain(`"${forbidden}"`);
     }
   });
 
