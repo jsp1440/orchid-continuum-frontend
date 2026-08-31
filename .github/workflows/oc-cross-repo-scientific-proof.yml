@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      BACKEND_SHA: 34bb8c21523e18aa574c9423c449077ee29b6dff
+      BACKEND_SHA: b4b6b4ff69eb782989f907f1ec6c2b5ddd1509e8
       FRONTEND_PROOF_FILE: cross-repo-proof.json
     steps:
       - name: Checkout frontend exact head
@@ -76,7 +76,7 @@ jobs:
           matrix["source_mode"] = "canonical_governed_source"
           matrix["source_domain"] = "traits"
           matrix["genus_scope"] = "Phalaenopsis"
-          matrix["backend_sha"] = "34bb8c21523e18aa574c9423c449077ee29b6dff"
+          matrix["backend_sha"] = "b4b6b4ff69eb782989f907f1ec6c2b5ddd1509e8"
           Path("../cross-repo-proof.json").write_text(json.dumps(matrix, sort_keys=True), encoding="utf-8")
           PY
 
