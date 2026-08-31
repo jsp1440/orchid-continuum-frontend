@@ -28,28 +28,45 @@ describe("Research Station exact taxon → Calyx turn context", () => {
   });
 
   it("does not accept a taxon parameter from a non-Research route", () => {
+    // An exact-species `taxon` parameter only enters from the Research Station
+    // origin. On the homepage featured-taxon route it is unrelated route material
+    // outside the generic genus allowlist, so the governed genus boundary rejects
+    // the whole arrival rather than silently dropping the taxon — the taxon is
+    // never accepted, and no route context is forwarded.
     const turnContext = buildCalyxTurnContext({
       projectId: "continuum-demo",
       uploadedFiles: [],
-      routeSearch: "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon",
+      routeSearch:
+        "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon&context_is_evidence=false",
     });
 
-    expect(turnContext.route_context).toEqual({
-      origin: "homepage-featured-taxon",
-      featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
+    expect(turnContext).not.toHaveProperty("route_context");
+  });
+
+  it("fails the governed genus turn closed when the non-evidence marker is absent", () => {
+    // Without `context_is_evidence=false`, a featured-taxon arrival violates the
+    // governed producer contract and must fail closed — no route context is
+    // forwarded, so the unauthorized exact-species taxon cannot leak either.
+    const turnContext = buildCalyxTurnContext({
+      projectId: "continuum-demo",
+      uploadedFiles: [],
+      routeSearch:
+        "?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=homepage-featured-taxon",
     });
+
+    expect(turnContext).not.toHaveProperty("route_context");
   });
 
   it("fails closed for malformed exact taxon values", () => {
+    // A malformed Research Station exact taxon is a contradictory identity, so
+    // the arrival fails closed entirely rather than degrading to a genus-only
+    // turn — no route context is forwarded.
     const turnContext = buildCalyxTurnContext({
       projectId: "continuum-demo",
       uploadedFiles: [],
       routeSearch: "?genus=Phalaenopsis&taxon=%3Cscript%3E&origin=research-station",
     });
 
-    expect(turnContext.route_context).toEqual({
-      origin: "research-station",
-      featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
-    });
+    expect(turnContext).not.toHaveProperty("route_context");
   });
 });

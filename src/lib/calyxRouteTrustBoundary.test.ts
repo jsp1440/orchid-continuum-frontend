@@ -46,6 +46,40 @@ describe('Calyx governed genus route trust boundary', () => {
     },
   );
 
+  it.each(['taxon', 'species', 'subject_id', 'record_id', 'project_id'])(
+    'rejects a governed genus arrival that also carries conflicting %s identity',
+    (key) => {
+      expect(
+        rejectsCalyxNavigationContext(
+          `?genus=Phalaenopsis&origin=${FEATURED_TAXON_ORIGIN}&context_is_evidence=false&${key}=Phalaenopsis%20aphrodite`,
+        ),
+      ).toBe(true);
+    },
+  );
+
+  it('accepts legitimate Research Station genus-only and matching exact-species arrivals', () => {
+    expect(
+      rejectsCalyxNavigationContext('?genus=Phalaenopsis&origin=research-station'),
+    ).toBe(false);
+    expect(
+      rejectsCalyxNavigationContext(
+        '?genus=Phalaenopsis&taxon=Phalaenopsis%20amabilis&origin=research-station',
+      ),
+    ).toBe(false);
+    expect(
+      rejectsCalyxNavigationContext('?taxon=canonical%3Ataxon%3A123&origin=research-station'),
+    ).toBe(false);
+  });
+
+  it.each([
+    '?genus=Phalaenopsis&taxon=&origin=research-station',
+    '?genus=Phalaenopsis&taxon=%2Fetc%2Fpasswd&origin=research-station',
+    '?genus=Paphiopedilum&taxon=Phalaenopsis%20amabilis&origin=research-station',
+    '?genus=Phalaenopsis&taxon=canonical%3Ataxon%3A123&origin=research-station',
+  ])('rejects malformed or contradictory Research Station exact identity: %s', (search) => {
+    expect(rejectsCalyxNavigationContext(search)).toBe(true);
+  });
+
   it('does not reinterpret unrelated governed adapters through this generic boundary', () => {
     expect(
       rejectsCalyxNavigationContext(

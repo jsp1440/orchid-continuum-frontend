@@ -1,7 +1,10 @@
+import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from '@/features/atlas-next/calyxHandoff';
 import { ATLAS_NEXT_CALYX_ORIGIN } from '@/features/atlas-next/researchHandoff';
+import { CLASSROOM_INVESTIGATION_ORIGIN } from '@/lib/classroomInvestigationNavigation';
 import {
   ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
+  RELATIONSHIP_MATRIX_ORIGIN,
 } from '@/lib/featuredTaxonNavigation';
 import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
 
@@ -10,10 +13,46 @@ const NON_EVIDENTIARY_GENUS_ORIGINS = new Set([
   ATLAS_WORKSPACE_ORIGIN,
   GENUS_PROFILE_ORIGIN,
   ATLAS_NEXT_CALYX_ORIGIN,
+  RELATIONSHIP_MATRIX_ORIGIN,
 ]);
 
+const RESEARCH_STATION_ORIGIN = 'research-station';
 const MAX_CANONICAL_GENUS_CHARACTERS = 120;
+const MAX_RESEARCH_TAXON_CHARACTERS = 180;
+const MAX_ATLAS_OCCURRENCE_QUESTION_CHARACTERS = 800;
 const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
+const SAFE_RESEARCH_TAXON = /^[A-Za-z0-9][A-Za-z0-9 .:_()'×-]*$/;
+const SAFE_RESEARCH_BINOMIAL = /^([A-Z][A-Za-z-]+)\s+[a-z][A-Za-z-]+$/;
+
+const FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS = new Set([
+  'latitude',
+  'longitude',
+  'locality',
+  'occurrence_id',
+  'record_id',
+  'subject_id',
+  'project_id',
+  'taxon',
+  'species',
+  'state',
+  'evidence',
+  'confidence',
+  'conclusion',
+  'citation',
+  'provenance',
+]);
+
+const QUESTION_CONTEXT_KEYS = [
+  'question',
+  'question_source',
+  'question_is_evidence',
+] as const;
+
+const ATLAS_OCCURRENCE_ALLOWED_KEYS = new Set([
+  'genus',
+  'origin',
+  ...QUESTION_CONTEXT_KEYS,
+]);
 
 function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
   const genus = params.get('genus')?.trim() ?? '';
@@ -22,6 +61,69 @@ function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
     genus.length <= MAX_CANONICAL_GENUS_CHARACTERS &&
     SAFE_CANONICAL_GENUS.test(genus)
   );
+}
+
+function hasForbiddenGenericGenusContext(params: URLSearchParams): boolean {
+  for (const key of FORBIDDEN_GENERIC_GENUS_CONTEXT_KEYS) {
+    if (params.has(key)) return true;
+  }
+  return false;
+}
+
+function hasQuestionContext(params: URLSearchParams): boolean {
+  return QUESTION_CONTEXT_KEYS.some((key) => params.has(key));
+}
+
+function rejectsQuestionContextForOrigin(params: URLSearchParams, origin: string): boolean {
+  if (!hasQuestionContext(params)) return false;
+  return (
+    origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN &&
+    origin !== CLASSROOM_INVESTIGATION_ORIGIN
+  );
+}
+
+function rejectsResearchStationIdentity(params: URLSearchParams, origin: string): boolean {
+  if (origin !== RESEARCH_STATION_ORIGIN) return false;
+
+  const hasTaxon = params.has('taxon');
+  if (!hasTaxon) return false;
+
+  const taxon = params.get('taxon')?.trim() ?? '';
+  if (
+    !taxon ||
+    taxon.length > MAX_RESEARCH_TAXON_CHARACTERS ||
+    !SAFE_RESEARCH_TAXON.test(taxon)
+  ) {
+    return true;
+  }
+
+  if (!params.has('genus')) return false;
+  if (!hasBoundedCanonicalGenus(params)) return true;
+
+  const binomial = taxon.match(SAFE_RESEARCH_BINOMIAL);
+  if (!binomial) return true;
+
+  return params.get('genus')!.trim() !== binomial[1];
+}
+
+function rejectsAtlasOccurrenceEvidenceContext(params: URLSearchParams, origin: string): boolean {
+  if (origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN) return false;
+  if (!hasBoundedCanonicalGenus(params)) return true;
+
+  for (const key of params.keys()) {
+    if (!ATLAS_OCCURRENCE_ALLOWED_KEYS.has(key)) return true;
+  }
+
+  const questionKeysPresent = QUESTION_CONTEXT_KEYS.filter((key) => params.has(key));
+  if (questionKeysPresent.length === 0) return false;
+  if (questionKeysPresent.length !== QUESTION_CONTEXT_KEYS.length) return true;
+
+  const question = params.get('question')?.replace(/\s+/g, ' ').trim() ?? '';
+  if (!question || question.length > MAX_ATLAS_OCCURRENCE_QUESTION_CHARACTERS) return true;
+  if (params.get('question_source') !== 'user') return true;
+  if (params.get('question_is_evidence') !== 'false') return true;
+
+  return false;
 }
 
 export type GovernedCalyxGenusTurnContext = {
@@ -41,14 +143,58 @@ export type GovernedCalyxGenusTurnContext = {
  * another dedicated adapter may handle it. `null` means it does belong here but
  * violates the producer contract, so callers must fail closed rather than
  * forwarding a partial genus/origin pair.
+ *
+ * Generic genus handoffs are identity/context channels only. Evidence-shaped,
+ * locality-shaped, or conflicting exact-taxon/project identifiers are rejected
+ * instead of silently ignored, preventing a producer regression or crafted URL
+ * from smuggling Matrix/Atlas scientific state into a Calyx genus turn.
+ *
+ * Routed user-question context is producer-governed as well. Only the Atlas
+ * occurrence-evidence and Classroom investigation producers may carry the
+ * complete non-evidentiary question provenance triple. Research Station,
+ * generic genus navigation, and unmanaged origins fail closed if they attempt
+ * to attach question context, preventing the generic Calyx parser from
+ * accepting a question under the wrong workflow origin.
+ *
+ * Unknown origins remain available to legacy/dedicated adapters only when any
+ * supplied genus is itself a bounded canonical single-token genus. This stops
+ * the older generic Calyx parser from promoting lowercase, binomial, or other
+ * malformed taxon strings to `rank: genus` merely because an origin is unknown.
+ *
+ * Research Station is a dedicated adapter, but its exact identity is also
+ * guarded here before the generic fallback can run. A supplied `taxon` must be
+ * bounded/safe; when Research Station supplies both genus and exact taxon, the
+ * taxon must be an unambiguous binomial whose genus exactly matches the carried
+ * genus. Invalid or contradictory arrivals fail closed instead of degrading to
+ * a genus-only Calyx turn.
+ *
+ * Atlas occurrence-evidence is also a dedicated adapter. Its public route is an
+ * identity-plus-user-question channel only: canonical genus, origin, and either
+ * no question or the complete non-evidentiary question provenance triple. Any
+ * extra locality/evidence/record/project key, malformed question provenance, or
+ * non-canonical genus rejects the entire arrival instead of degrading to a
+ * genus-only generic Calyx context.
  */
 export function governedCalyxGenusTurnContext(
   search: string,
 ): GovernedCalyxGenusTurnContext | null | undefined {
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
-  if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) return undefined;
-  if (!hasBoundedCanonicalGenus(params) || params.get('context_is_evidence') !== 'false') {
+
+  if (rejectsQuestionContextForOrigin(params, origin)) return null;
+  if (rejectsResearchStationIdentity(params, origin)) return null;
+  if (rejectsAtlasOccurrenceEvidenceContext(params, origin)) return null;
+
+  if (!NON_EVIDENTIARY_GENUS_ORIGINS.has(origin)) {
+    if (params.has('genus') && !hasBoundedCanonicalGenus(params)) return null;
+    return undefined;
+  }
+
+  if (
+    !hasBoundedCanonicalGenus(params) ||
+    params.get('context_is_evidence') !== 'false' ||
+    hasForbiddenGenericGenusContext(params)
+  ) {
     return null;
   }
 
@@ -78,12 +224,11 @@ export function calyxNavigationContextIsExplicitlyNonEvidentiary(search: string)
 /**
  * Fail closed when a governed genus-navigation origin reaches Calyx without
  * the canonical genus identity and explicit non-evidence declaration promised
- * by its producer.
- *
- * This is deliberately narrow. Atlas Next occurrence-evidence routes use a
- * separate question provenance contract, while dossier/classroom/research
- * arrivals have dedicated adapters. Only the generic genus origins that emit
- * `context_is_evidence=false` are enforced here.
+ * by its producer, when an unmanaged origin tries to supply a malformed genus,
+ * when a Research Station exact identity is malformed/contradictory, when an
+ * unapproved origin carries routed user-question context, or when Atlas
+ * occurrence-evidence carries malformed question provenance or any
+ * locality/evidence/record/project state outside its dedicated allowlist.
  */
 export function rejectsCalyxNavigationContext(search: string): boolean {
   return governedCalyxGenusTurnContext(search) === null;

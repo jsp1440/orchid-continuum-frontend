@@ -1,8 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Globe2, MapPinned, MessageCircle } from 'lucide-react';
+import { ArrowRight, Globe2, MapPinned, MessageCircle, Network } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import {
+  featuredTaxonAtlasHref,
+  featuredTaxonCalyxHref,
+  featuredTaxonMatrixHref,
+} from '@/lib/featuredTaxonNavigation';
 import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
 
 /**
@@ -22,17 +26,29 @@ const HomeAtlasContinuum: React.FC = () => {
     : [];
   const geographyGraph = ecologicalDomains.find((item) => item.domain === 'geography') ?? null;
   const elevationGraph = ecologicalDomains.find((item) => item.domain === 'elevation') ?? null;
+  const habitatGraph = ecologicalDomains.find((item) => item.domain === 'habitat') ?? null;
+  const climateGraph = ecologicalDomains.find((item) => item.domain === 'climate') ?? null;
+  const mycorrhizaGraph = ecologicalDomains.find((item) => item.domain === 'mycorrhiza') ?? null;
   const hero = publicGenusMediaItems(continuum?.media.items ?? [])[0] ?? null;
 
-  const geographyGraphLinked = Boolean(geographyGraph && (geographyGraph.nodes > 0 || geographyGraph.edges > 0));
-  const elevationGraphLinked = Boolean(elevationGraph && (elevationGraph.nodes > 0 || elevationGraph.edges > 0));
+  const hasGraphLinkage = (domain: { nodes: number; edges: number } | null) =>
+    Boolean(domain && (domain.nodes > 0 || domain.edges > 0));
+  const geographyGraphLinked = hasGraphLinkage(geographyGraph);
+  const elevationGraphLinked = hasGraphLinkage(elevationGraph);
+  const habitatGraphLinked = hasGraphLinkage(habitatGraph);
+  const climateGraphLinked = hasGraphLinkage(climateGraph);
+  const mycorrhizaGraphLinked = hasGraphLinkage(mycorrhizaGraph);
   const evidenceAvailable = Boolean(
     geography?.hasData ||
     occurrenceDomain?.state === 'known' ||
     geographyGraphLinked ||
-    elevationGraphLinked,
+    elevationGraphLinked ||
+    habitatGraphLinked ||
+    climateGraphLinked ||
+    mycorrhizaGraphLinked,
   );
   const atlasHref = featuredTaxonAtlasHref(genus);
+  const matrixHref = featuredTaxonMatrixHref(genus);
   const calyxHref = featuredTaxonCalyxHref(genus);
 
   const graphCoverageSummary = [
@@ -41,6 +57,15 @@ const HomeAtlasContinuum: React.FC = () => {
       : null,
     elevationGraphLinked && elevationGraph
       ? `elevation ${elevationGraph.nodes} nodes · ${elevationGraph.edges} relationships`
+      : null,
+    habitatGraphLinked && habitatGraph
+      ? `habitat ${habitatGraph.nodes} nodes · ${habitatGraph.edges} relationships`
+      : null,
+    climateGraphLinked && climateGraph
+      ? `climate ${climateGraph.nodes} nodes · ${climateGraph.edges} relationships`
+      : null,
+    mycorrhizaGraphLinked && mycorrhizaGraph
+      ? `mycorrhiza ${mycorrhizaGraph.nodes} nodes · ${mycorrhizaGraph.edges} relationships`
       : null,
   ].filter(Boolean).join(' · ');
 
@@ -73,6 +98,13 @@ const HomeAtlasContinuum: React.FC = () => {
               Explore {genus} in Atlas <ArrowRight className="h-4 w-4" />
             </Link>
             <Link
+              to={matrixHref}
+              className="inline-flex items-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.04] px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#eee4d1] transition-colors hover:border-[#d4b34a]/35 hover:bg-[#d4b34a]/10 hover:text-[#d4b34a]"
+            >
+              <Network className="h-4 w-4" />
+              Inspect {genus} relationships
+            </Link>
+            <Link
               to={calyxHref}
               className="inline-flex items-center gap-2 rounded-full border border-white/[0.16] bg-white/[0.04] px-5 py-2.5 font-mono text-[10px] uppercase tracking-[0.2em] text-[#eee4d1] transition-colors hover:border-[#d4b34a]/35 hover:bg-[#d4b34a]/10 hover:text-[#d4b34a]"
             >
@@ -81,7 +113,7 @@ const HomeAtlasContinuum: React.FC = () => {
             </Link>
           </div>
           <p className="mt-3 max-w-2xl text-xs leading-5 text-[#9e978a]">
-            Both paths carry the same featured genus through the canonical Continuum handoff, so a demonstration can move from geographic evidence to a grounded Calyx inquiry without resetting scientific context.
+            Atlas, Relationship Matrix, and Calyx receive only the same bounded featured genus. Matrix retrieves its own governed evidence; the homepage genus remains navigation context rather than scientific evidence.
           </p>
         </div>
 
@@ -91,14 +123,14 @@ const HomeAtlasContinuum: React.FC = () => {
               <MapPinned className="h-5 w-5" />
             </div>
             <div>
-              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#d4b34a]">Geographic evidence</p>
+              <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#d4b34a]">Ecological and geographic evidence</p>
               <p className="mt-2 text-sm leading-6 text-[#d8cfbd]/82">
-                {continuumStatus === 'loading' && 'Loading connected occurrence, geography, and elevation evidence…'}
-                {continuumStatus === 'unavailable' && 'Continuum evidence is temporarily unavailable. No geographic fallback has been substituted.'}
+                {continuumStatus === 'loading' && 'Loading connected occurrence, geography, elevation, habitat, climate, and mycorrhizal evidence…'}
+                {continuumStatus === 'unavailable' && 'Continuum evidence is temporarily unavailable. No ecological or geographic fallback has been substituted.'}
                 {continuumStatus === 'ready' && evidenceAvailable && (
-                  geography?.summary || graphCoverageSummary || 'Occurrence evidence is linked in the Continuum.'
+                  geography?.summary || graphCoverageSummary || 'Occurrence and ecological evidence are linked in the Continuum.'
                 )}
-                {continuumStatus === 'ready' && !evidenceAvailable && 'No geographic or elevation evidence is linked in the current Continuum view. This is a knowledge gap, not evidence that the orchid is absent.'}
+                {continuumStatus === 'ready' && !evidenceAvailable && 'No geographic, elevation, habitat, climate, or mycorrhizal evidence is linked in the current Continuum view. This is a knowledge gap, not evidence that the orchid is absent.'}
               </p>
             </div>
           </div>
@@ -121,7 +153,7 @@ const HomeAtlasContinuum: React.FC = () => {
           ) : null}
 
           <div className="mt-5 border-t border-white/[0.08] pt-4 text-xs leading-5 text-[#9e978a]">
-            Counts above are graph linkage, not occurrence totals or inferred range limits. This public summary does not imply that locality-sensitivity safeguards are present here; precise locality remains governed inside the full Atlas rather than being copied onto the homepage.
+            Counts above are graph linkage, not occurrence totals, inferred range limits, habitat breadth, climate tolerances, or association strength. This public summary does not imply that locality-sensitivity safeguards are present here; precise locality remains governed inside the full Atlas rather than being copied onto the homepage.
           </div>
         </div>
       </div>
