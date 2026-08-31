@@ -2,7 +2,7 @@
   "name": "Calyx — Orchid Continuum",
   "short_name": "Calyx",
   "description": "Direct voice and visual access to Orchid Continuum intelligence.",
-  "start_url": "/speak-with-calyx?source=pwa",
+  "start_url": "/calyx-mobile?source=pwa",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
@@ -20,7 +20,7 @@
     {
       "name": "Talk to Calyx",
       "short_name": "Talk",
-      "url": "/speak-with-calyx?source=pwa-shortcut"
+      "url": "/calyx-mobile?source=pwa-shortcut"
     },
     {
       "name": "Mission Control",
