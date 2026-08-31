@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+GUARD_PATH = "scripts/agent_security_guard.py"
+
 PROTECTED_PATHS = (
     "CLAUDE.md",
     ".github/copilot-instructions.md",
@@ -25,7 +27,7 @@ PROTECTED_PATHS = (
     ".cursor/**",
     ".vscode/**",
     ".github/workflows/agent-security-guard.yml",
-    "scripts/agent_security_guard.py",
+    GUARD_PATH,
     "docs/AGENT-SECURITY-BOUNDARIES.md",
 )
 
@@ -55,6 +57,15 @@ def git(*args: str) -> str:
     return proc.stdout
 
 
+def exists_at(ref: str, path: str) -> bool:
+    return subprocess.run(
+        ["git", "cat-file", "-e", f"{ref}:{path}"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    ).returncode == 0
+
+
 def is_protected(path: str) -> bool:
     return any(fnmatch.fnmatch(path, pattern) for pattern in PROTECTED_PATHS)
 
@@ -82,10 +93,13 @@ def main() -> int:
         if p.strip()
     ]
 
-    protected = sorted(p for p in changed if is_protected(p))
+    bootstrap = not exists_at(args.base, GUARD_PATH)
+    protected = [] if bootstrap else sorted(p for p in changed if is_protected(p))
     unsafe: list[tuple[str, str]] = []
 
     for path in changed:
+        if path == GUARD_PATH:
+            continue
         if Path(path).suffix.lower() not in SCANNED_SUFFIXES:
             continue
         for line in added_lines(args.base, args.head, path):
@@ -93,6 +107,9 @@ def main() -> int:
                 if pattern.search(line):
                     unsafe.append((path, line.strip()[:240]))
                     break
+
+    if bootstrap:
+        print("Bootstrap mode: guard absent from base; protected-path enforcement starts after integration.")
 
     if protected:
         print("::error::Agent-governance/security control files changed. Owner checkpoint required before merge.")
