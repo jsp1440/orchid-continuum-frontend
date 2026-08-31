@@ -1,0 +1,105 @@
+name: OC Cross-Repo Scientific Proof
+
+on:
+  pull_request:
+    branches: [oc-autonomous-integration]
+    paths:
+      - "src/lib/crossRepoScientificConvergence.test.ts"
+      - ".github/workflows/oc-cross-repo-scientific-proof.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove-canonical-evidence-to-calyx:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      BACKEND_SHA: 34bb8c21523e18aa574c9423c449077ee29b6dff
+      FRONTEND_PROOF_FILE: cross-repo-proof.json
+    steps:
+      - name: Checkout frontend exact head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Checkout backend exact integration head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: jsp1440/orchid-calyx-backend
+          ref: ${{ env.BACKEND_SHA }}
+          path: backend
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+
+      - name: Validate governed backend Matrix contract
+        working-directory: backend
+        run: |
+          python -m pip install -r requirements.txt pytest
+          python -m pytest -q \
+            tests/test_matrix_relationship_governed_sources.py \
+            tests/test_matrix_relationship_genus_scope.py \
+            tests/test_matrix_relationship_genus_scope_attestation.py
+
+      - name: Generate governed Phalaenopsis Matrix receipt from backend code
+        working-directory: backend
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from runtime.matrix_relationship import build_relationship_matrix
+          from runtime.matrix_relationship_sources import rows_to_assertions
+
+          assertions = rows_to_assertions(
+              "trait",
+              [
+                  {
+                      "source_pk": "trait-proof-1",
+                      "taxon_pk": 101,
+                      "subject_label": "Phalaenopsis amabilis",
+                      "trait_name": "growth_habit",
+                      "trait_value": "epiphytic",
+                      "support_count": 4,
+                      "confidence_score": 0.88,
+                      "confidence_label": "high",
+                  }
+              ],
+          )
+          matrix = build_relationship_matrix(
+              assertions,
+              dimension="trait",
+              subject_ids=["101", "999"],
+              object_ids=["trait:growth_habit=epiphytic"],
+          )
+          matrix["source_mode"] = "canonical_governed_source"
+          matrix["source_domain"] = "traits"
+          matrix["genus_scope"] = "Phalaenopsis"
+          matrix["backend_sha"] = "34bb8c21523e18aa574c9423c449077ee29b6dff"
+          Path("../cross-repo-proof.json").write_text(json.dumps(matrix, sort_keys=True), encoding="utf-8")
+          PY
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Consume backend receipt through Matrix → Atlas → Calyx boundaries
+        env:
+          OC_CROSS_REPO_PROOF_JSON: ${{ env.FRONTEND_PROOF_FILE }}
+        run: |
+          npm test -- \
+            src/lib/crossRepoScientificConvergence.test.ts \
+            src/lib/canonicalContinuumDemoContinuity.current.test.ts \
+            src/pages/RelationshipMatrixNext.canonicalSource.test.ts
+
+      - name: Record exact convergence heads
+        run: |
+          echo "frontend_sha=${GITHUB_SHA}"
+          echo "backend_sha=${BACKEND_SHA}"
+          test -s "${FRONTEND_PROOF_FILE}"
