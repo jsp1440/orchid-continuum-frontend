@@ -23,6 +23,7 @@ type CrossRepoProof = {
 };
 
 const proofPath = process.env.OC_CROSS_REPO_PROOF_JSON;
+const proofDescribe = proofPath ? describe : describe.skip;
 
 function readProof(): CrossRepoProof {
   if (!proofPath) {
@@ -31,7 +32,7 @@ function readProof(): CrossRepoProof {
   return JSON.parse(readFileSync(resolve(process.cwd(), proofPath), 'utf8')) as CrossRepoProof;
 }
 
-describe('cross-repository canonical evidence → Matrix → Atlas → Calyx proof', () => {
+proofDescribe('cross-repository canonical evidence → Matrix → Atlas → Calyx proof', () => {
   it('consumes a backend-generated governed Matrix receipt without changing evidence semantics', () => {
     const proof = readProof();
 
