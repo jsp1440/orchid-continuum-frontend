@@ -11,7 +11,7 @@ import { buildCalyxTurnContext } from '@/lib/calyxConversation';
 type ProofCell = {
   subject_id: string;
   state: string;
-  provenance?: Record<string, unknown> | null;
+  provenance?: Array<Record<string, unknown>> | null;
 };
 
 type CrossRepoProof = {
@@ -46,13 +46,17 @@ describe('cross-repository canonical evidence → Matrix → Atlas → Calyx pro
     expect(states['999']).not.toBe('absent');
 
     const present = proof.cells.find((cell) => cell.subject_id === '101');
-    expect(present?.provenance).toMatchObject({
-      source_domain: 'traits',
-      source_query_id: 'traits_resolved_v4',
-      source_pk: 'trait-proof-1',
-      support_count: 4,
-      confidence_label: 'high',
-    });
+    expect(present?.provenance).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          source_domain: 'traits',
+          source_query_id: 'traits_resolved_v4',
+          source_pk: 'trait-proof-1',
+          support_count: 4,
+          confidence_label: 'high',
+        }),
+      ]),
+    );
 
     const serialized = JSON.stringify(proof).toLowerCase();
     for (const forbidden of [
