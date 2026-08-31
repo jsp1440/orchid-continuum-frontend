@@ -1,0 +1,41 @@
+{
+  "name": "Calyx — Orchid Continuum",
+  "short_name": "Calyx",
+  "description": "Direct voice and visual access to Orchid Continuum intelligence.",
+  "start_url": "/calyx-mobile?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#07110d",
+  "theme_color": "#0b3d2e",
+  "icons": [
+    {
+      "src": "/calyx-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Talk to Calyx",
+      "short_name": "Talk",
+      "url": "/calyx-mobile?source=pwa-shortcut"
+    },
+    {
+      "name": "Mission Control",
+      "short_name": "Mission Control",
+      "url": "/mission-control"
+    },
+    {
+      "name": "Living Atlas",
+      "short_name": "Atlas",
+      "url": "/atlas-next"
+    },
+    {
+      "name": "Intelligence Graph",
+      "short_name": "Graph",
+      "url": "/intelligence-graph"
+    }
+  ]
+}
