@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Calyx">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="70%">
+      <stop offset="0" stop-color="#184f3e"/>
+      <stop offset="1" stop-color="#07110d"/>
+    </radialGradient>
+    <linearGradient id="petal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f5e9ff"/>
+      <stop offset="0.5" stop-color="#c9a7ff"/>
+      <stop offset="1" stop-color="#7d59c8"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="168" fill="none" stroke="#87d7b3" stroke-opacity="0.25" stroke-width="3"/>
+  <path d="M256 104c42 44 52 92 20 128-9 10-16 20-20 31-4-11-11-21-20-31-32-36-22-84 20-128Z" fill="url(#petal)"/>
+  <path d="M123 207c58-3 101 22 106 70 1 13 5 25 12 36-12-4-25-5-38-3-48 7-79-30-80-103Z" fill="url(#petal)" opacity="0.92"/>
+  <path d="M389 207c-58-3-101 22-106 70-1 13-5 25-12 36 12-4 25-5 38-3 48 7 79-30 80-103Z" fill="url(#petal)" opacity="0.92"/>
+  <path d="M176 370c23-53 60-83 103-66 12 5 24 7 37 6-9 9-16 20-21 32-18 45-64 55-119 28Z" fill="url(#petal)" opacity="0.88"/>
+  <path d="M336 370c-23-53-60-83-103-66-12 5-24 7-37 6 9 9 16 20 21 32 18 45 64 55 119 28Z" fill="url(#petal)" opacity="0.88"/>
+  <circle cx="256" cy="274" r="42" fill="#f7d779"/>
+  <circle cx="256" cy="274" r="18" fill="#402b57"/>
+  <path d="M256 316v74" stroke="#87d7b3" stroke-width="10" stroke-linecap="round"/>
+  <path d="M256 354c-24-18-44-16-61 5 27 5 48 3 61-5Zm0 0c24-18 44-16 61 5-27 5-48 3-61-5Z" fill="#87d7b3"/>
+</svg>
