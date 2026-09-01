@@ -1,7 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
-import { graphNodeMarker, resolveExecutableIssue, type OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
-import { selectAdmissibleLeaf } from '../src/lib/completion-graph/scheduler';
+import {
+  graphNodeMarker,
+  liveIssuesForNode,
+  resolveExecutableIssue,
+  type OpenIssueRef,
+} from '../src/lib/completion-graph/executableIssue';
+import { selectAdmissibleLeaf, type AdmissionResult } from '../src/lib/completion-graph/scheduler';
 import type { CompletionNode } from '../src/lib/completion-graph/types';
 
 function ghJson(args: string[]): unknown {
@@ -13,7 +18,16 @@ function ghJson(args: string[]): unknown {
 }
 
 function collectOpenIssues(): OpenIssueRef[] {
-  return ghJson(['issue', 'list', '--state', 'open', '--limit', '200', '--json', 'number,body']) as OpenIssueRef[];
+  return ghJson([
+    'issue',
+    'list',
+    '--state',
+    'open',
+    '--limit',
+    '200',
+    '--json',
+    'number,body,labels',
+  ]) as OpenIssueRef[];
 }
 
 function collectOpenWorkRefs(openIssues: OpenIssueRef[]): Set<string> {
@@ -65,29 +79,53 @@ function materializeGraphIssue(node: CompletionNode): number {
 }
 
 const openIssues = collectOpenIssues();
-const result = selectAdmissibleLeaf(COMPLETION_GRAPH, {
+const openWorkRefs = collectOpenWorkRefs(openIssues);
+const excludedNodeIds = new Set<string>();
+const suppressedNonExecutable: string[] = [];
+let result: AdmissionResult = selectAdmissibleLeaf(COMPLETION_GRAPH, {
   now: new Date().toISOString(),
-  openWorkRefs: collectOpenWorkRefs(openIssues),
+  openWorkRefs,
+  excludedNodeIds,
 });
-
-const selectedNode = result.selected?.node;
+let selectedNode: CompletionNode | undefined;
 let issueNumber: number | null = null;
 let materialized = false;
 
-if (selectedNode) {
+// Graph priority remains authoritative. If the highest-ranked leaf is already
+// represented by a live but non-executable issue (running, validating, parked,
+// blocked, owner-gated, or terminal), exclude only that node for this pulse and
+// ask the graph for its next admissible leaf. Never fall through to the legacy
+// queue merely because the first graph candidate cannot acquire a lease.
+while (result.selected) {
+  selectedNode = result.selected.node;
+  const liveIssues = liveIssuesForNode(selectedNode, openIssues);
   issueNumber = resolveExecutableIssue(selectedNode, openIssues);
-  if (issueNumber === null) {
+
+  if (issueNumber !== null) break;
+
+  if (liveIssues.length === 0) {
     issueNumber = materializeGraphIssue(selectedNode);
     materialized = true;
+    break;
   }
+
+  suppressedNonExecutable.push(selectedNode.id);
+  excludedNodeIds.add(selectedNode.id);
+  result = selectAdmissibleLeaf(COMPLETION_GRAPH, {
+    now: new Date().toISOString(),
+    openWorkRefs,
+    excludedNodeIds,
+  });
+  selectedNode = undefined;
 }
 
 const payload = {
-  admissible: result.selected !== null,
+  admissible: selectedNode !== undefined && issueNumber !== null,
   selected: selectedNode?.id ?? null,
   issueNumber: issueNumber ?? '',
   mode: selectedNode ? 'issue' : 'blocked',
   materialized,
+  suppressedNonExecutable,
   surfacedBlockers: result.surfacedBlockers.map((node) => node.id),
   suppressedDuplicates: result.suppressedDuplicates.map((node) => node.id),
   reasons: result.selected?.reasons ?? [],
