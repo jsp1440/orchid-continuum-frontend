@@ -11,8 +11,8 @@
  *
  * This reads the execution log the action leaves behind and prints the
  * classification fields only. It never prints the transcript (which is what the
- * action is withholding), and never prints the API key — only whether one was
- * present and well-formed.
+ * action is withholding), and never prints API-key shape, prefix, length or
+ * value — only whether a key is present.
  *
  * Exits 0 unconditionally. It is a diagnostic, not a gate: a non-zero exit here
  * would mask the real step's failure, and a crash in the diagnostic must never
@@ -76,12 +76,8 @@ function classify(apiErrorStatus, message) {
   };
 }
 
-/** Reports key presence and shape. Never the value. */
-function keyShape() {
-  const key = process.env.ANTHROPIC_API_KEY ?? "";
-  if (!key) return "absent";
-  if (!key.startsWith("sk-ant-")) return `present, unexpected prefix, length ${key.length}`;
-  return `present, well-formed, length ${key.length}`;
+function keyPresence() {
+  return process.env.ANTHROPIC_API_KEY ? "present" : "absent";
 }
 
 function findResultRecord(parsed) {
@@ -141,7 +137,7 @@ function main() {
   } catch {
     console.log("::warning::claude run diagnosis: no execution log at " + LOG_PATH);
     console.log("Nothing to classify — the action may have failed before invoking the SDK.");
-    console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    console.log(`ANTHROPIC_API_KEY: ${keyPresence()}`);
     return;
   }
 
@@ -150,14 +146,14 @@ function main() {
     parsed = JSON.parse(raw);
   } catch {
     console.log("::warning::claude run diagnosis: execution log is not valid JSON");
-    console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    console.log(`ANTHROPIC_API_KEY: ${keyPresence()}`);
     return;
   }
 
   const result = findResultRecord(parsed);
   if (!result) {
     console.log("::warning::claude run diagnosis: execution log contains no result record");
-    console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    console.log(`ANTHROPIC_API_KEY: ${keyPresence()}`);
     return;
   }
 
@@ -176,7 +172,7 @@ function main() {
   console.log(`api_error_status:   ${apiErrorStatus ?? "(none)"}`);
   console.log(`num_turns:          ${result.num_turns ?? "(none)"}`);
   console.log(`total_cost_usd:     ${result.total_cost_usd ?? "(none)"}`);
-  console.log(`ANTHROPIC_API_KEY:  ${keyShape()}`);
+  console.log(`ANTHROPIC_API_KEY:  ${keyPresence()}`);
 
   if (!isError) {
     console.log("verdict:            run completed without a reported error");
