@@ -277,17 +277,26 @@ jobs:
           set -euo pipefail
           graph_issue="${{ steps.graph.outputs.graph_issue }}"
           if [[ -n "$graph_issue" ]]; then
+            running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')
+            capacity=$(( MAX_ACTIVE_LANES - running ))
+            (( capacity > 0 )) || capacity=0
+
+            for idx in 0 1 2 3 4; do
+              echo "issue$((idx+1))=" >> "$GITHUB_OUTPUT"
+            done
+
+            (( capacity > 0 )) || exit 0
+
             labels=$(gh issue view "$graph_issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
-            if [[ "$labels" == *oc-queued* ]]; then
-              for idx in 0 1 2 3 4; do
-                if (( idx == 0 )); then
-                  echo "issue$((idx+1))=$graph_issue" >> "$GITHUB_OUTPUT"
-                else
-                  echo "issue$((idx+1))=" >> "$GITHUB_OUTPUT"
-                fi
-              done
-              exit 0
-            fi
+            [[ "$labels" == *oc-queued* ]] || exit 0
+            [[ "$labels" != *oc-running* && "$labels" != *oc-validating* && "$labels" != *oc-blocked* && "$labels" != *oc-owner-gate* && "$labels" != *oc-done* ]] || exit 0
+
+            gh issue edit "$graph_issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running >/dev/null
+            lease=$(gh issue view "$graph_issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
+            [[ "$lease" == *oc-running* && "$lease" != *oc-queued* ]] || exit 1
+
+            echo "issue1=$graph_issue" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
           now=$(date -u +%s)
