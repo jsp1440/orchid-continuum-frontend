@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -27,24 +27,7 @@ jobs:
           # changed range can be computed. The default depth-1 checkout has no
           # base to diff against.
           fetch-depth: 0
-          persist-credentials: true
-          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
-
-      - name: Apply bounded OpenAI lane repair on recovery PR
-        if: github.event_name == 'pull_request' && github.head_ref == 'repair/frontend-openai-runtime-diagnostics'
-        run: |
-          set -euo pipefail
-          python scripts/repair-openai-lane.py
-          git diff --check
-          if git diff --quiet -- .github/workflows/orchid-completion-lane.yml; then
-            echo 'OpenAI completion lane already repaired.'
-          else
-            git config user.name 'orchid-continuum-orchestrator[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git add .github/workflows/orchid-completion-lane.yml
-            git commit -m 'fix(autonomy): authenticate Codex fallback before execution'
-            git push origin HEAD:repair/frontend-openai-runtime-diagnostics
-          fi
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
