@@ -42,6 +42,14 @@ export type SchedulerContext = {
    */
   openWorkRefs?: ReadonlySet<string>;
   /**
+   * Graph node ids that are live but not executable in this pulse (for
+   * example because their representing issue is in runtime/repair backoff).
+   * Exclusion is supplied explicitly by the GitHub adapter so the pure graph
+   * scheduler can rank the next eligible leaf without learning provider or
+   * lease policy.
+   */
+  excludedNodeIds?: ReadonlySet<string>;
+  /**
    * Execution lanes admitted recently, most-recent-first. Used only to keep
    * lane fairness from starving a lane that hasn't run in a while; it never
    * overrides explicit priority.
@@ -144,7 +152,12 @@ export function selectAdmissibleLeaf(root: CompletionNode, ctx: SchedulerContext
 
   const surfacedBlockers = [...listBlockers(root), ...listOwnerActions(root)];
 
-  const eligible = leaves.filter((leaf) => ELIGIBLE_STATUSES.includes(leaf.status) && isDependencySatisfied(root, leaf));
+  const eligible = leaves.filter(
+    (leaf) =>
+      ELIGIBLE_STATUSES.includes(leaf.status) &&
+      isDependencySatisfied(root, leaf) &&
+      !ctx.excludedNodeIds?.has(leaf.id),
+  );
 
   const suppressedDuplicates = eligible.filter((leaf) => hasOpenTrackedWork(leaf, ctx.openWorkRefs));
   const admissible = eligible.filter((leaf) => !hasOpenTrackedWork(leaf, ctx.openWorkRefs));
