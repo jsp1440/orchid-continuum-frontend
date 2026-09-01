@@ -122,6 +122,37 @@ describe("autonomous completion lane dispatch", () => {
     expect(prepare.steps?.some((step) => step.run?.includes("graph_issue"))).toBe(true);
   });
 
+  it("leases a graph-selected issue before emitting it to a lane", () => {
+    const prepare = workflow.jobs.prepare as WorkflowJob & { steps?: Array<{ name?: string; run?: string }> };
+    const queue = prepare.steps?.find((step) => step.name === "Fill available execution slots from priority portfolio");
+    const run = queue?.run ?? "";
+    const graphStart = run.indexOf('graph_issue="${{ steps.graph.outputs.graph_issue }}"');
+    const capacityCheck = run.indexOf("capacity=$(( MAX_ACTIVE_LANES - running ))", graphStart);
+    const lease = run.indexOf('gh issue edit "$graph_issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running', graphStart);
+    const leaseVerify = run.indexOf('lease=$(gh issue view "$graph_issue"', graphStart);
+    const emit = run.indexOf('echo "issue1=$graph_issue"', graphStart);
+
+    expect(graphStart).toBeGreaterThanOrEqual(0);
+    expect(capacityCheck).toBeGreaterThan(graphStart);
+    expect(lease).toBeGreaterThan(capacityCheck);
+    expect(leaseVerify).toBeGreaterThan(lease);
+    expect(emit).toBeGreaterThan(leaseVerify);
+    expect(run).toContain('[[ "$lease" == *oc-running* && "$lease" != *oc-queued* ]]');
+  });
+
+  it("does not fall through to legacy queue selection after a valid graph selection", () => {
+    const prepare = workflow.jobs.prepare as WorkflowJob & { steps?: Array<{ name?: string; run?: string }> };
+    const queue = prepare.steps?.find((step) => step.name === "Fill available execution slots from priority portfolio");
+    const run = queue?.run ?? "";
+    const graphStart = run.indexOf('graph_issue="${{ steps.graph.outputs.graph_issue }}"');
+    const legacyStart = run.indexOf("priority_of ()", graphStart);
+    const graphBranch = run.slice(graphStart, legacyStart);
+
+    expect(graphBranch).toContain('if [[ -n "$graph_issue" ]]; then');
+    expect(graphBranch).toContain("exit 0");
+    expect(graphBranch).toContain('echo "issue1=" >> "$GITHUB_OUTPUT"');
+  });
+
   it("requires always() on every job downstream of an always() job", () => {
     // The general form of the defect: any job whose dependency chain contains a job
     // that is routinely skipped must defeat skip propagation itself.
