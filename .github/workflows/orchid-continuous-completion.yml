@@ -249,11 +249,40 @@ jobs:
       INTEGRATION_BRANCH: oc-autonomous-integration
       MAX_ACTIVE_LANES: 2
     steps:
+      - name: Bind queue to graph admission
+        id: graph
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          raw=$(npx tsx scripts/graphAdmission.ts)
+          echo "$raw"
+          issue=$(jq -r '.issueNumber // empty' <<<"$raw")
+          mode=$(jq -r '.mode // "blocked"' <<<"$raw")
+          echo "graph_issue=$issue" >> "$GITHUB_OUTPUT"
+          echo "graph_mode=$mode" >> "$GITHUB_OUTPUT"
+
       - name: Fill available execution slots from priority portfolio
         id: queue
         shell: bash
         run: |
           set -euo pipefail
+          graph_issue="${{ steps.graph.outputs.graph_issue }}"
+          if [[ -n "$graph_issue" ]]; then
+            labels=$(gh issue view "$graph_issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
+            if [[ "$labels" == *oc-queued* ]]; then
+              for idx in 0 1 2 3 4; do
+                if (( idx == 0 )); then
+                  echo "issue$((idx+1))=$graph_issue" >> "$GITHUB_OUTPUT"
+                else
+                  echo "issue$((idx+1))=" >> "$GITHUB_OUTPUT"
+                fi
+              done
+              exit 0
+            fi
+          fi
+
           now=$(date -u +%s)
           running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')
           capacity=$(( MAX_ACTIVE_LANES - running ))
