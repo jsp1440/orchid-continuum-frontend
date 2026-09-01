@@ -149,8 +149,10 @@ describe("autonomous completion lane dispatch", () => {
     const graphBranch = run.slice(graphStart, legacyStart);
 
     expect(graphBranch).toContain('if [[ -n "$graph_issue" ]]; then');
+    expect(graphBranch).toContain('for idx in 0 1 2 3 4; do');
+    expect(graphBranch).toContain('echo "issue$((idx+1))=" >> "$GITHUB_OUTPUT"');
+    expect(graphBranch).toContain('echo "issue1=$graph_issue" >> "$GITHUB_OUTPUT"');
     expect(graphBranch).toContain("exit 0");
-    expect(graphBranch).toContain('echo "issue1=" >> "$GITHUB_OUTPUT"');
   });
 
   it("requires always() on every job downstream of an always() job", () => {
