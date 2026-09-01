@@ -49,13 +49,18 @@ if (process.env.GITHUB_OUTPUT) {
   appendFileSync(process.env.GITHUB_OUTPUT, `kind=${kind}\n`);
 }
 
-if (process.env.GITHUB_STEP_SUMMARY && outcome !== 'success') {
-  const { appendFileSync } = await import('node:fs');
+if (outcome !== 'success') {
   const diagnostic = redactDiagnostic(stderr);
-  appendFileSync(
-    process.env.GITHUB_STEP_SUMMARY,
-    `### OpenAI runtime diagnostic\n\nclassification: \`${kind}\`\nexit: \`${exitCode || 'unknown'}\`\n\n\`\`\`text\n${diagnostic}\n\`\`\`\n`,
-  );
+  console.log('OpenAI redacted stderr diagnostic:');
+  console.log(diagnostic || '[no stderr]');
+
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const { appendFileSync } = await import('node:fs');
+    appendFileSync(
+      process.env.GITHUB_STEP_SUMMARY,
+      `### OpenAI runtime diagnostic\n\nclassification: \`${kind}\`\nexit: \`${exitCode || 'unknown'}\`\n\n\`\`\`text\n${diagnostic}\n\`\`\`\n`,
+    );
+  }
 }
 
 // Never print stdout: Codex stdout can contain prompt/model content and broad words such as
