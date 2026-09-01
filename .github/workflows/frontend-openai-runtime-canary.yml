@@ -35,10 +35,10 @@ jobs:
             exit 20
           fi
           set +e
-          npx -y @openai/codex@0.151.0 --version 2>> "$RUNNER_TEMP/openai-canary-stderr.log"
+          npx -y @openai/codex@0.148.0 --version 2>> "$RUNNER_TEMP/openai-canary-stderr.log"
           version_status=$?
           env -u GH_TOKEN OPENAI_API_KEY="$OPENAI_API_KEY" timeout 4m \
-            npx -y @openai/codex@0.151.0 --ask-for-approval never exec \
+            npx -y @openai/codex@0.148.0 --ask-for-approval never exec \
             --sandbox read-only --skip-git-repo-check --ephemeral -C "$GITHUB_WORKSPACE" \
             "Read package.json only. Make no edits and make no network calls from generated commands. Reply with exactly OC_OPENAI_CANARY_READY." \
             > "$RUNNER_TEMP/openai-canary-stdout.log" 2>> "$RUNNER_TEMP/openai-canary-stderr.log"
