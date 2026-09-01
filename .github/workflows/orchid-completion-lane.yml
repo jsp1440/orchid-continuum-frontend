@@ -145,8 +145,6 @@ jobs:
           kind=healthy
           fallback=false
           if [[ "$CLAUDE_OUTCOME" == "success" && "$log_present" != "true" ]]; then
-            # A green action conclusion without an SDK execution record is not
-            # provider success. Fail closed instead of requeueing a false no-op.
             kind=runtime_config
           elif [[ "$CLAUDE_OUTCOME" != "success" ]]; then
             if [[ "$normalized" == *"error_max_turns"* || "$normalized" == *"max_turns"* || "$normalized" == *"max turns"* || "$normalized" == *"maximum turns"* ]]; then
@@ -320,12 +318,21 @@ jobs:
           )
 
           git config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+          export CODEX_HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$CODEX_HOME"
           set +e
-          env -u GH_TOKEN OPENAI_API_KEY="$OPENAI_API_KEY" timeout 35m \
-            npx -y @openai/codex@latest --ask-for-approval never exec \
-            --sandbox workspace-write --skip-git-repo-check --ephemeral -C "$GITHUB_WORKSPACE" "$prompt" \
-            > "$RUNNER_TEMP/openai-stdout.log" 2> "$RUNNER_TEMP/openai-stderr.log"
-          status=$?
+          printf '%s\n' "$OPENAI_API_KEY" | npx -y @openai/codex@0.151.0 login --with-api-key \
+            > "$RUNNER_TEMP/openai-login.log" 2>> "$RUNNER_TEMP/openai-stderr.log"
+          login_status=$?
+          if [[ "$login_status" -eq 0 ]]; then
+            env -u GH_TOKEN OPENAI_API_KEY="$OPENAI_API_KEY" CODEX_HOME="$CODEX_HOME" timeout 35m \
+              npx -y @openai/codex@0.151.0 --ask-for-approval never exec \
+              --sandbox workspace-write --skip-git-repo-check --ephemeral -C "$GITHUB_WORKSPACE" "$prompt" \
+              > "$RUNNER_TEMP/openai-stdout.log" 2>> "$RUNNER_TEMP/openai-stderr.log"
+            status=$?
+          else
+            status=$login_status
+          fi
           set -e
           echo "$status" > "$RUNNER_TEMP/openai-exit.txt"
           gh auth setup-git >/dev/null
@@ -369,9 +376,9 @@ jobs:
           if [[ "$OPENAI_OUTCOME" != "success" ]]; then
             if [[ -f "$RUNNER_TEMP/openai-status.txt" ]] && grep -q 'config_missing' "$RUNNER_TEMP/openai-status.txt"; then
               kind=config
-            elif grep -Eqi '401|403|unauthor|forbidden|invalid.?api.?key|authentication|permission' "$RUNNER_TEMP/openai-stderr.log" "$RUNNER_TEMP/openai-stdout.log" 2>/dev/null; then
+            elif grep -Eqi '(^|[^0-9])(401|403)([^0-9]|$)|unauthori[sz]ed|invalid[_ .-]?api[_ .-]?key|authentication (failed|required)|missing scopes?:|insufficient permissions?.*(api|operation)|api\.responses\.write' "$RUNNER_TEMP/openai-stderr.log" 2>/dev/null; then
               kind=security
-            elif grep -Eqi '429|quota|rate.?limit|billing|credit|overloaded|service unavailable|temporarily unavailable|timeout|timed out|connection' "$RUNNER_TEMP/openai-stderr.log" "$RUNNER_TEMP/openai-stdout.log" 2>/dev/null || [[ "$(cat "$RUNNER_TEMP/openai-exit.txt" 2>/dev/null || true)" == "124" ]]; then
+            elif grep -Eqi '429|quota|rate.?limit|billing|credit|overloaded|service unavailable|temporarily unavailable|timeout|timed out|connection|websocket.*(reset|closed|failed)' "$RUNNER_TEMP/openai-stderr.log" 2>/dev/null || [[ "$(cat "$RUNNER_TEMP/openai-exit.txt" 2>/dev/null || true)" == "124" ]]; then
               kind=safe_provider
             else
               kind=unknown
