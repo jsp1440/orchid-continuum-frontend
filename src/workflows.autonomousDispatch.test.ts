@@ -114,6 +114,14 @@ describe("autonomous completion lane dispatch", () => {
     }
   });
 
+  it("binds the queue to the graph admission output before it falls back to the portfolio queue", () => {
+    const prepare = workflow.jobs.prepare as WorkflowJob & { steps?: Array<{ name?: string; run?: string }> };
+    const stepNames = prepare.steps?.map((step) => step.name ?? "") ?? [];
+    expect(stepNames).toContain("Bind queue to graph admission");
+    expect(prepare.steps?.some((step) => step.run?.includes("npx tsx scripts/graphAdmission.ts"))).toBe(true);
+    expect(prepare.steps?.some((step) => step.run?.includes("graph_issue"))).toBe(true);
+  });
+
   it("requires always() on every job downstream of an always() job", () => {
     // The general form of the defect: any job whose dependency chain contains a job
     // that is routinely skipped must defeat skip propagation itself.
