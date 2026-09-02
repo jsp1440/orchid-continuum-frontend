@@ -26,8 +26,8 @@ describe("continuous completion convergence guards", () => {
 
   it("suppresses unchanged durable issue/PR heads using a material fingerprint", () => {
     expect(scheduler).toContain("--json number,body,headRefOid");
-    expect(scheduler).toContain('contains(\\\"$marker\\\")');
-    expect(scheduler).not.toContain('contains(\\\\\"$marker\\\\\")');
+    expect(scheduler).toContain('contains(\\"$marker\\")');
+    expect(scheduler).not.toContain('contains(\\\\"$marker\\\\")');
     expect(scheduler).toContain('fingerprint="issue=${issue};pr=${durable_pr};head=${durable_sha};mode=repair"');
     expect(scheduler).toContain("[OC-AUTO-FINGERPRINT]");
     expect(scheduler).toContain("--add-label oc-runtime-backoff");
@@ -39,8 +39,8 @@ describe("continuous completion convergence guards", () => {
   });
 
   it("defensively refuses provider execution for an unchanged durable non-repair lineage", () => {
-    expect(lane).toContain('contains(\\\"${marker}\\\")');
-    expect(lane).not.toContain('contains(\\\\\"${marker}\\\\\")');
+    expect(lane).toContain('contains(\\"${marker}\\")');
+    expect(lane).not.toContain('contains(\\\\"${marker}\\\\")');
     expect(lane).toContain('if [[ "$labels" == *oc-running* && -n "$durable" && "$labels" != *oc-repair* ]]; then');
     expect(lane).toContain('echo "execute=false" >> "$GITHUB_OUTPUT"');
     expect(lane).toContain("--remove-label oc-running --remove-label oc-queued --add-label oc-validating");
