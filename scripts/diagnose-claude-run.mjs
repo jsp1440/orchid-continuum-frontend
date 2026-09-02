@@ -19,7 +19,7 @@
  * be mistaken for a product failure.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 
 const LOG_PATH =
   process.env.CLAUDE_EXECUTION_LOG ?? "/home/runner/work/_temp/claude-execution-output.json";
@@ -84,6 +84,17 @@ function keyShape() {
   return `present, well-formed, length ${key.length}`;
 }
 
+function reportCanaryHealth(healthy) {
+  if (process.env.GITHUB_OUTPUT) {
+    appendFileSync(process.env.GITHUB_OUTPUT, `healthy=${healthy}\n`, "utf8");
+  }
+}
+
+function failClosedCanary() {
+  reportCanaryHealth(false);
+  process.exitCode = 1;
+}
+
 function findResultRecord(parsed) {
   const records = Array.isArray(parsed) ? parsed : [parsed];
   // Last result record wins: a retried run appends rather than replacing.
@@ -142,6 +153,7 @@ function main() {
     console.log("::warning::claude run diagnosis: no execution log at " + LOG_PATH);
     console.log("Nothing to classify — the action may have failed before invoking the SDK.");
     console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    failClosedCanary();
     return;
   }
 
@@ -151,6 +163,7 @@ function main() {
   } catch {
     console.log("::warning::claude run diagnosis: execution log is not valid JSON");
     console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    failClosedCanary();
     return;
   }
 
@@ -158,6 +171,7 @@ function main() {
   if (!result) {
     console.log("::warning::claude run diagnosis: execution log contains no result record");
     console.log(`ANTHROPIC_API_KEY: ${keyShape()}`);
+    failClosedCanary();
     return;
   }
 
@@ -180,6 +194,7 @@ function main() {
 
   if (!isError) {
     console.log("verdict:            run completed without a reported error");
+    reportCanaryHealth(true);
     return;
   }
 
@@ -199,6 +214,10 @@ function main() {
 
   if (owner_action_required) {
     console.log(`::warning::Claude runtime blocked by an owner-only boundary: ${cause}. ${detail}`);
+  }
+  reportCanaryHealth(false);
+  if (!["ANTHROPIC_CREDIT_EXHAUSTED", "ANTHROPIC_RATE_LIMITED", "ANTHROPIC_PROVIDER_ERROR"].includes(cause)) {
+    process.exitCode = 1;
   }
 }
 

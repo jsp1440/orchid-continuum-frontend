@@ -1,3 +1,7 @@
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { classify, findResultRecord } from "../../scripts/diagnose-claude-run.mjs";
@@ -42,6 +46,60 @@ describe("claude run diagnosis", () => {
     expect(classify(429, "rate limit").owner_action_required).toBe(false);
     expect(classify(503, "overloaded").owner_action_required).toBe(false);
     expect(classify(401, "invalid x-api-key").owner_action_required).toBe(true);
+  });
+
+  it("keeps non-capacity provider failures fail-closed", () => {
+    expect(classify(401, "invalid x-api-key").cause).toBe("ANTHROPIC_AUTH_REJECTED");
+    expect(classify(403, "not permitted").cause).toBe("ANTHROPIC_PERMISSION_DENIED");
+    expect(classify(400, "malformed request").cause).toBe("UNCLASSIFIED_PROVIDER_ERROR");
+  });
+
+  it("reports degraded capacity without recovering parked work", () => {
+    const directory = mkdtempSync(join(tmpdir(), "claude-diagnosis-"));
+    const executionLog = join(directory, "execution.json");
+    const output = join(directory, "output.txt");
+    writeFileSync(
+      executionLog,
+      JSON.stringify({
+        type: "result",
+        is_error: true,
+        api_error_status: 400,
+        result: "Credit balance is too low",
+      }),
+    );
+
+    try {
+      execFileSync(process.execPath, ["scripts/diagnose-claude-run.mjs"], {
+        cwd: process.cwd(),
+        env: { ...process.env, CLAUDE_EXECUTION_LOG: executionLog, GITHUB_OUTPUT: output },
+      });
+      expect(readFileSync(output, "utf8")).toBe("healthy=false\n");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("fails closed for authentication errors", () => {
+    const directory = mkdtempSync(join(tmpdir(), "claude-diagnosis-"));
+    const executionLog = join(directory, "execution.json");
+    const output = join(directory, "output.txt");
+    writeFileSync(
+      executionLog,
+      JSON.stringify({ type: "result", is_error: true, api_error_status: 401, result: "invalid x-api-key" }),
+    );
+
+    try {
+      expect(() =>
+        execFileSync(process.execPath, ["scripts/diagnose-claude-run.mjs"], {
+          cwd: process.cwd(),
+          env: { ...process.env, CLAUDE_EXECUTION_LOG: executionLog, GITHUB_OUTPUT: output },
+          stdio: "pipe",
+        }),
+      ).toThrow();
+      expect(readFileSync(output, "utf8")).toBe("healthy=false\n");
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 
   it("refuses to invent a provider outage when no API error was reported", () => {
