@@ -204,6 +204,7 @@ jobs:
           fetch-depth: 0
 
       - name: Generate only the next missing bounded work items
+        continue-on-error: true
         uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -234,6 +235,11 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: node scripts/diagnose-claude-run.mjs
+
+      - name: Enforce planner provider failure policy
+        if: always()
+        run: node scripts/enforce-planner-provider-policy.mjs
+
   prepare:
     needs: [inventory, planner]
     if: always() && needs.inventory.result == 'success'
