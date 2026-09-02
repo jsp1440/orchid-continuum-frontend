@@ -40,7 +40,7 @@ jobs:
           set -euo pipefail
           labels=$(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
           marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          durable=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"${marker}\")))][0].number // empty" 2>/dev/null || true)
+          durable=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 500 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"${marker}\")))][0].number // empty" 2>/dev/null || true)
           if [[ "$labels" == *oc-running* && -n "$durable" && "$labels" != *oc-repair* ]]; then
             echo "execute=false" >> "$GITHUB_OUTPUT"
             gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
@@ -76,7 +76,7 @@ jobs:
         run: |
           set -euo pipefail
           marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 500 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
           pr=${pr%%$'\n'*}
           if [[ -n "$pr" ]]; then
             branch=$(gh pr view "$pr" --repo "$GITHUB_REPOSITORY" --json headRefName --jq '.headRefName')
@@ -393,7 +393,7 @@ jobs:
         run: |
           set -euo pipefail
           marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
+          pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 500 --json number,body --jq ".[] | select(.body != null and (.body | contains(\"$marker\"))) | .number" || true)
           pr=${pr%%$'\n'*}
 
           gh label create oc-runtime-backoff --repo "$GITHUB_REPOSITORY" --color 6e7781 --description "Worker parked after provider-chain failure; retry only after recovery evidence" 2>/dev/null || true
