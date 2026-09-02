@@ -30,6 +30,9 @@ describe("continuous completion convergence guards", () => {
     expect(scheduler).toContain('contains(\\"$marker\\")');
     expect(scheduler).not.toContain('contains(\\\\"$marker\\\\")');
     expect(scheduler).toContain('fingerprint="issue=${issue};pr=${durable_pr};head=${durable_sha};mode=repair"');
+    expect(scheduler).toContain('gh api --paginate "repos/$REPO/issues/$issue/comments?per_page=100"');
+    expect(scheduler).toContain('grep -Fqx "[OC-AUTO-FINGERPRINT] ${fingerprint}"');
+    expect(scheduler).not.toContain("--jq --arg fp");
     expect(scheduler).toContain("[OC-AUTO-FINGERPRINT]");
     expect(scheduler).toContain("--add-label oc-runtime-backoff");
   });
