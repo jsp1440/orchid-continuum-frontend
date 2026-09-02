@@ -304,13 +304,13 @@ jobs:
             [[ "$labels" == *oc-repair* ]] && repair=true
             marker="OC-AUTO-ISSUE: #${issue}"
             durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body,headRefOid --jq "[.[] | select(.body != null and (.body | contains(\\"$marker\\")))][0] // empty" || true)
+            if [[ -n "$durable" && "$repair" != true ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --add-label oc-validating >/dev/null 2>&1 || true
+              continue
+            fi
             if [[ -n "$durable" ]]; then
               durable_pr=$(jq -r '.number' <<<"$durable")
               durable_sha=$(jq -r '.headRefOid' <<<"$durable")
-              if [[ "$repair" != true ]]; then
-                gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --add-label oc-validating >/dev/null 2>&1 || true
-                continue
-              fi
               fingerprint="issue=${issue};pr=${durable_pr};head=${durable_sha};mode=repair"
               seen=$(gh issue view "$issue" --repo "$REPO" --json comments --jq --arg fp "[OC-AUTO-FINGERPRINT] ${fingerprint}" 'any(.comments[]?; (.body // "") | contains($fp))' 2>/dev/null || echo false)
               if [[ "$seen" == true ]]; then
