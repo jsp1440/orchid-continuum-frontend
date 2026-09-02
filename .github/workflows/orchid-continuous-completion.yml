@@ -111,6 +111,10 @@ jobs:
 
             labels=$(gh issue view "$issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
             [[ -n "$labels" ]] || continue
+            if [[ "$labels" == *oc-runtime-backoff* ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --remove-label oc-repair --remove-label oc-validating >/dev/null 2>&1 || true
+              continue
+            fi
             [[ "$labels" == *oc-running* ]] && continue
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
 
@@ -174,6 +178,10 @@ jobs:
           for issue in "${repairs[@]:-}"; do
             [[ -n "$issue" ]] || continue
             labels=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null || true)
+            if [[ "$labels" == *oc-runtime-backoff* ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --remove-label oc-repair --remove-label oc-validating >/dev/null 2>&1 || true
+              continue
+            fi
             if [[ "$labels" == *oc-repair* && "$labels" != *oc-running* && "$labels" != *oc-queued* ]]; then
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
             fi
