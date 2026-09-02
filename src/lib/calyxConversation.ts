@@ -5,6 +5,8 @@ import {
   CLASSROOM_INVESTIGATION_ORIGIN,
   classroomCalyxTurnRouteContext,
 } from "@/lib/classroomInvestigationNavigation";
+import { activeCultivationHandoff } from "@/lib/conservatoryCultivationCalyx";
+import { governedCalyxGenusTurnContext } from "@/lib/calyxRouteTrustBoundary";
 import { speciesDossierCalyxTurnRouteContext } from "@/lib/speciesDossierCalyxNavigation";
 import type { CalyxCitation, CalyxConversation } from "@/lib/calyxWorkspace";
 
@@ -358,13 +360,19 @@ export function buildCalyxTurnContext(options: {
   // from generic query parameters here.
   const dossierRouteContext = speciesDossierCalyxTurnRouteContext(routeSearch);
   const classroomRouteContext = classroomCalyxTurnRouteContext(routeSearch);
+  // A grower asking about their own plant. The observations were adopted by the
+  // Calyx route out of single-use storage; they are never in the address.
+  const cultivationRouteContext = activeCultivationHandoff(routeSearch);
+  const governedGenusRouteContext = governedCalyxGenusTurnContext(routeSearch);
 
   const routeContext = parseCalyxRouteContext(routeSearch);
   const researchTaxon = parseResearchExactTaxon(routeSearch, routeContext.origin);
   const invalidClassroomArrival =
     routeContext.origin === CLASSROOM_INVESTIGATION_ORIGIN && !classroomRouteContext;
 
-  if (dossierRouteContext) {
+  if (cultivationRouteContext) {
+    context.route_context = cultivationRouteContext;
+  } else if (dossierRouteContext) {
     context.route_context = dossierRouteContext;
   } else if (classroomRouteContext) {
     context.route_context = {
@@ -377,7 +385,10 @@ export function buildCalyxTurnContext(options: {
           }
         : {}),
     };
+  } else if (governedGenusRouteContext) {
+    context.route_context = governedGenusRouteContext;
   } else if (
+    governedGenusRouteContext === undefined &&
     !invalidClassroomArrival &&
     (routeContext.origin || routeContext.featuredTaxon || routeContext.questionContext || researchTaxon)
   ) {

@@ -4,6 +4,7 @@ export const SPECIES_DOSSIER_RESEARCH_PATH = '/research';
 const MAX_TAXON_CONTEXT_TEXT = 160;
 const UNSAFE_CONTEXT_PUNCTUATION = /[<>{}\\]/;
 const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
+const SAFE_BINOMIAL = /^[A-Z][A-Za-z-]+\s+[a-z][A-Za-z-]+$/;
 
 export interface SpeciesDossierResearchContext {
   origin: typeof SPECIES_DOSSIER_RESEARCH_ORIGIN;
@@ -21,13 +22,14 @@ function hasControlCharacter(value: string): boolean {
   });
 }
 
-function boundedTaxonText(value: string | null | undefined): string | null {
+function boundedSpecies(value: string | null | undefined): string | null {
   const text = value?.trim();
   if (
     !text ||
     text.length > MAX_TAXON_CONTEXT_TEXT ||
     hasControlCharacter(text) ||
-    UNSAFE_CONTEXT_PUNCTUATION.test(text)
+    UNSAFE_CONTEXT_PUNCTUATION.test(text) ||
+    !SAFE_BINOMIAL.test(text)
   ) {
     return null;
   }
@@ -40,6 +42,10 @@ function boundedGenus(value: string | null | undefined): string | null {
   return genus;
 }
 
+function supplied(value: string | null | undefined): boolean {
+  return value !== null && value !== undefined;
+}
+
 /**
  * Build the Species Dossier → Research Station handoff.
  *
@@ -47,12 +53,16 @@ function boundedGenus(value: string | null | undefined): string | null {
  * Research and has to type the organism in again, which is where subject
  * identity was being lost across the journey.
  *
- * Deliberately narrow. Genus drives the Research query builder, and the
- * accepted binomial rides along so Research can name the subject it inherited
- * rather than re-deriving it. Nothing else crosses: there is no parameter here
- * through which an occurrence id, coordinate, locality, collector, catalogue
- * number, site, grid, GPS value or elevation could travel, and the dossier's
- * evidence receipts stay in the dossier.
+ * Deliberately narrow. Genus drives the Research query builder, and a supplied
+ * accepted binomial must itself be canonical and agree with that genus. An
+ * explicitly malformed or mismatched species fails the whole handoff closed
+ * rather than silently widening a species dossier into a genus-only session.
+ * A genuinely genus-only caller may still omit `taxon` entirely.
+ *
+ * Nothing else crosses: there is no parameter here through which an occurrence
+ * id, coordinate, locality, collector, catalogue number, site, grid, GPS value
+ * or elevation could travel, and the dossier's evidence receipts stay in the
+ * dossier.
  *
  * The subject is navigation context. A dossier handoff says "this is what the
  * visitor was looking at", never "this is an evidenced finding about the
@@ -66,7 +76,8 @@ export function speciesDossierResearchHref(input: {
   const genus = boundedGenus(input.genus);
   if (!genus) return null;
 
-  const taxon = boundedTaxonText(input.taxon);
+  const taxon = boundedSpecies(input.taxon);
+  if (supplied(input.taxon) && (!taxon || !taxon.startsWith(`${genus} `))) return null;
 
   const params = new URLSearchParams();
   params.set('genus', genus);
@@ -89,10 +100,14 @@ export function parseSpeciesDossierResearchContext(
   const genus = boundedGenus(params.get('genus'));
   if (!genus) return null;
 
+  const rawTaxon = params.get('taxon');
+  const taxon = boundedSpecies(rawTaxon);
+  if (rawTaxon !== null && (!taxon || !taxon.startsWith(`${genus} `))) return null;
+
   return {
     origin: SPECIES_DOSSIER_RESEARCH_ORIGIN,
     genus,
-    taxon: boundedTaxonText(params.get('taxon')),
+    taxon,
     contextIsEvidence: false,
   };
 }

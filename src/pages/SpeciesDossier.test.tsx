@@ -473,3 +473,86 @@ describe('no regression to existing SpeciesDossier behavior', () => {
     expect(container.textContent).toContain('Not yet assessed in the Continuum record.');
   });
 });
+
+describe('Species Dossier → Atlas mounted continuity', () => {
+  function atlasLink(): HTMLAnchorElement | null {
+    return container.querySelector<HTMLAnchorElement>('a[href^="/atlas?species="]');
+  }
+
+  it('routes the View on Atlas action through the canonical identity resolver, not a hand-built query', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'cattleya-labiata',
+      canonical_name: 'Cattleya labiata',
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+
+    renderPage();
+    await flush();
+
+    const link = atlasLink();
+    expect(link).toBeTruthy();
+    // Exactly the bounded canonical binomial, URL-encoded, and nothing else.
+    expect(link?.getAttribute('href')).toBe('/atlas?species=Cattleya+labiata');
+    expect(link?.textContent).toContain('View on Atlas');
+  });
+
+  it('prefers the dossier accepted name over the ocBackend canonical name for the Atlas subject', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'cattleya-labiata',
+      canonical_name: 'Cattleya percivaliana',
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        identity: {
+          ...dossier().identity,
+          accepted_name: 'Cattleya labiata',
+        },
+      }),
+    );
+
+    renderPage();
+    await flush();
+
+    expect(atlasLink()?.getAttribute('href')).toBe('/atlas?species=Cattleya+labiata');
+  });
+
+  it('fails closed: hides the Atlas action when only an opaque route id is available', async () => {
+    // No canonical_name / scientific_name from ocBackend, and the dossier fetch
+    // fails, so the only thing identifying the record is the opaque route slug.
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'cattleya-labiata',
+    });
+    mocks.fetchSpeciesDossier.mockRejectedValue(new Error('503'));
+
+    renderPage();
+    await flush();
+
+    // The rest of the page still renders, but the Atlas action must be absent
+    // rather than leaking the route id into an Atlas search.
+    expect(atlasLink()).toBeNull();
+    expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
+  });
+
+  it('fails closed when the authoritative identity field is malformed instead of widening it', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'cattleya-labiata',
+      canonical_name: 'Cattleya labiata',
+    });
+    // Accepted name is supplied first but malformed (an opaque route fragment);
+    // the resolver must fail closed rather than skip down to the clean canonical.
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        identity: {
+          ...dossier().identity,
+          accepted_name: '/species/opaque-route-id',
+          full_scientific_name: '/species/opaque-route-id',
+        },
+      }),
+    );
+
+    renderPage();
+    await flush();
+
+    expect(atlasLink()).toBeNull();
+  });
+});

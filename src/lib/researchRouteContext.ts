@@ -1,4 +1,5 @@
 import { ATLAS_WORKSPACE_ORIGIN, FEATURED_TAXON_ORIGIN } from '@/lib/featuredTaxonNavigation';
+import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { MATRIX_RESEARCH_ORIGIN, parseMatrixResearchContext } from '@/lib/matrixResearchNavigation';
 import {
@@ -14,7 +15,8 @@ const SAFE_PROJECT = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 type LegacyResearchRouteOrigin =
   | typeof FEATURED_TAXON_ORIGIN
   | typeof ATLAS_NEXT_RESEARCH_ORIGIN
-  | typeof ATLAS_WORKSPACE_ORIGIN;
+  | typeof ATLAS_WORKSPACE_ORIGIN
+  | typeof GENUS_PROFILE_ORIGIN;
 export type ResearchRouteOrigin =
   | LegacyResearchRouteOrigin
   | typeof MATRIX_RESEARCH_ORIGIN
@@ -71,8 +73,11 @@ function boundedProject(value: string | null): string | null {
  * occurrence/catalogue identifiers, collector/site/grid/GPS/elevation data,
  * and all other route material are ignored at this module boundary.
  *
- * Legacy Atlas and featured-taxon callers retain their exact historical object
- * shape; Matrix-only fields are present only on the Matrix discriminant.
+ * Homepage Featured Taxon, Atlas and Genus Profile arrivals must explicitly
+ * retain the non-evidence declaration made by their producers or fail closed.
+ * If a caller explicitly supplies persisted-project identity, malformed project
+ * context fails the entire arrival instead of silently widening it to a
+ * genus-only research session.
  */
 export function parseResearchRouteContext(search: string | URLSearchParams): ResearchRouteContext | null {
   const params = typeof search === 'string' ? new URLSearchParams(search) : search;
@@ -103,7 +108,8 @@ export function parseResearchRouteContext(search: string | URLSearchParams): Res
   if (
     origin !== FEATURED_TAXON_ORIGIN &&
     origin !== ATLAS_NEXT_RESEARCH_ORIGIN &&
-    origin !== ATLAS_WORKSPACE_ORIGIN
+    origin !== ATLAS_WORKSPACE_ORIGIN &&
+    origin !== GENUS_PROFILE_ORIGIN
   ) {
     return null;
   }
@@ -113,16 +119,23 @@ export function parseResearchRouteContext(search: string | URLSearchParams): Res
 
   const evidenceFlag = params.get('context_is_evidence');
   if (
-    (origin === ATLAS_NEXT_RESEARCH_ORIGIN || origin === ATLAS_WORKSPACE_ORIGIN) &&
+    (origin === FEATURED_TAXON_ORIGIN ||
+      origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
+      origin === ATLAS_WORKSPACE_ORIGIN ||
+      origin === GENUS_PROFILE_ORIGIN) &&
     evidenceFlag !== 'false'
   ) {
     return null;
   }
 
+  const hasExplicitProject = params.has('project');
+  const projectId = boundedProject(params.get('project'));
+  if (hasExplicitProject && !projectId) return null;
+
   return {
     origin,
     genus,
-    projectId: boundedProject(params.get('project')),
+    projectId,
     contextIsEvidence: false,
   };
 }

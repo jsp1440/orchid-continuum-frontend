@@ -347,10 +347,12 @@ describe("canonical scientific journey (Phalaenopsis)", () => {
   });
 
   it("never promotes the carried question or research identity into evidence", () => {
-    // The two non-evidentiary boundaries, asserted together on one turn: a
-    // question arriving from Atlas and a taxon arriving from the Research
-    // Station must both remain interaction context on the same context object.
-    const search = new URLSearchParams({
+    // Question context and exact-taxon identity are each origin-bound to their
+    // own producer. No producer combines a user question with the Research
+    // Station origin, and the governed boundary now fails such a synthetic
+    // arrival closed rather than letting a question ride in under the wrong
+    // origin — so nothing is carried at all, let alone promoted to evidence.
+    const smuggled = new URLSearchParams({
       genus: CANONICAL_GENUS,
       taxon: CANONICAL_TAXON,
       project: PROJECT_ID,
@@ -359,23 +361,32 @@ describe("canonical scientific journey (Phalaenopsis)", () => {
       question_source: "user",
       question_is_evidence: "false",
     }).toString();
+    const smuggledContext = buildCalyxTurnContext({
+      projectId: PROJECT_ID,
+      uploadedFiles: [],
+      routeSearch: `?${smuggled}`,
+    });
+    expect(smuggledContext).not.toHaveProperty("route_context");
 
+    // The legitimate Research Station journey carries the exact taxon as
+    // explicit non-evidence interaction context — the flag is never absent, and
+    // nothing in the turn asserts that the carried identity is evidence.
+    const research = new URLSearchParams({
+      genus: CANONICAL_GENUS,
+      taxon: CANONICAL_TAXON,
+      origin: RESEARCH_STATION_ORIGIN,
+    }).toString();
     const context = buildCalyxTurnContext({
       projectId: PROJECT_ID,
       uploadedFiles: [],
-      routeSearch: `?${search}`,
+      routeSearch: `?${research}`,
     });
     const routeContext = (context as { route_context: Record<string, unknown> }).route_context;
 
-    expect(routeContext.question).toBe(CARRIED_QUESTION);
-    expect(routeContext.question_is_evidence).toBe(false);
     expect(routeContext.taxon).toBe(CANONICAL_TAXON);
     expect(routeContext.taxon_is_evidence).toBe(false);
-
-    // Neither boundary field may be absent: a missing flag reads as unclaimed,
-    // and unclaimed is how interaction context quietly becomes evidence.
     expect(Object.keys(routeContext)).toEqual(
-      expect.arrayContaining(["question_is_evidence", "taxon_is_evidence"]),
+      expect.arrayContaining(["taxon_is_evidence"]),
     );
 
     // Nothing in the turn asserts that any carried context is evidence.

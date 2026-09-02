@@ -30,8 +30,7 @@ import {
   type EvidenceState,
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
-import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
-import { speciesDossierCalyxHref } from '@/lib/speciesDossierCalyxNavigation';
+import { speciesDossierContinuumActions } from '@/lib/speciesDossierContinuumNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -134,25 +133,19 @@ const SpeciesDossier: React.FC = () => {
     decodeURIComponent(taxonomyId);
 
   const image = data?.hero_image_url || data?.representative_image_url || null;
-  const atlasQuery = encodeURIComponent(
-    data?.canonical_name || data?.scientific_name || taxonomyId,
-  );
-  // Into Research on the dossier's own subject, so the visitor does not have to
-  // retype the organism they are already looking at. Genus drives the query
-  // builder; the accepted binomial rides along as context only.
-  const researchHref = speciesDossierResearchHref({
-    genus: dossier?.identity.genus ?? data?.genus,
-    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
+  // Resolve one governed canonical species identity for every public
+  // continuation. Atlas, Research, and Calyx therefore either receive the same
+  // exact subject or all fail closed; none may widen an opaque route/taxonomy
+  // id or independently choose a different identity fallback.
+  const continuumActions = speciesDossierContinuumActions({
+    acceptedName: dossier?.identity.accepted_name,
+    fullScientificName: dossier?.identity.full_scientific_name,
+    canonicalName: data?.canonical_name,
+    scientificName: data?.scientific_name,
   });
-
-  // Straight into Calyx on this exact species. The producer fails closed unless
-  // it gets a bounded binomial that agrees with the genus, so a dossier whose
-  // identity is incomplete simply does not offer the action rather than opening
-  // a conversation about the wrong organism.
-  const calyxHref = speciesDossierCalyxHref({
-    genus: dossier?.identity.genus ?? data?.genus,
-    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
-  });
+  const atlasHref = continuumActions?.atlas ?? null;
+  const researchHref = continuumActions?.research ?? null;
+  const calyxHref = continuumActions?.calyx ?? null;
 
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
@@ -211,12 +204,14 @@ const SpeciesDossier: React.FC = () => {
                   )}
                 </div>
 
-                <Link
-                  to={`/atlas?species=${atlasQuery}`}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
-                >
-                  <MapIcon className="h-4 w-4" /> View on Atlas
-                </Link>
+                {atlasHref && (
+                  <Link
+                    to={atlasHref}
+                    className="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
+                  >
+                    <MapIcon className="h-4 w-4" /> View on Atlas
+                  </Link>
+                )}
                 {researchHref && (
                   <Link
                     to={researchHref}

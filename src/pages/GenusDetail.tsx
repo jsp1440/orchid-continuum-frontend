@@ -33,7 +33,12 @@ import {
   type EcologicalEvidence,
 } from '@/lib/genusProfileDataQuality';
 import { fetchGenusGraphEvidence, type GenusGraphResult } from '@/lib/knowledgeGraph';
-import { genusProfileAtlasHref } from '@/lib/genusProfileNavigation';
+import {
+  genusProfileAtlasHref,
+  genusProfileCalyxHref,
+  genusProfileResearchHref,
+  genusProfileSpeciesHref,
+} from '@/lib/genusProfileNavigation';
 import {
   lookupGenus,
   fetchGenusImagesWithSource,
@@ -60,6 +65,9 @@ import {
 
 const PLATFORM_LINKS = (genus: string): { label: string; to: string }[] => [
   { label: 'Atlas', to: genusProfileAtlasHref(genus) },
+  { label: 'Ask Calyx', to: genusProfileCalyxHref(genus) },
+  { label: 'Research', to: genusProfileResearchHref(genus) },
+  { label: 'Species', to: genusProfileSpeciesHref(genus) },
   { label: 'Conservatory', to: '/zoo' },
   { label: 'Field Station', to: '/ecosystems' },
   { label: 'Deception Lab', to: '/pollinators' },
@@ -442,7 +450,7 @@ const GenusDetail: React.FC = () => {
     });
 
     return representative.filter((plate) => {
-      // Skip plates whose every candidate image URL failed to load.
+      // Skip plates whose every candidate image failed to load.
       if (failedSpecies.has(plate.entry.species)) return false;
       // Once images have loaded, skip plates with NO candidate image left.
       if (!imagesLoading && plate.urls.length === 0) return false;
@@ -796,7 +804,7 @@ const GenusDetail: React.FC = () => {
 
             <div className="mt-8">
               <Link
-                to={`/species?genus=${encodeURIComponent(entry.genus)}`}
+                to={genusProfileSpeciesHref(entry.genus)}
                 className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#c9a24a] text-[#1a2e1a] font-mono text-[11px] tracking-[0.22em] uppercase hover:bg-[#d8b35a]"
               >
                 See all {entry.genus} species <ArrowRight className="h-4 w-4" />

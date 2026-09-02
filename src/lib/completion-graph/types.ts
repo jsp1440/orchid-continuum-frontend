@@ -77,6 +77,8 @@ export type CompletionNode = {
   status: CompletionStatus;
   threeLevels: ThreeLevelsOfDone;
   lane?: ExecutionLane;
+  dependsOn?: string[];
+  securityGate?: boolean;
   /** Only meaningful when this node has been directly scored (see AcceptanceGateScores contract). */
   gateScores?: AcceptanceGateScores;
   evidence: Evidence[];

@@ -13,15 +13,15 @@ const conclusion: MissionConclusion = {
 
 function governedMission(): BrainMission {
   return {
-    mission_id: "naocc-phalaenopsis-mission",
-    project_id: "naocc-phalaenopsis",
+    mission_id: "continuum-phalaenopsis-mission",
+    project_id: "continuum-phalaenopsis",
     question: "What governed evidence supports this ecological interpretation of Phalaenopsis amabilis?",
     state: "AWAITING_HUMAN_REVIEW",
     current_stage: "eligible_for_publication_state",
     steps_executed: 10,
     sources: [
       {
-        result_id: "naocc-source-1",
+        result_id: "continuum-source-1",
         title: "Governed Phalaenopsis evidence",
         object_type: "literature",
         authorized_excerpt: "The reviewed source span supports the bounded ecological claim.",
@@ -46,7 +46,7 @@ function governedMission(): BrainMission {
     missing_evidence: [],
     confidence: 0.8,
     conclusions: [conclusion],
-    reasoning_ledger: { ledger_id: "naocc-ledger-1", version: 1 },
+    reasoning_ledger: { ledger_id: "continuum-ledger-1", version: 1 },
     validation: { valid: true, blockers: [] },
     review_status: "HUMAN_REVIEW_REQUIRED",
     publication_eligibility: {
@@ -78,11 +78,11 @@ function governedMission(): BrainMission {
   } as BrainMission;
 }
 
-describe("NAOCC governed verification continuity", () => {
+describe("governed Continuum verification continuity", () => {
   it("keeps Research identity non-evidentiary while Check Calyx audits only governed evidence", () => {
     const href = researchStationCalyxHref({
       taxon: "Phalaenopsis amabilis",
-      projectId: "naocc-phalaenopsis",
+      projectId: "continuum-phalaenopsis",
       conversationId: "conversation-phalaenopsis",
     });
     const calyxUrl = new URL(href, "https://orchidcontinuum.org");
@@ -93,7 +93,7 @@ describe("NAOCC governed verification continuity", () => {
       routeSearch: calyxUrl.search,
     });
 
-    expect(turnContext.project_id).toBe("naocc-phalaenopsis");
+    expect(turnContext.project_id).toBe("continuum-phalaenopsis");
     expect(turnContext.route_context).toMatchObject({
       origin: "research-station",
       featured_taxon: { rank: "genus", accepted_name: "Phalaenopsis" },
@@ -116,8 +116,8 @@ describe("NAOCC governed verification continuity", () => {
       contentHash: "b".repeat(64),
     });
     expect(verification.provenance).toMatchObject({
-      missionId: "naocc-phalaenopsis-mission",
-      reasoningLedgerId: "naocc-ledger-1",
+      missionId: "continuum-phalaenopsis-mission",
+      reasoningLedgerId: "continuum-ledger-1",
       reasoningLedgerVersion: 1,
       publicationEligible: false,
       automaticPublication: false,

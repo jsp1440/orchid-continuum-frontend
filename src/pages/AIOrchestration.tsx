@@ -1,74 +1,50 @@
-import React, { useMemo, useState } from 'react';
-import { Bot, Brain, Clipboard, Download, FileArchive, GitPullRequest, Network, Search, ShieldCheck, Sparkles } from 'lucide-react';
-import Navbar from '@/components/orchid/Navbar';
-import Footer from '@/components/orchid/Footer';
+import React, { useMemo, useState } from "react";
+import { Brain, Network, Route, ShieldCheck, Sparkles } from "lucide-react";
+import Navbar from "@/components/orchid/Navbar";
+import Footer from "@/components/orchid/Footer";
+import {
+  planSpecialistCouncil,
+  SPECIALIST_COUNCIL,
+  type MissionKind,
+} from "@/lib/specialistCouncil";
 
-type AgentRole = {
-  name: string;
-  role: string;
-  output: string;
-  guardrail: string;
-};
-
-const agents: AgentRole[] = [
-  {
-    name: 'Claude',
-    role: 'Implementation engineer',
-    output: 'GitHub branch, code changes, PR, build report, deployment note',
-    guardrail: 'Code first; do not invent architecture or fake data.',
-  },
-  {
-    name: 'Perplexity',
-    role: 'Research analyst',
-    output: 'Downloadable Markdown research report with citations and examples',
-    guardrail: 'Research orchids explicitly; return one complete file, not fragmented cards.',
-  },
-  {
-    name: 'Kimi',
-    role: 'Independent reviewer',
-    output: 'Downloadable Markdown review with blockers, fixes, and merge recommendation',
-    guardrail: 'Audit data-source integrity, SQL, architecture, and regressions.',
-  },
-  {
-    name: 'ChatGPT / Calyx',
-    role: 'Chief architect and orchestrator',
-    output: 'Backlog updates, integration decisions, prompt templates, final deployment guidance',
-    guardrail: 'Keep work aligned with OCCC, OCOS, provenance, and the master tracker.',
-  },
+const missionKinds: MissionKind[] = [
+  "taxonomy",
+  "species-profile",
+  "trait-analysis",
+  "research",
+  "analysis",
+  "conservation",
+  "lesson",
+  "interface",
+  "harvest",
+  "data-quality",
 ];
-
-const taskTemplates = [
-  {
-    title: 'Featured Genus backend rebuild',
-    assignee: 'Claude',
-    summary: 'Rebuild the Featured Genus data endpoint from Orchid Continuum tables only. No iNaturalist fallback.',
-  },
-  {
-    title: 'Orchid genus experience research',
-    assignee: 'Perplexity',
-    summary: 'Research orchid-specific genus pages, pollinator/fungi storytelling, atlas previews, and public-vs-research UX.',
-  },
-  {
-    title: 'BUILD PR review',
-    assignee: 'Kimi',
-    summary: 'Review the pull request for data-source integrity, regressions, SQL assumptions, and merge safety.',
-  },
-];
-
-const protocol = `# Orchid Continuum AI Collaboration Protocol\n\nAll AI work supports the Orchid Continuum: an orchid biodiversity, conservation, education, and scientific cognition platform.\n\nRules:\n- Produce downloadable Markdown files for substantial work.\n- Do not leave important output trapped in chat cards or fragmented tables.\n- Preserve provenance.\n- Do not fabricate live data.\n- Use Orchid Continuum sources before external fallbacks.\n- Update the tracker and build documentation.\n- State blockers honestly.\n\nRoles:\n- Claude implements.\n- Perplexity researches.\n- Kimi reviews.\n- ChatGPT/Calyx integrates and prioritizes.\n`;
 
 const AIOrchestration: React.FC = () => {
-  const [copied, setCopied] = useState<string | null>(null);
-  const downloadUrl = useMemo(() => {
-    const blob = new Blob([protocol], { type: 'text/markdown' });
-    return URL.createObjectURL(blob);
-  }, []);
+  const [kind, setKind] = useState<MissionKind>("trait-analysis");
+  const [scientific, setScientific] = useState(true);
+  const [publicationCandidate, setPublicationCandidate] = useState(false);
+  const [needsQuantitativeAnalysis, setNeedsQuantitativeAnalysis] = useState(true);
+  const [needsConservationAssessment, setNeedsConservationAssessment] = useState(false);
 
-  const copy = async (label: string, text: string) => {
-    await navigator.clipboard.writeText(text);
-    setCopied(label);
-    window.setTimeout(() => setCopied(null), 1800);
-  };
+  const activation = useMemo(
+    () =>
+      planSpecialistCouncil({
+        kind,
+        scientific,
+        publicationCandidate,
+        needsQuantitativeAnalysis,
+        needsConservationAssessment,
+      }),
+    [kind, scientific, publicationCandidate, needsQuantitativeAnalysis, needsConservationAssessment],
+  );
+
+  const activeIds = new Set([
+    activation.coordinator,
+    ...activation.specialists,
+    ...(activation.reviewer ? [activation.reviewer] : []),
+  ]);
 
   return (
     <div className="min-h-screen bg-[#07140d] text-[#f5f0e8]">
@@ -77,67 +53,94 @@ const AIOrchestration: React.FC = () => {
         <section className="border-b border-white/[0.08] bg-[#0a170f]">
           <div className="mx-auto max-w-[1400px] px-6 py-12 lg:px-10">
             <div className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/35 bg-[#d4b34a]/10 px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-              <Network className="h-3.5 w-3.5" /> BUILD-041 · AI Orchestration
+              <Network className="h-3.5 w-3.5" /> Specialist Council v1
             </div>
-            <h1 className="mt-5 max-w-5xl text-4xl leading-tight md:text-6xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>
-              Stop making Jeff the router.
+            <h1 className="mt-5 max-w-5xl text-4xl leading-tight md:text-6xl" style={{ fontFamily: "Playfair Display, Georgia, serif" }}>
+              Calyx routes the mission.
             </h1>
             <p className="mt-4 max-w-3xl text-[16px] leading-7 text-[#cfc8b8]/88">
-              Mission Control now has a first orchestration workspace for coordinating Claude, Perplexity, Kimi, ChatGPT, and Calyx through one protocol, one tracker, and one file-output standard.
+              One durable council now unifies the Continuum&apos;s scientific, educational, design, data, and review roles. Provider tools execute work; they no longer define the architecture.
             </p>
           </div>
         </section>
 
         <section className="mx-auto max-w-[1400px] px-6 py-8 lg:px-10">
-          <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+          <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
             <article className="rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5 lg:p-6">
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                <Brain className="h-4 w-4" /> Agent roles
+                <Route className="h-4 w-4" /> Mission router
               </div>
-              <div className="mt-5 grid gap-3 md:grid-cols-2">
-                {agents.map((agent) => (
-                  <div key={agent.name} className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <h2 className="text-2xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{agent.name}</h2>
-                      <Bot className="h-5 w-5 text-[#d4b34a]" />
-                    </div>
-                    <div className="mt-2 font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-300">{agent.role}</div>
-                    <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78"><strong>Output:</strong> {agent.output}</p>
-                    <p className="mt-2 text-sm leading-6 text-[#cfc8b8]/70"><strong>Guardrail:</strong> {agent.guardrail}</p>
-                  </div>
-                ))}
-              </div>
+              <label className="mt-5 block text-sm text-[#cfc8b8]">
+                Mission type
+                <select
+                  value={kind}
+                  onChange={(event) => setKind(event.target.value as MissionKind)}
+                  className="mt-2 w-full rounded-xl border border-white/15 bg-black/30 px-3 py-3 text-[#faf7f2]"
+                >
+                  {missionKinds.map((missionKind) => (
+                    <option key={missionKind} value={missionKind}>{missionKind}</option>
+                  ))}
+                </select>
+              </label>
+              {[
+                ["Scientific mission", scientific, setScientific],
+                ["Publication candidate", publicationCandidate, setPublicationCandidate],
+                ["Needs quantitative analysis", needsQuantitativeAnalysis, setNeedsQuantitativeAnalysis],
+                ["Needs conservation assessment", needsConservationAssessment, setNeedsConservationAssessment],
+              ].map(([label, checked, setter]) => (
+                <label key={String(label)} className="mt-4 flex items-center gap-3 text-sm text-[#cfc8b8]">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(checked)}
+                    onChange={(event) => (setter as React.Dispatch<React.SetStateAction<boolean>>)(event.target.checked)}
+                    className="h-4 w-4 accent-[#d4b34a]"
+                  />
+                  {String(label)}
+                </label>
+              ))}
             </article>
 
             <article className="rounded-[1.5rem] border border-[#d4b34a]/18 bg-[#102816]/88 p-5 lg:p-6">
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                <FileArchive className="h-4 w-4" /> File-output standard
+                <Brain className="h-4 w-4" /> Activation record
               </div>
-              <h2 className="mt-4 text-3xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Every AI returns files.</h2>
-              <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/80">
-                Research reports, code reviews, build summaries, blockers, and implementation notes must be delivered as Markdown files and, when multiple artifacts exist, a ZIP archive.
-              </p>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <button onClick={() => copy('protocol', protocol)} className="inline-flex items-center gap-2 rounded-full bg-[#d4b34a] px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#12170d]">
-                  <Clipboard className="h-4 w-4" /> {copied === 'protocol' ? 'Copied' : 'Copy protocol'}
-                </button>
-                <a href={downloadUrl} download="Orchid_Continuum_AI_Collaboration_Protocol.md" className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2.5 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f5f0e8] hover:border-[#d4b34a]/60">
-                  <Download className="h-4 w-4" /> Download MD
-                </a>
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-300">Coordinator</div>
+                  <div className="mt-2 text-xl">Calyx Executive</div>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-300">Review gate</div>
+                  <div className="mt-2 text-xl">{activation.reviewer ? "Scientific Reviewer" : "Not required"}</div>
+                </div>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {activation.specialists.map((id) => {
+                  const role = SPECIALIST_COUNCIL.find((candidate) => candidate.id === id);
+                  return <span key={id} className="rounded-full border border-[#d4b34a]/25 bg-[#d4b34a]/10 px-3 py-1.5 text-xs text-[#ead778]">{role?.name ?? id}</span>;
+                })}
+              </div>
+              <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-[#cfc8b8]">
+                <div>Automatic publication: <strong className="text-[#faf7f2]">disabled</strong></div>
+                <div>Owner approval: <strong className="text-[#faf7f2]">{activation.ownerApprovalRequired ? "required" : "not required for this route"}</strong></div>
+                {activation.warnings.map((warning) => <div key={warning} className="mt-2 text-amber-300">{warning}</div>)}
               </div>
             </article>
           </div>
 
           <section className="mt-5 rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5 lg:p-6">
             <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-              <GitPullRequest className="h-4 w-4" /> Current orchestration queue
+              <Sparkles className="h-4 w-4" /> Canonical specialist registry
             </div>
-            <div className="mt-5 grid gap-3 lg:grid-cols-3">
-              {taskTemplates.map((task) => (
-                <article key={task.title} className="rounded-2xl border border-white/[0.08] bg-black/20 p-4">
-                  <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-emerald-300">{task.assignee}</div>
-                  <h3 className="mt-2 text-xl text-[#faf7f2]" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>{task.title}</h3>
-                  <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/75">{task.summary}</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {SPECIALIST_COUNCIL.map((role) => (
+                <article key={role.id} className={`rounded-2xl border p-4 ${activeIds.has(role.id) ? "border-[#d4b34a]/45 bg-[#d4b34a]/10" : "border-white/[0.08] bg-black/20"}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <h2 className="text-xl text-[#faf7f2]" style={{ fontFamily: "Playfair Display, Georgia, serif" }}>{role.name}</h2>
+                    {activeIds.has(role.id) && <span className="rounded-full bg-emerald-400/15 px-2 py-1 font-mono text-[8px] uppercase tracking-[0.16em] text-emerald-300">active</span>}
+                  </div>
+                  <p className="mt-3 text-sm leading-6 text-[#cfc8b8]/78">{role.purpose}</p>
+                  <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.14em] text-[#d4b34a]">Provenance · {role.provenance}</p>
                 </article>
               ))}
             </div>
@@ -146,18 +149,18 @@ const AIOrchestration: React.FC = () => {
           <section className="mt-5 grid gap-5 lg:grid-cols-2">
             <article className="rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5 lg:p-6">
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                <ShieldCheck className="h-4 w-4" /> Constitutional alignment
+                <ShieldCheck className="h-4 w-4" /> Scientific integrity
               </div>
               <p className="mt-4 text-sm leading-6 text-[#cfc8b8]/80">
-                BUILD-041 does not attempt full autonomous cross-AI execution. It creates the human-reviewable coordination layer required before automation: roles, file requirements, task templates, and approval gates.
+                Scientific missions cannot promote themselves. The independent reviewer must pass the evidence, method, provenance, and counterargument audit; publication candidates additionally require owner approval.
               </p>
             </article>
             <article className="rounded-[1.5rem] border border-white/[0.08] bg-[#0d1d13]/90 p-5 lg:p-6">
               <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#d4b34a]">
-                <Search className="h-4 w-4" /> Next automation step
+                <Network className="h-4 w-4" /> Current delivery slice
               </div>
               <p className="mt-4 text-sm leading-6 text-[#cfc8b8]/80">
-                Next: persist AI tasks and outputs in the backend/Brain, generate prompts from structured tasks, attach returned files, and update the master tracker automatically.
+                This slice implements the canonical roles, deterministic minimum-sufficient routing, specialist caps, and promotion gates. Backend persistence and provider adapters remain explicitly separate follow-on work.
               </p>
             </article>
           </section>

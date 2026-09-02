@@ -39,7 +39,14 @@ jobs:
         run: |
           set -euo pipefail
           labels=$(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
-          if [[ "$labels" == *oc-running* ]]; then
+          marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
+          durable=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\\"${marker}\\")))][0].number // empty" 2>/dev/null || true)
+
+          if [[ "$labels" == *oc-running* && -n "$durable" && "$labels" != *oc-repair* ]]; then
+            echo "execute=false" >> "$GITHUB_OUTPUT"
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Provider execution suppressed because unchanged durable PR #${durable} already owns this lineage. Validation supervisor retains control." >/dev/null 2>&1 || true
+          elif [[ "$labels" == *oc-running* && "$labels" != *oc-runtime-backoff* ]]; then
             echo "execute=true" >> "$GITHUB_OUTPUT"
           else
             echo "execute=false" >> "$GITHUB_OUTPUT"
@@ -89,6 +96,7 @@ jobs:
         uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
           prompt: |
             ORCHID CONTINUUM — CONTINUOUS COMPLETION LANE
 
@@ -136,12 +144,16 @@ jobs:
           set -euo pipefail
           execution_log="/home/runner/work/_temp/claude-execution-output.json"
           normalized=""
+          log_present=false
           if [[ -f "$execution_log" ]]; then
+            log_present=true
             normalized=$(jq -r '[.. | strings] | join(" ")' "$execution_log" 2>/dev/null | tr '[:upper:]' '[:lower:]' || true)
           fi
           kind=healthy
           fallback=false
-          if [[ "$CLAUDE_OUTCOME" != "success" ]]; then
+          if [[ "$CLAUDE_OUTCOME" == "success" && "$log_present" != "true" ]]; then
+            kind=runtime_config
+          elif [[ "$CLAUDE_OUTCOME" != "success" ]]; then
             if [[ "$normalized" == *"error_max_turns"* || "$normalized" == *"max_turns"* || "$normalized" == *"max turns"* || "$normalized" == *"maximum turns"* ]]; then
               kind=max_turns
             elif [[ "$normalized" == *"authentication"* || "$normalized" == *"unauthorized"* || "$normalized" == *"forbidden"* || "$normalized" == *"permission"* || "$normalized" == *"invalid api key"* || "$normalized" == *"invalid_api_key"* ]]; then
@@ -157,7 +169,7 @@ jobs:
             echo "kind=$kind"
             echo "fallback_allowed=$fallback"
           } >> "$GITHUB_OUTPUT"
-          echo "Claude classification: kind=$kind fallback_allowed=$fallback"
+          echo "Claude classification: kind=$kind fallback_allowed=$fallback execution_log=$log_present"
 
       - name: Execute bounded Gemini fallback
         if: steps.claude_provider.outputs.fallback_allowed == 'true'
@@ -313,12 +325,21 @@ jobs:
           )
 
           git config --local --unset-all http.https://github.com/.extraheader 2>/dev/null || true
+          export CODEX_HOME="$RUNNER_TEMP/codex-home"
+          mkdir -p "$CODEX_HOME"
           set +e
-          env -u GH_TOKEN OPENAI_API_KEY="$OPENAI_API_KEY" timeout 35m \
-            npx -y @openai/codex@latest --ask-for-approval never exec \
-            --sandbox workspace-write --skip-git-repo-check --ephemeral -C "$GITHUB_WORKSPACE" "$prompt" \
-            > "$RUNNER_TEMP/openai-stdout.log" 2> "$RUNNER_TEMP/openai-stderr.log"
-          status=$?
+          printf '%s\n' "$OPENAI_API_KEY" | npx -y @openai/codex@0.151.0 login --with-api-key \
+            > "$RUNNER_TEMP/openai-login.log" 2>> "$RUNNER_TEMP/openai-stderr.log"
+          login_status=$?
+          if [[ "$login_status" -eq 0 ]]; then
+            env -u GH_TOKEN OPENAI_API_KEY="$OPENAI_API_KEY" CODEX_HOME="$CODEX_HOME" timeout 35m \
+              npx -y @openai/codex@0.151.0 --ask-for-approval never exec \
+              --sandbox workspace-write --skip-git-repo-check --ephemeral -C "$GITHUB_WORKSPACE" "$prompt" \
+              > "$RUNNER_TEMP/openai-stdout.log" 2>> "$RUNNER_TEMP/openai-stderr.log"
+            status=$?
+          else
+            status=$login_status
+          fi
           set -e
           echo "$status" > "$RUNNER_TEMP/openai-exit.txt"
           gh auth setup-git >/dev/null
@@ -362,9 +383,9 @@ jobs:
           if [[ "$OPENAI_OUTCOME" != "success" ]]; then
             if [[ -f "$RUNNER_TEMP/openai-status.txt" ]] && grep -q 'config_missing' "$RUNNER_TEMP/openai-status.txt"; then
               kind=config
-            elif grep -Eqi '401|403|unauthor|forbidden|invalid.?api.?key|authentication|permission' "$RUNNER_TEMP/openai-stderr.log" "$RUNNER_TEMP/openai-stdout.log" 2>/dev/null; then
+            elif grep -Eqi '(^|[^0-9])(401|403)([^0-9]|$)|unauthori[sz]ed|invalid[_ .-]?api[_ .-]?key|authentication (failed|required)|missing scopes?:|insufficient permissions?.*(api|operation)|api\.responses\.write' "$RUNNER_TEMP/openai-stderr.log" 2>/dev/null; then
               kind=security
-            elif grep -Eqi '429|quota|rate.?limit|billing|credit|overloaded|service unavailable|temporarily unavailable|timeout|timed out|connection' "$RUNNER_TEMP/openai-stderr.log" "$RUNNER_TEMP/openai-stdout.log" 2>/dev/null || [[ "$(cat "$RUNNER_TEMP/openai-exit.txt" 2>/dev/null || true)" == "124" ]]; then
+            elif grep -Eqi '429|quota|rate.?limit|billing|credit|overloaded|service unavailable|temporarily unavailable|timeout|timed out|connection|websocket.*(reset|closed|failed)' "$RUNNER_TEMP/openai-stderr.log" 2>/dev/null || [[ "$(cat "$RUNNER_TEMP/openai-exit.txt" 2>/dev/null || true)" == "124" ]]; then
               kind=safe_provider
             else
               kind=unknown
@@ -403,6 +424,9 @@ jobs:
           elif [[ "$CLAUDE_KIND" == "max_turns" ]]; then
             gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-runtime-backoff --remove-label oc-validating --add-label oc-repair >/dev/null 2>&1 || true
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude reached the bounded turn ceiling; provider runtime remains healthy. Issue moved to oc-repair for a narrower continuation." >/dev/null
+          elif [[ "$CLAUDE_KIND" == "runtime_config" ]]; then
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-queued --remove-label oc-validating --remove-label oc-repair --add-label oc-runtime-backoff >/dev/null 2>&1 || true
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude action returned success without an SDK execution record. Classified runtime_config and parked fail-closed instead of treating the no-op as progress." >/dev/null
           elif [[ "$CLAUDE_FALLBACK" == "true" && "$GEMINI_OUTCOME" == "success" ]]; then
             gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-runtime-backoff --remove-label oc-validating --add-label oc-queued --add-label oc-repair >/dev/null 2>&1 || true
             gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude was safely unavailable; Gemini completed without durable changes. Returned to bounded repair without waiting for Claude recovery." >/dev/null

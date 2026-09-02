@@ -17,10 +17,10 @@ jobs:
   validate:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: npm
@@ -33,4 +33,6 @@ jobs:
       - name: Lint changed workspace surfaces
         run: npx eslint src/features/calyx-workspace/sessionContext.ts src/features/calyx-workspace/sessionContext.test.ts src/features/calyx-workspace/workspaceOutputBus.ts src/features/calyx-workspace/workspaceOutputBus.test.ts src/features/calyx-workspace/identificationContext.ts src/features/calyx-workspace/identificationContext.test.ts src/features/calyx-workspace/WorkspaceOutputPanel.tsx src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx src/components/lexicon/AskCalyx.tsx src/components/lexicon/EntryView.tsx src/pages/OrchidIdentificationNext.tsx src/lib/calyxService.ts
       - name: Diff hygiene
-        run: git diff --check origin/${{ github.base_ref }}...HEAD
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git diff --check "origin/$BASE_REF...HEAD"
