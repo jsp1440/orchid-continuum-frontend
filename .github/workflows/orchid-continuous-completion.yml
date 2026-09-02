@@ -275,27 +275,39 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          for idx in 1 2 3 4 5; do
+            echo "issue${idx}=" >> "$GITHUB_OUTPUT"
+          done
+
+          # This workflow's repository-scoped concurrency group serializes selectors.
+          # Still re-read both capacity and issue state immediately before every
+          # transition, then verify the transition before making a lane output
+          # observable. A failed or ambiguous mutation is a closed lease: no output.
+          leased_issue=""
+          try_lease () {
+            local issue="$1"
+            local running capacity labels lease
+            leased_issue=""
+
+            running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length') || return 1
+            capacity=$(( MAX_ACTIVE_LANES - running ))
+            (( capacity > 0 )) || return 1
+
+            labels=$(gh issue view "$issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")') || return 1
+            [[ "$labels" == *oc-queued* ]] || return 1
+            [[ "$labels" != *oc-running* && "$labels" != *oc-validating* && "$labels" != *oc-blocked* && "$labels" != *oc-owner-gate* && "$labels" != *oc-done* ]] || return 1
+
+            gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running >/dev/null || return 1
+            lease=$(gh issue view "$issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")') || return 1
+            [[ "$lease" == *oc-running* && "$lease" != *oc-queued* ]] || return 1
+            leased_issue="$issue"
+          }
+
           graph_issue="${{ steps.graph.outputs.graph_issue }}"
           if [[ -n "$graph_issue" ]]; then
-            running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')
-            capacity=$(( MAX_ACTIVE_LANES - running ))
-            (( capacity > 0 )) || capacity=0
-
-            for idx in 0 1 2 3 4; do
-              echo "issue$((idx+1))=" >> "$GITHUB_OUTPUT"
-            done
-
-            (( capacity > 0 )) || exit 0
-
-            labels=$(gh issue view "$graph_issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
-            [[ "$labels" == *oc-queued* ]] || exit 0
-            [[ "$labels" != *oc-running* && "$labels" != *oc-validating* && "$labels" != *oc-blocked* && "$labels" != *oc-owner-gate* && "$labels" != *oc-done* ]] || exit 0
-
-            gh issue edit "$graph_issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running >/dev/null
-            lease=$(gh issue view "$graph_issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
-            [[ "$lease" == *oc-running* && "$lease" != *oc-queued* ]] || exit 1
-
-            echo "issue1=$graph_issue" >> "$GITHUB_OUTPUT"
+            if try_lease "$graph_issue"; then
+              echo "issue1=$leased_issue" >> "$GITHUB_OUTPUT"
+            fi
             exit 0
           fi
 
@@ -353,12 +365,13 @@ jobs:
             selected+=("$issue")
           done
 
-          for idx in 0 1 2 3 4; do
-            value="${selected[$idx]:-}"
-            if [[ -n "$value" ]]; then
-              gh issue edit "$value" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running >/dev/null
+          output=1
+          for value in "${selected[@]:-}"; do
+            [[ -n "$value" ]] || continue
+            if try_lease "$value"; then
+              echo "issue${output}=$leased_issue" >> "$GITHUB_OUTPUT"
+              output=$(( output + 1 ))
             fi
-            echo "issue$((idx+1))=$value" >> "$GITHUB_OUTPUT"
           done
 
   lane1:

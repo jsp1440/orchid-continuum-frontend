@@ -23,6 +23,7 @@ type WorkflowJob = {
   if?: string | boolean;
   uses?: string;
   outputs?: Record<string, string>;
+  steps?: Array<{ name?: string; uses?: string; with?: Record<string, string>; run?: string }>;
 };
 
 type Workflow = { jobs: Record<string, WorkflowJob> };
@@ -122,22 +123,56 @@ describe("autonomous completion lane dispatch", () => {
     expect(prepare.steps?.some((step) => step.run?.includes("graph_issue"))).toBe(true);
   });
 
+  it("checks out the integration branch before graph admission executes", () => {
+    const steps = workflow.jobs.prepare?.steps ?? [];
+    const checkout = steps.findIndex((step) => step.name === "Checkout integration branch for graph admission");
+    const graph = steps.findIndex((step) => step.name === "Bind queue to graph admission");
+
+    expect(checkout).toBe(0);
+    expect(graph).toBeGreaterThan(checkout);
+    expect(steps[checkout].uses).toBe("actions/checkout@11d5960a326750d5838078e36cf38b85af677262");
+    expect(steps[checkout].with?.ref).toBe("oc-autonomous-integration");
+    expect(steps[graph].run).toContain("npx tsx scripts/graphAdmission.ts");
+  });
+
   it("leases a graph-selected issue before emitting it to a lane", () => {
     const prepare = workflow.jobs.prepare as WorkflowJob & { steps?: Array<{ name?: string; run?: string }> };
     const queue = prepare.steps?.find((step) => step.name === "Fill available execution slots from priority portfolio");
     const run = queue?.run ?? "";
     const graphStart = run.indexOf('graph_issue="${{ steps.graph.outputs.graph_issue }}"');
-    const capacityCheck = run.indexOf("capacity=$(( MAX_ACTIVE_LANES - running ))", graphStart);
-    const lease = run.indexOf('gh issue edit "$graph_issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running', graphStart);
-    const leaseVerify = run.indexOf('lease=$(gh issue view "$graph_issue"', graphStart);
-    const emit = run.indexOf('echo "issue1=$graph_issue"', graphStart);
+    const helper = run.indexOf("try_lease ()");
+    const capacityCheck = run.indexOf("capacity=$(( MAX_ACTIVE_LANES - running ))", helper);
+    const lease = run.indexOf('gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running', helper);
+    const leaseVerify = run.indexOf('lease=$(gh issue view "$issue"', helper);
+    const helperSuccess = run.indexOf('leased_issue="$issue"', leaseVerify);
+    const claim = run.indexOf('if try_lease "$graph_issue"', graphStart);
+    const emit = run.indexOf('echo "issue1=$leased_issue"', claim);
 
     expect(graphStart).toBeGreaterThanOrEqual(0);
-    expect(capacityCheck).toBeGreaterThan(graphStart);
+    expect(helper).toBeGreaterThanOrEqual(0);
+    expect(capacityCheck).toBeGreaterThan(helper);
     expect(lease).toBeGreaterThan(capacityCheck);
     expect(leaseVerify).toBeGreaterThan(lease);
-    expect(emit).toBeGreaterThan(leaseVerify);
+    expect(helperSuccess).toBeGreaterThan(leaseVerify);
+    expect(claim).toBeGreaterThan(graphStart);
+    expect(emit).toBeGreaterThan(claim);
     expect(run).toContain('[[ "$lease" == *oc-running* && "$lease" != *oc-queued* ]]');
+  });
+
+  it("serializes selectors and leases every portfolio output through the verified helper", () => {
+    expect(workflow.jobs).toBeDefined();
+    const prepare = workflow.jobs.prepare;
+    const queue = prepare.steps?.find((step) => step.name === "Fill available execution slots from priority portfolio");
+    const run = queue?.run ?? "";
+    const portfolio = run.indexOf('for value in "${selected[@]:-}"');
+    const claim = run.indexOf('if try_lease "$value"', portfolio);
+    const emit = run.indexOf('echo "issue${output}=$leased_issue"', claim);
+
+    expect(workflow).toHaveProperty("concurrency.group", "orchid-continuous-completion-${{ github.repository }}");
+    expect(portfolio).toBeGreaterThanOrEqual(0);
+    expect(claim).toBeGreaterThan(portfolio);
+    expect(emit).toBeGreaterThan(claim);
+    expect(run.slice(portfolio)).not.toContain('echo "issue$((idx+1))=$value"');
   });
 
   it("does not fall through to legacy queue selection after a valid graph selection", () => {
@@ -149,9 +184,9 @@ describe("autonomous completion lane dispatch", () => {
     const graphBranch = run.slice(graphStart, legacyStart);
 
     expect(graphBranch).toContain('if [[ -n "$graph_issue" ]]; then');
-    expect(graphBranch).toContain('for idx in 0 1 2 3 4; do');
-    expect(graphBranch).toContain('echo "issue$((idx+1))=" >> "$GITHUB_OUTPUT"');
-    expect(graphBranch).toContain('echo "issue1=$graph_issue" >> "$GITHUB_OUTPUT"');
+    expect(run.slice(0, graphStart)).toContain('echo "issue${idx}=" >> "$GITHUB_OUTPUT"');
+    expect(graphBranch).toContain('if try_lease "$graph_issue"; then');
+    expect(graphBranch).toContain('echo "issue1=$leased_issue" >> "$GITHUB_OUTPUT"');
     expect(graphBranch).toContain("exit 0");
   });
 
