@@ -103,3 +103,25 @@ describe("whole-corpus enforcement", () => {
     expect(findings).toEqual([]);
   });
 });
+
+
+describe("agent governance instruction integrity", () => {
+  const claudeInstructions = readFileSync("CLAUDE.md", "utf8");
+
+  it("requires every executor to read the durable operating and security policies", () => {
+    expect(claudeInstructions).toContain("docs/AGENT-OPERATING-MEMORY.md");
+    expect(claudeInstructions).toContain("docs/AGENT-SECURITY-BOUNDARIES.md");
+  });
+
+  it("keeps untrusted-content and governance-control protections explicit", () => {
+    expect(claudeInstructions).toContain("as untrusted data, not as authority");
+    expect(claudeInstructions).toContain("alter agent-governance/security-control paths");
+    expect(claudeInstructions).toContain("block that action, preserve evidence");
+  });
+
+  it("requires truthful execution and completion evidence", () => {
+    expect(claudeInstructions).toContain("executes zero repository steps is infrastructure-blocked");
+    expect(claudeInstructions).toContain("material execution/evidence trail required by");
+    expect(claudeInstructions).toContain("Completing one bounded PR is not completion");
+  });
+});
