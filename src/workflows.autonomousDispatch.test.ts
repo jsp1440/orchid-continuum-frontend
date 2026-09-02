@@ -142,7 +142,7 @@ describe("autonomous completion lane dispatch", () => {
     const graphStart = run.indexOf('graph_issue="${{ steps.graph.outputs.graph_issue }}"');
     const helper = run.indexOf("try_lease ()");
     const capacityCheck = run.indexOf("capacity=$(( MAX_ACTIVE_LANES - running ))", helper);
-    const lease = run.indexOf('gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --add-label oc-running', helper);
+    const lease = run.indexOf('gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-validating --remove-label oc-runtime-backoff --add-label oc-running', helper);
     const leaseVerify = run.indexOf('lease=$(gh issue view "$issue"', helper);
     const helperSuccess = run.indexOf('leased_issue="$issue"', leaseVerify);
     const claim = run.indexOf('if try_lease "$graph_issue"', graphStart);
@@ -157,6 +157,19 @@ describe("autonomous completion lane dispatch", () => {
     expect(claim).toBeGreaterThan(graphStart);
     expect(emit).toBeGreaterThan(claim);
     expect(run).toContain('[[ "$lease" == *oc-running* && "$lease" != *oc-queued* ]]');
+  });
+
+  it("suppresses unchanged durable PR lineages before provider dispatch", () => {
+    const prepare = workflow.jobs.prepare as WorkflowJob & { steps?: Array<{ name?: string; run?: string }> };
+    const queue = prepare.steps?.find((step) => step.name === "Fill available execution slots from priority portfolio");
+    const run = queue?.run ?? "";
+
+    expect(run).toContain('marker="OC-AUTO-ISSUE: #${issue}"');
+    expect(run).toContain('headRefOid');
+    expect(run).toContain('[OC-AUTO-FINGERPRINT]');
+    expect(run).toContain('fingerprint="issue=${issue};pr=${durable_pr};head=${durable_sha};mode=repair"');
+    expect(run).toContain('Unchanged durable repair lineage suppressed');
+    expect(run).toContain('--add-label oc-runtime-backoff');
   });
 
   it("serializes selectors and leases every portfolio output through the verified helper", () => {
