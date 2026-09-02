@@ -25,7 +25,8 @@ describe("continuous completion convergence guards", () => {
   });
 
   it("suppresses unchanged durable issue/PR heads using a material fingerprint", () => {
-    expect(scheduler).toContain("--json number,body,headRefOid");
+    expect(scheduler).toContain("--limit 500 --json number,body,headRefOid");
+    expect(scheduler).not.toContain("--limit 100 --json");
     expect(scheduler).toContain('contains(\\"$marker\\")');
     expect(scheduler).not.toContain('contains(\\\\"$marker\\\\")');
     expect(scheduler).toContain('fingerprint="issue=${issue};pr=${durable_pr};head=${durable_sha};mode=repair"');
