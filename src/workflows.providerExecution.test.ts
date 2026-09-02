@@ -16,6 +16,12 @@ describe('autonomous provider execution truthfulness', () => {
     expect(lane).toContain('parked fail-closed instead of treating the no-op as progress');
   });
 
+  it('independently suppresses ordinary provider execution when a durable PR already owns the lineage', () => {
+    expect(lane).toContain('durable=$(gh pr list');
+    expect(lane).toContain('unchanged durable PR #${durable} already owns this lineage');
+    expect(lane).toContain('--remove-label oc-running --remove-label oc-queued --add-label oc-validating');
+  });
+
   it('keeps authentication and permission anomalies fail-closed ahead of safe-provider fallback', () => {
     const security = lane.indexOf('invalid_api_key');
     const provider = lane.indexOf('billing_error');
