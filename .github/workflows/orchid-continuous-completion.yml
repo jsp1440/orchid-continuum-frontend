@@ -91,7 +91,7 @@ jobs:
             age=$((now - updated_epoch))
             (( age > 4800 )) || continue
             marker="OC-AUTO-ISSUE: #${issue}"
-            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0].number // empty" || true)
+            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 500 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0].number // empty" || true)
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-repair >/dev/null 2>&1 || true
             if [[ -n "$durable" ]]; then
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
@@ -100,7 +100,7 @@ jobs:
             fi
           done
 
-          mapfile -t prs < <(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq '.[] | select(.body != null and (.body | contains("OC-AUTO-ISSUE: #"))) | .number')
+          mapfile -t prs < <(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 500 --json number,body --jq '.[] | select(.body != null and (.body | contains("OC-AUTO-ISSUE: #"))) | .number')
           for pr in "${prs[@]:-}"; do
             [[ -n "$pr" ]] || continue
             data=$(gh pr view "$pr" --repo "$REPO" --json body,isDraft,mergeStateStatus,headRefName,headRefOid)
@@ -303,7 +303,7 @@ jobs:
             repair=false
             [[ "$labels" == *oc-repair* ]] && repair=true
             marker="OC-AUTO-ISSUE: #${issue}"
-            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body,headRefOid --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0] // empty" || true)
+            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 500 --json number,body,headRefOid --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0] // empty" || true)
             if [[ -n "$durable" && "$repair" != true ]]; then
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --add-label oc-validating >/dev/null 2>&1 || true
               continue
