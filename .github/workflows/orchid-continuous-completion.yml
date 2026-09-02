@@ -32,7 +32,7 @@ jobs:
       MAX_ACTIVE_LANES: 2
     steps:
       - name: Checkout main with full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
@@ -198,13 +198,13 @@ jobs:
       REFILL_COUNT: ${{ needs.inventory.outputs.refill_count }}
     steps:
       - name: Checkout integration branch for system inspection
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: oc-autonomous-integration
           fetch-depth: 0
 
       - name: Generate only the next missing bounded work items
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           prompt: |
@@ -377,7 +377,7 @@ jobs:
       INTEGRATION_BRANCH: oc-autonomous-integration
     steps:
       - name: Keep one integration-to-main governance gate available
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: main
           fetch-depth: 0
