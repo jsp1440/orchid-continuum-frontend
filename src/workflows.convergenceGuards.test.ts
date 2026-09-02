@@ -37,6 +37,11 @@ describe("continuous completion convergence guards", () => {
     expect(scheduler).toContain("--add-label oc-runtime-backoff");
   });
 
+  it("keeps runtime-backoff authoritative in supervisor and queue healing", () => {
+    expect(scheduler.match(/if \[\[ "\$labels" == \*oc-runtime-backoff\* \]\]; then/g)).toHaveLength(2);
+    expect(scheduler).toContain("--remove-label oc-queued --remove-label oc-running --remove-label oc-repair --remove-label oc-validating");
+  });
+
   it("routes an ordinary durable PR directly to validation", () => {
     expect(scheduler).toContain('if [[ -n "$durable" && "$repair" != true ]]; then');
     expect(scheduler).toContain("--remove-label oc-queued --remove-label oc-running --add-label oc-validating");
