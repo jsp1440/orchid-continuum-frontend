@@ -312,7 +312,11 @@ jobs:
               durable_pr=$(jq -r '.number' <<<"$durable")
               durable_sha=$(jq -r '.headRefOid' <<<"$durable")
               fingerprint="issue=${issue};pr=${durable_pr};head=${durable_sha};mode=repair"
-              seen=$(gh issue view "$issue" --repo "$REPO" --json comments --jq --arg fp "[OC-AUTO-FINGERPRINT] ${fingerprint}" 'any(.comments[]?; (.body // "") | contains($fp))' 2>/dev/null || echo false)
+              if gh api --paginate "repos/$REPO/issues/$issue/comments?per_page=100" --jq '.[].body // ""' 2>/dev/null | grep -Fqx "[OC-AUTO-FINGERPRINT] ${fingerprint}"; then
+                seen=true
+              else
+                seen=false
+              fi
               if [[ "$seen" == true ]]; then
                 gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --remove-label oc-repair --remove-label oc-validating --add-label oc-runtime-backoff >/dev/null 2>&1 || true
                 continue
