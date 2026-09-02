@@ -35,11 +35,14 @@ jobs:
     needs: inspect
     if: needs.inspect.outputs.count != '0'
     runs-on: ubuntu-latest
+    outputs:
+      healthy: ${{ steps.diagnose.outputs.healthy }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Prove Claude runtime health without repository mutation
+        continue-on-error: true
         uses: anthropics/claude-code-action@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -51,6 +54,7 @@ jobs:
             --allowedTools "Read"
 
       - name: Diagnose the Claude run
+        id: diagnose
         if: always()
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -58,7 +62,7 @@ jobs:
 
   recover:
     needs: [inspect, canary]
-    if: always() && needs.inspect.result == 'success' && needs.inspect.outputs.count != '0' && needs.canary.result == 'success'
+    if: always() && needs.inspect.result == 'success' && needs.inspect.outputs.count != '0' && needs.canary.outputs.healthy == 'true'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
