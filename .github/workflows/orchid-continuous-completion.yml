@@ -303,7 +303,7 @@ jobs:
             repair=false
             [[ "$labels" == *oc-repair* ]] && repair=true
             marker="OC-AUTO-ISSUE: #${issue}"
-            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body,headRefOid --jq "[.[] | select(.body != null and (.body | contains(\\"$marker\\")))][0] // empty" || true)
+            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body,headRefOid --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0] // empty" || true)
             if [[ -n "$durable" && "$repair" != true ]]; then
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-running --add-label oc-validating >/dev/null 2>&1 || true
               continue
