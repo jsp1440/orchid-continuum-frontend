@@ -32,14 +32,14 @@ describe("continuous completion convergence guards", () => {
   });
 
   it("routes an ordinary durable PR directly to validation", () => {
-    expect(scheduler).toContain('if [[ "$repair" != true ]]');
+    expect(scheduler).toContain('if [[ -n "$durable" && "$repair" != true ]]; then');
     expect(scheduler).toContain("--remove-label oc-queued --remove-label oc-running --add-label oc-validating");
   });
 
   it("defensively refuses provider execution for an unchanged durable non-repair lineage", () => {
-    expect(lane).toContain('if [[ "$running" == true && "$durable" == true && "$repair" != true ]]');
+    expect(lane).toContain('if [[ "$labels" == *oc-running* && -n "$durable" && "$labels" != *oc-repair* ]]; then');
     expect(lane).toContain('echo "execute=false" >> "$GITHUB_OUTPUT"');
     expect(lane).toContain("--remove-label oc-running --remove-label oc-queued --add-label oc-validating");
-    expect(lane).toContain('if [[ "$running" == true && "$runtime_backoff" != true ]]');
+    expect(lane).toContain('elif [[ "$labels" == *oc-running* && "$labels" != *oc-runtime-backoff* ]]; then');
   });
 });
