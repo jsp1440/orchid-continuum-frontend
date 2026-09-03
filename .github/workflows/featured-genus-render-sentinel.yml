@@ -33,16 +33,21 @@ jobs:
           name: featured-genus-render-sentinel
           path: artifacts/
           if-no-files-found: warn
-      - name: Create or update one active incident
+      - name: Create one active incident without repeat comments
         if: failure()
         run: |
           title="Sentinel: Featured Genus deployment audit failing"
           body="The deployed Featured Genus audit failed. See workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID and artifact featured-genus-render-sentinel."
           issue_number=$(gh issue list --state open --search "in:title $title" --json number,title --jq ".[] | select(.title == \"$title\") | .number" | head -n 1)
-          if [ -n "$issue_number" ]; then
-            gh issue comment "$issue_number" --body "$body"
-          else
+          if [ -z "$issue_number" ]; then
             gh issue create --title "$title" --body "$body"
+          else
+            {
+              echo "### Featured Genus Render Sentinel"
+              echo ""
+              echo "Incident #${issue_number} is already open; suppressing a duplicate issue comment/email."
+              echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
         env:
           GH_TOKEN: ${{ github.token }}
