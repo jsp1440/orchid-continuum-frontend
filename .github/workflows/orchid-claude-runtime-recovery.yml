@@ -67,9 +67,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          recovered=0
           mapfile -t parked < <(gh issue list --repo "$GITHUB_REPOSITORY" --state open --label oc-runtime-backoff --limit 200 --json number --jq '.[].number')
           for issue in "${parked[@]:-}"; do
             [[ -n "$issue" ]] || continue
             gh issue edit "$issue" --repo "$GITHUB_REPOSITORY" --remove-label oc-runtime-backoff --add-label oc-queued >/dev/null 2>&1 || true
-            gh issue comment "$issue" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Claude runtime canary succeeded. Runtime backoff cleared and issue returned to the priority portfolio." >/dev/null 2>&1 || true
+            recovered=$((recovered + 1))
           done
+          {
+            echo "### Orchid Claude Runtime Recovery"
+            echo ""
+            echo "Recovered ${recovered} parked issue(s) after a successful canary."
+          } >> "$GITHUB_STEP_SUMMARY"
