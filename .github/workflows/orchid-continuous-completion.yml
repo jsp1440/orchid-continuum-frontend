@@ -277,11 +277,22 @@ jobs:
 
       - name: Enforce planner provider failure policy
         if: always()
+        env:
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
         shell: bash
         run: |
           set -euo pipefail
           LOG="${CLAUDE_EXECUTION_LOG:-/home/runner/work/_temp/claude-execution-output.json}"
           if [[ ! -f "$LOG" ]]; then
+            # claude-code-action skips itself (exits 0) when the workflow file on
+            # the PR head differs from the default branch — a security guard that
+            # fires on any PR that modifies the workflow. No SDK invocation means
+            # no execution log. Treat a clean skip (outcome=success) as non-failing;
+            # treat a genuine pre-log failure (outcome=failure) as fail-closed.
+            if [[ "${CLAUDE_OUTCOME:-}" == "success" ]]; then
+              echo "::warning::Planner action was skipped (workflow-file validation guard); no execution log produced. Enforce gate bypassed for this PR-on-workflow run."
+              exit 0
+            fi
             echo "::error::Planner provider evidence is missing or malformed; failing closed."
             exit 1
           fi
