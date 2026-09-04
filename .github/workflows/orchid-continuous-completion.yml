@@ -187,8 +187,11 @@ jobs:
           mapfile -t queued_issues < <(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq '.[].number')
           for issue in "${queued_issues[@]:-}"; do
             [[ -n "$issue" ]] || continue
-            labels=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null || true)
-            [[ -n "$labels" ]] || continue
+            if ! labels=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null); then
+              echo "::error::Healer: could not read labels for issue #${issue}; failing closed."
+              heal_errors=$(( heal_errors + 1 ))
+              continue
+            fi
             conflict=""
             [[ "$labels" == *oc-running* ]] && conflict="oc-running"
             [[ "$labels" == *oc-validating* && -z "$conflict" ]] && conflict="oc-validating"
@@ -197,7 +200,11 @@ jobs:
             [[ -z "$conflict" ]] && continue
             echo "::warning::Healer: issue #${issue} has oc-queued + ${conflict} (invariant violation). Removing oc-queued."
             if gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued >/dev/null 2>&1; then
-              labels_after=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null || true)
+              if ! labels_after=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null); then
+                echo "::error::Healer: could not verify repair for issue #${issue}; failing closed."
+                heal_errors=$(( heal_errors + 1 ))
+                continue
+              fi
               if [[ "$labels_after" == *oc-queued* ]] && \
                  [[ "$labels_after" == *oc-running* || "$labels_after" == *oc-validating* || \
                     "$labels_after" == *oc-runtime-backoff* || "$labels_after" == *oc-repair-backoff* ]]; then
