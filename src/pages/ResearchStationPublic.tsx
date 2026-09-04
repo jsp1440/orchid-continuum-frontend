@@ -6,8 +6,11 @@ import {
   Database,
   GraduationCap,
   Leaf,
+  Mail,
+  MapPin,
   Microscope,
   Network,
+  Phone,
   ShieldCheck,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
@@ -42,15 +45,38 @@ const ResearchStationPublic: React.FC = () => (
     titleAccent="Led by Jeffery Scott Parham, M.S."
     intro="The Orchid Continuum Research Station is the public scientific research program of Orchid Continuum, an independent orchid biodiversity initiative integrating taxonomy, ecology, conservation, literature, images, and data systems into a provenance-aware research environment."
     heroAside={
-      <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/5 p-5">
-        <div className="mb-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-emerald-300/80">
-          <Microscope className="h-3 w-3" /> Scientific lead
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/5 p-5">
+          <div className="mb-3 flex items-center gap-2 text-[10px] uppercase tracking-[0.25em] text-emerald-300/80">
+            <Microscope className="h-3 w-3" /> Scientific lead
+          </div>
+          <p className="font-serif text-xl text-white">Jeffery Scott Parham, M.S.</p>
+          <p className="mt-1 text-sm text-white/65">Founder & Scientific Lead · PI-equivalent research lead</p>
+          <p className="mt-4 text-xs leading-6 text-white/60">
+            Plant scientist and educator with graduate training in plant pathology and biology, prior university teaching, USDA research experience, and long-term orchid research and cultivation work.
+          </p>
         </div>
-        <p className="font-serif text-xl text-white">Jeffery Scott Parham, M.S.</p>
-        <p className="mt-1 text-sm text-white/65">Founder & Scientific Lead · PI-equivalent research lead</p>
-        <p className="mt-4 text-xs leading-6 text-white/60">
-          Plant scientist and educator with graduate training in plant pathology and biology, prior university teaching, USDA research experience, and long-term orchid research and cultivation work.
-        </p>
+
+        <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
+          <div className="mb-3 text-[10px] uppercase tracking-[0.25em] text-white/55">Public research contact</div>
+          <div className="space-y-2 text-xs leading-5 text-white/70">
+            <a href="mailto:president@fcosorchids.org" className="flex items-start gap-2 hover:text-emerald-200">
+              <Mail className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>president@fcosorchids.org</span>
+            </a>
+            <a href="tel:+13602713971" className="flex items-start gap-2 hover:text-emerald-200">
+              <Phone className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>360-271-3971</span>
+            </a>
+            <div className="flex items-start gap-2">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>2016 Bush Dr, Los Osos, CA 93402</span>
+            </div>
+          </div>
+          <p className="mt-4 border-t border-white/10 pt-4 text-[11px] leading-5 text-white/50">
+            Organizational affiliation: Five Cities Orchid Society. Orchid Continuum grant funds are administered through Ecologistics, Inc. in its fiscal-sponsor role.
+          </p>
+        </div>
       </div>
     }
   >
