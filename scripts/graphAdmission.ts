@@ -4,6 +4,31 @@ import type { OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
 import { decideGraphIssueAction } from '../src/lib/completion-graph/graphIssueDecision';
 import { selectAdmissibleLeaf } from '../src/lib/completion-graph/scheduler';
 
+// P0 containment for #535. While provider NO-API mode is in force, the
+// deterministic scheduler may inventory/heal/reconcile, but it must never hand
+// an executable issue to a provider-backed lane. Returning the parked #535
+// sentinel keeps graph admission authoritative and prevents legacy queue
+// fallback without invoking any provider API. This is intentionally reversible:
+// remove this containment only after the budget/cooldown governor is merged and
+// explicitly exits NO-API mode.
+const PROVIDER_NO_API_MODE = true;
+
+if (PROVIDER_NO_API_MODE) {
+  console.log(JSON.stringify({
+    admissible: false,
+    selected: null,
+    issueNumber: 535,
+    mode: 'provider-no-api',
+    materialized: false,
+    decision: 'provider-no-api',
+    reason: 'Provider NO-API mode is active; deterministic control-plane work may continue but paid-model dispatch is parked.',
+    surfacedBlockers: [],
+    suppressedDuplicates: [],
+    reasons: ['P0 #535 provider NO-API containment'],
+  }));
+  process.exit(0);
+}
+
 function ghJson(args: string[]): unknown {
   const out = execFileSync('gh', args, {
     encoding: 'utf8',
