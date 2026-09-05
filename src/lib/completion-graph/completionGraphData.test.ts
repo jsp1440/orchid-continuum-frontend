@@ -139,11 +139,9 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(domainLeafCounts['domain-knowledge-graph']).toBe(3);
     expect(domainLeafCounts['domain-conservatory']).toBe(3);
 
-    // #522: the naming conflict between the two "Knowledge Graph" routes is
-    // resolved (docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md) --
-    // this client-derived rollup is named "Intelligence Graph" and must not
-    // collapse back into a single undifferentiated "Knowledge Graph" node.
+    // The two "Knowledge Graph" routes are architecturally distinct and must
+    // not collapse back into a single undifferentiated node.
     const kgVisualization = allNodes.find((n) => n.id === 'cap-kg-visualization-graph');
-    expect(kgVisualization?.gateScores?.architectureContracts).toBe(1);
+    expect(kgVisualization?.gateScores?.architectureContracts).toBe(0);
   });
 });

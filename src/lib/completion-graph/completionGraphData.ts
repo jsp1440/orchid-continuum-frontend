@@ -1044,18 +1044,10 @@ const calyxVerificationDomain = branch({
 // /knowledge both route to the same IntelligenceGraph.tsx page, which calls
 // fetchIntelligenceGraph() in orchidContinuum.ts -- this does NOT call the
 // knowledge-graph backend at all; it builds a graph client-side from
-// species/atlas/mycorrhizal rows already loaded elsewhere. TheKnowledgeGraph.tsx
-// (src/components/orchid/) was grepped for importers and has none -- confirmed
-// orphaned, not reachable from any route.
-//
-// #522 (2026-09-05): the naming/architecture conflict this domain's
-// nextAction pointed at is now resolved by
-// docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md. "Knowledge Graph"
-// is reserved for the genus-scoped backend capability; the client-derived
-// rollup is named "Intelligence Graph" (Footer.tsx relabeled accordingly) and
-// is guarded against re-conflation by
-// src/lib/knowledgeGraphNamingContract.test.ts. The two are no longer both
-// reachable under the same name.
+// species/atlas/mycorrhizal rows already loaded elsewhere. Two different
+// things are both reachable under the "Knowledge Graph" name and must not be
+// conflated. TheKnowledgeGraph.tsx (src/components/orchid/) was grepped for
+// importers and has none -- confirmed orphaned, not reachable from any route.
 
 const kgGenusEvidenceGate: CompletionNode = {
   id: 'cap-kg-genus-evidence',
@@ -1088,13 +1080,13 @@ const kgGenusEvidenceGate: CompletionNode = {
 const kgVisualizationGate: CompletionNode = {
   id: 'cap-kg-visualization-graph',
   parentId: 'module-knowledge-graph-core',
-  name: '/knowledge and /intelligence-graph visualization ("Intelligence Graph", client-derived, distinct from Knowledge Graph evidence)',
+  name: '/knowledge and /intelligence-graph visualization (client-derived, not backend-KG)',
   type: 'capability',
   status: 'PARTIAL',
   threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'UNKNOWN' },
   lane: 'PRODUCT_COMPLETION',
   gateScores: {
-    architectureContracts: 1,
+    architectureContracts: 0,
     implementationPresent: 1,
     integrationCanonicalBranch: 1,
     scientificProvenanceSecurity: null,
@@ -1107,11 +1099,8 @@ const kgVisualizationGate: CompletionNode = {
     { kind: 'file', ref: 'src/pages/IntelligenceGraph.tsx' },
     { kind: 'file', ref: 'src/lib/orchidContinuum.ts', note: 'fetchIntelligenceGraph() builds nodes/edges client-side from loadSpeciesRows/loadAtlasRows/loadMycorrhizalRows -- confirmed by reading the implementation it never calls a knowledge-graph backend endpoint, unlike cap-kg-genus-evidence.' },
     { kind: 'file', ref: 'src/components/orchid/TheKnowledgeGraph.tsx', note: 'Grepped for importers across src/: none found. Confirmed orphaned -- not reachable from any route.' },
-    { kind: 'file', ref: 'docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md', note: '#522: documents the canonical naming split -- "Knowledge Graph" is reserved for the genus-scoped backend capability (cap-kg-genus-evidence); this client-derived rollup is named "Intelligence Graph" and must not re-adopt the "Knowledge Graph" brand.' },
-    { kind: 'file', ref: 'src/components/orchid/Footer.tsx', note: '#522: nav link relabeled from "Knowledge Graph" to "Intelligence Graph" for the /knowledge route; the route path itself is unchanged.' },
-    { kind: 'test', ref: 'src/lib/knowledgeGraphNamingContract.test.ts', note: '#522: guards the naming split, the backend/client-derived data-source split, and the absence of coordinates/exact locality/occurrence identifiers on this client-derived graph.' },
   ],
-  nextAction: 'Confirm the "Intelligence Graph" rollup and its distinct-from-Knowledge-Graph disclosure render correctly in a live browser pass; architectureContracts now scored 1 per docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md (#522).',
+  nextAction: 'Decide whether the routes named "Knowledge Graph" should surface real backend KG evidence (cap-kg-genus-evidence) instead of, or alongside, the current client-derived rollup; architectureContracts scored 0 because no KG-specific contract governs what this page actually renders.',
   lastUpdated: CENSUS_DATE,
   children: [],
 };
@@ -1146,7 +1135,7 @@ const knowledgeGraphDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Knowledge Graph',
   type: 'domain',
-  nextAction: '#522: naming conflict on /knowledge and /intelligence-graph resolved (docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md); run a live browser pass on genus-scoped KG evidence and on the relabeled Intelligence Graph rollup.',
+  nextAction: 'Resolve the client-derived-vs-backend-KG naming conflict on /knowledge and /intelligence-graph; run a live browser pass on genus-scoped KG evidence.',
 }, [
   branch({
     id: 'module-knowledge-graph-core',
