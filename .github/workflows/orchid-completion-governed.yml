@@ -1,0 +1,64 @@
+name: Orchid Governed Completion
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  provider-admission:
+    runs-on: ubuntu-latest
+    outputs:
+      allow_paid_execution: ${{ steps.governor.outputs.allow_paid_execution }}
+      provider: ${{ steps.governor.outputs.provider }}
+      reason: ${{ steps.governor.outputs.reason }}
+      fingerprint: ${{ steps.governor.outputs.fingerprint }}
+      telemetry_json: ${{ steps.governor.outputs.telemetry_json }}
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+      # Safety invariant for issue #535: all paid providers remain hard parked
+      # until an explicitly governed future change lifts NO-API mode.
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'
+      OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
+      OC_PROVIDER_DAILY_MAX_CALLS: '4'
+      OC_PROVIDER_WAVE_MAX_CALLS: '1'
+    steps:
+      - name: Checkout governor code only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: oc-autonomous-integration
+          fetch-depth: 1
+
+      - name: Install deterministic governor dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Evaluate provider governor before any provider workflow
+        id: governor
+        shell: bash
+        run: npx tsx scripts/provider-governor-workflow-gate.ts
+
+      - name: Record parked decision
+        if: steps.governor.outputs.allow_paid_execution != 'true'
+        shell: bash
+        run: |
+          printf 'Paid provider execution parked: reason=%s fingerprint=%s\n' \
+            '${{ steps.governor.outputs.reason }}' \
+            '${{ steps.governor.outputs.fingerprint }}'
+
+  paid-provider-completion:
+    needs: provider-admission
+    if: needs.provider-admission.outputs.allow_paid_execution == 'true'
+    # The legacy provider workflow is unreachable while NO-API mode is true.
+    # Keeping this call behind a job-level gate ensures its provider secrets and
+    # third-party actions are never evaluated on normal deterministic ticks.
+    uses: ./.github/workflows/orchid-completion-lane.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+    secrets: inherit
