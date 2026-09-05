@@ -32,6 +32,9 @@ import type { CompletionNode, Evidence, ExecutionLane } from './types';
 
 const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
 
+/** Evidence-check date for nodes added by the #242 audit pass (Homepage, education/show-management). */
+const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
+
 /**
  * The integration commit this graph's evidence was checked against.
  *
@@ -45,10 +48,10 @@ const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: '00d3b3c2d08149df2dcafb97dc2b7e990263b118',
-  reconciledAt: '2026-08-23T00:00:00.000Z',
+  reconciledAgainstSha: '5bf293397fc5203a24a70e2608ce67bb71d420b8',
+  reconciledAt: '2026-09-05T00:00:00.000Z',
   scope:
-    'Initial census (#281) plus the mounted-journey, Verification Workbench, Classroom and legacy-salvage work landed through this commit. Not every domain has been re-scored — census coverage is reported alongside each percentage.',
+    'Initial census (#281) plus the mounted-journey, Verification Workbench, Classroom and legacy-salvage work landed through this commit, plus the #242 audit pass decomposing Homepage/Featured Genus/Public Calyx and the previously-uncensused Calyx education & show-management surfaces. Not every domain has been re-scored — census coverage is reported alongside each percentage.',
 };
 
 let autoId = 0;
@@ -1348,18 +1351,6 @@ type StubDomainSpec = {
 
 const STUB_DOMAINS: StubDomainSpec[] = [
   {
-    idHint: 'domain-homepage',
-    name: 'Homepage / Featured Genus / Public Calyx',
-    evidence: [
-      { kind: 'route', ref: '/' },
-      { kind: 'file', ref: 'src/pages/Index.tsx' },
-      { kind: 'route', ref: '/calyx' },
-      { kind: 'file', ref: 'src/components/calyx/AtlasAwareCalyxRoute.tsx' },
-    ],
-    nextAction: 'Decompose into Homepage, Featured Genus rotation, and Public Calyx capabilities with real acceptance gates.',
-    lane: 'PRODUCT_COMPLETION',
-  },
-  {
     idHint: 'domain-research-station',
     name: 'Research Station',
     evidence: [
@@ -1454,6 +1445,308 @@ function buildStubDomain(spec: StubDomainSpec): CompletionNode {
 
 const stubDomains = STUB_DOMAINS.map(buildStubDomain);
 
+// ─── Homepage / Featured Genus / Public Calyx ──────────────────────────────
+// Real evidence traced this pass (#242 audit): AppLayout.tsx wraps every
+// homepage section (HeroOrchid, ContinuumThread, FungalDependency,
+// DailyGenusFeature, HomeSpeciesExhibit, ContinuumWeb, HomeAtlasContinuum,
+// PublicCalyxGuide, HomepageStewardshipClose) in a SafeSection error
+// boundary that renders an explicit "no scientific fallback content has been
+// substituted" message on failure rather than a silent fabricated fallback --
+// confirmed by reading the source, not assumed. featuredGenus.ts is a
+// deterministic, clock-derived rotation (12h UTC window) shared by every
+// homepage element that must show the same genus; fetchFeaturedNarrative()
+// calls a real Supabase edge function and falls back to a locally-composed,
+// science-grounded (not invented) narrative on failure. PublicCalyxGuide's
+// prompts are derived from the same continuum relationships/gaps already on
+// screen, and link to /calyx (AtlasAwareCalyxRoute), which renders an
+// explicit non-evidentiary disclosure for the carried genus. #171
+// (HOMEPAGE-RECOVERY-008, open, oc-queued) already tracks the outstanding
+// integrated/responsive/deployed browser pass -- cited, not duplicated.
+
+const homepageHeroContinuumGate: CompletionNode = {
+  id: 'cap-homepage-hero-continuum',
+  parentId: 'module-homepage-core',
+  name: 'Hero orchid, continuum thread & fungal-dependency narrative sections',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/' },
+    { kind: 'file', ref: 'src/pages/Index.tsx' },
+    { kind: 'file', ref: 'src/components/AppLayout.tsx', note: 'Each section (HeroOrchid, ContinuumThread, FungalDependency, ContinuumWeb, HomepageStewardshipClose) is wrapped in a SafeSection error boundary that renders "No scientific fallback content has been substituted" on failure instead of a silent fabricated fallback -- confirmed by reading the source.' },
+    { kind: 'file', ref: 'src/components/orchid/HeroOrchid.tsx' },
+    { kind: 'file', ref: 'src/components/orchid/FungalDependency.tsx' },
+    { kind: 'file', ref: 'src/components/orchid/ContinuumWeb.tsx' },
+    { kind: 'test', ref: 'src/components/AppLayout.render.test.tsx' },
+    { kind: 'test', ref: 'src/components/orchid/HeroOrchid.canonicalMedia.test.ts' },
+    { kind: 'issue', ref: '#171', note: 'HOMEPAGE-RECOVERY-008 (open, oc-queued) already tracks the outstanding integrated/responsive/deployed browser pass for this domain -- not duplicated by this gate.' },
+  ],
+  issues: ['#171'],
+  nextAction: "Run #171's integrated responsive/deployed browser pass; only architecture/implementation/integration/provenance were confirmed this pass by reading source and tests (4 of 6 gate categories, ~75% weight coverage).",
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const homepageFeaturedGenusGate: CompletionNode = {
+  id: 'cap-homepage-featured-genus',
+  parentId: 'module-homepage-core',
+  name: 'Featured Genus rotation (Genus of the Day + Species in Focus)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/featuredGenus.ts', note: 'featuredGenusIndex()/featuredGenusName() derive a deterministic genus purely from the current UTC clock (12h window) so every visitor worldwide sees the same genus at the same moment; fetchFeaturedNarrative() calls the real genus-narrative Supabase edge function and falls back to a locally-composed, science-grounded (not invented) narrative on failure.' },
+    { kind: 'file', ref: 'src/components/orchid/DailyGenusFeature.tsx' },
+    { kind: 'file', ref: 'src/components/orchid/HomeSpeciesExhibit.tsx' },
+    { kind: 'file', ref: 'src/lib/dailyGenusContext.ts' },
+    { kind: 'test', ref: 'src/lib/featuredTaxonContinuum.test.ts' },
+    { kind: 'test', ref: 'src/lib/featuredTaxonSourceIntegrity.test.ts' },
+    { kind: 'test', ref: 'src/lib/featuredTaxonFungalEvidence.sourceIntegrity.test.ts' },
+    { kind: 'test', ref: 'src/components/orchid/DailyGenusFeatureContinuum.test.tsx' },
+    { kind: 'test', ref: 'src/components/orchid/HomeSpeciesExhibit.test.ts' },
+    { kind: 'test', ref: 'src/components/orchid/featuredGenusSingleGeneration.test.ts' },
+  ],
+  nextAction: 'Confirm the genus-narrative edge function returns real (non-fallback) AI narrative in a live browser session and that the rotation stays single-generation under real traffic (4 of 6 gate categories confirmed this pass).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const homepagePublicCalyxGate: CompletionNode = {
+  id: 'cap-homepage-public-calyx',
+  parentId: 'module-homepage-core',
+  name: 'Public Calyx guide & homepage-to-Calyx handoff',
+  type: 'integration',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'INTEGRATION_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/components/orchid/PublicCalyxGuide.tsx', note: 'Prompts are derived from the same continuum relationships/gaps already shown on the page (relationships?.pollinators.hasData, continuum?.gaps.length) -- confirmed by reading the source it asks about missing evidence rather than manufacturing a complete story when the graph is incomplete.' },
+    { kind: 'route', ref: '/calyx' },
+    { kind: 'file', ref: 'src/components/calyx/AtlasAwareCalyxRoute.tsx', note: 'Renders a "Continuing from Genus of the Day" banner for the featured-taxon origin and explicitly states the carried genus "is not scientific evidence" -- confirmed reachable from the homepage guide via featuredTaxonCalyxHref(), not orphaned.' },
+    { kind: 'file', ref: 'src/lib/featuredTaxonNavigation.ts' },
+    { kind: 'test', ref: 'src/components/calyx/AtlasAwareCalyxRoute.featuredGenus.test.ts' },
+    { kind: 'test', ref: 'src/lib/featuredTaxonNavigation.test.ts' },
+    { kind: 'test', ref: 'src/lib/homepageFeaturedGenusEntrypoint.test.ts' },
+  ],
+  nextAction: 'Run a live browser check: open the homepage, click "Ask Calyx" for the current Genus of the Day, and confirm the genus-handoff banner and non-evidentiary disclosure render end to end (4 of 6 gate categories confirmed this pass).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const homepageDomain = branch({
+  id: 'domain-homepage',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Homepage / Featured Genus / Public Calyx',
+  type: 'domain',
+  nextAction: 'Run the three outstanding browser/e2e passes noted on each capability; #171 already tracks the integrated responsive/deployed validation slice.',
+}, [
+  branch({
+    id: 'module-homepage-core',
+    parentId: 'domain-homepage',
+    name: 'Homepage core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [homepageHeroContinuumGate, homepageFeaturedGenusGate, homepagePublicCalyxGate]),
+]);
+
+// ─── Calyx education & show-management surfaces ────────────────────────────
+// Real evidence traced this pass, per #242's explicit call-out to find "any
+// Calyx education or show-management surfaces actually present in current
+// code": five real routed pages -- /education, /education/judging-practice,
+// /classroom, /classroom/investigation, /culture/orchids-on-screen -- none
+// previously represented anywhere in this graph. Judging Practice and Screen
+// Orchids are fully real (deterministic scoring, curated data, explicit "not
+// a real award" disclosure); the Scientific Method Lab persists a learner's
+// draft to localStorage only (no backend, no scientific record), which
+// AtlasAwareCalyxRoute correctly treats as ungoverned learner context when
+// carried into Calyx. Classroom's own header comment self-declares it a
+// "placeholder" awaiting /api/classrooms/*, mirroring the already-scored
+// OASIS backend dependency (cap-oasis-greenhouse-monitoring) -- honest, not
+// silently presented as live. No open issue in the tracker covers this
+// cluster.
+
+const educationGlossaryHubGate: CompletionNode = {
+  id: 'cap-education-glossary-hub',
+  parentId: 'module-education-show-core',
+  name: 'Education contextual-learning hub (BloomBot topic glossary)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/education' },
+    { kind: 'file', ref: 'src/pages/Education.tsx', note: 'Topic panels are static curated copy (VPD, PAR/DLI, etc.), not dynamically fetched or AI-generated per view -- confirmed by reading the source; the page\'s own comment calls this BloomBot\'s "first response" before linking to deeper content.' },
+  ],
+  nextAction: 'Confirm no topic content overstates certainty beyond the curated summary, then run a live browser pass (3 of 6 gate categories confirmed this pass).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const judgingPracticeGate: CompletionNode = {
+  id: 'cap-judging-practice',
+  parentId: 'module-education-show-core',
+  name: 'Judging practice sheet (recovered from the retired FCOS judging app)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/education/judging-practice' },
+    { kind: 'file', ref: 'src/pages/JudgingPractice.tsx', note: 'Header comment states the capability was recovered from the retired FCOS judging app but its "authority claim did not" come across: scoring is deterministic, a person enters every score, nothing is persisted, and no award is issued or predicted. RUBRIC_PROVENANCE discloses the rubric as "an unverified historical snapshot" on the page itself.' },
+    { kind: 'file', ref: 'src/lib/judgingPractice.ts' },
+    { kind: 'test', ref: 'src/lib/judgingPractice.test.ts' },
+    { kind: 'test', ref: 'src/pages/JudgingPractice.test.tsx' },
+  ],
+  nextAction: 'Run a live browser pass confirming the rubric provenance disclosure and deterministic scoring render correctly end to end (4 of 6 gate categories confirmed this pass by reading source and tests).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const screenOrchidsGate: CompletionNode = {
+  id: 'cap-screen-orchids',
+  parentId: 'module-education-show-core',
+  name: 'Orchids on Screen (culture module)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/culture/orchids-on-screen' },
+    { kind: 'file', ref: 'src/pages/ScreenOrchids.tsx' },
+    { kind: 'file', ref: 'src/data/screenOrchids.ts' },
+    { kind: 'test', ref: 'src/data/screenOrchids.test.ts' },
+    { kind: 'test', ref: 'src/pages/ScreenOrchids.test.tsx' },
+  ],
+  nextAction: 'Confirm the curated film/media records are real (sourced, attributable) rather than invented, then run a live browser pass (3 of 6 gate categories confirmed this pass).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const scientificMethodLabGate: CompletionNode = {
+  id: 'cap-scientific-method-lab',
+  parentId: 'module-education-show-core',
+  name: 'Scientific Method Lab (classroom investigation draft)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/classroom/investigation' },
+    { kind: 'file', ref: 'src/pages/ScientificMethodLab.tsx', note: "Draft investigation is persisted client-side only (localStorage key orchid-continuum:classroom:scientific-method-draft:v1) -- no backend write, no scientific record created." },
+    { kind: 'file', ref: 'src/lib/classroomInvestigationNavigation.ts' },
+    { kind: 'test', ref: 'src/lib/classroomInvestigationNavigation.test.ts' },
+    { kind: 'file', ref: 'src/components/calyx/AtlasAwareCalyxRoute.tsx', note: 'Confirmed this pass: a carried classroomContext renders a "Continuing from a classroom investigation" banner that explicitly states the learner\'s hypothesis/observations/conclusion "did not travel and are not evidence" and "nothing said here enters the Continuum\'s scientific record."' },
+  ],
+  nextAction: 'Run a live browser pass confirming the draft persists correctly across a session and the Calyx handoff banner renders as designed (4 of 6 gate categories confirmed this pass).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const classroomTeacherDashboardGate: CompletionNode = {
+  id: 'cap-classroom-teacher-dashboard',
+  parentId: 'module-education-show-core',
+  name: 'Teacher-facing classroom dashboard (rosters, assignments, progress reporting)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  lane: 'PRODUCT_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: 0,
+  },
+  evidence: [
+    { kind: 'route', ref: '/classroom' },
+    { kind: 'file', ref: 'src/pages/Classroom.tsx', note: 'File\'s own header comment self-declares this a "Teacher-facing dashboard placeholder. Conceptual UI only" awaiting /api/classrooms/* and /api/assignments/* backend endpoints; the page renders a visible "Demo · awaiting /api/classrooms" disclosure -- confirmed honest, not silently presented as live.' },
+  ],
+  nextAction: 'Owner/backend action: implement /api/classrooms/* and /api/assignments/* before this page can move off placeholder state -- outside this frontend repo\'s authority, same pattern as the OASIS backend dependency (cap-oasis-greenhouse-monitoring).',
+  lastUpdated: AUDIT_242_DATE,
+  children: [],
+};
+
+const educationShowManagementDomain = branch({
+  id: 'domain-education-show-management',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Calyx education & show-management surfaces',
+  type: 'domain',
+  nextAction: 'Run the outstanding browser/e2e passes on the four real capabilities; the teacher dashboard remains owner/backend-blocked, not a frontend gap.',
+}, [
+  branch({
+    id: 'module-education-show-core',
+    parentId: 'domain-education-show-management',
+    name: 'Education & show-management core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [
+    educationGlossaryHubGate,
+    judgingPracticeGate,
+    screenOrchidsGate,
+    scientificMethodLabGate,
+    classroomTeacherDashboardGate,
+  ]),
+]);
+
 // ─── Root ───────────────────────────────────────────────────────────────────
 
 export const COMPLETION_GRAPH: CompletionNode = branch({
@@ -1477,6 +1770,8 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   knowledgeGraphDomain,
   conservatoryDomain,
   lexiconDomain,
+  homepageDomain,
+  educationShowManagementDomain,
   buildJourneyContinuityDomain(branch),
   ...stubDomains,
 ]);
