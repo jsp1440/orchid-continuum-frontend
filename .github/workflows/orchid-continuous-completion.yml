@@ -1,4 +1,4 @@
-name: Orchid Continuous Completion — SAFE MODE
+name: Orchid Continuous Completion — NO API MODE
 
 on:
   workflow_dispatch:
@@ -14,27 +14,144 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
-  issues: read
-  pull-requests: read
-  actions: read
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
 
 jobs:
-  safe-mode:
+  deterministic-supervisor:
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      INTEGRATION_BRANCH: oc-autonomous-integration
     steps:
-      - name: Provider circuit breaker
+      - name: Enforce provider circuit breaker
         shell: bash
         run: |
-          echo "Orchid Continuous Completion is in SAFE MODE."
-          echo "Paid model execution is disabled after the 2026-09-04/05 provider-spend/suspension incident."
-          echo "This scheduled workflow intentionally performs zero Anthropic, Gemini, or OpenAI provider calls."
-          echo "Restore autonomous provider execution only after budget-aware batching, cooldowns, fingerprints, and hard circuit breakers are implemented and validated."
+          set -euo pipefail
+          echo "NO API MODE: paid model execution is disabled."
+          echo "Anthropic, Gemini, and OpenAI provider calls from this scheduler: 0."
+          echo "This workflow performs deterministic GitHub/CI supervision only."
+
+      - name: Inventory autonomous portfolio
+        id: inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          queued=$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
+          running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
+          validating=$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
+          blocked=$(gh issue list --repo "$REPO" --state open --label oc-blocked --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
+          prs=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number --jq 'length' 2>/dev/null || echo 0)
           {
-            echo "### Orchid provider circuit breaker"
+            echo "### Orchid Continuum — deterministic supervisor"
             echo
-            echo "- Paid model calls: **DISABLED**"
-            echo "- Scheduled provider retries: **0**"
-            echo "- Anthropic suspension bypass: **NOT ATTEMPTED**"
-            echo "- Re-enable condition: validated cost-governor + explicit provider recovery"
+            echo "- Paid provider calls: **0**"
+            echo "- Queued: **$queued**"
+            echo "- Running: **$running**"
+            echo "- Validating: **$validating**"
+            echo "- Blocked: **$blocked**"
+            echo "- Open integration PRs: **$prs**"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Recover stale running leases without invoking AI
+        shell: bash
+        run: |
+          set -euo pipefail
+          now=$(date -u +%s)
+          mapfile -t running < <(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number,updatedAt --jq '.[] | "\(.number) \(.updatedAt)"' 2>/dev/null || true)
+          for row in "${running[@]:-}"; do
+            [[ -n "$row" ]] || continue
+            issue=${row%% *}
+            updated=${row#* }
+            updated_epoch=$(date -u -d "$updated" +%s 2>/dev/null || echo "$now")
+            age=$((now - updated_epoch))
+            (( age > 4800 )) || continue
+            marker="OC-AUTO-ISSUE: #${issue}"
+            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0].number // empty" 2>/dev/null || true)
+            gh issue edit "$issue" --repo "$REPO" --remove-label oc-running >/dev/null 2>&1 || true
+            if [[ -n "$durable" ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
+            else
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
+            fi
+          done
+
+      - name: Supervise existing autonomous PRs with exact-head CI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t prs < <(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq '.[] | select(.body != null and (.body | contains("OC-AUTO-ISSUE: #"))) | .number' 2>/dev/null || true)
+          for pr in "${prs[@]:-}"; do
+            [[ -n "$pr" ]] || continue
+            data=$(gh pr view "$pr" --repo "$REPO" --json body,isDraft,mergeStateStatus,headRefName,headRefOid)
+            body=$(jq -r '.body // ""' <<<"$data")
+            issue=$(sed -n 's/.*OC-AUTO-ISSUE: #\([0-9][0-9]*\).*/\1/p' <<<"$body" | head -n1)
+            [[ -n "$issue" ]] || continue
+            head=$(jq -r '.headRefName' <<<"$data")
+            head_sha=$(jq -r '.headRefOid' <<<"$data")
+
+            gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
+
+            ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
+            ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$ci_runs")
+            matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$matrix_runs")
+
+            if [[ -z "$ci" ]]; then
+              gh workflow run frontend-ci.yml --repo "$REPO" --ref "$head" >/dev/null 2>&1 || true
+            fi
+            if [[ -z "$matrix" ]]; then
+              gh workflow run calyx-matrix-005-validation.yml --repo "$REPO" --ref "$head" >/dev/null 2>&1 || true
+            fi
+            [[ -n "$ci" && -n "$matrix" ]] || continue
+            [[ "$ci" == completed* && "$matrix" == completed* ]] || continue
+
+            if [[ "$ci" != "completed success" || "$matrix" != "completed success" ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-repair >/dev/null 2>&1 || true
+              continue
+            fi
+
+            merge_state=$(jq -r '.mergeStateStatus' <<<"$data")
+            if [[ "$merge_state" == "BEHIND" ]]; then
+              gh api -X PUT "repos/$REPO/pulls/$pr/update-branch" >/dev/null 2>&1 || true
+              continue
+            fi
+            if [[ "$merge_state" == "DIRTY" || "$merge_state" == "BLOCKED" ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-repair >/dev/null 2>&1 || true
+              continue
+            fi
+
+            if [[ $(jq -r '.isDraft' <<<"$data") == "true" ]]; then
+              gh pr ready "$pr" --repo "$REPO" >/dev/null 2>&1 || true
+            fi
+
+            if gh pr merge "$pr" --repo "$REPO" --squash --delete-branch=false >/dev/null 2>&1; then
+              requeue=false
+              blocked=false
+              grep -Eiq '^OC-AUTO-REQUEUE:[[:space:]]*true[[:space:]]*$' <<<"$body" && requeue=true || true
+              grep -Eiq '^OC-AUTO-BLOCKED:[[:space:]]*true[[:space:]]*$' <<<"$body" && blocked=true || true
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --remove-label oc-running --remove-label oc-queued --remove-label oc-repair >/dev/null 2>&1 || true
+              if [[ "$blocked" == true ]]; then
+                gh issue edit "$issue" --repo "$REPO" --add-label oc-blocked >/dev/null 2>&1 || true
+              elif [[ "$requeue" == true ]]; then
+                gh issue edit "$issue" --repo "$REPO" --add-label oc-queued >/dev/null 2>&1 || true
+              else
+                gh issue edit "$issue" --repo "$REPO" --add-label oc-done >/dev/null 2>&1 || true
+                gh issue close "$issue" --repo "$REPO" --comment "[OC-NO-API] Existing implementation integrated after exact-head CI passed. No paid AI provider was invoked by the supervisor." >/dev/null 2>&1 || true
+              fi
+            fi
+          done
+
+      - name: Publish operating mode
+        shell: bash
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+
+          ### Operating mode
+          The autonomous control plane is active for deterministic work: inventory, stale-lease recovery, exact-head validation, CI triggering, PR reconciliation, and safe integration advancement.
+
+          New AI-authored implementation is intentionally not dispatched by this scheduler. Anthropic remains parked. Gemini/OpenAI are also not automatically invoked until the provider-independent cost governor is implemented and proven.
+          EOF
