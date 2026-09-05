@@ -1157,6 +1157,79 @@ const knowledgeGraphDomain = branch({
   }, [kgGenusEvidenceGate, kgVisualizationGate, kgMissionControlAdapterGate]),
 ]);
 
+// ─── Taxonomy operations / releases (owner-authorization activation boundary) ──
+// Issue #523 (OC-TAXONOMY-GOVERNANCE-001): audited every user-reachable action in
+// src/pages/TaxonomyOperations.tsx and src/pages/TaxonomyReleases.tsx against the
+// mission's explicit no-taxonomy-activation-without-owner-authorization boundary.
+//
+// Findings, read from the source (not assumed):
+//   - TaxonomyOperations.tsx is fully read-only: it issues only GET requests
+//     (releases + readiness) and its one button just re-fetches; its two links
+//     are navigation, not mutation.
+//   - TaxonomyReleases.tsx has exactly one mutating action -- POST
+//     .../taxonomy/releases/inspect, which stores and inspects a *staged*
+//     release. That is explicitly not canonical promotion/activation (the page
+//     says so on screen, and there is no promote/activate button anywhere in
+//     either page or their embedded HasslerReleaseLifecyclePanel, which is
+//     itself read-only and self-documented as incapable of upload/stage/
+//     activate/publish). The single mutation is gated behind an owner session
+//     (validateOwnerSession) and a backend readiness flag (ready_for_upload),
+//     both re-verified inside uploadRelease() immediately before the network
+//     call fires -- not read from potentially-stale button-disabled state.
+// No gap was found; no code change to the pages themselves was required. New
+// regression tests (src/pages/TaxonomyOperations.test.tsx,
+// src/pages/TaxonomyReleases.test.tsx) lock this in, including two TOCTOU-style
+// tests (owner session revoked / readiness flipped after render but before the
+// click resolves) confirmed load-bearing by deliberately removing the re-check
+// in the source and watching those two tests fail before restoring it.
+
+const taxonomyOpsPagesGate: CompletionNode = {
+  id: 'cap-taxonomy-ops-pages',
+  parentId: 'module-taxonomy-ops-core',
+  name: 'TaxonomyOperations / TaxonomyReleases pages',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'issue', ref: '#523', note: 'OC-TAXONOMY-GOVERNANCE-001: audit against the no-taxonomy-activation-without-owner-authorization boundary.' },
+    { kind: 'file', ref: 'src/pages/TaxonomyOperations.tsx', note: 'Confirmed by reading the source: only GET requests to /taxonomy/releases and /taxonomy/readiness; the single button re-fetches; both links are navigation. No mutating action exists on this page.' },
+    { kind: 'file', ref: 'src/pages/TaxonomyReleases.tsx', note: 'Confirmed by reading the source: the only mutating action is POST /taxonomy/releases/inspect (stage + inspect, explicitly not promotion/activation). It is gated behind validateOwnerSession() and the backend ready_for_upload flag, both re-verified inside uploadRelease() immediately before the network call -- not read from stale button-disabled state.' },
+    { kind: 'file', ref: 'src/lib/hasslerReleaseLifecycle.ts', note: 'Read-only consumer, self-documented as incapable of implying upload/stage/activation/publication; fails closed to "unreachable" rather than asserting ABSENT.' },
+    { kind: 'file', ref: 'src/components/mission-control/HasslerReleaseLifecyclePanel.tsx', note: 'Read-only panel; carries no control that could upload, stage, activate, or publish anything.' },
+    { kind: 'file', ref: 'src/lib/ownerOperationsConsole.ts', note: 'validateOwnerSession() only returns a truthy token when authenticated === true (strict) and owner identity is a non-empty string -- confirmed by reading the BUILD-057/BUILD-058 guards in the source.' },
+    { kind: 'test', ref: 'src/pages/TaxonomyOperations.test.tsx', note: 'Proves every reachable interaction on this page issues only GET requests and never reaches an activate/promote/publish endpoint.' },
+    { kind: 'test', ref: 'src/pages/TaxonomyReleases.test.tsx', note: 'Proves the single mutating action is unreachable without both an authenticated owner session and backend readiness confirmation, including two TOCTOU-style tests and a defense-in-depth test that bypasses the disabled attribute directly.' },
+  ],
+  nextAction: 'No gap found and no code change was required; this capability is code-complete against the activation-boundary question. Remaining: a live browser pass against a real Calyx backend to confirm the readiness/upload UI end-to-end (browserEndToEnd and deployedOperational still unscored).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const taxonomyOpsDomain = branch({
+  id: 'domain-taxonomy-ops',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Taxonomy operations',
+  type: 'domain',
+  nextAction: 'Run a live browser pass against a real Calyx backend to confirm the readiness/upload UI end-to-end; the code-level owner-authorization activation-boundary audit (#523) is complete with no gap found.',
+}, [
+  branch({
+    id: 'module-taxonomy-ops-core',
+    parentId: 'domain-taxonomy-ops',
+    name: 'Taxonomy operations core',
+    type: 'module',
+    nextAction: 'See child capability.',
+  }, [taxonomyOpsPagesGate]),
+]);
+
 // ─── Conservatory / OASIS ───────────────────────────────────────────────────
 // Real evidence traced this pass: /conservatory/* is wrapped in
 // <ProtectedRoute> around MyConservatory.tsx, which performs real CRUD
@@ -1344,17 +1417,6 @@ const STUB_DOMAINS: StubDomainSpec[] = [
     lane: 'SCIENTIFIC_DATA_COMPLETION',
   },
   {
-    idHint: 'domain-taxonomy-ops',
-    name: 'Taxonomy operations',
-    evidence: [
-      { kind: 'file', ref: 'src/pages/TaxonomyOperations.tsx' },
-      { kind: 'file', ref: 'src/pages/TaxonomyReleases.tsx' },
-      { kind: 'file', ref: 'src/pages/MissionControlEntry.tsx', note: 'Mounted via MissionControlEntry\'s internal switch, not a direct App.tsx route.' },
-    ],
-    nextAction: 'Confirm taxonomy activation gating and score against the mission\'s explicit "no taxonomy activation" authorization boundary.',
-    lane: 'SCIENTIFIC_DATA_COMPLETION',
-  },
-  {
     idHint: 'domain-media-provenance',
     name: 'Media/image provenance',
     evidence: [
@@ -1418,6 +1480,7 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   calyxVerificationDomain,
   knowledgeGraphDomain,
   conservatoryDomain,
+  taxonomyOpsDomain,
   buildJourneyContinuityDomain(branch),
   ...stubDomains,
 ]);
