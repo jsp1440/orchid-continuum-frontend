@@ -26,6 +26,7 @@ describe('Orchestrator Queue Bridge', () => {
     }];
     const second = planQueueBridge([source], existing, 1);
     expect(second.create).toHaveLength(0);
+    expect(second.retire).toHaveLength(0);
     expect(second.suppressed).toEqual([{ sourceKey: sourceKey(source), reason: 'existing-open-lineage' }]);
   });
 
@@ -39,6 +40,37 @@ describe('Orchestrator Queue Bridge', () => {
     const existing = [{ sourceKey: sourceKey(a), title: a.title, state: 'open' as const, kind: 'issue' as const }];
     const refill = planQueueBridge([c, b, a], existing, 2);
     expect(refill.create.map((item) => item.sourceKey)).toEqual([sourceKey(b)]);
+  });
+
+  it('retires a completed source before calculating refill depth', () => {
+    const completed = candidate('done', { unfinished: false });
+    const next = candidate('next');
+    const existing = [{
+      sourceKey: sourceKey(completed),
+      title: completed.title,
+      state: 'open' as const,
+      kind: 'issue' as const,
+    }];
+
+    const plan = planQueueBridge([completed, next], existing, 1);
+
+    expect(plan.retire).toEqual([{ sourceKey: sourceKey(completed), reason: 'source-completed' }]);
+    expect(plan.preparedOpenCount).toBe(0);
+    expect(plan.create.map((item) => item.sourceKey)).toEqual([sourceKey(next)]);
+  });
+
+  it('does not repeatedly retire an already closed lineage', () => {
+    const completed = candidate('done', { unfinished: false });
+    const existing = [{
+      sourceKey: sourceKey(completed),
+      title: completed.title,
+      state: 'closed' as const,
+      kind: 'issue' as const,
+    }];
+
+    const plan = planQueueBridge([completed], existing, 1);
+    expect(plan.retire).toHaveLength(0);
+    expect(plan.create).toHaveLength(0);
   });
 
   it('deduplicates duplicate source records and matching open PR titles', () => {
