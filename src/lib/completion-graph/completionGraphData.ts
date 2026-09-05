@@ -1264,6 +1264,75 @@ const conservatoryDomain = branch({
   }, [conservatoryCollectionGate, conservatoryReadinessGate, oasisGreenhouseMonitoringGate]),
 ]);
 
+// ─── Lexicon / Knowledge Explorer ───────────────────────────────────────────
+// Real evidence: OC-LEXICON-001 (issue #524, portfolio jsp1440/Orchid-Continuum-Brain#96).
+// src/lib/lexiconService.ts merges a canonical Calyx backend response
+// (CALYX_BACKEND_BASE_URL + /api/lexicon) with a read-only Famous AI
+// Illustrated Orchid Lexicon migration fallback; governed scientific fields
+// only ever come from canonical storage. This capability instruments and
+// scores the real, current ratio of canonical-served vs Famous-fallback-only
+// entries, replacing the census-pending stub this domain previously carried.
+
+const lexiconCoverageInstrumentationGate: CompletionNode = {
+  id: 'cap-lexicon-coverage-instrumentation',
+  parentId: 'module-lexicon-core',
+  name: 'Lexicon canonical-vs-fallback coverage instrumentation',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'UNKNOWN' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: null,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'issue', ref: '#524', note: 'OC-LEXICON-001 -- instrument and score Lexicon canonical-vs-fallback coverage; parent portfolio jsp1440/Orchid-Continuum-Brain#96.' },
+    { kind: 'file', ref: 'src/lib/lexiconService.ts', note: 'measureLexiconCoverage() mirrors the exact canonical-fetch-then-merge logic getEntries() uses, so the ratio it reports matches what getEntries()/getEntry() actually serve, not a reimplementation that could drift.' },
+    { kind: 'test', ref: 'src/lib/lexiconService.test.ts', note: 'Covers a real 0% ratio on canonical-unreachable, a partial ratio on real canonical hits, and 0% (not a fabricated partial number) on an empty canonical response.' },
+    { kind: 'test', ref: 'src/lib/lexiconCoverageUnavailable.test.ts', note: 'Confirms the fail-closed contract: status is "unavailable" with a null ratio, never a guessed number, when nothing exists to measure against.' },
+    { kind: 'file', ref: 'src/components/mission-control/LexiconCoverageDiagnostic.tsx', note: 'Mission Control diagnostic panel rendering the measured ratio or an explicit "Coverage unavailable" state.' },
+    { kind: 'test', ref: 'src/components/mission-control/LexiconCoverageDiagnostic.render.test.tsx' },
+    { kind: 'file', ref: 'src/pages/MissionControl.tsx', note: 'Panel mounted in the Diagnostics column, wrapped in the existing SafePanel error boundary.' },
+  ],
+  nextAction: 'Merge this PR into oc-autonomous-integration to score integrationCanonicalBranch, then run a live/browser pass confirming the Mission Control Lexicon Coverage panel renders the measured ratio against a real Calyx backend session (only 3 of 6 gate categories evaluated this pass -- ~55% weight coverage; fail-closed behavior is already covered by focused tests).',
+  lastUpdated: CENSUS_DATE,
+  children: [],
+};
+
+const lexiconDomain = branch({
+  id: 'domain-lexicon',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Glossary / Lexicon / Knowledge Explorer',
+  type: 'domain',
+  nextAction: 'See child capability for the newly-scored coverage instrumentation; Knowledge Explorer decomposition remains census-pending.',
+}, [
+  branch({
+    id: 'module-lexicon-core',
+    parentId: 'domain-lexicon',
+    name: 'Lexicon core',
+    type: 'module',
+    nextAction: 'See child capabilities.',
+  }, [
+    lexiconCoverageInstrumentationGate,
+    censusPending({
+      idHint: 'cap-lexicon-knowledge-explorer',
+      parentId: 'module-lexicon-core',
+      name: 'Knowledge Explorer and remaining Lexicon term/relationship coverage',
+      evidence: [
+        { kind: 'route', ref: '/lexicon/*' },
+        { kind: 'file', ref: 'src/features/lexicon/LexiconAppLayout.tsx' },
+        { kind: 'route', ref: '/intelligence-graph' },
+      ],
+      nextAction: 'Decompose Knowledge Explorer (/intelligence-graph) into its own capabilities and score real term/relationship coverage beyond the canonical-vs-fallback ratio scored in the sibling capability.',
+      lane: 'SCIENTIFIC_DATA_COMPLETION',
+    }),
+  ]),
+]);
+
 // ─── Remaining initial inventory: recorded as domains, census pending ──────
 // Each entry below has at least one route/file existence check so "missing
 // evidence" is never silently treated as zero — but none have been scored,
@@ -1300,17 +1369,6 @@ const STUB_DOMAINS: StubDomainSpec[] = [
     ],
     nextAction: 'Audit Research Station capabilities beyond the already-scored Atlas handoff (advanced queries, trait explorers, conservation research workspace).',
     lane: 'PRODUCT_COMPLETION',
-  },
-  {
-    idHint: 'domain-lexicon',
-    name: 'Glossary / Lexicon / Knowledge Explorer',
-    evidence: [
-      { kind: 'route', ref: '/lexicon/*' },
-      { kind: 'file', ref: 'src/features/lexicon/LexiconAppLayout.tsx' },
-      { kind: 'route', ref: '/intelligence-graph' },
-    ],
-    nextAction: 'Decompose Lexicon and Knowledge Explorer into separate capabilities and score against real term/relationship coverage.',
-    lane: 'SCIENTIFIC_DATA_COMPLETION',
   },
   {
     idHint: 'domain-pollinator-mycorrhiza',
@@ -1418,6 +1476,7 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   calyxVerificationDomain,
   knowledgeGraphDomain,
   conservatoryDomain,
+  lexiconDomain,
   buildJourneyContinuityDomain(branch),
   ...stubDomains,
 ]);

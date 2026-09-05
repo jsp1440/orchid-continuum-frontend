@@ -48,6 +48,7 @@ import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import CompletionObservatory from '@/components/mission-control/CompletionObservatory';
 import DependencyReadinessMatrix from '@/components/mission-control/DependencyReadinessMatrix';
+import LexiconCoverageDiagnostic from '@/components/mission-control/LexiconCoverageDiagnostic';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import {
   type ContinuumSubsystem,
@@ -3210,6 +3211,12 @@ const MissionControlContent: React.FC = () => {
                     <br />
                     Data age: {dataAgeLabel}
                   </div>
+                </Panel>
+                </SafePanel>
+
+                <SafePanel title="Lexicon Coverage">
+                <Panel eyebrow="Diagnostics" title="Lexicon Coverage" icon={BookOpen}>
+                  <LexiconCoverageDiagnostic />
                 </Panel>
                 </SafePanel>
               </aside>
