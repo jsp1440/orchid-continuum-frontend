@@ -170,6 +170,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # Heal oc-repair issues that are stuck without a runnable label
           mapfile -t repairs < <(gh issue list --repo "$REPO" --state open --label oc-repair --limit 200 --json number --jq '.[].number')
           for issue in "${repairs[@]:-}"; do
             [[ -n "$issue" ]] || continue
@@ -178,6 +180,43 @@ jobs:
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
             fi
           done
+
+          # Enforce mutual exclusion: oc-queued cannot coexist with oc-running,
+          # oc-validating, oc-runtime-backoff, or oc-repair-backoff.
+          heal_errors=0
+          mapfile -t queued_issues < <(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq '.[].number')
+          for issue in "${queued_issues[@]:-}"; do
+            [[ -n "$issue" ]] || continue
+            if ! labels=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null); then
+              echo "::error::Healer: could not read labels for issue #${issue}; failing closed."
+              heal_errors=$(( heal_errors + 1 ))
+              continue
+            fi
+            conflict=""
+            [[ "$labels" == *oc-running* ]] && conflict="oc-running"
+            [[ "$labels" == *oc-validating* && -z "$conflict" ]] && conflict="oc-validating"
+            [[ "$labels" == *oc-runtime-backoff* && -z "$conflict" ]] && conflict="oc-runtime-backoff"
+            [[ "$labels" == *oc-repair-backoff* && -z "$conflict" ]] && conflict="oc-repair-backoff"
+            [[ -z "$conflict" ]] && continue
+            echo "::warning::Healer: issue #${issue} has oc-queued + ${conflict} (invariant violation). Removing oc-queued."
+            if gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued >/dev/null 2>&1; then
+              if ! labels_after=$(gh issue view "$issue" --repo "$REPO" --json labels --jq '[.labels[].name] | join(" ")' 2>/dev/null); then
+                echo "::error::Healer: could not verify repair for issue #${issue}; failing closed."
+                heal_errors=$(( heal_errors + 1 ))
+                continue
+              fi
+              if [[ "$labels_after" == *oc-queued* ]] && \
+                 [[ "$labels_after" == *oc-running* || "$labels_after" == *oc-validating* || \
+                    "$labels_after" == *oc-runtime-backoff* || "$labels_after" == *oc-repair-backoff* ]]; then
+                echo "::error::Healer: issue #${issue} invariant violation persists after repair; failing closed."
+                heal_errors=$(( heal_errors + 1 ))
+              fi
+            else
+              echo "::error::Healer: could not remove oc-queued from issue #${issue}; failing closed."
+              heal_errors=$(( heal_errors + 1 ))
+            fi
+          done
+          (( heal_errors == 0 )) || exit 1
 
           queued=$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')
           running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')
@@ -204,6 +243,7 @@ jobs:
           fetch-depth: 0
 
       - name: Generate only the next missing bounded work items
+        id: claude
         continue-on-error: true
         uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
         with:
@@ -238,7 +278,46 @@ jobs:
 
       - name: Enforce planner provider failure policy
         if: always()
-        run: node scripts/enforce-planner-provider-policy.mjs
+        env:
+          CLAUDE_OUTCOME: ${{ steps.claude.outcome }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          LOG="${CLAUDE_EXECUTION_LOG:-/home/runner/work/_temp/claude-execution-output.json}"
+          if [[ ! -f "$LOG" ]]; then
+            # claude-code-action skips itself (exits 0) when the workflow file on
+            # the PR head differs from the default branch — a security guard that
+            # fires on any PR that modifies the workflow. No SDK invocation means
+            # no execution log. Treat a clean skip (outcome=success) as non-failing;
+            # treat a genuine pre-log failure (outcome=failure) as fail-closed.
+            if [[ "${CLAUDE_OUTCOME:-}" == "success" ]]; then
+              echo "::warning::Planner action was skipped (workflow-file validation guard); no execution log produced. Enforce gate bypassed for this PR-on-workflow run."
+              exit 0
+            fi
+            echo "::error::Planner provider evidence is missing or malformed; failing closed."
+            exit 1
+          fi
+          result_json=$(jq '(if type == "array" then . else [.] end) | [.[] | objects | select(.type == "result")] | last // empty' "$LOG" 2>/dev/null || true)
+          if [[ -z "$result_json" ]]; then
+            echo "::error::Planner provider evidence has no result record; failing closed."
+            exit 1
+          fi
+          is_error=$(jq -r '.is_error // false' <<<"$result_json")
+          if [[ "$is_error" != "true" ]]; then
+            echo "Planner provider health is good."
+            exit 0
+          fi
+          cause=$(jq -r '.provider_failure_cause // ""' <<<"$result_json")
+          case "$cause" in
+            ANTHROPIC_CREDIT_EXHAUSTED|ANTHROPIC_RATE_LIMITED|ANTHROPIC_PROVIDER_ERROR)
+              echo "::warning::Planner provider is degraded ($cause); existing governed completion work may continue without refill."
+              exit 0
+              ;;
+            *)
+              echo "::error::Planner provider failure is not a safe capacity degradation: ${cause:-UNSAFE_OR_UNCLASSIFIED_PROVIDER_FAILURE}"
+              exit 1
+              ;;
+          esac
 
   prepare:
     needs: [inventory, planner]
@@ -304,7 +383,7 @@ jobs:
             issue=${row##*|}
             labels=$(gh issue view "$issue" --repo "$REPO" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
             [[ "$labels" == *oc-queued* ]] || continue
-            [[ "$labels" != *oc-running* && "$labels" != *oc-validating* && "$labels" != *oc-runtime-backoff* ]] || continue
+            [[ "$labels" != *oc-running* && "$labels" != *oc-validating* && "$labels" != *oc-runtime-backoff* && "$labels" != *oc-repair-backoff* ]] || continue
 
             repair=false
             [[ "$labels" == *oc-repair* ]] && repair=true
