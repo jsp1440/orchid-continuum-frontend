@@ -13,26 +13,24 @@ describe("provider governor workflow boundary", () => {
     expect(governed).toContain("OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'");
   });
 
-  it("evaluates the deterministic governor before the legacy paid-provider lane", () => {
-    const gate = governed.indexOf("scripts/provider-governor-workflow-gate.ts");
-    const paidLane = governed.indexOf("./.github/workflows/orchid-completion-lane.yml");
-
-    expect(gate).toBeGreaterThan(-1);
-    expect(paidLane).toBeGreaterThan(gate);
-    expect(governed).toContain(
-      "if: needs.provider-admission.outputs.allow_paid_execution == 'true'",
-    );
+  it("evaluates only deterministic provider admission in NO-API mode", () => {
+    expect(governed).toContain("scripts/provider-governor-workflow-gate.ts");
+    expect(governed).toContain("Provider admission only:");
   });
 
-  it("does not expose provider credentials or provider actions in the admission job", () => {
-    const admission = governed.split("  paid-provider-completion:")[0];
+  it("contains no reachable or declared paid-provider workflow while hard parked", () => {
+    expect(governed).not.toContain("./.github/workflows/orchid-completion-lane.yml");
+    expect(governed).not.toContain("secrets: inherit");
+    expect(governed).not.toContain("paid-provider-completion:");
+  });
 
-    expect(admission).not.toContain("ANTHROPIC_API_KEY");
-    expect(admission).not.toContain("OPENAI_API_KEY");
-    expect(admission).not.toContain("GEMINI_API_KEY");
-    expect(admission).not.toContain("anthropics/claude-code-action");
-    expect(admission).not.toContain("openai/");
-    expect(admission).not.toContain("google-gemini");
+  it("does not expose provider credentials or provider actions anywhere in the governed wrapper", () => {
+    expect(governed).not.toContain("ANTHROPIC_API_KEY");
+    expect(governed).not.toContain("OPENAI_API_KEY");
+    expect(governed).not.toContain("GEMINI_API_KEY");
+    expect(governed).not.toContain("anthropics/claude-code-action");
+    expect(governed).not.toContain("openai/");
+    expect(governed).not.toContain("google-gemini");
   });
 
   it("keeps dispatch throttles explicit at the workflow boundary", () => {
