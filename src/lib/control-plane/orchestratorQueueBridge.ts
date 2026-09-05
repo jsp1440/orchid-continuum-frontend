@@ -75,6 +75,27 @@ function classifyProtected(candidate: QueueBridgeCandidate): string[] {
     .sort();
 }
 
+function reconcileCandidateStates(candidates: QueueBridgeCandidate[]): QueueBridgeCandidate[] {
+  const byKey = new Map<string, QueueBridgeCandidate>();
+
+  for (const candidate of candidates) {
+    const key = sourceKey(candidate);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, candidate);
+      continue;
+    }
+
+    // Conflicting duplicate source observations fail toward unfinished work. A source
+    // is considered complete only when every observation for that key agrees.
+    if (!current.unfinished && candidate.unfinished) {
+      byKey.set(key, candidate);
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) => sourceKey(a).localeCompare(sourceKey(b)));
+}
+
 export function prepareCandidate(candidate: QueueBridgeCandidate): PreparedWork {
   const key = sourceKey(candidate);
   const blockedReasons = classifyProtected(candidate);
@@ -110,39 +131,36 @@ export function planQueueBridge(
   targetDepth: number,
 ): QueueBridgePlan {
   const boundedTarget = Math.max(0, Math.floor(targetDepth));
+  const reconciledCandidates = reconcileCandidateStates(candidates);
   const completedSourceKeys = new Set(
-    candidates.filter((candidate) => !candidate.unfinished).map((candidate) => sourceKey(candidate)),
+    reconciledCandidates.filter((candidate) => !candidate.unfinished).map((candidate) => sourceKey(candidate)),
   );
   const openSourceKeys = new Set(
     existing.filter((item) => item.state === 'open' && item.sourceKey).map((item) => item.sourceKey!.toLowerCase()),
   );
-  const openTitles = new Set(existing.filter((item) => item.state === 'open').map((item) => normalizeTitle(item.title)));
   const retire = [...openSourceKeys]
     .filter((key) => completedSourceKeys.has(key))
     .sort()
     .map((key) => ({ sourceKey: key, reason: 'source-completed' as const }));
   const retiringKeys = new Set(retire.map((item) => item.sourceKey));
+  const openTitles = new Set(
+    existing
+      .filter(
+        (item) => item.state === 'open' && !(item.sourceKey && retiringKeys.has(item.sourceKey.toLowerCase())),
+      )
+      .map((item) => normalizeTitle(item.title)),
+  );
   const preparedOpenCount = existing.filter(
     (item) => item.state === 'open' && Boolean(item.sourceKey) && !retiringKeys.has(item.sourceKey!.toLowerCase()),
   ).length;
   const slots = Math.max(0, boundedTarget - preparedOpenCount);
 
-  const seenCandidateKeys = new Set<string>();
   const suppressed: QueueBridgePlan['suppressed'] = [];
   const safe: PreparedWork[] = [];
   const protectedWork: PreparedWork[] = [];
 
-  const ordered = [...candidates]
-    .filter((candidate) => candidate.unfinished)
-    .sort((a, b) => sourceKey(a).localeCompare(sourceKey(b)));
-
-  for (const candidate of ordered) {
+  for (const candidate of reconciledCandidates.filter((candidate) => candidate.unfinished)) {
     const key = sourceKey(candidate);
-    if (seenCandidateKeys.has(key)) {
-      suppressed.push({ sourceKey: key, reason: 'duplicate-source-candidate' });
-      continue;
-    }
-    seenCandidateKeys.add(key);
 
     if ((openSourceKeys.has(key) && !retiringKeys.has(key)) || openTitles.has(normalizeTitle(candidate.title))) {
       suppressed.push({ sourceKey: key, reason: 'existing-open-lineage' });
