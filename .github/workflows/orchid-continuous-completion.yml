@@ -7,7 +7,7 @@ on:
   pull_request:
     types: [closed, synchronize, ready_for_review]
   issues:
-    types: [closed, reopened]
+    types: [closed, reopened, labeled, unlabeled]
 
 concurrency:
   group: orchid-continuous-completion-${{ github.repository }}
@@ -26,6 +26,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
       INTEGRATION_BRANCH: oc-autonomous-integration
+      PREPARED_TARGET: 20
     steps:
       - name: Enforce provider circuit breaker
         shell: bash
@@ -33,7 +34,18 @@ jobs:
           set -euo pipefail
           echo "NO API MODE: paid model execution is disabled."
           echo "Anthropic, Gemini, and OpenAI provider calls from this scheduler: 0."
-          echo "This workflow performs deterministic GitHub/CI supervision only."
+          echo "This workflow performs deterministic GitHub/CI supervision and job preparation only."
+
+      - name: Ensure persistence labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          ensure_label() {
+            gh label create "$1" --repo "$REPO" --color "$2" --description "$3" 2>/dev/null || true
+          }
+          ensure_label oc-prepared 0e8a16 "Deterministically prepared for the next reasoning/coding worker"
+          ensure_label oc-needs-reasoning d93f0b "Prepared work requires a reasoning/coding worker"
+          ensure_label oc-portfolio-refill 5319e7 "Persistent steward requests more bounded backlog"
 
       - name: Inventory autonomous portfolio
         id: inventory
@@ -41,19 +53,28 @@ jobs:
         run: |
           set -euo pipefail
           queued=$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
+          prepared=$(gh issue list --repo "$REPO" --state open --label oc-prepared --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
           running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
           validating=$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
           blocked=$(gh issue list --repo "$REPO" --state open --label oc-blocked --limit 500 --json number --jq 'length' 2>/dev/null || echo 0)
           prs=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number --jq 'length' 2>/dev/null || echo 0)
+          actionable=$((queued + prepared + running + validating))
           {
-            echo "### Orchid Continuum — deterministic supervisor"
+            echo "queued=$queued"
+            echo "prepared=$prepared"
+            echo "actionable=$actionable"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Orchid Continuum — persistent deterministic supervisor"
             echo
             echo "- Paid provider calls: **0**"
             echo "- Queued: **$queued**"
+            echo "- Prepared: **$prepared**"
             echo "- Running: **$running**"
             echo "- Validating: **$validating**"
             echo "- Blocked: **$blocked**"
             echo "- Open integration PRs: **$prs**"
+            echo "- Prepared target: **$PREPARED_TARGET**"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Recover stale running leases without invoking AI
@@ -73,11 +94,67 @@ jobs:
             durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0].number // empty" 2>/dev/null || true)
             gh issue edit "$issue" --repo "$REPO" --remove-label oc-running >/dev/null 2>&1 || true
             if [[ -n "$durable" ]]; then
-              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-prepared --add-label oc-validating >/dev/null 2>&1 || true
             else
               gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-queued >/dev/null 2>&1 || true
             fi
           done
+
+      - name: Prepare queued work persistently without invoking AI
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t queued < <(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number,title,body,updatedAt,labels --jq '.[] | @base64')
+          prepared_now=0
+          for item in "${queued[@]:-}"; do
+            [[ -n "$item" ]] || continue
+            obj=$(base64 --decode <<<"$item")
+            issue=$(jq -r '.number' <<<"$obj")
+            labels=$(jq -r '[.labels[].name] | join(" ")' <<<"$obj")
+            [[ "$labels" == *oc-running* || "$labels" == *oc-validating* || "$labels" == *oc-blocked* || "$labels" == *oc-owner-gate* || "$labels" == *oc-done* || "$labels" == *oc-runtime-backoff* ]] && continue
+
+            marker="OC-AUTO-ISSUE: #${issue}"
+            durable=$(gh pr list --repo "$REPO" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\"$marker\")))][0].number // empty" 2>/dev/null || true)
+            if [[ -n "$durable" ]]; then
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-queued --remove-label oc-prepared --remove-label oc-needs-reasoning --add-label oc-validating >/dev/null 2>&1 || true
+              continue
+            fi
+
+            updated=$(jq -r '.updatedAt' <<<"$obj")
+            title=$(jq -r '.title // ""' <<<"$obj")
+            body=$(jq -r '.body // ""' <<<"$obj")
+            fingerprint=$(printf '%s\n%s\n%s\n%s\n' "$issue" "$updated" "$title" "$body" | sha256sum | cut -d' ' -f1)
+            stamp="[OC-PREPARED-FINGERPRINT] ${fingerprint}"
+            seen=$(gh issue view "$issue" --repo "$REPO" --json comments --jq --arg stamp "$stamp" 'any(.comments[]?; (.body // "") | contains($stamp))' 2>/dev/null || echo false)
+
+            gh issue edit "$issue" --repo "$REPO" --add-label oc-prepared --add-label oc-needs-reasoning >/dev/null 2>&1 || true
+            if [[ "$seen" != true ]]; then
+              gh issue comment "$issue" --repo "$REPO" --body "$stamp
+[OC-PERSISTENCE] Job prepared deterministically. No paid AI provider was invoked. A reasoning/coding worker may consume this only if the issue is still open, materially unchanged, and outside protected governance boundaries." >/dev/null 2>&1 || true
+            fi
+            prepared_now=$((prepared_now + 1))
+            (( prepared_now >= PREPARED_TARGET )) && break
+          done
+          echo "Prepared/refreshed up to $prepared_now queued jobs this cycle." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Maintain one durable portfolio-refill request
+        shell: bash
+        run: |
+          set -euo pipefail
+          actionable=$(gh issue list --repo "$REPO" --state open --limit 500 --json number,labels --jq '[.[] | select(any(.labels[]?; .name == "oc-queued" or .name == "oc-prepared" or .name == "oc-running" or .name == "oc-validating"))] | length' 2>/dev/null || echo 0)
+          existing=$(gh issue list --repo "$REPO" --state open --label oc-portfolio-refill --limit 20 --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if (( actionable < PREPARED_TARGET )); then
+            if [[ -z "$existing" ]]; then
+              gh issue create --repo "$REPO" --title "P0: persistence steward refill required" --label oc-portfolio-refill --label oc-p0 --body "[OC-PERSISTENCE-REFILL]
+The deterministic persistence lane found only ${actionable} actionable/prepared items; target is ${PREPARED_TARGET}.
+
+A reasoning-capable steward should reconcile OrchidContinuumBrain against frontend/backend implementation truth, create only genuinely missing bounded work, deduplicate against existing issues/PRs, and preserve all scientific, locality, credential, spending, production, and destructive-operation boundaries.
+
+This issue is a durable wake-up signal, not authorization to invoke a paid model API from GitHub Actions." >/dev/null
+            fi
+          elif [[ -n "$existing" ]]; then
+            gh issue close "$existing" --repo "$REPO" --comment "[OC-PERSISTENCE] Prepared/actionable depth recovered to ${actionable}; refill signal retired without paid AI use." >/dev/null 2>&1 || true
+          fi
 
       - name: Supervise existing autonomous PRs with exact-head CI
         shell: bash
@@ -92,48 +169,26 @@ jobs:
             [[ -n "$issue" ]] || continue
             head=$(jq -r '.headRefName' <<<"$data")
             head_sha=$(jq -r '.headRefOid' <<<"$data")
-
-            gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
+            gh issue edit "$issue" --repo "$REPO" --remove-label oc-running --remove-label oc-queued --remove-label oc-prepared --remove-label oc-needs-reasoning --add-label oc-validating >/dev/null 2>&1 || true
 
             ci_runs=$(gh run list --repo "$REPO" --workflow frontend-ci.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
             matrix_runs=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml --branch "$head" --limit 20 --json headSha,status,conclusion 2>/dev/null || echo '[]')
             ci=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$ci_runs")
             matrix=$(jq -r --arg sha "$head_sha" '[.[] | select(.headSha == $sha)][0] | if . then [.status, (.conclusion // "")] | join(" ") else "" end' <<<"$matrix_runs")
-
-            if [[ -z "$ci" ]]; then
-              gh workflow run frontend-ci.yml --repo "$REPO" --ref "$head" >/dev/null 2>&1 || true
-            fi
-            if [[ -z "$matrix" ]]; then
-              gh workflow run calyx-matrix-005-validation.yml --repo "$REPO" --ref "$head" >/dev/null 2>&1 || true
-            fi
-            [[ -n "$ci" && -n "$matrix" ]] || continue
-            [[ "$ci" == completed* && "$matrix" == completed* ]] || continue
-
-            if [[ "$ci" != "completed success" || "$matrix" != "completed success" ]]; then
-              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-repair >/dev/null 2>&1 || true
-              continue
-            fi
+            [[ -n "$ci" ]] || gh workflow run frontend-ci.yml --repo "$REPO" --ref "$head" >/dev/null 2>&1 || true
+            [[ -n "$matrix" ]] || gh workflow run calyx-matrix-005-validation.yml --repo "$REPO" --ref "$head" >/dev/null 2>&1 || true
+            [[ "$ci" == "completed success" && "$matrix" == "completed success" ]] || continue
 
             merge_state=$(jq -r '.mergeStateStatus' <<<"$data")
-            if [[ "$merge_state" == "BEHIND" ]]; then
-              gh api -X PUT "repos/$REPO/pulls/$pr/update-branch" >/dev/null 2>&1 || true
-              continue
-            fi
-            if [[ "$merge_state" == "DIRTY" || "$merge_state" == "BLOCKED" ]]; then
-              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-repair >/dev/null 2>&1 || true
-              continue
-            fi
-
-            if [[ $(jq -r '.isDraft' <<<"$data") == "true" ]]; then
-              gh pr ready "$pr" --repo "$REPO" >/dev/null 2>&1 || true
-            fi
+            [[ "$merge_state" != "DIRTY" && "$merge_state" != "BLOCKED" ]] || { gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --add-label oc-repair >/dev/null 2>&1 || true; continue; }
+            [[ "$merge_state" != "BEHIND" ]] || { gh api -X PUT "repos/$REPO/pulls/$pr/update-branch" >/dev/null 2>&1 || true; continue; }
+            [[ $(jq -r '.isDraft' <<<"$data") != "true" ]] || gh pr ready "$pr" --repo "$REPO" >/dev/null 2>&1 || true
 
             if gh pr merge "$pr" --repo "$REPO" --squash --delete-branch=false >/dev/null 2>&1; then
-              requeue=false
-              blocked=false
+              requeue=false; blocked=false
               grep -Eiq '^OC-AUTO-REQUEUE:[[:space:]]*true[[:space:]]*$' <<<"$body" && requeue=true || true
               grep -Eiq '^OC-AUTO-BLOCKED:[[:space:]]*true[[:space:]]*$' <<<"$body" && blocked=true || true
-              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --remove-label oc-running --remove-label oc-queued --remove-label oc-repair >/dev/null 2>&1 || true
+              gh issue edit "$issue" --repo "$REPO" --remove-label oc-validating --remove-label oc-running --remove-label oc-queued --remove-label oc-repair --remove-label oc-prepared --remove-label oc-needs-reasoning >/dev/null 2>&1 || true
               if [[ "$blocked" == true ]]; then
                 gh issue edit "$issue" --repo "$REPO" --add-label oc-blocked >/dev/null 2>&1 || true
               elif [[ "$requeue" == true ]]; then
@@ -145,13 +200,13 @@ jobs:
             fi
           done
 
-      - name: Publish operating mode
+      - name: Publish persistence operating mode
         shell: bash
         run: |
           cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
 
-          ### Operating mode
-          The autonomous control plane is active for deterministic work: inventory, stale-lease recovery, exact-head validation, CI triggering, PR reconciliation, and safe integration advancement.
+          ### Persistence operating mode
+          The five-minute control plane now keeps working between conversations: inventory, stale-lease recovery, deterministic job preparation, material-change fingerprinting, backlog-depth signaling, exact-head CI triggering, PR reconciliation, and safe integration advancement.
 
-          New AI-authored implementation is intentionally not dispatched by this scheduler. Anthropic remains parked. Gemini/OpenAI are also not automatically invoked until the provider-independent cost governor is implemented and proven.
+          It makes zero Anthropic, Gemini, or OpenAI calls. New code/reasoning work is handed off through durable `oc-prepared` / `oc-needs-reasoning` state to a reasoning-capable worker outside this scheduler.
           EOF
