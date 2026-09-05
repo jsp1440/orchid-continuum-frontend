@@ -471,7 +471,7 @@ jobs:
           ref: main
           fetch-depth: 0
 
-      - name: Open or refresh the autonomous integration batch PR
+      - name: Autonomous integration promotion or owner-gate fallback
         shell: bash
         run: |
           set -euo pipefail
@@ -479,29 +479,102 @@ jobs:
           ahead=$(git rev-list --count "origin/main..origin/$INTEGRATION_BRANCH")
           (( ahead > 0 )) || exit 0
 
-          existing=$(gh pr list --repo "$REPO" --state open --base main --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
-          body=$(cat <<EOF
-          Autonomously validated integration batch from $INTEGRATION_BRANCH.
+          integration_sha=$(git rev-parse "origin/$INTEGRATION_BRANCH")
 
-          Routine green reversible engineering is pre-authorized to continue through the completion system. This PR remains a governance boundary only where protected scientific truth, sensitive locality, credentials/security, spending, destructive operations, or other constitutional policy is implicated.
+          # Check required CI on the integration branch head
+          ci_status=$(gh run list --repo "$REPO" --workflow frontend-ci.yml \
+            --branch "$INTEGRATION_BRANCH" --limit 20 --json headSha,status,conclusion \
+            --jq "[.[] | select(.headSha == \"$integration_sha\")][0] | \
+            if . then [.status, (.conclusion // \"\")] | join(\" \") else \"\" end" 2>/dev/null || true)
+          matrix_status=$(gh run list --repo "$REPO" --workflow calyx-matrix-005-validation.yml \
+            --branch "$INTEGRATION_BRANCH" --limit 20 --json headSha,status,conclusion \
+            --jq "[.[] | select(.headSha == \"$integration_sha\")][0] | \
+            if . then [.status, (.conclusion // \"\")] | join(\" \") else \"\" end" 2>/dev/null || true)
 
-          OC-AUTO-INTEGRATION-GATE
-          EOF
-          )
-
-          if [[ -z "$existing" ]]; then
-            if ! create_error=$(gh pr create --repo "$REPO" --base main --head "$INTEGRATION_BRANCH" --draft --title "OC autonomous integration batch" --body "$body" 2>&1 >/dev/null); then
-              if grep -qi 'not permitted to create or approve pull requests' <<<"$create_error"; then
-                notice="GitHub Actions is not permitted to create pull requests in $REPO. Enable Settings -> Actions -> General -> Workflow permissions -> Allow GitHub Actions to create and approve pull requests. The integration branch remains safe and active."
-                echo "::warning title=Integration gate PR blocked by repository setting::$notice"
-                printf '### Integration gate\n\n%s\n' "$notice" >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-              fi
-              echo "$create_error" >&2
-              exit 1
+          # Scan diff for protected boundary paths (fail-closed: any match → owner gate)
+          protected=false
+          protect_reason=""
+          while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            if [[ "$path" == migrations/* || "$path" == *migration*.sql || \
+                  "$path" == *taxonomy* || "$path" == *scientific-truth* || \
+                  "$path" == *canonical-knowledge* || "$path" == *production-data* || \
+                  "$path" == *locality-data* || "$path" == *secrets* ]]; then
+              protected=true
+              protect_reason="protected path in diff: $path"
+              echo "::warning::Autonomous promotion blocked — $protect_reason"
+              break
             fi
-            existing=$(gh pr list --repo "$REPO" --state open --base main --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
+          done < <(git diff --name-only "origin/main..origin/$INTEGRATION_BRANCH" 2>/dev/null || true)
+
+          # Autonomous promotion: all safety conditions verified
+          if [[ "$ci_status" == "completed success" && \
+                "$matrix_status" == "completed success" && \
+                "$protected" == "false" ]]; then
+            existing=$(gh pr list --repo "$REPO" --state open --base main \
+              --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
+            pr_body="OC autonomous promotion: exact-head CI verified, reversible code-only change, no protected boundary detected.
+
+OC-AUTO-INTEGRATION-GATE"
+            if [[ -z "$existing" ]]; then
+              create_out=$(gh pr create --repo "$REPO" --base main --head "$INTEGRATION_BRANCH" \
+                --title "OC autonomous integration batch" --body "$pr_body" 2>&1) || {
+                if grep -qi 'not permitted to create or approve pull requests' <<<"$create_out"; then
+                  echo "::warning title=Integration gate PR blocked by repository setting::GitHub Actions cannot create PRs in $REPO."
+                  exit 0
+                fi
+                echo "$create_out" >&2; exit 1
+              }
+              existing=$(gh pr list --repo "$REPO" --state open --base main \
+                --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
+            else
+              gh pr edit "$existing" --repo "$REPO" --body "$pr_body" >/dev/null 2>&1 || true
+            fi
+            if [[ -n "$existing" ]]; then
+              if gh pr merge "$existing" --repo "$REPO" --squash --delete-branch=false >/dev/null 2>&1; then
+                echo "::notice::Autonomous promotion: merged oc-autonomous-integration → main (PR #$existing, sha $integration_sha)"
+                printf '### Autonomous promotion\n\nMerged `oc-autonomous-integration` → `main` (PR #%s, sha `%s`).\n' \
+                  "$existing" "$integration_sha" >> "$GITHUB_STEP_SUMMARY"
+              else
+                echo "::warning::Autonomous promotion: merge failed on PR #$existing; leaving for owner review"
+                gh pr edit "$existing" --repo "$REPO" --add-label oc-owner-gate >/dev/null 2>&1 || true
+              fi
+            fi
+
+          # Owner-gate fallback: one or more conditions not met
           else
-            gh pr edit "$existing" --repo "$REPO" --body "$body" >/dev/null
+            reason=""
+            [[ "$ci_status" == "completed success" ]] || \
+              reason="frontend-ci not green on integration head (${ci_status:-no run found})"
+            [[ "$matrix_status" == "completed success" ]] || \
+              reason="${reason:+$reason; }matrix-validation not green on integration head (${matrix_status:-no run found})"
+            [[ "$protected" == "false" ]] || \
+              reason="${reason:+$reason; }$protect_reason"
+            echo "::warning::Autonomous promotion deferred: $reason"
+
+            existing=$(gh pr list --repo "$REPO" --state open --base main \
+              --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
+            gate_body="Autonomously validated integration batch from $INTEGRATION_BRANCH.
+
+Deferred to owner gate: $reason
+
+Routine green reversible engineering is pre-authorized to continue through the completion system. This PR remains a governance boundary only where protected scientific truth, sensitive locality, credentials/security, spending, destructive operations, or other constitutional policy is implicated.
+
+OC-AUTO-INTEGRATION-GATE"
+            if [[ -z "$existing" ]]; then
+              create_out=$(gh pr create --repo "$REPO" --base main --head "$INTEGRATION_BRANCH" \
+                --draft --title "OC autonomous integration batch" --body "$gate_body" 2>&1) || {
+                if grep -qi 'not permitted to create or approve pull requests' <<<"$create_out"; then
+                  echo "::warning title=Integration gate PR blocked by repository setting::GitHub Actions cannot create PRs in $REPO."
+                  exit 0
+                fi
+                echo "$create_out" >&2; exit 1
+              }
+              existing=$(gh pr list --repo "$REPO" --state open --base main \
+                --head "$INTEGRATION_BRANCH" --json number --jq '.[0].number // empty')
+            else
+              gh pr edit "$existing" --repo "$REPO" --body "$gate_body" >/dev/null 2>&1 || true
+            fi
+            [[ -z "$existing" ]] || gh pr edit "$existing" --repo "$REPO" \
+              --add-label oc-owner-gate >/dev/null 2>&1 || true
           fi
-          [[ -z "$existing" ]] || gh pr edit "$existing" --repo "$REPO" --add-label oc-owner-gate >/dev/null 2>&1 || true
