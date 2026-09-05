@@ -243,6 +243,7 @@ jobs:
           fetch-depth: 0
 
       - name: Generate only the next missing bounded work items
+        id: claude
         continue-on-error: true
         uses: anthropics/claude-code-action@c81e3bc69d1b18badbb63ba39581218f02421678 # v1.0.201
         with:
