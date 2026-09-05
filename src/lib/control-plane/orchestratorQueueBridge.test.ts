@@ -31,8 +31,8 @@ describe('Orchestrator Queue Bridge', () => {
 
   it('refills deterministically when prepared capacity is depleted', () => {
     const a = candidate('a');
-    const b = candidate('b', { sourceKind: 'connector-queue' });
-    const c = candidate('c', { sourceKind: 'bounded-engineering-executor' });
+    const b = candidate('b');
+    const c = candidate('c');
     const first = planQueueBridge([c, b, a], [], 2);
     expect(first.create.map((item) => item.sourceKey)).toEqual([sourceKey(a), sourceKey(b)]);
 
