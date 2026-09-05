@@ -35,6 +35,7 @@ export interface PreparedWork {
 
 export interface QueueBridgePlan {
   create: PreparedWork[];
+  retire: Array<{ sourceKey: string; reason: 'source-completed' }>;
   suppressed: Array<{ sourceKey: string; reason: string }>;
   protected: PreparedWork[];
   eligibleCount: number;
@@ -99,9 +100,9 @@ export function prepareCandidate(candidate: QueueBridgeCandidate): PreparedWork 
 
 /**
  * Deterministic reconciliation only. It never invokes a provider and never performs
- * GitHub writes itself. A caller may materialize `create` items after rechecking
- * repository truth. Protected items are returned separately and never count toward
- * executable prepared depth.
+ * GitHub writes itself. A caller may materialize `create`/`retire` actions after
+ * rechecking repository truth. Protected items are returned separately and never
+ * count toward executable prepared depth.
  */
 export function planQueueBridge(
   candidates: QueueBridgeCandidate[],
@@ -109,11 +110,21 @@ export function planQueueBridge(
   targetDepth: number,
 ): QueueBridgePlan {
   const boundedTarget = Math.max(0, Math.floor(targetDepth));
+  const completedSourceKeys = new Set(
+    candidates.filter((candidate) => !candidate.unfinished).map((candidate) => sourceKey(candidate)),
+  );
   const openSourceKeys = new Set(
     existing.filter((item) => item.state === 'open' && item.sourceKey).map((item) => item.sourceKey!.toLowerCase()),
   );
   const openTitles = new Set(existing.filter((item) => item.state === 'open').map((item) => normalizeTitle(item.title)));
-  const preparedOpenCount = existing.filter((item) => item.state === 'open' && Boolean(item.sourceKey)).length;
+  const retire = [...openSourceKeys]
+    .filter((key) => completedSourceKeys.has(key))
+    .sort()
+    .map((key) => ({ sourceKey: key, reason: 'source-completed' as const }));
+  const retiringKeys = new Set(retire.map((item) => item.sourceKey));
+  const preparedOpenCount = existing.filter(
+    (item) => item.state === 'open' && Boolean(item.sourceKey) && !retiringKeys.has(item.sourceKey!.toLowerCase()),
+  ).length;
   const slots = Math.max(0, boundedTarget - preparedOpenCount);
 
   const seenCandidateKeys = new Set<string>();
@@ -133,7 +144,7 @@ export function planQueueBridge(
     }
     seenCandidateKeys.add(key);
 
-    if (openSourceKeys.has(key) || openTitles.has(normalizeTitle(candidate.title))) {
+    if ((openSourceKeys.has(key) && !retiringKeys.has(key)) || openTitles.has(normalizeTitle(candidate.title))) {
       suppressed.push({ sourceKey: key, reason: 'existing-open-lineage' });
       continue;
     }
@@ -148,6 +159,7 @@ export function planQueueBridge(
 
   return {
     create: safe.slice(0, slots),
+    retire,
     suppressed,
     protected: protectedWork,
     eligibleCount: safe.length,
