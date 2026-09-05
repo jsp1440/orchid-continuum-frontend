@@ -1,0 +1,65 @@
+name: Orchid Deterministic Dispatch
+
+on:
+  workflow_call:
+    inputs:
+      issue1:
+        required: false
+        type: string
+        default: ''
+      issue2:
+        required: false
+        type: string
+        default: ''
+      issue3:
+        required: false
+        type: string
+        default: ''
+      issue4:
+        required: false
+        type: string
+        default: ''
+      issue5:
+        required: false
+        type: string
+        default: ''
+
+# This workflow is intentionally credential-free. It is the reusable boundary
+# between frequent deterministic queue/scheduling activity and any future paid
+# provider execution. Each selected issue enters the governed admission wrapper;
+# while NO-API mode is active, that wrapper parks Anthropic/Gemini/OpenAI before
+# the legacy provider lane is reachable.
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  issue1:
+    if: inputs.issue1 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue1 }}
+
+  issue2:
+    if: inputs.issue2 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue2 }}
+
+  issue3:
+    if: inputs.issue3 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue3 }}
+
+  issue4:
+    if: inputs.issue4 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue4 }}
+
+  issue5:
+    if: inputs.issue5 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue5 }}
