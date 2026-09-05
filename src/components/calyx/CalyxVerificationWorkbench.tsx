@@ -2,11 +2,13 @@ import React, { useMemo, useState } from "react";
 
 import GovernedEvidenceSearch from "@/components/calyx/GovernedEvidenceSearch";
 import ReasoningLedgerInspector from "@/components/calyx/ReasoningLedgerInspector";
+import ScientificObservabilityTrace from "@/components/calyx/ScientificObservabilityTrace";
 import type { BrainMission, MissionConclusion } from "@/lib/calyxWorkspace";
 import {
   checkCalyxMissionClaim,
   type CalyxVerificationCheckStatus,
 } from "@/lib/calyxVerification";
+import { getScientificObservabilityCorrelationId } from "@/lib/scientificObservabilityCorrelation";
 
 const STATUS_CLASS: Record<CalyxVerificationCheckStatus, string> = {
   pass: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
@@ -55,6 +57,7 @@ export default function CalyxVerificationWorkbench({
   const passCount = result.checks.filter((item) => item.status === "pass").length;
   const reviewCount = result.checks.filter((item) => item.status === "needs_review").length;
   const failCount = result.checks.filter((item) => item.status === "fail").length;
+  const traceCorrelationId = getScientificObservabilityCorrelationId(mission);
 
   return (
     <div className="mt-3 rounded-lg border border-primary/20 bg-muted/20" data-testid="calyx-verification-workbench">
@@ -326,6 +329,20 @@ export default function CalyxVerificationWorkbench({
               ledgerId={result.provenance.reasoningLedgerId}
               version={result.provenance.reasoningLedgerVersion}
             />
+          </section>
+
+          <section className="mt-4" aria-label="Scientific observability">
+            {traceCorrelationId ? (
+              <ScientificObservabilityTrace correlationId={traceCorrelationId} />
+            ) : (
+              <p
+                className="rounded-lg border border-dashed bg-background p-3 text-xs text-muted-foreground"
+                data-testid="scientific-observability-unavailable"
+              >
+                Scientific observability trace unavailable for this mission: no explicit correlation
+                id was supplied. The mission id is not substituted for provenance.
+              </p>
+            )}
           </section>
         </div>
       ) : null}
