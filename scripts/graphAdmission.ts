@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
-import { graphNodeMarker, resolveExecutableIssue, type OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
+import type { OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
+import { decideGraphIssueAction } from '../src/lib/completion-graph/graphIssueDecision';
 import { selectAdmissibleLeaf } from '../src/lib/completion-graph/scheduler';
-import type { CompletionNode } from '../src/lib/completion-graph/types';
 
 function ghJson(args: string[]): unknown {
   const out = execFileSync('gh', args, {
@@ -31,63 +31,52 @@ function collectOpenWorkRefs(openIssues: OpenIssueRef[]): Set<string> {
   return refs;
 }
 
-function materializeGraphIssue(node: CompletionNode): number {
-  const marker = graphNodeMarker(node.id);
-  const title = `Graph leaf: ${node.name}`;
-  const body = [
-    'This bounded work item was materialized directly from the canonical completion graph because the selected admissible leaf had no live executable issue.',
-    '',
-    `Graph node: \`${node.id}\``,
-    `Lane: \`${node.lane ?? 'UNSPECIFIED'}\``,
-    '',
-    '## Required next action',
-    node.nextAction || 'Reconcile this leaf against current canonical evidence and implement the smallest safe acceptance step.',
-    '',
-    '## Completion discipline',
-    '- The completion graph remains authoritative for WHAT work is selected.',
-    '- Update the graph evidence/status when acceptance evidence changes so the scheduler can advance naturally.',
-    '- Do not infer scientific absence from unavailable evidence and do not weaken provenance or sensitive-locality protections.',
-    '- Production deployment, production data/KG mutation, taxonomy activation, publication, credentials, spending, and destructive operations remain owner-gated.',
-    '',
-    marker,
-  ].join('\n');
-
+function createIssue(title: string, body: string, labels: string[]): number {
+  const labelArgs = labels.flatMap((label) => ['--label', label]);
   const url = execFileSync(
     'gh',
-    ['issue', 'create', '--title', title, '--body', body, '--label', 'oc-queued', '--label', 'oc-auto-generated'],
+    ['issue', 'create', '--title', title, '--body', body, ...labelArgs],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   ).trim();
   const match = url.match(/\/issues\/(\d+)\/?$/);
   if (!match) {
-    throw new Error(`Graph issue materialization did not return an issue URL for ${node.id}`);
+    throw new Error(`Graph issue materialization did not return an issue URL for title "${title}"`);
   }
   return Number(match[1]);
 }
 
+const now = new Date().toISOString();
 const openIssues = collectOpenIssues();
 const result = selectAdmissibleLeaf(COMPLETION_GRAPH, {
-  now: new Date().toISOString(),
+  now,
   openWorkRefs: collectOpenWorkRefs(openIssues),
 });
 
-const selectedNode = result.selected?.node;
+const selectedNode = result.selected?.node ?? null;
+const decision = decideGraphIssueAction(selectedNode, openIssues, now);
+
 let issueNumber: number | null = null;
 let materialized = false;
 
-if (selectedNode) {
-  issueNumber = resolveExecutableIssue(selectedNode, openIssues);
-  if (issueNumber === null) {
-    issueNumber = materializeGraphIssue(selectedNode);
-    materialized = true;
-  }
+if (decision.action === 'reuse-existing') {
+  issueNumber = decision.issueNumber;
+} else if (decision.action === 'create') {
+  issueNumber = createIssue(decision.title, decision.body, decision.labels);
+  materialized = true;
+} else {
+  // no-admissible-node / fail-closed: log why so the workflow run has a durable
+  // trail explaining why nothing was created, per the "log why, never guess" rule.
+  console.error(`[graph-admission] ${decision.reason}`);
 }
 
 const payload = {
   admissible: result.selected !== null,
   selected: selectedNode?.id ?? null,
   issueNumber: issueNumber ?? '',
-  mode: selectedNode ? 'issue' : 'blocked',
+  mode: issueNumber !== null ? 'issue' : 'blocked',
   materialized,
+  decision: decision.action,
+  reason: decision.reason,
   surfacedBlockers: result.surfacedBlockers.map((node) => node.id),
   suppressedDuplicates: result.suppressedDuplicates.map((node) => node.id),
   reasons: result.selected?.reasons ?? [],
