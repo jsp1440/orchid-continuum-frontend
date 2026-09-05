@@ -34,6 +34,16 @@ function classify(apiErrorStatus, message) {
       detail: "The Anthropic account has insufficient credit. Repository-side changes cannot fix this.",
     };
   }
+  if (apiErrorStatus === 400 && text.includes("not scoped to a workspace")) {
+    return {
+      cause: "ANTHROPIC_KEY_NOT_WORKSPACE_SCOPED",
+      owner_action_required: true,
+      detail:
+        "The API key is not scoped to a workspace. Either generate a workspace-scoped key at " +
+        "console.anthropic.com → API Keys, or add ANTHROPIC_WORKSPACE_ID as a GitHub secret " +
+        "containing the workspace ID shown in console.anthropic.com → Settings.",
+    };
+  }
   if (apiErrorStatus === 401) {
     return {
       cause: "ANTHROPIC_AUTH_REJECTED",
