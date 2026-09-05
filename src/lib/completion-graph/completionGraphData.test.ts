@@ -146,4 +146,49 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     const kgVisualization = allNodes.find((n) => n.id === 'cap-kg-visualization-graph');
     expect(kgVisualization?.gateScores?.architectureContracts).toBe(1);
   });
+
+  it('#242: Homepage/Featured Genus/Public Calyx is decomposed, not a single generic census-pending stub', () => {
+    const scoredLeafIds = [
+      'cap-homepage-hero-continuum',
+      'cap-homepage-featured-genus',
+      'cap-homepage-public-calyx',
+    ];
+    for (const id of scoredLeafIds) {
+      const leaf = allNodes.find((n) => n.id === id);
+      expect(leaf, `expected leaf ${id} to exist`).toBeTruthy();
+      expect(leaf?.gateScores, `expected leaf ${id} to have gateScores`).toBeTruthy();
+      expect(computeGateScore(leaf?.gateScores).percentage).not.toBeNull();
+    }
+
+    const homepageLeaves = getLeaves(allNodes.find((n) => n.id === 'domain-homepage')!);
+    expect(homepageLeaves.length).toBe(3);
+
+    // #171 (HOMEPAGE-RECOVERY-008) is cited rather than duplicated by a new issue.
+    const heroGate = allNodes.find((n) => n.id === 'cap-homepage-hero-continuum');
+    expect(heroGate?.issues).toContain('#171');
+  });
+
+  it('#242: Calyx education & show-management surfaces are a real, newly-censused domain', () => {
+    const scoredLeafIds = [
+      'cap-education-glossary-hub',
+      'cap-judging-practice',
+      'cap-screen-orchids',
+      'cap-scientific-method-lab',
+      'cap-classroom-teacher-dashboard',
+    ];
+    for (const id of scoredLeafIds) {
+      const leaf = allNodes.find((n) => n.id === id);
+      expect(leaf, `expected leaf ${id} to exist`).toBeTruthy();
+      expect(leaf?.gateScores, `expected leaf ${id} to have gateScores`).toBeTruthy();
+      expect(computeGateScore(leaf?.gateScores).percentage).not.toBeNull();
+    }
+
+    const educationLeaves = getLeaves(allNodes.find((n) => n.id === 'domain-education-show-management')!);
+    expect(educationLeaves.length).toBe(5);
+
+    // Classroom stays honestly backend-blocked (mirrors OASIS), never silently marked complete.
+    const classroom = allNodes.find((n) => n.id === 'cap-classroom-teacher-dashboard');
+    expect(classroom?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(classroom?.gateScores?.deployedOperational).toBe(0);
+  });
 });
