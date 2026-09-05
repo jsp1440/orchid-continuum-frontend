@@ -188,20 +188,91 @@ async function requestCanonical(path = ''): Promise<CanonicalLexiconEnvelope> {
   return response.json() as Promise<CanonicalLexiconEnvelope>;
 }
 
-export async function getEntries(): Promise<LexiconEntry[]> {
+/** Attempts the same canonical bulk fetch getEntries() uses, without throwing. */
+async function tryFetchCanonicalEntries(): Promise<{ ok: boolean; entries: LexiconEntry[] }> {
   try {
     const payload = await requestCanonical('?limit=2000');
-    const canonical = (payload.entries ?? []).map(normalizeEntry);
-    if (!canonical.length) {
-      lastSource = 'famous_fallback';
-      return famousFallback.map(normalizeEntry);
-    }
-    lastSource = 'canonical_plus_famous_fallback';
-    return mergeBySlug(famousFallback, canonical);
+    return { ok: true, entries: (payload.entries ?? []).map(normalizeEntry) };
   } catch {
+    return { ok: false, entries: [] };
+  }
+}
+
+export async function getEntries(): Promise<LexiconEntry[]> {
+  const canonicalFetch = await tryFetchCanonicalEntries();
+  if (!canonicalFetch.ok || !canonicalFetch.entries.length) {
     lastSource = 'famous_fallback';
     return famousFallback.map(normalizeEntry);
   }
+  lastSource = 'canonical_plus_famous_fallback';
+  return mergeBySlug(famousFallback, canonicalFetch.entries);
+}
+
+export type LexiconCoverageStatus = 'measured' | 'unavailable';
+
+/**
+ * Reports the real, current ratio of canonical-backend-sourced Lexicon entries
+ * versus Famous-fallback-only entries in the catalogue getEntries()/getEntry()
+ * actually serve right now. Never fabricates a ratio: when there is nothing to
+ * measure against (no canonical reach AND no fallback catalogue at all),
+ * status is 'unavailable' and canonicalCoverageRatio stays null.
+ */
+export interface LexiconCoverageReport {
+  status: LexiconCoverageStatus;
+  measuredAt: string;
+  /** Total distinct entries the merged catalogue currently serves. */
+  totalEntries: number;
+  /** Entries whose governed scientific fields are backed by the canonical backend right now. */
+  canonicalServedEntries: number;
+  /** Entries served only from the Famous AI Illustrated Orchid Lexicon migration fallback. */
+  famousFallbackOnlyEntries: number;
+  /** canonicalServedEntries / totalEntries, or null when status is 'unavailable'. */
+  canonicalCoverageRatio: number | null;
+  /** Whether the canonical Lexicon API request itself succeeded this measurement. */
+  canonicalReachable: boolean;
+  reason?: string;
+}
+
+export async function measureLexiconCoverage(): Promise<LexiconCoverageReport> {
+  const measuredAt = new Date().toISOString();
+  const fallbackNormalized = famousFallback.map(normalizeEntry);
+  const canonicalFetch = await tryFetchCanonicalEntries();
+
+  const merged = canonicalFetch.entries.length
+    ? mergeBySlug(fallbackNormalized, canonicalFetch.entries)
+    : fallbackNormalized;
+
+  if (!merged.length) {
+    return {
+      status: 'unavailable',
+      measuredAt,
+      totalEntries: 0,
+      canonicalServedEntries: 0,
+      famousFallbackOnlyEntries: 0,
+      canonicalCoverageRatio: null,
+      canonicalReachable: canonicalFetch.ok,
+      reason: canonicalFetch.ok
+        ? 'Canonical Lexicon API returned zero entries and no Famous fallback entries exist to measure against.'
+        : 'Canonical Lexicon API request failed and no Famous fallback entries exist to measure against.',
+    };
+  }
+
+  const canonicalSlugs = new Set(canonicalFetch.entries.map((entry) => entry.slug));
+  const canonicalServedEntries = merged.filter((entry) => canonicalSlugs.has(entry.slug)).length;
+  const famousFallbackOnlyEntries = merged.length - canonicalServedEntries;
+
+  return {
+    status: 'measured',
+    measuredAt,
+    totalEntries: merged.length,
+    canonicalServedEntries,
+    famousFallbackOnlyEntries,
+    canonicalCoverageRatio: canonicalServedEntries / merged.length,
+    canonicalReachable: canonicalFetch.ok,
+    reason: canonicalFetch.ok
+      ? undefined
+      : 'Canonical Lexicon API request failed; getEntries()/getEntry() are currently serving Famous fallback content only.',
+  };
 }
 
 async function requestCanonicalEntry(slug: string): Promise<LexiconEntry | null> {
