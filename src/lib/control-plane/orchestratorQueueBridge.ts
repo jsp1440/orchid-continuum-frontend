@@ -15,6 +15,14 @@ export interface QueueBridgeCandidate {
   unfinished: boolean;
   dependencies?: string[];
   protectedClasses?: string[];
+  /**
+   * Authoritative evidence that an implementation PR for this source was merged into
+   * the integration branch. This is needed because GitHub close keywords do not
+   * necessarily close source issues when the merge target is a non-default branch.
+   */
+  integratedCompletion?: boolean;
+  /** Explicit source-level request for new work after a prior integration. */
+  explicitRequeue?: boolean;
 }
 
 export interface ExistingWorkRef {
@@ -75,6 +83,16 @@ function classifyProtected(candidate: QueueBridgeCandidate): string[] {
     .sort();
 }
 
+/**
+ * Integration completion outranks a syntactically-open source issue. An explicit
+ * requeue is the only source-level signal that revives work after that completion.
+ */
+function isEffectivelyUnfinished(candidate: QueueBridgeCandidate): boolean {
+  if (candidate.explicitRequeue) return true;
+  if (candidate.integratedCompletion) return false;
+  return candidate.unfinished;
+}
+
 function reconcileCandidateStates(candidates: QueueBridgeCandidate[]): QueueBridgeCandidate[] {
   const byKey = new Map<string, QueueBridgeCandidate>();
 
@@ -86,8 +104,18 @@ function reconcileCandidateStates(candidates: QueueBridgeCandidate[]): QueueBrid
       continue;
     }
 
-    // Conflicting duplicate source observations fail toward unfinished work. A source
-    // is considered complete only when every observation for that key agrees.
+    // An explicit requeue is authoritative new-work evidence and must survive stale
+    // completion observations. Otherwise, merged integration evidence suppresses a
+    // merely syntactically-open issue. With neither signal, conflicts fail toward
+    // unfinished work as before.
+    if (current.explicitRequeue || candidate.explicitRequeue) {
+      byKey.set(key, current.explicitRequeue ? current : candidate);
+      continue;
+    }
+    if (current.integratedCompletion || candidate.integratedCompletion) {
+      byKey.set(key, current.integratedCompletion ? current : candidate);
+      continue;
+    }
     if (!current.unfinished && candidate.unfinished) {
       byKey.set(key, candidate);
     }
@@ -133,7 +161,9 @@ export function planQueueBridge(
   const boundedTarget = Math.max(0, Math.floor(targetDepth));
   const reconciledCandidates = reconcileCandidateStates(candidates);
   const completedSourceKeys = new Set(
-    reconciledCandidates.filter((candidate) => !candidate.unfinished).map((candidate) => sourceKey(candidate)),
+    reconciledCandidates
+      .filter((candidate) => !isEffectivelyUnfinished(candidate))
+      .map((candidate) => sourceKey(candidate)),
   );
   const openSourceKeys = new Set(
     existing.filter((item) => item.state === 'open' && item.sourceKey).map((item) => item.sourceKey!.toLowerCase()),
@@ -159,7 +189,7 @@ export function planQueueBridge(
   const safe: PreparedWork[] = [];
   const protectedWork: PreparedWork[] = [];
 
-  for (const candidate of reconciledCandidates.filter((candidate) => candidate.unfinished)) {
+  for (const candidate of reconciledCandidates.filter((candidate) => isEffectivelyUnfinished(candidate))) {
     const key = sourceKey(candidate);
 
     if ((openSourceKeys.has(key) && !retiringKeys.has(key)) || openTitles.has(normalizeTitle(candidate.title))) {
