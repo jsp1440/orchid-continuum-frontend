@@ -6,6 +6,17 @@ import { computeGateScore } from './scoring';
 describe('COMPLETION_GRAPH structural integrity', () => {
   const allNodes = flattenGraph(COMPLETION_GRAPH);
 
+  it('#525 scores only the trait consumer without claiming a live backend or completing the remaining station', () => {
+    const station = allNodes.find((node) => node.id === 'domain-research-station')!;
+    const leaves = getLeaves(station);
+    const traits = leaves.find((node) => node.id === 'cap-research-trait-explorer')!;
+    expect(traits.issues).toContain('#525');
+    expect(traits.threeLevels.productComplete).toBe('NOT_MET');
+    expect(traits.gateScores?.deployedOperational).toBeNull();
+    expect(traits.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaves.some((node) => node.status === 'UNKNOWN' && !node.gateScores)).toBe(true);
+  });
+
   it('has a single root with parentId null', () => {
     expect(COMPLETION_GRAPH.parentId).toBeNull();
     const nonRootWithNullParent = allNodes.filter((n) => n.id !== COMPLETION_GRAPH.id && n.parentId === null);
