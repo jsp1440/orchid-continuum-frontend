@@ -8,6 +8,8 @@ import {
 } from "@/components/conservatory/ConservatoryReadiness";
 
 const API_BASE = (import.meta.env.VITE_CALYX_API_URL || "").replace(/\/$/, "");
+const PUBLIC_LOAD_ERROR = "Conservatory records are temporarily unavailable. No collection data has been changed.";
+const PUBLIC_SAVE_ERROR = "The plant could not be saved. Your collection has not been changed.";
 
 type Plant = {
   id: string;
@@ -71,7 +73,7 @@ function usePlants() {
   const reload = useCallback(async () => {
     setLoading(true); setError(undefined);
     try { const body = await request<{ plants: Plant[] }>("/api/conservatory/plants"); setPlants(body.plants || []); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "Unable to load plants"); }
+    catch (reason) { console.error("[Conservatory] plant list failed", reason); setError(PUBLIC_LOAD_ERROR); }
     finally { setLoading(false); }
   }, [request]);
   useEffect(() => { void reload(); }, [reload]);
@@ -109,7 +111,7 @@ function AddPlant() {
     if (!ready) { setError("Collection entry is blocked until persistent storage and restart survival are verified."); return; }
     setSaving(true); setError(undefined);
     try { const plant = await request<Plant>("/api/conservatory/plants", { method: "POST", body: JSON.stringify(form) }); navigate(`/conservatory/plants/${plant.id}`); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "The plant could not be saved."); }
+    catch (reason) { console.error("[Conservatory] plant save failed", reason); setError(PUBLIC_SAVE_ERROR); }
     finally { setSaving(false); }
   }
   const field = (key: keyof PlantInput, value: string) => setForm((current) => ({ ...current, [key]: value }));
@@ -134,7 +136,7 @@ function Detail() {
   const request = useApi();
   const [plant, setPlant] = useState<Plant>();
   const [error, setError] = useState<string>();
-  useEffect(() => { request<Plant>(`/api/conservatory/plants/${encodeURIComponent(plantId)}`).then(setPlant).catch((reason) => setError(reason instanceof Error ? reason.message : "Unable to load plant")); }, [plantId, request]);
+  useEffect(() => { request<Plant>(`/api/conservatory/plants/${encodeURIComponent(plantId)}`).then(setPlant).catch((reason) => { console.error("[Conservatory] plant detail failed", reason); setError(PUBLIC_LOAD_ERROR); }); }, [plantId, request]);
   if (error || !plant) return <Status loading={!error} error={error} />;
   return <div className="rounded-xl border bg-card p-6"><p className="text-xs uppercase tracking-wide text-muted-foreground">{plant.accession_number}</p><div className="mt-4 flex flex-wrap justify-between gap-6"><div><h2 className="text-3xl font-semibold italic">{plant.display_name}</h2><p className="mt-2">{plant.accepted_scientific_name || "Accepted name not yet linked"}</p><p className="mt-2 text-muted-foreground">{plant.location || "Location not recorded"}</p><p className="mt-5 max-w-2xl">{plant.notes || "No notes recorded"}</p></div><QrImage plant={plant} /></div><p className="mt-6 break-all font-mono text-xs text-muted-foreground">{plant.qr_identifier}</p></div>;
 }

@@ -4,6 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const API_BASE = (import.meta.env.VITE_CALYX_API_URL || "").replace(/\/$/, "");
 const SERVICE_UNAVAILABLE = "Conservatory readiness cannot be verified for this deployment right now. Collection entry remains safely blocked.";
+const VERIFIED_GATE_DETAIL = "Verified by the deployed Conservatory readiness service.";
+const BLOCKED_GATE_DETAIL = "This gate has not been verified. Collection entry remains blocked until the deployed service reports it ready.";
 
 export type ConservatoryGate = {
   name: string;
@@ -19,6 +21,17 @@ export type ConservatoryReadinessReport = {
   checked_at: string;
   instruction: string;
 };
+
+/**
+ * Public Conservatory readiness surfaces intentionally do not echo backend
+ * evidence strings or blocking reasons. Those values can contain deployment
+ * paths, environment names, URLs, or other operator-only detail. The visitor
+ * needs the verified/blocked state; operators can inspect the backend report
+ * through authenticated tooling.
+ */
+export function publicGateDetail(gate: Pick<ConservatoryGate, "passed">): string {
+  return gate.passed ? VERIFIED_GATE_DETAIL : BLOCKED_GATE_DETAIL;
+}
 
 export function useConservatoryReadiness() {
   const { session } = useAuth();
@@ -66,7 +79,7 @@ export function ConservatoryReadinessBanner() {
         </div>
         <button type="button" className="rounded-md border px-3 py-2 text-sm" onClick={() => void refresh()} disabled={loading}>{loading ? "Checking…" : "Check again"}</button>
       </div>
-      {report && <div className="mt-4 grid gap-2 md:grid-cols-2">{report.gates.map((gate) => <div key={gate.name} className="rounded-lg border bg-background/70 p-3"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{gate.name.replaceAll("_", " ")}</strong><span className={`text-xs font-semibold ${gate.passed ? "text-emerald-700" : "text-amber-700"}`}>{gate.passed ? "Verified" : "Blocked"}</span></div><p className="mt-1 text-xs text-muted-foreground">{gate.blocking_reason || gate.evidence}</p></div>)}</div>}
+      {report && <div className="mt-4 grid gap-2 md:grid-cols-2">{report.gates.map((gate) => <div key={gate.name} className="rounded-lg border bg-background/70 p-3"><div className="flex items-center justify-between gap-3"><strong className="text-sm">{gate.name.replaceAll("_", " ")}</strong><span className={`text-xs font-semibold ${gate.passed ? "text-emerald-700" : "text-amber-700"}`}>{gate.passed ? "Verified" : "Blocked"}</span></div><p className="mt-1 text-xs text-muted-foreground">{publicGateDetail(gate)}</p></div>)}</div>}
       <div className="mt-4"><Link className="text-sm font-medium text-primary" to="/conservatory/readiness">View full readiness report</Link></div>
     </section>
   );
@@ -75,5 +88,5 @@ export function ConservatoryReadinessBanner() {
 export function ConservatoryReadinessPage() {
   const { report, loading, error, refresh } = useConservatoryReadiness();
   const ready = report?.ready_for_collection_entry === true;
-  return <div><h2 className="text-3xl font-semibold">Conservatory Readiness</h2><p className="mt-2 text-muted-foreground">Live evidence from the deployed Calyx backend. Unknown conditions fail closed.</p><div className={`mt-6 rounded-xl border p-6 ${ready ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}><h3 className="text-xl font-semibold">{loading ? "Checking…" : ready ? "Ready for controlled testing" : "Not ready for real collection entry"}</h3><p className="mt-2 text-sm">{error || report?.instruction || "No verified report is available. Collection entry remains safely blocked."}</p><button type="button" className="mt-4 rounded-md border px-4 py-2" onClick={() => void refresh()} disabled={loading}>Refresh evidence</button></div>{report && <div className="mt-6 space-y-3">{report.gates.map((gate) => <article key={gate.name} className="rounded-xl border bg-card p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold capitalize">{gate.name.replaceAll("_", " ")}</h3><span className={gate.passed ? "text-emerald-700" : "text-amber-700"}>{gate.passed ? "Verified" : "Blocked"}</span></div><p className="mt-2 text-sm text-muted-foreground">{gate.evidence}</p>{gate.blocking_reason && <p className="mt-2 text-sm font-medium">Required: {gate.blocking_reason}</p>}</article>)}</div>}</div>;
+  return <div><h2 className="text-3xl font-semibold">Conservatory Readiness</h2><p className="mt-2 text-muted-foreground">Live readiness status from the deployed Calyx backend. Unknown conditions fail closed; deployment internals are not exposed here.</p><div className={`mt-6 rounded-xl border p-6 ${ready ? "border-emerald-500/40 bg-emerald-500/5" : "border-amber-500/40 bg-amber-500/5"}`}><h3 className="text-xl font-semibold">{loading ? "Checking…" : ready ? "Ready for controlled testing" : "Not ready for real collection entry"}</h3><p className="mt-2 text-sm">{error || report?.instruction || "No verified report is available. Collection entry remains safely blocked."}</p><button type="button" className="mt-4 rounded-md border px-4 py-2" onClick={() => void refresh()} disabled={loading}>Refresh readiness</button></div>{report && <div className="mt-6 space-y-3">{report.gates.map((gate) => <article key={gate.name} className="rounded-xl border bg-card p-5"><div className="flex flex-wrap items-center justify-between gap-3"><h3 className="font-semibold capitalize">{gate.name.replaceAll("_", " ")}</h3><span className={gate.passed ? "text-emerald-700" : "text-amber-700"}>{gate.passed ? "Verified" : "Blocked"}</span></div><p className="mt-2 text-sm text-muted-foreground">{publicGateDetail(gate)}</p></article>)}</div>}</div>;
 }

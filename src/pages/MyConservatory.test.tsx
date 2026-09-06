@@ -16,8 +16,7 @@ vi.mock("@/contexts/AuthContext", () => ({
 vi.stubEnv("VITE_CALYX_API_URL", "https://calyx.example.test");
 const { default: MyConservatory } = await import("@/pages/MyConservatory");
 
-(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
-  true;
+(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const readyReport = {
   ready_for_collection_entry: true,
@@ -72,12 +71,8 @@ function routedFetch(overrides: { readiness?: unknown; plantsList?: unknown } = 
   const plantsList = overrides.plantsList ?? { plants };
   return vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url.includes("/api/conservatory/readiness")) {
-      return { ok: true, json: async () => readiness } as Response;
-    }
-    if (url.includes("/api/conservatory/plants") && !url.match(/plants\/[^/?]+/)) {
-      return { ok: true, json: async () => plantsList } as Response;
-    }
+    if (url.includes("/api/conservatory/readiness")) return { ok: true, json: async () => readiness } as Response;
+    if (url.includes("/api/conservatory/plants") && !url.match(/plants\/[^/?]+/)) return { ok: true, json: async () => plantsList } as Response;
     return { ok: true, json: async () => ({}) } as Response;
   });
 }
@@ -109,11 +104,7 @@ async function flush() {
 function renderAt(path: string, fetchMock: ReturnType<typeof routedFetch>) {
   vi.stubGlobal("fetch", fetchMock);
   act(() => {
-    root.render(
-      <MemoryRouter initialEntries={[path]}>
-        <MyConservatory />
-      </MemoryRouter>,
-    );
+    root.render(<MemoryRouter initialEntries={[path]}><MyConservatory /></MemoryRouter>);
   });
 }
 
@@ -123,7 +114,6 @@ describe("MyConservatory routing", () => {
     await flush();
     expect(container.textContent).toContain("Your living collection");
     expect(container.textContent).toContain("Phalaenopsis amabilis");
-    // Plants: 2, QR ready: 2, Locations recorded: 1
     const counts = Array.from(container.querySelectorAll("strong")).map((el) => el.textContent);
     expect(counts).toContain("2");
     expect(counts).toContain("1");
@@ -141,17 +131,14 @@ describe("MyConservatory plant search", () => {
   it("filters plants by accession number, name, or location as the query changes", async () => {
     renderAt("/conservatory/plants", routedFetch());
     await flush();
-
     const input = container.querySelector('input[aria-label="Search plants"]') as HTMLInputElement;
     expect(input).toBeTruthy();
-
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
     act(() => {
       nativeSetter.call(input, "Cattleya");
       input.dispatchEvent(new Event("input", { bubbles: true }));
     });
     await flush();
-
     expect(container.textContent).toContain("1 result");
     expect(container.textContent).toContain("Cattleya labiata");
     expect(container.textContent).not.toContain("Phalaenopsis amabilis");
@@ -159,13 +146,13 @@ describe("MyConservatory plant search", () => {
 });
 
 describe("MyConservatory Add Plant — readiness gate", () => {
-  it("blocks the form entirely and shows the locked message when the backend is not ready", async () => {
+  it("blocks the form entirely and shows bounded locked-state copy when the backend is not ready", async () => {
     renderAt("/conservatory/plants/new", routedFetch({ readiness: blockedReport }));
     await flush();
-
     expect(container.textContent).toContain("Plant entry is locked");
-    expect(container.textContent).toContain("Deploy and confirm data survives a restart.");
-    // The safety-critical assertion: no submittable form exists while blocked.
+    expect(container.textContent).toContain("Restart survival has not been verified yet.");
+    expect(container.textContent).not.toContain("Deploy and confirm data survives a restart.");
+    expect(container.textContent).not.toContain("No verified restart evidence.");
     expect(container.querySelector("form")).toBeNull();
     expect(container.querySelector('input[required]')).toBeNull();
   });
@@ -173,7 +160,6 @@ describe("MyConservatory Add Plant — readiness gate", () => {
   it("renders the add-plant form once readiness passes, and blocks submission client-side if ready flips false first", async () => {
     renderAt("/conservatory/plants/new", routedFetch({ readiness: readyReport }));
     await flush();
-
     expect(container.textContent).toContain("Add Test Plant");
     const form = container.querySelector("form");
     expect(form).toBeTruthy();
@@ -184,30 +170,23 @@ describe("MyConservatory Add Plant — readiness gate", () => {
   it("submits a POST to /api/conservatory/plants and navigates to the new plant when ready", async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
-      if (url.includes("/api/conservatory/readiness")) {
-        return { ok: true, json: async () => readyReport } as Response;
-      }
-      if (url.includes("/api/conservatory/plants") && init?.method === "POST") {
-        return { ok: true, json: async () => ({ ...plants[0], id: "new-plant-id" }) } as Response;
-      }
+      if (url.includes("/api/conservatory/readiness")) return { ok: true, json: async () => readyReport } as Response;
+      if (url.includes("/api/conservatory/plants") && init?.method === "POST") return { ok: true, json: async () => ({ ...plants[0], id: "new-plant-id" }) } as Response;
       return { ok: true, json: async () => ({ plants: [] }) } as Response;
     });
     renderAt("/conservatory/plants/new", fetchMock);
     await flush();
-
     const nameInput = container.querySelector("form input") as HTMLInputElement;
     const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value")!.set!;
     act(() => {
       nativeSetter.call(nameInput, "Vanda coerulea");
       nameInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
-
     const form = container.querySelector("form") as HTMLFormElement;
     act(() => {
       form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flush();
-
     const postCall = fetchMock.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
     expect(postCall).toBeTruthy();
     expect(String(postCall![0])).toContain("/api/conservatory/plants");
