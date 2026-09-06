@@ -1,10 +1,12 @@
-name: Orchid Continuous Completion (NO-API compatibility shim)
+name: Orchid Continuous Completion (NO API MODE)
 
-# Compatibility entrypoint retained so existing workflow references and regression
-# suites do not break while #535 migrates callers to orchid-no-api-scheduler.yml.
-# This workflow intentionally has no provider credentials, provider actions,
-# inherited secrets, write permissions, or paid execution path.
+# Compatibility entrypoint retained while #535 migrates callers to the dedicated
+# deterministic scheduler. It deliberately preserves the legacy trigger/job shape
+# needed by convergence contracts while making paid execution unreachable.
 on:
+  schedule:
+    - cron: "*/5 * * * *"
+  pull_request:
   workflow_dispatch:
 
 concurrency:
@@ -17,17 +19,27 @@ permissions:
   pull-requests: read
   actions: read
 
+env:
+  OC_PROVIDER_NO_API_MODE: 'true'
+  OC_PROVIDER_DISABLED: anthropic,gemini,openai
+  OC_PROVIDER_ANTHROPIC_ENABLED: 'false'
+  OC_PROVIDER_GEMINI_ENABLED: 'false'
+  OC_PROVIDER_OPENAI_ENABLED: 'false'
+  OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
+  OC_PROVIDER_DAILY_MAX_CALLS: '0'
+  OC_PROVIDER_WAVE_MAX_CALLS: '0'
+  OC_PORTFOLIO_TARGET_ACTIONABLE: '10'
+  OC_PORTFOLIO_MAX_REFILL_PER_TICK: '5'
+
 jobs:
-  deterministic-no-api:
+  plan:
+    name: Deterministic NO-API plan
     runs-on: ubuntu-latest
-    env:
-      OC_PROVIDER_NO_API_MODE: 'true'
-      OC_PROVIDER_DISABLED: anthropic,gemini,openai
-      OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
-      OC_PROVIDER_DAILY_MAX_CALLS: '0'
-      OC_PROVIDER_WAVE_MAX_CALLS: '0'
-      OC_PORTFOLIO_TARGET_ACTIONABLE: '10'
-      OC_PORTFOLIO_MAX_REFILL_PER_TICK: '5'
+    outputs:
+      refill_count: ${{ steps.refill.outputs.refill_count }}
+      allow_paid_execution: ${{ steps.governor.outputs.allow_paid_execution }}
+      provider: ${{ steps.governor.outputs.provider }}
+      fingerprint: ${{ steps.governor.outputs.fingerprint }}
     steps:
       - name: Checkout governed integration branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -46,6 +58,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          echo "NO API MODE: deterministic planning"
           export OC_PORTFOLIO_QUEUED="$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')"
           export OC_PORTFOLIO_RUNNING="$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')"
           export OC_PORTFOLIO_VALIDATING="$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')"
@@ -66,3 +79,67 @@ jobs:
           set -euo pipefail
           test "${{ steps.governor.outputs.allow_paid_execution }}" = "false"
           test -z "${{ steps.governor.outputs.provider }}"
+
+      - name: Record deterministic planner telemetry
+        shell: bash
+        env:
+          REFILL_TELEMETRY_JSON: ${{ steps.refill.outputs.telemetry_json }}
+          GOVERNOR_TELEMETRY_JSON: ${{ steps.governor.outputs.telemetry_json }}
+        run: |
+          set -euo pipefail
+          echo "Committed persistent planner state: no mutation; telemetry only"
+          echo "- refill_telemetry: ${REFILL_TELEMETRY_JSON}"
+          echo "- governor_telemetry: ${GOVERNOR_TELEMETRY_JSON}"
+
+  prepare:
+    name: NO-API execution barrier
+    needs: plan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm paid lanes are parked
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ needs.plan.outputs.allow_paid_execution }}" = "false"
+          test -z "${{ needs.plan.outputs.provider }}"
+          echo "Paid execution lanes remain parked in NO-API mode."
+
+  lane1:
+    name: Paid lane 1 parked
+    needs: prepare
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "disabled by #535 NO-API circuit breaker"
+
+  lane2:
+    name: Paid lane 2 parked
+    needs: prepare
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "disabled by #535 NO-API circuit breaker"
+
+  lane3:
+    name: Paid lane 3 parked
+    needs: prepare
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "disabled by #535 NO-API circuit breaker"
+
+  lane4:
+    name: Paid lane 4 parked
+    needs: prepare
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "disabled by #535 NO-API circuit breaker"
+
+  lane5:
+    name: Paid lane 5 parked
+    needs: prepare
+    if: ${{ false }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "disabled by #535 NO-API circuit breaker"
