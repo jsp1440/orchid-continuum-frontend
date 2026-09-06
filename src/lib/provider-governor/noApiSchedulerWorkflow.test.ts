@@ -13,9 +13,10 @@ describe('Orchid NO-API scheduler workflow', () => {
     expect(workflow).toContain("OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'");
   });
 
-  it('uses only deterministic refill and governor admission adapters', () => {
-    expect(workflow).toContain('npx tsx scripts/deterministic-portfolio-refill-workflow.ts');
-    expect(workflow).toContain('npx tsx scripts/provider-governor-workflow-gate.ts');
+  it('uses only locked deterministic refill and governor admission adapters', () => {
+    expect(workflow).toContain('npm ci --ignore-scripts');
+    expect(workflow).toContain('npx --no-install tsx scripts/deterministic-portfolio-refill-workflow.ts');
+    expect(workflow).toContain('npx --no-install tsx scripts/provider-governor-workflow-gate.ts');
     expect(workflow).not.toContain('orchid-completion-lane.yml');
     expect(workflow).not.toContain('secrets: inherit');
   });
@@ -26,6 +27,13 @@ describe('Orchid NO-API scheduler workflow', () => {
     expect(workflow).not.toMatch(/GEMINI_API_KEY/);
     expect(workflow).not.toMatch(/OPENAI_API_KEY/);
     expect(workflow).not.toMatch(/google-gemini|openai\/|claude-code-action/i);
+  });
+
+  it('preserves JSON telemetry without shell reparsing', () => {
+    expect(workflow).toContain('REFILL_TELEMETRY_JSON: ${{ steps.refill.outputs.telemetry_json }}');
+    expect(workflow).toContain('GOVERNOR_TELEMETRY_JSON: ${{ steps.governor.outputs.telemetry_json }}');
+    expect(workflow).toContain('"- refill_telemetry: ${REFILL_TELEMETRY_JSON}"');
+    expect(workflow).toContain('"- governor_telemetry: ${GOVERNOR_TELEMETRY_JSON}"');
   });
 
   it('fails closed if governor authorization ever changes unexpectedly', () => {
