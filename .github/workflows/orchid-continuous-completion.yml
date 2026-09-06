@@ -1,0 +1,68 @@
+name: Orchid Continuous Completion (NO-API compatibility shim)
+
+# Compatibility entrypoint retained so existing workflow references and regression
+# suites do not break while #535 migrates callers to orchid-no-api-scheduler.yml.
+# This workflow intentionally has no provider credentials, provider actions,
+# inherited secrets, write permissions, or paid execution path.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: orchid-continuous-completion-no-api-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  deterministic-no-api:
+    runs-on: ubuntu-latest
+    env:
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_PROVIDER_DISABLED: anthropic,gemini,openai
+      OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
+      OC_PROVIDER_DAILY_MAX_CALLS: '0'
+      OC_PROVIDER_WAVE_MAX_CALLS: '0'
+      OC_PORTFOLIO_TARGET_ACTIONABLE: '10'
+      OC_PORTFOLIO_MAX_REFILL_PER_TICK: '5'
+    steps:
+      - name: Checkout governed integration branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: oc-autonomous-integration
+          fetch-depth: 1
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Compute deterministic refill requirement
+        id: refill
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export OC_PORTFOLIO_QUEUED="$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')"
+          export OC_PORTFOLIO_RUNNING="$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')"
+          export OC_PORTFOLIO_VALIDATING="$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')"
+          npx --no-install tsx scripts/deterministic-portfolio-refill-workflow.ts
+
+      - name: Evaluate provider governor in fail-closed NO-API mode
+        id: governor
+        shell: bash
+        env:
+          OC_PROVIDER_WORK_JSON: '[]'
+        run: |
+          set -euo pipefail
+          npx --no-install tsx scripts/provider-governor-workflow-gate.ts
+
+      - name: Assert paid execution remains unreachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.governor.outputs.allow_paid_execution }}" = "false"
+          test -z "${{ steps.governor.outputs.provider }}"
