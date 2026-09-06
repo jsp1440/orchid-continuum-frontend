@@ -20,10 +20,12 @@ jobs:
     runs-on: ubuntu-latest
     env:
       OC_PROVIDER_NO_API_MODE: 'true'
-      OC_DISABLED_PROVIDERS: anthropic,gemini,openai
-      OC_PROVIDER_MIN_DISPATCH_INTERVAL_SECONDS: '3600'
-      OC_PROVIDER_DAILY_CALL_BUDGET: '0'
-      OC_PROVIDER_WAVE_CALL_BUDGET: '0'
+      OC_PROVIDER_DISABLED: anthropic,gemini,openai
+      OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
+      OC_PROVIDER_DAILY_MAX_CALLS: '0'
+      OC_PROVIDER_WAVE_MAX_CALLS: '0'
+      OC_PORTFOLIO_TARGET_ACTIONABLE: '10'
+      OC_PORTFOLIO_MAX_REFILL_PER_TICK: '5'
     steps:
       - name: Checkout governed integration branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -39,32 +41,19 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          queued=$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')
-          running=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')
-          validating=$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')
-          node scripts/deterministicPortfolioRefill.mjs \
-            --queued "$queued" \
-            --running "$running" \
-            --validating "$validating" \
-            --target 10 \
-            --max-refill-per-tick 5 \
-            --github-output "$GITHUB_OUTPUT"
+          export OC_PORTFOLIO_QUEUED="$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')"
+          export OC_PORTFOLIO_RUNNING="$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')"
+          export OC_PORTFOLIO_VALIDATING="$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')"
+          npx tsx scripts/deterministic-portfolio-refill-workflow.ts
 
       - name: Evaluate provider governor without paid execution
         id: governor
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
+          OC_PROVIDER_WORK_JSON: '[]'
         run: |
           set -euo pipefail
-          node scripts/providerGovernorWorkflow.mjs \
-            --no-api-mode true \
-            --disabled-providers "$OC_DISABLED_PROVIDERS" \
-            --min-dispatch-interval-seconds "$OC_PROVIDER_MIN_DISPATCH_INTERVAL_SECONDS" \
-            --daily-call-budget "$OC_PROVIDER_DAILY_CALL_BUDGET" \
-            --wave-call-budget "$OC_PROVIDER_WAVE_CALL_BUDGET" \
-            --github-output "$GITHUB_OUTPUT"
+          npx tsx scripts/provider-governor-workflow-gate.ts
 
       - name: Emit deterministic telemetry
         shell: bash
@@ -77,12 +66,16 @@ jobs:
             echo '- openai: parked'
             echo '- paidProviderCallsAllowed: 0'
             echo "- refill_count: ${{ steps.refill.outputs.refill_count }}"
+            echo "- refill_telemetry: ${{ steps.refill.outputs.telemetry_json }}"
             echo "- governor_allow_paid_execution: ${{ steps.governor.outputs.allow_paid_execution }}"
             echo "- governor_reason: ${{ steps.governor.outputs.reason }}"
+            echo "- governor_fingerprint: ${{ steps.governor.outputs.fingerprint }}"
+            echo "- governor_telemetry: ${{ steps.governor.outputs.telemetry_json }}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Assert paid execution remains unreachable
         shell: bash
         run: |
           set -euo pipefail
-          test "${{ steps.governor.outputs.allow_paid_execution }}" != "true"
+          test "${{ steps.governor.outputs.allow_paid_execution }}" = "false"
+          test -z "${{ steps.governor.outputs.provider }}"
