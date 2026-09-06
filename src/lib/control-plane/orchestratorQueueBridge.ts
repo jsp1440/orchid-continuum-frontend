@@ -65,6 +65,15 @@ const PROTECTED_CLASSES = new Set([
   'protected-path',
 ]);
 
+const PRIORITY_RANK: Record<QueueBridgeCandidate['priority'], number> = {
+  'oc-p0': 0,
+  'oc-p1': 1,
+  'oc-p2': 2,
+  'oc-p3': 3,
+  'oc-p4': 4,
+  'oc-p5': 5,
+};
+
 export function sourceKey(candidate: QueueBridgeCandidate): string {
   return `${candidate.sourceRepo}|${candidate.sourceKind}|${candidate.sourceId}`.toLowerCase();
 }
@@ -186,7 +195,7 @@ export function planQueueBridge(
   const slots = Math.max(0, boundedTarget - preparedOpenCount);
 
   const suppressed: QueueBridgePlan['suppressed'] = [];
-  const safe: PreparedWork[] = [];
+  const safe: Array<{ candidate: QueueBridgeCandidate; prepared: PreparedWork }> = [];
   const protectedWork: PreparedWork[] = [];
 
   for (const candidate of reconciledCandidates.filter((candidate) => isEffectivelyUnfinished(candidate))) {
@@ -202,11 +211,19 @@ export function planQueueBridge(
       protectedWork.push(prepared);
       continue;
     }
-    safe.push(prepared);
+    safe.push({ candidate, prepared });
   }
 
+  // Refill must be both deterministic and useful: highest portfolio priority wins,
+  // while source identity provides a stable tie-breaker independent of discovery order.
+  safe.sort(
+    (a, b) =>
+      PRIORITY_RANK[a.candidate.priority] - PRIORITY_RANK[b.candidate.priority] ||
+      a.prepared.sourceKey.localeCompare(b.prepared.sourceKey),
+  );
+
   return {
-    create: safe.slice(0, slots),
+    create: safe.slice(0, slots).map((item) => item.prepared),
     retire,
     suppressed,
     protected: protectedWork,
