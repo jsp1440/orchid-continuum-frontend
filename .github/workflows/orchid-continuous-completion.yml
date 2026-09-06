@@ -41,11 +41,12 @@ jobs:
       provider: ${{ steps.governor.outputs.provider }}
       fingerprint: ${{ steps.governor.outputs.fingerprint }}
     steps:
-      - name: Checkout governed integration branch
+      - name: Checkout exact PR head or governed integration branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: oc-autonomous-integration
+          ref: ${{ github.event.pull_request.head.sha || 'oc-autonomous-integration' }}
           fetch-depth: 1
+          persist-credentials: false
 
       - name: Install locked dependencies
         run: npm ci --ignore-scripts
@@ -110,7 +111,8 @@ jobs:
     if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "disabled by #535 NO-API circuit breaker"
+      - run: |
+          echo "disabled by #535 NO-API circuit breaker"
 
   lane2:
     name: Paid lane 2 parked
@@ -118,7 +120,8 @@ jobs:
     if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "disabled by #535 NO-API circuit breaker"
+      - run: |
+          echo "disabled by #535 NO-API circuit breaker"
 
   lane3:
     name: Paid lane 3 parked
@@ -126,7 +129,8 @@ jobs:
     if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "disabled by #535 NO-API circuit breaker"
+      - run: |
+          echo "disabled by #535 NO-API circuit breaker"
 
   lane4:
     name: Paid lane 4 parked
@@ -134,7 +138,8 @@ jobs:
     if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "disabled by #535 NO-API circuit breaker"
+      - run: |
+          echo "disabled by #535 NO-API circuit breaker"
 
   lane5:
     name: Paid lane 5 parked
@@ -142,4 +147,5 @@ jobs:
     if: ${{ false }}
     runs-on: ubuntu-latest
     steps:
-      - run: echo "disabled by #535 NO-API circuit breaker"
+      - run: |
+          echo "disabled by #535 NO-API circuit breaker"
