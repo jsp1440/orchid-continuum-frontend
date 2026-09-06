@@ -128,4 +128,57 @@ describe('Orchestrator Queue Bridge', () => {
     expect(plan.protected[0].labels).toContain('oc-owner-gate');
     expect(plan.protected[0].blockedReasons).toEqual(['scientific-publication', 'sensitive-locality-exposure']);
   });
+
+  it('suppresses a syntactically open source when integration already contains its implementation', () => {
+    const source = candidate('stale-open', { integratedCompletion: true });
+    const plan = planQueueBridge([source], [], 1);
+
+    expect(plan.create).toHaveLength(0);
+    expect(plan.eligibleCount).toBe(0);
+  });
+
+  it('retires a stale prepared mirror once when integration completion is discovered', () => {
+    const source = candidate('stale-mirror', { integratedCompletion: true });
+    const existing = [{
+      sourceKey: sourceKey(source),
+      title: source.title,
+      state: 'open' as const,
+      kind: 'issue' as const,
+    }];
+
+    const first = planQueueBridge([source], existing, 1);
+    expect(first.retire).toEqual([{ sourceKey: sourceKey(source), reason: 'source-completed' }]);
+    expect(first.create).toHaveLength(0);
+
+    const closed = [{ ...existing[0], state: 'closed' as const }];
+    const repeated = planQueueBridge([source], closed, 1);
+    expect(repeated.retire).toHaveLength(0);
+    expect(repeated.create).toHaveLength(0);
+  });
+
+  it('lets explicit requeue override prior integration completion', () => {
+    const source = candidate('follow-on', {
+      integratedCompletion: true,
+      explicitRequeue: true,
+    });
+    const plan = planQueueBridge([source], [], 1);
+
+    expect(plan.create.map((item) => item.sourceKey)).toEqual([sourceKey(source)]);
+  });
+
+  it('reconciles stale open and integration-complete observations toward completion unless explicitly requeued', () => {
+    const staleOpen = candidate('merged-source', { unfinished: true });
+    const integrationComplete = candidate('merged-source', { unfinished: true, integratedCompletion: true });
+    const plan = planQueueBridge([staleOpen, integrationComplete], [], 1);
+
+    expect(plan.create).toHaveLength(0);
+
+    const requeued = candidate('merged-source', {
+      unfinished: true,
+      integratedCompletion: true,
+      explicitRequeue: true,
+    });
+    const requeuePlan = planQueueBridge([integrationComplete, requeued], [], 1);
+    expect(requeuePlan.create.map((item) => item.sourceKey)).toEqual([sourceKey(requeued)]);
+  });
 });
