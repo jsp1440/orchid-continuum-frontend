@@ -33,6 +33,9 @@ jobs:
           ref: oc-autonomous-integration
           fetch-depth: 1
 
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
       - name: Compute deterministic refill requirement
         id: refill
         shell: bash
@@ -44,7 +47,7 @@ jobs:
           export OC_PORTFOLIO_QUEUED="$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')"
           export OC_PORTFOLIO_RUNNING="$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')"
           export OC_PORTFOLIO_VALIDATING="$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')"
-          npx tsx scripts/deterministic-portfolio-refill-workflow.ts
+          npx --no-install tsx scripts/deterministic-portfolio-refill-workflow.ts
 
       - name: Evaluate provider governor without paid execution
         id: governor
@@ -53,10 +56,17 @@ jobs:
           OC_PROVIDER_WORK_JSON: '[]'
         run: |
           set -euo pipefail
-          npx tsx scripts/provider-governor-workflow-gate.ts
+          npx --no-install tsx scripts/provider-governor-workflow-gate.ts
 
       - name: Emit deterministic telemetry
         shell: bash
+        env:
+          REFILL_COUNT: ${{ steps.refill.outputs.refill_count }}
+          REFILL_TELEMETRY_JSON: ${{ steps.refill.outputs.telemetry_json }}
+          GOVERNOR_ALLOW_PAID_EXECUTION: ${{ steps.governor.outputs.allow_paid_execution }}
+          GOVERNOR_REASON: ${{ steps.governor.outputs.reason }}
+          GOVERNOR_FINGERPRINT: ${{ steps.governor.outputs.fingerprint }}
+          GOVERNOR_TELEMETRY_JSON: ${{ steps.governor.outputs.telemetry_json }}
         run: |
           {
             echo '### Orchid NO-API scheduler'
@@ -65,12 +75,12 @@ jobs:
             echo '- gemini: parked'
             echo '- openai: parked'
             echo '- paidProviderCallsAllowed: 0'
-            echo "- refill_count: ${{ steps.refill.outputs.refill_count }}"
-            echo "- refill_telemetry: ${{ steps.refill.outputs.telemetry_json }}"
-            echo "- governor_allow_paid_execution: ${{ steps.governor.outputs.allow_paid_execution }}"
-            echo "- governor_reason: ${{ steps.governor.outputs.reason }}"
-            echo "- governor_fingerprint: ${{ steps.governor.outputs.fingerprint }}"
-            echo "- governor_telemetry: ${{ steps.governor.outputs.telemetry_json }}"
+            printf '%s\n' "- refill_count: ${REFILL_COUNT}"
+            printf '%s\n' "- refill_telemetry: ${REFILL_TELEMETRY_JSON}"
+            printf '%s\n' "- governor_allow_paid_execution: ${GOVERNOR_ALLOW_PAID_EXECUTION}"
+            printf '%s\n' "- governor_reason: ${GOVERNOR_REASON}"
+            printf '%s\n' "- governor_fingerprint: ${GOVERNOR_FINGERPRINT}"
+            printf '%s\n' "- governor_telemetry: ${GOVERNOR_TELEMETRY_JSON}"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Assert paid execution remains unreachable
