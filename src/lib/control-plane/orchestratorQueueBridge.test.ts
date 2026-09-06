@@ -42,6 +42,21 @@ describe('Orchestrator Queue Bridge', () => {
     expect(refill.create.map((item) => item.sourceKey)).toEqual([sourceKey(b)]);
   });
 
+  it('refills highest-priority safe work first with stable source-key tie breaking', () => {
+    const p4 = candidate('a-low', { priority: 'oc-p4' });
+    const p0z = candidate('z-high', { priority: 'oc-p0' });
+    const p0b = candidate('b-high', { priority: 'oc-p0' });
+    const p1 = candidate('c-mid', { priority: 'oc-p1' });
+
+    const plan = planQueueBridge([p4, p0z, p1, p0b], [], 3);
+
+    expect(plan.create.map((item) => item.sourceKey)).toEqual([
+      sourceKey(p0b),
+      sourceKey(p0z),
+      sourceKey(p1),
+    ]);
+  });
+
   it('retires a completed source before calculating refill depth', () => {
     const completed = candidate('done', { unfinished: false });
     const next = candidate('next');
