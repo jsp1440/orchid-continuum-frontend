@@ -1,0 +1,47 @@
+name: Orchid Subscription Worker Canary
+
+on:
+  workflow_dispatch:
+
+# Phase 1 for #608 is preflight only. This job intentionally requires a local/
+# self-hosted runner whose Codex CLI is already authenticated through ChatGPT.
+# It never invokes a model and it has no API-key secret inputs.
+permissions:
+  contents: read
+
+jobs:
+  subscription-preflight:
+    runs-on: [self-hosted, oc-subscription-worker]
+    timeout-minutes: 10
+    env:
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_SUBSCRIPTION_WORKER: 'codex'
+    steps:
+      - name: Checkout governed integration branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: oc-autonomous-integration
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Install locked deterministic dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Prove Codex is subscription-authenticated with no model API keys
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --no-install tsx scripts/subscription-worker-preflight.ts
+
+      - name: Record canary boundary
+        shell: bash
+        run: |
+          {
+            echo '### Orchid subscription worker canary'
+            echo '- phase: preflight-only'
+            echo '- worker: Codex CLI'
+            echo '- required auth: ChatGPT subscription'
+            echo '- model API keys: forbidden'
+            echo '- model execution: none'
+            echo '- production/main/scientific mutation: none'
+          } >> "$GITHUB_STEP_SUMMARY"
