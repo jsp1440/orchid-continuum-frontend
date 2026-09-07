@@ -10,6 +10,26 @@ type AccountProbe = {
   planType: string | null;
 };
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === 'object' && value !== null;
+}
+
+function readString(record: JsonRecord | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function parseMessage(line: string): JsonRecord | null {
+  try {
+    const value: unknown = JSON.parse(line);
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 function emit(decision: SubscriptionWorkerPreflightDecision, details: Record<string, unknown>) {
   process.stdout.write(
     `${JSON.stringify({ worker: 'codex', ...decision, ...details })}\n`,
@@ -51,12 +71,8 @@ async function readCodexAccount(): Promise<AccountProbe> {
     });
 
     lines.on('line', (line) => {
-      let message: any;
-      try {
-        message = JSON.parse(line);
-      } catch {
-        return;
-      }
+      const message = parseMessage(line);
+      if (!message) return;
 
       if (message.id === 0) {
         if (message.error) {
@@ -73,10 +89,12 @@ async function readCodexAccount(): Promise<AccountProbe> {
           finish(new Error(`codex account/read failed: ${JSON.stringify(message.error)}`));
           return;
         }
-        const account = message.result?.account ?? null;
+        const result = isRecord(message.result) ? message.result : null;
+        const accountValue = result?.account;
+        const account = isRecord(accountValue) ? accountValue : null;
         finish(null, {
-          accountType: typeof account?.type === 'string' ? account.type : null,
-          planType: typeof account?.planType === 'string' ? account.planType : null,
+          accountType: readString(account, 'type'),
+          planType: readString(account, 'planType'),
         });
       }
     });
