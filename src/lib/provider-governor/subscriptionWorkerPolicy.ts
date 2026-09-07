@@ -9,7 +9,7 @@ export const FORBIDDEN_MODEL_API_ENV = [
 export type SubscriptionWorkerPreflightInput = {
   env: Record<string, string | undefined>;
   codexAvailable: boolean;
-  codexAuthOutput: string;
+  codexAccountType: string | null;
 };
 
 export type SubscriptionWorkerPreflightDecision = {
@@ -29,13 +29,8 @@ export function findForbiddenModelApiEnv(
   return FORBIDDEN_MODEL_API_ENV.filter((name) => Boolean(env[name]?.trim()));
 }
 
-export function codexUsesChatGPTSubscription(authOutput: string): boolean {
-  const normalized = authOutput.trim().toLowerCase();
-  return (
-    normalized.includes('logged in using chatgpt') &&
-    !normalized.includes('api key') &&
-    !normalized.includes('api-key')
-  );
+export function codexUsesChatGPTSubscription(accountType: string | null): boolean {
+  return accountType?.trim().toLowerCase() === 'chatgpt';
 }
 
 export function evaluateSubscriptionWorkerPreflight(
@@ -60,7 +55,7 @@ export function evaluateSubscriptionWorkerPreflight(
     };
   }
 
-  if (!codexUsesChatGPTSubscription(input.codexAuthOutput)) {
+  if (!codexUsesChatGPTSubscription(input.codexAccountType)) {
     return {
       allowed: false,
       authMode: 'unknown',
