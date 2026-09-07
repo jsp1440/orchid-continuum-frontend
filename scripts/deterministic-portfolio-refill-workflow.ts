@@ -5,7 +5,9 @@ const result = evaluateDeterministicPortfolioRefillWorkflow({
   queued: process.env.OC_PORTFOLIO_QUEUED,
   running: process.env.OC_PORTFOLIO_RUNNING,
   validating: process.env.OC_PORTFOLIO_VALIDATING,
-  targetActionable: process.env.OC_PORTFOLIO_TARGET_ACTIONABLE,
+  maxActiveLanes: process.env.OC_MAX_ACTIVE_LANES,
+  wavesAhead: process.env.OC_PORTFOLIO_WAVES_AHEAD,
+  targetFloor: process.env.OC_PORTFOLIO_TARGET_FLOOR,
   maxRefillPerTick: process.env.OC_PORTFOLIO_MAX_REFILL_PER_TICK,
 });
 
@@ -18,6 +20,7 @@ appendFileSync(
   output,
   [
     `actionable=${result.actionable}`,
+    `target_actionable=${result.targetActionable}`,
     `refill_count=${result.refillCount}`,
     `needs_refill=${String(result.needsRefill)}`,
     `reason=${result.reason}`,
