@@ -14,6 +14,7 @@ import {
   Network,
   ScrollText,
 } from 'lucide-react';
+import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
 import {
   buildResearchDossier,
@@ -533,6 +534,15 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
             ))}
           </ul>
         )}
+      </SectionShell>
+
+      {/* ACTIVITY — canonical audit history for the resolved project */}
+      <SectionShell
+        icon={<ScrollText className="h-3.5 w-3.5" />}
+        eyebrow="Activity"
+        title="Project audit trail"
+      >
+        <ResearchActivityPanel projectId={dossier.project.project_id} />
       </SectionShell>
 
       {/* SYNTHESIS — run over the governed path, never computed here */}
