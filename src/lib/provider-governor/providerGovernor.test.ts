@@ -74,16 +74,37 @@ describe('provider governor #535', () => {
     if (result.dispatch) expect(result.provider).toBe('openai');
   });
 
-  it('selects the cheapest adequate enabled provider through priority hooks', () => {
+  it('selects the cheapest adequate enabled provider through policy priority', () => {
     const result = decide();
     expect(result.dispatch).toBe(true);
     if (result.dispatch) expect(result.provider).toBe('gemini');
   });
 
-  it('respects per-task adequacy and escalates only when required', () => {
+  it('fails closed when a worker narrows provider adequacy without evidence', () => {
     const result = decide(state(), policies(), [{ ...work[0], adequateProviders: ['anthropic'] }]);
+    expect(result.dispatch).toBe(false);
+    expect(result.reason).toBe('routing-evidence-required');
+    expect(result.telemetry.selectedProvider).toBeNull();
+  });
+
+  it('allows evidence-backed provider restriction and escalation', () => {
+    const result = decide(state(), policies(), [{
+      ...work[0],
+      adequateProviders: ['anthropic'],
+      routingEvidence: [{ kind: 'tested-precedent', reference: 'provider-eval/complex-debug-v1' }],
+    }]);
     expect(result.dispatch).toBe(true);
     if (result.dispatch) expect(result.provider).toBe('anthropic');
+  });
+
+  it('rejects blank evidence references rather than treating them as proof', () => {
+    const result = decide(state(), policies(), [{
+      ...work[0],
+      adequateProviders: ['anthropic'],
+      routingEvidence: [{ kind: 'repository-policy', reference: '   ' }],
+    }]);
+    expect(result.dispatch).toBe(false);
+    expect(result.reason).toBe('routing-evidence-required');
   });
 
   it('parks when the minimum dispatch interval has not elapsed', () => {
@@ -136,12 +157,23 @@ describe('provider governor #535', () => {
     expect(result.dispatch).toBe(true);
   });
 
-  it('fingerprints issue/head/acceptance state deterministically and detects material change', () => {
+  it('fingerprints routing evidence so an evidence change is material', () => {
     const first = changedWorkFingerprint(work);
     const reordered = changedWorkFingerprint([...work].reverse());
     const changed = changedWorkFingerprint([{ ...work[0], headSha: 'def' }]);
+    const restricted = changedWorkFingerprint([{
+      ...work[0],
+      adequateProviders: ['anthropic'],
+      routingEvidence: [{ kind: 'verified-tool-result', reference: 'eval-run-42' }],
+    }]);
+    const newEvidence = changedWorkFingerprint([{
+      ...work[0],
+      adequateProviders: ['anthropic'],
+      routingEvidence: [{ kind: 'verified-tool-result', reference: 'eval-run-43' }],
+    }]);
     expect(first).toBe(reordered);
     expect(changed).not.toBe(first);
+    expect(newEvidence).not.toBe(restricted);
   });
 
   it('records only real telemetry and preserves UNKNOWN rather than estimating it', () => {
