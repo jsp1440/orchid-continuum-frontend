@@ -2,6 +2,16 @@ import { createHash } from 'node:crypto';
 
 export type Provider = 'anthropic' | 'gemini' | 'openai';
 export type ProviderState = 'enabled' | 'disabled';
+export type RoutingEvidenceKind =
+  | 'repository-policy'
+  | 'verified-tool-result'
+  | 'authoritative-documentation'
+  | 'tested-precedent';
+
+export interface RoutingEvidence {
+  kind: RoutingEvidenceKind;
+  reference: string;
+}
 
 export interface ProviderPolicy {
   state: ProviderState;
@@ -37,6 +47,7 @@ export interface WorkUnit {
   materialRevision?: string | null;
   urgentP0?: boolean;
   adequateProviders?: Provider[];
+  routingEvidence?: RoutingEvidence[];
 }
 
 export interface DispatchRequest {
@@ -72,6 +83,24 @@ function stable(value: unknown): string {
   return JSON.stringify(value);
 }
 
+function normalizedRoutingEvidence(unit: WorkUnit): RoutingEvidence[] {
+  return (unit.routingEvidence ?? [])
+    .filter((entry) => entry.reference.trim().length > 0)
+    .map((entry) => ({ kind: entry.kind, reference: entry.reference.trim() }))
+    .sort((a, b) => `${a.kind}:${a.reference}`.localeCompare(`${b.kind}:${b.reference}`));
+}
+
+function hasProviderRestriction(unit: WorkUnit): boolean {
+  if (unit.adequateProviders === undefined) return false;
+  const declared = [...new Set(unit.adequateProviders)].sort();
+  const defaults = [...PROVIDERS].sort();
+  return stable(declared) !== stable(defaults);
+}
+
+function hasEvidenceForProviderRestriction(unit: WorkUnit): boolean {
+  return !hasProviderRestriction(unit) || normalizedRoutingEvidence(unit).length > 0;
+}
+
 export function changedWorkFingerprint(work: WorkUnit[]): string {
   const material = work
     .map((unit) => ({
@@ -81,6 +110,7 @@ export function changedWorkFingerprint(work: WorkUnit[]): string {
       materialRevision: unit.materialRevision ?? null,
       urgentP0: Boolean(unit.urgentP0),
       adequateProviders: [...(unit.adequateProviders ?? PROVIDERS)].sort(),
+      routingEvidence: normalizedRoutingEvidence(unit),
     }))
     .sort((a, b) => a.issueNumber - b.issueNumber);
   return createHash('sha256').update(stable(material)).digest('hex');
@@ -120,6 +150,7 @@ export function decideProviderDispatch(request: DispatchRequest): DispatchDecisi
   if (request.state.noApiMode) return deny('provider-no-api');
   if (request.work.length === 0) return deny('no-material-work');
   if (request.state.lastFingerprint === fingerprint) return deny('unchanged-work-fingerprint');
+  if (!request.work.every(hasEvidenceForProviderRestriction)) return deny('routing-evidence-required');
   if (request.work.length < request.materialWorkThreshold && !request.work.some((unit) => unit.urgentP0)) {
     return deny('batch-threshold-not-met');
   }
