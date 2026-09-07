@@ -48,10 +48,10 @@ const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: '5bf293397fc5203a24a70e2608ce67bb71d420b8',
-  reconciledAt: '2026-09-05T00:00:00.000Z',
+  reconciledAgainstSha: 'deba2b2897a7fc47a0dd56fc8fd8a3dc0e641fea',
+  reconciledAt: '2026-09-06T00:00:00.000Z',
   scope:
-    'Initial census (#281) plus the mounted-journey, Verification Workbench, Classroom and legacy-salvage work landed through this commit, plus the #242 audit pass decomposing Homepage/Featured Genus/Public Calyx and the previously-uncensused Calyx education & show-management surfaces. Not every domain has been re-scored — census coverage is reported alongside each percentage.',
+    'Initial census (#281) and #242 audit retained. The #525 pass checks only the Research Station Trait Explorer gap against this integration base and adds a tested frontend consumer; other domains retain their earlier evidence dates. The backend trait endpoint and live retrieval are not yet verified. Census coverage is reported alongside each percentage.',
 };
 
 let autoId = 0;
@@ -1349,18 +1349,65 @@ type StubDomainSpec = {
   lane: ExecutionLane;
 };
 
-const STUB_DOMAINS: StubDomainSpec[] = [
-  {
-    idHint: 'domain-research-station',
-    name: 'Research Station',
+const researchStationDomain = branch({
+  id: 'domain-research-station',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Research Station',
+  type: 'domain',
+  nextAction: 'Supply the read-only trait endpoint from canonical persisted evidence; continue the remaining workbench census without duplicating existing project or literature implementations.',
+}, [branch({
+  id: 'domain-research-station-module',
+  parentId: 'domain-research-station',
+  name: 'Research Station',
+  type: 'module',
+  nextAction: 'See trait retrieval and remaining capability gates.',
+}, [
+  censusPending({
+    idHint: 'domain-research-station-cap',
+    parentId: 'domain-research-station-module',
+    name: 'Remaining Research Station capability census',
     evidence: [
       { kind: 'route', ref: '/research' },
       { kind: 'file', ref: 'src/pages/ResearchCenter.tsx' },
-      { kind: 'issue', ref: '#278', note: 'Atlas -> Research handoff already scored separately under the Atlas domain.' },
+      { kind: 'issue', ref: '#278', note: 'Atlas -> Research handoff scored separately under Atlas.' },
     ],
-    nextAction: 'Audit Research Station capabilities beyond the already-scored Atlas handoff (advanced queries, trait explorers, conservation research workspace).',
+    nextAction: 'Audit the project workbench, advanced queries, ecological networks, literature and exports independently of the bounded Trait Explorer consumer.',
     lane: 'PRODUCT_COMPLETION',
+  }),
+  {
+    id: 'cap-research-trait-explorer',
+    parentId: 'domain-research-station-module',
+    name: 'Trait Explorer: subject-bound read-only retrieval with provenance',
+    type: 'capability',
+    status: 'PARTIAL',
+    threeLevels: { codeComplete: 'MET', integratedComplete: 'UNKNOWN', productComplete: 'NOT_MET' },
+    lane: 'PRODUCT_COMPLETION',
+    gateScores: {
+      architectureContracts: 1,
+      implementationPresent: 1,
+      integrationCanonicalBranch: null,
+      scientificProvenanceSecurity: 1,
+      browserEndToEnd: null,
+      deployedOperational: null,
+    },
+    evidence: [
+      { kind: 'issue', ref: '#525' },
+      { kind: 'route', ref: '/research' },
+      { kind: 'doc', ref: 'docs/contracts/RESEARCH-TRAITS-001.md', note: 'Consumer contract only; backend implementation is not claimed.' },
+      { kind: 'file', ref: 'src/components/research/ResearchTraitExplorer.tsx' },
+      { kind: 'file', ref: 'src/lib/researchTraits.ts' },
+      { kind: 'test', ref: 'src/lib/researchTraits.test.ts' },
+      { kind: 'test', ref: 'src/components/research/ResearchTraitExplorer.test.tsx' },
+    ],
+    issues: ['#525'],
+    nextAction: 'Implement GET /api/research/traits in the canonical backend from persisted source-bound records, then verify real browser retrieval. The frontend currently reports missing/unavailable contracts without fabricated data.',
+    lastAccomplishment: 'Replaced the static Trait Explorer card with explicit genus/species retrieval, source receipts, distinct missing-data states and stale-response isolation.',
+    lastUpdated: '2026-09-06T00:00:00.000Z',
+    children: [],
   },
+])]);
+
+const STUB_DOMAINS: StubDomainSpec[] = [
   {
     idHint: 'domain-pollinator-mycorrhiza',
     name: 'Pollinator / mycorrhiza / ecological relationships',
@@ -1773,6 +1820,7 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   homepageDomain,
   educationShowManagementDomain,
   buildJourneyContinuityDomain(branch),
+  researchStationDomain,
   ...stubDomains,
 ]);
 

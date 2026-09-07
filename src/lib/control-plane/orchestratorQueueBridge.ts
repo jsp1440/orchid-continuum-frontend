@@ -15,6 +15,14 @@ export interface QueueBridgeCandidate {
   unfinished: boolean;
   dependencies?: string[];
   protectedClasses?: string[];
+  /**
+   * Authoritative evidence that an implementation PR for this source was merged into
+   * the integration branch. This is needed because GitHub close keywords do not
+   * necessarily close source issues when the merge target is a non-default branch.
+   */
+  integratedCompletion?: boolean;
+  /** Explicit source-level request for new work after a prior integration. */
+  explicitRequeue?: boolean;
 }
 
 export interface ExistingWorkRef {
@@ -35,6 +43,7 @@ export interface PreparedWork {
 
 export interface QueueBridgePlan {
   create: PreparedWork[];
+  retire: Array<{ sourceKey: string; reason: 'source-completed' }>;
   suppressed: Array<{ sourceKey: string; reason: string }>;
   protected: PreparedWork[];
   eligibleCount: number;
@@ -56,6 +65,15 @@ const PROTECTED_CLASSES = new Set([
   'protected-path',
 ]);
 
+const PRIORITY_RANK: Record<QueueBridgeCandidate['priority'], number> = {
+  'oc-p0': 0,
+  'oc-p1': 1,
+  'oc-p2': 2,
+  'oc-p3': 3,
+  'oc-p4': 4,
+  'oc-p5': 5,
+};
+
 export function sourceKey(candidate: QueueBridgeCandidate): string {
   return `${candidate.sourceRepo}|${candidate.sourceKind}|${candidate.sourceId}`.toLowerCase();
 }
@@ -72,6 +90,47 @@ function classifyProtected(candidate: QueueBridgeCandidate): string[] {
   return [...new Set(candidate.protectedClasses ?? [])]
     .filter((value) => PROTECTED_CLASSES.has(value))
     .sort();
+}
+
+/**
+ * Integration completion outranks a syntactically-open source issue. An explicit
+ * requeue is the only source-level signal that revives work after that completion.
+ */
+function isEffectivelyUnfinished(candidate: QueueBridgeCandidate): boolean {
+  if (candidate.explicitRequeue) return true;
+  if (candidate.integratedCompletion) return false;
+  return candidate.unfinished;
+}
+
+function reconcileCandidateStates(candidates: QueueBridgeCandidate[]): QueueBridgeCandidate[] {
+  const byKey = new Map<string, QueueBridgeCandidate>();
+
+  for (const candidate of candidates) {
+    const key = sourceKey(candidate);
+    const current = byKey.get(key);
+    if (!current) {
+      byKey.set(key, candidate);
+      continue;
+    }
+
+    // An explicit requeue is authoritative new-work evidence and must survive stale
+    // completion observations. Otherwise, merged integration evidence suppresses a
+    // merely syntactically-open issue. With neither signal, conflicts fail toward
+    // unfinished work as before.
+    if (current.explicitRequeue || candidate.explicitRequeue) {
+      byKey.set(key, current.explicitRequeue ? current : candidate);
+      continue;
+    }
+    if (current.integratedCompletion || candidate.integratedCompletion) {
+      byKey.set(key, current.integratedCompletion ? current : candidate);
+      continue;
+    }
+    if (!current.unfinished && candidate.unfinished) {
+      byKey.set(key, candidate);
+    }
+  }
+
+  return [...byKey.values()].sort((a, b) => sourceKey(a).localeCompare(sourceKey(b)));
 }
 
 export function prepareCandidate(candidate: QueueBridgeCandidate): PreparedWork {
@@ -99,9 +158,9 @@ export function prepareCandidate(candidate: QueueBridgeCandidate): PreparedWork 
 
 /**
  * Deterministic reconciliation only. It never invokes a provider and never performs
- * GitHub writes itself. A caller may materialize `create` items after rechecking
- * repository truth. Protected items are returned separately and never count toward
- * executable prepared depth.
+ * GitHub writes itself. A caller may materialize `create`/`retire` actions after
+ * rechecking repository truth. Protected items are returned separately and never
+ * count toward executable prepared depth.
  */
 export function planQueueBridge(
   candidates: QueueBridgeCandidate[],
@@ -109,31 +168,40 @@ export function planQueueBridge(
   targetDepth: number,
 ): QueueBridgePlan {
   const boundedTarget = Math.max(0, Math.floor(targetDepth));
+  const reconciledCandidates = reconcileCandidateStates(candidates);
+  const completedSourceKeys = new Set(
+    reconciledCandidates
+      .filter((candidate) => !isEffectivelyUnfinished(candidate))
+      .map((candidate) => sourceKey(candidate)),
+  );
   const openSourceKeys = new Set(
     existing.filter((item) => item.state === 'open' && item.sourceKey).map((item) => item.sourceKey!.toLowerCase()),
   );
-  const openTitles = new Set(existing.filter((item) => item.state === 'open').map((item) => normalizeTitle(item.title)));
-  const preparedOpenCount = existing.filter((item) => item.state === 'open' && Boolean(item.sourceKey)).length;
+  const retire = [...openSourceKeys]
+    .filter((key) => completedSourceKeys.has(key))
+    .sort()
+    .map((key) => ({ sourceKey: key, reason: 'source-completed' as const }));
+  const retiringKeys = new Set(retire.map((item) => item.sourceKey));
+  const openTitles = new Set(
+    existing
+      .filter(
+        (item) => item.state === 'open' && !(item.sourceKey && retiringKeys.has(item.sourceKey.toLowerCase())),
+      )
+      .map((item) => normalizeTitle(item.title)),
+  );
+  const preparedOpenCount = existing.filter(
+    (item) => item.state === 'open' && Boolean(item.sourceKey) && !retiringKeys.has(item.sourceKey!.toLowerCase()),
+  ).length;
   const slots = Math.max(0, boundedTarget - preparedOpenCount);
 
-  const seenCandidateKeys = new Set<string>();
   const suppressed: QueueBridgePlan['suppressed'] = [];
-  const safe: PreparedWork[] = [];
+  const safe: Array<{ candidate: QueueBridgeCandidate; prepared: PreparedWork }> = [];
   const protectedWork: PreparedWork[] = [];
 
-  const ordered = [...candidates]
-    .filter((candidate) => candidate.unfinished)
-    .sort((a, b) => sourceKey(a).localeCompare(sourceKey(b)));
-
-  for (const candidate of ordered) {
+  for (const candidate of reconciledCandidates.filter((candidate) => isEffectivelyUnfinished(candidate))) {
     const key = sourceKey(candidate);
-    if (seenCandidateKeys.has(key)) {
-      suppressed.push({ sourceKey: key, reason: 'duplicate-source-candidate' });
-      continue;
-    }
-    seenCandidateKeys.add(key);
 
-    if (openSourceKeys.has(key) || openTitles.has(normalizeTitle(candidate.title))) {
+    if ((openSourceKeys.has(key) && !retiringKeys.has(key)) || openTitles.has(normalizeTitle(candidate.title))) {
       suppressed.push({ sourceKey: key, reason: 'existing-open-lineage' });
       continue;
     }
@@ -143,11 +211,20 @@ export function planQueueBridge(
       protectedWork.push(prepared);
       continue;
     }
-    safe.push(prepared);
+    safe.push({ candidate, prepared });
   }
 
+  // Refill must be both deterministic and useful: highest portfolio priority wins,
+  // while source identity provides a stable tie-breaker independent of discovery order.
+  safe.sort(
+    (a, b) =>
+      PRIORITY_RANK[a.candidate.priority] - PRIORITY_RANK[b.candidate.priority] ||
+      a.prepared.sourceKey.localeCompare(b.prepared.sourceKey),
+  );
+
   return {
-    create: safe.slice(0, slots),
+    create: safe.slice(0, slots).map((item) => item.prepared),
+    retire,
     suppressed,
     protected: protectedWork,
     eligibleCount: safe.length,

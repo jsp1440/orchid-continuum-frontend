@@ -39,26 +39,21 @@ jobs:
       - name: Install deterministic governor dependencies
         run: npm ci --ignore-scripts
 
-      - name: Evaluate provider governor before any provider workflow
+      - name: Evaluate provider governor without entering a provider workflow
         id: governor
         shell: bash
         run: npx tsx scripts/provider-governor-workflow-gate.ts
 
-      - name: Record parked decision
-        if: steps.governor.outputs.allow_paid_execution != 'true'
+      - name: Record governed NO-API decision
         shell: bash
         run: |
-          printf 'Paid provider execution parked: reason=%s fingerprint=%s\n' \
+          printf 'Provider admission only: allow=%s provider=%s reason=%s fingerprint=%s\n' \
+            '${{ steps.governor.outputs.allow_paid_execution }}' \
+            '${{ steps.governor.outputs.provider }}' \
             '${{ steps.governor.outputs.reason }}' \
             '${{ steps.governor.outputs.fingerprint }}'
 
-  paid-provider-completion:
-    needs: provider-admission
-    if: needs.provider-admission.outputs.allow_paid_execution == 'true'
-    # The legacy provider workflow is unreachable while NO-API mode is true.
-    # Keeping this call behind a job-level gate ensures its provider secrets and
-    # third-party actions are never evaluated on normal deterministic ticks.
-    uses: ./.github/workflows/orchid-completion-lane.yml
-    with:
-      issue_number: ${{ inputs.issue_number }}
-    secrets: inherit
+# Deliberately no paid-provider job exists in this workflow while NO-API mode is
+# active. This removes inherited secrets and third-party provider actions from the
+# callable execution graph entirely. Re-enabling paid execution requires a new,
+# separately reviewed governed change after provider recovery and spending approval.
