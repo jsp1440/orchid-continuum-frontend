@@ -1,9 +1,15 @@
 /**
- * /intelligence-graph — Orchid Intelligence Graph foundation.
+ * /intelligence-graph (also aliased at /knowledge) — Orchid Intelligence Graph.
  *
- * A live SVG node-link visualization of the ecological knowledge graph
- * built from the database (species, genera, biomes, pollinators,
+ * A live SVG node-link visualization built client-side from already-loaded
+ * species/atlas/mycorrhizal rows (species, genera, biomes, pollinators,
  * mycorrhizae, countries, IUCN status). Reads real edges, never invents.
+ *
+ * This is distinct from the backend-integrated, genus-scoped "Knowledge
+ * Graph" evidence capability (fetchGenusGraphEvidence in
+ * src/lib/knowledgeGraph.ts, surfaced on genus pages). See
+ * docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md for the naming
+ * split between the two.
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
@@ -94,6 +100,10 @@ const IntelligenceGraph: React.FC = () => {
                 A living node-link of the Continuum's biodiversity relationships — orchids ↔
                 habitats ↔ pollinators ↔ fungi ↔ countries ↔ conservation status. Every node and
                 edge is derived from a real database record. Nothing is invented.
+              </p>
+              <p className="mt-2 max-w-2xl text-[12px] text-[#cfc8b8]/55 leading-relaxed">
+                This is an aggregate Intelligence Graph across the whole collection, not the
+                genus-scoped Knowledge Graph evidence shown on individual genus pages.
               </p>
             </div>
             <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-[#cfc8b8]/70">

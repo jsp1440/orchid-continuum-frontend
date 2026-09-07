@@ -27,7 +27,7 @@ import Species from "./pages/Species";
 import MyCollection from "./pages/MyCollection";
 import MyConservatory from "./pages/MyConservatory";
 import ResearchCenter from "./pages/ResearchCenter";
-import ResearchStationPublic from "./pages/ResearchStationPublic";
+import ResearcherJefferyParham from "./pages/ResearcherJefferyParham";
 import Education from "./pages/Education";
 import Partners from "./pages/Partners";
 import GetInvolved from "./pages/GetInvolved";
@@ -100,8 +100,6 @@ const App = () => (
                   <Route path="/genus/:name" element={<GenusDetail />} />
                   <Route path="/species/:slug" element={<SpeciesDossier />} />
                   <Route path="/about" element={<About />} />
-                  <Route path="/research-station" element={<ResearchStationPublic />} />
-                  <Route path="/research-station/about" element={<ResearchStationPublic />} />
                   <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
                   <Route path="/atlas" element={<Atlas />} />
                   <Route
@@ -144,6 +142,9 @@ const App = () => (
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
                   <Route path="/conservatory/*" element={<ProtectedRoute title="Sign in to view your conservatory" description="Your private living collection, plant passports, QR identifiers, and collection notes live behind authentication."><MyConservatory /></ProtectedRoute>} />
+                  <Route path="/research-station" element={<ResearcherJefferyParham />} />
+                  <Route path="/research-station/about" element={<ResearcherJefferyParham />} />
+                  <Route path="/research-station/researchers/jeffery-scott-parham" element={<ResearcherJefferyParham />} />
                   <Route path="/research" element={<ProtectedRoute title="Research Center · members only" description="Sign in to access advanced queries, trait explorers, and the conservation research workspace."><ResearchCenter /></ProtectedRoute>} />
                   <Route path="/account" element={<Account />} />
                   <Route path="/saved" element={<SavedOrchids />} />

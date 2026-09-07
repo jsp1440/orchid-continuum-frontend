@@ -6,6 +6,17 @@ import { computeGateScore } from './scoring';
 describe('COMPLETION_GRAPH structural integrity', () => {
   const allNodes = flattenGraph(COMPLETION_GRAPH);
 
+  it('#525 scores only the trait consumer without claiming a live backend or completing the remaining station', () => {
+    const station = allNodes.find((node) => node.id === 'domain-research-station')!;
+    const leaves = getLeaves(station);
+    const traits = leaves.find((node) => node.id === 'cap-research-trait-explorer')!;
+    expect(traits.issues).toContain('#525');
+    expect(traits.threeLevels.productComplete).toBe('NOT_MET');
+    expect(traits.gateScores?.deployedOperational).toBeNull();
+    expect(traits.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaves.some((node) => node.status === 'UNKNOWN' && !node.gateScores)).toBe(true);
+  });
+
   it('has a single root with parentId null', () => {
     expect(COMPLETION_GRAPH.parentId).toBeNull();
     const nonRootWithNullParent = allNodes.filter((n) => n.id !== COMPLETION_GRAPH.id && n.parentId === null);
@@ -139,9 +150,56 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(domainLeafCounts['domain-knowledge-graph']).toBe(3);
     expect(domainLeafCounts['domain-conservatory']).toBe(3);
 
-    // The two "Knowledge Graph" routes are architecturally distinct and must
-    // not collapse back into a single undifferentiated node.
+    // #522: the naming conflict between the two "Knowledge Graph" routes is
+    // resolved (docs/contracts/KNOWLEDGE-GRAPH-ROUTE-NAMING-CONTRACT.md) --
+    // this client-derived rollup is named "Intelligence Graph" and must not
+    // collapse back into a single undifferentiated "Knowledge Graph" node.
     const kgVisualization = allNodes.find((n) => n.id === 'cap-kg-visualization-graph');
-    expect(kgVisualization?.gateScores?.architectureContracts).toBe(0);
+    expect(kgVisualization?.gateScores?.architectureContracts).toBe(1);
+  });
+
+  it('#242: Homepage/Featured Genus/Public Calyx is decomposed, not a single generic census-pending stub', () => {
+    const scoredLeafIds = [
+      'cap-homepage-hero-continuum',
+      'cap-homepage-featured-genus',
+      'cap-homepage-public-calyx',
+    ];
+    for (const id of scoredLeafIds) {
+      const leaf = allNodes.find((n) => n.id === id);
+      expect(leaf, `expected leaf ${id} to exist`).toBeTruthy();
+      expect(leaf?.gateScores, `expected leaf ${id} to have gateScores`).toBeTruthy();
+      expect(computeGateScore(leaf?.gateScores).percentage).not.toBeNull();
+    }
+
+    const homepageLeaves = getLeaves(allNodes.find((n) => n.id === 'domain-homepage')!);
+    expect(homepageLeaves.length).toBe(3);
+
+    // #171 (HOMEPAGE-RECOVERY-008) is cited rather than duplicated by a new issue.
+    const heroGate = allNodes.find((n) => n.id === 'cap-homepage-hero-continuum');
+    expect(heroGate?.issues).toContain('#171');
+  });
+
+  it('#242: Calyx education & show-management surfaces are a real, newly-censused domain', () => {
+    const scoredLeafIds = [
+      'cap-education-glossary-hub',
+      'cap-judging-practice',
+      'cap-screen-orchids',
+      'cap-scientific-method-lab',
+      'cap-classroom-teacher-dashboard',
+    ];
+    for (const id of scoredLeafIds) {
+      const leaf = allNodes.find((n) => n.id === id);
+      expect(leaf, `expected leaf ${id} to exist`).toBeTruthy();
+      expect(leaf?.gateScores, `expected leaf ${id} to have gateScores`).toBeTruthy();
+      expect(computeGateScore(leaf?.gateScores).percentage).not.toBeNull();
+    }
+
+    const educationLeaves = getLeaves(allNodes.find((n) => n.id === 'domain-education-show-management')!);
+    expect(educationLeaves.length).toBe(5);
+
+    // Classroom stays honestly backend-blocked (mirrors OASIS), never silently marked complete.
+    const classroom = allNodes.find((n) => n.id === 'cap-classroom-teacher-dashboard');
+    expect(classroom?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(classroom?.gateScores?.deployedOperational).toBe(0);
   });
 });
