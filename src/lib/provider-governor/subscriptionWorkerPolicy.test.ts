@@ -6,10 +6,11 @@ import {
 } from './subscriptionWorkerPolicy';
 
 describe('subscription worker preflight policy', () => {
-  it('accepts Codex only when auth is explicitly ChatGPT subscription based', () => {
-    expect(codexUsesChatGPTSubscription('Logged in using ChatGPT')).toBe(true);
-    expect(codexUsesChatGPTSubscription('Logged in using API key')).toBe(false);
-    expect(codexUsesChatGPTSubscription('Logged in')).toBe(false);
+  it('accepts only the structured ChatGPT account type', () => {
+    expect(codexUsesChatGPTSubscription('chatgpt')).toBe(true);
+    expect(codexUsesChatGPTSubscription('CHATGPT')).toBe(true);
+    expect(codexUsesChatGPTSubscription('apiKey')).toBe(false);
+    expect(codexUsesChatGPTSubscription(null)).toBe(false);
   });
 
   it('detects every forbidden model API environment variable', () => {
@@ -35,7 +36,7 @@ describe('subscription worker preflight policy', () => {
       evaluateSubscriptionWorkerPreflight({
         env: { OPENAI_API_KEY: 'sk-test' },
         codexAvailable: true,
-        codexAuthOutput: 'Logged in using ChatGPT',
+        codexAccountType: 'chatgpt',
       }),
     ).toEqual({
       allowed: false,
@@ -50,7 +51,7 @@ describe('subscription worker preflight policy', () => {
       evaluateSubscriptionWorkerPreflight({
         env: {},
         codexAvailable: false,
-        codexAuthOutput: '',
+        codexAccountType: null,
       }).reason,
     ).toBe('codex_cli_missing');
   });
@@ -60,7 +61,7 @@ describe('subscription worker preflight policy', () => {
       evaluateSubscriptionWorkerPreflight({
         env: {},
         codexAvailable: true,
-        codexAuthOutput: 'Logged in using API key',
+        codexAccountType: 'apiKey',
       }).reason,
     ).toBe('codex_not_logged_in_with_chatgpt');
   });
@@ -70,7 +71,7 @@ describe('subscription worker preflight policy', () => {
       evaluateSubscriptionWorkerPreflight({
         env: {},
         codexAvailable: true,
-        codexAuthOutput: 'Logged in using ChatGPT',
+        codexAccountType: 'chatgpt',
       }),
     ).toEqual({
       allowed: true,
