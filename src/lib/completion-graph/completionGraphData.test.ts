@@ -17,6 +17,29 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(leaves.some((node) => node.status === 'UNKNOWN' && !node.gateScores)).toBe(true);
   });
 
+  it('#528 replaces the relationship census stub with a scored real-data capability', () => {
+    const domain = allNodes.find((node) => node.id === 'domain-pollinator-mycorrhiza')!;
+    const leaves = getLeaves(domain);
+
+    expect(leaves).toHaveLength(1);
+    const relationship = leaves[0];
+    expect(relationship.id).toBe('cap-pollinator-mycorrhiza-real-data');
+    expect(relationship.status).toBe('PARTIAL');
+    expect(relationship.threeLevels).toEqual({
+      codeComplete: 'MET',
+      integratedComplete: 'MET',
+      productComplete: 'UNKNOWN',
+    });
+    expect(relationship.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(relationship.gateScores?.browserEndToEnd).toBeNull();
+    expect(relationship.gateScores?.deployedOperational).toBeNull();
+    expect(
+      relationship.evidence.some((e) =>
+        e.ref.includes('ecologicalRelationshipData.sourceIntegrity.test.ts'),
+      ),
+    ).toBe(true);
+  });
+
   it('has a single root with parentId null', () => {
     expect(COMPLETION_GRAPH.parentId).toBeNull();
     const nonRootWithNullParent = allNodes.filter((n) => n.id !== COMPLETION_GRAPH.id && n.parentId === null);
