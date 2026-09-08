@@ -103,16 +103,45 @@ export default function UniversityReviewerPanel() {
     onError: (error) => setMessage(errorText(error)),
   });
 
-  if (context.isLoading) return null;
+  if (context.isLoading) {
+    return (
+      <section
+        aria-live="polite"
+        className="rounded-2xl border border-white/10 bg-white/[0.025] p-6 text-sm text-white/65"
+        role="status"
+      >
+        Verifying scientific reviewer access…
+      </section>
+    );
+  }
   if (context.isError) {
-    if (context.error instanceof UniversityApiError && context.error.status === 401) return null;
+    if (context.error instanceof UniversityApiError && context.error.status === 401) {
+      return (
+        <section className="rounded-2xl border border-amber-300/20 bg-amber-300/[0.035] p-6 md:p-8">
+          <div className="flex items-center gap-2 text-amber-100">
+            <LockKeyhole className="h-4 w-4" />
+            <h2 className="font-serif text-xl">Scientific reviewer sign-in required</h2>
+          </div>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/65">
+            Sign in through Mission Control to verify reviewer qualifications. Authentication alone
+            does not grant scientific-review authority.
+          </p>
+        </section>
+      );
+    }
     return (
       <section className="rounded-2xl border border-red-300/25 bg-red-300/[0.05] p-6 text-sm text-red-100">
         Reviewer authority could not be verified. {errorText(context.error)}
       </section>
     );
   }
-  if (!context.data) return null;
+  if (!context.data) {
+    return (
+      <section className="rounded-2xl border border-red-300/25 bg-red-300/[0.05] p-6 text-sm text-red-100">
+        Reviewer authority could not be verified. No reviewer context was returned.
+      </section>
+    );
+  }
 
   if (!context.data.science_review_allowed) {
     return (
