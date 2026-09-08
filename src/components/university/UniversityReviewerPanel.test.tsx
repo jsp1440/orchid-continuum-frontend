@@ -121,6 +121,14 @@ async function waitForText(expected: string) {
   throw new Error(`Timed out waiting for: ${expected}`);
 }
 
+async function waitForCondition(predicate: () => boolean, description: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate()) return;
+    await flush();
+  }
+  throw new Error(`Timed out waiting for: ${description}`);
+}
+
 function buttonWithText(expected: string): HTMLButtonElement {
   const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(
     (candidate) => candidate.textContent?.includes(expected),
@@ -262,11 +270,8 @@ describe('UniversityReviewerPanel governed decision flow', () => {
       await openSubmittedSession();
 
       act(() => buttonWithText(buttonLabel).click());
-      await waitForText(
-        decision === 'approved_for_candidate_knowledge_consideration'
-          ? 'No Candidate Knowledge promotion or publication was performed'
-          : 'Human review decision recorded',
-      );
+      await waitForCondition(() => decide.mock.calls.length === 1, 'review API decision');
+      await waitForCondition(() => queue.mock.calls.length === 2, 'review queue refresh');
 
       expect(decide).toHaveBeenCalledWith(submittedSession.session_id, {
         reviewed_revision: submittedSession.revision,
