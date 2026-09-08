@@ -270,7 +270,7 @@ const RegionalMap: React.FC<Props> = ({ view, marks, selectedId, onSelect, onVie
 
   return (
     <div role="region" aria-label="Regional Orchid Atlas map" className="absolute inset-0" data-testid="atlas-regional-map">
-      <div ref={hostRef} role="application" aria-label={\`Regional map with ${marks.length.toLocaleString()} generalized orchid records\`} className="absolute inset-0" />
+      <div ref={hostRef} role="application" aria-label={`Regional map with ${marks.length.toLocaleString()} generalized orchid records`} className="absolute inset-0" />
 
       {state.kind === 'unconfigured' && (
         <div role="status" className="absolute inset-0 flex items-center justify-center bg-[#05070b] px-6">
