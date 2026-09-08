@@ -5,6 +5,7 @@ import {
   type Provider,
   type ProviderPolicy,
   type WorkUnit,
+  type VerifiedRoutingRule,
 } from './providerGovernor';
 
 export interface WorkflowGovernorConfig {
@@ -15,6 +16,8 @@ export interface WorkflowGovernorConfig {
   waveMaxCalls: number;
   providerPriority?: Partial<Record<Provider, number>>;
   disabledProviders?: Provider[];
+  /** Trusted policy only; never take verification rules from worker JSON. */
+  verifiedRoutingRules?: readonly VerifiedRoutingRule[];
 }
 
 export interface WorkflowGovernorAdmissionInput {
@@ -67,6 +70,7 @@ export function admitWorkflowProviderExecution(input: WorkflowGovernorAdmissionI
     policies,
     state: { ...input.state, noApiMode: input.config.noApiMode || input.state.noApiMode },
     materialWorkThreshold: input.config.materialWorkThreshold,
+    verifiedRoutingRules: input.config.verifiedRoutingRules,
   });
 
   return {

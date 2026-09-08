@@ -35,11 +35,14 @@ export interface GovernorRuntimeInput extends Omit<DispatchRequest, 'state'> {
 /**
  * Single governed boundary between deterministic scheduling and any paid model
  * execution. The callback is never invoked unless the governor authorizes a
- * dispatch. This module contains no provider SDK/network code itself.
+ * dispatch and its reservation is durably saved. The caller must serialize
+ * ticks and load the latest saved state; the sink must reject stale writes.
+ * This module contains no provider SDK/network code itself.
  */
 export async function executeGovernedProviderTick(
   input: GovernorRuntimeInput,
   invokeProvider: (provider: Provider) => Promise<ProviderInvocationResult>,
+  persistState?: (serializedState: string) => Promise<void>,
 ): Promise<GovernorRuntimeResult> {
   let state: GovernorState = deserializeGovernorState(input.serializedState);
   const dayKey = input.now.slice(0, 10);
@@ -51,30 +54,46 @@ export async function executeGovernedProviderTick(
     policies: input.policies,
     state,
     materialWorkThreshold: input.materialWorkThreshold,
+    verifiedRoutingRules: input.verifiedRoutingRules,
   });
 
-  if (!decision.dispatch) {
-    return {
-      dispatched: false,
-      provider: null,
-      reason: decision.reason,
-      fingerprint: decision.fingerprint,
-      serializedState: serializeGovernorState(state),
-      decisionTelemetry: decision.telemetry,
-      stateTelemetry: governorTelemetrySnapshot(state),
-    };
-  }
-
-  const usage = await invokeProvider(decision.provider);
-  state = recordDispatch(state, decision.provider, decision.fingerprint, input.now, usage);
-
-  return {
-    dispatched: true,
-    provider: decision.provider,
-    reason: decision.reason,
+  const result = (dispatched: boolean, provider: Provider | null, reason: string): GovernorRuntimeResult => ({
+    dispatched,
+    provider,
+    reason,
     fingerprint: decision.fingerprint,
     serializedState: serializeGovernorState(state),
-    decisionTelemetry: decision.telemetry,
+    decisionTelemetry: { ...decision.telemetry, selectedProvider: provider, reason },
     stateTelemetry: governorTelemetrySnapshot(state),
-  };
+  });
+
+  if (!decision.dispatch) return result(false, null, decision.reason);
+  if (!persistState) return result(false, null, 'provider-state-persistence-required');
+
+  const previous = state;
+  // Reserve the attempt and fingerprint before any external effect. UNKNOWN
+  // usage is deliberate: an exception/crash does not prove a call was free.
+  state = recordDispatch(previous, decision.provider, decision.fingerprint, input.now);
+  try {
+    await persistState(serializeGovernorState(state));
+  } catch {
+    return result(false, null, 'provider-state-persistence-failed');
+  }
+
+  let usage: ProviderInvocationResult;
+  try {
+    usage = await invokeProvider(decision.provider);
+  } catch {
+    // Keep the reserved attempt; never retry or broaden provider authority.
+    return result(true, decision.provider, 'provider-invocation-failed');
+  }
+
+  const measured = recordDispatch(previous, decision.provider, decision.fingerprint, input.now, usage);
+  try {
+    await persistState(serializeGovernorState(measured));
+  } catch {
+    return result(true, decision.provider, 'provider-telemetry-persistence-failed');
+  }
+  state = measured;
+  return result(true, decision.provider, decision.reason);
 }
