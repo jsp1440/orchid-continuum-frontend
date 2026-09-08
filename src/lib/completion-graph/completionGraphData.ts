@@ -1420,8 +1420,9 @@ const ecologicalRelationshipsDomain = branch({
     name: 'Pollinator and mycorrhizal relationship profiles',
     type: 'module',
     nextAction: 'See the real-data relationship capability.',
-  }, [{
-    id: 'cap-pollinator-mycorrhiza-real-data',
+  }, [
+    {
+      id: 'cap-pollinator-mycorrhiza-real-data',
     parentId: 'module-pollinator-mycorrhiza',
     name: 'Canonical pollinator and mycorrhizal relationship retrieval',
     type: 'capability',
@@ -1450,9 +1451,9 @@ const ecologicalRelationshipsDomain = branch({
     nextAction: 'Verify both profiles in a deployed browser against canonical populated and empty relationship states; code, integration, and anti-fabrication sourcing are proven, but browser/deployment gates remain unevaluated.',
     lastAccomplishment: 'Verified canonical Supabase-backed relationship reads and added regression guards against fixture fallback while preserving honest empty states.',
     lastUpdated: '2026-09-08T00:00:00.000Z',
-    children: [],
-  }],
-  ),
+      children: [],
+    },
+  ]),
 ]);
 
 const STUB_DOMAINS: StubDomainSpec[] = [
