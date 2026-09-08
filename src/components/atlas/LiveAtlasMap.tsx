@@ -348,7 +348,7 @@ const LiveAtlasMap: React.FC<Props> = ({
         <div
           ref={containerRef}
           role="application"
-          aria-label={\`Interactive map with ${displayPoints.length.toLocaleString()} generalized orchid records\`}
+          aria-label={`Interactive map with ${displayPoints.length.toLocaleString()} generalized orchid records`}
           className="absolute inset-0"
           style={{ background: '#e8ece6' }}
         />
