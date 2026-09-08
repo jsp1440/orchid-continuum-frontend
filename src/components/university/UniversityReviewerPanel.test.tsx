@@ -272,6 +272,11 @@ describe('UniversityReviewerPanel governed decision flow', () => {
       act(() => buttonWithText(buttonLabel).click());
       await waitForCondition(() => decide.mock.calls.length === 1, 'review API decision');
       await waitForCondition(() => queue.mock.calls.length === 2, 'review queue refresh');
+      const expectedMessage =
+        decision === 'approved_for_candidate_knowledge_consideration'
+          ? 'No Candidate Knowledge promotion or publication was performed'
+          : 'Human review decision recorded';
+      await waitForText(expectedMessage);
 
       expect(decide).toHaveBeenCalledWith(submittedSession.session_id, {
         reviewed_revision: submittedSession.revision,
@@ -279,6 +284,8 @@ describe('UniversityReviewerPanel governed decision flow', () => {
         notes: null,
       });
       expect(queue).toHaveBeenCalledTimes(2);
+      expect(container.querySelector('[role="status"]')?.textContent).toContain(expectedMessage);
+      expect(container.textContent).toContain('Select an investigation to inspect its scientific record');
     },
   );
 });
