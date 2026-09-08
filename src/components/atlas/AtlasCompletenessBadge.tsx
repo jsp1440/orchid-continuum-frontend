@@ -34,12 +34,12 @@ const AtlasCompletenessBadge: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="rounded-2xl border border-[#c9a24a]/30 bg-[#0a0d1c]/70 backdrop-blur-md px-5 py-3 flex items-center gap-3">
+      <div role="status" aria-live="polite" aria-label="Atlas record completeness" className="rounded-2xl border border-[#c9a24a]/30 bg-[#0a0d1c]/70 backdrop-blur-md px-5 py-3 flex items-center gap-3">
         <Database className="h-4 w-4 text-[#c9a24a]" />
         <div className="font-mono text-[10px] sm:text-[11px] tracking-[0.18em] uppercase text-[#faf7f2]">
           {loading ? (
             <span className="inline-flex items-center gap-2 text-[#cfc8b8]/70">
-              <Loader2 className="h-3 w-3 animate-spin" /> Counting occurrence
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" /> Counting occurrence
               records…
             </span>
           ) : (
