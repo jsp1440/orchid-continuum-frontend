@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act } from 'react';
+import { act, type ReactNode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,8 +14,8 @@ vi.mock('@/components/orchid/PageShell', () => ({
   }: {
     title: string;
     intro: string;
-    heroAside?: React.ReactNode;
-    children: React.ReactNode;
+    heroAside?: ReactNode;
+    children: ReactNode;
   }) => (
     <main>
       <h1>{title}</h1>
