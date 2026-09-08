@@ -23,7 +23,9 @@ import {
 } from '@/lib/ocBackend';
 import {
   fetchSpeciesDossier,
+  resolveFederatedSpecies,
   sectionMessage,
+  type FederationResolveResult,
   type SpeciesDossierEnvelope,
   type DossierSection,
   type EvidenceReceipt,
@@ -96,6 +98,9 @@ const SpeciesDossier: React.FC = () => {
   const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
   const [dossierError, setDossierError] = useState(false);
+  const [federation, setFederation] = useState<FederationResolveResult | null>(null);
+  const [federationLoading, setFederationLoading] = useState(true);
+  const [federationError, setFederationError] = useState(false);
 
   useEffect(() => {
     if (!taxonomyId) return;
@@ -118,8 +123,24 @@ const SpeciesDossier: React.FC = () => {
     setDossier(null);
     fetchSpeciesDossier(taxonomyId, ctrl.signal)
       .then((d) => setDossier(d))
-      .catch(() => setDossierError(true))
-      .finally(() => setDossierLoading(false));
+      .catch(() => {
+        if (!ctrl.signal.aborted) setDossierError(true);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setDossierLoading(false);
+      });
+
+    setFederationLoading(true);
+    setFederationError(false);
+    setFederation(null);
+    resolveFederatedSpecies({ taxonId: taxonomyId }, ctrl.signal)
+      .then((result) => setFederation(result))
+      .catch(() => {
+        if (!ctrl.signal.aborted) setFederationError(true);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setFederationLoading(false);
+      });
 
     return () => ctrl.abort();
   }, [taxonomyId]);
@@ -146,6 +167,20 @@ const SpeciesDossier: React.FC = () => {
   const atlasHref = continuumActions?.atlas ?? null;
   const researchHref = continuumActions?.research ?? null;
   const calyxHref = continuumActions?.calyx ?? null;
+
+  const federatedPartner =
+    federation?.status === 'resolved' && federation.partner_slug
+      ? dossier?.partner_references.find(
+          (partner) => partner.partner_id === federation.partner_slug,
+        ) ?? null
+      : null;
+  const federatedSourceName = federatedPartner?.partner_name || federation?.partner_slug || null;
+  const federatedAttribution =
+    federatedPartner?.attribution_text || federation?.explanation || null;
+  const federatedSourceUrl =
+    federation?.reciprocal_source_url || federatedPartner?.source_url || null;
+  const hasFederatedMatch =
+    federation?.status === 'resolved' && Boolean(federation.partner_slug);
 
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
@@ -349,6 +384,40 @@ const SpeciesDossier: React.FC = () => {
                       Data coming soon
                       {mycoStatus === 404 ? ' · no record yet' : ''}.
                     </Empty>
+                  )}
+                </Block>
+
+                {/* Federated attribution — only backend-supplied identities and citations. */}
+                <Block icon={Network} title="Federated attribution">
+                  {federationLoading ? (
+                    <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Resolving federated source…
+                    </div>
+                  ) : federationError ? (
+                    <Empty>Federated source unavailable.</Empty>
+                  ) : hasFederatedMatch ? (
+                    <div data-testid="federated-attribution" className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/70 p-4">
+                      <div className="font-display italic text-[16px] text-[#faf7f2]">
+                        {federatedSourceName}
+                      </div>
+                      {federatedAttribution && (
+                        <p className="mt-2 font-body text-[13px] text-[#cfc8b8]/75">
+                          {federatedAttribution}
+                        </p>
+                      )}
+                      {federatedSourceUrl && (
+                        <a
+                          href={federatedSourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-block font-mono text-[9px] tracking-[0.1em] uppercase text-[#c9a24a] hover:text-[#deb866]"
+                        >
+                          Federated source
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <Empty>Not federated for this species.</Empty>
                   )}
                 </Block>
 
