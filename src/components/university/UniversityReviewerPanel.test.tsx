@@ -67,6 +67,14 @@ async function flush() {
   });
 }
 
+async function waitForText(expected: string) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (container.textContent?.includes(expected)) return;
+    await flush();
+  }
+  throw new Error(`Timed out waiting for: ${expected}`);
+}
+
 describe('UniversityReviewerPanel access states', () => {
   it('renders a visible state while reviewer access is being verified', () => {
     vi.stubGlobal('fetch', vi.fn(() => new Promise(() => undefined)));
@@ -82,7 +90,7 @@ describe('UniversityReviewerPanel access states', () => {
       vi.fn(async () => new Response(JSON.stringify({ detail: 'unauthorized' }), { status: 401 })),
     );
     mount();
-    await flush();
+    await waitForText('Scientific reviewer sign-in required');
 
     expect(container.textContent).toContain('Scientific reviewer sign-in required');
     expect(container.textContent).toContain('Authentication alone does not grant scientific-review authority');
@@ -99,7 +107,7 @@ describe('UniversityReviewerPanel access states', () => {
         )),
     );
     mount();
-    await flush();
+    await waitForText('Scientific reviewer workspace locked');
 
     expect(container.textContent).toContain('Scientific reviewer workspace locked');
     expect(container.textContent).not.toContain('No submitted investigations are awaiting review');
@@ -121,8 +129,7 @@ describe('UniversityReviewerPanel access states', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     mount();
-    await flush();
-    await flush();
+    await waitForText('No submitted investigations are awaiting review');
 
     expect(container.textContent).toContain('Scientific reviewer workspace');
     expect(container.textContent).toContain('No submitted investigations are awaiting review');
