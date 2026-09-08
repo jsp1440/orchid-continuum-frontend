@@ -189,6 +189,16 @@ export default function UniversityReviewerPanel() {
         </div>
       </div>
 
+      {message && (
+        <p
+          aria-live="polite"
+          className="mt-6 rounded-xl border border-violet-200/20 bg-violet-200/[0.06] p-4 text-sm text-violet-100/80"
+          role="status"
+        >
+          {message}
+        </p>
+      )}
+
       {queue.isLoading && <p className="mt-6 text-sm text-white/55">Loading submitted investigations…</p>}
       {queue.isError && <p className="mt-6 text-sm text-red-200">{errorText(queue.error)}</p>}
 
@@ -293,7 +303,6 @@ export default function UniversityReviewerPanel() {
                       </button>
                     ))}
                   </div>
-                  {message && <p className="mt-3 text-sm text-violet-100/80">{message}</p>}
                   <p className="mt-3 text-xs leading-relaxed text-white/45">
                     Candidate Knowledge consideration is not promotion. No review action in this workspace performs publication.
                   </p>
