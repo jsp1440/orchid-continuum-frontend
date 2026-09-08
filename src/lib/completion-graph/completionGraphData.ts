@@ -48,10 +48,10 @@ const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: 'deba2b2897a7fc47a0dd56fc8fd8a3dc0e641fea',
-  reconciledAt: '2026-09-06T00:00:00.000Z',
+  reconciledAgainstSha: 'c4efd478c274cc804b2f5e067c83c44acdb06f60',
+  reconciledAt: '2026-09-08T00:00:00.000Z',
   scope:
-    'Initial census (#281) and #242 audit retained. The #525 pass checks only the Research Station Trait Explorer gap against this integration base and adds a tested frontend consumer; other domains retain their earlier evidence dates. The backend trait endpoint and live retrieval are not yet verified. Census coverage is reported alongside each percentage.',
+    'Initial census (#281) and earlier audited domains are retained at their recorded evidence dates. The #528 pass verifies the Pollinator/Mycorrhiza relationship surfaces against canonical Supabase-backed species, atlas_occurrences, and species_mycorrhizal reads and replaces that domain\'s census placeholder with a scored capability. Browser and deployed operation remain unevaluated. Census coverage is reported alongside each percentage.',
 };
 
 let autoId = 0;
@@ -1407,19 +1407,55 @@ const researchStationDomain = branch({
   },
 ])]);
 
-const STUB_DOMAINS: StubDomainSpec[] = [
-  {
-    idHint: 'domain-pollinator-mycorrhiza',
-    name: 'Pollinator / mycorrhiza / ecological relationships',
+const ecologicalRelationshipsDomain = branch({
+  id: 'domain-pollinator-mycorrhiza',
+  parentId: 'portfolio-orchid-continuum',
+  name: 'Pollinator / mycorrhiza / ecological relationships',
+  type: 'domain',
+  nextAction: 'Run a browser pass against deployed canonical records; retain explicit unavailable states when relationship tables are empty.',
+}, [
+  branch({
+    id: 'module-pollinator-mycorrhiza',
+    parentId: 'domain-pollinator-mycorrhiza',
+    name: 'Pollinator and mycorrhizal relationship profiles',
+    type: 'module',
+    nextAction: 'See the real-data relationship capability.',
+  }, [{
+    id: 'cap-pollinator-mycorrhiza-real-data',
+    parentId: 'module-pollinator-mycorrhiza',
+    name: 'Canonical pollinator and mycorrhizal relationship retrieval',
+    type: 'capability',
+    status: 'PARTIAL',
+    threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+    lane: 'SCIENTIFIC_DATA_COMPLETION',
+    gateScores: {
+      architectureContracts: 1,
+      implementationPresent: 1,
+      integrationCanonicalBranch: 1,
+      scientificProvenanceSecurity: 1,
+      browserEndToEnd: null,
+      deployedOperational: null,
+    },
     evidence: [
+      { kind: 'issue', ref: '#528' },
       { kind: 'route', ref: '/pollinators/:taxa' },
       { kind: 'route', ref: '/mycorrhizae/:taxa' },
+      { kind: 'file', ref: 'src/lib/orchidContinuum.ts', note: 'Pollinator aggregates read species.pollinators plus atlas_occurrences; mycorrhizal aggregates join species to species_mycorrhizal. Empty or unavailable reads return no relationship rather than fixtures.' },
       { kind: 'file', ref: 'src/pages/PollinatorProfile.tsx' },
-      { kind: 'file', ref: 'src/pages/MycorrhizaProfile.tsx' },
+      { kind: 'file', ref: 'src/pages/MycorrhizaProfile.tsx', note: 'Empty relationship state explicitly says no mycorrhizal data will be fabricated.' },
+      { kind: 'test', ref: 'src/lib/ecologicalRelationshipData.sourceIntegrity.test.ts' },
+      { kind: 'test', ref: 'src/lib/completion-graph/completionGraphData.test.ts' },
     ],
-    nextAction: 'Score relationship coverage against real KG-connected entities.',
-    lane: 'SCIENTIFIC_DATA_COMPLETION',
-  },
+    issues: ['#528'],
+    nextAction: 'Verify both profiles in a deployed browser against canonical populated and empty relationship states; code, integration, and anti-fabrication sourcing are proven, but browser/deployment gates remain unevaluated.',
+    lastAccomplishment: 'Verified canonical Supabase-backed relationship reads and added regression guards against fixture fallback while preserving honest empty states.',
+    lastUpdated: '2026-09-08T00:00:00.000Z',
+    children: [],
+  }],
+  ),
+]);
+
+const STUB_DOMAINS: StubDomainSpec[] = [
   {
     idHint: 'domain-conservation',
     name: 'Conservation',
@@ -1821,6 +1857,7 @@ export const COMPLETION_GRAPH: CompletionNode = branch({
   educationShowManagementDomain,
   buildJourneyContinuityDomain(branch),
   researchStationDomain,
+  ecologicalRelationshipsDomain,
   ...stubDomains,
 ]);
 
