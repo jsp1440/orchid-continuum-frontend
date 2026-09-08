@@ -142,6 +142,8 @@ const App = () => (
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
                   <Route path="/conservatory/*" element={<ProtectedRoute title="Sign in to view your conservatory" description="Your private living collection, plant passports, QR identifiers, and collection notes live behind authentication."><MyConservatory /></ProtectedRoute>} />
+                  <Route path="/research-station" element={<ResearcherJefferyParham />} />
+                  <Route path="/research-station/about" element={<ResearcherJefferyParham />} />
                   <Route path="/research-station/researchers/jeffery-scott-parham" element={<ResearcherJefferyParham />} />
                   <Route path="/research" element={<ProtectedRoute title="Research Center · members only" description="Sign in to access advanced queries, trait explorers, and the conservation research workspace."><ResearchCenter /></ProtectedRoute>} />
                   <Route path="/account" element={<Account />} />

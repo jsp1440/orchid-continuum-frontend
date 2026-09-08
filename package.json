@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "generate:research-profile": "node --import tsx scripts/render-researcher-profile.tsx",
+    "prebuild": "npm run generate:research-profile",
     "build": "vite build",
     "typecheck": "tsc --noEmit",
     "build:dev": "vite build --mode development",

@@ -35,6 +35,7 @@ const Footer: React.FC = () => {
     {
       title: 'Research Center',
       items: [
+        { label: 'Research Station & scientific lead', route: '/research-station' },
         { label: 'Research Center', route: '/research' },
         { label: 'Pollinators', route: '/pollinators' },
         { label: 'Mycorrhizal fungi', route: '/mycorrhizae' },

@@ -2,11 +2,19 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/research-station",
+      "destination": "/researcher-jeffery-scott-parham.html"
+    },
+    {
+      "source": "/research-station/about",
+      "destination": "/researcher-jeffery-scott-parham.html"
+    },
+    {
       "source": "/research-station/researchers/jeffery-scott-parham",
       "destination": "/researcher-jeffery-scott-parham.html"
     },
     {
-      "source": "/((?!assets/|favicon\\.ico|robots\\.txt|sitemap\\.xml).*)",
+      "source": "/((?!assets/|favicon\\.ico|robots\\.txt|sitemap\\.xml|research-station-profile\\.css|researcher-jeffery-scott-parham\\.html).*)",
       "destination": "/index.html"
     }
   ],
