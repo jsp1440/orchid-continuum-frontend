@@ -6,6 +6,7 @@ import {
   type GovernorState,
   type Provider,
   type ProviderPolicy,
+  type WorkUnit,
 } from './providerGovernor';
 
 const providers: Provider[] = ['anthropic', 'gemini', 'openai'];
@@ -37,7 +38,7 @@ const policies = () => ({
 });
 const work = [{ issueNumber: 535, headSha: 'abc', acceptanceState: 'prepared', materialRevision: 'r1' }];
 
-function decide(s = state(), p = policies(), units = work) {
+function decide(s = state(), p = policies(), units: WorkUnit[] = work) {
   return decideProviderDispatch({
     now: '2026-09-05T13:00:00Z',
     work: units,
@@ -87,21 +88,21 @@ describe('provider governor #535', () => {
     expect(result.telemetry.selectedProvider).toBeNull();
   });
 
-  it('allows evidence-backed provider restriction and escalation', () => {
+  it('does not accept an unverified reference as provider restriction evidence', () => {
     const result = decide(state(), policies(), [{
       ...work[0],
       adequateProviders: ['anthropic'],
-      routingEvidence: [{ kind: 'tested-precedent', reference: 'provider-eval/complex-debug-v1' }],
+      routingEvidence: [{ kind: 'tested-precedent', reference: 'provider-eval/complex-debug-v1', sha256: 'a'.repeat(64) }],
     }]);
-    expect(result.dispatch).toBe(true);
-    if (result.dispatch) expect(result.provider).toBe('anthropic');
+    expect(result.dispatch).toBe(false);
+    expect(result.reason).toBe('routing-evidence-required');
   });
 
   it('rejects blank evidence references rather than treating them as proof', () => {
     const result = decide(state(), policies(), [{
       ...work[0],
       adequateProviders: ['anthropic'],
-      routingEvidence: [{ kind: 'repository-policy', reference: '   ' }],
+      routingEvidence: [{ kind: 'repository-policy', reference: '   ', sha256: 'a'.repeat(64) }],
     }]);
     expect(result.dispatch).toBe(false);
     expect(result.reason).toBe('routing-evidence-required');
@@ -164,12 +165,12 @@ describe('provider governor #535', () => {
     const restricted = changedWorkFingerprint([{
       ...work[0],
       adequateProviders: ['anthropic'],
-      routingEvidence: [{ kind: 'verified-tool-result', reference: 'eval-run-42' }],
+      routingEvidence: [{ kind: 'verified-tool-result', reference: 'eval-run-42', sha256: 'a'.repeat(64) }],
     }]);
     const newEvidence = changedWorkFingerprint([{
       ...work[0],
       adequateProviders: ['anthropic'],
-      routingEvidence: [{ kind: 'verified-tool-result', reference: 'eval-run-43' }],
+      routingEvidence: [{ kind: 'verified-tool-result', reference: 'eval-run-43', sha256: 'b'.repeat(64) }],
     }]);
     expect(first).toBe(reordered);
     expect(changed).not.toBe(first);

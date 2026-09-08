@@ -11,6 +11,15 @@ export type RoutingEvidenceKind =
 export interface RoutingEvidence {
   kind: RoutingEvidenceKind;
   reference: string;
+  /** SHA-256 of the independently verified source/result, not of a worker claim. */
+  sha256: string;
+}
+
+/** Supplied by trusted repository policy, never parsed from a WorkUnit. */
+export interface VerifiedRoutingRule {
+  evidence: RoutingEvidence;
+  /** Exact work/restriction fingerprint with routingEvidence set to []. */
+  workFingerprint: string;
 }
 
 export interface ProviderPolicy {
@@ -56,6 +65,8 @@ export interface DispatchRequest {
   policies: Record<Provider, ProviderPolicy>;
   state: GovernorState;
   materialWorkThreshold: number;
+  /** Independently verified rules. No rules means no non-default restriction. */
+  verifiedRoutingRules?: readonly VerifiedRoutingRule[];
 }
 
 export type DispatchDecision =
@@ -71,6 +82,9 @@ export interface GovernorTelemetry {
 }
 
 const PROVIDERS: Provider[] = ['anthropic', 'gemini', 'openai'];
+const EVIDENCE_KINDS: RoutingEvidenceKind[] = [
+  'repository-policy', 'verified-tool-result', 'authoritative-documentation', 'tested-precedent',
+];
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -80,39 +94,68 @@ function stable(value: unknown): string {
       .map(([key, entry]) => `${JSON.stringify(key)}:${stable(entry)}`)
       .join(',')}}`;
   }
-  return JSON.stringify(value);
+  return JSON.stringify(value) ?? 'null';
 }
 
-function normalizedRoutingEvidence(unit: WorkUnit): RoutingEvidence[] {
-  return (unit.routingEvidence ?? [])
-    .filter((entry) => entry.reference.trim().length > 0)
-    .map((entry) => ({ kind: entry.kind, reference: entry.reference.trim() }))
-    .sort((a, b) => `${a.kind}:${a.reference}`.localeCompare(`${b.kind}:${b.reference}`));
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isWorkUnit(value: unknown): value is WorkUnit {
+  return isRecord(value) && Number.isInteger(value.issueNumber) && Number(value.issueNumber) > 0;
+}
+
+function normalizedProviders(value: unknown): Provider[] | null {
+  if (value === undefined) return [...PROVIDERS].sort();
+  if (!Array.isArray(value) || value.length === 0 || !value.every((p) => PROVIDERS.includes(p))) return null;
+  return [...new Set<Provider>(value)].sort();
+}
+
+function normalizedRoutingEvidence(value: unknown): RoutingEvidence[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return null;
+  const evidence: RoutingEvidence[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)
+      || !EVIDENCE_KINDS.includes(entry.kind as RoutingEvidenceKind)
+      || typeof entry.reference !== 'string' || !entry.reference.trim()
+      || typeof entry.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(entry.sha256)) return null;
+    evidence.push({ kind: entry.kind as RoutingEvidenceKind, reference: entry.reference.trim(), sha256: entry.sha256 });
+  }
+  return evidence.sort((a, b) => stable(a).localeCompare(stable(b)));
 }
 
 function hasProviderRestriction(unit: WorkUnit): boolean {
   if (unit.adequateProviders === undefined) return false;
-  const declared = [...new Set(unit.adequateProviders)].sort();
+  const declared = normalizedProviders(unit.adequateProviders);
   const defaults = [...PROVIDERS].sort();
   return stable(declared) !== stable(defaults);
 }
 
-function hasEvidenceForProviderRestriction(unit: WorkUnit): boolean {
-  return !hasProviderRestriction(unit) || normalizedRoutingEvidence(unit).length > 0;
+function hasEvidenceForProviderRestriction(unit: WorkUnit, rules: readonly VerifiedRoutingRule[]): boolean {
+  if (!hasProviderRestriction(unit)) return true;
+  const evidence = normalizedRoutingEvidence(unit.routingEvidence);
+  if (!evidence?.length || !Array.isArray(rules)) return false;
+  const subject = changedWorkFingerprint([{ ...unit, routingEvidence: [] }]);
+  // A well-shaped reference is a claim, not verification. Every cited source
+  // must match policy's verified content and this exact work/provider set.
+  return evidence.every((entry) => rules.some((rule) => isRecord(rule)
+    && rule.workFingerprint === subject
+    && stable(normalizedRoutingEvidence([rule.evidence])) === stable([entry])));
 }
 
 export function changedWorkFingerprint(work: WorkUnit[]): string {
   const material = work
-    .map((unit) => ({
+    .map((unit) => !isWorkUnit(unit) ? unit : ({
       issueNumber: unit.issueNumber,
       headSha: unit.headSha ?? null,
       acceptanceState: unit.acceptanceState ?? null,
       materialRevision: unit.materialRevision ?? null,
       urgentP0: Boolean(unit.urgentP0),
-      adequateProviders: [...(unit.adequateProviders ?? PROVIDERS)].sort(),
-      routingEvidence: normalizedRoutingEvidence(unit),
+      adequateProviders: normalizedProviders(unit.adequateProviders) ?? unit.adequateProviders,
+      routingEvidence: normalizedRoutingEvidence(unit.routingEvidence) ?? unit.routingEvidence,
     }))
-    .sort((a, b) => a.issueNumber - b.issueNumber);
+    .sort((a, b) => stable(a).localeCompare(stable(b)));
   return createHash('sha256').update(stable(material)).digest('hex');
 }
 
@@ -149,8 +192,12 @@ export function decideProviderDispatch(request: DispatchRequest): DispatchDecisi
 
   if (request.state.noApiMode) return deny('provider-no-api');
   if (request.work.length === 0) return deny('no-material-work');
+  if (!request.work.every(isWorkUnit)) return deny('invalid-work-unit');
+  if (!request.work.every((unit) => normalizedProviders(unit.adequateProviders))) return deny('invalid-provider-restriction');
+  if (!request.work.every((unit) => hasEvidenceForProviderRestriction(unit, request.verifiedRoutingRules ?? []))) {
+    return deny('routing-evidence-required');
+  }
   if (request.state.lastFingerprint === fingerprint) return deny('unchanged-work-fingerprint');
-  if (!request.work.every(hasEvidenceForProviderRestriction)) return deny('routing-evidence-required');
   if (request.work.length < request.materialWorkThreshold && !request.work.some((unit) => unit.urgentP0)) {
     return deny('batch-threshold-not-met');
   }
@@ -161,13 +208,17 @@ export function decideProviderDispatch(request: DispatchRequest): DispatchDecisi
   const candidates = PROVIDERS
     .filter((provider) => request.policies[provider].state === 'enabled')
     .filter((provider) => providerCanHandle(provider, request.work))
-    .filter((provider) => belowCeiling(request.state.daily[provider], request.policies[provider], 'daily'))
-    .filter((provider) => belowCeiling(request.state.wave[provider], request.policies[provider], 'wave'))
-    .filter((provider) => cooldownSatisfied(nowMs, request.state.daily[provider], request.policies[provider]))
     .sort((a, b) => request.policies[a].priority - request.policies[b].priority);
 
   if (candidates.length === 0) return deny('no-provider-within-governor');
   const provider = candidates[0];
+  // Exhaustion/cooldown is not evidence of necessity for a costlier provider.
+  // Select by authorized policy first, then park that route if unavailable.
+  if (!belowCeiling(request.state.daily[provider], request.policies[provider], 'daily')
+    || !belowCeiling(request.state.wave[provider], request.policies[provider], 'wave')
+    || !cooldownSatisfied(nowMs, request.state.daily[provider], request.policies[provider])) {
+    return deny('no-provider-within-governor');
+  }
   const reason = 'cheapest-adequate-provider';
   return {
     dispatch: true,
