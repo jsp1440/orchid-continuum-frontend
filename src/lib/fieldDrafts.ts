@@ -36,8 +36,14 @@ function normalizeText(value: string, maxLength: number): string {
   return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+function isMediaDescriptor(value: unknown): value is FieldMediaDescriptor {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<FieldMediaDescriptor>;
+  return typeof candidate.name === "string" && typeof candidate.size === "number" && typeof candidate.type === "string";
+}
+
 function normalizeMedia(media: FieldMediaDescriptor[]): FieldMediaDescriptor[] {
-  return media.slice(0, 20).map((item) => ({
+  return media.filter(isMediaDescriptor).slice(0, 20).map((item) => ({
     name: normalizeText(item.name, 180) || "unnamed media",
     size: Number.isFinite(item.size) && item.size >= 0 ? Math.floor(item.size) : 0,
     type: normalizeText(item.type, 100) || "application/octet-stream",
@@ -82,6 +88,7 @@ function isFieldDraft(value: unknown): value is FieldDraft {
     (candidate.taxonLabel === null || typeof candidate.taxonLabel === "string") &&
     LOCALITY_VISIBILITIES.has(candidate.localityVisibility as FieldLocalityVisibility) &&
     Array.isArray(candidate.media) &&
+    candidate.media.every(isMediaDescriptor) &&
     candidate.status === "local_only"
   );
 }
