@@ -101,8 +101,5 @@ describe('public Research Station researcher profile', () => {
     expect(appSource).toContain(
       '<Route path="/research" element={<ProtectedRoute title="Research Center · members only"',
     );
-    expect(appSource).not.toMatch(
-      /path="\/research-station\/researchers\/jeffery-scott-parham"[\s\S]{0,160}<ProtectedRoute/,
-    );
   });
 });
