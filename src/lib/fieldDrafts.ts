@@ -33,7 +33,11 @@ const LOCALITY_VISIBILITIES = new Set<FieldLocalityVisibility>([
 ]);
 
 function normalizeText(value: string, maxLength: number): string {
-  return value.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim().slice(0, maxLength);
+  const withoutControls = Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127 ? " " : character;
+  }).join("");
+  return withoutControls.replace(/\\s+/g, " ").trim().slice(0, maxLength);
 }
 
 function isMediaDescriptor(value: unknown): value is FieldMediaDescriptor {
