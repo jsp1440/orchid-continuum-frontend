@@ -93,7 +93,7 @@ describe('public Research Station researcher profile', () => {
   });
 
   it('keeps the stable researcher route public while the research workspace stays protected', () => {
-    const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+    const appSource = readFileSync('src/App.tsx', 'utf8');
 
     expect(appSource).toContain(
       '<Route path="/research-station/researchers/jeffery-scott-parham" element={<ResearcherJefferyParham />} />',
