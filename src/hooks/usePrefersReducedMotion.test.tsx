@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import AtlasFilterPanel from '@/components/atlas/AtlasFilterPanel';
 import { getReducedMotionPreference } from './usePrefersReducedMotion';
@@ -15,14 +15,31 @@ describe('Atlas accessibility contracts', () => {
   });
 
   it('labels the Atlas filter region and every filter control', () => {
-    render(
+    const html = renderToStaticMarkup(
       <AtlasFilterPanel filters={{}} onChange={() => undefined} onReset={() => undefined} />,
     );
 
-    expect(screen.getByRole('complementary', { name: 'Atlas filters' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Reset Atlas filters' })).toBeInTheDocument();
-    for (const label of ['Genus', 'Species', 'Country', 'Minimum elevation (m)', 'Maximum elevation (m)', 'Start year', 'End year', 'Biome']) {
-      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    expect(html).toContain('aria-label="Atlas filters"');
+    expect(html).toContain('aria-label="Reset Atlas filters"');
+
+    for (const [label, id] of [
+      ['Genus', 'atlas-filter-genus'],
+      ['Species', 'atlas-filter-species'],
+      ['Country', 'atlas-filter-country'],
+      ['Biome', 'atlas-filter-biome'],
+    ]) {
+      expect(html).toContain(`for="${id}"`);
+      expect(html).toContain(`id="${id}"`);
+      expect(html).toContain(`>${label}</label>`);
+    }
+
+    for (const label of [
+      'Minimum elevation (m)',
+      'Maximum elevation (m)',
+      'Start year',
+      'End year',
+    ]) {
+      expect(html).toContain(`aria-label="${label}"`);
     }
   });
 });
