@@ -26,7 +26,16 @@ export interface QueueBridgeCandidate {
 }
 
 export interface ExistingWorkRef {
+  /** Canonical persisted Queue Bridge marker for this lineage. */
   sourceKey?: string;
+  /**
+   * Source keys explicitly referenced by an implementation PR. These keys are
+   * admitted only when the reference evidence and integration target are both
+   * verified, so incidental issue-number mentions cannot suppress legitimate work.
+   */
+  referencedSourceKeys?: string[];
+  baseBranch?: string;
+  deliveryEvidence?: 'queue-marker' | 'explicit-source-reference';
   title: string;
   state: 'open' | 'closed';
   kind: 'issue' | 'pr';
@@ -102,6 +111,22 @@ function isEffectivelyUnfinished(candidate: QueueBridgeCandidate): boolean {
   return candidate.unfinished;
 }
 
+function activeLineageKeys(item: ExistingWorkRef): string[] {
+  const keys = item.sourceKey ? [item.sourceKey.toLowerCase()] : [];
+
+  if (
+    item.kind === 'pr' &&
+    item.state === 'open' &&
+    item.baseBranch === 'oc-autonomous-integration' &&
+    item.deliveryEvidence &&
+    item.referencedSourceKeys?.length
+  ) {
+    keys.push(...item.referencedSourceKeys.map((key) => key.toLowerCase()));
+  }
+
+  return [...new Set(keys)];
+}
+
 function reconcileCandidateStates(candidates: QueueBridgeCandidate[]): QueueBridgeCandidate[] {
   const byKey = new Map<string, QueueBridgeCandidate>();
 
@@ -175,7 +200,9 @@ export function planQueueBridge(
       .map((candidate) => sourceKey(candidate)),
   );
   const openSourceKeys = new Set(
-    existing.filter((item) => item.state === 'open' && item.sourceKey).map((item) => item.sourceKey!.toLowerCase()),
+    existing
+      .filter((item) => item.state === 'open')
+      .flatMap((item) => activeLineageKeys(item)),
   );
   const retire = [...openSourceKeys]
     .filter((key) => completedSourceKeys.has(key))
