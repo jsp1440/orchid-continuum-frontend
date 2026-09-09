@@ -17,6 +17,7 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
+import ResearcherJefferyParham from "./pages/ResearcherJefferyParham";
 import Atlas from "./pages/Atlas";
 const AtlasNext = lazy(() => import("./pages/AtlasNext"));
 import OrchidZoo from "./pages/OrchidZoo";
@@ -95,6 +96,7 @@ const App = () => (
                   <Route path="/genus/:name" element={<GenusDetail />} />
                   <Route path="/species/:slug" element={<SpeciesDossier />} />
                   <Route path="/about" element={<About />} />
+                  <Route path="/researchers/jeffery-parham" element={<ResearcherJefferyParham />} />
                   <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
                   <Route path="/atlas" element={<Atlas />} />
                   {/* Candidate Living Atlas. Isolated from /atlas by design; three.js
