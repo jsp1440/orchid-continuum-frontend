@@ -132,6 +132,51 @@ describe('Orchestrator Queue Bridge', () => {
     expect(plan.suppressed.every((item) => item.reason === 'existing-open-lineage')).toBe(true);
   });
 
+  it('reuses a verified active integration delivery instead of refilling a duplicate mirror', () => {
+    const source = candidate('1252', { title: 'Conservation status service' });
+    const activeDelivery = {
+      title: 'feat(conservation): implement status service',
+      state: 'open' as const,
+      kind: 'pr' as const,
+      referencedSourceKeys: [sourceKey(source)],
+      baseBranch: 'oc-autonomous-integration',
+      deliveryEvidence: 'explicit-source-reference' as const,
+    };
+
+    const first = planQueueBridge([source], [activeDelivery], 1);
+    const repeated = planQueueBridge([source], [activeDelivery], 1);
+
+    expect(first.create).toHaveLength(0);
+    expect(first.preparedOpenCount).toBe(1);
+    expect(first.suppressed).toEqual([
+      { sourceKey: sourceKey(source), reason: 'existing-open-lineage' },
+    ]);
+    expect(repeated).toEqual(first);
+  });
+
+  it('fails closed on ambiguous or unauthorized PR references', () => {
+    const source = candidate('1252', { title: 'Conservation status service' });
+    const reference = {
+      title: 'Unrelated delivery title',
+      state: 'open' as const,
+      kind: 'pr' as const,
+      referencedSourceKeys: [sourceKey(source)],
+    };
+
+    const missingEvidence = planQueueBridge([source], [{
+      ...reference,
+      baseBranch: 'oc-autonomous-integration',
+    }], 1);
+    const wrongBase = planQueueBridge([source], [{
+      ...reference,
+      baseBranch: 'main',
+      deliveryEvidence: 'explicit-source-reference' as const,
+    }], 1);
+
+    expect(missingEvidence.create.map((item) => item.sourceKey)).toEqual([sourceKey(source)]);
+    expect(wrongBase.create.map((item) => item.sourceKey)).toEqual([sourceKey(source)]);
+  });
+
   it('classifies protected work fail-closed and never fills executable prepared depth with it', () => {
     const protectedCandidate = candidate('publish', {
       sourceKind: 'brain-knowledge-gap',
