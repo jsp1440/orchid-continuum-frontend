@@ -216,9 +216,7 @@ export function planQueueBridge(
       )
       .map((item) => normalizeTitle(item.title)),
   );
-  const preparedOpenCount = existing.filter(
-    (item) => item.state === 'open' && Boolean(item.sourceKey) && !retiringKeys.has(item.sourceKey!.toLowerCase()),
-  ).length;
+  const preparedOpenCount = [...openSourceKeys].filter((key) => !retiringKeys.has(key)).length;
   const slots = Math.max(0, boundedTarget - preparedOpenCount);
 
   const suppressed: QueueBridgePlan['suppressed'] = [];
