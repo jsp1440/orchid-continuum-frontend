@@ -13,6 +13,7 @@ import PageShell from '@/components/orchid/PageShell';
 import RoleBadge from '@/components/orchid/RoleBadge';
 import EducationalOverlay from '@/components/orchid/EducationalOverlay';
 import GlossaryTerm from '@/components/orchid/GlossaryTerm';
+import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
 
 /**
  * ProjectWorkspace
@@ -26,6 +27,7 @@ import GlossaryTerm from '@/components/orchid/GlossaryTerm';
 
 const tabs = [
   { id: 'overview', label: 'Overview', Icon: Activity },
+  { id: 'activity', label: 'Activity history', Icon: CalendarDays },
   { id: 'sightings', label: 'Documented sightings', Icon: Camera },
   { id: 'protocols', label: 'Protocols', Icon: ScrollText },
   { id: 'team', label: 'Team', Icon: Users2 },
@@ -175,6 +177,20 @@ const ProjectWorkspace: React.FC = () => {
                 Back to Conservation Hub
               </Link>
             </aside>
+          </div>
+        )}
+
+        {tab === 'activity' && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-6 md:p-8">
+            <div className="mb-5">
+              <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-200/80 mb-2">
+                Project audit history
+              </div>
+              <p className="text-sm leading-relaxed text-white/60">
+                A complete, backend-authoritative record of project changes, shown in bounded pages.
+              </p>
+            </div>
+            <ResearchActivityPanel projectId={slug} />
           </div>
         )}
 
