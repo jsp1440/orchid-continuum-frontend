@@ -18,6 +18,7 @@ export interface BackendReserveProposal {
   semantic_key?: string | null;
   priority?: number | BackendPriority;
   source_repo?: string | null;
+  source_payload?: unknown;
 }
 
 export interface BackendReservePlan {
@@ -81,6 +82,71 @@ function safeStringArray(value: unknown): string[] | null {
   return [...new Set(value.map((item) => item.trim()).filter(Boolean))].sort();
 }
 
+const KNOWLEDGE_GAP_PAYLOAD_KEYS = [
+  'automatic_publication',
+  'domain',
+  'execution_mode',
+  'knowledge_graph_mutation',
+  'research_question',
+  'review_required',
+  'schema',
+  'sensitive_locality_disclosure',
+  'taxon_id',
+  'taxon_name',
+  'taxonomy_mutation',
+] as const;
+
+function missionText(value: unknown, maxLength: number): string | null {
+  const text = safeText(value);
+  if (!text || text.length > maxLength
+    || Array.from(text).some((character) => character.charCodeAt(0) < 32)) return null;
+  return text;
+}
+
+function sourcePayloadBody(value: unknown): { body: string; reason?: never } | { body?: never; reason: string } {
+  if (value === undefined) return { body: '' };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return { reason: 'invalid_source_payload' };
+  }
+  const payload = value as Record<string, unknown>;
+  const keys = Object.keys(payload).sort();
+  if (keys.length !== KNOWLEDGE_GAP_PAYLOAD_KEYS.length
+    || keys.some((key, index) => key !== KNOWLEDGE_GAP_PAYLOAD_KEYS[index])) {
+    return { reason: 'invalid_source_payload' };
+  }
+
+  const schema = missionText(payload.schema, 80);
+  const taxonId = missionText(payload.taxon_id, 200);
+  const taxonName = missionText(payload.taxon_name, 300);
+  const domain = missionText(payload.domain, 100);
+  const question = missionText(payload.research_question, 2000);
+  if (!schema || schema !== 'oc.knowledge-gap-reserve-source.v1'
+    || !taxonId || !taxonName || !domain || !question) {
+    return { reason: 'invalid_source_payload' };
+  }
+  if (payload.execution_mode !== 'bounded_research_mission'
+    || payload.review_required !== true
+    || payload.automatic_publication !== false
+    || payload.knowledge_graph_mutation !== false
+    || payload.taxonomy_mutation !== false
+    || payload.sensitive_locality_disclosure !== false) {
+    return { reason: 'source_payload_authority_escalation' };
+  }
+
+  return {
+    body: [
+      '',
+      'Canonical bounded research mission:',
+      `- Taxon ID: ${taxonId}`,
+      `- Taxon name: ${taxonName}`,
+      `- Domain: ${domain}`,
+      `- Research question: ${question}`,
+      '- Human review required: yes',
+      '- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled',
+    ].join('\n'),
+  };
+}
+
 function emptyPlan(existing: ExistingWorkRef[], targetDepth: number): QueueBridgePlan {
   return planQueueBridge([], existing, targetDepth);
 }
@@ -126,6 +192,7 @@ export function bridgeBackendReservePlan(
     const dependencies = safeStringArray(proposal?.dependencies);
     const labels = safeStringArray(proposal?.labels);
     const sourceRepo = safeText(proposal?.source_repo) ?? defaultSourceRepo;
+    const sourcePayload = sourcePayloadBody(proposal?.source_payload);
 
     if (
       !sourceRef
@@ -135,8 +202,9 @@ export function bridgeBackendReservePlan(
       || !(proposal.source_kind in SOURCE_KIND_MAP)
       || dependencies === null
       || labels === null
+      || sourcePayload.reason
     ) {
-      rejected.push({ sourceRef, reason: 'invalid_proposal_contract' });
+      rejected.push({ sourceRef, reason: sourcePayload.reason ?? 'invalid_proposal_contract' });
       continue;
     }
 
@@ -167,7 +235,7 @@ export function bridgeBackendReservePlan(
       title: safeText(proposal.title) ?? `Prepare ${sourceRef}`,
       body:
         'Prepared from the canonical backend reserve planner. ' +
-        `${fingerprintLine}${semanticLine}`,
+        `${fingerprintLine}${semanticLine}${sourcePayload.body}`,
       priority: priorityOf(proposal.priority),
       unfinished: true,
       dependencies,

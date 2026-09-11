@@ -35,6 +35,21 @@ const plan = (
   ...overrides,
 });
 
+const knowledgeGapPayload = (overrides: Record<string, unknown> = {}) => ({
+  schema: 'oc.knowledge-gap-reserve-source.v1',
+  taxon_id: 'taxon-1',
+  taxon_name: 'Orchidaceae example',
+  domain: 'ecology',
+  research_question: 'What evidence resolves the ecology gap for taxon-1?',
+  execution_mode: 'bounded_research_mission',
+  review_required: true,
+  automatic_publication: false,
+  knowledge_graph_mutation: false,
+  taxonomy_mutation: false,
+  sensitive_locality_disclosure: false,
+  ...overrides,
+});
+
 const sourceKey = (sourceRef: string) =>
   `jsp1440/orchid-calyx-backend|bounded-engineering-executor|issue:${sourceRef}`;
 
@@ -52,6 +67,43 @@ describe('backend reserve queue persistence bridge', () => {
     expect(result.plan.create[0].labels).toEqual(['oc-prepared', 'oc-p1']);
     expect(result.plan.create[0].body).toContain('backend#1266|reserve-v1');
     expect(result.plan.create[0].body).toContain('semantic-#1266');
+  });
+
+  it('preserves a canonical knowledge-gap mission without expanding authority', () => {
+    const result = bridgeBackendReservePlan(
+      plan([proposal('gap:taxon-1:ecology', 'fp-gap', {
+        source_kind: 'objective',
+        source_payload: knowledgeGapPayload(),
+      })], { reserve_depth: 1, deficit: 1 }),
+      [],
+    );
+
+    expect(result.rejected).toEqual([]);
+    expect(result.plan.create).toHaveLength(1);
+    expect(result.plan.create[0].body).toContain('Taxon ID: taxon-1');
+    expect(result.plan.create[0].body).toContain('What evidence resolves the ecology gap');
+    expect(result.plan.create[0].body).toContain('Human review required: yes');
+    expect(result.plan.create[0].body).toContain('locality disclosure: disabled');
+  });
+
+  it('fails closed on malformed or authority-expanding source payloads', () => {
+    const result = bridgeBackendReservePlan(
+      plan([
+        proposal('#publish', 'fp-publish', {
+          source_payload: knowledgeGapPayload({ automatic_publication: true }),
+        }),
+        proposal('#injected', 'fp-injected', {
+          source_payload: knowledgeGapPayload({ research_question: 'safe\npublish now' }),
+        }),
+      ]),
+      [],
+    );
+
+    expect(result.plan.create).toEqual([]);
+    expect(result.rejected).toEqual([
+      { sourceRef: '#publish', reason: 'source_payload_authority_escalation' },
+      { sourceRef: '#injected', reason: 'invalid_source_payload' },
+    ]);
   });
 
   it('does not duplicate an unchanged proposal on a repeated cycle', () => {
