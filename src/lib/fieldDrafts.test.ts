@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   createFieldDraft,
+  FIELD_DRAFT_LIMIT,
   fieldDraftStorageKey,
   readFieldDrafts,
   writeFieldDrafts,
@@ -40,11 +41,11 @@ describe("field draft persistence", () => {
       { note: "New root tip", localityVisibility: "private" },
       { id: "draft-2", now: "2026-09-09T12:01:00.000Z" },
     );
-    writeFieldDrafts(storage, [draft]);
-    expect(readFieldDrafts(storage)).toEqual([draft]);
+    writeFieldDrafts(storage, [draft], "user-a");
+    expect(readFieldDrafts(storage, "user-a")).toEqual([draft]);
 
-    storage.setItem(fieldDraftStorageKey(), "{not json");
-    expect(readFieldDrafts(storage)).toEqual([]);
+    storage.setItem(fieldDraftStorageKey("user-a"), "{not json");
+    expect(readFieldDrafts(storage, "user-a")).toEqual([]);
   });
 
   it("rejects empty notes and invalid locality values", () => {
@@ -61,9 +62,52 @@ describe("field draft persistence", () => {
 
   it("drops invalid records rather than treating them as drafts", () => {
     const storage = new MemoryStorage();
-    storage.setItem(fieldDraftStorageKey(), JSON.stringify([
+    storage.setItem(fieldDraftStorageKey("user-a"), JSON.stringify([
       { schemaVersion: 1, id: "unsafe", note: "missing governance", status: "local_only" },
     ]));
-    expect(readFieldDrafts(storage)).toEqual([]);
+    expect(readFieldDrafts(storage, "user-a")).toEqual([]);
+  });
+
+  it("isolates drafts by authenticated account", () => {
+    const storage = new MemoryStorage();
+    const draft = createFieldDraft(
+      { note: "Private bench note", localityVisibility: "private" },
+      { id: "draft-private", now: "2026-09-09T12:04:00.000Z" },
+    );
+
+    writeFieldDrafts(storage, [draft], "user-a");
+
+    expect(readFieldDrafts(storage, "user-a")).toEqual([draft]);
+    expect(readFieldDrafts(storage, "user-b")).toEqual([]);
+    expect(fieldDraftStorageKey("user-a")).not.toBe(fieldDraftStorageKey("user-b"));
+  });
+
+  it("fails closed when browser storage cannot be read", () => {
+    const storage = {
+      getItem() {
+        throw new DOMException("Storage disabled", "SecurityError");
+      },
+    };
+
+    expect(readFieldDrafts(storage, "user-a")).toEqual([]);
+  });
+
+  it("rejects capacity overflow instead of silently losing a draft", () => {
+    const storage = new MemoryStorage();
+    const draft = createFieldDraft(
+      { note: "Capacity test", localityVisibility: "private" },
+      { id: "draft-capacity", now: "2026-09-09T12:05:00.000Z" },
+    );
+
+    expect(() =>
+      writeFieldDrafts(
+        storage,
+        Array.from({ length: FIELD_DRAFT_LIMIT + 1 }, (_, index) => ({
+          ...draft,
+          id: `draft-${index}`,
+        })),
+        "user-a",
+      ),
+    ).toThrow("Discard or upload a draft");
   });
 });
