@@ -4,6 +4,7 @@ import {
   type ExistingWorkRef,
   type QueueBridgeCandidate,
   type QueueBridgePlan,
+  type QueueSourceKind,
 } from './orchestratorQueueBridge';
 
 export type CapabilityState = 'implemented' | 'missing' | 'unknown';
@@ -26,8 +27,16 @@ export interface PortfolioRepositoryState {
   backend: 'available' | 'unavailable';
 }
 
+export interface QueueBridgeSourceObservation {
+  sourceKind: QueueSourceKind;
+  state: 'connected' | 'unavailable' | 'unknown';
+  evidence: string[];
+}
+
 export interface PortfolioStewardInput {
   observations: ModuleCapabilityObservation[];
+  /** Omit only when a caller has not yet adopted durable source coverage reporting. */
+  queueBridgeSources?: QueueBridgeSourceObservation[];
   repositories: PortfolioRepositoryState;
   existing: ExistingWorkRef[];
   actionableCount: number;
@@ -46,6 +55,24 @@ export interface PortfolioStewardDiagnostics {
   discoveredGaps: string[];
   dedupeSuppressions: Array<{ sourceKey: string; reason: string }>;
   blockers: string[];
+  queueBridgeCoverage: {
+    tracked: boolean;
+    complete: boolean;
+    connected: QueueSourceKind[];
+    unresolved: Array<{
+      sourceKind: QueueSourceKind;
+      state: 'unavailable' | 'unknown';
+      evidence: string[];
+    }>;
+  };
+  inventory: {
+    persistedBridgeDepth: number;
+    createdCount: number;
+    retiredCount: number;
+    projectedActionableCount: number;
+    duplicateSuppressionCount: number;
+    protectedParkedCount: number;
+  };
 }
 
 export interface PortfolioStewardResult {
@@ -55,6 +82,13 @@ export interface PortfolioStewardResult {
 
 const BRAIN_REPO = 'jsp1440/OrchidContinuumBrain';
 const REPOSITORY_NAMES = ['brain', 'frontend', 'backend'] as const;
+const QUEUE_BRIDGE_SOURCES: QueueSourceKind[] = [
+  'autonomous-orchestrator',
+  'brain-knowledge-gap',
+  'self-audit',
+  'connector-queue',
+  'bounded-engineering-executor',
+];
 
 function positiveInteger(value: number, field: string): void {
   if (!Number.isInteger(value) || value <= 0) {
@@ -151,6 +185,75 @@ function repositoryBlockers(repositories: PortfolioRepositoryState): QueueBridge
   });
 }
 
+interface QueueBridgeCoverage {
+  tracked: boolean;
+  complete: boolean;
+  connected: QueueSourceKind[];
+  unresolved: Array<{
+    sourceKind: QueueSourceKind;
+    state: 'unavailable' | 'unknown';
+    evidence: string[];
+  }>;
+}
+
+function queueBridgeCoverage(
+  observations: QueueBridgeSourceObservation[] | undefined,
+): QueueBridgeCoverage {
+  if (observations === undefined) {
+    return { tracked: false, complete: false, connected: [], unresolved: [] };
+  }
+
+  const bySource = new Map<QueueSourceKind, QueueBridgeSourceObservation[]>();
+  for (const observation of observations) {
+    const current = bySource.get(observation.sourceKind) ?? [];
+    current.push(observation);
+    bySource.set(observation.sourceKind, current);
+  }
+
+  const connected: QueueSourceKind[] = [];
+  const unresolved: QueueBridgeCoverage['unresolved'] = [];
+
+  for (const sourceKind of QUEUE_BRIDGE_SOURCES) {
+    const sourceObservations = bySource.get(sourceKind) ?? [];
+    const evidence = [...new Set(
+      sourceObservations.flatMap((item) => item.evidence.map((value) => value.trim())).filter(Boolean),
+    )].sort();
+    const states = new Set(sourceObservations.map((item) => item.state));
+    const state = sourceObservations.length === 1 && states.has('connected') && evidence.length > 0
+      ? 'connected'
+      : states.has('unavailable')
+        ? 'unavailable'
+        : 'unknown';
+
+    if (state === 'connected') connected.push(sourceKind);
+    else unresolved.push({ sourceKind, state, evidence });
+  }
+
+  return {
+    tracked: true,
+    complete: unresolved.length === 0,
+    connected,
+    unresolved,
+  };
+}
+
+function queueBridgeSourceCandidates(coverage: QueueBridgeCoverage): QueueBridgeCandidate[] {
+  if (!coverage.tracked) return [];
+
+  return coverage.unresolved.map((source) => ({
+    sourceRepo: 'jsp1440/orchid-continuum-frontend',
+    sourceKind: source.sourceKind,
+    sourceId: `portfolio-source-reconciliation-${source.sourceKind}`,
+    title: `RECONCILE: ${source.sourceKind} Queue Bridge source coverage`,
+    body:
+      `Portfolio Steward cannot prove the ${source.sourceKind} durable source is connected. ` +
+      'Reconcile existing implementation evidence before creating replacement feature work. ' +
+      `Evidence: ${source.evidence.length ? source.evidence.join('; ') : 'none supplied'}`,
+    priority: 'oc-p0',
+    unfinished: true,
+  }));
+}
+
 export function derivePortfolioStewardTarget(
   maxActiveLanes: number,
   wavesAhead: number,
@@ -184,8 +287,10 @@ export function planPortfolioSteward(input: PortfolioStewardInput): PortfolioSte
     (item) => item.state === 'open' && Boolean(item.sourceKey),
   ).length;
   const boundedSlots = Math.min(refillDeficit, input.maxCreatePerCycle);
+  const coverage = queueBridgeCoverage(input.queueBridgeSources);
   const candidates = [
     ...repositoryBlockers(input.repositories),
+    ...queueBridgeSourceCandidates(coverage),
     ...input.observations
       .slice()
       .sort((a, b) => slug(a.module).localeCompare(slug(b.module)))
@@ -219,6 +324,18 @@ export function planPortfolioSteward(input: PortfolioStewardInput): PortfolioSte
       blockers: plan.protected
         .map((item) => `${item.sourceKey}: ${item.blockedReasons.join(', ')}`)
         .sort(),
+      queueBridgeCoverage: coverage,
+      inventory: {
+        persistedBridgeDepth: plan.preparedOpenCount,
+        createdCount: plan.create.length,
+        retiredCount: plan.retire.length,
+        projectedActionableCount: Math.max(
+          0,
+          input.actionableCount - plan.retire.length + plan.create.length,
+        ),
+        duplicateSuppressionCount: plan.suppressed.length,
+        protectedParkedCount: plan.protected.length,
+      },
     },
   };
 }
