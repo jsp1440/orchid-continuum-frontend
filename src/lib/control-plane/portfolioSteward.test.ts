@@ -4,6 +4,7 @@ import {
   planPortfolioSteward,
   type ModuleCapabilityObservation,
   type PortfolioStewardInput,
+  type QueueBridgeSourceObservation,
 } from './portfolioSteward';
 
 const observation = (
@@ -18,6 +19,18 @@ const observation = (
   evidence: [`repo://${module}`],
   ...overrides,
 });
+
+const queueBridgeSources: QueueBridgeSourceObservation[] = [
+  'autonomous-orchestrator',
+  'brain-knowledge-gap',
+  'self-audit',
+  'connector-queue',
+  'bounded-engineering-executor',
+].map((sourceKind) => ({
+  sourceKind: sourceKind as QueueBridgeSourceObservation['sourceKind'],
+  state: 'connected',
+  evidence: [`repo://queue-bridge/${sourceKind}`],
+}));
 
 const base = (overrides: Partial<PortfolioStewardInput> = {}): PortfolioStewardInput => ({
   observations: [],
@@ -161,6 +174,90 @@ describe('Portfolio Steward #532', () => {
     ]);
     expect(result.plan.protected).toHaveLength(1);
     expect(result.diagnostics.blockers[0]).toContain('canonical-taxonomy-mutation');
+  });
+
+  it('reports complete durable source coverage without manufacturing work', () => {
+    const result = planPortfolioSteward(base({
+      queueBridgeSources,
+      actionableCount: 20,
+    }));
+
+    expect(result.plan.create).toHaveLength(0);
+    expect(result.diagnostics.queueBridgeCoverage).toEqual({
+      tracked: true,
+      complete: true,
+      connected: queueBridgeSources.map((item) => item.sourceKind),
+      unresolved: [],
+    });
+    expect(result.diagnostics.inventory).toEqual({
+      persistedBridgeDepth: 0,
+      createdCount: 0,
+      retiredCount: 0,
+      projectedActionableCount: 20,
+      duplicateSuppressionCount: 0,
+      protectedParkedCount: 0,
+    });
+  });
+
+  it('creates one stable reconciliation lineage for unproven source coverage', () => {
+    const first = planPortfolioSteward(base({
+      queueBridgeSources: queueBridgeSources.map((item) =>
+        item.sourceKind === 'connector-queue'
+          ? { ...item, state: 'unknown' as const, evidence: [] }
+          : item),
+      actionableCount: 19,
+    }));
+
+    expect(first.plan.create.map((item) => item.title)).toEqual([
+      'RECONCILE: connector-queue Queue Bridge source coverage',
+    ]);
+    expect(first.diagnostics.queueBridgeCoverage).toMatchObject({
+      complete: false,
+      unresolved: [{ sourceKind: 'connector-queue', state: 'unknown', evidence: [] }],
+    });
+
+    const second = planPortfolioSteward(base({
+      queueBridgeSources: queueBridgeSources.map((item) =>
+        item.sourceKind === 'connector-queue'
+          ? { ...item, state: 'unknown' as const, evidence: [] }
+          : item),
+      existing: first.plan.create.map((item) => ({
+        sourceKey: item.sourceKey,
+        title: item.title,
+        state: 'open' as const,
+        kind: 'issue' as const,
+      })),
+      actionableCount: 20,
+    }));
+
+    expect(second.plan.create).toHaveLength(0);
+    expect(second.diagnostics.inventory.duplicateSuppressionCount).toBe(1);
+  });
+
+  it('fails source coverage closed on duplicate or evidence-free connected claims', () => {
+    const result = planPortfolioSteward(base({
+      queueBridgeSources: [
+        ...queueBridgeSources,
+        {
+          sourceKind: 'self-audit',
+          state: 'connected',
+          evidence: ['repo://queue-bridge/self-audit-second-claim'],
+        },
+      ],
+      actionableCount: 19,
+    }));
+
+    expect(result.diagnostics.queueBridgeCoverage.unresolved).toEqual([
+      {
+        sourceKind: 'self-audit',
+        state: 'unknown',
+        evidence: [
+          'repo://queue-bridge/self-audit',
+          'repo://queue-bridge/self-audit-second-claim',
+        ],
+      },
+    ]);
+    expect(result.plan.create).toHaveLength(1);
   });
 
   it('fails closed on malformed capacity and never exposes provider authority', () => {
