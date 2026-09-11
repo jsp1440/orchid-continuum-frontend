@@ -1,0 +1,143 @@
+export type FieldLocalityVisibility = "private" | "research_restricted" | "public";
+
+export type FieldMediaDescriptor = {
+  name: string;
+  size: number;
+  type: string;
+};
+
+export type FieldDraft = {
+  schemaVersion: 1;
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  note: string;
+  taxonLabel: string | null;
+  localityVisibility: FieldLocalityVisibility;
+  media: FieldMediaDescriptor[];
+  status: "local_only";
+};
+
+export type NewFieldDraft = {
+  note: string;
+  taxonLabel?: string;
+  localityVisibility: FieldLocalityVisibility;
+  media?: FieldMediaDescriptor[];
+};
+
+const STORAGE_KEY_PREFIX = "orchid-continuum.field-drafts.v1";
+export const FIELD_DRAFT_LIMIT = 100;
+const LOCALITY_VISIBILITIES = new Set<FieldLocalityVisibility>([
+  "private",
+  "research_restricted",
+  "public",
+]);
+
+function normalizeText(value: string, maxLength: number): string {
+  const withoutControls = Array.from(value, (character) => {
+    const codePoint = character.codePointAt(0) ?? 0;
+    return codePoint < 32 || codePoint === 127 ? " " : character;
+  }).join("");
+  return withoutControls.replace(/\\s+/g, " ").trim().slice(0, maxLength);
+}
+
+function isMediaDescriptor(value: unknown): value is FieldMediaDescriptor {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<FieldMediaDescriptor>;
+  return typeof candidate.name === "string" && typeof candidate.size === "number" && typeof candidate.type === "string";
+}
+
+function normalizeMedia(media: FieldMediaDescriptor[]): FieldMediaDescriptor[] {
+  return media.filter(isMediaDescriptor).slice(0, 20).map((item) => ({
+    name: normalizeText(item.name, 180) || "unnamed media",
+    size: Number.isFinite(item.size) && item.size >= 0 ? Math.floor(item.size) : 0,
+    type: normalizeText(item.type, 100) || "application/octet-stream",
+  }));
+}
+
+export function createFieldDraft(
+  input: NewFieldDraft,
+  identity: { id: string; now: string },
+): FieldDraft {
+  const note = normalizeText(input.note, 5000);
+  if (!note) throw new Error("A field note is required.");
+  if (!LOCALITY_VISIBILITIES.has(input.localityVisibility)) {
+    throw new Error("A governed locality choice is required.");
+  }
+
+  const taxonLabel = normalizeText(input.taxonLabel ?? "", 240);
+  return {
+    schemaVersion: 1,
+    id: normalizeText(identity.id, 120),
+    createdAt: identity.now,
+    updatedAt: identity.now,
+    note,
+    taxonLabel: taxonLabel || null,
+    localityVisibility: input.localityVisibility,
+    media: normalizeMedia(input.media ?? []),
+    status: "local_only",
+  };
+}
+
+function isFieldDraft(value: unknown): value is FieldDraft {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<FieldDraft>;
+  return (
+    candidate.schemaVersion === 1 &&
+    typeof candidate.id === "string" &&
+    candidate.id.length > 0 &&
+    typeof candidate.createdAt === "string" &&
+    typeof candidate.updatedAt === "string" &&
+    typeof candidate.note === "string" &&
+    candidate.note.length > 0 &&
+    (candidate.taxonLabel === null || typeof candidate.taxonLabel === "string") &&
+    LOCALITY_VISIBILITIES.has(candidate.localityVisibility as FieldLocalityVisibility) &&
+    Array.isArray(candidate.media) &&
+    candidate.media.every(isMediaDescriptor) &&
+    candidate.status === "local_only"
+  );
+}
+
+function requireAccountId(accountId: string): string {
+  const normalized = normalizeText(accountId, 120);
+  if (!normalized) throw new Error("An authenticated account is required.");
+  return normalized;
+}
+
+export function readFieldDrafts(
+  storage: Pick<Storage, "getItem">,
+  accountId: string,
+): FieldDraft[] {
+  try {
+    const raw = storage.getItem(fieldDraftStorageKey(accountId));
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(isFieldDraft).map((draft) => ({
+      ...draft,
+      note: normalizeText(draft.note, 5000),
+      taxonLabel: draft.taxonLabel ? normalizeText(draft.taxonLabel, 240) : null,
+      media: normalizeMedia(draft.media),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export function writeFieldDrafts(
+  storage: Pick<Storage, "setItem">,
+  drafts: FieldDraft[],
+  accountId: string,
+): void {
+  if (drafts.length > FIELD_DRAFT_LIMIT) {
+    throw new Error(`This device can store up to ${FIELD_DRAFT_LIMIT} field drafts. Discard or upload a draft before saving another.`);
+  }
+  storage.setItem(
+    fieldDraftStorageKey(accountId),
+    JSON.stringify(drafts.filter(isFieldDraft)),
+  );
+}
+
+export function fieldDraftStorageKey(accountId: string): string {
+  return `${STORAGE_KEY_PREFIX}.${encodeURIComponent(requireAccountId(accountId))}`;
+}

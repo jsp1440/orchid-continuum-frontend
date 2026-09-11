@@ -83,6 +83,7 @@ export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
   '/ai-orchestration',
   '/diagnostics/daily-genus',
   '/collection',
+  '/field',
   '/conservatory/*',
   '/research',
 ] as const;
