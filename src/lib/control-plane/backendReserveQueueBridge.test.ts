@@ -93,7 +93,7 @@ describe('backend reserve queue persistence bridge', () => {
           source_payload: knowledgeGapPayload({ automatic_publication: true }),
         }),
         proposal('#injected', 'fp-injected', {
-          source_payload: knowledgeGapPayload({ research_question: 'safe\\npublish now' }),
+          source_payload: knowledgeGapPayload({ research_question: 'safe\npublish now' }),
         }),
       ]),
       [],
