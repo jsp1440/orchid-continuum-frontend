@@ -98,7 +98,8 @@ const KNOWLEDGE_GAP_PAYLOAD_KEYS = [
 
 function missionText(value: unknown, maxLength: number): string | null {
   const text = safeText(value);
-  if (!text || text.length > maxLength || /[\r\n\u0000-\u001f]/u.test(text)) return null;
+  if (!text || text.length > maxLength
+    || Array.from(text).some((character) => character.charCodeAt(0) < 32)) return null;
   return text;
 }
 
