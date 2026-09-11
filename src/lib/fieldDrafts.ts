@@ -25,7 +25,8 @@ export type NewFieldDraft = {
   media?: FieldMediaDescriptor[];
 };
 
-const STORAGE_KEY = "orchid-continuum.field-drafts.v1";
+const STORAGE_KEY_PREFIX = "orchid-continuum.field-drafts.v1";
+export const FIELD_DRAFT_LIMIT = 100;
 const LOCALITY_VISIBILITIES = new Set<FieldLocalityVisibility>([
   "private",
   "research_restricted",
@@ -97,10 +98,19 @@ function isFieldDraft(value: unknown): value is FieldDraft {
   );
 }
 
-export function readFieldDrafts(storage: Pick<Storage, "getItem">): FieldDraft[] {
-  const raw = storage.getItem(STORAGE_KEY);
-  if (!raw) return [];
+function requireAccountId(accountId: string): string {
+  const normalized = normalizeText(accountId, 120);
+  if (!normalized) throw new Error("An authenticated account is required.");
+  return normalized;
+}
+
+export function readFieldDrafts(
+  storage: Pick<Storage, "getItem">,
+  accountId: string,
+): FieldDraft[] {
   try {
+    const raw = storage.getItem(fieldDraftStorageKey(accountId));
+    if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter(isFieldDraft).map((draft) => ({
@@ -117,10 +127,17 @@ export function readFieldDrafts(storage: Pick<Storage, "getItem">): FieldDraft[]
 export function writeFieldDrafts(
   storage: Pick<Storage, "setItem">,
   drafts: FieldDraft[],
+  accountId: string,
 ): void {
-  storage.setItem(STORAGE_KEY, JSON.stringify(drafts.filter(isFieldDraft).slice(0, 100)));
+  if (drafts.length > FIELD_DRAFT_LIMIT) {
+    throw new Error(`This device can store up to ${FIELD_DRAFT_LIMIT} field drafts. Discard or upload a draft before saving another.`);
+  }
+  storage.setItem(
+    fieldDraftStorageKey(accountId),
+    JSON.stringify(drafts.filter(isFieldDraft)),
+  );
 }
 
-export function fieldDraftStorageKey(): string {
-  return STORAGE_KEY;
+export function fieldDraftStorageKey(accountId: string): string {
+  return `${STORAGE_KEY_PREFIX}.${encodeURIComponent(requireAccountId(accountId))}`;
 }
