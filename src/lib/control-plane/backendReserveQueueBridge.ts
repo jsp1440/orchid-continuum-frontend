@@ -142,7 +142,7 @@ function sourcePayloadBody(value: unknown): { body: string; reason?: never } | {
       `- Research question: ${question}`,
       '- Human review required: yes',
       '- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled',
-    ].join('\\n'),
+    ].join('\n'),
   };
 }
 
