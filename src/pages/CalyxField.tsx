@@ -8,6 +8,7 @@ import {
   type FieldLocalityVisibility,
   type FieldMediaDescriptor,
 } from "@/lib/fieldDrafts";
+import { useAuth } from "@/contexts/AuthContext";
 
 function nextDraftIdentity() {
   return {
@@ -23,7 +24,11 @@ const localityLabels: Record<FieldLocalityVisibility, string> = {
 };
 
 export default function CalyxField() {
-  const [drafts, setDrafts] = useState<FieldDraft[]>(() => readFieldDrafts(window.localStorage));
+  const { user } = useAuth();
+  const accountId = user?.id ?? "";
+  const [drafts, setDrafts] = useState<FieldDraft[]>(() =>
+    readFieldDrafts(window.localStorage, accountId),
+  );
   const [note, setNote] = useState("");
   const [taxonLabel, setTaxonLabel] = useState("");
   const [localityVisibility, setLocalityVisibility] = useState<FieldLocalityVisibility>("private");
@@ -43,8 +48,8 @@ export default function CalyxField() {
   }, [drafts, query, unidentifiedOnly]);
 
   function persist(next: FieldDraft[]) {
+    writeFieldDrafts(window.localStorage, next, accountId);
     setDrafts(next);
-    writeFieldDrafts(window.localStorage, next);
   }
 
   function captureLocation() {
@@ -167,7 +172,13 @@ export default function CalyxField() {
                     <p className="font-semibold">{draft.taxonLabel ?? "Unidentified orchid"}</p>
                     <p className="mt-1 text-xs text-muted-foreground">{new Date(draft.createdAt).toLocaleString()} · {localityLabels[draft.localityVisibility]}</p>
                   </div>
-                  <button type="button" aria-label="Discard draft" onClick={() => persist(drafts.filter((item) => item.id !== draft.id))} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-destructive"><Trash2 aria-hidden="true" className="h-4 w-4" /></button>
+                  <button type="button" aria-label="Discard draft" onClick={() => {
+                    try {
+                      persist(drafts.filter((item) => item.id !== draft.id));
+                    } catch {
+                      setError("The draft could not be removed from this device.");
+                    }
+                  }} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-destructive"><Trash2 aria-hidden="true" className="h-4 w-4" /></button>
                 </div>
                 <p className="mt-3 text-sm">{draft.note}</p>
                 {!draft.taxonLabel ? <p className="mt-3 rounded-md bg-secondary p-2 text-xs"><strong>Calyx suggestion pending.</strong> Any future identification is a suggestion, not a verified determination.</p> : null}
