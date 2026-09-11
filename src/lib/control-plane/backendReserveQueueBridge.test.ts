@@ -50,8 +50,11 @@ const knowledgeGapPayload = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-const sourceKey = (sourceRef: string) =>
-  `jsp1440/orchid-calyx-backend|bounded-engineering-executor|issue:${sourceRef}`;
+const sourceKey = (
+  sourceRef: string,
+  queueSourceKind = 'bounded-engineering-executor',
+  backendSourceKind = 'issue',
+) => `jsp1440/orchid-calyx-backend|${queueSourceKind}|${backendSourceKind}:${sourceRef}`;
 
 describe('backend reserve queue persistence bridge', () => {
   it('materializes a valid backend proposal through the canonical Queue Bridge', () => {
@@ -73,6 +76,7 @@ describe('backend reserve queue persistence bridge', () => {
     const result = bridgeBackendReservePlan(
       plan([proposal('gap:taxon-1:ecology', 'fp-gap', {
         source_kind: 'objective',
+        queue_source_kind: 'brain-knowledge-gap',
         source_payload: knowledgeGapPayload(),
       })], { reserve_depth: 1, deficit: 1 }),
       [],
@@ -80,6 +84,9 @@ describe('backend reserve queue persistence bridge', () => {
 
     expect(result.rejected).toEqual([]);
     expect(result.plan.create).toHaveLength(1);
+    expect(result.plan.create[0].sourceKey).toBe(
+      sourceKey('gap:taxon-1:ecology', 'brain-knowledge-gap', 'objective'),
+    );
     expect(result.plan.create[0].body).toContain('Taxon ID: taxon-1');
     expect(result.plan.create[0].body).toContain('What evidence resolves the ecology gap');
     expect(result.plan.create[0].body).toContain('Human review required: yes');
@@ -157,6 +164,20 @@ describe('backend reserve queue persistence bridge', () => {
     expect(result.rejected).toEqual([
       { sourceRef: '#fingerprint-copy', reason: 'duplicate_fingerprint' },
       { sourceRef: '#semantic-copy', reason: 'semantic_duplicate' },
+    ]);
+  });
+
+  it('rejects an unknown declared queue source instead of guessing its lineage', () => {
+    const result = bridgeBackendReservePlan(
+      plan([proposal('#unknown-source', 'fp-unknown', {
+        queue_source_kind: 'invented-queue-source',
+      })], { reserve_depth: 1, deficit: 1 }),
+      [],
+    );
+
+    expect(result.plan.create).toEqual([]);
+    expect(result.rejected).toEqual([
+      { sourceRef: '#unknown-source', reason: 'invalid_queue_source_kind' },
     ]);
   });
 

@@ -3,6 +3,7 @@ import {
   type ExistingWorkRef,
   type QueueBridgeCandidate,
   type QueueBridgePlan,
+  type QueueSourceKind,
 } from './orchestratorQueueBridge';
 
 type BackendSourceKind = 'issue' | 'template' | 'objective';
@@ -11,6 +12,7 @@ type BackendPriority = QueueBridgeCandidate['priority'];
 export interface BackendReserveProposal {
   source_ref: string;
   source_kind: BackendSourceKind;
+  queue_source_kind?: QueueSourceKind | string | null;
   title?: string | null;
   labels?: string[];
   dependencies?: string[];
@@ -45,7 +47,15 @@ const SAFE_UPSTREAM_STATUSES = new Set([
   'reserve_below_target_no_eligible_candidates',
 ]);
 
-const SOURCE_KIND_MAP: Record<BackendSourceKind, QueueBridgeCandidate['sourceKind']> = {
+const QUEUE_SOURCE_KINDS = new Set<QueueSourceKind>([
+  'autonomous-orchestrator',
+  'brain-knowledge-gap',
+  'self-audit',
+  'connector-queue',
+  'bounded-engineering-executor',
+]);
+
+const SOURCE_KIND_MAP: Record<BackendSourceKind, QueueSourceKind> = {
   issue: 'bounded-engineering-executor',
   template: 'autonomous-orchestrator',
   objective: 'autonomous-orchestrator',
@@ -187,6 +197,11 @@ export function bridgeBackendReservePlan(
 
   for (const proposal of upstream.proposals) {
     const sourceRef = safeText(proposal?.source_ref);
+    const declaredQueueSourceKind = safeText(proposal?.queue_source_kind);
+    const queueSourceKind = declaredQueueSourceKind
+      && QUEUE_SOURCE_KINDS.has(declaredQueueSourceKind as QueueSourceKind)
+      ? declaredQueueSourceKind as QueueSourceKind
+      : null;
     const fingerprint = safeText(proposal?.material_fingerprint);
     const semanticKey = safeText(proposal?.semantic_key);
     const dependencies = safeStringArray(proposal?.dependencies);
@@ -200,11 +215,17 @@ export function bridgeBackendReservePlan(
       || !sourceRepo
       || !proposal
       || !(proposal.source_kind in SOURCE_KIND_MAP)
+      || (declaredQueueSourceKind !== null && queueSourceKind === null)
       || dependencies === null
       || labels === null
       || sourcePayload.reason
     ) {
-      rejected.push({ sourceRef, reason: sourcePayload.reason ?? 'invalid_proposal_contract' });
+      rejected.push({
+        sourceRef,
+        reason: declaredQueueSourceKind !== null && queueSourceKind === null
+          ? 'invalid_queue_source_kind'
+          : sourcePayload.reason ?? 'invalid_proposal_contract',
+      });
       continue;
     }
 
@@ -230,7 +251,7 @@ export function bridgeBackendReservePlan(
 
     candidates.push({
       sourceRepo,
-      sourceKind: SOURCE_KIND_MAP[proposal.source_kind],
+      sourceKind: queueSourceKind ?? SOURCE_KIND_MAP[proposal.source_kind],
       sourceId: `${proposal.source_kind}:${sourceRef}`,
       title: safeText(proposal.title) ?? `Prepare ${sourceRef}`,
       body:
