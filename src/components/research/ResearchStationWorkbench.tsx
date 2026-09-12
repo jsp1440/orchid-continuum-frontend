@@ -147,41 +147,79 @@ const ManifestPanel: React.FC<{
   const build = useCallback(async () => {
     setState({ status: 'building' });
     const structure = result.structure;
-    const supportedClaims =
-      structure?.claim_coverage.filter((c) => c.coverage === 'supported') ?? [];
-    const contradictedClaims =
-      structure?.claim_coverage.filter(
-        (c) => c.coverage === 'contradicted' || c.coverage === 'contested',
-      ) ?? [];
-    const verificationState: VerificationPacket['verification_state'] =
-      !structure || result.degraded ? 'validation_required' : 'ready_for_review';
+    const taxonId = dossier.subject?.taxon_id?.trim() ?? '';
+    const taxonomySnapshotId = structure?.taxonomy_snapshot_id?.trim() ?? '';
+    const researchQuestion = dossier.project.research_question?.trim() ?? '';
+    const conversationId = result.conversationId.trim();
+
+    // The manifest is an immutable scientific record. Never manufacture canonical
+    // taxonomy or run identities when the governed backend did not return them.
+    if (!structure || !taxonId || !taxonomySnapshotId || !researchQuestion || !conversationId) {
+      setState({
+        status: 'error',
+        kind: 'validation_failed',
+        message:
+          'Run manifest requires a governed synthesis with canonical taxon and taxonomy snapshot identities.',
+      });
+      return;
+    }
+
+    const supportedClaims = structure.claim_coverage.filter(
+      (claim) =>
+        claim.coverage === 'supported' &&
+        claim.supporting_count > 0 &&
+        claim.source_families.length > 0,
+    );
+    const claimsMissingProvenance = structure.claim_coverage
+      .filter(
+        (claim) =>
+          claim.coverage === 'unresolved' ||
+          (claim.coverage === 'supported' &&
+            (claim.supporting_count <= 0 || claim.source_families.length === 0)),
+      )
+      .map((claim) => claim.claim_id);
+    const contradictedClaims = structure.claim_coverage.filter(
+      (claim) => claim.coverage === 'contradicted' || claim.coverage === 'contested',
+    );
+    const missingEvidence = Array.from(
+      new Set(
+        [...structure.missing_evidence, ...claimsMissingProvenance].filter(
+          (item) => typeof item === 'string' && item.trim().length > 0,
+        ),
+      ),
+    );
+    const verificationState: VerificationPacket['verification_state'] = result.degraded
+      ? 'validation_required'
+      : missingEvidence.length > 0
+        ? 'evidence_incomplete'
+        : 'ready_for_review';
 
     const packet: VerificationPacket = {
       contract_version: 'oc-verification-handoff-v1',
       verification_state: verificationState,
-      resolved_evidence: supportedClaims.map((c) => {
-        const total = c.supporting_count + c.contradicting_count;
+      resolved_evidence: supportedClaims.map((claim) => {
+        const total = claim.supporting_count + claim.contradicting_count;
         return {
-          evidence_id: c.claim_id,
-          source_id: c.source_families[0] ?? 'unattributed',
-          statement: c.claim,
-          provenance: c.source_families,
-          confidence: total > 0 ? c.supporting_count / total : 1.0,
+          evidence_id: claim.claim_id,
+          source_id: claim.source_families[0],
+          statement: claim.claim,
+          provenance: claim.source_families,
+          confidence: claim.supporting_count / total,
         };
       }),
-      missing_evidence: structure?.missing_evidence ?? [],
-      contradictions: contradictedClaims.map((c) => c.claim_id),
-      knowledge_gaps: structure?.missing_evidence ?? [],
+      missing_evidence: missingEvidence,
+      contradictions: contradictedClaims.map((claim) => claim.claim_id),
+      knowledge_gaps: missingEvidence,
       human_review_required: true,
       automatic_scientific_publication_allowed: false,
       canonical_knowledge_mutation_allowed: false,
     };
 
     const request: RunManifestRequest = {
-      run_id: `run:${dossier.project.project_id}:${String(Date.now())}`,
-      research_question: dossier.project.research_question ?? '',
-      taxon_id: dossier.subject?.taxon_id ?? 'unknown',
-      taxonomy_snapshot_id: `snapshot:${dossier.project.project_id}`,
+      run_id: `run:${dossier.project.project_id}:${conversationId}`,
+      research_question: researchQuestion,
+      taxon_id: taxonId,
+      taxonomy_snapshot_id: taxonomySnapshotId,
       verification_packets: [packet],
     };
 
