@@ -1,4 +1,5 @@
 import { BACKEND_BASE_URL, CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { parseWorkflowIntelligence, type WorkflowIntelligence } from '@/lib/workflowIntelligence';
 
 export type MissionControlStatus = 'healthy' | 'warning' | 'critical' | 'offline' | 'loading' | 'stale' | 'error' | 'unknown' | 'stub';
 export type ControlState = 'read_only' | 'disabled' | 'planned' | 'requires_owner_authorization';
@@ -215,6 +216,7 @@ export type MissionControlOperations = {
   /** Backend-declared section manifest from mission_control.sections (BUILD-064+). */
   sections: MissionControlSection[];
   scientificReadiness?: ScientificReadiness | null;
+  workflowIntelligence?: WorkflowIntelligence | null;
 };
 
 type ExecutiveStatePayload = {
@@ -913,6 +915,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     questionsResult,
     runtimeConfigurationResult,
     runtimeStatusResult,
+    workflowIntelligenceResult,
     publicApiResult,
   ] = await Promise.all([
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/executive/state', 'Executive state'),
@@ -930,6 +933,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runner/constitutional/governance-questions', 'Governance questions'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/configuration', 'Runtime configuration'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runner/autonomous-status', 'Runtime autonomous status'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/scientific-observability/workflow-intelligence', 'Workflow intelligence'),
     getJson<Record<string, unknown>>(BACKEND_BASE_URL, '/health', 'Public API health'),
   ]);
 
@@ -949,6 +953,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     questionsResult.diagnostic,
     runtimeConfigurationResult.diagnostic,
     runtimeStatusResult.diagnostic,
+    workflowIntelligenceResult.diagnostic,
     publicApiResult.diagnostic,
   ];
 
@@ -1052,5 +1057,6 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     governance,
     sections: executive.sections,
     scientificReadiness: executive.scientificReadiness,
+    workflowIntelligence: parseWorkflowIntelligence(workflowIntelligenceResult.payload),
   };
 }
