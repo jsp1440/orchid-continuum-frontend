@@ -106,7 +106,7 @@ function makeManifestResponse(override?: Response | null): Response {
 
 function makeFetch(
   manifestResponse?: Response | null,
-  turnResponse: typeof TURN_RESPONSE = TURN_RESPONSE,
+  turnResponse: unknown = TURN_RESPONSE,
 ): ReturnType<typeof vi.fn> {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     // Manifest POST
