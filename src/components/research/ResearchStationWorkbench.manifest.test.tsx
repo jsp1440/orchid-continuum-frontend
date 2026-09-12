@@ -37,7 +37,7 @@ const MANIFEST_FIXTURE: RunEvidenceManifest = {
   run_id: `run:${PROJECT_ID}:1`,
   research_question: PROJECT.research_question,
   taxon_id: SUBJECT_TAXON.taxon_id,
-  taxonomy_snapshot_id: `snapshot:${PROJECT_ID}`,
+  taxonomy_snapshot_id: 'hassler:2026-09-01',
   run_fingerprint: 'a'.repeat(64),
   created_at_utc: '2026-09-12T00:00:00+00:00',
   verification_state: 'ready_for_review',
@@ -64,6 +64,7 @@ const TURN_RESPONSE = {
     claim_coverage: [],
     missing_evidence: [],
     resolved_subject: 'Phalaenopsis',
+    taxonomy_snapshot_id: 'hassler:2026-09-01',
     governed_provenance: null,
   },
 };
@@ -103,7 +104,10 @@ function makeManifestResponse(override?: Response | null): Response {
   return override ?? ok(MANIFEST_FIXTURE);
 }
 
-function makeFetch(manifestResponse?: Response | null): ReturnType<typeof vi.fn> {
+function makeFetch(
+  manifestResponse?: Response | null,
+  turnResponse: typeof TURN_RESPONSE = TURN_RESPONSE,
+): ReturnType<typeof vi.fn> {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     // Manifest POST
     if (url.includes('/synthesis/run-manifest')) {
@@ -111,7 +115,7 @@ function makeFetch(manifestResponse?: Response | null): ReturnType<typeof vi.fn>
     }
     // Calyx turn POST
     if (url.includes('/turns') && init?.method === 'POST') {
-      return Promise.resolve(ok(TURN_RESPONSE));
+      return Promise.resolve(ok(turnResponse));
     }
     // Calyx conversation POST (create, no /turns)
     if (
@@ -275,5 +279,67 @@ describe('ManifestPanel', () => {
     );
     expect(manifestCalls).toHaveLength(0);
     expect(container.textContent).toContain('Build run manifest');
+  });
+
+  it('uses stable governed run and taxonomy identities', async () => {
+    const fetch = makeFetch();
+    await render(fetch);
+    await clickButton('Synthesize this investigation');
+    await clickButton('Build run manifest');
+
+    const manifestCall = (fetch.mock.calls as [string, RequestInit][]).find(([url]) =>
+      url.includes('/synthesis/run-manifest'),
+    );
+    expect(manifestCall).toBeTruthy();
+    const body = JSON.parse(String(manifestCall?.[1]?.body)) as {
+      run_id: string;
+      taxonomy_snapshot_id: string;
+    };
+    expect(body.run_id).toBe(`run:${PROJECT_ID}:conv-test`);
+    expect(body.taxonomy_snapshot_id).toBe('hassler:2026-09-01');
+  });
+
+  it('marks a governed packet evidence-incomplete when evidence is missing', async () => {
+    const fetch = makeFetch(undefined, {
+      ...TURN_RESPONSE,
+      synthesis_structure: {
+        ...TURN_RESPONSE.synthesis_structure,
+        missing_evidence: ['warm-growing comparison'],
+      },
+    });
+    await render(fetch);
+    await clickButton('Synthesize this investigation');
+    await clickButton('Build run manifest');
+
+    const manifestCall = (fetch.mock.calls as [string, RequestInit][]).find(([url]) =>
+      url.includes('/synthesis/run-manifest'),
+    );
+    const body = JSON.parse(String(manifestCall?.[1]?.body)) as {
+      verification_packets: Array<{ verification_state: string; knowledge_gaps: string[] }>;
+    };
+    expect(body.verification_packets[0]).toMatchObject({
+      verification_state: 'evidence_incomplete',
+      knowledge_gaps: ['warm-growing comparison'],
+    });
+  });
+
+  it('fails closed without a canonical taxonomy snapshot and does not POST', async () => {
+    const fetch = makeFetch(undefined, {
+      ...TURN_RESPONSE,
+      synthesis_structure: {
+        ...TURN_RESPONSE.synthesis_structure,
+        taxonomy_snapshot_id: null,
+      },
+    });
+    await render(fetch);
+    await clickButton('Synthesize this investigation');
+    await clickButton('Build run manifest');
+
+    expect(container.textContent).toContain('Manifest unavailable');
+    expect(container.textContent).toContain('canonical taxon and taxonomy snapshot identities');
+    const manifestCalls = (fetch.mock.calls as [string][]).filter(([url]) =>
+      url.includes('/synthesis/run-manifest'),
+    );
+    expect(manifestCalls).toHaveLength(0);
   });
 });
