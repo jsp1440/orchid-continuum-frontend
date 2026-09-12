@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 
 import GovernedEvidenceSearch from "@/components/calyx/GovernedEvidenceSearch";
 import ReasoningLedgerInspector from "@/components/calyx/ReasoningLedgerInspector";
+import ScientificObservabilityAnomalyQueue from "@/components/calyx/ScientificObservabilityAnomalyQueue";
 import ScientificObservabilityTrace from "@/components/calyx/ScientificObservabilityTrace";
 import type { BrainMission, MissionConclusion } from "@/lib/calyxWorkspace";
 import {
@@ -333,7 +334,10 @@ export default function CalyxVerificationWorkbench({
 
           <section className="mt-4" aria-label="Scientific observability">
             {traceCorrelationId ? (
-              <ScientificObservabilityTrace correlationId={traceCorrelationId} />
+              <>
+                <ScientificObservabilityAnomalyQueue correlationId={traceCorrelationId} />
+                <ScientificObservabilityTrace correlationId={traceCorrelationId} />
+              </>
             ) : (
               <p
                 className="rounded-lg border border-dashed bg-background p-3 text-xs text-muted-foreground"
