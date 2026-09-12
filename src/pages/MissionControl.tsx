@@ -47,6 +47,7 @@ import {
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import CompletionObservatory from '@/components/mission-control/CompletionObservatory';
+import ScientificReadinessPanel from '@/components/mission-control/ScientificReadinessPanel';
 import DependencyReadinessMatrix from '@/components/mission-control/DependencyReadinessMatrix';
 import LexiconCoverageDiagnostic from '@/components/mission-control/LexiconCoverageDiagnostic';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
@@ -2911,6 +2912,13 @@ const MissionControlContent: React.FC = () => {
                 <SafePanel title="Completion Observatory">
                 <Panel id="mission-control-completion-observatory" eyebrow="OC-OBSERVATORY-001" title="Completion Observatory" icon={Network}>
                   <CompletionObservatory />
+                </Panel>
+                </SafePanel>
+
+                {/* SCI-OBS-003: calculated scientific readiness, advisory only */}
+                <SafePanel title="Scientific Readiness">
+                <Panel id="mission-control-scientific-readiness" eyebrow="SCI-OBS-003" title="Scientific Readiness" icon={Activity}>
+                  <ScientificReadinessPanel readiness={dashboard.scientificReadiness} />
                 </Panel>
                 </SafePanel>
 
