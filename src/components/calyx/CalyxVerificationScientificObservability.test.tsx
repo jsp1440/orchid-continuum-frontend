@@ -10,6 +10,11 @@ vi.mock("@/components/calyx/GovernedEvidenceSearch", () => ({
 vi.mock("@/components/calyx/ReasoningLedgerInspector", () => ({
   default: () => <div data-testid="ledger-inspector" />,
 }));
+vi.mock("@/components/calyx/ScientificObservabilityAnomalyQueue", () => ({
+  default: ({ correlationId }: { correlationId: string }) => (
+    <div data-testid="anomaly-queue">{correlationId}</div>
+  ),
+}));
 vi.mock("@/components/calyx/ScientificObservabilityTrace", () => ({
   default: ({ correlationId }: { correlationId: string }) => (
     <div data-testid="observability-trace">{correlationId}</div>
