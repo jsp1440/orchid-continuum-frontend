@@ -48,6 +48,7 @@ import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import CompletionObservatory from '@/components/mission-control/CompletionObservatory';
 import ScientificReadinessPanel from '@/components/mission-control/ScientificReadinessPanel';
+import WorkflowIntelligencePanel from '@/components/mission-control/WorkflowIntelligencePanel';
 import DependencyReadinessMatrix from '@/components/mission-control/DependencyReadinessMatrix';
 import LexiconCoverageDiagnostic from '@/components/mission-control/LexiconCoverageDiagnostic';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
@@ -2919,6 +2920,13 @@ const MissionControlContent: React.FC = () => {
                 <SafePanel title="Scientific Readiness">
                 <Panel id="mission-control-scientific-readiness" eyebrow="SCI-OBS-003" title="Scientific Readiness" icon={Activity}>
                   <ScientificReadinessPanel readiness={dashboard.scientificReadiness} />
+                </Panel>
+                </SafePanel>
+
+                {/* WFI-001: canonical provider-free workflow intelligence */}
+                <SafePanel title="Workflow Intelligence">
+                <Panel id="mission-control-workflow-intelligence" eyebrow="WFI-001" title="Workflow Intelligence" icon={Workflow}>
+                  <WorkflowIntelligencePanel intelligence={dashboard.workflowIntelligence} />
                 </Panel>
                 </SafePanel>
 
