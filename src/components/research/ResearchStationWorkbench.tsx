@@ -164,13 +164,14 @@ const ManifestPanel: React.FC<{
       return;
     }
 
-    const supportedClaims = structure.claim_coverage.filter(
+    const claimCoverage = structure.claim_coverage ?? [];
+    const supportedClaims = claimCoverage.filter(
       (claim) =>
         claim.coverage === 'supported' &&
         claim.supporting_count > 0 &&
         claim.source_families.length > 0,
     );
-    const claimsMissingProvenance = structure.claim_coverage
+    const claimsMissingProvenance = claimCoverage
       .filter(
         (claim) =>
           claim.coverage === 'unresolved' ||
@@ -178,12 +179,12 @@ const ManifestPanel: React.FC<{
             (claim.supporting_count <= 0 || claim.source_families.length === 0)),
       )
       .map((claim) => claim.claim_id);
-    const contradictedClaims = structure.claim_coverage.filter(
+    const contradictedClaims = claimCoverage.filter(
       (claim) => claim.coverage === 'contradicted' || claim.coverage === 'contested',
     );
     const missingEvidence = Array.from(
       new Set(
-        [...structure.missing_evidence, ...claimsMissingProvenance].filter(
+        [...(structure.missing_evidence ?? []), ...claimsMissingProvenance].filter(
           (item) => typeof item === 'string' && item.trim().length > 0,
         ),
       ),
