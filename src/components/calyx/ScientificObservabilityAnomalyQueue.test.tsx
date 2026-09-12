@@ -4,7 +4,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const apiRequest = vi.fn();
+const { apiRequest } = vi.hoisted(() => ({ apiRequest: vi.fn() }));
 vi.mock("@/lib/api", () => ({ apiRequest }));
 
 import ScientificObservabilityAnomalyQueue from "./ScientificObservabilityAnomalyQueue";
