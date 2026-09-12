@@ -60,6 +60,8 @@ export type CalyxSynthesisStructure = {
   degraded_composition?: boolean;
   /** The investigation subject this turn continues, resolved server-side. */
   resolved_subject?: string | null;
+  /** Canonical taxonomy release pinned by the governed backend for this synthesis. */
+  taxonomy_snapshot_id?: string | null;
   follow_up_turn?: boolean;
   claim_coverage?: CalyxClaimCoverage[];
   integrated_across_source_families?: boolean;
