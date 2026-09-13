@@ -55,6 +55,11 @@ import {
   type VerificationPacket,
 } from '@/lib/evidenceDecisionManifest';
 import { buildResearchStationReviewExport } from '@/lib/researchStationReviewExport';
+import {
+  candidateProposalRequest,
+  prepareCandidateProposal,
+  type CandidateKnowledgeProposal,
+} from '@/lib/candidateKnowledgeProposal';
 
 /**
  * ResearchStationWorkbench — one investigation, read end to end.
@@ -130,8 +135,105 @@ type SynthesisState =
 type ManifestState =
   | { status: 'idle' }
   | { status: 'building' }
-  | { status: 'ready'; manifest: RunEvidenceManifest }
+  | { status: 'ready'; manifest: RunEvidenceManifest; packet: VerificationPacket }
   | { status: 'error'; kind: string; message: string };
+
+type CandidateProposalState =
+  | { status: 'idle' }
+  | { status: 'preparing' }
+  | { status: 'ready'; proposal: CandidateKnowledgeProposal }
+  | { status: 'error'; message: string };
+
+const CandidateProposalPanel: React.FC<{
+  manifest: RunEvidenceManifest;
+  packet: VerificationPacket;
+  result: ResearchStationSynthesis;
+}> = ({ manifest, packet, result }) => {
+  const [state, setState] = useState<CandidateProposalState>({ status: 'idle' });
+  const request = useMemo(
+    () => candidateProposalRequest(manifest, packet, result.mission),
+    [manifest, packet, result.mission],
+  );
+
+  if (!request) {
+    return (
+      <div
+        className="rounded-xl border border-dashed border-white/15 bg-black/20 px-3 py-3"
+        data-testid="candidate-proposal-unavailable"
+      >
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
+          Candidate proposal unavailable
+        </p>
+        <p className="mt-1 text-[11px] leading-5 text-white/45">
+          The Brain mission did not return one unambiguous candidate with explicit source,
+          revision, extraction-run, domain, taxon, and confidence bindings. Nothing was
+          invented and no Knowledge Graph handoff was attempted.
+        </p>
+      </div>
+    );
+  }
+
+  const prepare = async () => {
+    setState({ status: 'preparing' });
+    try {
+      const proposal = await prepareCandidateProposal(request);
+      setState({ status: 'ready', proposal });
+    } catch (error) {
+      setState({
+        status: 'error',
+        message:
+          error instanceof CalyxApiError
+            ? error.message
+            : 'Candidate proposal could not be prepared.',
+      });
+    }
+  };
+
+  if (state.status === 'ready') {
+    return (
+      <div
+        className="rounded-xl border border-emerald-300/25 bg-emerald-300/5 px-3 py-3"
+        data-testid="candidate-proposal-ready"
+      >
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200">
+          Candidate proposal prepared · owner submission required
+        </p>
+        <p className="mt-1 break-all font-mono text-[10px] text-white/55">
+          {state.proposal.proposal_id}
+        </p>
+        <p className="mt-2 text-[11px] leading-5 text-white/50">
+          No candidate persisted · No automatic approval · No scientific publication · No
+          canonical or Knowledge Graph mutation
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/5 px-3 py-3">
+      <button
+        type="button"
+        onClick={() => void prepare()}
+        disabled={state.status === 'preparing'}
+        className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-100 hover:bg-emerald-300/10 disabled:opacity-60"
+      >
+        <Network className="h-3.5 w-3.5" />
+        {state.status === 'preparing'
+          ? 'Preparing candidate proposal…'
+          : 'Prepare candidate proposal'}
+      </button>
+      <p className="mt-2 text-[11px] leading-5 text-white/45">
+        Prepares the canonical Candidate Knowledge request for owner review. This action
+        cannot persist, approve, publish, or mutate the Knowledge Graph.
+      </p>
+      {state.status === 'error' ? (
+        <p className="mt-2 text-[11px] leading-5 text-amber-200" role="status">
+          Candidate proposal unavailable: {state.message}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 /**
  * ManifestPanel — builds and renders an oc-run-evidence-manifest-v1 for the
@@ -237,7 +339,7 @@ const ManifestPanel: React.FC<{
 
     try {
       const manifest = await buildRunManifest(request);
-      setState({ status: 'ready', manifest });
+      setState({ status: 'ready', manifest, packet });
     } catch (error) {
       if (error instanceof CalyxApiError) {
         setState({ status: 'error', kind: error.kind, message: error.message });
@@ -377,6 +479,11 @@ const ManifestPanel: React.FC<{
           canonical knowledge.
         </p>
       </div>
+      <CandidateProposalPanel
+        manifest={manifest}
+        packet={state.packet}
+        result={result}
+      />
       <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
         <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
           Governance
