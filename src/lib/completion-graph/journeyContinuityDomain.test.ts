@@ -111,6 +111,15 @@ describe('browser evidence is claimed only where it was obtained', () => {
     expect(dossierMatrix?.status).toBe('OWNER_ACTION');
     expect(dossierMatrix?.nextAction).toMatch(/owner-gated deployed-backend/i);
   });
+
+  it('parks real Lexicon-backend verification instead of preparing synthetic canonical entries', () => {
+    const researchLexicon = getLeaves(buildJourneyContinuityDomain(buildBranch)).find(
+      (gate) => gate.id === 'gate-journey-research-lexicon',
+    );
+
+    expect(researchLexicon?.status).toBe('OWNER_ACTION');
+    expect(researchLexicon?.nextAction).toMatch(/real canonical Lexicon entries/i);
+  });
 });
 
 describe('the domain is part of the portfolio', () => {
