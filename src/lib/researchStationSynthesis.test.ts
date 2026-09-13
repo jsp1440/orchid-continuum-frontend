@@ -288,7 +288,6 @@ describe("evidence gaps stay gaps", () => {
   });
 });
 
-
 describe("governed evidence-class readiness", () => {
   it("accepts a consistent ready contract from the backend", () => {
     expect(
