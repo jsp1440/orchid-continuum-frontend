@@ -93,6 +93,15 @@ describe('browser evidence is claimed only where it was obtained', () => {
       expect(gate.threeLevels.productComplete, gate.id).not.toBe('MET');
     }
   });
+
+  it('parks the completed Classroom contract at the remaining owner-only deployment gate', () => {
+    const classroom = getLeaves(buildJourneyContinuityDomain(buildBranch)).find(
+      (gate) => gate.id === 'gate-journey-classroom-calyx',
+    );
+
+    expect(classroom?.status).toBe('OWNER_ACTION');
+    expect(classroom?.nextAction).toMatch(/owner-gated deployed-backend/i);
+  });
 });
 
 describe('the domain is part of the portfolio', () => {
