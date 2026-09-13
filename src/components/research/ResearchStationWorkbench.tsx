@@ -37,6 +37,7 @@ import {
 } from '@/lib/researchStationNavigation';
 import {
   ResearchStationQuestionMissing,
+  governedEvidenceClassReadiness,
   groupClaimCoverage,
   hasUnresolvedConflict,
   runResearchStationSynthesis,
@@ -164,6 +165,13 @@ const ManifestPanel: React.FC<{
       return;
     }
 
+    const evidenceReadiness = governedEvidenceClassReadiness(structure);
+    const readinessGaps =
+      evidenceReadiness?.status === 'ready'
+        ? []
+        : evidenceReadiness?.missing_requirements.length
+          ? evidenceReadiness.missing_requirements
+          : ['governed evidence-class readiness unavailable'];
     const claimCoverage = structure.claim_coverage ?? [];
     const supportedClaims = claimCoverage.filter(
       (claim) =>
@@ -184,7 +192,7 @@ const ManifestPanel: React.FC<{
     );
     const missingEvidence = Array.from(
       new Set(
-        [...(structure.missing_evidence ?? []), ...claimsMissingProvenance].filter(
+        [...(structure.missing_evidence ?? []), ...claimsMissingProvenance, ...readinessGaps].filter(
           (item) => typeof item === 'string' && item.trim().length > 0,
         ),
       ),
@@ -444,6 +452,7 @@ const SynthesisPanel: React.FC<{
   const groups = groupClaimCoverage(result.structure);
   const gaps = synthesisGaps(result.structure);
   const conflicted = hasUnresolvedConflict(result.structure);
+  const evidenceReadiness = governedEvidenceClassReadiness(result.structure);
   const provenance = result.structure?.governed_provenance;
   const coverageOrder: Array<keyof ClaimCoverageGroups> = [
     'supported',
@@ -491,6 +500,85 @@ const SynthesisPanel: React.FC<{
             The governed mission returned no valid bounded plan. Synthesis output remains
             visible, but it is not presented as planned research.
           </NothingRecorded>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+            Evidence readiness
+          </p>
+          {evidenceReadiness ? (
+            <span
+              className={
+                evidenceReadiness.status === 'ready'
+                  ? 'rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200'
+                  : 'rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-amber-200'
+              }
+            >
+              {evidenceReadiness.status === 'ready' ? 'Ready for review' : 'Evidence incomplete'}
+            </span>
+          ) : null}
+        </div>
+        {evidenceReadiness ? (
+          <div className="mt-3 grid gap-3">
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="font-mono text-lg text-white">
+                  {evidenceReadiness.literature_present ? 'Present' : 'Missing'}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
+                  Review-required literature
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="font-mono text-lg text-white">
+                  {evidenceReadiness.continuum_evidence_class_count}/
+                  {evidenceReadiness.required_continuum_evidence_class_count}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
+                  Continuum evidence classes
+                </p>
+              </div>
+            </div>
+            {evidenceReadiness.continuum_evidence_classes.length ? (
+              <div className="flex flex-wrap gap-2">
+                {evidenceReadiness.continuum_evidence_classes.map((evidenceClass) => (
+                  <span
+                    key={evidenceClass}
+                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-white/60"
+                  >
+                    {evidenceClass.replaceAll('_', ' ')}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {evidenceReadiness.missing_requirements.length ? (
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/80">
+                  Still required
+                </p>
+                <ul className="mt-1.5 grid gap-1">
+                  {evidenceReadiness.missing_requirements.map((requirement) => (
+                    <li key={requirement} className="text-xs leading-5 text-white/65">
+                      {requirement}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <p className="text-[11px] leading-5 text-white/40">
+              Literature remains human-review-required. Readiness does not authorize scientific
+              publication or canonical knowledge mutation.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <NothingRecorded>
+              The backend returned no internally consistent evidence-readiness contract. Readiness
+              is unavailable, not assumed.
+            </NothingRecorded>
+          </div>
         )}
       </div>
 
