@@ -14,6 +14,7 @@ import {
   Network,
   ScrollText,
 } from 'lucide-react';
+import ScientificSynthesis from '@/components/calyx/ScientificSynthesis';
 import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
 import {
@@ -596,6 +597,18 @@ const SynthesisPanel: React.FC<{
           </NothingRecorded>
         )}
       </div>
+
+      {result.mission ? (
+        <ScientificSynthesis mission={result.mission} />
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
+          <NothingRecorded>
+            No complete, same-project Brain mission was returned. Scientific conclusions and the
+            Verification Workbench remain unavailable rather than being reconstructed in the
+            browser.
+          </NothingRecorded>
+        </div>
+      )}
 
       <section
         aria-label="Evidence comparison"

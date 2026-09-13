@@ -93,6 +93,40 @@ const TURN_RESPONSE = {
     },
     governed_provenance: null,
   },
+  research: {
+    mission: {
+      mission_id: 'mission-phal-01',
+      project_id: PROJECT_ID,
+      question: `Regarding ${SUBJECT_TAXON.taxon_id}: ${PROJECT.research_question}`,
+      state: 'COMPLETED',
+      current_stage: 'SYNTHESIS',
+      steps_executed: 4,
+      sources: [],
+      supporting_evidence: [],
+      contradicting_evidence: [],
+      missing_evidence: [],
+      confidence: null,
+      conclusions: [
+        {
+          type: 'provisional',
+          text: 'The current evidence supports a provisional cool-versus-warm comparison.',
+          claim_ids: ['claim-cool', 'claim-warm'],
+        },
+      ],
+      reasoning_ledger: { ledger_id: 'ledger-phal-01', version: 1 },
+      validation: { valid: true, blockers: [] },
+      review_status: 'HUMAN_REVIEW_REQUIRED',
+      publication_eligibility: {
+        eligible: false,
+        automatic_publication: false,
+        blockers: ['human scientific review required'],
+      },
+      blockers: [],
+      partial: false,
+      created_at: '2026-09-12T00:00:00Z',
+      updated_at: '2026-09-12T00:00:00Z',
+    },
+  },
 };
 
 // ── Response helpers ───────────────────────────────────────────────────────
@@ -226,6 +260,35 @@ describe('ManifestPanel', () => {
         '[aria-label="1 supporting and 1 contradicting evidence records"]',
       ),
     ).toBeTruthy();
+  });
+
+  it('mounts the returned Brain conclusion in the canonical Verification Workbench', async () => {
+    await render();
+    await clickButton('Synthesize this investigation');
+
+    expect(container.textContent).toContain('Scientific synthesis');
+    expect(container.textContent).toContain(
+      'The current evidence supports a provisional cool-versus-warm comparison.',
+    );
+    expect(container.textContent).toContain('Calyx Verification Workbench');
+    expect(container.textContent).toContain('Check Calyx');
+  });
+
+  it('refuses to mount a cross-project Brain mission', async () => {
+    const fetch = makeFetch(undefined, {
+      ...TURN_RESPONSE,
+      research: {
+        mission: {
+          ...TURN_RESPONSE.research.mission,
+          project_id: 'proj-other',
+        },
+      },
+    });
+    await render(fetch);
+    await clickButton('Synthesize this investigation');
+
+    expect(container.textContent).toContain('No complete, same-project Brain mission was returned.');
+    expect(container.textContent).not.toContain('Calyx Verification Workbench');
   });
 
   it('renders manifest card with fingerprint, counts, badges and governance after successful POST', async () => {
