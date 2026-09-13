@@ -102,6 +102,15 @@ describe('browser evidence is claimed only where it was obtained', () => {
     expect(classroom?.status).toBe('OWNER_ACTION');
     expect(classroom?.nextAction).toMatch(/owner-gated deployed-backend/i);
   });
+
+  it('parks the completed dossier to Matrix contract at its owner-only deployment gate', () => {
+    const dossierMatrix = getLeaves(buildJourneyContinuityDomain(buildBranch)).find(
+      (gate) => gate.id === 'gate-journey-dossier-matrix',
+    );
+
+    expect(dossierMatrix?.status).toBe('OWNER_ACTION');
+    expect(dossierMatrix?.nextAction).toMatch(/owner-gated deployed-backend/i);
+  });
 });
 
 describe('the domain is part of the portfolio', () => {
