@@ -1,6 +1,7 @@
 import {
   createCalyxConversation,
   sendCalyxTurn,
+  type BrainMission,
   type BrainMissionPlan,
   type CalyxClaimCoverage,
   type CalyxEvidenceClassReadiness,
@@ -36,6 +37,8 @@ export type ResearchStationSynthesis = {
   structure: CalyxSynthesisStructure | null;
   /** The bounded plan persisted by the governed Brain mission; null when unavailable or malformed. */
   plan: BrainMissionPlan | null;
+  /** The exact governed mission used by the canonical synthesis/verification consumer. */
+  mission: BrainMission | null;
   /** True when the backend composed from linked evidence rather than reasoning generatively. */
   degraded: boolean;
 };
@@ -114,6 +117,97 @@ export function governedEvidenceClassReadiness(
     continuum_evidence_classes: [...classes],
     missing_requirements: [...missing],
   };
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function governedStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(nonEmptyString);
+}
+
+/**
+ * Accepts only a complete Brain mission for this exact project and question.
+ *
+ * This prevents a stale, cross-project, or authority-expanding payload from
+ * reaching the canonical verification consumer. Invalid missions remain
+ * unavailable; their prose answer may still render separately.
+ */
+export function governedResearchMission(
+  value: unknown,
+  expectedProjectId: string,
+  expectedQuestion: string,
+): BrainMission | null {
+  if (!value || typeof value !== "object") return null;
+  const mission = value as Partial<BrainMission>;
+  const validation = mission.validation;
+  const publication = mission.publication_eligibility;
+  const ledger = mission.reasoning_ledger;
+
+  const conclusionsValid =
+    Array.isArray(mission.conclusions) &&
+    mission.conclusions.every(
+      (conclusion) =>
+        conclusion &&
+        typeof conclusion === "object" &&
+        nonEmptyString(conclusion.text) &&
+        (conclusion.type === undefined || nonEmptyString(conclusion.type)) &&
+        (conclusion.claim_ids === undefined ||
+          (Array.isArray(conclusion.claim_ids) &&
+            conclusion.claim_ids.every(
+              (claimId) =>
+                (typeof claimId === "number" && Number.isFinite(claimId)) ||
+                nonEmptyString(claimId),
+            ))),
+    );
+
+  const confidenceValid =
+    mission.confidence === null ||
+    (typeof mission.confidence === "number" &&
+      Number.isFinite(mission.confidence) &&
+      mission.confidence >= 0 &&
+      mission.confidence <= 1);
+
+  const ledgerValid =
+    ledger === null ||
+    (ledger !== undefined &&
+      nonEmptyString(ledger.ledger_id) &&
+      Number.isInteger(ledger.version) &&
+      ledger.version > 0);
+
+  if (
+    !nonEmptyString(mission.mission_id) ||
+    mission.project_id !== expectedProjectId ||
+    mission.question?.trim() !== expectedQuestion.trim() ||
+    !nonEmptyString(mission.state) ||
+    !nonEmptyString(mission.current_stage) ||
+    !Number.isInteger(mission.steps_executed) ||
+    Number(mission.steps_executed) < 0 ||
+    !Array.isArray(mission.sources) ||
+    !Array.isArray(mission.supporting_evidence) ||
+    !Array.isArray(mission.contradicting_evidence) ||
+    !governedStringArray(mission.missing_evidence) ||
+    !confidenceValid ||
+    !conclusionsValid ||
+    !ledgerValid ||
+    !validation ||
+    typeof validation.valid !== "boolean" ||
+    !governedStringArray(validation.blockers) ||
+    !nonEmptyString(mission.review_status) ||
+    !publication ||
+    typeof publication.eligible !== "boolean" ||
+    publication.automatic_publication !== false ||
+    !governedStringArray(publication.blockers) ||
+    !Array.isArray(mission.blockers) ||
+    typeof mission.partial !== "boolean" ||
+    !nonEmptyString(mission.created_at) ||
+    !nonEmptyString(mission.updated_at)
+  ) {
+    return null;
+  }
+
+  return mission as BrainMission;
 }
 
 export class ResearchStationQuestionMissing extends Error {
@@ -200,6 +294,7 @@ export async function runResearchStationSynthesis(
     answer: turn.answer ?? "",
     structure,
     plan: governedMissionPlan(turn.research?.mission?.plan),
+    mission: governedResearchMission(turn.research?.mission, projectId, question),
     // Absent structure means an older backend, not a generative answer. Claiming
     // "reasoned generatively" on missing data would overstate what happened, so
     // an unknown composer reads as degraded.
