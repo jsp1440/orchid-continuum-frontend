@@ -73,6 +73,14 @@ export default function OrchidIdentificationContinuum() {
               {sourceContext.taxonLabel} remains bounded navigation context from the Species Dossier.
               It is not a Matrix observation, not evidence, and not a verified identification.
             </p>
+            <dl className="mt-4 max-w-3xl rounded-xl border bg-background/70 p-4 text-sm">
+              <div className="grid gap-1 sm:grid-cols-[9rem_1fr]">
+                <dt className="font-medium text-muted-foreground">Canonical taxon ID</dt>
+                <dd className="break-all font-mono" data-testid="matrix-arrival-taxon-id">
+                  {sourceContext.taxonId}
+                </dd>
+              </div>
+            </dl>
             <Link
               to={researchHref}
               className="mt-5 inline-flex items-center gap-2 rounded-xl border px-4 py-3 text-sm font-semibold"
