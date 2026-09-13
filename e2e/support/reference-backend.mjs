@@ -58,6 +58,110 @@ const REQUIREMENTS = {
   },
 };
 
+const DOSSIER_FIXTURE_TAXON_ID = "taxon:world-plants:phalaenopsis-amabilis";
+const DOSSIER_FIXTURE_NAME = "Phalaenopsis amabilis";
+
+function unavailableDossierSection(reason) {
+  return {
+    state: "unavailable",
+    summary: null,
+    items: [],
+    receipts: [],
+    unavailable_reason: reason,
+  };
+}
+
+function dossierFixture() {
+  const unavailable = () => unavailableDossierSection(
+    "The provider-free browser fixture supplies identity continuity only; scientific evidence is unavailable.",
+  );
+  return {
+    contract_version: "oc-species-dossier-v1",
+    generated_at: "2026-01-01T00:00:00.000Z",
+    identity: {
+      taxon_id: DOSSIER_FIXTURE_TAXON_ID,
+      display_name: DOSSIER_FIXTURE_NAME,
+      full_scientific_name: DOSSIER_FIXTURE_NAME,
+      accepted_name: DOSSIER_FIXTURE_NAME,
+      authorship: null,
+      rank: "species",
+      genus: "Phalaenopsis",
+      specific_epithet: "amabilis",
+      taxonomic_status: "fixture_identity_only",
+      synonyms: [],
+    },
+    nomenclature: unavailable(),
+    protologue: unavailable(),
+    type_material: unavailable(),
+    historical_media: unavailable(),
+    living_media: unavailable(),
+    morphology: unavailable(),
+    distribution: unavailable(),
+    ecology: unavailable(),
+    phenology: unavailable(),
+    pollinators: unavailable(),
+    mycorrhizae: unavailable(),
+    conservation: unavailable(),
+    literature: unavailable(),
+    cultivation: unavailable(),
+    knowledge_graph: unavailable(),
+    calyx_narrative: unavailable(),
+    research_gaps: unavailable(),
+    atlas: {
+      contract_version: "oc-species-atlas-v1",
+      taxon_id: DOSSIER_FIXTURE_TAXON_ID,
+      generated_at: "2026-01-01T00:00:00.000Z",
+      layers: [],
+      unavailable_layers: ["all"],
+      provenance: [],
+    },
+    related_species: [],
+    matrix_url: "/orchid-identification?untrusted=discarded#discarded",
+    partner_references: [],
+    provenance: [],
+  };
+}
+
+async function publicSpeciesRoute(req, res, url) {
+  const path = url.pathname;
+  let match = /^\/api\/species\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    return json(res, 200, {
+      taxonomy_id: decodeURIComponent(match[1]),
+      canonical_name: DOSSIER_FIXTURE_NAME,
+      scientific_name: DOSSIER_FIXTURE_NAME,
+      genus: "Phalaenopsis",
+      species: "amabilis",
+      family: "Orchidaceae",
+      conservation_status: null,
+      region: null,
+      habitat: null,
+      description: "Provider-free identity-continuity fixture; no scientific description supplied.",
+    });
+  }
+  match = /^\/api\/mycorrhizal\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") return json(res, 404, { detail: "Fixture evidence unavailable." });
+
+  match = /^\/api\/platform\/species\/([^/]+)\/dossier$/.exec(path);
+  if (match && req.method === "GET") return json(res, 200, dossierFixture());
+
+  if (path === "/api/platform/federation/resolve-species" && req.method === "GET") {
+    return json(res, 200, {
+      status: "unresolved",
+      incoming_name: null,
+      matched_name: null,
+      match_state: "none",
+      taxon_id: null,
+      canonical_dossier_url: null,
+      candidates: [],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: "No federation source is configured in the provider-free fixture.",
+    });
+  }
+  return fail(res, 404, "no_such_endpoint", `The reference backend does not answer ${req.method} ${path}.`);
+}
+
 function requirementsFor(taxon) {
   const direct = REQUIREMENTS[(taxon || "").trim().toLowerCase()];
   if (direct) return direct;
@@ -1322,6 +1426,20 @@ async function calyxRoute(req, res, url) {
 
   /* ------------------------------------------------- Calyx / Brain ----- */
 
+  if (path === "/api/matrix-identification/registry" && req.method === "GET") {
+    return json(res, 200, {
+      versions: [{
+        registry_id: "reference-orchid-matrix",
+        version: "fixture-v1",
+        title: "Provider-free reference matrix",
+        scope: { genus: "Phalaenopsis" },
+        candidate_count: 0,
+        character_count: 0,
+        publication_state: "fixture_only",
+      }],
+    });
+  }
+
   // Conversation, turn, mission and evidence retrieval, in the shapes
   // src/lib/calyxWorkspace.ts and src/lib/evidenceRetrieval.ts declare.
   //
@@ -1547,7 +1665,15 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);
     if (url.pathname.startsWith("/api/research/")) return await researchRoute(req, res, url);
     if (
+      url.pathname.startsWith("/api/species/") ||
+      url.pathname.startsWith("/api/mycorrhizal/") ||
+      url.pathname.startsWith("/api/platform/")
+    ) {
+      return await publicSpeciesRoute(req, res, url);
+    }
+    if (
       url.pathname.startsWith("/api/calyx/") ||
+      url.pathname.startsWith("/api/matrix-identification/") ||
       url.pathname.startsWith("/brain/") ||
       url.pathname.startsWith("/api/evidence-retrieval/") ||
       url.pathname.startsWith("/synthesis/")
