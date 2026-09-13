@@ -358,7 +358,6 @@ describe("governed evidence-class readiness", () => {
   });
 });
 
-
 describe("claim comparison rows", () => {
   it("preserves backend support, contradiction, and source-family measurements", () => {
     expect(
