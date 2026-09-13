@@ -439,7 +439,6 @@ describe("claim comparison rows", () => {
   });
 });
 
-
 const governedMission = (overrides: Partial<BrainMission> = {}): BrainMission => ({
   mission_id: "mission-phal-1",
   project_id: "proj-1",
@@ -496,7 +495,7 @@ describe("governed Research Station mission", () => {
         governedMission({
           publication_eligibility: {
             eligible: true,
-            automatic_publication: true,
+            automatic_publication: true as unknown as false,
             blockers: [],
           },
         }),
