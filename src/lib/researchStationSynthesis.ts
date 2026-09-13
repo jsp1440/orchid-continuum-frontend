@@ -3,6 +3,7 @@ import {
   sendCalyxTurn,
   type BrainMission,
   type BrainMissionPlan,
+  type CalyxCitation,
   type CalyxClaimCoverage,
   type CalyxEvidenceClassReadiness,
   type CalyxSynthesisStructure,
@@ -39,6 +40,8 @@ export type ResearchStationSynthesis = {
   plan: BrainMissionPlan | null;
   /** The exact governed mission used by the canonical synthesis/verification consumer. */
   mission: BrainMission | null;
+  /** Display-authorized source citations returned for this exact turn. */
+  citations: CalyxCitation[];
   /** True when the backend composed from linked evidence rather than reasoning generatively. */
   degraded: boolean;
 };
@@ -125,6 +128,35 @@ function nonEmptyString(value: unknown): value is string {
 
 function governedStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(nonEmptyString);
+}
+
+function optionalCitationString(value: unknown): string | null {
+  return nonEmptyString(value) ? value.trim() : null;
+}
+
+/**
+ * Retains only display-authorized citation fields with a real title. Invalid
+ * entries disappear instead of becoming invented bibliography in the export.
+ */
+export function governedResearchCitations(value: unknown): CalyxCitation[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const citation = item as Partial<CalyxCitation>;
+    if (!nonEmptyString(citation.title)) return [];
+    return [{
+      title: citation.title.trim(),
+      authors: optionalCitationString(citation.authors),
+      publication_date: optionalCitationString(citation.publication_date),
+      journal: optionalCitationString(citation.journal),
+      doi: optionalCitationString(citation.doi),
+      pmid: optionalCitationString(citation.pmid),
+      pmcid: optionalCitationString(citation.pmcid),
+      provider: optionalCitationString(citation.provider),
+      review_state: optionalCitationString(citation.review_state),
+      canonical_evidence: citation.canonical_evidence === true,
+    }];
+  });
 }
 
 /**
@@ -295,6 +327,7 @@ export async function runResearchStationSynthesis(
     structure,
     plan: governedMissionPlan(turn.research?.mission?.plan),
     mission: governedResearchMission(turn.research?.mission, projectId, question),
+    citations: governedResearchCitations(turn.research?.citations),
     // Absent structure means an older backend, not a generative answer. Claiming
     // "reasoned generatively" on missing data would overstate what happened, so
     // an unknown composer reads as degraded.
