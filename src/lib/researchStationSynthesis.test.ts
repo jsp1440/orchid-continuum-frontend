@@ -5,6 +5,7 @@ import type { ResearchStationDossier } from "@/lib/researchStation";
 import {
   ResearchStationQuestionMissing,
   buildResearchStationTurnContext,
+  claimComparisonRows,
   governedEvidenceClassReadiness,
   groupClaimCoverage,
   hasUnresolvedConflict,
@@ -354,5 +355,85 @@ describe("governed evidence-class readiness", () => {
   it("keeps an absent readiness contract unavailable", () => {
     expect(governedEvidenceClassReadiness(structure())).toBeNull();
     expect(governedEvidenceClassReadiness(null)).toBeNull();
+  });
+});
+
+describe("claim comparison rows", () => {
+  it("preserves backend support, contradiction, and source-family measurements", () => {
+    expect(
+      claimComparisonRows(
+        structure({
+          claim_coverage: [
+            {
+              claim_id: "cool",
+              claim: "Cool-growing records cluster at lower temperatures.",
+              coverage: "contested",
+              source_families: ["trait_record", "literature"],
+              supporting_count: 3,
+              contradicting_count: 1,
+            },
+          ],
+        }),
+      ),
+    ).toEqual([
+      {
+        claimId: "cool",
+        claim: "Cool-growing records cluster at lower temperatures.",
+        coverage: "contested",
+        sourceFamilies: ["trait_record", "literature"],
+        supportingCount: 3,
+        contradictingCount: 1,
+      },
+    ]);
+  });
+
+  it("keeps invalid measurements unavailable instead of converting them to zero", () => {
+    const [row] = claimComparisonRows(
+      structure({
+        claim_coverage: [
+          {
+            claim_id: "warm",
+            claim: "Warm-growing evidence is incomplete.",
+            coverage: "unresolved",
+            source_families: [],
+            supporting_count: -1,
+            contradicting_count: Number.NaN,
+          },
+        ],
+      }),
+    );
+    expect(row.supportingCount).toBeNull();
+    expect(row.contradictingCount).toBeNull();
+  });
+
+  it("fails closed on unknown coverage and drops claims without stable identity", () => {
+    const rows = claimComparisonRows(
+      structure({
+        claim_coverage: [
+          {
+            claim_id: "future",
+            claim: "A future coverage state.",
+            coverage: "new_state",
+            source_families: ["trait_record", "trait_record"],
+            supporting_count: 1,
+            contradicting_count: 0,
+          },
+          {
+            claim_id: " ",
+            claim: "No stable identity.",
+            coverage: "supported",
+            source_families: ["literature"],
+            supporting_count: 1,
+            contradicting_count: 0,
+          },
+        ],
+      }),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      claimId: "future",
+      coverage: "unresolved",
+      sourceFamilies: ["trait_record"],
+    });
   });
 });

@@ -37,6 +37,7 @@ import {
 } from '@/lib/researchStationNavigation';
 import {
   ResearchStationQuestionMissing,
+  claimComparisonRows,
   governedEvidenceClassReadiness,
   groupClaimCoverage,
   hasUnresolvedConflict,
@@ -450,6 +451,7 @@ const SynthesisPanel: React.FC<{
 
   const { result } = state;
   const groups = groupClaimCoverage(result.structure);
+  const comparisonRows = claimComparisonRows(result.structure);
   const gaps = synthesisGaps(result.structure);
   const conflicted = hasUnresolvedConflict(result.structure);
   const evidenceReadiness = governedEvidenceClassReadiness(result.structure);
@@ -594,6 +596,98 @@ const SynthesisPanel: React.FC<{
           </NothingRecorded>
         )}
       </div>
+
+      <section
+        aria-label="Evidence comparison"
+        className="rounded-xl border border-white/10 bg-black/20 px-4 py-4"
+        data-testid="evidence-comparison"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+            Claim comparison
+          </p>
+          <p className="text-[11px] leading-5 text-white/40">
+            Backend-reported evidence counts · no browser inference
+          </p>
+        </div>
+        {comparisonRows.length ? (
+          <div className="mt-3 grid gap-3">
+            {comparisonRows.map((row) => {
+              const supportingCount = row.supportingCount;
+              const contradictingCount = row.contradictingCount;
+              const total =
+                supportingCount !== null && contradictingCount !== null
+                  ? supportingCount + contradictingCount
+                  : null;
+              const supportingShare =
+                total !== null && total > 0 && supportingCount !== null
+                  ? (supportingCount / total) * 100
+                  : null;
+              const contradictingShare =
+                total !== null && total > 0 && contradictingCount !== null
+                  ? (contradictingCount / total) * 100
+                  : null;
+              return (
+                <article
+                  key={row.claimId}
+                  className="rounded-xl border border-white/10 bg-black/20 px-3 py-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="max-w-2xl text-xs leading-5 text-white/75">{row.claim}</p>
+                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/55">
+                      {row.coverage}
+                    </span>
+                  </div>
+                  {total !== null ? (
+                    <div className="mt-2">
+                      <div
+                        className="flex h-2 overflow-hidden rounded-full bg-white/5"
+                        role="img"
+                        aria-label={`${supportingCount} supporting and ${contradictingCount} contradicting evidence records`}
+                      >
+                        {supportingShare !== null ? (
+                          <span
+                            className="bg-emerald-300/70"
+                            style={{ width: `${supportingShare}%` }}
+                          />
+                        ) : null}
+                        {contradictingShare !== null ? (
+                          <span
+                            className="bg-amber-300/70"
+                            style={{ width: `${contradictingShare}%` }}
+                          />
+                        ) : null}
+                      </div>
+                      <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
+                        {supportingCount} supporting · {contradictingCount} contradicting
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] leading-5 text-white/45">
+                      Evidence counts unavailable — not zero.
+                    </p>
+                  )}
+                  {row.sourceFamilies.length ? (
+                    <p className="mt-2 text-[11px] leading-5 text-white/40">
+                      Sources: {row.sourceFamilies.join(', ')}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[11px] leading-5 text-white/40">
+                      Source families unavailable.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-3">
+            <NothingRecorded>
+              The governed synthesis returned no identified claim coverage to compare.
+            </NothingRecorded>
+          </div>
+        )}
+      </section>
 
       {conflicted && (
         <p className="flex items-start gap-2 text-xs leading-5 text-amber-200/90">

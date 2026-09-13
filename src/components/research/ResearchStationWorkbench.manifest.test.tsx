@@ -61,7 +61,24 @@ const TURN_RESPONSE = {
   answer: 'Phalaenopsis grow optimally at intermediate-warm temperatures.',
   synthesis_structure: {
     generative: true,
-    claim_coverage: [],
+    claim_coverage: [
+      {
+        claim_id: 'claim-cool',
+        claim: 'Cool-growing records support lower night temperatures.',
+        coverage: 'supported',
+        source_families: ['trait_record', 'occurrence_summary'],
+        supporting_count: 2,
+        contradicting_count: 0,
+      },
+      {
+        claim_id: 'claim-warm',
+        claim: 'Warm-growing records conflict across the reviewed evidence.',
+        coverage: 'contested',
+        source_families: ['literature', 'trait_record'],
+        supporting_count: 1,
+        contradicting_count: 1,
+      },
+    ],
     missing_evidence: [],
     resolved_subject: 'Phalaenopsis',
     taxonomy_snapshot_id: 'hassler:2026-09-01',
@@ -194,6 +211,21 @@ describe('ManifestPanel', () => {
 
     expect(container.textContent).toContain('Build run manifest');
     expect(container.textContent).not.toContain('Building run manifest');
+  });
+
+  it('renders a non-inferential claim comparison with counts and source families', async () => {
+    await render();
+    await clickButton('Synthesize this investigation');
+
+    expect(container.textContent).toContain('Claim comparison');
+    expect(container.textContent).toContain('Cool-growing records support lower night temperatures.');
+    expect(container.textContent).toContain('2 supporting · 0 contradicting');
+    expect(container.textContent).toContain('Sources: trait_record, occurrence_summary');
+    expect(
+      container.querySelector(
+        '[aria-label="1 supporting and 1 contradicting evidence records"]',
+      ),
+    ).toBeTruthy();
   });
 
   it('renders manifest card with fingerprint, counts, badges and governance after successful POST', async () => {

@@ -207,6 +207,61 @@ export async function runResearchStationSynthesis(
   };
 }
 
+export type ClaimComparisonRow = {
+  claimId: string;
+  claim: string;
+  coverage: "supported" | "contested" | "contradicted" | "unresolved";
+  supportingCount: number | null;
+  contradictingCount: number | null;
+  sourceFamilies: string[];
+};
+
+function governedEvidenceCount(value: unknown): number | null {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+/**
+ * Builds presentation-only comparison rows from backend claim coverage.
+ *
+ * Counts that are missing, fractional, or negative remain unavailable. Unknown
+ * coverage states become unresolved, and no source family is invented.
+ */
+export function claimComparisonRows(
+  structure: CalyxSynthesisStructure | null | undefined,
+): ClaimComparisonRow[] {
+  return (structure?.claim_coverage ?? []).flatMap((claim) => {
+    const claimId = typeof claim.claim_id === "string" ? claim.claim_id.trim() : "";
+    const statement = typeof claim.claim === "string" ? claim.claim.trim() : "";
+    if (!claimId || !statement) return [];
+
+    const coverage =
+      claim.coverage === "supported" ||
+      claim.coverage === "contested" ||
+      claim.coverage === "contradicted"
+        ? claim.coverage
+        : "unresolved";
+    const sourceFamilies = Array.isArray(claim.source_families)
+      ? Array.from(
+          new Set(
+            claim.source_families
+              .filter((item): item is string => typeof item === "string")
+              .map((item) => item.trim())
+              .filter(Boolean),
+          ),
+        )
+      : [];
+
+    return [{
+      claimId,
+      claim: statement,
+      coverage,
+      supportingCount: governedEvidenceCount(claim.supporting_count),
+      contradictingCount: governedEvidenceCount(claim.contradicting_count),
+      sourceFamilies,
+    }];
+  });
+}
+
 export type ClaimCoverageGroups = {
   supported: CalyxClaimCoverage[];
   contested: CalyxClaimCoverage[];
