@@ -54,6 +54,7 @@ import {
   type RunManifestRequest,
   type VerificationPacket,
 } from '@/lib/evidenceDecisionManifest';
+import { buildResearchStationReviewExport } from '@/lib/researchStationReviewExport';
 
 /**
  * ResearchStationWorkbench — one investigation, read end to end.
@@ -292,6 +293,18 @@ const ManifestPanel: React.FC<{
   }
 
   const { manifest } = state;
+
+  const exportReviewPacket = () => {
+    const packet = buildResearchStationReviewExport({ dossier, result, manifest });
+    const blob = new Blob([packet], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `orchid-review-${dossier.project.project_id}-${manifest.run_fingerprint.slice(0, 12)}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="mt-1 grid gap-3 border-t border-white/10 pt-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -349,6 +362,21 @@ const ManifestPanel: React.FC<{
           missing — not as evidence of absence.
         </p>
       )}
+      <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/5 px-3 py-3">
+        <button
+          type="button"
+          onClick={exportReviewPacket}
+          className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-100 hover:bg-emerald-300/10"
+        >
+          <ScrollText className="h-3.5 w-3.5" />
+          Export cited review packet
+        </button>
+        <p className="mt-2 text-[11px] leading-5 text-white/45">
+          Downloads the exact governed synthesis, evidence comparison, citations, gaps, and
+          immutable fingerprint. This is a review proposal only; it cannot publish or mutate
+          canonical knowledge.
+        </p>
+      </div>
       <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
         <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
           Governance
