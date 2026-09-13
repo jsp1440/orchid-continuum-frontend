@@ -525,7 +525,9 @@ const SynthesisPanel: React.FC<{
             <div className="grid grid-cols-2 gap-2 text-center">
               <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
                 <p className="font-mono text-lg text-white">
-                  {evidenceReadiness.literature_present ? 'Present' : 'Missing'}
+                  {evidenceReadiness.literature_present && evidenceReadiness.literature_review_required
+                    ? 'Present'
+                    : 'Missing'}
                 </p>
                 <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
                   Review-required literature
