@@ -613,13 +613,20 @@ const SynthesisPanel: React.FC<{
         {comparisonRows.length ? (
           <div className="mt-3 grid gap-3">
             {comparisonRows.map((row) => {
-              const measured =
-                row.supportingCount !== null && row.contradictingCount !== null;
-              const total = measured ? row.supportingCount + row.contradictingCount : null;
+              const supportingCount = row.supportingCount;
+              const contradictingCount = row.contradictingCount;
+              const total =
+                supportingCount !== null && contradictingCount !== null
+                  ? supportingCount + contradictingCount
+                  : null;
               const supportingShare =
-                total !== null && total > 0 ? (row.supportingCount! / total) * 100 : null;
+                total !== null && total > 0 && supportingCount !== null
+                  ? (supportingCount / total) * 100
+                  : null;
               const contradictingShare =
-                total !== null && total > 0 ? (row.contradictingCount! / total) * 100 : null;
+                total !== null && total > 0 && contradictingCount !== null
+                  ? (contradictingCount / total) * 100
+                  : null;
               return (
                 <article
                   key={row.claimId}
@@ -636,7 +643,7 @@ const SynthesisPanel: React.FC<{
                       <div
                         className="flex h-2 overflow-hidden rounded-full bg-white/5"
                         role="img"
-                        aria-label={`${row.supportingCount} supporting and ${row.contradictingCount} contradicting evidence records`}
+                        aria-label={`${supportingCount} supporting and ${contradictingCount} contradicting evidence records`}
                       >
                         {supportingShare !== null ? (
                           <span
@@ -652,7 +659,7 @@ const SynthesisPanel: React.FC<{
                         ) : null}
                       </div>
                       <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
-                        {row.supportingCount} supporting · {row.contradictingCount} contradicting
+                        {supportingCount} supporting · {contradictingCount} contradicting
                       </p>
                     </div>
                   ) : (
