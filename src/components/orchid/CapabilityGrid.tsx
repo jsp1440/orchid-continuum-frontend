@@ -91,17 +91,21 @@ const CAPABILITIES: Capability[] = [
 
 const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
   const navigate = useNavigate();
+  const id = React.useId();
   const Icon = cap.icon;
   return (
     <button
       type="button"
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-description`}
       onClick={() => navigate(cap.href)}
-      className="group text-left rounded-2xl border border-[#d4b34a]/20 bg-[#13241a] p-7 lg:p-8 transition-all hover:border-[#d4b34a]/55 hover:bg-[#16291c]"
+      className="group text-left rounded-2xl border border-[#d4b34a]/20 bg-[#13241a] p-7 lg:p-8 transition-all hover:border-[#d4b34a]/55 hover:bg-[#16291c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e6c563]"
     >
       <span className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-[#d4b34a]/12 text-[#e6c563]">
-        <Icon className="h-6 w-6" strokeWidth={1.6} />
+        <Icon aria-hidden="true" className="h-6 w-6" strokeWidth={1.6} />
       </span>
       <h3
+        id={`${id}-title`}
         className="mt-5"
         style={{
           fontFamily: '"Playfair Display",Georgia,serif',
@@ -114,6 +118,7 @@ const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
         {cap.title}
       </h3>
       <p
+        id={`${id}-description`}
         className="mt-3"
         style={{
           color: '#dfe4d6',
@@ -126,16 +131,18 @@ const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
       </p>
       <span className="mt-5 inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.18em] uppercase text-[#e6c563] group-hover:text-[#f4d97a]">
         {cap.link}
-        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+        <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-1" />
       </span>
     </button>
   );
 };
 
 const CapabilityGrid: React.FC = () => {
+  const headingId = React.useId();
   return (
     <section
       id="what-the-graph-makes-possible"
+      aria-labelledby={headingId}
       className="border-b border-black/20"
       style={{ background: '#1a2e1a' }}
     >
@@ -151,6 +158,7 @@ const CapabilityGrid: React.FC = () => {
             </span>
           </div>
           <h2
+            id={headingId}
             className="mt-6"
             style={{
               fontFamily: '"Playfair Display",Georgia,serif',
