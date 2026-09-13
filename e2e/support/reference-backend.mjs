@@ -1173,14 +1173,22 @@ function researchStationMissionFor(question) {
         title: "Fixture literature record: night-temperature association",
         object_type: "document",
         authorized_excerpt: "Invented acceptance text; not a botanical finding.",
-        citation: { revision_id: 41, source_anchor_ids: [101] },
+        citation: {
+          revision_id: 41,
+          source_anchor_ids: [101],
+          locator: "fixture://literature/41#anchor-101",
+        },
       },
       {
         result_id: "fixture-literature-2",
         title: "Fixture literature record: conflicting observation",
         object_type: "document",
         authorized_excerpt: "Invented conflicting acceptance text; not a botanical finding.",
-        citation: { revision_id: 42, source_anchor_ids: [102] },
+        citation: {
+          revision_id: 42,
+          source_anchor_ids: [102],
+          locator: "fixture://literature/42#anchor-102",
+        },
       },
     ],
     supporting_evidence: [{
@@ -1217,7 +1225,7 @@ function researchStationMissionFor(question) {
     conclusions: [{
       type: "bounded_conclusion",
       text: "Fixture conclusion: the recorded evidence supports one association while a second source contests it; human review remains required.",
-      claim_ids: ["claim:temperature-association", "claim:temperature-contested"],
+      claim_ids: ["candidate:phal-temperature-fixture", "counter:phal-temperature-fixture"],
     }],
     reasoning_ledger: { ledger_id: "fixture-ledger-1", version: 1 },
     validation: { valid: true, blockers: [] },
