@@ -1,6 +1,7 @@
 import {
   createCalyxConversation,
   sendCalyxTurn,
+  type BrainMissionPlan,
   type CalyxClaimCoverage,
   type CalyxSynthesisStructure,
 } from "@/lib/calyxWorkspace";
@@ -32,9 +33,41 @@ export type ResearchStationSynthesis = {
   answer: string;
   /** Null when the backend does not supply the structure - never synthesized here. */
   structure: CalyxSynthesisStructure | null;
+  /** The bounded plan persisted by the governed Brain mission; null when unavailable or malformed. */
+  plan: BrainMissionPlan | null;
   /** True when the backend composed from linked evidence rather than reasoning generatively. */
   degraded: boolean;
 };
+
+function governedMissionPlan(value: unknown): BrainMissionPlan | null {
+  if (!value || typeof value !== "object") return null;
+  const plan = value as Partial<BrainMissionPlan>;
+  const strings = (items: unknown): items is string[] =>
+    Array.isArray(items) &&
+    items.length > 0 &&
+    items.every((item) => typeof item === "string" && item.trim().length > 0);
+  if (
+    typeof plan.question !== "string" ||
+    !plan.question.trim() ||
+    !strings(plan.domains) ||
+    !strings(plan.retrieval_queries) ||
+    !Number.isInteger(plan.source_budget) ||
+    Number(plan.source_budget) <= 0 ||
+    !Number.isInteger(plan.per_domain_source_budget) ||
+    Number(plan.per_domain_source_budget) <= 0 ||
+    plan.claims_and_inferences_separated !== true
+  ) {
+    return null;
+  }
+  return {
+    question: plan.question.trim(),
+    domains: plan.domains.map((item) => item.trim()),
+    retrieval_queries: plan.retrieval_queries.map((item) => item.trim()),
+    source_budget: Number(plan.source_budget),
+    per_domain_source_budget: Number(plan.per_domain_source_budget),
+    claims_and_inferences_separated: true,
+  };
+}
 
 export class ResearchStationQuestionMissing extends Error {
   constructor() {
@@ -119,6 +152,7 @@ export async function runResearchStationSynthesis(
     conversationId: turn.conversation_id || conversation.conversation_id,
     answer: turn.answer ?? "",
     structure,
+    plan: governedMissionPlan(turn.research?.mission?.plan),
     // Absent structure means an older backend, not a generative answer. Claiming
     // "reasoned generatively" on missing data would overstate what happened, so
     // an unknown composer reads as degraded.
