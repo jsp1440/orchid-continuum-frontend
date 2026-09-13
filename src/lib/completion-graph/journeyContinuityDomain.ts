@@ -85,7 +85,7 @@ const JOINS: JoinSpec[] = [
     name: 'Species Dossier -> Matrix carries a canonical taxon id',
     files: ['src/lib/speciesDossierMatrixNavigation.ts', 'src/features/calyx-workspace/identificationContext.ts', 'src/pages/OrchidIdentificationContinuum.tsx'],
     tests: ['src/features/calyx-workspace/identificationResearchHandoff.test.ts', 'e2e/species-dossier-matrix-canonical-taxon.spec.ts'],
-    prs: ['#330'],
+    prs: ['#330', '#658'],
     browser: 1,
     browserNote: 'Mounted production-bundle pass against the provider-free reference backend: the dossier supplied matrix_url and a canonical taxon id, Matrix rendered that exact id, and the untrusted backend query/fragment were discarded.',
     provenanceNote: 'context_is_observation and context_is_evidence both remained false; no locality keys traveled and the fixture supplied no scientific evidence.',
