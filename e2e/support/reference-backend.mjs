@@ -1107,15 +1107,15 @@ async function researchRoute(req, res, url) {
   if (path === "/api/research/projects" && req.method === "GET") {
     return json(res, 200, { items: [researchProject] });
   }
-  if (path === \`/api/research/projects/\${RESEARCH_PROJECT_ID}\` && req.method === "GET") {
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}` && req.method === "GET") {
     return json(res, 200, researchProject);
   }
-  if (path === \`/api/research/projects/\${RESEARCH_PROJECT_ID}/taxa\` && req.method === "GET") {
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/taxa` && req.method === "GET") {
     return json(res, 200, {
       items: [{ project_id: RESEARCH_PROJECT_ID, taxon_id: "taxon:phalaenopsis", relationship: "SUBJECT" }],
     });
   }
-  if (path === \`/api/research/projects/\${RESEARCH_PROJECT_ID}/documents\` && req.method === "GET") {
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/documents` && req.method === "GET") {
     return json(res, 200, {
       items: [
         { project_id: RESEARCH_PROJECT_ID, document_id: "fixture-literature-1", revision_id: "41", relationship: "SOURCE" },
@@ -1123,7 +1123,7 @@ async function researchRoute(req, res, url) {
       ],
     });
   }
-  if (path === \`/api/research/projects/\${RESEARCH_PROJECT_ID}/evidence\` && req.method === "GET") {
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/evidence` && req.method === "GET") {
     return json(res, 200, {
       items: [
         { project_id: RESEARCH_PROJECT_ID, evidence_kind: "CANDIDATE", evidence_id: "fixture-trait-observation", relationship: "SUPPORTS" },
@@ -1131,7 +1131,7 @@ async function researchRoute(req, res, url) {
       ],
     });
   }
-  if (path === \`/api/research/projects/\${RESEARCH_PROJECT_ID}/notes\` && req.method === "GET") {
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/notes` && req.method === "GET") {
     return json(res, 200, {
       items: [{
         note_id: "fixture-note-1",
@@ -1468,7 +1468,7 @@ async function calyxRoute(req, res, url) {
     }
     return json(res, 200, {
       contract_version: "oc-candidate-knowledge-proposal-v1",
-      proposal_id: \`fixture-proposal-\${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}\`,
+      proposal_id: `fixture-proposal-${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}`,
       run_id: input.manifest.run_id,
       run_fingerprint: input.manifest.run_fingerprint,
       candidate_handoff_request: input.verification_packet.reasoning?.candidate_knowledge ?? {},
