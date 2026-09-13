@@ -23,7 +23,7 @@ export type BrainMissionPlan = {
 };
 export type BrainMission = {
   mission_id: string; project_id: string; question: string; state: string; current_stage: string; steps_executed: number;
-  plan: BrainMissionPlan;
+  plan?: BrainMissionPlan | null;
   sources: MissionSource[]; supporting_evidence: MissionEvidence[]; contradicting_evidence: MissionEvidence[]; missing_evidence: string[];
   confidence: number | null; conclusions: MissionConclusion[]; reasoning_ledger: { ledger_id: string; version: number } | null;
   validation: { valid: boolean; blockers: string[] }; review_status: string;
