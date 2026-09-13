@@ -1362,7 +1362,9 @@ async function calyxRoute(req, res, url) {
     if (!conversation) return fail(res, 404, "conversation_not_found", "No such conversation.");
     const input = asJson();
     const question = String(input.message ?? input.content ?? "").trim();
-    const mission = conversation.project_id === RESEARCH_PROJECT_ID\n      ? researchStationMissionFor(question)\n      : missionForQuestion(question);
+    const mission = conversation.project_id === RESEARCH_PROJECT_ID
+      ? researchStationMissionFor(question)
+      : missionForQuestion(question);
 
     const operator_message = {
       message_id: randomUUID(),
@@ -1534,11 +1536,13 @@ const server = createServer(async (req, res) => {
   }
   try {
     if (url.pathname.startsWith("/auth/v1")) return await identityRoute(req, res, url);
-    if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);\n    if (url.pathname.startsWith("/api/research/")) return await researchRoute(req, res, url);
+    if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);
+    if (url.pathname.startsWith("/api/research/")) return await researchRoute(req, res, url);
     if (
       url.pathname.startsWith("/api/calyx/") ||
       url.pathname.startsWith("/brain/") ||
-      url.pathname.startsWith("/api/evidence-retrieval/") ||\n      url.pathname.startsWith("/synthesis/")
+      url.pathname.startsWith("/api/evidence-retrieval/") ||
+      url.pathname.startsWith("/synthesis/")
     ) {
       return await calyxRoute(req, res, url);
     }
