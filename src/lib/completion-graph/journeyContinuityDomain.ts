@@ -49,6 +49,8 @@ type JoinSpec = {
   browser: 0 | 1 | null;
   browserNote: string;
   provenanceNote: string;
+  /** Remaining scheduler disposition after the evidenced acceptance work. */
+  remainingStatus?: 'PARTIAL' | 'OWNER_ACTION';
   nextAction: string;
   lastAccomplishment: string;
 };
@@ -147,6 +149,7 @@ const JOINS: JoinSpec[] = [
     browser: 1,
     browserNote: 'Mounted production-bundle pass against the running provider-free reference backend: Calyx answered the exact learner question, while the turn envelope contained only the bounded subject/question and excluded marked observation, hypothesis and conclusion text.',
     provenanceNote: 'The learner hypothesis, observation, design, analysis and conclusion have no parameter to travel through. An arrival must declare context_is_learner_draft=true or it is rejected.',
+    remainingStatus: 'OWNER_ACTION',
     nextAction: 'Owner-gated deployed-backend verification remains; NO-API automation must not invoke the production Calyx provider.',
     lastAccomplishment: '#501 proved the mounted learner-register turn against the provider-free backend contract without promoting learner work to evidence.',
   },
@@ -184,7 +187,7 @@ function joinGate(join: JoinSpec): CompletionNode {
     parentId: `int-journey-${join.id}`,
     name: join.name,
     type: 'acceptance_gate',
-    status: join.browser === 1 ? 'PARTIAL' : 'PARTIAL',
+    status: join.remainingStatus ?? 'PARTIAL',
     threeLevels: {
       codeComplete: 'MET',
       integratedComplete: 'MET',
