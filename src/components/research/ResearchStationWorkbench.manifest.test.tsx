@@ -75,7 +75,7 @@ const TURN_RESPONSE = {
   conversation_id: 'conv-test',
   answer: 'Phalaenopsis grow optimally at intermediate-warm temperatures.',
   synthesis_structure: {
-    generative: false,
+    generative: true,
     claim_coverage: [
       {
         claim_id: 'claim-cool',
