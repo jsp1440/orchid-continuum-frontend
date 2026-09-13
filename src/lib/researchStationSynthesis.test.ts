@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CalyxSynthesisStructure } from "@/lib/calyxWorkspace";
+import type { BrainMission, CalyxSynthesisStructure } from "@/lib/calyxWorkspace";
 import type { ResearchStationDossier } from "@/lib/researchStation";
 import {
   ResearchStationQuestionMissing,
   buildResearchStationTurnContext,
   claimComparisonRows,
   governedEvidenceClassReadiness,
+  governedResearchMission,
   groupClaimCoverage,
   hasUnresolvedConflict,
   runResearchStationSynthesis,
@@ -435,5 +436,80 @@ describe("claim comparison rows", () => {
       coverage: "unresolved",
       sourceFamilies: ["trait_record"],
     });
+  });
+});
+
+
+const governedMission = (overrides: Partial<BrainMission> = {}): BrainMission => ({
+  mission_id: "mission-phal-1",
+  project_id: "proj-1",
+  question: "Does velamen thickness track drought tolerance?",
+  state: "COMPLETED",
+  current_stage: "SYNTHESIS",
+  steps_executed: 4,
+  sources: [],
+  supporting_evidence: [],
+  contradicting_evidence: [],
+  missing_evidence: [],
+  confidence: null,
+  conclusions: [{ type: "provisional", text: "Evidence remains mixed.", claim_ids: ["claim-1"] }],
+  reasoning_ledger: { ledger_id: "ledger-1", version: 1 },
+  validation: { valid: true, blockers: [] },
+  review_status: "HUMAN_REVIEW_REQUIRED",
+  publication_eligibility: {
+    eligible: false,
+    automatic_publication: false,
+    blockers: ["human scientific review required"],
+  },
+  blockers: [],
+  partial: false,
+  created_at: "2026-09-12T00:00:00Z",
+  updated_at: "2026-09-12T00:00:00Z",
+  ...overrides,
+});
+
+describe("governed Research Station mission", () => {
+  it("accepts the complete mission for the exact project and question", () => {
+    const mission = governedMission();
+    expect(
+      governedResearchMission(
+        mission,
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBe(mission);
+  });
+
+  it("rejects a stale cross-project mission", () => {
+    expect(
+      governedResearchMission(
+        governedMission({ project_id: "proj-other" }),
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects authority-expanding or incomplete mission payloads", () => {
+    expect(
+      governedResearchMission(
+        governedMission({
+          publication_eligibility: {
+            eligible: true,
+            automatic_publication: true,
+            blockers: [],
+          },
+        }),
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBeNull();
+    expect(
+      governedResearchMission(
+        governedMission({ conclusions: [{ text: " " }] }),
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBeNull();
   });
 });
