@@ -1,0 +1,93 @@
+name: Orchid NO-API Scheduler
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+concurrency:
+  group: orchid-no-api-scheduler-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+  actions: read
+
+jobs:
+  deterministic-scheduling:
+    runs-on: ubuntu-latest
+    env:
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_PROVIDER_DISABLED: anthropic,gemini,openai
+      OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
+      OC_PROVIDER_DAILY_MAX_CALLS: '0'
+      OC_PROVIDER_WAVE_MAX_CALLS: '0'
+      OC_MAX_ACTIVE_LANES: '5'
+      OC_PORTFOLIO_WAVES_AHEAD: '3'
+      OC_PORTFOLIO_TARGET_FLOOR: '20'
+      OC_PORTFOLIO_MAX_REFILL_PER_TICK: '5'
+    steps:
+      - name: Checkout governed integration branch
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: oc-autonomous-integration
+          fetch-depth: 1
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Compute deterministic refill requirement
+        id: refill
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          export OC_PORTFOLIO_QUEUED="$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq 'length')"
+          export OC_PORTFOLIO_RUNNING="$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')"
+          export OC_PORTFOLIO_VALIDATING="$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')"
+          npx --no-install tsx scripts/deterministic-portfolio-refill-workflow.ts
+
+      - name: Evaluate provider governor without paid execution
+        id: governor
+        shell: bash
+        env:
+          OC_PROVIDER_WORK_JSON: '[]'
+        run: |
+          set -euo pipefail
+          npx --no-install tsx scripts/provider-governor-workflow-gate.ts
+
+      - name: Emit deterministic telemetry
+        shell: bash
+        env:
+          REFILL_COUNT: ${{ steps.refill.outputs.refill_count }}
+          REFILL_TELEMETRY_JSON: ${{ steps.refill.outputs.telemetry_json }}
+          GOVERNOR_ALLOW_PAID_EXECUTION: ${{ steps.governor.outputs.allow_paid_execution }}
+          GOVERNOR_REASON: ${{ steps.governor.outputs.reason }}
+          GOVERNOR_FINGERPRINT: ${{ steps.governor.outputs.fingerprint }}
+          GOVERNOR_TELEMETRY_JSON: ${{ steps.governor.outputs.telemetry_json }}
+        run: |
+          {
+            echo '### Orchid NO-API scheduler'
+            echo '- mode: deterministic-no-api'
+            echo '- anthropic: parked'
+            echo '- gemini: parked'
+            echo '- openai: parked'
+            echo '- paidProviderCallsAllowed: 0'
+            printf '%s\n' "- refill_count: ${REFILL_COUNT}"
+            printf '%s\n' "- refill_telemetry: ${REFILL_TELEMETRY_JSON}"
+            printf '%s\n' "- governor_allow_paid_execution: ${GOVERNOR_ALLOW_PAID_EXECUTION}"
+            printf '%s\n' "- governor_reason: ${GOVERNOR_REASON}"
+            printf '%s\n' "- governor_fingerprint: ${GOVERNOR_FINGERPRINT}"
+            printf '%s\n' "- governor_telemetry: ${GOVERNOR_TELEMETRY_JSON}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Assert paid execution remains unreachable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ steps.governor.outputs.allow_paid_execution }}" = "false"
+          test -z "${{ steps.governor.outputs.provider }}"

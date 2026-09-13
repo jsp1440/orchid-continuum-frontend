@@ -1,4 +1,5 @@
 import { BACKEND_BASE_URL, CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { parseWorkflowIntelligence, type WorkflowIntelligence } from '@/lib/workflowIntelligence';
 
 export type MissionControlStatus = 'healthy' | 'warning' | 'critical' | 'offline' | 'loading' | 'stale' | 'error' | 'unknown' | 'stub';
 export type ControlState = 'read_only' | 'disabled' | 'planned' | 'requires_owner_authorization';
@@ -158,6 +159,29 @@ export type GovernanceQuestion = {
   timestamp?: string;
 };
 
+export type ScientificReadinessDimension = {
+  key: string;
+  state: 'available' | 'conditional' | 'blocked' | 'unavailable' | 'unknown' | 'error';
+  numerator: number | null;
+  denominator: number | null;
+  score: number | null;
+  missingRequirements: string[];
+  upstreamBlockers: string[];
+  limitation: string | null;
+  calculationVersion: string;
+  measuredAt: string;
+};
+
+export type ScientificReadiness = {
+  contractVersion: 'sci-obs-readiness-v1';
+  generatedAt: string;
+  overallState: 'ready' | 'conditional' | 'blocked';
+  dimensions: Record<string, ScientificReadinessDimension>;
+  componentCoverage: Record<string, { state: string; present: boolean | null }>;
+  humanApprovalRequired: true;
+  publicationAuthority: false;
+};
+
 export type MissionControlSection = {
   id: string;
   title: string;
@@ -191,6 +215,8 @@ export type MissionControlOperations = {
   governance: GovernanceSummary;
   /** Backend-declared section manifest from mission_control.sections (BUILD-064+). */
   sections: MissionControlSection[];
+  scientificReadiness?: ScientificReadiness | null;
+  workflowIntelligence?: WorkflowIntelligence | null;
 };
 
 type ExecutiveStatePayload = {
@@ -206,6 +232,7 @@ type ExecutiveStatePayload = {
   mission_control?: { sections?: unknown[]; navigation?: unknown };
   /** BUILD-064: top-level navigation contract from owner_operations */
   navigation?: unknown;
+  scientific_readiness?: unknown;
 };
 
 const nowIso = () => new Date().toISOString();
@@ -708,6 +735,58 @@ function readLiveSubsystems(payload: unknown): ContinuumSubsystem[] {
     .filter((item): item is ContinuumSubsystem => Boolean(item));
 }
 
+export function parseScientificReadiness(value: unknown): ScientificReadiness | null {
+  const record = asRecord(value);
+  if (!record || record.contract_version !== 'sci-obs-readiness-v1') return null;
+  if (record.publication_authority !== false || record.human_approval_required !== true) return null;
+
+  const rawDimensions = asRecord(record.dimensions);
+  const rawCoverage = asRecord(record.component_coverage);
+  if (!rawDimensions || !rawCoverage) return null;
+
+  const dimensions: Record<string, ScientificReadinessDimension> = {};
+  for (const [key, raw] of Object.entries(rawDimensions)) {
+    const dimension = asRecord(raw);
+    if (!dimension) return null;
+    const state = String(dimension.state ?? '');
+    if (!['available', 'conditional', 'blocked', 'unavailable', 'unknown', 'error'].includes(state)) return null;
+    dimensions[key] = {
+      key,
+      state: state as ScientificReadinessDimension['state'],
+      numerator: typeof dimension.numerator === 'number' ? dimension.numerator : null,
+      denominator: typeof dimension.denominator === 'number' ? dimension.denominator : null,
+      score: typeof dimension.score === 'number' ? dimension.score : null,
+      missingRequirements: asArray<string>(dimension.missing_requirements),
+      upstreamBlockers: asArray<string>(dimension.upstream_blockers),
+      limitation: typeof dimension.limitation === 'string' ? dimension.limitation : null,
+      calculationVersion: String(dimension.calculation_version ?? record.contract_version),
+      measuredAt: String(dimension.measured_at ?? record.generated_at ?? ''),
+    };
+  }
+
+  const componentCoverage = Object.fromEntries(
+    Object.entries(rawCoverage).map(([key, raw]) => {
+      const component = asRecord(raw);
+      return [key, {
+        state: String(component?.state ?? 'unavailable'),
+        present: typeof component?.present === 'boolean' ? component.present : null,
+      }];
+    }),
+  );
+
+  return {
+    contractVersion: 'sci-obs-readiness-v1',
+    generatedAt: String(record.generated_at ?? ''),
+    overallState: ['ready', 'conditional', 'blocked'].includes(String(record.overall_state))
+      ? String(record.overall_state) as ScientificReadiness['overallState']
+      : 'blocked',
+    dimensions,
+    componentCoverage,
+    humanApprovalRequired: true,
+    publicationAuthority: false,
+  };
+}
+
 function readExecutivePayload(payload: unknown) {
   const record = asRecord(payload) as ExecutiveStatePayload | undefined;
   if (!record) {
@@ -719,6 +798,7 @@ function readExecutivePayload(payload: unknown) {
       briefing: null as Record<string, unknown> | null,
       generatedAt: nowIso(),
       sections: [] as MissionControlSection[],
+      scientificReadiness: null as ScientificReadiness | null,
     };
   }
   const subsystems = asArray<unknown>(record.subsystems)
@@ -770,6 +850,7 @@ function readExecutivePayload(payload: unknown) {
     briefing: record.briefing ?? null,
     generatedAt: String(record.generated_at ?? nowIso()),
     sections,
+    scientificReadiness: parseScientificReadiness(record.scientific_readiness),
   };
 }
 
@@ -834,6 +915,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     questionsResult,
     runtimeConfigurationResult,
     runtimeStatusResult,
+    workflowIntelligenceResult,
     publicApiResult,
   ] = await Promise.all([
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/executive/state', 'Executive state'),
@@ -851,6 +933,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runner/constitutional/governance-questions', 'Governance questions'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runtime/configuration', 'Runtime configuration'),
     getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/runner/autonomous-status', 'Runtime autonomous status'),
+    getJson<Record<string, unknown>>(CALYX_BACKEND_BASE_URL, '/api/scientific-observability/workflow-intelligence', 'Workflow intelligence'),
     getJson<Record<string, unknown>>(BACKEND_BASE_URL, '/health', 'Public API health'),
   ]);
 
@@ -870,6 +953,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     questionsResult.diagnostic,
     runtimeConfigurationResult.diagnostic,
     runtimeStatusResult.diagnostic,
+    workflowIntelligenceResult.diagnostic,
     publicApiResult.diagnostic,
   ];
 
@@ -972,5 +1056,7 @@ export async function fetchMissionControlOperations(): Promise<MissionControlOpe
     safetyBoundaries: fallbackSafety,
     governance,
     sections: executive.sections,
+    scientificReadiness: executive.scientificReadiness,
+    workflowIntelligence: parseWorkflowIntelligence(workflowIntelligenceResult.payload),
   };
 }

@@ -71,7 +71,7 @@ export type ResearchNote = {
   data_status?: string;
 };
 
-async function researchRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function researchRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
@@ -80,6 +80,7 @@ async function researchRequest<T>(path: string, init?: RequestInit): Promise<T> 
       headers: { Accept: "application/json", ...(init?.headers ?? {}) },
     });
   } catch (error) {
+    if (init?.signal?.aborted) throw error;
     throw new CalyxApiError(
       "network_error",
       error instanceof Error ? error.message : "Research Station request failed",

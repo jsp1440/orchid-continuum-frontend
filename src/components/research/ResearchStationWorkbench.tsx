@@ -14,6 +14,7 @@ import {
   Network,
   ScrollText,
 } from 'lucide-react';
+import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
 import {
   buildResearchDossier,
@@ -43,6 +44,13 @@ import {
   type ClaimCoverageGroups,
   type ResearchStationSynthesis,
 } from '@/lib/researchStationSynthesis';
+import {
+  buildRunManifest,
+  verificationStateLabel,
+  type RunEvidenceManifest,
+  type RunManifestRequest,
+  type VerificationPacket,
+} from '@/lib/evidenceDecisionManifest';
 
 /**
  * ResearchStationWorkbench — one investigation, read end to end.
@@ -114,6 +122,235 @@ type SynthesisState =
   | { status: 'running' }
   | { status: 'ready'; result: ResearchStationSynthesis }
   | { status: 'error'; kind: string; message: string };
+
+type ManifestState =
+  | { status: 'idle' }
+  | { status: 'building' }
+  | { status: 'ready'; manifest: RunEvidenceManifest }
+  | { status: 'error'; kind: string; message: string };
+
+/**
+ * ManifestPanel — builds and renders an oc-run-evidence-manifest-v1 for the
+ * completed synthesis run.  Visibly distinguishes resolved evidence, contradictions,
+ * missing evidence (labelled as missing, not as a finding), knowledge gaps,
+ * verification state, run fingerprint, and all governance invariants.
+ *
+ * NO-API: buildRunManifest() calls the deterministic backend endpoint.
+ * No generative model is invoked here.
+ */
+const ManifestPanel: React.FC<{
+  dossier: ResearchStationDossier;
+  result: ResearchStationSynthesis;
+}> = ({ dossier, result }) => {
+  const [state, setState] = useState<ManifestState>({ status: 'idle' });
+
+  const build = useCallback(async () => {
+    setState({ status: 'building' });
+    const structure = result.structure;
+    const taxonId = dossier.subject?.taxon_id?.trim() ?? '';
+    const taxonomySnapshotId = structure?.taxonomy_snapshot_id?.trim() ?? '';
+    const researchQuestion = dossier.project.research_question?.trim() ?? '';
+    const conversationId = result.conversationId.trim();
+
+    // The manifest is an immutable scientific record. Never manufacture canonical
+    // taxonomy or run identities when the governed backend did not return them.
+    if (!structure || !taxonId || !taxonomySnapshotId || !researchQuestion || !conversationId) {
+      setState({
+        status: 'error',
+        kind: 'validation_failed',
+        message:
+          'Run manifest requires a governed synthesis with canonical taxon and taxonomy snapshot identities.',
+      });
+      return;
+    }
+
+    const claimCoverage = structure.claim_coverage ?? [];
+    const supportedClaims = claimCoverage.filter(
+      (claim) =>
+        claim.coverage === 'supported' &&
+        claim.supporting_count > 0 &&
+        claim.source_families.length > 0,
+    );
+    const claimsMissingProvenance = claimCoverage
+      .filter(
+        (claim) =>
+          claim.coverage === 'unresolved' ||
+          (claim.coverage === 'supported' &&
+            (claim.supporting_count <= 0 || claim.source_families.length === 0)),
+      )
+      .map((claim) => claim.claim_id);
+    const contradictedClaims = claimCoverage.filter(
+      (claim) => claim.coverage === 'contradicted' || claim.coverage === 'contested',
+    );
+    const missingEvidence = Array.from(
+      new Set(
+        [...(structure.missing_evidence ?? []), ...claimsMissingProvenance].filter(
+          (item) => typeof item === 'string' && item.trim().length > 0,
+        ),
+      ),
+    );
+    const verificationState: VerificationPacket['verification_state'] = result.degraded
+      ? 'validation_required'
+      : missingEvidence.length > 0
+        ? 'evidence_incomplete'
+        : 'ready_for_review';
+
+    const packet: VerificationPacket = {
+      contract_version: 'oc-verification-handoff-v1',
+      verification_state: verificationState,
+      resolved_evidence: supportedClaims.map((claim) => {
+        const total = claim.supporting_count + claim.contradicting_count;
+        return {
+          evidence_id: claim.claim_id,
+          source_id: claim.source_families[0],
+          statement: claim.claim,
+          provenance: claim.source_families,
+          confidence: claim.supporting_count / total,
+        };
+      }),
+      missing_evidence: missingEvidence,
+      contradictions: contradictedClaims.map((claim) => claim.claim_id),
+      knowledge_gaps: missingEvidence,
+      human_review_required: true,
+      automatic_scientific_publication_allowed: false,
+      canonical_knowledge_mutation_allowed: false,
+    };
+
+    const request: RunManifestRequest = {
+      run_id: `run:${dossier.project.project_id}:${conversationId}`,
+      research_question: researchQuestion,
+      taxon_id: taxonId,
+      taxonomy_snapshot_id: taxonomySnapshotId,
+      verification_packets: [packet],
+    };
+
+    try {
+      const manifest = await buildRunManifest(request);
+      setState({ status: 'ready', manifest });
+    } catch (error) {
+      if (error instanceof CalyxApiError) {
+        setState({ status: 'error', kind: error.kind, message: error.message });
+        return;
+      }
+      setState({
+        status: 'error',
+        kind: 'server_error',
+        message: 'Run manifest could not be built.',
+      });
+    }
+  }, [dossier, result]);
+
+  if (state.status === 'idle' || state.status === 'building') {
+    return (
+      <div className="mt-1 border-t border-white/10 pt-3">
+        <button
+          type="button"
+          onClick={() => void build()}
+          disabled={state.status === 'building'}
+          className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/70 transition hover:bg-white/10 disabled:opacity-60"
+        >
+          <ScrollText className="h-3.5 w-3.5" />
+          {state.status === 'building'
+            ? 'Building run manifest…'
+            : 'Build run manifest'}
+        </button>
+        <p className="mt-1.5 text-[11px] leading-5 text-white/40">
+          Fingerprints this run and records the evidence chain for human review.
+        </p>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="mt-1 border-t border-white/10 pt-3">
+        <div className="rounded-xl border border-amber-300/30 bg-amber-300/5 px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-200">
+            Manifest unavailable
+          </p>
+          <p className="mt-1 text-xs leading-5 text-white/65">{state.message}</p>
+          <button
+            type="button"
+            onClick={() => setState({ status: 'idle' })}
+            className="mt-2 rounded-full border border-white/20 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-white hover:bg-white/5"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { manifest } = state;
+  return (
+    <div className="mt-1 grid gap-3 border-t border-white/10 pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+          Run manifest
+        </span>
+        <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200">
+          Human review required
+        </span>
+        <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/60">
+          Immutable
+        </span>
+      </div>
+      <p className="font-mono text-[10px] leading-5 text-white/40">
+        Fingerprint:{' '}
+        <span className="text-white/65">{manifest.run_fingerprint.slice(0, 12)}…</span>
+      </p>
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
+        {verificationStateLabel(manifest)}
+      </p>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <p className="font-mono text-lg text-emerald-200">{manifest.resolved_evidence_count}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-300/70">
+            Resolved
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <p className="font-mono text-lg text-white">{manifest.missing_evidence_count}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">Missing</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <p className="font-mono text-lg text-white">{manifest.knowledge_gap_count}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">Gaps</p>
+        </div>
+      </div>
+      {manifest.contradictions.length > 0 && (
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-200/80">
+            Contradictions preserved
+          </p>
+          <ul className="mt-1.5 grid gap-1">
+            {manifest.contradictions.map((c) => (
+              <li key={c} className="text-xs leading-5 text-amber-100/70">
+                {c}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {manifest.missing_evidence_count > 0 && (
+        <p className="text-[11px] leading-5 text-white/45">
+          {manifest.missing_evidence_count}{' '}
+          {manifest.missing_evidence_count === 1 ? 'piece' : 'pieces'} of evidence recorded as
+          missing — not as evidence of absence.
+        </p>
+      )}
+      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
+          Governance
+        </p>
+        <p className="mt-1 text-xs leading-5 text-white/50">
+          No automatic publication · No canonical mutation · Human authority required for
+          canonical activation
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const COVERAGE_LABEL: Record<keyof ClaimCoverageGroups, string> = {
   supported: 'Supported by the linked evidence',
@@ -325,6 +562,7 @@ const SynthesisPanel: React.FC<{
         Continue this thread in Calyx
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
+      <ManifestPanel dossier={dossier} result={result} />
     </div>
   );
 };
@@ -533,6 +771,15 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
             ))}
           </ul>
         )}
+      </SectionShell>
+
+      {/* ACTIVITY — canonical audit history for the resolved project */}
+      <SectionShell
+        icon={<ScrollText className="h-3.5 w-3.5" />}
+        eyebrow="Activity"
+        title="Project audit trail"
+      >
+        <ResearchActivityPanel projectId={dossier.project.project_id} />
       </SectionShell>
 
       {/* SYNTHESIS — run over the governed path, never computed here */}

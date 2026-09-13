@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   fetchSpeciesById: vi.fn(),
   fetchMycorrhizal: vi.fn(),
   fetchSpeciesDossier: vi.fn(),
+  resolveFederatedSpecies: vi.fn(),
   useAuth: vi.fn(() => ({ session: null })),
 }));
 
@@ -44,6 +45,7 @@ vi.mock('@/lib/speciesDossier', async () => {
   return {
     ...actual,
     fetchSpeciesDossier: mocks.fetchSpeciesDossier,
+    resolveFederatedSpecies: mocks.resolveFederatedSpecies,
   };
 });
 
@@ -144,6 +146,18 @@ beforeEach(() => {
   });
   mocks.fetchMycorrhizal.mockReset().mockResolvedValue({ status: 404, partners: [] });
   mocks.fetchSpeciesDossier.mockReset();
+  mocks.resolveFederatedSpecies.mockReset().mockResolvedValue({
+    status: 'unresolved',
+    incoming_name: null,
+    matched_name: null,
+    match_state: 'none',
+    taxon_id: null,
+    canonical_dossier_url: null,
+    candidates: [],
+    partner_slug: null,
+    reciprocal_source_url: null,
+    explanation: 'No federated match.',
+  });
 });
 
 afterEach(() => {
@@ -471,6 +485,74 @@ describe('no regression to existing SpeciesDossier behavior', () => {
     await flush();
 
     expect(container.textContent).toContain('Not yet assessed in the Continuum record.');
+  });
+});
+
+describe('federated source attribution', () => {
+  it('renders only backend-supplied partner attribution for a resolved match', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        partner_references: [{
+          partner_id: 'orchid-partner',
+          partner_name: 'Orchid Partner Catalogue',
+          source_url: 'https://partner.example/species/cattleya-labiata',
+          attribution_text: 'Record supplied by Orchid Partner Catalogue.',
+          permissions: {
+            linking: true,
+            indexing: true,
+            quotation: true,
+            images: false,
+            trait_extraction: false,
+            api_access: true,
+          },
+          match_state: 'accepted_name',
+          last_verified_at: '2026-09-01T00:00:00Z',
+        }],
+      }),
+    );
+    mocks.resolveFederatedSpecies.mockResolvedValue({
+      status: 'resolved',
+      incoming_name: 'Cattleya labiata',
+      matched_name: 'Cattleya labiata',
+      match_state: 'accepted_name',
+      taxon_id: 'cattleya-labiata',
+      canonical_dossier_url: '/species/cattleya-labiata',
+      candidates: [],
+      partner_slug: 'orchid-partner',
+      reciprocal_source_url: 'https://partner.example/species/cattleya-labiata',
+      explanation: 'Resolved from partner identity.',
+    });
+
+    renderPage();
+    await flush();
+
+    const attribution = container.querySelector('[data-testid="federated-attribution"]');
+    expect(attribution?.textContent).toContain('Orchid Partner Catalogue');
+    expect(attribution?.textContent).toContain('Record supplied by Orchid Partner Catalogue.');
+    expect(
+      attribution?.querySelector('a[href="https://partner.example/species/cattleya-labiata"]'),
+    ).toBeTruthy();
+  });
+
+  it('renders an honest not-federated state for an empty resolution', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+    renderPage();
+    await flush();
+
+    expect(container.textContent).toContain('Not federated for this species.');
+    expect(container.querySelector('[data-testid="federated-attribution"]')).toBeNull();
+  });
+
+  it('renders source unavailable when federation resolution fails without inventing attribution', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+    mocks.resolveFederatedSpecies.mockRejectedValue(new Error('503'));
+
+    renderPage();
+    await flush();
+
+    expect(container.textContent).toContain('Federated source unavailable.');
+    expect(container.textContent).not.toContain('Orchid Partner Catalogue');
+    expect(container.querySelector('[data-testid="federated-attribution"]')).toBeNull();
   });
 });
 

@@ -147,13 +147,13 @@ const AtlasMap: React.FC<Props> = ({ layers, loading, status }) => {
   }, [layers, ready, L]);
 
   return (
-    <div className="rounded-3xl border border-white/10 bg-[#142a1f] overflow-hidden">
+    <div role="region" aria-label="Interactive Orchid Atlas map" className="rounded-3xl border border-white/10 bg-[#142a1f] overflow-hidden">
       <div className="px-6 py-4 border-b border-white/10 flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2 text-xs tracking-[0.25em] uppercase text-emerald-300/80">
           <Globe2 className="h-3.5 w-3.5" /> Atlas Canvas
         </div>
-        <div className="flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-white/55">
-          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-300" />}
+        <div role="status" aria-live="polite" className="flex items-center gap-2 text-[10px] tracking-[0.2em] uppercase text-white/55">
+          {loading && <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none text-emerald-300" />}
           {!loading && <CircleDashed className="h-3.5 w-3.5" />}
           {status ?? (loading ? 'Fetching layer…' : 'Live layer')}
         </div>
@@ -161,7 +161,7 @@ const AtlasMap: React.FC<Props> = ({ layers, loading, status }) => {
       <div className="relative aspect-[16/8] bg-[#0d1f17]">
         {!ready && !error && (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
-            <Loader2 className="h-5 w-5 animate-spin text-emerald-300 mb-3" />
+            <Loader2 className="h-5 w-5 animate-spin motion-reduce:animate-none text-emerald-300 mb-3" />
             <div className="text-sm text-white/60">Initializing map renderer…</div>
           </div>
         )}
@@ -176,6 +176,8 @@ const AtlasMap: React.FC<Props> = ({ layers, loading, status }) => {
         )}
         <div
           ref={containerRef}
+          role="application"
+          aria-label="Map showing generalized orchid records by active layer"
           className="absolute inset-0"
           style={{ background: '#0d1f17' }}
         />

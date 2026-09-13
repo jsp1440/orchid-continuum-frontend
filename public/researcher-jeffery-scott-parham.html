@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Jeffery Scott Parham — Botanist & Orchid Researcher | Orchid Research Station</title>
+    <meta
+      name="description"
+      content="Official Orchid Research Station profile for Jeffery Scott Parham, botanist and orchid researcher, Founder and Principal Developer of Orchid Continuum, and President of the Five Cities Orchid Society."
+    />
+    <meta name="author" content="Orchid Continuum" />
+    <meta property="og:title" content="Jeffery Scott Parham — Botanist & Orchid Researcher" />
+    <meta
+      property="og:description"
+      content="Official Orchid Continuum Research Station profile: background, current work, and research interests of Jeffery Scott Parham."
+    />
+    <meta property="og:type" content="profile" />
+    <meta property="profile:first_name" content="Jeffery" />
+    <meta property="profile:last_name" content="Parham" />
+    <meta name="robots" content="index,follow" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Person",
+        "name": "Jeffery Scott Parham",
+        "alternateName": "Jeff Parham",
+        "jobTitle": "Botanist and Orchid Researcher",
+        "description": "Founder and Principal Developer of Orchid Continuum and President of the Five Cities Orchid Society, working on orchid biology, conservation, taxonomy, pollination ecology, mycorrhizal associations, cultivation, phenology, biodiversity informatics, and evidence-grounded AI research tools.",
+        "affiliation": [
+          { "@type": "Organization", "name": "Orchid Continuum" },
+          { "@type": "Organization", "name": "Five Cities Orchid Society" }
+        ],
+        "alumniOf": [
+          { "@type": "CollegeOrUniversity", "name": "University of California, Riverside" }
+        ]
+      }
+    </script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #04050d;
+        --panel: #0a0d1c;
+        --green: #10261b;
+        --gold: #c9a24a;
+        --text: #faf7f2;
+        --muted: #cfc8b8;
+        --line: rgba(255, 255, 255, 0.09);
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.65;
+      }
+      a { color: #e5c56f; }
+      .wrap { width: min(1040px, calc(100% - 40px)); margin: 0 auto; }
+      header {
+        border-bottom: 1px solid var(--line);
+        background: rgba(4, 5, 13, 0.94);
+      }
+      header .wrap {
+        min-height: 68px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 24px;
+      }
+      .brand { font-family: Georgia, "Times New Roman", serif; font-size: 19px; }
+      .station { color: var(--muted); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; }
+      main { padding: 56px 0 72px; }
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        overflow: hidden;
+        background: var(--panel);
+      }
+      .hero-top {
+        padding: clamp(32px, 6vw, 64px);
+        background: linear-gradient(135deg, var(--green), #0a1515 52%, var(--panel));
+      }
+      .eyebrow {
+        color: var(--gold);
+        font-size: 10px;
+        letter-spacing: 0.24em;
+        text-transform: uppercase;
+        font-weight: 650;
+      }
+      h1, h2, h3 { font-family: Georgia, "Times New Roman", serif; font-weight: 500; }
+      h1 { margin: 14px 0 0; font-size: clamp(38px, 7vw, 66px); line-height: 1.02; }
+      .role { margin: 10px 0 0; color: var(--gold); font: 500 clamp(20px, 3vw, 27px)/1.25 Georgia, serif; }
+      .lede { max-width: 780px; margin: 24px 0 0; color: rgba(207, 200, 184, 0.86); font-size: 17px; }
+      .verified {
+        display: inline-block;
+        margin-top: 22px;
+        border: 1px solid rgba(201, 162, 74, 0.32);
+        border-radius: 999px;
+        background: rgba(201, 162, 74, 0.09);
+        color: #e5c56f;
+        padding: 7px 11px;
+        font-size: 10px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+      .grid { display: grid; grid-template-columns: 1.18fr 0.82fr; }
+      .section { padding: clamp(28px, 5vw, 48px); }
+      .section + .section { border-left: 1px solid var(--line); background: rgba(255, 255, 255, 0.012); }
+      h2 { margin: 0 0 18px; font-size: 27px; }
+      p { color: rgba(207, 200, 184, 0.78); }
+      dl { margin: 0; }
+      dt { margin-top: 22px; color: var(--gold); font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; }
+      dd { margin: 7px 0 0; color: rgba(245, 240, 232, 0.88); }
+      .interests { margin-top: 42px; }
+      .cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+      .card { border: 1px solid var(--line); border-radius: 18px; background: var(--panel); padding: 24px; }
+      .card h3 { margin: 0 0 8px; font-size: 20px; }
+      .card p { margin: 0; font-size: 14px; }
+      .context { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 34px; }
+      .note { margin-top: 30px; border: 1px solid rgba(201, 162, 74, 0.22); border-radius: 16px; background: rgba(201, 162, 74, 0.045); padding: 22px; }
+      .note p { margin: 7px 0 0; font-size: 13px; }
+      footer { border-top: 1px solid var(--line); padding: 30px 0 46px; color: rgba(207, 200, 184, 0.58); font-size: 12px; }
+      @media (max-width: 760px) {
+        .grid, .cards, .context { grid-template-columns: 1fr; }
+        .section + .section { border-left: 0; border-top: 1px solid var(--line); }
+        header .wrap { align-items: flex-start; flex-direction: column; justify-content: center; padding: 14px 0; gap: 2px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="wrap">
+        <div class="brand">Orchid Continuum</div>
+        <div class="station">Orchid Research Station · Official Researcher Profile</div>
+      </div>
+    </header>
+
+    <main>
+      <div class="wrap">
+        <article class="hero">
+          <div class="hero-top">
+            <div class="eyebrow">Researcher profile</div>
+            <h1>Jeffery Scott Parham</h1>
+            <div class="role">Botanist · Orchid Researcher</div>
+            <p class="lede">
+              Founder and Principal Developer of Orchid Continuum and President of the Five Cities Orchid Society. His work brings botanical training, orchid horticulture, conservation science, and biodiversity informatics together in a research environment designed specifically for Orchidaceae.
+            </p>
+            <div class="verified">Official Orchid Continuum Research Station profile</div>
+          </div>
+
+          <div class="grid">
+            <section class="section">
+              <h2>Research profile</h2>
+              <p>
+                Parham’s work focuses on making orchid knowledge more usable without separating it from its evidence. Within Orchid Continuum, he is developing a connected scientific environment in which taxonomy, literature, occurrences, ecological relationships, images, living-collection records, and conservation evidence can be examined together rather than as isolated databases.
+              </p>
+              <p>
+                The Orchid Research Station is the research workspace for that effort. It supports source-preserving analysis, project records, evidence retrieval, and research workflows, while Calyx provides the evidence-grounded intelligence layer used across the wider Orchid Continuum.
+              </p>
+              <p>
+                Current work includes orchid ecology and cultivation questions, pollination and reproductive biology, orchid–fungal relationships, taxonomy and provenance, conservation intelligence, and methods for applying artificial intelligence to biodiversity research while retaining uncertainty, counterevidence, and human review.
+              </p>
+            </section>
+
+            <section class="section">
+              <h2>Education &amp; background</h2>
+              <dl>
+                <dt>Education</dt>
+                <dd>
+                  B.S., Biology<br />
+                  M.A., Biology (Botany)<br />
+                  M.S., Plant Pathology — University of California, Riverside
+                </dd>
+                <dt>Research experience</dt>
+                <dd>Previous research experience with the USDA Horticultural Crops Research Laboratory.</dd>
+                <dt>Teaching</dt>
+                <dd>Previous teaching experience at National University and Fresno City College.</dd>
+              </dl>
+            </section>
+          </div>
+        </article>
+
+        <section class="interests" aria-labelledby="research-interests">
+          <div class="eyebrow">Research interests</div>
+          <h2 id="research-interests">Current areas of investigation</h2>
+          <div class="cards">
+            <div class="card">
+              <h3>Orchid biology and conservation</h3>
+              <p>Orchid ecology, cultivation, conservation practice, phenology, and biological requirements connecting wild and cultivated plants.</p>
+            </div>
+            <div class="card">
+              <h3>Taxonomy and biodiversity informatics</h3>
+              <p>Canonical orchid identity, nomenclature, provenance, and integration of distributed biodiversity evidence into research-ready records.</p>
+            </div>
+            <div class="card">
+              <h3>Pollination and mycorrhizal ecology</h3>
+              <p>Orchid pollination systems, reproductive biology, and fungal relationships supporting orchid germination and persistence.</p>
+            </div>
+            <div class="card">
+              <h3>Evidence-grounded AI for science</h3>
+              <p>Research tools that preserve sources, uncertainty, counterevidence, and human-review boundaries while helping researchers synthesize orchid evidence.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="context" aria-label="Research context">
+          <div class="card">
+            <h3>Orchid Continuum</h3>
+            <p>
+              Orchid Continuum is a biodiversity-intelligence initiative for Orchidaceae connecting scientific evidence, conservation information, research workflows, and orchid-focused digital tools. The project operates with nonprofit fiscal sponsorship through Ecologistics, Inc.
+            </p>
+            <p><a href="/">Visit Orchid Continuum</a></p>
+          </div>
+          <div class="card">
+            <h3>Orchid Research Station</h3>
+            <p>
+              The Research Station is the Continuum’s scientific workspace for research projects, source archives, evidence synthesis, and analysis. Its member research workspace is authenticated while this researcher profile is intentionally public.
+            </p>
+            <p><a href="/research">Open the Research Station workspace</a></p>
+          </div>
+        </section>
+
+        <section class="note" aria-label="Verification note">
+          <div class="eyebrow">Verification note</div>
+          <p>
+            This page is maintained by Orchid Continuum as the official Research Station profile for Jeffery Scott Parham. It describes educational background, prior professional experience, current project roles, and research interests; it does not claim institutional appointments, publications, grants, or researcher identifiers that are not explicitly documented here.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <footer>
+      <div class="wrap">Orchid Continuum · Orchid Research Station · Nonprofit fiscal sponsorship through Ecologistics, Inc.</div>
+    </footer>
+  </body>
+</html>

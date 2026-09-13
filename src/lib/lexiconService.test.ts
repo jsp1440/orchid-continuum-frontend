@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getEntry, mergeCanonicalAndFallback, type CanonicalLexiconResponse } from './lexiconService';
+import { getEntry, measureLexiconCoverage, mergeCanonicalAndFallback, type CanonicalLexiconResponse } from './lexiconService';
 import { entries as famousBaseEntries } from '@/data/lexiconEntries';
 import { famousLexiconSupplement } from '@/data/famousLexiconSupplement';
 import type { LexiconEntry } from '@/data/types';
@@ -282,5 +282,65 @@ describe('getEntry', () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(entry?.id).toBe('canonical-bulk-hit');
+  });
+});
+
+describe('measureLexiconCoverage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('reports a real, measured 0% coverage rather than "unavailable" when the canonical API is unreachable but Famous fallback entries exist', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')));
+
+    const report = await measureLexiconCoverage();
+
+    expect(report.status).toBe('measured');
+    expect(report.canonicalReachable).toBe(false);
+    expect(report.canonicalServedEntries).toBe(0);
+    expect(report.totalEntries).toBe(45);
+    expect(report.famousFallbackOnlyEntries).toBe(45);
+    expect(report.canonicalCoverageRatio).toBe(0);
+    expect(report.reason).toMatch(/Famous fallback content only/);
+  });
+
+  it('measures the real ratio of canonical-served entries against the full fallback catalogue', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(
+        response(200, {
+          release: 'CALYX-LEXICON-LIVE-003',
+          count: 2,
+          entries: [
+            { id: 'canonical-form', slug: 'form', preferred_term: 'Form', quick_definition: 'Canonical form', source_system: 'oc_concepts' },
+            { id: 'canonical-symmetry', slug: 'symmetry', preferred_term: 'Symmetry', quick_definition: 'Canonical symmetry', source_system: 'oc_concepts' },
+          ],
+        }),
+      ),
+    );
+
+    const report = await measureLexiconCoverage();
+
+    expect(report.status).toBe('measured');
+    expect(report.canonicalReachable).toBe(true);
+    expect(report.totalEntries).toBe(45);
+    expect(report.canonicalServedEntries).toBe(2);
+    expect(report.famousFallbackOnlyEntries).toBe(43);
+    expect(report.canonicalCoverageRatio).toBeCloseTo(2 / 45);
+    expect(report.reason).toBeUndefined();
+  });
+
+  it('reports 0% coverage, never fabricating a partial number, when the canonical API returns zero entries', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValueOnce(response(200, { release: 'CALYX-LEXICON-LIVE-004', count: 0, entries: [] })),
+    );
+
+    const report = await measureLexiconCoverage();
+
+    expect(report.status).toBe('measured');
+    expect(report.canonicalReachable).toBe(true);
+    expect(report.canonicalServedEntries).toBe(0);
+    expect(report.canonicalCoverageRatio).toBe(0);
   });
 });

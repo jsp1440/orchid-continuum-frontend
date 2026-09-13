@@ -1,0 +1,59 @@
+name: Orchid Governed Completion
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  provider-admission:
+    runs-on: ubuntu-latest
+    outputs:
+      allow_paid_execution: ${{ steps.governor.outputs.allow_paid_execution }}
+      provider: ${{ steps.governor.outputs.provider }}
+      reason: ${{ steps.governor.outputs.reason }}
+      fingerprint: ${{ steps.governor.outputs.fingerprint }}
+      telemetry_json: ${{ steps.governor.outputs.telemetry_json }}
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+      # Safety invariant for issue #535: all paid providers remain hard parked
+      # until an explicitly governed future change lifts NO-API mode.
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'
+      OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
+      OC_PROVIDER_DAILY_MAX_CALLS: '4'
+      OC_PROVIDER_WAVE_MAX_CALLS: '1'
+    steps:
+      - name: Checkout governor code only
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: oc-autonomous-integration
+          fetch-depth: 1
+
+      - name: Install deterministic governor dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Evaluate provider governor without entering a provider workflow
+        id: governor
+        shell: bash
+        run: npx tsx scripts/provider-governor-workflow-gate.ts
+
+      - name: Record governed NO-API decision
+        shell: bash
+        run: |
+          printf 'Provider admission only: allow=%s provider=%s reason=%s fingerprint=%s\n' \
+            '${{ steps.governor.outputs.allow_paid_execution }}' \
+            '${{ steps.governor.outputs.provider }}' \
+            '${{ steps.governor.outputs.reason }}' \
+            '${{ steps.governor.outputs.fingerprint }}'
+
+# Deliberately no paid-provider job exists in this workflow while NO-API mode is
+# active. This removes inherited secrets and third-party provider actions from the
+# callable execution graph entirely. Re-enabling paid execution requires a new,
+# separately reviewed governed change after provider recovery and spending approval.

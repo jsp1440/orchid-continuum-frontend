@@ -4,6 +4,7 @@ import { Globe2, Loader2, Layers as LayersIcon } from 'lucide-react';
 import { useLeaflet } from '@/hooks/useLeaflet';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import { resolveAtlasLocation } from '@/lib/atlasLocalitySafety';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 
 /**
  * LiveAtlasMap — real-geography scientific biodiversity map.
@@ -103,6 +104,7 @@ const LiveAtlasMap: React.FC<Props> = ({
   focusView,
 }) => {
   const { ready, error, L } = useLeaflet();
+  const reducedMotion = usePrefersReducedMotion();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const occurrenceLayerRef = useRef<LayerGroup | null>(null);
@@ -249,7 +251,7 @@ const LiveAtlasMap: React.FC<Props> = ({
     ring.addTo(map);
     highlightRef.current = ring;
     map.setView([point.lat, point.lng], Math.max(map.getZoom(), 5), {
-      animate: true,
+      animate: !reducedMotion,
     });
   }, [selectedId, displayPoints, ready, L]);
 
@@ -262,7 +264,7 @@ const LiveAtlasMap: React.FC<Props> = ({
         [south, west],
         [north, east],
       ],
-      { animate: true, padding: [24, 24] },
+      { animate: !reducedMotion, padding: [24, 24] },
     );
   }, [focusBounds, ready, L]);
 
@@ -270,8 +272,8 @@ const LiveAtlasMap: React.FC<Props> = ({
     if (!ready || !L || !mapRef.current || !focusView) return;
     const map = mapRef.current;
     map.flyTo([focusView.lat, focusView.lng], focusView.zoom, {
-      animate: true,
-      duration: 1.4,
+      animate: !reducedMotion,
+      duration: reducedMotion ? 0 : 1.4,
     });
   }, [focusView, ready, L]);
 
@@ -282,7 +284,7 @@ const LiveAtlasMap: React.FC<Props> = ({
   }, [displayPoints]);
 
   return (
-    <div className="relative rounded-2xl border border-white/[0.08] overflow-hidden bg-[#06091a]">
+    <div role="region" aria-label="Living Atlas map" className="relative rounded-2xl border border-white/[0.08] overflow-hidden bg-[#06091a]">
       <div className="absolute top-0 left-0 right-0 z-[400] px-4 py-3 flex items-center justify-between gap-3 pointer-events-none">
         <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a] bg-[#04050d]/85 backdrop-blur px-3 py-1.5 rounded-full border border-white/10 pointer-events-auto">
           <Globe2 className="h-3 w-3" />
@@ -291,7 +293,7 @@ const LiveAtlasMap: React.FC<Props> = ({
         <div className="flex items-center gap-2 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/80 bg-[#04050d]/85 backdrop-blur px-3 py-1.5 rounded-full border border-white/10 pointer-events-auto">
           {loading ? (
             <>
-              <Loader2 className="h-3 w-3 animate-spin text-[#c9a24a]" />
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none text-[#c9a24a]" />
               Loading
             </>
           ) : (
@@ -338,13 +340,15 @@ const LiveAtlasMap: React.FC<Props> = ({
         {!ready && !error && (
           <div className="absolute inset-0 z-[450] flex items-center justify-center bg-[#04050d]/80">
             <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.22em] uppercase text-[#cfc8b8]/70">
-              <Loader2 className="h-3.5 w-3.5 animate-spin text-[#c9a24a]" />
+              <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none text-[#c9a24a]" />
               Initialising basemap…
             </div>
           </div>
         )}
         <div
           ref={containerRef}
+          role="application"
+          aria-label={`Interactive map with ${displayPoints.length.toLocaleString()} generalized orchid records`}
           className="absolute inset-0"
           style={{ background: '#e8ece6' }}
         />
