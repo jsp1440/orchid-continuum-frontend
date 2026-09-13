@@ -3,6 +3,7 @@ import {
   sendCalyxTurn,
   type BrainMissionPlan,
   type CalyxClaimCoverage,
+  type CalyxEvidenceClassReadiness,
   type CalyxSynthesisStructure,
 } from "@/lib/calyxWorkspace";
 import { RESEARCH_STATION_ORIGIN, assertNoLocalityLeak } from "@/lib/researchStationNavigation";
@@ -66,6 +67,52 @@ function governedMissionPlan(value: unknown): BrainMissionPlan | null {
     source_budget: Number(plan.source_budget),
     per_domain_source_budget: Number(plan.per_domain_source_budget),
     claims_and_inferences_separated: true,
+  };
+}
+
+/**
+ * Accepts the backend readiness contract only when its counts and ready state
+ * agree with the evidence it names. Missing or inconsistent data stays
+ * unavailable; the browser never upgrades it to ready.
+ */
+export function governedEvidenceClassReadiness(
+  structure: CalyxSynthesisStructure | null | undefined,
+): CalyxEvidenceClassReadiness | null {
+  const value = structure?.evidence_class_readiness;
+  if (!value || typeof value !== "object") return null;
+
+  const classes = value.continuum_evidence_classes;
+  const missing = value.missing_requirements;
+  if (
+    (value.status !== "ready" && value.status !== "evidence_incomplete") ||
+    typeof value.literature_present !== "boolean" ||
+    typeof value.literature_review_required !== "boolean" ||
+    !Array.isArray(classes) ||
+    !classes.every((item) => typeof item === "string" && item.trim().length > 0) ||
+    new Set(classes).size !== classes.length ||
+    !Number.isInteger(value.continuum_evidence_class_count) ||
+    value.continuum_evidence_class_count !== classes.length ||
+    !Number.isInteger(value.required_continuum_evidence_class_count) ||
+    value.required_continuum_evidence_class_count < 2 ||
+    !Array.isArray(missing) ||
+    !missing.every((item) => typeof item === "string" && item.trim().length > 0)
+  ) {
+    return null;
+  }
+
+  const satisfiesReadyContract =
+    value.literature_present &&
+    value.literature_review_required &&
+    classes.length >= value.required_continuum_evidence_class_count &&
+    missing.length === 0;
+
+  if (value.status === "ready" && !satisfiesReadyContract) return null;
+  if (value.status === "evidence_incomplete" && satisfiesReadyContract) return null;
+
+  return {
+    ...value,
+    continuum_evidence_classes: [...classes],
+    missing_requirements: [...missing],
   };
 }
 

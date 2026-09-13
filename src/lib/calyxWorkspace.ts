@@ -62,6 +62,15 @@ export type CalyxClaimCoverage = {
   supporting_count: number;
   contradicting_count: number;
 };
+export type CalyxEvidenceClassReadiness = {
+  status: "ready" | "evidence_incomplete";
+  literature_present: boolean;
+  literature_review_required: boolean;
+  continuum_evidence_classes: string[];
+  continuum_evidence_class_count: number;
+  required_continuum_evidence_class_count: number;
+  missing_requirements: string[];
+};
 export type CalyxSynthesisStructure = {
   composer_contract?: string;
   /** False when the answer was composed from linked evidence, not reasoned generatively. */
@@ -78,6 +87,8 @@ export type CalyxSynthesisStructure = {
   source_families?: string[];
   missing_evidence?: string[];
   canonical_retrieval_gap?: boolean;
+  /** Governed proof that literature and distinct canonical Continuum evidence classes are present. */
+  evidence_class_readiness?: CalyxEvidenceClassReadiness | null;
   external_literature_review_required?: boolean;
   unresolved_conflict?: boolean;
   mission_unavailable?: boolean;
