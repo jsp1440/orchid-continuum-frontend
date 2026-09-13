@@ -85,9 +85,7 @@ test("the complete evidence-to-review path is executable without publication or 
   await expect(comparison).toContainText("2 supporting · 0 contradicting");
   await expect(comparison).toContainText("1 supporting · 1 contradicting");
   await expect(comparison).toContainText("literature, measurement_aggregate");
-  await expect(body).toContainText(
-    "Live literature retrieval is unavailable in this deterministic acceptance fixture.",
-  );
+  await expect(body).toContainText("live evidence remains unavailable");
 
   const verification = page.getByTestId("calyx-verification-workbench");
   await expect(verification).toBeVisible();
