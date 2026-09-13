@@ -65,6 +65,15 @@ const TURN_RESPONSE = {
     missing_evidence: [],
     resolved_subject: 'Phalaenopsis',
     taxonomy_snapshot_id: 'hassler:2026-09-01',
+    evidence_class_readiness: {
+      status: 'ready',
+      literature_present: true,
+      literature_review_required: true,
+      continuum_evidence_classes: ['trait_record', 'occurrence_summary'],
+      continuum_evidence_class_count: 2,
+      required_continuum_evidence_class_count: 2,
+      missing_requirements: [],
+    },
     governed_provenance: null,
   },
 };
