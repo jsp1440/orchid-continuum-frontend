@@ -5,6 +5,7 @@ import type { ResearchStationDossier } from "@/lib/researchStation";
 import {
   ResearchStationQuestionMissing,
   buildResearchStationTurnContext,
+  governedEvidenceClassReadiness,
   groupClaimCoverage,
   hasUnresolvedConflict,
   runResearchStationSynthesis,
@@ -284,5 +285,75 @@ describe("evidence gaps stay gaps", () => {
     expect(synthesisGaps(structure({ missing_evidence: ["", "   ", "real gap"] }))).toEqual([
       "real gap",
     ]);
+  });
+});
+
+
+describe("governed evidence-class readiness", () => {
+  it("accepts a consistent ready contract from the backend", () => {
+    expect(
+      governedEvidenceClassReadiness(
+        structure({
+          evidence_class_readiness: {
+            status: "ready",
+            literature_present: true,
+            literature_review_required: true,
+            continuum_evidence_classes: ["trait_record", "occurrence_summary"],
+            continuum_evidence_class_count: 2,
+            required_continuum_evidence_class_count: 2,
+            missing_requirements: [],
+          },
+        }),
+      ),
+    ).toEqual({
+      status: "ready",
+      literature_present: true,
+      literature_review_required: true,
+      continuum_evidence_classes: ["trait_record", "occurrence_summary"],
+      continuum_evidence_class_count: 2,
+      required_continuum_evidence_class_count: 2,
+      missing_requirements: [],
+    });
+  });
+
+  it("preserves an incomplete backend result and its named requirements", () => {
+    expect(
+      governedEvidenceClassReadiness(
+        structure({
+          evidence_class_readiness: {
+            status: "evidence_incomplete",
+            literature_present: true,
+            literature_review_required: true,
+            continuum_evidence_classes: ["trait_record"],
+            continuum_evidence_class_count: 1,
+            required_continuum_evidence_class_count: 2,
+            missing_requirements: ["one additional Continuum evidence class"],
+          },
+        }),
+      )?.missing_requirements,
+    ).toEqual(["one additional Continuum evidence class"]);
+  });
+
+  it("fails closed when a ready label disagrees with the evidence counts", () => {
+    expect(
+      governedEvidenceClassReadiness(
+        structure({
+          evidence_class_readiness: {
+            status: "ready",
+            literature_present: true,
+            literature_review_required: true,
+            continuum_evidence_classes: ["trait_record"],
+            continuum_evidence_class_count: 2,
+            required_continuum_evidence_class_count: 2,
+            missing_requirements: [],
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps an absent readiness contract unavailable", () => {
+    expect(governedEvidenceClassReadiness(structure())).toBeNull();
+    expect(governedEvidenceClassReadiness(null)).toBeNull();
   });
 });
