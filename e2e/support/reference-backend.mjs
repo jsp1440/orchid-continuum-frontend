@@ -1072,6 +1072,234 @@ function evidenceFor(query, route) {
 }
 
 
+
+/* --------------------------------------- Research Station acceptance ----- */
+
+/**
+ * A single persisted research investigation for the browser acceptance path.
+ *
+ * FIXTURE, NOT FINDING. The records below are invented and exist only to prove
+ * that the mounted frontend preserves provenance, contradiction, missingness,
+ * human review, and the proposal-only Knowledge Graph boundary.
+ */
+const RESEARCH_PROJECT_ID = "project-phal-browser";
+const RESEARCH_QUESTION =
+  "Which recorded evidence distinguishes cool-growing from warm-growing Phalaenopsis?";
+
+const researchProject = {
+  project_id: RESEARCH_PROJECT_ID,
+  owner_subject: "reference-operator",
+  title: "Phalaenopsis evidence decision — browser fixture",
+  description: "Deterministic acceptance fixture; not scientific evidence.",
+  research_question: RESEARCH_QUESTION,
+  hypothesis: "Fixture hypothesis only: recorded night-temperature associations may differ.",
+  status: "ACTIVE",
+  created_at: "2026-01-01T00:00:00.000Z",
+  updated_at: "2026-01-01T00:00:00.000Z",
+  archived_at: null,
+  version: 1,
+  permissions: { can_read: true, can_update: false, can_archive: false },
+  link_counts: { taxa: 1, documents: 2, evidence: 2, notes: 1 },
+};
+
+async function researchRoute(req, res, url) {
+  const path = url.pathname;
+  if (path === "/api/research/projects" && req.method === "GET") {
+    return json(res, 200, { items: [researchProject] });
+  }
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}` && req.method === "GET") {
+    return json(res, 200, researchProject);
+  }
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/taxa` && req.method === "GET") {
+    return json(res, 200, {
+      items: [{ project_id: RESEARCH_PROJECT_ID, taxon_id: "taxon:phalaenopsis", relationship: "SUBJECT" }],
+    });
+  }
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/documents` && req.method === "GET") {
+    return json(res, 200, {
+      items: [
+        { project_id: RESEARCH_PROJECT_ID, document_id: "fixture-literature-1", revision_id: "41", relationship: "SOURCE" },
+        { project_id: RESEARCH_PROJECT_ID, document_id: "fixture-literature-2", revision_id: "42", relationship: "CONTRADICTS" },
+      ],
+    });
+  }
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/evidence` && req.method === "GET") {
+    return json(res, 200, {
+      items: [
+        { project_id: RESEARCH_PROJECT_ID, evidence_kind: "CANDIDATE", evidence_id: "fixture-trait-observation", relationship: "SUPPORTS" },
+        { project_id: RESEARCH_PROJECT_ID, evidence_kind: "AGGREGATE", evidence_id: "fixture-measurement-aggregate", relationship: "COMPARES" },
+      ],
+    });
+  }
+  if (path === `/api/research/projects/${RESEARCH_PROJECT_ID}/notes` && req.method === "GET") {
+    return json(res, 200, {
+      items: [{
+        note_id: "fixture-note-1",
+        project_id: RESEARCH_PROJECT_ID,
+        title: "Acceptance boundary",
+        body: "Fixture note: live literature retrieval is unavailable in this browser proof.",
+        note_type: "METHOD",
+        data_status: "USER_ANNOTATION_NOT_EVIDENCE",
+      }],
+    });
+  }
+  return fail(res, 404, "no_such_project", "The reference backend holds no other research project.");
+}
+
+function researchStationMissionFor(question) {
+  const missionId = "fixture-research-mission-1";
+  const mission = {
+    mission_id: missionId,
+    project_id: RESEARCH_PROJECT_ID,
+    question,
+    state: "completed",
+    current_stage: "human_review",
+    steps_executed: 5,
+    plan: {
+      question,
+      domains: ["literature", "trait", "measurement"],
+      retrieval_queries: [
+        "fixture literature: Phalaenopsis temperature association",
+        "fixture Continuum trait observations",
+        "fixture Continuum measurement aggregates",
+      ],
+      source_budget: 6,
+      per_domain_source_budget: 2,
+      claims_and_inferences_separated: true,
+    },
+    sources: [
+      {
+        result_id: "fixture-literature-1",
+        title: "Fixture literature record: night-temperature association",
+        object_type: "document",
+        authorized_excerpt: "Invented acceptance text; not a botanical finding.",
+        citation: {
+          revision_id: 41,
+          source_anchor_ids: [101],
+          locator: "fixture://literature/41#anchor-101",
+        },
+      },
+      {
+        result_id: "fixture-literature-2",
+        title: "Fixture literature record: conflicting observation",
+        object_type: "document",
+        authorized_excerpt: "Invented conflicting acceptance text; not a botanical finding.",
+        citation: {
+          revision_id: 42,
+          source_anchor_ids: [102],
+          locator: "fixture://literature/42#anchor-102",
+        },
+      },
+    ],
+    supporting_evidence: [{
+      candidate_id: "candidate:phal-temperature-fixture",
+      candidate_version: 1,
+      subject: "taxon:phalaenopsis",
+      predicate: "fixture_recorded_night_temperature_association",
+      value: "fixture:cooler-recorded-nights",
+      source_revision_id: 41,
+      source_anchor_ids: [101],
+      provenance: {
+        mission_id: missionId,
+        confidence: 0.67,
+        domain: "measurement",
+        source_object_type: "document_revision",
+        source_object_id: 41,
+        extraction_run_id: 701,
+      },
+    }],
+    contradicting_evidence: [{
+      candidate_id: "counter:phal-temperature-fixture",
+      candidate_version: 1,
+      subject: "taxon:phalaenopsis",
+      predicate: "fixture_recorded_night_temperature_association",
+      value: "fixture:no-separated-association",
+      source_revision_id: 42,
+      source_anchor_ids: [102],
+      provenance: { mission_id: missionId, extraction_run_id: 702 },
+    }],
+    missing_evidence: [
+      "Live literature retrieval is unavailable in this deterministic acceptance fixture.",
+    ],
+    confidence: 0.67,
+    conclusions: [{
+      type: "bounded_conclusion",
+      text: "Fixture conclusion: the recorded evidence supports one association while a second source contests it; human review remains required.",
+      claim_ids: ["candidate:phal-temperature-fixture", "counter:phal-temperature-fixture"],
+    }],
+    reasoning_ledger: { ledger_id: "fixture-ledger-1", version: 1 },
+    validation: { valid: true, blockers: [] },
+    review_status: "HUMAN_REVIEW_REQUIRED",
+    publication_eligibility: {
+      eligible: false,
+      automatic_publication: false,
+      blockers: ["human_review_required", "fixture_not_scientific_evidence"],
+    },
+    blockers: [],
+    partial: false,
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+  };
+  calyxStore.missions.set(missionId, mission);
+  return {
+    mission,
+    subject: "taxon:phalaenopsis",
+    answer:
+      "Fixture synthesis only. One provenance-bearing claim is supported, a second comparison is contested, and live evidence remains unavailable.",
+    citations: [{
+      title: "Fixture literature record: night-temperature association",
+      authors: "Reference Fixture",
+      publication_date: "2020-01-01",
+      journal: "Acceptance Fixtures",
+      doi: "10.0000/orchid.fixture.1",
+      provider: "reference-backend",
+      review_state: "review_required",
+      canonical_evidence: false,
+    }],
+    synthesis_structure: {
+      composer_contract: "oc-research-station-browser-fixture-v1",
+      generative: true,
+      degraded_composition: false,
+      resolved_subject: "taxon:phalaenopsis",
+      taxonomy_snapshot_id: "world-plants:2.1.2026",
+      evidence_class_readiness: {
+        status: "ready",
+        literature_present: true,
+        literature_review_required: true,
+        continuum_evidence_classes: ["trait_observation", "measurement_aggregate"],
+        continuum_evidence_class_count: 2,
+        required_continuum_evidence_class_count: 2,
+        missing_requirements: [],
+      },
+      claim_coverage: [
+        {
+          claim_id: "claim:temperature-association",
+          claim: "Fixture recorded night-temperature association",
+          coverage: "supported",
+          supporting_count: 2,
+          contradicting_count: 0,
+          source_families: ["literature", "trait_observation"],
+        },
+        {
+          claim_id: "claim:temperature-contested",
+          claim: "Fixture comparison remains contested",
+          coverage: "contested",
+          supporting_count: 1,
+          contradicting_count: 1,
+          source_families: ["literature", "measurement_aggregate"],
+        },
+      ],
+      unresolved_conflict: true,
+      missing_evidence: [],
+      governed_provenance: {
+        mission_id: missionId,
+        evidence_packet_id: "fixture-packet-1",
+        review_status: "HUMAN_REVIEW_REQUIRED",
+      },
+    },
+  };
+}
+
 /* ----------------------------------------------------------- calyx ----- */
 
 /**
@@ -1142,7 +1370,9 @@ async function calyxRoute(req, res, url) {
     if (!conversation) return fail(res, 404, "conversation_not_found", "No such conversation.");
     const input = asJson();
     const question = String(input.message ?? input.content ?? "").trim();
-    const mission = missionForQuestion(question);
+    const mission = conversation.project_id === RESEARCH_PROJECT_ID
+      ? researchStationMissionFor(question)
+      : missionForQuestion(question);
 
     const operator_message = {
       message_id: randomUUID(),
@@ -1182,7 +1412,7 @@ async function calyxRoute(req, res, url) {
         retrieval: {},
         citations: mission.citations,
       },
-      synthesis_structure: {
+      synthesis_structure: mission.synthesis_structure ?? {
         composer_contract: "reference-fixture-v1",
         // Composed from linked fixture evidence, not reasoned generatively.
         generative: false,
@@ -1190,6 +1420,73 @@ async function calyxRoute(req, res, url) {
         resolved_subject: mission.subject,
         missing_evidence: mission.mission.missing_evidence,
       },
+    });
+  }
+
+
+  if (path === "/synthesis/run-manifest" && req.method === "POST") {
+    const input = asJson();
+    const packet = Array.isArray(input.verification_packets) ? input.verification_packets[0] : null;
+    if (
+      !input.run_id ||
+      !input.research_question ||
+      !input.taxon_id ||
+      !input.taxonomy_snapshot_id ||
+      !packet ||
+      packet.human_review_required !== true ||
+      packet.automatic_scientific_publication_allowed !== false ||
+      packet.canonical_knowledge_mutation_allowed !== false
+    ) {
+      return fail(res, 422, "manifest_contract_rejected", "The immutable review manifest contract was incomplete.");
+    }
+    const fingerprint = createHash("sha256")
+      .update(JSON.stringify(input))
+      .digest("hex");
+    return json(res, 200, {
+      contract_version: "oc-run-evidence-manifest-v1",
+      run_id: input.run_id,
+      research_question: input.research_question,
+      taxon_id: input.taxon_id,
+      taxonomy_snapshot_id: input.taxonomy_snapshot_id,
+      run_fingerprint: fingerprint,
+      created_at_utc: "2026-01-01T00:00:00.000Z",
+      verification_state: packet.verification_state,
+      resolved_evidence_count: packet.resolved_evidence.length,
+      missing_evidence_count: packet.missing_evidence.length,
+      knowledge_gap_count: packet.knowledge_gaps.length,
+      contradictions: packet.contradictions,
+      review_decision: null,
+      epistemic_state: "fixture_review_pending",
+      human_review_required: true,
+      automatic_scientific_publication_allowed: false,
+      canonical_knowledge_mutation_allowed: false,
+      canonical_activation_requires_human_authority: true,
+      immutable: true,
+    });
+  }
+
+  if (path === "/synthesis/candidate-proposal" && req.method === "POST") {
+    const input = asJson();
+    if (
+      input.manifest?.verification_state !== "ready_for_review" ||
+      input.verification_packet?.verification_state !== "ready_for_review" ||
+      input.verification_packet?.human_review_required !== true
+    ) {
+      return fail(res, 422, "proposal_contract_rejected", "Only a review-ready, human-gated packet may become a proposal.");
+    }
+    return json(res, 200, {
+      contract_version: "oc-candidate-knowledge-proposal-v1",
+      proposal_id: `fixture-proposal-${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}`,
+      run_id: input.manifest.run_id,
+      run_fingerprint: input.manifest.run_fingerprint,
+      candidate_handoff_request: input.verification_packet.reasoning?.candidate_knowledge ?? {},
+      review_required: true,
+      owner_submission_required: true,
+      candidate_persistence_performed: false,
+      automatic_approval: false,
+      automatic_scientific_publication: false,
+      canonical_knowledge_mutation: false,
+      knowledge_graph_mutation: false,
     });
   }
 
@@ -1248,10 +1545,12 @@ const server = createServer(async (req, res) => {
   try {
     if (url.pathname.startsWith("/auth/v1")) return await identityRoute(req, res, url);
     if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);
+    if (url.pathname.startsWith("/api/research/")) return await researchRoute(req, res, url);
     if (
       url.pathname.startsWith("/api/calyx/") ||
       url.pathname.startsWith("/brain/") ||
-      url.pathname.startsWith("/api/evidence-retrieval/")
+      url.pathname.startsWith("/api/evidence-retrieval/") ||
+      url.pathname.startsWith("/synthesis/")
     ) {
       return await calyxRoute(req, res, url);
     }
