@@ -454,6 +454,46 @@ const SynthesisPanel: React.FC<{
 
   return (
     <div className="mt-4 grid gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
+        <div className="flex items-center gap-2 text-emerald-300/80">
+          <ScrollText className="h-3.5 w-3.5" />
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em]">
+            Governed research plan
+          </p>
+        </div>
+        {result.plan ? (
+          <div className="mt-3 grid gap-3">
+            <p className="text-sm leading-6 text-white/80">{result.plan.question}</p>
+            <div className="flex flex-wrap gap-2">
+              {result.plan.domains.map((domain) => (
+                <span
+                  key={domain}
+                  className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-white/60"
+                >
+                  {domain.replaceAll('_', ' ')}
+                </span>
+              ))}
+            </div>
+            <ol className="grid gap-1.5">
+              {result.plan.retrieval_queries.map((query, index) => (
+                <li key={query} className="text-xs leading-5 text-white/60">
+                  <span className="mr-2 font-mono text-white/35">{index + 1}.</span>
+                  {query}
+                </li>
+              ))}
+            </ol>
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
+              Source budget {result.plan.source_budget} · Claims and inferences kept separate
+            </p>
+          </div>
+        ) : (
+          <NothingRecorded>
+            The governed mission returned no valid bounded plan. Synthesis output remains
+            visible, but it is not presented as planned research.
+          </NothingRecorded>
+        )}
+      </div>
+
       {/* The answer, exactly as Calyx composed it. */}
       <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
         {result.answer.trim() ? (

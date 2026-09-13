@@ -13,8 +13,17 @@ export type MissionSource = {
 };
 export type MissionEvidence = { candidate_id?: number | string; candidate_version?: number; subject?: string; predicate?: string; value?: unknown; source_revision_id?: number | string; source_anchor_ids?: Array<number | string>; provenance?: Record<string, unknown>; [key: string]: unknown };
 export type MissionConclusion = { type?: string; text: string; claim_ids?: Array<number | string> };
+export type BrainMissionPlan = {
+  question: string;
+  domains: string[];
+  retrieval_queries: string[];
+  source_budget: number;
+  per_domain_source_budget: number;
+  claims_and_inferences_separated: true;
+};
 export type BrainMission = {
   mission_id: string; project_id: string; question: string; state: string; current_stage: string; steps_executed: number;
+  plan?: BrainMissionPlan | null;
   sources: MissionSource[]; supporting_evidence: MissionEvidence[]; contradicting_evidence: MissionEvidence[]; missing_evidence: string[];
   confidence: number | null; conclusions: MissionConclusion[]; reasoning_ledger: { ledger_id: string; version: number } | null;
   validation: { valid: boolean; blockers: string[] }; review_status: string;

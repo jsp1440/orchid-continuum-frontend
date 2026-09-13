@@ -124,6 +124,56 @@ describe("running the governed synthesis", () => {
     expect(result.answer).toBe("The evidence points this way without settling it.");
   });
 
+  it("preserves the bounded plan returned by the governed Brain mission", async () => {
+    sendTurn.mockResolvedValue({
+      conversation_id: "conv-1",
+      answer: "Answer.",
+      synthesis_structure: structure(),
+      research: {
+        mission: {
+          plan: {
+            question: "Compare cool- and warm-growing Phalaenopsis evidence.",
+            domains: ["taxonomy", "geographic_distribution"],
+            retrieval_queries: ["Phalaenopsis taxonomy", "Phalaenopsis distribution"],
+            source_budget: 20,
+            per_domain_source_budget: 4,
+            claims_and_inferences_separated: true,
+          },
+        },
+      },
+    });
+
+    expect((await runResearchStationSynthesis(dossier())).plan).toEqual({
+      question: "Compare cool- and warm-growing Phalaenopsis evidence.",
+      domains: ["taxonomy", "geographic_distribution"],
+      retrieval_queries: ["Phalaenopsis taxonomy", "Phalaenopsis distribution"],
+      source_budget: 20,
+      per_domain_source_budget: 4,
+      claims_and_inferences_separated: true,
+    });
+  });
+
+  it("keeps an absent or malformed mission plan unavailable", async () => {
+    sendTurn.mockResolvedValue({
+      conversation_id: "conv-1",
+      answer: "Answer.",
+      synthesis_structure: structure(),
+      research: {
+        mission: {
+          plan: {
+            question: "Question",
+            domains: [],
+            retrieval_queries: [],
+            source_budget: 0,
+            claims_and_inferences_separated: false,
+          },
+        },
+      },
+    });
+
+    expect((await runResearchStationSynthesis(dossier())).plan).toBeNull();
+  });
+
   it("returns a null structure rather than inventing one on an older backend", async () => {
     sendTurn.mockResolvedValue({ conversation_id: "conv-1", answer: "Answer." });
     const result = await runResearchStationSynthesis(dossier());
