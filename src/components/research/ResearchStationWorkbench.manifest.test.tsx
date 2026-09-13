@@ -97,7 +97,7 @@ const TURN_RESPONSE = {
     mission: {
       mission_id: 'mission-phal-01',
       project_id: PROJECT_ID,
-      question: PROJECT.research_question,
+      question: `Regarding ${SUBJECT_TAXON.taxon_id}: ${PROJECT.research_question}`,
       state: 'COMPLETED',
       current_stage: 'SYNTHESIS',
       steps_executed: 4,
