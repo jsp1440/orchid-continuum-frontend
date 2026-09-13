@@ -126,7 +126,8 @@ const JOINS: JoinSpec[] = [
     browser: 1,
     browserNote: 'Browser pass run: /lexicon?q=Cattleya purpurata hydrated the search input with the term.',
     provenanceNote: 'A blank or whitespace-only term is treated as no term rather than an empty search; no locality key is emitted.',
-    nextAction: 'Confirm the browser returns real canonical entries once the Lexicon backend is reachable.',
+    remainingStatus: 'OWNER_ACTION',
+    nextAction: 'Owner-gated deployed-backend verification remains; a provider-free fixture cannot prove that real canonical Lexicon entries are reachable.',
     lastAccomplishment: '#329 stopped the section root discarding the term and resolving to the front page.',
   },
   {
