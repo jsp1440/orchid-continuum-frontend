@@ -54,6 +54,21 @@ const MANIFEST_FIXTURE: RunEvidenceManifest = {
   immutable: true,
 };
 
+const PROPOSAL_FIXTURE = {
+  contract_version: 'oc-candidate-knowledge-proposal-v1',
+  proposal_id: 'candidate-proposal:fixture',
+  run_id: MANIFEST_FIXTURE.run_id,
+  run_fingerprint: MANIFEST_FIXTURE.run_fingerprint,
+  candidate_handoff_request: {},
+  review_required: true,
+  owner_submission_required: true,
+  candidate_persistence_performed: false,
+  automatic_approval: false,
+  automatic_scientific_publication: false,
+  canonical_knowledge_mutation: false,
+  knowledge_graph_mutation: false,
+};
+
 const CONVERSATION = { conversation_id: 'conv-test' };
 
 const TURN_RESPONSE = {
@@ -102,7 +117,22 @@ const TURN_RESPONSE = {
       current_stage: 'SYNTHESIS',
       steps_executed: 4,
       sources: [],
-      supporting_evidence: [],
+      supporting_evidence: [
+        {
+          candidate_id: 'candidate:phal-warm',
+          subject: SUBJECT_TAXON.taxon_id,
+          predicate: 'grows_optimally_at',
+          value: 'temperature:intermediate_warm',
+          source_revision_id: 8,
+          provenance: {
+            confidence: 0.78,
+            domain: 'cultivation',
+            source_object_type: 'brain_reasoning_record',
+            source_object_id: 103,
+            extraction_run_id: 12,
+          },
+        },
+      ],
       contradicting_evidence: [],
       missing_evidence: [],
       confidence: null,
@@ -180,6 +210,10 @@ function makeFetch(
   turnResponse: unknown = TURN_RESPONSE,
 ): ReturnType<typeof vi.fn> {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+    // Review-only candidate proposal POST
+    if (url.includes('/synthesis/candidate-proposal')) {
+      return Promise.resolve(ok(PROPOSAL_FIXTURE));
+    }
     // Manifest POST
     if (url.includes('/synthesis/run-manifest')) {
       return Promise.resolve(makeManifestResponse(manifestResponse));
@@ -325,6 +359,67 @@ describe('ManifestPanel', () => {
     expect(container.textContent).toContain('No canonical mutation');
     expect(container.textContent).toContain('Export cited review packet');
     expect(container.textContent).toContain('review proposal only');
+  });
+
+  it('prepares a canonical review proposal without persistence or graph mutation', async () => {
+    const fetch = makeFetch();
+    await render(fetch);
+    await clickButton('Synthesize this investigation');
+    await clickButton('Build run manifest');
+    await clickButton('Prepare candidate proposal');
+
+    expect(container.textContent).toContain(
+      'Candidate proposal prepared · owner submission required',
+    );
+    expect(container.textContent).toContain('candidate-proposal:fixture');
+    expect(container.textContent).toContain('No candidate persisted');
+    expect(container.textContent).toContain('No automatic approval');
+    expect(container.textContent).toContain('No scientific publication');
+    expect(container.textContent).toContain('No canonical or Knowledge Graph mutation');
+
+    const proposalCall = (fetch.mock.calls as [string, RequestInit][]).find(([url]) =>
+      url.includes('/synthesis/candidate-proposal'),
+    );
+    expect(proposalCall).toBeTruthy();
+    const body = JSON.parse(String(proposalCall?.[1]?.body)) as {
+      manifest: RunEvidenceManifest;
+      verification_packet: {
+        reasoning?: { candidate_knowledge?: { candidate_id?: string } };
+        canonical_knowledge_mutation_allowed: boolean;
+      };
+      source_object_id: number;
+      revision_id: number;
+      extraction_run_id: number;
+    };
+    expect(body.manifest.run_fingerprint).toBe(MANIFEST_FIXTURE.run_fingerprint);
+    expect(body.verification_packet.reasoning?.candidate_knowledge?.candidate_id).toBe(
+      'candidate:phal-warm',
+    );
+    expect(body.verification_packet.canonical_knowledge_mutation_allowed).toBe(false);
+    expect(body.source_object_id).toBe(103);
+    expect(body.revision_id).toBe(8);
+    expect(body.extraction_run_id).toBe(12);
+  });
+
+  it('keeps the proposal unavailable when canonical source bindings are absent', async () => {
+    await render(
+      makeFetch(undefined, {
+        ...TURN_RESPONSE,
+        research: {
+          ...TURN_RESPONSE.research,
+          mission: {
+            ...TURN_RESPONSE.research.mission,
+            supporting_evidence: [],
+          },
+        },
+      }),
+    );
+    await clickButton('Synthesize this investigation');
+    await clickButton('Build run manifest');
+
+    expect(container.textContent).toContain('Candidate proposal unavailable');
+    expect(container.textContent).toContain('Nothing was invented');
+    expect(container.textContent).not.toContain('Prepare candidate proposal');
   });
 
   it('shows "Manifest unavailable" error card when POST returns 503', async () => {
