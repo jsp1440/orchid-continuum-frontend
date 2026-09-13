@@ -126,6 +126,17 @@ const TURN_RESPONSE = {
       created_at: '2026-09-12T00:00:00Z',
       updated_at: '2026-09-12T00:00:00Z',
     },
+    citations: [
+      {
+        title: 'Temperature response in Phalaenopsis',
+        authors: 'Example A.',
+        publication_date: '2025',
+        journal: 'Orchid Research',
+        doi: '10.1000/example',
+        review_state: 'REVIEW_REQUIRED',
+        canonical_evidence: false,
+      },
+    ],
   },
 };
 
@@ -312,6 +323,8 @@ describe('ManifestPanel', () => {
     // Governance invariants card
     expect(container.textContent).toContain('No automatic publication');
     expect(container.textContent).toContain('No canonical mutation');
+    expect(container.textContent).toContain('Export cited review packet');
+    expect(container.textContent).toContain('review proposal only');
   });
 
   it('shows "Manifest unavailable" error card when POST returns 503', async () => {

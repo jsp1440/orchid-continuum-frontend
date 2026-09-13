@@ -7,6 +7,7 @@ import {
   buildResearchStationTurnContext,
   claimComparisonRows,
   governedEvidenceClassReadiness,
+  governedResearchCitations,
   governedResearchMission,
   groupClaimCoverage,
   hasUnresolvedConflict,
@@ -103,6 +104,40 @@ describe("research station turn context", () => {
         dossier({ project: { ...dossier().project, research_question: null } }),
       ),
     ).toThrow(ResearchStationQuestionMissing);
+  });
+});
+
+describe("governed research citations", () => {
+  it("retains display-authorized bibliography and drops malformed entries", () => {
+    expect(
+      governedResearchCitations([
+        {
+          title: "  Temperature response in Phalaenopsis  ",
+          doi: " 10.1000/example ",
+          review_state: "REVIEW_REQUIRED",
+          canonical_evidence: false,
+        },
+        { title: "   ", doi: "10.1000/forged" },
+        null,
+      ]),
+    ).toEqual([
+      {
+        title: "Temperature response in Phalaenopsis",
+        authors: null,
+        publication_date: null,
+        journal: null,
+        doi: "10.1000/example",
+        pmid: null,
+        pmcid: null,
+        provider: null,
+        review_state: "REVIEW_REQUIRED",
+        canonical_evidence: false,
+      },
+    ]);
+  });
+
+  it("keeps unavailable citations empty rather than inventing bibliography", () => {
+    expect(governedResearchCitations(undefined)).toEqual([]);
   });
 });
 
