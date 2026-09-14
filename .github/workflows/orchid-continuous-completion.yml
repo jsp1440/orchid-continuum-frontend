@@ -73,7 +73,7 @@ jobs:
 
   dispatch:
     needs: plan
-    if: needs.plan.outputs.issues != '[]'
+    if: always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'
     permissions:
       contents: write
       issues: write

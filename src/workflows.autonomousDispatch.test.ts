@@ -12,7 +12,7 @@ describe('canonical provider-free autonomous dispatch', () => {
     expect(workflow.env.MAX_ACTIVE_LANES).toBe(8);
     expect(workflow.env.PROVIDER_AUTHORIZED).toBe('false');
     expect(workflow.jobs.dispatch.uses).toBe('./.github/workflows/orchid-deterministic-dispatch.yml');
-    expect(workflow.jobs.dispatch.if).toBe("needs.plan.outputs.issues != '[]'");
+    expect(workflow.jobs.dispatch.if).toBe("always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'");
     expect(workflow.jobs.audit.if).toContain('always()');
   });
   it('converges the old scheduler onto the canonical entrypoint without another timer', () => {
