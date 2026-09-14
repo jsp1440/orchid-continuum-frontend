@@ -1,0 +1,84 @@
+name: Orchid Budgeted Completion Lane
+
+on:
+  workflow_call:
+    inputs:
+      issue_number:
+        required: true
+        type: string
+      provider_authorized:
+        required: false
+        type: boolean
+        default: false
+      requested_usd:
+        required: false
+        type: number
+        default: 0.50
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+  id-token: write
+
+jobs:
+  budget-preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.governor.outputs.allowed }}
+      reason: ${{ steps.governor.outputs.reason }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: oc-autonomous-integration
+          fetch-depth: 1
+      - name: Fail-closed provider budget preflight
+        id: governor
+        env:
+          PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
+          REQUESTED_USD: ${{ inputs.requested_usd }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          decision=$(node scripts/oc-budget-governor.mjs \
+            --authorized "$PROVIDER_AUTHORIZED" \
+            --requested "$REQUESTED_USD" \
+            --program-spent "${OC_PROGRAM_SPENT_USD:-0}" \
+            --daily-spent "${OC_DAILY_SPENT_USD:-0}")
+          status=$?
+          set -e
+          allowed=$(jq -r '.allowed' <<<"$decision")
+          reason=$(jq -r '.reason' <<<"$decision")
+          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Budget preflight — issue #${{ inputs.issue_number }}"
+            echo "- Provider authorized: **${PROVIDER_AUTHORIZED}**"
+            echo "- Requested reservation: **$${REQUESTED_USD}**"
+            echo "- Allowed: **${allowed}**"
+            echo "- Reason: **${reason}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$allowed" != "true" ]]; then
+            exit 0
+          fi
+          [[ "$status" -eq 0 ]]
+
+  provider-worker:
+    needs: budget-preflight
+    if: needs.budget-preflight.outputs.allowed == 'true'
+    uses: ./.github/workflows/orchid-completion-lane.yml
+    with:
+      issue_number: ${{ inputs.issue_number }}
+    secrets: inherit
+
+  provider-denied:
+    needs: budget-preflight
+    if: needs.budget-preflight.outputs.allowed != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm zero-provider execution
+        run: |
+          echo "Provider worker suppressed for issue #${{ inputs.issue_number }}."
+          echo "Reason: ${{ needs.budget-preflight.outputs.reason }}"
