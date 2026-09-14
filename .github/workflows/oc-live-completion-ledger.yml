@@ -10,13 +10,6 @@ on:
       - 'public/data/oc-live-completion-ledger.json'
   issues:
     types: [opened, edited, closed, reopened, labeled, unlabeled, assigned, unassigned]
-  workflow_run:
-    workflows:
-      - Frontend CI
-      - Agent Security Guard
-      - CALYX-MATRIX-005 Validation
-      - Orchid Continuous Completion (NO API MODE)
-    types: [completed]
 
 permissions:
   contents: write
@@ -34,13 +27,13 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check out default branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           ref: main
           fetch-depth: 0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
         with:
           node-version: '22'
 
