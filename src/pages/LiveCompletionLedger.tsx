@@ -28,6 +28,7 @@ type LiveLedger = {
 };
 
 const POLL_MS = 15000;
+const LEDGER_URL = 'https://raw.githubusercontent.com/jsp1440/orchid-continuum-frontend/oc-live-ledger-state/public/data/oc-live-completion-ledger.json';
 
 const statusMeta: Record<LedgerStatus, { label: string; className: string }> = {
   complete: { label: 'Complete', className: 'border-emerald-300/30 bg-emerald-300/10 text-emerald-200' },
@@ -71,7 +72,7 @@ export default function LiveCompletionLedger() {
   const load = useCallback(async () => {
     setRefreshing(true);
     try {
-      const response = await fetch(`/data/oc-live-completion-ledger.json?t=${Date.now()}`, { cache: 'no-store' });
+      const response = await fetch(`${LEDGER_URL}?t=${Date.now()}`, { cache: 'no-store' });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const next = (await response.json()) as LiveLedger;
       setLedger(next);
@@ -112,7 +113,7 @@ export default function LiveCompletionLedger() {
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#c9a24a]">Mission Control · live telemetry</div>
             <h1 className="mt-3 text-4xl font-semibold sm:text-5xl" style={{ fontFamily: 'Playfair Display, Georgia, serif' }}>Orchid Continuum Completion Ledger</h1>
             <p className="mt-3 max-w-3xl text-sm leading-6 text-[#cfc8b8]/80">
-              GitHub-backed completion telemetry. This view polls the machine ledger every 15 seconds and never counts queued work as completed.
+              GitHub-backed completion telemetry. The browser checks the state feed every 15 seconds; GitHub reconciliation updates that feed on project events and at least every five minutes. Queued work never counts as completed.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
@@ -125,7 +126,7 @@ export default function LiveCompletionLedger() {
 
         <div className="mt-6 flex flex-wrap items-center gap-3 rounded-lg border border-white/10 bg-black/20 px-4 py-3 text-xs text-[#cfc8b8]/75">
           <Activity className="h-4 w-4 text-emerald-300" />
-          <span>Source: {ledger?.source_of_truth ?? 'loading'}</span><span>·</span><span>Poll interval: 15s</span><span>·</span>
+          <span>Source: {ledger?.source_of_truth ?? 'loading'}</span><span>·</span><span>Browser poll: 15s</span><span>·</span><span>GitHub reconcile: ≤5 min target</span><span>·</span>
           <span>Last browser refresh: {lastFetchedAt ? lastFetchedAt.toLocaleTimeString() : 'waiting'}</span>
           {ledger?.generated_at ? <><span>·</span><span>Ledger generated: {new Date(ledger.generated_at).toLocaleString()}</span></> : null}
           {ledger?.last_state_change_at ? <><span>·</span><span>Last GitHub state change: {new Date(ledger.last_state_change_at).toLocaleString()}</span></> : null}
