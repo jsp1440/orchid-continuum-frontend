@@ -24,10 +24,10 @@ jobs:
       OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS: '3600000'
       OC_PROVIDER_DAILY_MAX_CALLS: '0'
       OC_PROVIDER_WAVE_MAX_CALLS: '0'
-      OC_MAX_ACTIVE_LANES: '5'
+      OC_MAX_ACTIVE_LANES: '8'
       OC_PORTFOLIO_WAVES_AHEAD: '3'
       OC_PORTFOLIO_TARGET_FLOOR: '20'
-      OC_PORTFOLIO_MAX_REFILL_PER_TICK: '5'
+      OC_PORTFOLIO_MAX_REFILL_PER_TICK: '8'
     steps:
       - name: Checkout governed integration branch
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -73,6 +73,7 @@ jobs:
           {
             echo '### Orchid NO-API scheduler'
             echo '- mode: deterministic-no-api'
+            echo '- active_lane_capacity: 8'
             echo '- anthropic: parked'
             echo '- gemini: parked'
             echo '- openai: parked'
