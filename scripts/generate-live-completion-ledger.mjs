@@ -2,6 +2,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 
 const token = process.env.GITHUB_TOKEN || '';
 const outputPath = new URL('../public/data/oc-live-completion-ledger.json', import.meta.url);
+const csvOutputPath = new URL('../public/data/oc-live-completion-ledger.csv', import.meta.url);
 const current = JSON.parse(await readFile(outputPath, 'utf8'));
 
 const repositories = [
@@ -26,8 +27,7 @@ async function github(path) {
 async function pagedIssues(repoSlug, state = 'all') {
   const values = [];
   for (let page = 1; page <= 100; page += 1) {
-    const separator = '?';
-    const batch = await github(`/repos/${repoSlug}/issues${separator}state=${state}&per_page=100&page=${page}&sort=updated&direction=desc`);
+    const batch = await github(`/repos/${repoSlug}/issues?state=${state}&per_page=100&page=${page}&sort=updated&direction=desc`);
     values.push(...batch.filter((item) => !item.pull_request));
     if (batch.length < 100) return values;
   }
@@ -45,6 +45,22 @@ function deriveStatus(issue) {
   if (labels.has('oc-blocked') || labels.has('oc-runtime-backoff')) return 'blocked';
   if (labels.has('oc-queued')) return 'queued';
   return null;
+}
+
+function csvCell(value) {
+  const text = value == null ? '' : String(value);
+  return `"${text.replaceAll('"', '""')}"`;
+}
+
+function buildCsv(ledger) {
+  const rows = [['ledger_id', 'record_type', 'status', 'reference', 'title', 'timestamp', 'evidence_url']];
+  for (const item of ledger.completed) {
+    rows.push([item.id ?? '', 'completion', 'complete', item.ref ?? '', item.title, item.completed_at ?? '', item.url ?? '']);
+  }
+  for (const item of ledger.active) {
+    rows.push(['', 'active', item.status, item.ref ?? '', item.title, item.updated_at ?? '', item.url ?? '']);
+  }
+  return `${rows.map((row) => row.map(csvCell).join(',')).join('\n')}\n`;
 }
 
 const active = [];
@@ -120,16 +136,14 @@ delete semanticNext.generated_at;
 
 const semanticCurrent = { ...current };
 delete semanticCurrent.generated_at;
+const changed = JSON.stringify(semanticCurrent) !== JSON.stringify(semanticNext);
+const next = changed ? { ...semanticNext, generated_at: new Date().toISOString() } : current;
 
-if (JSON.stringify(semanticCurrent) === JSON.stringify(semanticNext)) {
-  console.log(`live ledger unchanged: ${semanticNext.verified_complete_count} complete, ${active.length} active/queued/gated/blocked`);
+await writeFile(csvOutputPath, buildCsv(next), 'utf8');
+if (!changed) {
+  console.log(`live ledger unchanged: ${semanticNext.verified_complete_count} complete, ${active.length} active/queued/gated/blocked; CSV mirror refreshed`);
   process.exit(0);
 }
-
-const next = {
-  ...semanticNext,
-  generated_at: new Date().toISOString(),
-};
 
 await writeFile(outputPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
 console.log(`live ledger updated: ${next.verified_complete_count} complete (${newlyDiscovered.length} newly discovered oc-done receipts), ${active.length} active/queued/gated/blocked`);
