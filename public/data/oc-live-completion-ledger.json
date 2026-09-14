@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "program": "OC-FINISH-14D",
+  "source_of_truth": "github",
+  "hard_paid_ceiling_usd": 50,
+  "paid_spend_usd": 0.001027,
+  "verified_complete_count": 17,
+  "status_key": {
+    "complete": "verified with evidence",
+    "running": "actively executing",
+    "queued": "eligible for execution",
+    "owner_gate": "requires owner authorization",
+    "blocked": "external or technical dependency"
+  },
+  "completed": [
+    {"id":1,"title":"Backend autonomy control plane","ref":"backend#1422","status":"complete"},
+    {"id":2,"title":"Frontend governed 8-lane control plane","ref":"frontend#663","status":"complete"},
+    {"id":3,"title":"Frontend autonomous integration","ref":"frontend#493","status":"complete"},
+    {"id":4,"title":"Queue-label contradiction repair","status":"complete"},
+    {"id":5,"title":"Provider-free autonomy proof","status":"complete"},
+    {"id":6,"title":"Paid API Stage A","status":"complete"},
+    {"id":7,"title":"Paid API Stage B — two concurrent real jobs","status":"complete"},
+    {"id":8,"title":"Paid execution Budget Governor proof","status":"complete"},
+    {"id":9,"title":"PR #1423 deterministic worker tests — 87 passed","ref":"backend#1423","status":"complete"},
+    {"id":10,"title":"PR #1423 BUILD-088E exact-head validation","ref":"backend#1423","status":"complete"},
+    {"id":11,"title":"PR #1423 workflow-governance audit","ref":"backend#1423","status":"complete"},
+    {"id":12,"title":"PR #1423 Calyx conversation validation","ref":"backend#1423","status":"complete"},
+    {"id":13,"title":"PR #1423 CALYX-AGENT-003 validation","ref":"backend#1423","status":"complete"},
+    {"id":14,"title":"Two-week completion program","ref":"Brain#140","status":"complete"},
+    {"id":15,"title":"Continuous-completion/refill directive","ref":"Brain#140","status":"complete"},
+    {"id":16,"title":"Paid-execution authorization encoded","ref":"frontend#662","status":"complete"},
+    {"id":17,"title":"Execution reservoir populated","status":"complete"}
+  ],
+  "active": [
+    {"ref":"frontend#661","title":"Canonical multi-lane coding dispatch / real oc-running proof","status":"running"},
+    {"ref":"frontend#662","title":"Budget Governor + shared context + model router","status":"running"},
+    {"ref":"backend#608 / PR#1423","title":"Worker integration / Stage C","status":"running"},
+    {"ref":"frontend#166","title":"Featured Genus media/context recovery","status":"queued"},
+    {"ref":"frontend#167","title":"Thematic Earth/Atlas redesign","status":"queued"},
+    {"ref":"frontend#168","title":"Frontend/backend contract recovery","status":"queued"},
+    {"ref":"frontend#169","title":"Relationship / Knowledge Graph convergence","status":"queued"},
+    {"ref":"frontend#170","title":"Contextual Public Calyx","status":"queued"},
+    {"ref":"frontend#610","title":"Calyx Field / Lance pilot","status":"queued"},
+    {"ref":"frontend#243","title":"Conservatory/OASIS + Buying Companion","status":"queued"}
+  ]
+}
