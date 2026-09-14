@@ -79,11 +79,13 @@ describe('LiveCompletionLedger', () => {
     expect(container.textContent).toContain('$49.999');
   });
 
-  it('requests the machine ledger with cache bypass', async () => {
+  it('requests the dedicated state-branch ledger with cache bypass', async () => {
     await renderLedger();
     const mockedFetch = vi.mocked(fetch);
     expect(mockedFetch).toHaveBeenCalledTimes(1);
-    expect(String(mockedFetch.mock.calls[0][0])).toContain('/data/oc-live-completion-ledger.json?t=');
+    expect(String(mockedFetch.mock.calls[0][0])).toContain(
+      'raw.githubusercontent.com/jsp1440/orchid-continuum-frontend/oc-live-ledger-state/public/data/oc-live-completion-ledger.json?t=',
+    );
     expect(mockedFetch.mock.calls[0][1]).toMatchObject({ cache: 'no-store' });
   });
 });
