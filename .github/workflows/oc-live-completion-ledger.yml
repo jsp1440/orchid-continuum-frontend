@@ -8,6 +8,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'public/data/oc-live-completion-ledger.json'
+      - 'public/data/oc-live-completion-ledger.csv'
   issues:
     types: [opened, edited, closed, reopened, labeled, unlabeled, assigned, unassigned]
 
@@ -42,11 +43,12 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/generate-live-completion-ledger.mjs
 
-      - name: Validate ledger JSON contract
+      - name: Validate ledger contract
         run: |
           node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
           const ledger = JSON.parse(await readFile('public/data/oc-live-completion-ledger.json', 'utf8'));
+          const csv = await readFile('public/data/oc-live-completion-ledger.csv', 'utf8');
           if (ledger.source_of_truth !== 'github') throw new Error('source_of_truth must be github');
           if (!Array.isArray(ledger.completed) || !Array.isArray(ledger.active)) throw new Error('ledger arrays missing');
           if (ledger.verified_complete_count !== ledger.completed.length) throw new Error('verified count mismatch');
@@ -54,18 +56,19 @@ jobs:
           if (new Set(ids).size !== ids.length) throw new Error('duplicate completion IDs');
           const allowed = new Set(['running', 'queued', 'owner_gate', 'blocked']);
           if (ledger.active.some((item) => !allowed.has(item.status))) throw new Error('invalid active status');
+          if (!csv.startsWith('"ledger_id","record_type","status","reference","title","timestamp","evidence_url"')) throw new Error('CSV header mismatch');
           console.log(`validated ${ledger.completed.length} completions and ${ledger.active.length} live work items`);
           NODE
 
-      - name: Commit changed ledger only
+      - name: Commit changed ledger mirrors only
         shell: bash
         run: |
-          if git diff --quiet -- public/data/oc-live-completion-ledger.json; then
+          if git diff --quiet -- public/data/oc-live-completion-ledger.json public/data/oc-live-completion-ledger.csv; then
             echo 'No ledger changes.'
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add public/data/oc-live-completion-ledger.json
+          git add public/data/oc-live-completion-ledger.json public/data/oc-live-completion-ledger.csv
           git commit -m 'chore(mission-control): refresh live completion ledger'
           git push origin HEAD:main
