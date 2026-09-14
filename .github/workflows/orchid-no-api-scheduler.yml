@@ -51,11 +51,44 @@ jobs:
           export OC_PORTFOLIO_VALIDATING="$(gh issue list --repo "$REPO" --state open --label oc-validating --limit 200 --json number --jq 'length')"
           npx --no-install tsx scripts/deterministic-portfolio-refill-workflow.ts
 
+      - name: Build graph-bound eight-lane wave plan
+        id: graph_plan
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          queued_json=$(gh issue list --repo "$REPO" --state open --label oc-queued --limit 500 --json number --jq '[.[].number]')
+          running_count=$(gh issue list --repo "$REPO" --state open --label oc-running --limit 200 --json number --jq 'length')
+          open_pr_refs=$(gh pr list --repo "$REPO" --state open --limit 500 --json number --jq '[.[] | "#\(.number)"]')
+
+          export OC_QUEUED_ISSUES_JSON="$queued_json"
+          export OC_RUNNING_COUNT="$running_count"
+          export OC_OPEN_WORK_REFS_JSON="$open_pr_refs"
+
+          plan=$(npx --no-install tsx scripts/oc-graph-dispatch-plan.ts)
+          issues_json=$(jq -c '.issues' <<<"$plan")
+          leaves_json=$(jq -c '.leaves' <<<"$plan")
+          untracked_count=$(jq '.untrackedLeaves | length' <<<"$plan")
+          blocker_count=$(jq '.surfacedBlockers | length' <<<"$plan")
+          capacity=$(jq '.capacity' <<<"$plan")
+
+          {
+            echo "issues_json=$issues_json"
+            echo "leaves_json=$leaves_json"
+            echo "untracked_count=$untracked_count"
+            echo "blocker_count=$blocker_count"
+            echo "capacity=$capacity"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "$plan" > "$RUNNER_TEMP/oc-graph-dispatch-plan.json"
+
       - name: Evaluate provider governor without paid execution
         id: governor
         shell: bash
         env:
-          OC_PROVIDER_WORK_JSON: '[]'
+          OC_PROVIDER_WORK_JSON: ${{ steps.graph_plan.outputs.leaves_json }}
         run: |
           set -euo pipefail
           npx --no-install tsx scripts/provider-governor-workflow-gate.ts
@@ -65,6 +98,11 @@ jobs:
         env:
           REFILL_COUNT: ${{ steps.refill.outputs.refill_count }}
           REFILL_TELEMETRY_JSON: ${{ steps.refill.outputs.telemetry_json }}
+          GRAPH_CAPACITY: ${{ steps.graph_plan.outputs.capacity }}
+          GRAPH_ISSUES_JSON: ${{ steps.graph_plan.outputs.issues_json }}
+          GRAPH_LEAVES_JSON: ${{ steps.graph_plan.outputs.leaves_json }}
+          GRAPH_UNTRACKED_COUNT: ${{ steps.graph_plan.outputs.untracked_count }}
+          GRAPH_BLOCKER_COUNT: ${{ steps.graph_plan.outputs.blocker_count }}
           GOVERNOR_ALLOW_PAID_EXECUTION: ${{ steps.governor.outputs.allow_paid_execution }}
           GOVERNOR_REASON: ${{ steps.governor.outputs.reason }}
           GOVERNOR_FINGERPRINT: ${{ steps.governor.outputs.fingerprint }}
@@ -73,7 +111,13 @@ jobs:
           {
             echo '### Orchid NO-API scheduler'
             echo '- mode: deterministic-no-api'
+            echo '- graph_binding: canonical-completion-graph'
             echo '- active_lane_capacity: 8'
+            printf '%s\n' "- graph_remaining_capacity: ${GRAPH_CAPACITY}"
+            printf '%s\n' "- graph_selected_issues: ${GRAPH_ISSUES_JSON}"
+            printf '%s\n' "- graph_selected_leaves: ${GRAPH_LEAVES_JSON}"
+            printf '%s\n' "- graph_untracked_admissible_leaves: ${GRAPH_UNTRACKED_COUNT}"
+            printf '%s\n' "- graph_surfaced_blockers: ${GRAPH_BLOCKER_COUNT}"
             echo '- anthropic: parked'
             echo '- gemini: parked'
             echo '- openai: parked'
