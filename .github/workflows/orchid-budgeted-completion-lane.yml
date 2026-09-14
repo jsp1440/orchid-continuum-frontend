@@ -6,6 +6,12 @@ on:
       issue_number:
         required: true
         type: string
+      wave_hash:
+        required: true
+        type: string
+      artifact_name:
+        required: true
+        type: string
       provider_authorized:
         required: false
         type: boolean
@@ -22,63 +28,90 @@ permissions:
   actions: write
   id-token: write
 
+concurrency:
+  group: orchid-governed-issue-${{ github.repository }}-${{ inputs.issue_number }}
+  cancel-in-progress: false
+
 jobs:
   budget-preflight:
     runs-on: ubuntu-latest
     outputs:
-      allowed: ${{ steps.governor.outputs.allowed }}
-      reason: ${{ steps.governor.outputs.reason }}
+      allowed: ${{ steps.budget.outputs.allowed }}
+      lease_id: ${{ steps.budget.outputs.lease_id }}
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+      PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
+      REQUESTED_USD: ${{ inputs.requested_usd }}
+      OC_WAVE_HASH: ${{ inputs.wave_hash }}
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'
+      OC_PROVIDER_DAILY_MAX_CALLS: '0'
+      OC_PROVIDER_WAVE_MAX_CALLS: '0'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: oc-autonomous-integration
-          fetch-depth: 1
-      - name: Fail-closed provider budget preflight
-        id: governor
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
+      - name: Preserve existing provider policy, throttles and fingerprints
+        id: policy
+        run: npx --no-install tsx scripts/provider-governor-workflow-gate.ts
+      - name: Fail-closed budget and exclusive durable reservation
+        id: budget
         env:
-          PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
-          REQUESTED_USD: ${{ inputs.requested_usd }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          set +e
-          decision=$(node scripts/oc-budget-governor.mjs \
-            --authorized "$PROVIDER_AUTHORIZED" \
-            --requested "$REQUESTED_USD" \
-            --program-spent "${OC_PROGRAM_SPENT_USD:-0}" \
-            --daily-spent "${OC_DAILY_SPENT_USD:-0}")
-          status=$?
-          set -e
-          allowed=$(jq -r '.allowed' <<<"$decision")
-          reason=$(jq -r '.reason' <<<"$decision")
-          echo "allowed=$allowed" >> "$GITHUB_OUTPUT"
-          echo "reason=$reason" >> "$GITHUB_OUTPUT"
-          {
-            echo "### Budget preflight — issue #${{ inputs.issue_number }}"
-            echo "- Provider authorized: **${PROVIDER_AUTHORIZED}**"
-            echo "- Requested reservation: **$${REQUESTED_USD}**"
-            echo "- Allowed: **${allowed}**"
-            echo "- Reason: **${reason}**"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [[ "$allowed" != "true" ]]; then
-            exit 0
-          fi
-          [[ "$status" -eq 0 ]]
+          GH_TOKEN: ${{ github.token }}
+          OC_PROVIDER_POLICY_ALLOWED: ${{ steps.policy.outputs.allow_paid_execution }}
+        run: npx --no-install tsx scripts/oc-dispatch-runtime.ts admit
+      - name: Preserve denied-lane receipt
+        if: steps.budget.outputs.allowed == 'false'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-receipts/*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
   provider-worker:
     needs: budget-preflight
-    if: needs.budget-preflight.outputs.allowed == 'true'
+    if: inputs.provider_authorized && needs.budget-preflight.outputs.allowed == 'true' && needs.budget-preflight.outputs.lease_id != ''
     uses: ./.github/workflows/orchid-completion-lane.yml
     with:
       issue_number: ${{ inputs.issue_number }}
-    secrets: inherit
+      provider_authorized: ${{ inputs.provider_authorized }}
+      lease_id: ${{ needs.budget-preflight.outputs.lease_id }}
+      wave_hash: ${{ inputs.wave_hash }}
+      artifact_name: ${{ inputs.artifact_name }}
+    # No provider secrets are forwarded while the owner has prohibited paid execution.
 
-  provider-denied:
-    needs: budget-preflight
-    if: needs.budget-preflight.outputs.allowed != 'true'
+  settle:
+    needs: [budget-preflight, provider-worker]
+    if: always() && needs.budget-preflight.outputs.lease_id != ''
     runs-on: ubuntu-latest
     steps:
-      - name: Confirm zero-provider execution
-        run: |
-          echo "Provider worker suppressed for issue #${{ inputs.issue_number }}."
-          echo "Reason: ${{ needs.budget-preflight.outputs.reason }}"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
+      - name: Release fenced lease and immediately refill this capacity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          OC_LEASE_ID: ${{ needs.budget-preflight.outputs.lease_id }}
+          OC_WAVE_HASH: ${{ inputs.wave_hash }}
+        run: npx --no-install tsx scripts/oc-dispatch-runtime.ts settle
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-receipts/*.json
+          include-hidden-files: true
+          if-no-files-found: error

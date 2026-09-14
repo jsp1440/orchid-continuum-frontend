@@ -3,90 +3,33 @@ name: Orchid Deterministic Dispatch
 on:
   workflow_call:
     inputs:
-      issue1:
-        required: false
+      issues_json:
+        required: true
         type: string
-        default: ''
-      issue2:
-        required: false
+      wave_hash:
+        required: true
         type: string
-        default: ''
-      issue3:
-        required: false
+      artifact_name:
+        required: true
         type: string
-        default: ''
-      issue4:
-        required: false
-        type: string
-        default: ''
-      issue5:
-        required: false
-        type: string
-        default: ''
-      issue6:
-        required: false
-        type: string
-        default: ''
-      issue7:
-        required: false
-        type: string
-        default: ''
-      issue8:
-        required: false
-        type: string
-        default: ''
 
-# Credential-free fan-out boundary. The governed child workflow keeps paid
-# providers unreachable while NO-API mode is active.
 permissions:
-  contents: read
-  issues: read
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+  id-token: write
 
 jobs:
-  issue1:
-    if: inputs.issue1 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
+  lane:
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        issue: ${{ fromJSON(inputs.issues_json) }}
+    uses: ./.github/workflows/orchid-budgeted-completion-lane.yml
     with:
-      issue_number: ${{ inputs.issue1 }}
-
-  issue2:
-    if: inputs.issue2 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue2 }}
-
-  issue3:
-    if: inputs.issue3 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue3 }}
-
-  issue4:
-    if: inputs.issue4 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue4 }}
-
-  issue5:
-    if: inputs.issue5 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue5 }}
-
-  issue6:
-    if: inputs.issue6 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue6 }}
-
-  issue7:
-    if: inputs.issue7 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue7 }}
-
-  issue8:
-    if: inputs.issue8 != ''
-    uses: ./.github/workflows/orchid-completion-governed.yml
-    with:
-      issue_number: ${{ inputs.issue8 }}
+      issue_number: ${{ format('{0}', matrix.issue) }}
+      wave_hash: ${{ inputs.wave_hash }}
+      artifact_name: ${{ inputs.artifact_name }}
+      provider_authorized: false

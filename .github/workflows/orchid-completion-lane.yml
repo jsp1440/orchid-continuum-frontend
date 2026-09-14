@@ -6,6 +6,22 @@ on:
       issue_number:
         required: true
         type: string
+      provider_authorized:
+        required: false
+        type: boolean
+        default: false
+      lease_id:
+        required: false
+        type: string
+        default: ''
+      wave_hash:
+        required: false
+        type: string
+        default: ''
+      artifact_name:
+        required: false
+        type: string
+        default: ''
 
 concurrency:
   group: orchid-completion-lane-${{ github.repository }}-${{ inputs.issue_number }}
@@ -19,7 +35,49 @@ permissions:
   id-token: write
 
 jobs:
+  budget-authorization:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.verify.outputs.allowed }}
+      integration_sha: ${{ steps.verify.outputs.integration_sha }}
+    env:
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+      PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
+      OC_LEASE_ID: ${{ inputs.lease_id }}
+      OC_WAVE_HASH: ${{ inputs.wave_hash }}
+      OC_PROVIDER_NO_API_MODE: 'true'
+      OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'
+      OC_PROVIDER_DAILY_MAX_CALLS: '0'
+      OC_PROVIDER_WAVE_MAX_CALLS: '0'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - name: Check authorization even for a direct legacy caller
+        run: |
+          set -euo pipefail
+          node scripts/oc-budget-governor.mjs --authorized "$PROVIDER_AUTHORIZED" > budget-decision.json || test "$?" -eq 42
+          cat budget-decision.json
+      - id: policy
+        run: npx --no-install tsx scripts/provider-governor-workflow-gate.ts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        if: inputs.provider_authorized && inputs.artifact_name != ''
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
+      - name: Verify fenced reservation and current admission before real worker
+        id: verify
+        if: inputs.provider_authorized && inputs.lease_id != '' && inputs.artifact_name != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OC_PROVIDER_POLICY_ALLOWED: ${{ steps.policy.outputs.allow_paid_execution }}
+        run: npx --no-install tsx scripts/oc-dispatch-runtime.ts verify
+
   execute:
+    needs: budget-authorization
+    if: inputs.provider_authorized && needs.budget-authorization.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 70
     env:
@@ -27,31 +85,36 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       INTEGRATION_BRANCH: oc-autonomous-integration
     steps:
-      - name: Checkout autonomous integration branch
+      - name: Checkout caller control implementation
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ env.INTEGRATION_BRANCH }}
-          fetch-depth: 0
-
-      - name: Verify scheduler lease
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
+      - name: Start fenced lease from actual executable lane
         id: lease
-        shell: bash
-        run: |
-          set -euo pipefail
-          labels=$(gh issue view "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --json state,labels --jq 'select(.state == "OPEN") | [.labels[].name] | join(" ")' 2>/dev/null || true)
-          marker="OC-AUTO-ISSUE: #${ISSUE_NUMBER}"
-          durable=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --base "$INTEGRATION_BRANCH" --limit 100 --json number,body --jq "[.[] | select(.body != null and (.body | contains(\\"${marker}\\")))][0].number // empty" 2>/dev/null || true)
-
-          if [[ "$labels" == *oc-running* && -n "$durable" && "$labels" != *oc-repair* ]]; then
-            echo "execute=false" >> "$GITHUB_OUTPUT"
-            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label oc-running --remove-label oc-queued --add-label oc-validating >/dev/null 2>&1 || true
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Provider execution suppressed because unchanged durable PR #${durable} already owns this lineage. Validation supervisor retains control." >/dev/null 2>&1 || true
-          elif [[ "$labels" == *oc-running* && "$labels" != *oc-runtime-backoff* ]]; then
-            echo "execute=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "execute=false" >> "$GITHUB_OUTPUT"
-            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body "[OC-AUTO] Stale/duplicate completion dispatch suppressed before provider execution because this issue no longer owns an oc-running lease. Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}." >/dev/null 2>&1 || true
-          fi
+        env:
+          PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
+          OC_PROVIDER_POLICY_ALLOWED: ${{ needs.budget-authorization.outputs.allowed }}
+          OC_LEASE_ID: ${{ inputs.lease_id }}
+          OC_WAVE_HASH: ${{ inputs.wave_hash }}
+        run: npx --no-install tsx scripts/oc-dispatch-runtime.ts start
+      - name: Checkout admitted integration revision
+        if: steps.lease.outputs.execute == 'true'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.budget-authorization.outputs.integration_sha }}
+          fetch-depth: 0
+      - name: Reuse admitted wave context
+        if: steps.lease.outputs.execute == 'true'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
 
       - name: Load issue context
         if: steps.lease.outputs.execute == 'true'
@@ -115,6 +178,7 @@ jobs:
             - Implement the largest safe bounded vertical slice that can be completed in this run.
             - Use real Continuum data/contracts; unavailable != absent; do not invent scientific evidence.
             - Run focused tests, broader tests, lint, typecheck/build and browser/preview validation where appropriate; repair failures before delivery.
+            - Read .oc-wave/plan.json and its hash-addressed wave packet first; reuse shared governance, architecture, graph and lineage context.
             - Commit and push durable work. Open/update exactly one draft PR targeting `oc-autonomous-integration` and include these exact machine-readable lines in its body:
               `OC-AUTO-ISSUE: #${{ inputs.issue_number }}`
               `OC-AUTO-REQUEUE: true|false`

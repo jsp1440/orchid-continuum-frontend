@@ -9,6 +9,7 @@ export type GraphDispatchPlanInput = {
   runningCount?: number;
   queuedIssueNumbers?: number[];
   openWorkRefs?: string[];
+  occupiedNodeIds?: string[];
   now?: string;
 };
 
@@ -34,7 +35,7 @@ function findNode(root: CompletionNode, id: string): CompletionNode | null {
 }
 
 function issueNumberFromRef(ref: string): number | null {
-  const match = ref.match(/(?:^|#)(\d+)$/);
+  const match = ref.match(/^(?:#|jsp1440\/orchid-continuum-frontend#|https:\/\/github\.com\/jsp1440\/orchid-continuum-frontend\/issues\/)?(\d+)$/);
   return match ? Number(match[1]) : null;
 }
 
@@ -54,14 +55,20 @@ function trackedQueuedIssue(node: CompletionNode, queued: ReadonlySet<number>): 
  * OWNER_ACTION in an isolated clone solely to remove them from this planning
  * pass; dependencies continue to see them as not-DONE and remain blocked.
  */
-export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}): GraphDispatchPlan {
-  const maxActiveLanes = Math.max(0, Number(input.maxActiveLanes ?? 8));
-  const runningCount = Math.max(0, Number(input.runningCount ?? 0));
+export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root: CompletionNode = COMPLETION_GRAPH): GraphDispatchPlan {
+  const maxActiveLanes = input.maxActiveLanes ?? 8;
+  const runningCount = input.runningCount ?? 0;
+  if (!Number.isSafeInteger(maxActiveLanes) || maxActiveLanes < 0 || maxActiveLanes > 8 ||
+      !Number.isSafeInteger(runningCount) || runningCount < 0) throw new Error("Invalid graph capacity");
   const capacity = Math.max(0, maxActiveLanes - runningCount);
   const queued = new Set(input.queuedIssueNumbers ?? []);
   const openWorkRefs = new Set(input.openWorkRefs ?? []);
   const now = input.now ?? new Date().toISOString();
-  const graph = cloneGraph(COMPLETION_GRAPH);
+  const graph = cloneGraph(root);
+  for (const id of input.occupiedNodeIds ?? []) {
+    const node = findNode(graph, id);
+    if (node) node.status = 'OWNER_ACTION';
+  }
 
   const issues: number[] = [];
   const leaves: GraphDispatchPlan['leaves'] = [];
