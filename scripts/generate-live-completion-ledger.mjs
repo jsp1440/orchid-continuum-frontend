@@ -20,7 +20,11 @@ const headers = {
 
 async function github(path) {
   const response = await fetch(`https://api.github.com${path}`, { headers });
-  if (!response.ok) throw new Error(`${response.status} ${response.statusText}: ${path}`);
+  if (!response.ok) {
+    const error = new Error(`${response.status} ${response.statusText}: ${path}`);
+    error.status = response.status;
+    throw error;
+  }
   return response.json();
 }
 
@@ -67,10 +71,25 @@ const active = [];
 const doneReceipts = [];
 const heartbeat = {};
 for (const repo of repositories) {
-  const issues = await pagedIssues(repo.slug, 'all');
+  let issues;
+  try {
+    issues = await pagedIssues(repo.slug, 'all');
+  } catch (error) {
+    if (error?.status === 404) {
+      heartbeat[repo.short] = {
+        accessible: false,
+        reason: 'repository unavailable to this workflow token',
+      };
+      console.warn(`live ledger: ${repo.slug} unavailable to workflow token; continuing with accessible repositories`);
+      continue;
+    }
+    throw error;
+  }
+
   const openIssues = issues.filter((issue) => issue.state === 'open');
   const doneIssues = issues.filter((issue) => issue.state === 'closed' && labelsOf(issue).has('oc-done'));
   heartbeat[repo.short] = {
+    accessible: true,
     issues_scanned: issues.length,
     open_issues_scanned: openIssues.length,
     canonical_done_receipts: doneIssues.length,
