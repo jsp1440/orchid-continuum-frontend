@@ -13,7 +13,7 @@ describe("deterministic completion dispatch boundary", () => {
       /uses: \.\/\.github\/workflows\/orchid-completion-governed\.yml/g,
     );
 
-    expect(governedUses).toHaveLength(5);
+    expect(governedUses).toHaveLength(8);
     expect(dispatcher).not.toContain("./.github/workflows/orchid-completion-lane.yml");
   });
 
@@ -28,7 +28,7 @@ describe("deterministic completion dispatch boundary", () => {
   });
 
   it("does not run empty queue slots", () => {
-    for (let index = 1; index <= 5; index += 1) {
+    for (let index = 1; index <= 8; index += 1) {
       expect(dispatcher).toContain(`if: inputs.issue${index} != ''`);
       expect(dispatcher).toContain(`issue_number: \${{ inputs.issue${index} }}`);
     }
