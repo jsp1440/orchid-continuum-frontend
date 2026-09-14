@@ -23,6 +23,17 @@ async function github(path) {
   return response.json();
 }
 
+async function pagedIssues(repoSlug, state = 'all') {
+  const values = [];
+  for (let page = 1; page <= 100; page += 1) {
+    const separator = '?';
+    const batch = await github(`/repos/${repoSlug}/issues${separator}state=${state}&per_page=100&page=${page}&sort=updated&direction=desc`);
+    values.push(...batch.filter((item) => !item.pull_request));
+    if (batch.length < 100) return values;
+  }
+  throw new Error(`Incomplete GitHub pagination for ${repoSlug}`);
+}
+
 function labelsOf(issue) {
   return new Set((issue.labels || []).map((label) => typeof label === 'string' ? label : label.name).filter(Boolean));
 }
@@ -37,11 +48,19 @@ function deriveStatus(issue) {
 }
 
 const active = [];
+const doneReceipts = [];
 const heartbeat = {};
 for (const repo of repositories) {
-  const issues = await github(`/repos/${repo.slug}/issues?state=open&per_page=100&sort=updated&direction=desc`);
-  heartbeat[repo.short] = { open_items_scanned: issues.length };
-  for (const issue of issues) {
+  const issues = await pagedIssues(repo.slug, 'all');
+  const openIssues = issues.filter((issue) => issue.state === 'open');
+  const doneIssues = issues.filter((issue) => issue.state === 'closed' && labelsOf(issue).has('oc-done'));
+  heartbeat[repo.short] = {
+    issues_scanned: issues.length,
+    open_issues_scanned: openIssues.length,
+    canonical_done_receipts: doneIssues.length,
+  };
+
+  for (const issue of openIssues) {
     const status = deriveStatus(issue);
     if (!status) continue;
     active.push({
@@ -50,22 +69,49 @@ for (const repo of repositories) {
       status,
       url: issue.html_url,
       updated_at: issue.updated_at,
-      kind: issue.pull_request ? 'pull_request' : 'issue',
+      kind: 'issue',
+    });
+  }
+
+  for (const issue of doneIssues) {
+    doneReceipts.push({
+      ref: `${repo.short}#${issue.number}`,
+      title: issue.title,
+      status: 'complete',
+      url: issue.html_url,
+      completed_at: issue.closed_at || issue.updated_at,
+      source: 'oc-done',
     });
   }
 }
 
 const rank = { running: 0, queued: 1, owner_gate: 2, blocked: 3 };
 active.sort((a, b) => (rank[a.status] - rank[b.status]) || Date.parse(b.updated_at) - Date.parse(a.updated_at));
+doneReceipts.sort((a, b) => Date.parse(a.completed_at || '0') - Date.parse(b.completed_at || '0') || a.ref.localeCompare(b.ref));
 
-const lastStateChangeAt = active.reduce((latest, item) => {
-  if (!item.updated_at) return latest;
-  return !latest || Date.parse(item.updated_at) > Date.parse(latest) ? item.updated_at : latest;
-}, null);
+const existingCompleted = Array.isArray(current.completed) ? current.completed : [];
+const existingRefs = new Set(existingCompleted.map((item) => item.ref).filter(Boolean));
+let nextId = existingCompleted.reduce((max, item) => Number.isSafeInteger(item.id) ? Math.max(max, item.id) : max, 0) + 1;
+const newlyDiscovered = [];
+for (const receipt of doneReceipts) {
+  if (existingRefs.has(receipt.ref)) continue;
+  newlyDiscovered.push({ id: nextId, ...receipt });
+  existingRefs.add(receipt.ref);
+  nextId += 1;
+}
+const completed = [...existingCompleted, ...newlyDiscovered];
+
+const latestCandidates = [
+  ...active.map((item) => item.updated_at),
+  ...doneReceipts.map((item) => item.completed_at),
+].filter(Boolean);
+const lastStateChangeAt = latestCandidates.reduce((latest, value) =>
+  !latest || Date.parse(value) > Date.parse(latest) ? value : latest, null);
 
 const semanticNext = {
   ...current,
-  verified_complete_count: Array.isArray(current.completed) ? current.completed.length : 0,
+  verified_complete_count: completed.length,
+  completed,
   active,
   heartbeat,
   last_state_change_at: lastStateChangeAt,
@@ -86,4 +132,4 @@ const next = {
 };
 
 await writeFile(outputPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-console.log(`live ledger updated: ${next.verified_complete_count} complete, ${active.length} active/queued/gated/blocked`);
+console.log(`live ledger updated: ${next.verified_complete_count} complete (${newlyDiscovered.length} newly discovered oc-done receipts), ${active.length} active/queued/gated/blocked`);
