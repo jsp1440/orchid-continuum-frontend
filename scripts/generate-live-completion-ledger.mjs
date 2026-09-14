@@ -58,13 +58,32 @@ for (const repo of repositories) {
 const rank = { running: 0, queued: 1, owner_gate: 2, blocked: 3 };
 active.sort((a, b) => (rank[a.status] - rank[b.status]) || Date.parse(b.updated_at) - Date.parse(a.updated_at));
 
-const next = {
+const lastStateChangeAt = active.reduce((latest, item) => {
+  if (!item.updated_at) return latest;
+  return !latest || Date.parse(item.updated_at) > Date.parse(latest) ? item.updated_at : latest;
+}, null);
+
+const semanticNext = {
   ...current,
-  generated_at: new Date().toISOString(),
   verified_complete_count: Array.isArray(current.completed) ? current.completed.length : 0,
   active,
   heartbeat,
+  last_state_change_at: lastStateChangeAt,
+};
+delete semanticNext.generated_at;
+
+const semanticCurrent = { ...current };
+delete semanticCurrent.generated_at;
+
+if (JSON.stringify(semanticCurrent) === JSON.stringify(semanticNext)) {
+  console.log(`live ledger unchanged: ${semanticNext.verified_complete_count} complete, ${active.length} active/queued/gated/blocked`);
+  process.exit(0);
+}
+
+const next = {
+  ...semanticNext,
+  generated_at: new Date().toISOString(),
 };
 
 await writeFile(outputPath, `${JSON.stringify(next, null, 2)}\n`, 'utf8');
-console.log(`live ledger: ${next.verified_complete_count} complete, ${active.length} active/queued/gated/blocked`);
+console.log(`live ledger updated: ${next.verified_complete_count} complete, ${active.length} active/queued/gated/blocked`);
