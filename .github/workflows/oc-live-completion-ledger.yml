@@ -4,6 +4,19 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '*/5 * * * *'
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'public/data/oc-live-completion-ledger.json'
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled, assigned, unassigned]
+  workflow_run:
+    workflows:
+      - Frontend CI
+      - Agent Security Guard
+      - CALYX-MATRIX-005 Validation
+      - Orchid Continuous Completion (NO API MODE)
+    types: [completed]
 
 permissions:
   contents: write
