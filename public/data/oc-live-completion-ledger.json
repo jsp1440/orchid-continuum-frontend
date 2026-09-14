@@ -4,7 +4,7 @@
   "source_of_truth": "github",
   "hard_paid_ceiling_usd": 50,
   "paid_spend_usd": 0.001027,
-  "verified_complete_count": 17,
+  "verified_complete_count": 77,
   "status_key": {
     "complete": "verified with evidence",
     "running": "actively executing",
@@ -13,34 +13,1183 @@
     "blocked": "external or technical dependency"
   },
   "completed": [
-    {"id":1,"title":"Backend autonomy control plane","ref":"backend#1422","status":"complete"},
-    {"id":2,"title":"Frontend governed 8-lane control plane","ref":"frontend#663","status":"complete"},
-    {"id":3,"title":"Frontend autonomous integration","ref":"frontend#493","status":"complete"},
-    {"id":4,"title":"Queue-label contradiction repair","status":"complete"},
-    {"id":5,"title":"Provider-free autonomy proof","status":"complete"},
-    {"id":6,"title":"Paid API Stage A","status":"complete"},
-    {"id":7,"title":"Paid API Stage B — two concurrent real jobs","status":"complete"},
-    {"id":8,"title":"Paid execution Budget Governor proof","status":"complete"},
-    {"id":9,"title":"PR #1423 deterministic worker tests — 87 passed","ref":"backend#1423","status":"complete"},
-    {"id":10,"title":"PR #1423 BUILD-088E exact-head validation","ref":"backend#1423","status":"complete"},
-    {"id":11,"title":"PR #1423 workflow-governance audit","ref":"backend#1423","status":"complete"},
-    {"id":12,"title":"PR #1423 Calyx conversation validation","ref":"backend#1423","status":"complete"},
-    {"id":13,"title":"PR #1423 CALYX-AGENT-003 validation","ref":"backend#1423","status":"complete"},
-    {"id":14,"title":"Two-week completion program","ref":"Brain#140","status":"complete"},
-    {"id":15,"title":"Continuous-completion/refill directive","ref":"Brain#140","status":"complete"},
-    {"id":16,"title":"Paid-execution authorization encoded","ref":"frontend#662","status":"complete"},
-    {"id":17,"title":"Execution reservoir populated","status":"complete"}
+    {
+      "id": 1,
+      "title": "Backend autonomy control plane",
+      "ref": "backend#1422",
+      "status": "complete"
+    },
+    {
+      "id": 2,
+      "title": "Frontend governed 8-lane control plane",
+      "ref": "frontend#663",
+      "status": "complete"
+    },
+    {
+      "id": 3,
+      "title": "Frontend autonomous integration",
+      "ref": "frontend#493",
+      "status": "complete"
+    },
+    {
+      "id": 4,
+      "title": "Queue-label contradiction repair",
+      "status": "complete"
+    },
+    {
+      "id": 5,
+      "title": "Provider-free autonomy proof",
+      "status": "complete"
+    },
+    {
+      "id": 6,
+      "title": "Paid API Stage A",
+      "status": "complete"
+    },
+    {
+      "id": 7,
+      "title": "Paid API Stage B — two concurrent real jobs",
+      "status": "complete"
+    },
+    {
+      "id": 8,
+      "title": "Paid execution Budget Governor proof",
+      "status": "complete"
+    },
+    {
+      "id": 9,
+      "title": "PR #1423 deterministic worker tests — 87 passed",
+      "ref": "backend#1423",
+      "status": "complete"
+    },
+    {
+      "id": 10,
+      "title": "PR #1423 BUILD-088E exact-head validation",
+      "ref": "backend#1423",
+      "status": "complete"
+    },
+    {
+      "id": 11,
+      "title": "PR #1423 workflow-governance audit",
+      "ref": "backend#1423",
+      "status": "complete"
+    },
+    {
+      "id": 12,
+      "title": "PR #1423 Calyx conversation validation",
+      "ref": "backend#1423",
+      "status": "complete"
+    },
+    {
+      "id": 13,
+      "title": "PR #1423 CALYX-AGENT-003 validation",
+      "ref": "backend#1423",
+      "status": "complete"
+    },
+    {
+      "id": 14,
+      "title": "Two-week completion program",
+      "ref": "Brain#140",
+      "status": "complete"
+    },
+    {
+      "id": 15,
+      "title": "Continuous-completion/refill directive",
+      "ref": "Brain#140",
+      "status": "complete"
+    },
+    {
+      "id": 16,
+      "title": "Paid-execution authorization encoded",
+      "ref": "frontend#662",
+      "status": "complete"
+    },
+    {
+      "id": 17,
+      "title": "Execution reservoir populated",
+      "status": "complete"
+    },
+    {
+      "id": 18,
+      "ref": "frontend#85",
+      "title": "CALYX-SPECIES-EXHIBIT-001 — Render nine unique evidence-grounded species stories",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/85",
+      "completed_at": "2026-08-20T02:28:36Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 19,
+      "ref": "frontend#87",
+      "title": "CALYX-HOMEPAGE-READINESS-UI-001 — Mission Control go/no-go dashboard",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/87",
+      "completed_at": "2026-08-20T02:28:40Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 20,
+      "ref": "frontend#89",
+      "title": "CALYX-SPECIES-DOSSIER-UI-001 — Atlas-aware dossier and adaptive partner entry",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/89",
+      "completed_at": "2026-08-20T02:28:47Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 21,
+      "ref": "frontend#93",
+      "title": "CALYX BUILD PACKET — Repair live frontend images, Atlas visibility, and graph labels",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/93",
+      "completed_at": "2026-08-20T18:40:07Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 22,
+      "ref": "frontend#163",
+      "title": "HOMEPAGE-RECOVERY-001 — canonical story flow, Atlas redesign, Calyx design participation, and live backend recovery",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/163",
+      "completed_at": "2026-08-20T22:35:22Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 23,
+      "ref": "backend#1083",
+      "title": "P0 OC-COMPLETE-001 — priority-aware five-lane portfolio scheduler",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1083",
+      "completed_at": "2026-08-21T03:59:47Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 24,
+      "ref": "frontend#284",
+      "title": "P1 — Wire canonical Species Dossier evidence receipts into the live /species/:slug page",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/284",
+      "completed_at": "2026-08-22T06:36:16Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 25,
+      "ref": "frontend#285",
+      "title": "P1 — Persist Applied AI and Data Science assessment continuity across sessions",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/285",
+      "completed_at": "2026-08-22T06:55:19Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 26,
+      "ref": "backend#1133",
+      "title": "CALYX-OBS-001 — end-to-end scientific observability trace for Calyx queries",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1133",
+      "completed_at": "2026-08-22T16:02:16Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 27,
+      "ref": "frontend#349",
+      "title": "P1 OC-INTEGRATION-GenusProfile-Atlas-002 — Wire mounted Genus Profile → Atlas handoff",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/349",
+      "completed_at": "2026-08-22T19:22:04Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 28,
+      "ref": "backend#1138",
+      "title": "Calyx Flywheel 1/6 — Governed procedure and assertion contracts",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1138",
+      "completed_at": "2026-08-23T06:29:18Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 29,
+      "ref": "frontend#367",
+      "title": "P1 OC-MISSION-CONTROL-RESTORE — Restore owner discoverability and current completion evidence",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/367",
+      "completed_at": "2026-08-23T10:25:44Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 30,
+      "ref": "frontend#478",
+      "title": "P0 OC-RUNTIME-006-FE — Port governed Claude → Gemini → OpenAI failover to frontend completion lanes",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/478",
+      "completed_at": "2026-08-31T05:06:34Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 31,
+      "ref": "frontend#497",
+      "title": "P0 CONTROL-PLANE — Prevent Claude workflow-validation skip from masquerading as healthy execution",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/497",
+      "completed_at": "2026-09-01T20:30:16Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 32,
+      "ref": "backend#1218",
+      "title": "P0 CONTROL-PLANE — Make repair-backoff mutually exclusive with scheduler queue eligibility",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1218",
+      "completed_at": "2026-09-01T23:55:04Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 33,
+      "ref": "backend#1216",
+      "title": "P0 CONTROL-PLANE — Bound Codex version probe before fallback timeout",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1216",
+      "completed_at": "2026-09-02T03:45:42Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 34,
+      "ref": "frontend#502",
+      "title": "P0 CONTROL-PLANE — Acquire graph-selected lease before lane dispatch",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/502",
+      "completed_at": "2026-09-02T21:42:05Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 35,
+      "ref": "backend#1239",
+      "title": "CALYX-AGENT-GOV-001 — task intent contract + behavioral ledger + least-agency enforcement",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1239",
+      "completed_at": "2026-09-03T14:31:49Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 36,
+      "ref": "frontend#522",
+      "title": "P1 OC-KNOWLEDGE-GRAPH-001 - Resolve the /knowledge vs /intelligence-graph naming and architecture conflict",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/522",
+      "completed_at": "2026-09-05T05:14:37Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 37,
+      "ref": "frontend#521",
+      "title": "P0 OC-CONTROL-PLANE - Wire completion-graph selectNextUnmetGate output into real scheduler issue creation",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/521",
+      "completed_at": "2026-09-05T05:27:01Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 38,
+      "ref": "backend#1132",
+      "title": "P0 OC-SECURITY-008 — Common Orchid Continuum Security Boundary",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1132",
+      "completed_at": "2026-09-06T01:08:42Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 39,
+      "ref": "frontend#600",
+      "title": "PREPARED: backend #1225 — exact-head scientific guard assertion repair",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/600",
+      "completed_at": "2026-09-06T06:06:16Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 40,
+      "ref": "frontend#601",
+      "title": "PREPARED: backend #1127 — empirical executor capability projection without authority gain",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/601",
+      "completed_at": "2026-09-06T06:06:52Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 41,
+      "ref": "frontend#599",
+      "title": "PREPARED: backend #1184 — provider-free Engineering Memory v1 vertical slice",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/599",
+      "completed_at": "2026-09-06T06:06:59Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 42,
+      "ref": "frontend#598",
+      "title": "PREPARED: backend #1227 — bounded Scientific Memory MVP contract",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/598",
+      "completed_at": "2026-09-06T06:07:05Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 43,
+      "ref": "backend#1267",
+      "title": "Expose continuous-completion status for Calyx operations monitor",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1267",
+      "completed_at": "2026-09-08T07:11:15Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 44,
+      "ref": "backend#1274",
+      "title": "P0 CONTROL-PLANE — Enforce owner-interruption suppression and auto-repair-first escalation",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1274",
+      "completed_at": "2026-09-08T07:11:16Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 45,
+      "ref": "frontend#561",
+      "title": "PREPARED: backend #1274 — owner-interruption suppression + auto-repair-first contract",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/561",
+      "completed_at": "2026-09-08T07:11:18Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 46,
+      "ref": "frontend#517",
+      "title": "Consume canonical completion health contract for frontend parity",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/517",
+      "completed_at": "2026-09-08T07:12:56Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 47,
+      "ref": "frontend#535",
+      "title": "P0: stop API rapid-fire — budget-aware batched provider dispatch",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/535",
+      "completed_at": "2026-09-08T08:09:20Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 48,
+      "ref": "frontend#286",
+      "title": "P2 — Guard /university/review against silent blank-page render for unauthorized users",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/286",
+      "completed_at": "2026-09-08T09:16:08Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 49,
+      "ref": "backend#1253",
+      "title": "P3 OC-HABITAT-001 — Habitat, elevation, and geospatial reconciliation pipeline",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1253",
+      "completed_at": "2026-09-09T20:27:05Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 50,
+      "ref": "backend#1255",
+      "title": "P3 OC-MOLECULAR-001 — Molecular sequence / GenBank / ITS accession integration contract",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1255",
+      "completed_at": "2026-09-09T20:27:42Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 51,
+      "ref": "backend#1256",
+      "title": "P3 OC-VISION-001 — Vision/image intelligence pipeline schema, license attribution, and identification contract",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1256",
+      "completed_at": "2026-09-09T20:28:32Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 52,
+      "ref": "backend#1137",
+      "title": "P1 OC-PROVIDER-ECONOMY-001 — Evaluate Kimi, Perplexity, Twin roles for low-cost autonomous capacity",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1137",
+      "completed_at": "2026-09-09T20:41:03Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 53,
+      "ref": "backend#1317",
+      "title": "P0 OC-SWARM-005 — repair controller zero-job startup and isolate activation gate",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1317",
+      "completed_at": "2026-09-09T21:01:40Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 54,
+      "ref": "backend#1086",
+      "title": "P2 OC-COMPLETE-004 — federation/source expansion for literature, pollination, mycorrhiza, traits, media",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1086",
+      "completed_at": "2026-09-09T22:38:52Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 55,
+      "ref": "backend#313",
+      "title": "CALYX-100-L3 — Source-binding resolver and canonical provenance chain",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/313",
+      "completed_at": "2026-09-11T06:10:59Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 56,
+      "ref": "backend#1251",
+      "title": "P2 OC-KG-001 — Knowledge Graph materialization schema, governed pipeline, and read-through contract",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1251",
+      "completed_at": "2026-09-11T07:17:09Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 57,
+      "ref": "backend#1266",
+      "title": "Add dependency-aware autonomous backlog refiller with reserve queue",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1266",
+      "completed_at": "2026-09-11T08:12:37Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 58,
+      "ref": "backend#1025",
+      "title": "TWO-DAY-SLICE-A — implement audit follow-through core without workflow changes",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1025",
+      "completed_at": "2026-09-11T19:19:18Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 59,
+      "ref": "frontend#562",
+      "title": "PREPARED: backend #1025 — deterministic self-audit remediation queue bridge",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/562",
+      "completed_at": "2026-09-11T19:19:20Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 60,
+      "ref": "backend#899",
+      "title": "SCICOMP-002U — complete and deterministic project activity pagination",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/899",
+      "completed_at": "2026-09-11T21:04:38Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 61,
+      "ref": "frontend#559",
+      "title": "PREPARED: backend #899 — deterministic Research Station activity pagination",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/559",
+      "completed_at": "2026-09-11T21:04:39Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 62,
+      "ref": "backend#1029",
+      "title": "TWO-DAY-SLICE-D — repair pollinator/mycorrhiza taxonomy IDs with dry-run migration",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1029",
+      "completed_at": "2026-09-11T22:15:04Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 63,
+      "ref": "frontend#548",
+      "title": "PREPARED: backend #1029 — pollinator/mycorrhiza taxon-ID dry-run repair package",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/548",
+      "completed_at": "2026-09-11T22:15:05Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 64,
+      "ref": "backend#1190",
+      "title": "P0 CALYX-EVOLVE-001 — Persistent taxonomy/data-curation experiment loop",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1190",
+      "completed_at": "2026-09-11T23:23:56Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 65,
+      "ref": "backend#1355",
+      "title": "SYNTH-CANARY-001 — prove governed direct executor on a trivial deterministic edit",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1355",
+      "completed_at": "2026-09-12T00:54:39Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 66,
+      "ref": "backend#1179",
+      "title": "CALYX-GH-RESEARCH-EXECUTOR-002 — bind queued research requests to governed execution and result artifacts",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1179",
+      "completed_at": "2026-09-12T02:14:48Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 67,
+      "ref": "backend#1365",
+      "title": "SWARM-LIVE-001 — reject malformed dependency declarations before queue admission",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1365",
+      "completed_at": "2026-09-12T05:52:59Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 68,
+      "ref": "frontend#576",
+      "title": "PREPARED: Brain #105 — calculated scientific readiness into Mission Control",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/576",
+      "completed_at": "2026-09-12T09:12:12Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 69,
+      "ref": "frontend#577",
+      "title": "PREPARED: Brain #109 — workflow reconstruction on canonical scientific observability",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/577",
+      "completed_at": "2026-09-12T10:10:17Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 70,
+      "ref": "frontend#632",
+      "title": "PREPARED: Brain #109 — transparent workflow automation opportunity ranking",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/632",
+      "completed_at": "2026-09-12T11:10:19Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 71,
+      "ref": "frontend#633",
+      "title": "PREPARED: Brain #109 — governed workflow agent-context contract",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/633",
+      "completed_at": "2026-09-12T12:09:55Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 72,
+      "ref": "frontend#634",
+      "title": "PREPARED: Brain #109 — review-required workflow runbook generation",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/634",
+      "completed_at": "2026-09-12T13:09:53Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 73,
+      "ref": "frontend#635",
+      "title": "PREPARED: Brain #109 — consume workflow intelligence in Mission Control",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/635",
+      "completed_at": "2026-09-12T14:14:05Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 74,
+      "ref": "frontend#637",
+      "title": "PREPARED: Brain #109 — end-to-end governed workflow intelligence proof",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/637",
+      "completed_at": "2026-09-12T15:07:24Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 75,
+      "ref": "frontend#638",
+      "title": "PREPARED: Brain #105 — readiness-change observation and regression lifecycle",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/638",
+      "completed_at": "2026-09-12T16:12:08Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 76,
+      "ref": "frontend#639",
+      "title": "PREPARED: Brain #109 — vertical-slice finding and cost-classification closure",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/639",
+      "completed_at": "2026-09-12T17:13:14Z",
+      "source": "oc-done"
+    },
+    {
+      "id": 77,
+      "ref": "frontend#575",
+      "title": "PREPARED: Brain #106 — persist scientific-observability anomalies into Verification Workbench",
+      "status": "complete",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/575",
+      "completed_at": "2026-09-12T18:09:28Z",
+      "source": "oc-done"
+    }
   ],
   "active": [
-    {"ref":"frontend#661","title":"Canonical multi-lane coding dispatch / real oc-running proof","status":"running"},
-    {"ref":"frontend#662","title":"Budget Governor + shared context + model router","status":"running"},
-    {"ref":"backend#608 / PR#1423","title":"Worker integration / Stage C","status":"running"},
-    {"ref":"frontend#166","title":"Featured Genus media/context recovery","status":"queued"},
-    {"ref":"frontend#167","title":"Thematic Earth/Atlas redesign","status":"queued"},
-    {"ref":"frontend#168","title":"Frontend/backend contract recovery","status":"queued"},
-    {"ref":"frontend#169","title":"Relationship / Knowledge Graph convergence","status":"queued"},
-    {"ref":"frontend#170","title":"Contextual Public Calyx","status":"queued"},
-    {"ref":"frontend#610","title":"Calyx Field / Lance pilot","status":"queued"},
-    {"ref":"frontend#243","title":"Conservatory/OASIS + Buying Companion","status":"queued"}
-  ]
+    {
+      "ref": "backend#1360",
+      "title": "P1 LIT-INTEL-001 — cross-domain technology scouting through the existing intelligence ledger",
+      "status": "running",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1360",
+      "updated_at": "2026-09-14T02:40:10Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#243",
+      "title": "P2 OC-COMPLETE-006 — Conservatory/OASIS + Orchid Buying Companion completion",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/243",
+      "updated_at": "2026-09-14T20:53:43Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#610",
+      "title": "Calyx Field Phase B: Android/desktop PWA Lance pilot",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/610",
+      "updated_at": "2026-09-14T20:53:36Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#170",
+      "title": "HOMEPAGE-RECOVERY-007 — contextual Public Calyx integration",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/170",
+      "updated_at": "2026-09-14T20:53:31Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#169",
+      "title": "HOMEPAGE-RECOVERY-006 — relationship experience and knowledge-graph convergence",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/169",
+      "updated_at": "2026-09-14T20:53:24Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#168",
+      "title": "HOMEPAGE-RECOVERY-005 — frontend/backend contract audit and recovery",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/168",
+      "updated_at": "2026-09-14T20:53:19Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#167",
+      "title": "HOMEPAGE-RECOVERY-004 — thematic Earth/Atlas redesign",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/167",
+      "updated_at": "2026-09-14T20:53:13Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#166",
+      "title": "HOMEPAGE-RECOVERY-003 — Featured Genus media and shared context recovery",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/166",
+      "updated_at": "2026-09-14T20:53:08Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#662",
+      "title": "P0 OC-BUDGET-001 — Budget Governor + shared context + model router",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/662",
+      "updated_at": "2026-09-14T20:53:02Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#676",
+      "title": "P1 CONSERVATORY-SECURITY-001 — bound public readiness evidence",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/676",
+      "updated_at": "2026-09-14T06:48:49Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#675",
+      "title": "P1 CONSERVATION-INTEGRATION-001 — canonical Atlas→Conservation evidence handoff",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/675",
+      "updated_at": "2026-09-14T06:28:51Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#664",
+      "title": "P0 LANCE-ACCEPTANCE-001 — October operational pilot, device rehearsal, and training",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/664",
+      "updated_at": "2026-09-14T02:40:44Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#308",
+      "title": "P0 OC-ARCHAEOLOGY-001 — Recover legacy Orchid Continuum apps, widgets, and lost work",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/308",
+      "updated_at": "2026-09-13T23:46:03Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#296",
+      "title": "P1 OC-OBSERVATORY-002 — Completion graph schema + recursive census",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/296",
+      "updated_at": "2026-09-13T23:46:00Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#523",
+      "title": "P1 OC-TAXONOMY-GOVERNANCE-001 - Audit TaxonomyOperations and TaxonomyReleases against the owner-authorization activation boundary",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/523",
+      "updated_at": "2026-09-13T23:45:59Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#289",
+      "title": "P4 — Add ARIA roles, keyboard navigation, and tests to homepage CapabilityGrid and EcosystemsBand",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/289",
+      "updated_at": "2026-09-13T01:13:52Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1361",
+      "title": "P1 LIT-INTEL-002 — evidence-bound innovation tasks through the canonical reserve queue",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1361",
+      "updated_at": "2026-09-12T04:37:10Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#171",
+      "title": "HOMEPAGE-RECOVERY-008 — integrated responsive and deployed validation",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/171",
+      "updated_at": "2026-09-05T05:33:22Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#188",
+      "title": "NAOCC-DEMO-001B — Federated Species Workspace meeting preview",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/188",
+      "updated_at": "2026-09-05T05:33:20Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#189",
+      "title": "NAOCC-DEMO-001C — Research Station Conservation Project Starter + federation bridge",
+      "status": "queued",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/189",
+      "updated_at": "2026-09-05T05:33:17Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#661",
+      "title": "P0 OC-EXECUTOR-001 — Restore real multi-lane coding dispatch",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/661",
+      "updated_at": "2026-09-14T06:42:41Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#532",
+      "title": "P0: permanent Portfolio Steward — Brain-driven self-refilling autonomous backlog",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/532",
+      "updated_at": "2026-09-14T02:39:33Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1024",
+      "title": "TWO-DAY-COMPLETION-001 — rolling 5-lane completion queue for Orchid Continuum",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1024",
+      "updated_at": "2026-09-11T15:12:59Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1085",
+      "title": "P0 OC-COMPLETE-003 — canonical scientific coverage, freshness, and backfill matrix",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1085",
+      "updated_at": "2026-09-10T03:45:21Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#23",
+      "title": "BUILD-MEDIA-001 — Provenance-First Genus Media Resolver",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/23",
+      "updated_at": "2026-09-08T16:04:09Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#520",
+      "title": "P0: stalled queue must trigger automatic remediation instead of passive stop",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/520",
+      "updated_at": "2026-09-08T13:19:47Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#608",
+      "title": "P0: subscription-authenticated worker bridge — Codex/ChatGPT first, zero model API keys",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/608",
+      "updated_at": "2026-09-08T10:11:47Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1008",
+      "title": "HARVESTER-PRODUCTIVITY-001 — live per-source yield, freshness, failures, and marginal-value telemetry",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1008",
+      "updated_at": "2026-08-21T04:09:58Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1021",
+      "title": "ORCHESTRATION-LITERATURE-KG-001 — add literature harvesting→extraction→methodology/traits→KG mission lane",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1021",
+      "updated_at": "2026-08-21T04:09:57Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1022",
+      "title": "ORCHESTRATION-AUDIT-FOLLOWTHROUGH-001 — audits must auto-create remediation work, not stop at narration",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1022",
+      "updated_at": "2026-08-21T04:09:56Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1026",
+      "title": "TWO-DAY-SLICE-B — implement Literature→KG orchestrator lane core",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1026",
+      "updated_at": "2026-08-21T04:09:52Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1027",
+      "title": "TWO-DAY-SLICE-C — implement rolling five-lane queue core",
+      "status": "owner_gate",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1027",
+      "updated_at": "2026-08-21T04:09:51Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1345",
+      "title": "CADE-101 — Implement ResearchQuestion / StateOfKnowledge / Hypothesis first vertical slice",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1345",
+      "updated_at": "2026-09-14T02:41:35Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#379",
+      "title": "P2 CONSERVATORY-LOCATIONS-UI-001 — Mount growing spaces and placement history",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/379",
+      "updated_at": "2026-09-14T02:41:20Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1298",
+      "title": "Calyx Field Phase B: observation/media/protected-locality pilot API",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1298",
+      "updated_at": "2026-09-14T02:41:01Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#301",
+      "title": "P1 OC-COMPLETE-004 — Graph-driven scheduler admission and convergence",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/301",
+      "updated_at": "2026-09-13T23:46:02Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1401",
+      "title": "P1 OC-RUNTIME-001 — bounded autonomous lane runtime",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1401",
+      "updated_at": "2026-09-13T01:19:22Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1402",
+      "title": "P0 OC-RUNTIME-001-COST — fail-closed shared cost ceilings and observed-spend admission",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1402",
+      "updated_at": "2026-09-13T01:19:11Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1396",
+      "title": "P1 OC-RSI-001 — Improvement Discovery Loop for bounded recursive self-improvement",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1396",
+      "updated_at": "2026-09-13T01:15:20Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#281",
+      "title": "P1 OC-OBSERVATORY-001 — Canonical completion graph + Mission Control observatory",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/281",
+      "updated_at": "2026-09-12T13:11:52Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1371",
+      "title": "P4 OBS-001: reject contradictory scheduler success evidence",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1371",
+      "updated_at": "2026-09-12T06:55:06Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1264",
+      "title": "Wire health contract into continuous-completion observer and fail-closed healer",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1264",
+      "updated_at": "2026-09-12T04:37:03Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#539",
+      "title": "PREPARED: backend #1264 — wire health contract into completion observer and healer",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/539",
+      "updated_at": "2026-09-11T21:07:09Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#525",
+      "title": "P2 OC-RESEARCH-STATION-TRAITS-001 - Build a real Trait Explorer vertical slice for Research Station",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/525",
+      "updated_at": "2026-09-07T00:23:23Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#365",
+      "title": "P1 OC-YIELD-001 — Autonomous Engineering Yield + independent review control",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/365",
+      "updated_at": "2026-09-06T07:24:18Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#66",
+      "title": "BUILD-OASIS-004 — Orchid Continuum App Center integration boundary",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/66",
+      "updated_at": "2026-09-06T06:21:57Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#197",
+      "title": "HARVESTER-PRODUCTIVITY-UI-001 — Mission Control harvester productivity dashboard",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/197",
+      "updated_at": "2026-09-06T05:54:46Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#358",
+      "title": "Calyx Flywheel 6/6 — Channel-neutral delivery and audience testing",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/358",
+      "updated_at": "2026-09-06T05:54:28Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#357",
+      "title": "Calyx Flywheel 5/6 — Analyze & Improve workbench",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/357",
+      "updated_at": "2026-09-06T05:54:12Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#302",
+      "title": "P1 OC-ACCEPTANCE-001 — Canonical live journey acceptance matrix",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/302",
+      "updated_at": "2026-09-06T05:53:47Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#311",
+      "title": "P1 OC-SHOWCASE-001 — Recover Hollywood Orchids as a newsletter-ready public widget",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/311",
+      "updated_at": "2026-09-06T05:24:12Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#310",
+      "title": "P1 OC-ARCHAEOLOGY-002 — Legacy asset registry and preservation manifest",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/310",
+      "updated_at": "2026-09-06T04:52:27Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#299",
+      "title": "P0 OC-OBSERVATORY-003 — Secret and external dependency readiness matrix",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/299",
+      "updated_at": "2026-09-06T04:22:52Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#288",
+      "title": "P3 — Audit Mission Control stub system registry against current backend capability",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/288",
+      "updated_at": "2026-09-06T04:22:26Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#165",
+      "title": "HOMEPAGE-RECOVERY-002 — story flow, language, and hero implementation",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/165",
+      "updated_at": "2026-09-06T04:21:34Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#131",
+      "title": "CALYX-MATRIX-UI-002 — Dynamic multimodal identification & visual reasoning experience",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/131",
+      "updated_at": "2026-09-06T04:21:24Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#71",
+      "title": "CALYX-TAXONOMY-REVIEW-001 — Release comparison and conflict review workspace",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/71",
+      "updated_at": "2026-09-06T04:21:17Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#591",
+      "title": "PREPARED: backend #1194 — deterministic governed browser-source fixture adapter",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/591",
+      "updated_at": "2026-09-06T01:22:09Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#579",
+      "title": "PREPARED: backend #1084 — Hassler release read-only readiness and staging preflight",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/579",
+      "updated_at": "2026-09-05T23:26:05Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#567",
+      "title": "PREPARED: backend #1085 — canonical scientific coverage/freshness/backfill matrix",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/567",
+      "updated_at": "2026-09-05T22:29:35Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#489",
+      "title": "P0 OC-CONTROL-PLANE — Add governed provider failover to portfolio refill planner",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/489",
+      "updated_at": "2026-09-05T06:55:05Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#242",
+      "title": "P1 OC-COMPLETE-005 — product-module completion audit and convergence queue",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/242",
+      "updated_at": "2026-09-05T06:04:06Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#238",
+      "title": "P1 CALYX-SYNTHESIS-001 — Featured Genus teaching unit + Mission Control readability",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/238",
+      "updated_at": "2026-09-05T06:02:17Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "frontend#283",
+      "title": "P0 — Recover stale oc-validating slots when CI never reports back",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/283",
+      "updated_at": "2026-08-22T06:36:24Z",
+      "kind": "issue"
+    },
+    {
+      "ref": "backend#1050",
+      "title": "BLOCKER — anthropics/claude-code-action@v1 fails in the planner and all three lanes; the autonomous loop produces no durable work",
+      "status": "blocked",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/issues/1050",
+      "updated_at": "2026-08-22T04:36:54Z",
+      "kind": "issue"
+    }
+  ],
+  "heartbeat": {
+    "frontend": {
+      "accessible": true,
+      "issues_scanned": 154,
+      "open_issues_scanned": 59,
+      "canonical_done_receipts": 35
+    },
+    "backend": {
+      "accessible": true,
+      "issues_scanned": 306,
+      "open_issues_scanned": 154,
+      "canonical_done_receipts": 25
+    },
+    "Brain": {
+      "accessible": false,
+      "reason": "repository unavailable to this workflow token"
+    }
+  },
+  "last_state_change_at": "2026-09-14T20:53:43Z",
+  "generated_at": "2026-09-14T21:26:30.906Z"
 }
