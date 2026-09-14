@@ -5,7 +5,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LexiconCoverageReport } from '@/lib/lexiconService';
 
-const measureLexiconCoverage = vi.fn<[], Promise<LexiconCoverageReport>>();
+const measureLexiconCoverage = vi.fn<() => Promise<LexiconCoverageReport>>();
 
 vi.mock('@/lib/lexiconService', () => ({
   measureLexiconCoverage: () => measureLexiconCoverage(),

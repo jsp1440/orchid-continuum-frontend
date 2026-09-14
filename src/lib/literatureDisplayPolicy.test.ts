@@ -27,7 +27,7 @@ describe("the gate fails closed", () => {
   it("withholds when there is no binding at all", () => {
     const release = releaseText(TEXT, null);
     expect(release.released).toBe(false);
-    if (release.released) throw new Error("unreachable");
+    if (release.released === true) throw new Error("unreachable");
     expect(release.reason).toBe("no-binding");
   });
 
@@ -39,7 +39,7 @@ describe("the gate fails closed", () => {
   it("withholds a policy string it does not recognise, rather than defaulting open", () => {
     const release = releaseText(TEXT, binding("FULL_TEXT_ALLOWED_PENDING"));
     expect(release.released).toBe(false);
-    if (release.released) throw new Error("unreachable");
+    if (release.released === true) throw new Error("unreachable");
     expect(release.reason).toBe("unrecognised-policy");
   });
 
@@ -88,7 +88,7 @@ describe("each policy releases exactly what it permits", () => {
   it("withholds INTERNAL_RESEARCH_ONLY without the internal-use permission", () => {
     const release = releaseText(TEXT, binding("INTERNAL_RESEARCH_ONLY", false));
     expect(release.released).toBe(false);
-    if (release.released) throw new Error("unreachable");
+    if (release.released === true) throw new Error("unreachable");
     expect(release.reason).toBe("internal-permission-absent");
   });
 
@@ -112,7 +112,7 @@ describe("withheld is never absent", () => {
   it("reports permitted-but-empty text as absent, not as a refusal", () => {
     const release = releaseText("", binding("FULL_TEXT_ALLOWED"));
     expect(release.released).toBe(false);
-    if (release.released) throw new Error("unreachable");
+    if (release.released === true) throw new Error("unreachable");
     expect(release.reason).toBe("absent");
   });
 

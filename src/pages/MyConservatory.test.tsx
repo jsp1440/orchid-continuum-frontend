@@ -94,7 +94,7 @@ let container: HTMLDivElement;
 let root: Root;
 
 beforeEach(() => {
-  mocks.useAuth.mockReturnValue({ session: null });
+  mocks.useAuth.mockReturnValue({ session: null, loading: false });
   container = document.createElement("div");
   document.body.appendChild(container);
   root = createRoot(container);
@@ -357,7 +357,7 @@ function contextFetch(overrides: {
   environment?: unknown;
   placementStatus?: number;
 } = {}) {
-  return vi.fn(async (input: RequestInfo | URL) => {
+  return vi.fn<typeof fetch>(async (input) => {
     const url = String(input);
     if (url.includes("qr.svg")) return { ok: true, blob: async () => new Blob([""]) } as unknown as Response;
     if (url.includes("/placement")) {
@@ -584,7 +584,7 @@ describe("MyConservatory recording a placement", () => {
     },
   };
 
-  async function open(overrides = placedContext) {
+  async function open(overrides: Parameters<typeof contextFetch>[0] = placedContext) {
     const fetchMock = contextFetch(overrides);
     renderAt("/conservatory/plants/p1", fetchMock as unknown as ReturnType<typeof routedFetch>);
     await flush();

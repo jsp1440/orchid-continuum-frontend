@@ -81,7 +81,7 @@ function GatedText({
     <div className="mt-4">
       <h3 className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/40">{label}</h3>
       <div className="mt-2">
-        {release.released ? (
+        {release.released === true ? (
           <>
             <p className="text-sm leading-relaxed text-white/75" data-testid="released-text">
               {release.text}
@@ -132,7 +132,7 @@ function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperVi
         </span>
       </div>
 
-      {statement.released ? (
+      {statement.released === true ? (
         <p className="mt-3 text-sm leading-relaxed text-white/80">
           {statement.text}
           {statement.truncated ? '…' : ''}

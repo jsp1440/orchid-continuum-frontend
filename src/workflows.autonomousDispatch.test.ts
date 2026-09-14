@@ -34,11 +34,17 @@ describe('canonical provider-free autonomous dispatch', () => {
     expect(read('orchid-completion-lane')).toContain('scripts/oc-budget-governor.mjs');
   });
   it('also denies provider canaries triggered by worker edits', () => {
-    for (const name of ['frontend-openai-runtime-canary', 'orchid-claude-runtime-recovery']) {
-      const canary = yaml.load(read(name)) as { jobs: Record<string, Job> };
-      expect(canary.jobs.canary.if).toContain("needs.budget-preflight.outputs.allowed == 'true'");
-      expect(read(name)).toContain("PROVIDER_AUTHORIZED: 'false'");
-    }
+    const canary = yaml.load(read('frontend-openai-runtime-canary')) as { jobs: Record<string, Job> };
+    expect(canary.jobs.canary.if).toContain("needs.budget-preflight.outputs.allowed == 'true'");
+    expect(read('frontend-openai-runtime-canary')).toContain("PROVIDER_AUTHORIZED: 'false'");
+  });
+  it('preserves the suspended Anthropic recovery circuit breaker with no executable canary', () => {
+    const recovery = yaml.load(read('orchid-claude-runtime-recovery')) as { jobs: Record<string, Job>; permissions: Record<string, string> };
+    expect(Object.keys(recovery.jobs)).toEqual(['parked']);
+    expect(recovery.permissions).toEqual({ contents: 'read', issues: 'read' });
+    expect(recovery.jobs.parked.steps?.every(step => !step.uses && !/\b(?:gh|curl|node|npx)\b/.test(step.run || ''))).toBe(true);
+    expect(read('orchid-claude-runtime-recovery')).not.toContain('secrets.');
+    expect(read('orchid-claude-runtime-recovery')).toContain('Automatic recovery attempts: **DISABLED**');
   });
   it('always settles a granted lease and refills per lane, independently of sibling outcomes', () => {
     const wrapper = yaml.load(read('orchid-budgeted-completion-lane')) as { jobs: Record<string, Job> };

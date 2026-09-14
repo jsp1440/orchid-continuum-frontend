@@ -96,7 +96,8 @@ function nullableString(value: unknown, field: string): string | null {
 }
 
 function identity(value: unknown, field: string): CompletionIdentity {
-  if (value === null || typeof value === 'string' || typeof value === 'number') return value;
+  if (value === null) return null;
+  if (typeof value === 'string' || typeof value === 'number') return value;
   throw new Error(`invalid ${field}: expected string, number, or null`);
 }
 
@@ -223,7 +224,7 @@ export function parseCompletionHealthStatus(value: unknown): CompletionHealthSta
       number: identity(pr.number, `autonomous_prs[${index}].number`),
       headSha: nullableString(pr.head_sha, `autonomous_prs[${index}].head_sha`),
       ciState: nullableString(pr.ci_state, `autonomous_prs[${index}].ci_state`),
-      mergeable,
+      mergeable: mergeable === null ? null : bool(mergeable, `autonomous_prs[${index}].mergeable`),
     };
   });
 
