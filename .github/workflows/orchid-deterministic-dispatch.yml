@@ -23,12 +23,21 @@ on:
         required: false
         type: string
         default: ''
+      issue6:
+        required: false
+        type: string
+        default: ''
+      issue7:
+        required: false
+        type: string
+        default: ''
+      issue8:
+        required: false
+        type: string
+        default: ''
 
-# This workflow is intentionally credential-free. It is the reusable boundary
-# between frequent deterministic queue/scheduling activity and any future paid
-# provider execution. Each selected issue enters the governed admission wrapper;
-# while NO-API mode is active, that wrapper parks Anthropic/Gemini/OpenAI before
-# the legacy provider lane is reachable.
+# Credential-free fan-out boundary. The governed child workflow keeps paid
+# providers unreachable while NO-API mode is active.
 permissions:
   contents: read
   issues: read
@@ -63,3 +72,21 @@ jobs:
     uses: ./.github/workflows/orchid-completion-governed.yml
     with:
       issue_number: ${{ inputs.issue5 }}
+
+  issue6:
+    if: inputs.issue6 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue6 }}
+
+  issue7:
+    if: inputs.issue7 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue7 }}
+
+  issue8:
+    if: inputs.issue8 != ''
+    uses: ./.github/workflows/orchid-completion-governed.yml
+    with:
+      issue_number: ${{ inputs.issue8 }}
