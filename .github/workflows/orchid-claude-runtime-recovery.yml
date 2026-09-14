@@ -15,6 +15,25 @@ permissions:
   id-token: write
 
 jobs:
+  budget-preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.budget.outputs.allowed }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Provider canaries require the same spending authorization
+        id: budget
+        env:
+          PROVIDER_AUTHORIZED: 'false'
+        run: |
+          set -euo pipefail
+          node scripts/oc-budget-governor.mjs --authorized "$PROVIDER_AUTHORIZED" > budget-decision.json || test "$?" -eq 42
+          echo "allowed=$(jq -r '.allowed' budget-decision.json)" >> "$GITHUB_OUTPUT"
+          cat budget-decision.json
+
   inspect:
     runs-on: ubuntu-latest
     outputs:
@@ -32,8 +51,8 @@ jobs:
           echo "count=$count" >> "$GITHUB_OUTPUT"
 
   canary:
-    needs: inspect
-    if: needs.inspect.outputs.count != '0'
+    needs: [inspect, budget-preflight]
+    if: needs.inspect.outputs.count != '0' && needs.budget-preflight.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

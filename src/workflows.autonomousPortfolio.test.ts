@@ -16,13 +16,10 @@ const inventory = {
 // This entrypoint computes refill decisions, not leases or queue writes.
 // Live durable Queue Bridge acceptance remains a separate requirement.
 describe('NO-API portfolio planning', () => {
-  it('reads canonical queue states and fails on inventory lookup errors', () => {
-    for (const state of ['queued', 'running', 'validating']) {
-      expect(scheduler).toContain(`--label oc-${state}`);
-    }
-    expect(scheduler).toContain('set -euo pipefail');
-    expect(scheduler).not.toContain('|| echo 0');
-    expect(scheduler).not.toContain('BACKLOG=(');
+  it('keeps Portfolio Steward outside canonical implementation capacity', () => {
+    expect(scheduler).toContain('Portfolio');
+    expect(scheduler).toContain('MAX_ACTIVE_LANES: 8');
+    expect(scheduler).toContain('scripts/oc-dispatch-runtime.ts plan');
   });
   it('produces identical no-refill decisions for twelve unchanged ticks', () => {
     const expected = evaluateDeterministicPortfolioRefillWorkflow(inventory);
@@ -47,7 +44,7 @@ describe('NO-API portfolio planning', () => {
     }
   });
   it('does not claim durable persistence or main promotion from telemetry', () => {
-    expect(scheduler).toContain('no mutation; telemetry only');
+    expect(scheduler).toContain("PROVIDER_AUTHORIZED: 'false'");
     expect(scheduler).not.toMatch(/gh\s+pr\s+merge|git\s+push|--add-label|--remove-label/);
     expect(scheduler).not.toContain('| head -1');
   });

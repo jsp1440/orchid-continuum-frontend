@@ -33,7 +33,7 @@ jobs:
       - name: Checkout governor code only
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: oc-autonomous-integration
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
       - name: Install deterministic governor dependencies
@@ -42,7 +42,7 @@ jobs:
       - name: Evaluate provider governor without entering a provider workflow
         id: governor
         shell: bash
-        run: npx tsx scripts/provider-governor-workflow-gate.ts
+        run: npx --no-install tsx scripts/provider-governor-workflow-gate.ts
 
       - name: Record governed NO-API decision
         shell: bash

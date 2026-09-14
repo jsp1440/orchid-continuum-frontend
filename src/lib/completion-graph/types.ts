@@ -41,10 +41,12 @@ export type ExecutionLane =
   | 'SCIENTIFIC_DATA_COMPLETION'
   | 'RELEASE_ACCEPTANCE';
 
-export type EvidenceKind = 'file' | 'route' | 'test' | 'pr' | 'issue' | 'ci' | 'doc' | 'commit';
+export type EvidenceKind = 'file' | 'route' | 'test' | 'pr' | 'issue' | 'ci' | 'doc' | 'commit' | 'note';
 
 export type Evidence = {
   kind: EvidenceKind;
+  /** Corroborating PR metadata; never completion proof by itself. */
+  prState?: 'open' | 'closed' | 'merged';
   ref: string;
   note?: string;
 };
