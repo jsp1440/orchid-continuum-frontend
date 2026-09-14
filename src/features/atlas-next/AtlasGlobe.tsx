@@ -5,6 +5,7 @@ import { feature } from 'topojson-client';
 import type { Topology } from 'topojson-specification';
 import countries110m from 'world-atlas/countries-110m.json';
 import type { Focus } from './scale';
+import { getReducedMotionPreference } from '@/hooks/usePrefersReducedMotion';
 
 /**
  * ATLAS-NEXT — the globe.
@@ -156,7 +157,7 @@ const AtlasGlobe: React.FC<Props> = ({
     if (!mount) return;
 
     const s = state.current;
-    s.reducedMotion = !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    s.reducedMotion = getReducedMotionPreference();
     s.coarsePointer = !!window.matchMedia?.('(pointer: coarse)').matches;
 
     let width = mount.clientWidth || 1;
@@ -574,7 +575,7 @@ const AtlasGlobe: React.FC<Props> = ({
     rebuildRef.current?.();
   }, [marks]);
 
-  return <div ref={mountRef} className="absolute inset-0" data-testid="atlas-globe" />;
+  return <div ref={mountRef} role="application" aria-label={`Interactive globe with ${marks.length.toLocaleString()} generalized orchid records`} className="absolute inset-0" data-testid="atlas-globe" />;
 };
 
 export default AtlasGlobe;

@@ -52,6 +52,10 @@ export default defineConfig(() => {
       globals: true,
       environment: "node",
       testTimeout: 15000,
+      // The browser journey is driven by Playwright, not Vitest. Without this
+      // Vitest collects the spec, fails to resolve @playwright/test's runner,
+      // and reports a red suite for a file it was never meant to run.
+      exclude: ["node_modules/**", "dist/**", "e2e/**"],
     },
   };
 });

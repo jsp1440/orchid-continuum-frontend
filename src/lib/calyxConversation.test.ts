@@ -99,7 +99,11 @@ describe("calyxConversation helpers", () => {
   });
 
   it("grounds CALYX turns in bounded featured-genus route context", () => {
-    expect(parseCalyxRouteContext("?genus=Vanilla&origin=homepage-featured-taxon")).toEqual({
+    expect(
+      parseCalyxRouteContext(
+        "?genus=Vanilla&origin=homepage-featured-taxon&context_is_evidence=false",
+      ),
+    ).toEqual({
       origin: "homepage-featured-taxon",
       featuredTaxon: { rank: "genus", name: "Vanilla" },
       questionContext: null,
@@ -109,17 +113,19 @@ describe("calyxConversation helpers", () => {
       buildCalyxTurnContext({
         projectId: "calyx-speak",
         uploadedFiles: [],
-        routeSearch: "?genus=Vanilla&origin=homepage-featured-taxon",
+        routeSearch:
+          "?genus=Vanilla&origin=homepage-featured-taxon&context_is_evidence=false",
       }),
     ).toMatchObject({
       route_context: {
         origin: "homepage-featured-taxon",
         featured_taxon: { rank: "genus", accepted_name: "Vanilla" },
+        featured_taxon_is_evidence: false,
       },
     });
   });
 
-  it("carries the Atlas active question into Calyx route context as non-evidentiary metadata", () => {
+  it("carries only the clean Atlas active question into Calyx as non-evidentiary metadata", () => {
     const href = atlasOccurrenceEvidenceCalyxHref(
       "Vanilla",
       "  What evidence supports this occurrence pattern?  ",
@@ -141,7 +147,7 @@ describe("calyxConversation helpers", () => {
       buildCalyxTurnContext({
         projectId: "calyx-speak",
         uploadedFiles: [],
-        routeSearch: `${search}&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private`,
+        routeSearch: search,
       }),
     ).toMatchObject({
       route_context: {
@@ -153,35 +159,26 @@ describe("calyxConversation helpers", () => {
       },
     });
 
-    const routeContext = (
-      buildCalyxTurnContext({
-        projectId: "calyx-speak",
-        uploadedFiles: [],
-        routeSearch: `${search}&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private`,
-      }).route_context ?? {}
-    ) as Record<string, unknown>;
-    expect(routeContext).not.toHaveProperty("latitude");
-    expect(routeContext).not.toHaveProperty("longitude");
-    expect(routeContext).not.toHaveProperty("locality");
-    expect(routeContext).not.toHaveProperty("occurrence_id");
-    expect(routeContext).not.toHaveProperty("collector");
+    const poisonedContext = buildCalyxTurnContext({
+      projectId: "calyx-speak",
+      uploadedFiles: [],
+      routeSearch: `${search}&latitude=-12.4&longitude=-77.1&locality=protected&occurrence_id=secret-1&collector=private`,
+    });
+    expect(poisonedContext).not.toHaveProperty("route_context");
   });
 
   it("fails closed when Atlas question provenance is malformed", () => {
-    const parsed = parseCalyxRouteContext(
-      "?genus=Vanilla&origin=atlas-next-occurrence-evidence&question=Where%3F&question_source=user&question_is_evidence=true",
-    );
+    const malformedSearch =
+      "?genus=Vanilla&origin=atlas-next-occurrence-evidence&question=Where%3F&question_source=user&question_is_evidence=true";
+    const parsed = parseCalyxRouteContext(malformedSearch);
     expect(parsed.questionContext).toBeNull();
 
     const context = buildCalyxTurnContext({
       projectId: "calyx-speak",
       uploadedFiles: [],
-      routeSearch:
-        "?genus=Vanilla&origin=atlas-next-occurrence-evidence&question=Where%3F&question_source=user&question_is_evidence=true",
+      routeSearch: malformedSearch,
     });
-    expect(context.route_context).not.toHaveProperty("question");
-    expect(context.route_context).not.toHaveProperty("question_source");
-    expect(context.route_context).not.toHaveProperty("question_is_evidence");
+    expect(context).not.toHaveProperty("route_context");
   });
 
   it("drops malformed or oversized route context instead of forwarding it", () => {

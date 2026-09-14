@@ -30,15 +30,27 @@ describe('Research Center route context', () => {
   });
 
   it('retains the existing featured-taxon genus handoff as navigation context', () => {
-    // Regression: this case previously hand-wrote `origin=featured-taxon`,
-    // which no producer emits — the canonical value is `homepage-featured-taxon`.
-    // The parser was never broken; the literal had drifted from the constant.
     expect(parseResearchRouteContext(searchOf(featuredTaxonResearchHref('Phalaenopsis')))).toEqual({
       origin: FEATURED_TAXON_ORIGIN,
       genus: 'Phalaenopsis',
       projectId: null,
       contextIsEvidence: false,
     });
+  });
+
+  it('requires the homepage featured genus to declare itself non-evidentiary', () => {
+    const href = featuredTaxonResearchHref('Phalaenopsis');
+    const params = new URLSearchParams(searchOf(href));
+    expect(params.get('context_is_evidence')).toBe('false');
+
+    expect(
+      parseResearchRouteContext('?genus=Phalaenopsis&origin=homepage-featured-taxon'),
+    ).toBeNull();
+    expect(
+      parseResearchRouteContext(
+        '?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=true',
+      ),
+    ).toBeNull();
   });
 
   it('fails closed if Atlas attempts to assert evidentiary context', () => {
@@ -50,10 +62,27 @@ describe('Research Center route context', () => {
     expect(parseResearchRouteContext('?genus=Phalaenopsis&origin=atlas-next')).toBeNull();
   });
 
-  it('drops malformed project identity without dropping the safe genus context', () => {
+  it('fails closed on malformed explicit project identity instead of widening to genus-only context', () => {
+    const malformedProjects = [
+      'project%3Flat%3D1%26lng%3D2',
+      '%20%20%20',
+      '%2Fresearch%2Fproject',
+      'x'.repeat(161),
+    ];
+
+    for (const project of malformedProjects) {
+      expect(
+        parseResearchRouteContext(
+          `?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false&project=${project}`,
+        ),
+      ).toBeNull();
+    }
+  });
+
+  it('preserves a legitimate genus-only Research arrival when no project was supplied', () => {
     expect(
       parseResearchRouteContext(
-        '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false&project=project%3Flat%3D1%26lng%3D2',
+        '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false',
       ),
     ).toEqual({
       origin: ATLAS_NEXT_RESEARCH_ORIGIN,
@@ -84,8 +113,6 @@ describe('Research Center route context', () => {
   });
 
   it('round-trips both governed origins, so neither can break the other', () => {
-    // One test that fails if EITHER producer stops matching the parser. The
-    // previous per-origin literals could each drift independently and silently.
     const featured = parseResearchRouteContext(searchOf(featuredTaxonResearchHref('Phalaenopsis')));
     const atlas = parseResearchRouteContext(
       searchOf(atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'naocc-phalaenopsis' })),
@@ -93,8 +120,6 @@ describe('Research Center route context', () => {
 
     expect(featured?.origin).toBe(FEATURED_TAXON_ORIGIN);
     expect(atlas?.origin).toBe(ATLAS_NEXT_RESEARCH_ORIGIN);
-
-    // Distinct origins, one shared subject, and neither is evidence.
     expect(featured?.origin).not.toBe(atlas?.origin);
     expect(featured?.genus).toBe('Phalaenopsis');
     expect(atlas?.genus).toBe('Phalaenopsis');
@@ -103,8 +128,6 @@ describe('Research Center route context', () => {
   });
 
   it('never lets a producer emit a locality channel', () => {
-    // Asserted on the built hrefs themselves, not just the parsed result: the
-    // parser ignoring a field is not the same as the contract never offering it.
     const hrefs = [
       featuredTaxonResearchHref('Phalaenopsis'),
       atlasNextResearchHref({ genus: 'Phalaenopsis', projectId: 'naocc-phalaenopsis' }),

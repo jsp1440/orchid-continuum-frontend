@@ -115,7 +115,18 @@
     font-family: 'Playfair Display', 'Playfair', Georgia, serif;
     font-weight: 500;
     letter-spacing: -0.012em;
-    color: #1c1a17;
+    /*
+     * Headings take the colour of what they sit in.
+     *
+     * This used to be a flat `color: #1c1a17`, which paints ink on every
+     * heading on the site whatever is behind it. On the dark panels — Mission
+     * Control's sign-in, the About and Ecosystems heroes, the Orchids on
+     * screen essay — that is near-black on near-black, a contrast around
+     * 1.05:1. The heading is not faint there; it is not there. `body` already
+     * carries the ink colour, so a heading on the ordinary cream page is
+     * unchanged, while one inside a dark section finally reads.
+     */
+    color: inherit;
   }
 
   pre, code, kbd, samp {

@@ -18,6 +18,10 @@ interface ImportMetaEnv {
   readonly VITE_MAPBOX_TOKEN?: string;
   /** Optional Mapbox style override. */
   readonly VITE_MAPBOX_STYLE_URL?: string;
+  /** Identity/database origin. Defaults to the shipped hosted project. */
+  readonly VITE_SUPABASE_URL?: string;
+  /** PUBLIC anon key for VITE_SUPABASE_URL. Never a service-role key. */
+  readonly VITE_SUPABASE_ANON_KEY?: string;
 }
 
 interface ImportMeta {

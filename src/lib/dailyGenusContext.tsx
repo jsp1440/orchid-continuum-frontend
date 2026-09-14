@@ -20,6 +20,29 @@ export interface DailyGenusState {
   diagnostic: string | null;
 }
 
+const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
+const MAX_CANONICAL_GENUS_LENGTH = 120;
+
+/**
+ * Daily snapshot rows are operational input, not trusted scientific identity.
+ * Keep them behind the same bounded single-genus contract used by public
+ * navigation so a malformed snapshot cannot crash Homepage/Atlas/Matrix/Calyx
+ * route producers or silently turn a binomial/locality-shaped value into genus
+ * context.
+ */
+export function canonicalDailySnapshotGenus(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const genus = value.trim();
+  if (
+    !genus ||
+    genus.length > MAX_CANONICAL_GENUS_LENGTH ||
+    !SAFE_CANONICAL_GENUS.test(genus)
+  ) {
+    return null;
+  }
+  return genus;
+}
+
 const initialGenus = featuredGenusName();
 const DailyGenusContext = createContext<DailyGenusState>({
   genus: initialGenus,
@@ -72,16 +95,19 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         .eq('snapshot_date', today)
         .single();
 
-      const snapshotGenus = !error && data ? (data.genus as string | null)?.trim() : null;
+      const rawSnapshotGenus = !error && data ? data.genus : null;
+      const snapshotGenus = canonicalDailySnapshotGenus(rawSnapshotGenus);
       if (snapshotGenus) {
         await hydrateContinuum(snapshotGenus, null);
         return;
       }
 
-      await hydrateContinuum(
-        local,
-        `[Genus of the Day] Snapshot unavailable for ${today}; using deterministic identity ${local}.`,
-      );
+      const invalidSnapshotDiagnostic =
+        !error && data && typeof rawSnapshotGenus === 'string' && rawSnapshotGenus.trim()
+          ? `[Genus of the Day] Snapshot identity for ${today} was not a bounded canonical genus; using deterministic identity ${local}.`
+          : `[Genus of the Day] Snapshot unavailable for ${today}; using deterministic identity ${local}.`;
+
+      await hydrateContinuum(local, invalidSnapshotDiagnostic);
     } catch (error) {
       await hydrateContinuum(
         local,

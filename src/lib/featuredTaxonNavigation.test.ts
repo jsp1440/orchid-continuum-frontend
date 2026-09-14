@@ -2,8 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { parseCalyxRouteContext } from '@/lib/calyxConversation';
 import {
   FEATURED_TAXON_ORIGIN,
+  atlasWorkspaceCalyxHref,
+  atlasWorkspaceResearchHref,
+  atlasWorkspaceSpeciesHref,
   featuredTaxonAtlasHref,
   featuredTaxonCalyxHref,
+  featuredTaxonGenusProfileHref,
+  featuredTaxonResearchHref,
 } from '@/lib/featuredTaxonNavigation';
 
 describe('featured taxon navigation contracts', () => {
@@ -12,6 +17,11 @@ describe('featured taxon navigation contracts', () => {
     const url = new URL(href, 'https://orchidcontinuum.org');
     expect(url.pathname).toBe('/atlas');
     expect(url.searchParams.get('genera')).toBe('Vanilla');
+  });
+
+  it('hands the featured genus to its canonical Genus Profile path', () => {
+    expect(featuredTaxonGenusProfileHref('Vanilla')).toBe('/genus/Vanilla');
+    expect(featuredTaxonGenusProfileHref('Phalaenopsis')).toBe('/genus/Phalaenopsis');
   });
 
   it('produces Calyx route context that the canonical turn-context parser consumes', () => {
@@ -48,5 +58,26 @@ describe('featured taxon navigation contracts', () => {
   it('fails closed when no featured genus is available', () => {
     expect(() => featuredTaxonAtlasHref('   ')).toThrow('Featured taxon genus is required');
     expect(() => featuredTaxonCalyxHref('')).toThrow('Featured taxon genus is required');
+    expect(() => featuredTaxonGenusProfileHref('')).toThrow('Featured taxon genus is required');
+  });
+
+  it('accepts only a bounded canonical genus across homepage and Atlas handoffs', () => {
+    const handoffs = [
+      featuredTaxonAtlasHref,
+      featuredTaxonCalyxHref,
+      featuredTaxonGenusProfileHref,
+      featuredTaxonResearchHref,
+      atlasWorkspaceCalyxHref,
+      atlasWorkspaceResearchHref,
+      atlasWorkspaceSpeciesHref,
+    ];
+
+    for (const handoff of handoffs) {
+      expect(() => handoff('Phalaenopsis amabilis')).toThrow('bounded canonical genus');
+      expect(() => handoff('phalaenopsis')).toThrow('bounded canonical genus');
+      expect(() => handoff('Phalaenopsis?locality=hidden')).toThrow('bounded canonical genus');
+      expect(() => handoff(`A${'a'.repeat(120)}`)).toThrow('bounded canonical genus');
+      expect(() => handoff(null as unknown as string)).toThrow('bounded canonical genus');
+    }
   });
 });

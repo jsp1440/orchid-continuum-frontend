@@ -5,18 +5,19 @@ import {
   Network,
   FileSearch,
   Download,
-  Beaker,
   GitBranch,
   Database,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
+import ResearchTraitExplorer from '@/components/research/ResearchTraitExplorer';
 import {
   researchStationAtlasHref,
   researchStationCalyxHref,
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { ATLAS_WORKSPACE_ORIGIN } from '@/lib/featuredTaxonNavigation';
+import { GENUS_PROFILE_ORIGIN } from '@/lib/genusProfileNavigation';
 import { SPECIES_DOSSIER_RESEARCH_ORIGIN } from '@/lib/speciesDossierResearchNavigation';
 import { MATRIX_RESEARCH_ORIGIN } from '@/lib/matrixResearchNavigation';
 import { parseResearchRouteContext } from '@/lib/researchRouteContext';
@@ -25,9 +26,8 @@ import { parseResearchRouteContext } from '@/lib/researchRouteContext';
  * Research Center — advanced research surface for power users.
  *
  * Five pillars: Query Builder, Trait Explorer, Ecological Networks,
- * Literature/Evidence, and Exports. Each pillar maps to a future
- * Continuum API endpoint; this page is intentionally a structural
- * placeholder so researchers can see what is coming online.
+ * Literature/Evidence, and Exports. The investigation workbench and
+ * read-only Trait Explorer are wired; the other pillars remain previews.
  */
 
 const PILLARS = [
@@ -37,13 +37,6 @@ const PILLARS = [
     body: 'Compose filters across taxonomy, traits, ecology, and geography. Save queries as reproducible URLs.',
     endpoint: 'POST /api/research/queries',
     fields: ['genus', 'biome', 'elevation', 'pollinator', 'iucn'],
-  },
-  {
-    icon: Beaker,
-    title: 'Trait Explorer',
-    body: 'Distributions of growth form, flower size, perfume class, lip morphology — across genera and clades.',
-    endpoint: 'GET /api/research/traits',
-    fields: ['growth-form', 'flower-size', 'spur-length', 'scent-class'],
   },
   {
     icon: Network,
@@ -82,6 +75,7 @@ const ResearchCenter: React.FC = () => {
   const arrivedFromAtlas =
     routeContext?.origin === ATLAS_NEXT_RESEARCH_ORIGIN ||
     routeContext?.origin === ATLAS_WORKSPACE_ORIGIN;
+  const arrivedFromGenusProfile = routeContext?.origin === GENUS_PROFILE_ORIGIN;
   const arrivedFromDossier = routeContext?.origin === SPECIES_DOSSIER_RESEARCH_ORIGIN;
   // A Matrix arrival previously fell through to "Continuing from Genus of the
   // Day" — a curated editorial pick, which is not where this subject came from.
@@ -151,9 +145,11 @@ const ResearchCenter: React.FC = () => {
                     ? 'Continuing from the Species Dossier'
                     : arrivedFromAtlas
                       ? 'Continuing from the Atlas'
-                      : arrivedFromMatrix
-                        ? 'Continuing from a Matrix candidate'
-                        : 'Continuing from Genus of the Day'}
+                      : arrivedFromGenusProfile
+                        ? 'Continuing from the Genus Profile'
+                        : arrivedFromMatrix
+                          ? 'Continuing from a Matrix candidate'
+                          : 'Continuing from Genus of the Day'}
                 </div>
                 <p className="mt-2 text-sm leading-6 text-white/75">
                   <span className="font-serif text-lg italic text-white">{subjectLabel}</span>{' '}
@@ -192,7 +188,7 @@ const ResearchCenter: React.FC = () => {
 
       {/* Research Station — one investigation, read end to end against the
           canonical Research Workspace contract. This is the live surface; the
-          query-builder pillars below remain a structural preview. */}
+          other query-builder pillars below remain a structural preview. */}
       <section className="py-10">
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <div className="mb-6">
@@ -219,6 +215,12 @@ const ResearchCenter: React.FC = () => {
           ) : (
             <ResearchStationWorkbench projectId={projectId} />
           )}
+        </div>
+      </section>
+
+      <section className="py-10">
+        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+          <ResearchTraitExplorer key={subjectLabel} initialSubject={subjectLabel} />
         </div>
       </section>
 
@@ -279,7 +281,7 @@ const ResearchCenter: React.FC = () => {
       <section className="pb-20">
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <div className="text-xs tracking-[0.25em] uppercase text-emerald-300/70 mb-3">
-            Five research pillars
+            Remaining research pillars · preview
           </div>
           <h2 className="font-serif text-3xl md:text-4xl mb-10 max-w-2xl">
             From curated lists to reproducible exports.

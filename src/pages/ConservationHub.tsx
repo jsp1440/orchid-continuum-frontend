@@ -2,8 +2,6 @@ import React from 'react';
 import { Trees, ScrollText, HandHeart, Network, Workflow } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import PageShell from '@/components/orchid/PageShell';
-import OrganizationCard from '@/components/orchid/OrganizationCard';
-import ProjectWorkspaceCard from '@/components/orchid/ProjectWorkspaceCard';
 import EducationalOverlay from '@/components/orchid/EducationalOverlay';
 import GlossaryTerm from '@/components/orchid/GlossaryTerm';
 import RoleBadge from '@/components/orchid/RoleBadge';
@@ -21,93 +19,6 @@ import RoleBadge from '@/components/orchid/RoleBadge';
  * Frontend never queries the database directly; data flows exclusively
  * through the typed API client (see src/lib/api.ts).
  */
-
-const demoOrgs = [
-  {
-    slug: 'andean-orchid-trust',
-    name: 'Andean Orchid Trust',
-    kind: 'Conservation Organization',
-    region: 'Ecuador & Peru',
-    description:
-      'Field conservation across cloud forest corridors of the eastern Andes. Coordinates ranger patrols, community nurseries, and pollinator monitoring with eight partner reserves.',
-    memberCount: 412,
-    projectCount: 7,
-    focus: ['Cloud forest', 'Pollinator monitoring', 'Community nurseries'],
-  },
-  {
-    slug: 'south-asia-orchidaceae-network',
-    name: 'South Asia Orchidaceae Network',
-    kind: 'Research Consortium',
-    region: 'India · Bhutan · Nepal',
-    description:
-      'A consortium linking ten herbaria and four protected-area authorities to share documented sightings, voucher images, and habitat assessments across the eastern Himalaya.',
-    memberCount: 86,
-    projectCount: 4,
-    focus: ['Herbarium digitisation', 'Habitat assessment'],
-  },
-  {
-    slug: 'borneo-canopy-initiative',
-    name: 'Borneo Canopy Initiative',
-    kind: 'Conservation Organization',
-    region: 'Sabah, Malaysia',
-    description:
-      'Lowland and montane epiphytic orchid surveys with Indigenous land stewards. Builds bilingual species guides and trains community paraecologists.',
-    memberCount: 138,
-    projectCount: 5,
-    focus: ['Epiphyte surveys', 'Indigenous stewardship', 'Paraecology'],
-  },
-];
-
-const demoProjects = [
-  {
-    slug: 'high-andean-pollinator-pulse',
-    title: 'High-Andean Pollinator Pulse',
-    organization: 'Andean Orchid Trust',
-    region: 'Cajamarca, Peru · 2,800–3,400 m',
-    summary:
-      'Year-round monitoring of hummingbird and euglossine visitation at twelve Telipogon sites, paired with micro-climate loggers and AI-assisted image triage.',
-    phase: 'Active fieldwork' as const,
-    contributors: 18,
-    lastActivity: new Date(Date.now() - 86_400_000 * 2).toISOString(),
-    openTo: ['public', 'researcher', 'organization'] as const,
-  },
-  {
-    slug: 'himalayan-herbarium-bridge',
-    title: 'Himalayan Herbarium Bridge',
-    organization: 'South Asia Orchidaceae Network',
-    region: 'Sikkim · Bhutan',
-    summary:
-      'Cross-walk of 14,000 voucher specimens against the Continuum taxonomy. Documents historical range shifts and nomenclatural revisions since 1890.',
-    phase: 'Analysis' as const,
-    contributors: 9,
-    lastActivity: new Date(Date.now() - 86_400_000 * 9).toISOString(),
-    openTo: ['researcher', 'organization'] as const,
-  },
-  {
-    slug: 'kinabalu-canopy-paraecology',
-    title: 'Kinabalu Canopy Paraecology',
-    organization: 'Borneo Canopy Initiative',
-    region: 'Sabah, Malaysia',
-    summary:
-      'Community paraecologists document epiphytic orchid assemblages along an elevational gradient. Photo-vouchered with mycorrhizal soil sampling at fruiting events.',
-    phase: 'Planning' as const,
-    contributors: 6,
-    lastActivity: new Date(Date.now() - 86_400_000 * 14).toISOString(),
-    openTo: ['public', 'student', 'organization'] as const,
-  },
-  {
-    slug: 'mesoamerican-fragmentation-atlas',
-    title: 'Mesoamerican Fragmentation Atlas',
-    organization: 'Continuum Cross-Network',
-    region: 'Guatemala · Honduras · Mexico',
-    summary:
-      'Spatial overlay of orchid sightings against deforestation chronologies. Surfaces priority corridors where remaining cloud forest could be reconnected.',
-    phase: 'Reporting' as const,
-    contributors: 22,
-    lastActivity: new Date(Date.now() - 86_400_000 * 4).toISOString(),
-    openTo: ['researcher', 'organization', 'admin'] as const,
-  },
-];
 
 const protocols = [
   {
@@ -219,10 +130,18 @@ const ConservationHub: React.FC = () => {
             }
           />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {demoOrgs.map(o => (
-            <OrganizationCard key={o.slug} {...o} demo />
-          ))}
+        <div
+          data-testid="organization-directory-unavailable"
+          className="rounded-2xl border border-white/10 bg-white/[0.02] p-8"
+        >
+          <h3 className="font-serif text-2xl text-white">
+            No verified member organizations are published yet
+          </h3>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/70">
+            Organization identities, locations, contacts, membership counts,
+            agreements, and projects remain hidden until a governed backend
+            record explicitly authorizes public display.
+          </p>
         </div>
       </section>
 
@@ -243,10 +162,18 @@ const ConservationHub: React.FC = () => {
             </p>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {demoProjects.map(p => (
-            <ProjectWorkspaceCard key={p.slug} {...p} demo />
-          ))}
+        <div
+          data-testid="project-directory-unavailable"
+          className="rounded-2xl border border-white/10 bg-white/[0.02] p-8"
+        >
+          <h3 className="font-serif text-2xl text-white">
+            No verified project workspaces are published yet
+          </h3>
+          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-white/70">
+            Project names, participants, locations, activity, and scientific
+            claims appear only when supplied by a verified organization record
+            with public-display authorization.
+          </p>
         </div>
       </section>
 
@@ -317,9 +244,9 @@ const ConservationHub: React.FC = () => {
                 Find your counterparts
               </h3>
               <p className="text-sm text-white/70 leading-relaxed">
-                The Continuum surfaces organizations working on adjacent
-                geographies, taxa, or methods — so a herbarium in Quito and a
-                ranger team in Loja can recognise their shared work.
+                The Continuum can surface verified organizations working on
+                adjacent geographies, taxa, or methods when their governed
+                records explicitly permit public discovery.
               </p>
             </div>
           </div>

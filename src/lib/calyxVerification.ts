@@ -347,7 +347,7 @@ export function checkCalyxMissionClaim(
       "Reasoning audit trail",
       ledgerPresent ? "pass" : "fail",
       ledgerPresent
-        ? "A versioned reasoning ledger is recorded. Its contents are not retrievable from this surface, so the reasoning itself has not been inspected here — only its existence and version."
+        ? "A versioned reasoning ledger is recorded, and this exact revision can be requested for inspection below. Recording is still not review: this check confirms the ledger exists, not that its reasoning was read or found sound."
         : "No versioned reasoning ledger is attached to this mission.",
     ),
     check(
@@ -439,4 +439,77 @@ export function checkCalyxMissionClaim(
       automaticPublication: false,
     },
   };
+}
+
+
+export type CalyxAnomalyReview = {
+  taskId: string;
+  anomalyType: string;
+  riskClass: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  correlationId: string;
+  eventId: string;
+  state: string;
+  sealed: boolean;
+};
+
+const ANOMALY_RISKS = new Set(["LOW", "MEDIUM", "HIGH", "CRITICAL"]);
+const ANOMALY_TYPE = /^SCI_OBS_ANOMALY:([A-Z][A-Z0-9_]*)$/;
+
+/**
+ * Convert the governed review queue into the only anomaly fields the
+ * Workbench may display. Any authority expansion, identity mismatch, or
+ * incomplete embargo fails closed. Metadata details are deliberately omitted.
+ */
+export function parseCalyxAnomalyReviews(
+  payload: unknown,
+  correlationId: string,
+): CalyxAnomalyReview[] {
+  if (!payload || typeof payload !== "object") return [];
+  const tasks = (payload as { tasks?: unknown }).tasks;
+  if (!Array.isArray(tasks)) return [];
+
+  const accepted = new Map<string, CalyxAnomalyReview>();
+  for (const raw of tasks) {
+    if (!raw || typeof raw !== "object") continue;
+    const task = raw as Record<string, unknown>;
+    const match = clean(task.review_type).match(ANOMALY_TYPE);
+    if (!match || task.routing_outcome !== "ROUTE_TO_VERIFICATION_WORKBENCH") continue;
+    if (task.required_capability !== "scientific_review") continue;
+    const metadata = task.metadata;
+    if (!metadata || typeof metadata !== "object") continue;
+    if ((metadata as Record<string, unknown>).authoritative_state_mutated !== false) continue;
+    const anomaly = (metadata as Record<string, unknown>).sci_obs_anomaly;
+    if (!anomaly || typeof anomaly !== "object") continue;
+    const record = anomaly as Record<string, unknown>;
+    const anomalyType = match[1];
+    const taskId = clean(task.task_id);
+    const eventId = clean(record.event_id);
+    const taskCorrelation = clean(task.orchestration_id);
+    const anomalyCorrelation = clean(record.correlation_id);
+    const riskClass = clean(task.risk_class);
+    const batchKey = clean(task.batch_key);
+    if (!taskId || !eventId || taskCorrelation !== correlationId) continue;
+    if (anomalyCorrelation !== correlationId || clean(record.code) !== anomalyType) continue;
+    if (!ANOMALY_RISKS.has(riskClass) || clean(record.risk_class) !== riskClass) continue;
+    if (batchKey !== `sci-obs:${correlationId}:${eventId}:${anomalyType}`) continue;
+
+    const embargoed = task.embargoed === true;
+    const displayPolicy = clean(task.display_policy);
+    const protectedLocality = anomalyType === "PROTECTED_LOCALITY_EXPOSURE";
+    if (protectedLocality && (!embargoed || displayPolicy !== "SEALED_PARTNER")) continue;
+    if (embargoed && displayPolicy !== "SEALED_PARTNER") continue;
+
+    accepted.set(batchKey, {
+      taskId,
+      anomalyType,
+      riskClass: riskClass as CalyxAnomalyReview["riskClass"],
+      correlationId,
+      eventId,
+      state: clean(task.state) || "UNKNOWN",
+      sealed: embargoed,
+    });
+  }
+  return [...accepted.values()].sort((left, right) =>
+    left.taskId.localeCompare(right.taskId),
+  );
 }

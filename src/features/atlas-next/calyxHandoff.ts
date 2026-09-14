@@ -1,8 +1,15 @@
 export const ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN = 'atlas-next-occurrence-evidence';
 
+const CLASSROOM_INVESTIGATION_ORIGIN = 'classroom-investigation';
 const MAX_GENUS_CHARACTERS = 80;
 export const MAX_ATLAS_CALYX_QUESTION_CHARACTERS = 800;
-const SAFE_GENUS = /^[A-Za-z][A-Za-z -]*$/;
+// The handoff forwards genus-level identity only. Enforce a canonical
+// single-token genus (capitalised, no internal whitespace) so an occurrence
+// binomial or any multi-word value fails closed here instead of producing a
+// /calyx?genus=<binomial> link that asserts a species as a genus. Matches the
+// shared boundary in researchRouteContext, matrixResearchNavigation, and the
+// Calyx route consumer.
+const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
 
 export type AtlasCalyxQuestionContext = {
   question: string;
@@ -17,14 +24,26 @@ function boundedQuestion(question: string | null | undefined): string | null {
 }
 
 /**
- * Parse the optional Atlas-authored question context carried on the Calyx route.
+ * Parse the optional routed user-question context carried on the Calyx route.
  *
  * The three provenance fields are an all-or-nothing contract. Any malformed or
  * incomplete provenance fails closed so duplicated route context can never be
- * mistaken for scientific evidence.
+ * mistaken for scientific evidence. Question context is also origin-bound here
+ * as defense in depth: only the Atlas occurrence-evidence and Classroom
+ * investigation producers may populate this generic parser. Other origins must
+ * use their dedicated contracts and cannot acquire a question merely by
+ * supplying lookalike query parameters.
  */
 export function parseAtlasCalyxQuestionContext(search: string): AtlasCalyxQuestionContext | null {
   const params = new URLSearchParams(search);
+  const origin = params.get('origin')?.trim() ?? '';
+  if (
+    origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN &&
+    origin !== CLASSROOM_INVESTIGATION_ORIGIN
+  ) {
+    return null;
+  }
+
   const question = boundedQuestion(params.get('question'));
   if (!question) return null;
   if (params.get('question_source') !== 'user') return null;

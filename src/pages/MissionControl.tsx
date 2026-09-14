@@ -47,7 +47,10 @@ import {
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import CompletionObservatory from '@/components/mission-control/CompletionObservatory';
+import ScientificReadinessPanel from '@/components/mission-control/ScientificReadinessPanel';
+import WorkflowIntelligencePanel from '@/components/mission-control/WorkflowIntelligencePanel';
 import DependencyReadinessMatrix from '@/components/mission-control/DependencyReadinessMatrix';
+import LexiconCoverageDiagnostic from '@/components/mission-control/LexiconCoverageDiagnostic';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import {
   type ContinuumSubsystem,
@@ -2913,6 +2916,20 @@ const MissionControlContent: React.FC = () => {
                 </Panel>
                 </SafePanel>
 
+                {/* SCI-OBS-003: calculated scientific readiness, advisory only */}
+                <SafePanel title="Scientific Readiness">
+                <Panel id="mission-control-scientific-readiness" eyebrow="SCI-OBS-003" title="Scientific Readiness" icon={Activity}>
+                  <ScientificReadinessPanel readiness={dashboard.scientificReadiness} />
+                </Panel>
+                </SafePanel>
+
+                {/* WFI-001: canonical provider-free workflow intelligence */}
+                <SafePanel title="Workflow Intelligence">
+                <Panel id="mission-control-workflow-intelligence" eyebrow="WFI-001" title="Workflow Intelligence" icon={Workflow}>
+                  <WorkflowIntelligencePanel intelligence={dashboard.workflowIntelligence} />
+                </Panel>
+                </SafePanel>
+
                 {/* OC-OBSERVATORY-003: secret & external-dependency readiness matrix */}
                 <SafePanel title="Dependency Readiness">
                 <Panel id="mission-control-dependency-readiness" eyebrow="OC-OBSERVATORY-003" title="Secret & Dependency Readiness" icon={KeyRound}>
@@ -3210,6 +3227,12 @@ const MissionControlContent: React.FC = () => {
                     <br />
                     Data age: {dataAgeLabel}
                   </div>
+                </Panel>
+                </SafePanel>
+
+                <SafePanel title="Lexicon Coverage">
+                <Panel eyebrow="Diagnostics" title="Lexicon Coverage" icon={BookOpen}>
+                  <LexiconCoverageDiagnostic />
                 </Panel>
                 </SafePanel>
               </aside>

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 const WORKFLOW_RE = /^\.github\/workflows\/[^/]+\.ya?ml$/;
 const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
@@ -30,6 +30,11 @@ function changedFiles() {
     .filter(Boolean);
 }
 
+/** Whether a workflow checks out repository content at all. */
+function workflowChecksOutCode(source) {
+  return /^\s*(?:-\s*)?uses:\s*actions\/checkout@/m.test(source);
+}
+
 export function actionPinFinding(trimmed, lineNumber = 0) {
   // Workflow steps are YAML list items, so the standard form is
   // `- uses: owner/action@ref`. A matcher that only recognizes a bare `uses:`
@@ -43,12 +48,23 @@ export function actionPinFinding(trimmed, lineNumber = 0) {
 }
 
 function inspectWorkflow(path) {
-  const source = readFileSync(path, "utf8");
+  return inspectWorkflowSource(readFileSync(path, "utf8"));
+}
+
+/**
+ * The rules, applied to workflow text rather than to a path, so they can be
+ * exercised directly instead of only through whatever happens to be in
+ * .github/workflows at the time.
+ */
+export function inspectWorkflowSource(source) {
   const lines = source.split("\n");
   const findings = [];
   let runBlockIndent = null;
 
-  if (!/^permissions:\s*$/m.test(source)) {
+  const declaresPermissions = /^permissions:\s*$/m.test(source);
+  const checksOutCode = workflowChecksOutCode(source);
+
+  if (!declaresPermissions) {
     findings.push("declare an explicit top-level permissions block");
   }
 
@@ -65,8 +81,21 @@ function inspectWorkflow(path) {
       runBlockIndent = indent;
     }
 
-    if (/^(pull_request_target|workflow_run):\s*$/.test(trimmed)) {
-      findings.push(`${lineNumber}: privileged trigger "${trimmed.replace(":", "")}" is not permitted in an autonomous build workflow`);
+    if (/^pull_request_target:\s*$/.test(trimmed)) {
+      findings.push(`${lineNumber}: privileged trigger "pull_request_target" is not permitted in an autonomous build workflow`);
+    }
+
+    // `workflow_run` runs in the base repository's context with a token, even
+    // for a fork's pull request. What makes that dangerous is combining it with
+    // checking out and running the code that triggered it. A workflow that
+    // never checks anything out cannot execute untrusted code, so the rule is
+    // on the combination rather than on the trigger.
+    if (/^workflow_run:\s*$/.test(trimmed)) {
+      if (checksOutCode) {
+        findings.push(`${lineNumber}: "workflow_run" must not check out code; it runs privileged against the base repository`);
+      } else if (!declaresPermissions) {
+        findings.push(`${lineNumber}: "workflow_run" requires an explicit top-level permissions block`);
+      }
     }
 
     if (/runs-on:\s*.*self-hosted/i.test(trimmed)) {
@@ -93,8 +122,34 @@ function inspectWorkflow(path) {
   return findings;
 }
 
+/**
+ * Every workflow in the repository, not only the ones a branch happens to
+ * touch.
+ *
+ * Checking the diff answers "did this change introduce an unpinned action",
+ * which lets an unpinned action already in the tree stay there forever, and
+ * lets one arrive on a branch that never edits a workflow again. Checking the
+ * corpus answers "does this repository contain an unpinned action", which is
+ * the question worth failing a build over.
+ */
+export function allWorkflows() {
+  try {
+    return readdirSync(".github/workflows")
+      .filter((name) => /\.ya?ml$/.test(name))
+      .map((name) => `.github/workflows/${name}`)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 function main() {
-  const workflows = changedFiles().filter((path) => WORKFLOW_RE.test(path));
+  // `--changed-only` keeps the older diff-scoped behaviour available for a
+  // caller that genuinely wants it; the corpus is the default.
+  const changedOnly = process.argv.includes("--changed-only");
+  const workflows = changedOnly
+    ? changedFiles().filter((path) => WORKFLOW_RE.test(path))
+    : allWorkflows();
   const failures = [];
 
   for (const workflow of workflows) {
@@ -109,10 +164,11 @@ function main() {
     process.exit(1);
   }
 
+  const scope = changedOnly ? "changed workflow(s)" : "workflow(s) in the repository";
   console.log(
     workflows.length
-      ? `Governed workflow security check passed for ${workflows.length} changed workflow(s).`
-      : "No workflow files changed; governed workflow security check passed.",
+      ? `Governed workflow security check passed for ${workflows.length} ${scope}.`
+      : `No workflow files found; governed workflow security check passed.`,
   );
 }
 

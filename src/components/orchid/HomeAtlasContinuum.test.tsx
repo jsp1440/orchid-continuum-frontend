@@ -27,6 +27,16 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('continuum?.relationships?.geography');
   });
 
+  it('surfaces canonical ecological graph domains without inventing biological claims', () => {
+    const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    expect(atlas).toContain("item.domain === 'habitat'");
+    expect(atlas).toContain("item.domain === 'climate'");
+    expect(atlas).toContain("item.domain === 'mycorrhiza'");
+    expect(atlas).toContain('habitat breadth');
+    expect(atlas).toContain('climate tolerances');
+    expect(atlas).toContain('association strength');
+  });
+
   it('preserves the featured genus when handing the visitor into the full Atlas through the canonical navigation contract', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
     const navigation = read('src/lib/featuredTaxonNavigation.ts');
@@ -36,6 +46,18 @@ describe('homepage Atlas source integrity', () => {
     expect(atlas).toContain('const atlasHref = featuredTaxonAtlasHref(genus)');
     expect(atlas).toContain('to={atlasHref}');
     expect(navigation).toContain('/atlas?genera=');
+  });
+
+  it('hands the featured genus into Relationship Matrix as read scope only', () => {
+    const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
+    const navigation = read('src/lib/featuredTaxonNavigation.ts');
+    expect(atlas).toContain('featuredTaxonMatrixHref');
+    expect(atlas).toContain('const matrixHref = featuredTaxonMatrixHref(genus)');
+    expect(atlas).toContain('to={matrixHref}');
+    expect(atlas).toContain('Matrix retrieves its own governed evidence');
+    expect(navigation).toContain('/relationship-matrix?genus=');
+    expect(navigation).not.toContain('/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}&latitude=');
+    expect(navigation).not.toContain('/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}&locality=');
   });
 
   it('does not publicly claim Atlas locality protection before the Atlas Next safety lane is integrated', () => {

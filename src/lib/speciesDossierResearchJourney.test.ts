@@ -46,8 +46,6 @@ describe('species dossier → research → calyx', () => {
   });
 
   it('keeps the accepted binomial, not just the genus', () => {
-    // The whole point of the dossier handoff: Research can name the organism
-    // the visitor was reading about, rather than degrading it to its genus.
     const context = parseResearchRouteContext(
       searchOf(speciesDossierResearchHref({ genus: GENUS, taxon: TAXON })),
     );
@@ -69,13 +67,10 @@ describe('species dossier → research → calyx', () => {
 
     expect(routeContext.taxon).toBe(TAXON);
     expect(routeContext.origin).toBe(RESEARCH_STATION_ORIGIN);
-    // Still context at the far end of the chain, three handoffs later.
     expect(routeContext.taxon_is_evidence).toBe(false);
   });
 
   it('never lets a dossier subject arrive as evidence', () => {
-    // Both directions: the builder always asserts false, and the parser refuses
-    // anything that claims otherwise or omits the claim entirely.
     expect(speciesDossierResearchHref({ genus: GENUS, taxon: TAXON })).toContain(
       'context_is_evidence=false',
     );
@@ -90,24 +85,45 @@ describe('species dossier → research → calyx', () => {
   });
 
   it('offers no handoff when the dossier has no usable genus', () => {
-    // The affordance must be absent rather than producing a link Research
-    // would refuse on arrival.
     expect(speciesDossierResearchHref({ genus: null })).toBeNull();
     expect(speciesDossierResearchHref({ genus: '' })).toBeNull();
     expect(speciesDossierResearchHref({ genus: 'not a genus' })).toBeNull();
     expect(speciesDossierResearchHref({ genus: '<script>' })).toBeNull();
   });
 
-  it('drops an unusable binomial without losing the usable genus', () => {
-    const href = speciesDossierResearchHref({ genus: GENUS, taxon: 'x'.repeat(400) });
+  it('fails closed instead of widening an explicitly malformed species to its genus', () => {
+    for (const taxon of [
+      'x'.repeat(400),
+      'phalaenopsis amabilis',
+      'Phalaenopsis',
+      'Phalaenopsis/amabilis',
+      '14.5995,-120.9842',
+      '<script>',
+      'Dracula lotax',
+    ]) {
+      expect(speciesDossierResearchHref({ genus: GENUS, taxon })).toBeNull();
+    }
+
+    expect(
+      parseSpeciesDossierResearchContext(
+        `?genus=${GENUS}&taxon=Dracula+lotax&origin=${SPECIES_DOSSIER_RESEARCH_ORIGIN}&context_is_evidence=false`,
+      ),
+    ).toBeNull();
+    expect(
+      parseSpeciesDossierResearchContext(
+        `?genus=${GENUS}&taxon=Phalaenopsis%2Famabilis&origin=${SPECIES_DOSSIER_RESEARCH_ORIGIN}&context_is_evidence=false`,
+      ),
+    ).toBeNull();
+  });
+
+  it('still permits an intentionally genus-only caller that omits taxon entirely', () => {
+    const href = speciesDossierResearchHref({ genus: GENUS });
     const context = parseResearchRouteContext(searchOf(href));
     expect(context?.genus).toBe(GENUS);
     expect(context && 'taxon' in context ? context.taxon : null).toBeNull();
   });
 
   it('opens no route for locality, occurrence or collector material', () => {
-    // Asserted on the built href itself: a parser that ignores a field is a
-    // weaker guarantee than a contract that never offers one.
     const href = speciesDossierResearchHref({ genus: GENUS, taxon: TAXON })!;
     const keys = [...new URLSearchParams(searchOf(href)).keys()].sort();
     expect(keys).toEqual(['context_is_evidence', 'genus', 'origin', 'taxon']);
@@ -142,8 +158,9 @@ describe('species dossier → research → calyx', () => {
   });
 
   it('leaves the other governed origins working', () => {
-    // A new origin must not shadow the existing ones through the shared parser.
-    const featured = parseResearchRouteContext('?genus=Phalaenopsis&origin=homepage-featured-taxon');
+    const featured = parseResearchRouteContext(
+      '?genus=Phalaenopsis&origin=homepage-featured-taxon&context_is_evidence=false',
+    );
     expect(featured?.origin).toBe('homepage-featured-taxon');
     const atlas = parseResearchRouteContext(
       '?genus=Phalaenopsis&origin=atlas-next&context_is_evidence=false',

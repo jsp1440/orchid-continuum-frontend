@@ -22,6 +22,7 @@ import ResearchCenter from './ResearchCenter';
 import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
 import { matrixResearchHref } from '@/lib/matrixResearchNavigation';
 import { atlasNextResearchHref } from '@/features/atlas-next/researchHandoff';
+import { featuredTaxonResearchHref } from '@/lib/featuredTaxonNavigation';
 import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
 import { applyAtlasFilters, type AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 
@@ -136,7 +137,7 @@ describe('research center carries the arriving subject onward', () => {
   it('still filters by genus when only a genus arrived', async () => {
     // Genus-of-the-day and Atlas arrivals carry no species. They must keep
     // working exactly as before rather than degrading to an unfiltered view.
-    await renderAt(`?genus=${GENUS}&origin=homepage-featured-taxon`);
+    await renderAt(featuredTaxonResearchHref(GENUS));
 
     const atlas = new URLSearchParams(searchOf(hrefFor(/return to atlas/i)));
     expect(atlas.get('genera')).toBe(GENUS);
@@ -198,7 +199,7 @@ describe('research center attributes the subject to where it came from', () => {
     container?.remove();
 
     // Genus of the Day is still correct for the featured-taxon origin.
-    await renderAt(`?genus=${GENUS}&origin=homepage-featured-taxon`);
+    await renderAt(featuredTaxonResearchHref(GENUS));
     expect(container.textContent).toContain('Continuing from Genus of the Day');
   });
 

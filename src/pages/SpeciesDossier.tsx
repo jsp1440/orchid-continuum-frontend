@@ -23,15 +23,16 @@ import {
 } from '@/lib/ocBackend';
 import {
   fetchSpeciesDossier,
+  resolveFederatedSpecies,
   sectionMessage,
+  type FederationResolveResult,
   type SpeciesDossierEnvelope,
   type DossierSection,
   type EvidenceReceipt,
   type EvidenceState,
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
-import { speciesDossierResearchHref } from '@/lib/speciesDossierResearchNavigation';
-import { speciesDossierCalyxHref } from '@/lib/speciesDossierCalyxNavigation';
+import { speciesDossierContinuumActions } from '@/lib/speciesDossierContinuumNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -97,6 +98,9 @@ const SpeciesDossier: React.FC = () => {
   const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
   const [dossierError, setDossierError] = useState(false);
+  const [federation, setFederation] = useState<FederationResolveResult | null>(null);
+  const [federationLoading, setFederationLoading] = useState(true);
+  const [federationError, setFederationError] = useState(false);
 
   useEffect(() => {
     if (!taxonomyId) return;
@@ -119,8 +123,24 @@ const SpeciesDossier: React.FC = () => {
     setDossier(null);
     fetchSpeciesDossier(taxonomyId, ctrl.signal)
       .then((d) => setDossier(d))
-      .catch(() => setDossierError(true))
-      .finally(() => setDossierLoading(false));
+      .catch(() => {
+        if (!ctrl.signal.aborted) setDossierError(true);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setDossierLoading(false);
+      });
+
+    setFederationLoading(true);
+    setFederationError(false);
+    setFederation(null);
+    resolveFederatedSpecies({ taxonId: taxonomyId }, ctrl.signal)
+      .then((result) => setFederation(result))
+      .catch(() => {
+        if (!ctrl.signal.aborted) setFederationError(true);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setFederationLoading(false);
+      });
 
     return () => ctrl.abort();
   }, [taxonomyId]);
@@ -134,25 +154,33 @@ const SpeciesDossier: React.FC = () => {
     decodeURIComponent(taxonomyId);
 
   const image = data?.hero_image_url || data?.representative_image_url || null;
-  const atlasQuery = encodeURIComponent(
-    data?.canonical_name || data?.scientific_name || taxonomyId,
-  );
-  // Into Research on the dossier's own subject, so the visitor does not have to
-  // retype the organism they are already looking at. Genus drives the query
-  // builder; the accepted binomial rides along as context only.
-  const researchHref = speciesDossierResearchHref({
-    genus: dossier?.identity.genus ?? data?.genus,
-    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
+  // Resolve one governed canonical species identity for every public
+  // continuation. Atlas, Research, and Calyx therefore either receive the same
+  // exact subject or all fail closed; none may widen an opaque route/taxonomy
+  // id or independently choose a different identity fallback.
+  const continuumActions = speciesDossierContinuumActions({
+    acceptedName: dossier?.identity.accepted_name,
+    fullScientificName: dossier?.identity.full_scientific_name,
+    canonicalName: data?.canonical_name,
+    scientificName: data?.scientific_name,
   });
+  const atlasHref = continuumActions?.atlas ?? null;
+  const researchHref = continuumActions?.research ?? null;
+  const calyxHref = continuumActions?.calyx ?? null;
 
-  // Straight into Calyx on this exact species. The producer fails closed unless
-  // it gets a bounded binomial that agrees with the genus, so a dossier whose
-  // identity is incomplete simply does not offer the action rather than opening
-  // a conversation about the wrong organism.
-  const calyxHref = speciesDossierCalyxHref({
-    genus: dossier?.identity.genus ?? data?.genus,
-    taxon: dossier?.identity.accepted_name ?? dossier?.identity.full_scientific_name ?? null,
-  });
+  const federatedPartner =
+    federation?.status === 'resolved' && federation.partner_slug
+      ? dossier?.partner_references.find(
+          (partner) => partner.partner_id === federation.partner_slug,
+        ) ?? null
+      : null;
+  const federatedSourceName = federatedPartner?.partner_name || federation?.partner_slug || null;
+  const federatedAttribution =
+    federatedPartner?.attribution_text || federation?.explanation || null;
+  const federatedSourceUrl =
+    federation?.reciprocal_source_url || federatedPartner?.source_url || null;
+  const hasFederatedMatch =
+    federation?.status === 'resolved' && Boolean(federation.partner_slug);
 
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
@@ -211,12 +239,14 @@ const SpeciesDossier: React.FC = () => {
                   )}
                 </div>
 
-                <Link
-                  to={`/atlas?species=${atlasQuery}`}
-                  className="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
-                >
-                  <MapIcon className="h-4 w-4" /> View on Atlas
-                </Link>
+                {atlasHref && (
+                  <Link
+                    to={atlasHref}
+                    className="mt-4 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
+                  >
+                    <MapIcon className="h-4 w-4" /> View on Atlas
+                  </Link>
+                )}
                 {researchHref && (
                   <Link
                     to={researchHref}
@@ -354,6 +384,40 @@ const SpeciesDossier: React.FC = () => {
                       Data coming soon
                       {mycoStatus === 404 ? ' · no record yet' : ''}.
                     </Empty>
+                  )}
+                </Block>
+
+                {/* Federated attribution — only backend-supplied identities and citations. */}
+                <Block icon={Network} title="Federated attribution">
+                  {federationLoading ? (
+                    <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
+                      <Loader2 className="h-3 w-3 animate-spin" /> Resolving federated source…
+                    </div>
+                  ) : federationError ? (
+                    <Empty>Federated source unavailable.</Empty>
+                  ) : hasFederatedMatch ? (
+                    <div data-testid="federated-attribution" className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/70 p-4">
+                      <div className="font-display italic text-[16px] text-[#faf7f2]">
+                        {federatedSourceName}
+                      </div>
+                      {federatedAttribution && (
+                        <p className="mt-2 font-body text-[13px] text-[#cfc8b8]/75">
+                          {federatedAttribution}
+                        </p>
+                      )}
+                      {federatedSourceUrl && (
+                        <a
+                          href={federatedSourceUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mt-2 inline-block font-mono text-[9px] tracking-[0.1em] uppercase text-[#c9a24a] hover:text-[#deb866]"
+                        >
+                          Federated source
+                        </a>
+                      )}
+                    </div>
+                  ) : (
+                    <Empty>Not federated for this species.</Empty>
                   )}
                 </Block>
 

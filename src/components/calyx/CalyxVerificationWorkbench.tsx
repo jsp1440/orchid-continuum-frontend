@@ -1,11 +1,15 @@
 import React, { useMemo, useState } from "react";
 
 import GovernedEvidenceSearch from "@/components/calyx/GovernedEvidenceSearch";
+import ReasoningLedgerInspector from "@/components/calyx/ReasoningLedgerInspector";
+import ScientificObservabilityAnomalyQueue from "@/components/calyx/ScientificObservabilityAnomalyQueue";
+import ScientificObservabilityTrace from "@/components/calyx/ScientificObservabilityTrace";
 import type { BrainMission, MissionConclusion } from "@/lib/calyxWorkspace";
 import {
   checkCalyxMissionClaim,
   type CalyxVerificationCheckStatus,
 } from "@/lib/calyxVerification";
+import { getScientificObservabilityCorrelationId } from "@/lib/scientificObservabilityCorrelation";
 
 const STATUS_CLASS: Record<CalyxVerificationCheckStatus, string> = {
   pass: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
@@ -54,6 +58,7 @@ export default function CalyxVerificationWorkbench({
   const passCount = result.checks.filter((item) => item.status === "pass").length;
   const reviewCount = result.checks.filter((item) => item.status === "needs_review").length;
   const failCount = result.checks.filter((item) => item.status === "fail").length;
+  const traceCorrelationId = getScientificObservabilityCorrelationId(mission);
 
   return (
     <div className="mt-3 rounded-lg border border-primary/20 bg-muted/20" data-testid="calyx-verification-workbench">
@@ -318,10 +323,30 @@ export default function CalyxVerificationWorkbench({
                 make the reasoning readable from here, and a verification
                 surface that implies otherwise is the failure it exists to
                 prevent. */}
-            <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-              The reasoning ledger is identified but cannot be retrieved from this surface. Its
-              existence is verified; its contents are not.
-            </p>
+            {/* Replaced by a real retrieval path: the ledger contract landed
+                as backend #1135, so the Workbench no longer has to state that
+                the contents are unreachable. */}
+            <ReasoningLedgerInspector
+              ledgerId={result.provenance.reasoningLedgerId}
+              version={result.provenance.reasoningLedgerVersion}
+            />
+          </section>
+
+          <section className="mt-4" aria-label="Scientific observability">
+            {traceCorrelationId ? (
+              <>
+                <ScientificObservabilityAnomalyQueue correlationId={traceCorrelationId} />
+                <ScientificObservabilityTrace correlationId={traceCorrelationId} />
+              </>
+            ) : (
+              <p
+                className="rounded-lg border border-dashed bg-background p-3 text-xs text-muted-foreground"
+                data-testid="scientific-observability-unavailable"
+              >
+                Scientific observability trace unavailable for this mission: no explicit correlation
+                id was supplied. The mission id is not substituted for provenance.
+              </p>
+            )}
           </section>
         </div>
       ) : null}

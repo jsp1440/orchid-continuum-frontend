@@ -1,10 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CalyxSynthesisStructure } from "@/lib/calyxWorkspace";
+import type { BrainMission, CalyxSynthesisStructure } from "@/lib/calyxWorkspace";
 import type { ResearchStationDossier } from "@/lib/researchStation";
 import {
   ResearchStationQuestionMissing,
   buildResearchStationTurnContext,
+  claimComparisonRows,
+  governedEvidenceClassReadiness,
+  governedResearchCitations,
+  governedResearchMission,
   groupClaimCoverage,
   hasUnresolvedConflict,
   runResearchStationSynthesis,
@@ -103,6 +107,40 @@ describe("research station turn context", () => {
   });
 });
 
+describe("governed research citations", () => {
+  it("retains display-authorized bibliography and drops malformed entries", () => {
+    expect(
+      governedResearchCitations([
+        {
+          title: "  Temperature response in Phalaenopsis  ",
+          doi: " 10.1000/example ",
+          review_state: "REVIEW_REQUIRED",
+          canonical_evidence: false,
+        },
+        { title: "   ", doi: "10.1000/forged" },
+        null,
+      ]),
+    ).toEqual([
+      {
+        title: "Temperature response in Phalaenopsis",
+        authors: null,
+        publication_date: null,
+        journal: null,
+        doi: "10.1000/example",
+        pmid: null,
+        pmcid: null,
+        provider: null,
+        review_state: "REVIEW_REQUIRED",
+        canonical_evidence: false,
+      },
+    ]);
+  });
+
+  it("keeps unavailable citations empty rather than inventing bibliography", () => {
+    expect(governedResearchCitations(undefined)).toEqual([]);
+  });
+});
+
 describe("running the governed synthesis", () => {
   it("asks the governed path explicitly rather than letting the casual heuristic decide", async () => {
     sendTurn.mockResolvedValue({
@@ -122,6 +160,56 @@ describe("running the governed synthesis", () => {
     });
     const result = await runResearchStationSynthesis(dossier());
     expect(result.answer).toBe("The evidence points this way without settling it.");
+  });
+
+  it("preserves the bounded plan returned by the governed Brain mission", async () => {
+    sendTurn.mockResolvedValue({
+      conversation_id: "conv-1",
+      answer: "Answer.",
+      synthesis_structure: structure(),
+      research: {
+        mission: {
+          plan: {
+            question: "Compare cool- and warm-growing Phalaenopsis evidence.",
+            domains: ["taxonomy", "geographic_distribution"],
+            retrieval_queries: ["Phalaenopsis taxonomy", "Phalaenopsis distribution"],
+            source_budget: 20,
+            per_domain_source_budget: 4,
+            claims_and_inferences_separated: true,
+          },
+        },
+      },
+    });
+
+    expect((await runResearchStationSynthesis(dossier())).plan).toEqual({
+      question: "Compare cool- and warm-growing Phalaenopsis evidence.",
+      domains: ["taxonomy", "geographic_distribution"],
+      retrieval_queries: ["Phalaenopsis taxonomy", "Phalaenopsis distribution"],
+      source_budget: 20,
+      per_domain_source_budget: 4,
+      claims_and_inferences_separated: true,
+    });
+  });
+
+  it("keeps an absent or malformed mission plan unavailable", async () => {
+    sendTurn.mockResolvedValue({
+      conversation_id: "conv-1",
+      answer: "Answer.",
+      synthesis_structure: structure(),
+      research: {
+        mission: {
+          plan: {
+            question: "Question",
+            domains: [],
+            retrieval_queries: [],
+            source_budget: 0,
+            claims_and_inferences_separated: false,
+          },
+        },
+      },
+    });
+
+    expect((await runResearchStationSynthesis(dossier())).plan).toBeNull();
   });
 
   it("returns a null structure rather than inventing one on an older backend", async () => {
@@ -234,5 +322,228 @@ describe("evidence gaps stay gaps", () => {
     expect(synthesisGaps(structure({ missing_evidence: ["", "   ", "real gap"] }))).toEqual([
       "real gap",
     ]);
+  });
+});
+
+describe("governed evidence-class readiness", () => {
+  it("accepts a consistent ready contract from the backend", () => {
+    expect(
+      governedEvidenceClassReadiness(
+        structure({
+          evidence_class_readiness: {
+            status: "ready",
+            literature_present: true,
+            literature_review_required: true,
+            continuum_evidence_classes: ["trait_record", "occurrence_summary"],
+            continuum_evidence_class_count: 2,
+            required_continuum_evidence_class_count: 2,
+            missing_requirements: [],
+          },
+        }),
+      ),
+    ).toEqual({
+      status: "ready",
+      literature_present: true,
+      literature_review_required: true,
+      continuum_evidence_classes: ["trait_record", "occurrence_summary"],
+      continuum_evidence_class_count: 2,
+      required_continuum_evidence_class_count: 2,
+      missing_requirements: [],
+    });
+  });
+
+  it("preserves an incomplete backend result and its named requirements", () => {
+    expect(
+      governedEvidenceClassReadiness(
+        structure({
+          evidence_class_readiness: {
+            status: "evidence_incomplete",
+            literature_present: true,
+            literature_review_required: true,
+            continuum_evidence_classes: ["trait_record"],
+            continuum_evidence_class_count: 1,
+            required_continuum_evidence_class_count: 2,
+            missing_requirements: ["one additional Continuum evidence class"],
+          },
+        }),
+      )?.missing_requirements,
+    ).toEqual(["one additional Continuum evidence class"]);
+  });
+
+  it("fails closed when a ready label disagrees with the evidence counts", () => {
+    expect(
+      governedEvidenceClassReadiness(
+        structure({
+          evidence_class_readiness: {
+            status: "ready",
+            literature_present: true,
+            literature_review_required: true,
+            continuum_evidence_classes: ["trait_record"],
+            continuum_evidence_class_count: 2,
+            required_continuum_evidence_class_count: 2,
+            missing_requirements: [],
+          },
+        }),
+      ),
+    ).toBeNull();
+  });
+
+  it("keeps an absent readiness contract unavailable", () => {
+    expect(governedEvidenceClassReadiness(structure())).toBeNull();
+    expect(governedEvidenceClassReadiness(null)).toBeNull();
+  });
+});
+
+describe("claim comparison rows", () => {
+  it("preserves backend support, contradiction, and source-family measurements", () => {
+    expect(
+      claimComparisonRows(
+        structure({
+          claim_coverage: [
+            {
+              claim_id: "cool",
+              claim: "Cool-growing records cluster at lower temperatures.",
+              coverage: "contested",
+              source_families: ["trait_record", "literature"],
+              supporting_count: 3,
+              contradicting_count: 1,
+            },
+          ],
+        }),
+      ),
+    ).toEqual([
+      {
+        claimId: "cool",
+        claim: "Cool-growing records cluster at lower temperatures.",
+        coverage: "contested",
+        sourceFamilies: ["trait_record", "literature"],
+        supportingCount: 3,
+        contradictingCount: 1,
+      },
+    ]);
+  });
+
+  it("keeps invalid measurements unavailable instead of converting them to zero", () => {
+    const [row] = claimComparisonRows(
+      structure({
+        claim_coverage: [
+          {
+            claim_id: "warm",
+            claim: "Warm-growing evidence is incomplete.",
+            coverage: "unresolved",
+            source_families: [],
+            supporting_count: -1,
+            contradicting_count: Number.NaN,
+          },
+        ],
+      }),
+    );
+    expect(row.supportingCount).toBeNull();
+    expect(row.contradictingCount).toBeNull();
+  });
+
+  it("fails closed on unknown coverage and drops claims without stable identity", () => {
+    const rows = claimComparisonRows(
+      structure({
+        claim_coverage: [
+          {
+            claim_id: "future",
+            claim: "A future coverage state.",
+            coverage: "new_state",
+            source_families: ["trait_record", "trait_record"],
+            supporting_count: 1,
+            contradicting_count: 0,
+          },
+          {
+            claim_id: " ",
+            claim: "No stable identity.",
+            coverage: "supported",
+            source_families: ["literature"],
+            supporting_count: 1,
+            contradicting_count: 0,
+          },
+        ],
+      }),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      claimId: "future",
+      coverage: "unresolved",
+      sourceFamilies: ["trait_record"],
+    });
+  });
+});
+
+const governedMission = (overrides: Partial<BrainMission> = {}): BrainMission => ({
+  mission_id: "mission-phal-1",
+  project_id: "proj-1",
+  question: "Does velamen thickness track drought tolerance?",
+  state: "COMPLETED",
+  current_stage: "SYNTHESIS",
+  steps_executed: 4,
+  sources: [],
+  supporting_evidence: [],
+  contradicting_evidence: [],
+  missing_evidence: [],
+  confidence: null,
+  conclusions: [{ type: "provisional", text: "Evidence remains mixed.", claim_ids: ["claim-1"] }],
+  reasoning_ledger: { ledger_id: "ledger-1", version: 1 },
+  validation: { valid: true, blockers: [] },
+  review_status: "HUMAN_REVIEW_REQUIRED",
+  publication_eligibility: {
+    eligible: false,
+    automatic_publication: false,
+    blockers: ["human scientific review required"],
+  },
+  blockers: [],
+  partial: false,
+  created_at: "2026-09-12T00:00:00Z",
+  updated_at: "2026-09-12T00:00:00Z",
+  ...overrides,
+});
+
+describe("governed Research Station mission", () => {
+  it("accepts the complete mission for the exact project and question", () => {
+    const mission = governedMission();
+    expect(
+      governedResearchMission(
+        mission,
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBe(mission);
+  });
+
+  it("rejects a stale cross-project mission", () => {
+    expect(
+      governedResearchMission(
+        governedMission({ project_id: "proj-other" }),
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBeNull();
+  });
+
+  it("rejects authority-expanding or incomplete mission payloads", () => {
+    expect(
+      governedResearchMission(
+        governedMission({
+          publication_eligibility: {
+            eligible: true,
+            automatic_publication: true as unknown as false,
+            blockers: [],
+          },
+        }),
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBeNull();
+    expect(
+      governedResearchMission(
+        governedMission({ conclusions: [{ text: " " }] }),
+        "proj-1",
+        "Does velamen thickness track drought tolerance?",
+      ),
+    ).toBeNull();
   });
 });

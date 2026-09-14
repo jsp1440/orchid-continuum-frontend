@@ -22,6 +22,7 @@ import {
   type FeaturedSpecies,
 } from '@/lib/speciesFeature';
 import { homepageSafeUrl } from '@/lib/imageQuality';
+import { speciesDossierAtlasHref } from '@/lib/speciesDossierAtlasNavigation';
 
 const TARGET_COUNT = 6;
 
@@ -333,7 +334,7 @@ const CardImage: React.FC<{
   );
 };
 
-const SpeciesCard: React.FC<{ data: FeaturedSpecies; eager?: boolean }> = ({
+export const SpeciesCard: React.FC<{ data: FeaturedSpecies; eager?: boolean }> = ({
   data,
   eager,
 }) => {
@@ -341,7 +342,12 @@ const SpeciesCard: React.FC<{ data: FeaturedSpecies; eager?: boolean }> = ({
   const favorited = useIsFavorite(data.name);
   const badge = data.conservation ? conservationBadge(data.conservation) : null;
   const speciesHref = `/species/${encodeURIComponent(data.name)}`;
-  const atlasHref = `/atlas?species=${encodeURIComponent(data.name)}`;
+  // Into Atlas on the card's canonical species identity only, through the same
+  // guarded contract the Species Dossier uses. A featured entry that is not a
+  // bounded canonical binomial (a genus-only or grex/hybrid name) fails closed
+  // and simply omits the Atlas action rather than widening a non-species label
+  // into a species-filtered Atlas search.
+  const atlasHref = speciesDossierAtlasHref(data.name);
   const ecoNote = data.habitat || data.pollinator || data.climate;
 
   return (
@@ -451,12 +457,14 @@ const SpeciesCard: React.FC<{ data: FeaturedSpecies; eager?: boolean }> = ({
             <ArrowRight className="h-3.5 w-3.5 group-hover/btn:translate-x-1 transition-transform" />
           </button>
 
-          <Link
-            to={atlasHref}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-[#C9A84C]/40 text-[#faf7f2] hover:bg-[#C9A84C]/10 hover:border-[#C9A84C] transition-colors font-mono text-[10px] tracking-[0.2em] uppercase"
-          >
-            View in atlas
-          </Link>
+          {atlasHref && (
+            <Link
+              to={atlasHref}
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-full border border-[#C9A84C]/40 text-[#faf7f2] hover:bg-[#C9A84C]/10 hover:border-[#C9A84C] transition-colors font-mono text-[10px] tracking-[0.2em] uppercase"
+            >
+              View in atlas
+            </Link>
+          )}
         </div>
       </div>
     </div>

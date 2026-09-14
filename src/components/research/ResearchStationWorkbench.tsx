@@ -14,6 +14,8 @@ import {
   Network,
   ScrollText,
 } from 'lucide-react';
+import ScientificSynthesis from '@/components/calyx/ScientificSynthesis';
+import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
 import {
   buildResearchDossier,
@@ -36,6 +38,8 @@ import {
 } from '@/lib/researchStationNavigation';
 import {
   ResearchStationQuestionMissing,
+  claimComparisonRows,
+  governedEvidenceClassReadiness,
   groupClaimCoverage,
   hasUnresolvedConflict,
   runResearchStationSynthesis,
@@ -43,6 +47,19 @@ import {
   type ClaimCoverageGroups,
   type ResearchStationSynthesis,
 } from '@/lib/researchStationSynthesis';
+import {
+  buildRunManifest,
+  verificationStateLabel,
+  type RunEvidenceManifest,
+  type RunManifestRequest,
+  type VerificationPacket,
+} from '@/lib/evidenceDecisionManifest';
+import { buildResearchStationReviewExport } from '@/lib/researchStationReviewExport';
+import {
+  candidateProposalRequest,
+  prepareCandidateProposal,
+  type CandidateKnowledgeProposal,
+} from '@/lib/candidateKnowledgeProposal';
 
 /**
  * ResearchStationWorkbench — one investigation, read end to end.
@@ -114,6 +131,371 @@ type SynthesisState =
   | { status: 'running' }
   | { status: 'ready'; result: ResearchStationSynthesis }
   | { status: 'error'; kind: string; message: string };
+
+type ManifestState =
+  | { status: 'idle' }
+  | { status: 'building' }
+  | { status: 'ready'; manifest: RunEvidenceManifest; packet: VerificationPacket }
+  | { status: 'error'; kind: string; message: string };
+
+type CandidateProposalState =
+  | { status: 'idle' }
+  | { status: 'preparing' }
+  | { status: 'ready'; proposal: CandidateKnowledgeProposal }
+  | { status: 'error'; message: string };
+
+const CandidateProposalPanel: React.FC<{
+  manifest: RunEvidenceManifest;
+  packet: VerificationPacket;
+  result: ResearchStationSynthesis;
+}> = ({ manifest, packet, result }) => {
+  const [state, setState] = useState<CandidateProposalState>({ status: 'idle' });
+  const request = useMemo(
+    () => candidateProposalRequest(manifest, packet, result.mission),
+    [manifest, packet, result.mission],
+  );
+
+  if (!request) {
+    return (
+      <div
+        className="rounded-xl border border-dashed border-white/15 bg-black/20 px-3 py-3"
+        data-testid="candidate-proposal-unavailable"
+      >
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
+          Candidate proposal unavailable
+        </p>
+        <p className="mt-1 text-[11px] leading-5 text-white/45">
+          The Brain mission did not return one unambiguous candidate with explicit source,
+          revision, extraction-run, domain, taxon, and confidence bindings. Nothing was
+          invented and no Knowledge Graph handoff was attempted.
+        </p>
+      </div>
+    );
+  }
+
+  const prepare = async () => {
+    setState({ status: 'preparing' });
+    try {
+      const proposal = await prepareCandidateProposal(request);
+      setState({ status: 'ready', proposal });
+    } catch (error) {
+      setState({
+        status: 'error',
+        message:
+          error instanceof CalyxApiError
+            ? error.message
+            : 'Candidate proposal could not be prepared.',
+      });
+    }
+  };
+
+  if (state.status === 'ready') {
+    return (
+      <div
+        className="rounded-xl border border-emerald-300/25 bg-emerald-300/5 px-3 py-3"
+        data-testid="candidate-proposal-ready"
+      >
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200">
+          Candidate proposal prepared · owner submission required
+        </p>
+        <p className="mt-1 break-all font-mono text-[10px] text-white/55">
+          {state.proposal.proposal_id}
+        </p>
+        <p className="mt-2 text-[11px] leading-5 text-white/50">
+          No candidate persisted · No automatic approval · No scientific publication · No
+          canonical or Knowledge Graph mutation
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/5 px-3 py-3">
+      <button
+        type="button"
+        onClick={() => void prepare()}
+        disabled={state.status === 'preparing'}
+        className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-100 hover:bg-emerald-300/10 disabled:opacity-60"
+      >
+        <Network className="h-3.5 w-3.5" />
+        {state.status === 'preparing'
+          ? 'Preparing candidate proposal…'
+          : 'Prepare candidate proposal'}
+      </button>
+      <p className="mt-2 text-[11px] leading-5 text-white/45">
+        Prepares the canonical Candidate Knowledge request for owner review. This action
+        cannot persist, approve, publish, or mutate the Knowledge Graph.
+      </p>
+      {state.status === 'error' ? (
+        <p className="mt-2 text-[11px] leading-5 text-amber-200" role="status">
+          Candidate proposal unavailable: {state.message}
+        </p>
+      ) : null}
+    </div>
+  );
+};
+
+/**
+ * ManifestPanel — builds and renders an oc-run-evidence-manifest-v1 for the
+ * completed synthesis run.  Visibly distinguishes resolved evidence, contradictions,
+ * missing evidence (labelled as missing, not as a finding), knowledge gaps,
+ * verification state, run fingerprint, and all governance invariants.
+ *
+ * NO-API: buildRunManifest() calls the deterministic backend endpoint.
+ * No generative model is invoked here.
+ */
+const ManifestPanel: React.FC<{
+  dossier: ResearchStationDossier;
+  result: ResearchStationSynthesis;
+}> = ({ dossier, result }) => {
+  const [state, setState] = useState<ManifestState>({ status: 'idle' });
+
+  const build = useCallback(async () => {
+    setState({ status: 'building' });
+    const structure = result.structure;
+    const taxonId = dossier.subject?.taxon_id?.trim() ?? '';
+    const taxonomySnapshotId = structure?.taxonomy_snapshot_id?.trim() ?? '';
+    const researchQuestion = dossier.project.research_question?.trim() ?? '';
+    const conversationId = result.conversationId.trim();
+
+    // The manifest is an immutable scientific record. Never manufacture canonical
+    // taxonomy or run identities when the governed backend did not return them.
+    if (!structure || !taxonId || !taxonomySnapshotId || !researchQuestion || !conversationId) {
+      setState({
+        status: 'error',
+        kind: 'validation_failed',
+        message:
+          'Run manifest requires a governed synthesis with canonical taxon and taxonomy snapshot identities.',
+      });
+      return;
+    }
+
+    const evidenceReadiness = governedEvidenceClassReadiness(structure);
+    const readinessGaps =
+      evidenceReadiness?.status === 'ready'
+        ? []
+        : evidenceReadiness?.missing_requirements.length
+          ? evidenceReadiness.missing_requirements
+          : ['governed evidence-class readiness unavailable'];
+    const claimCoverage = structure.claim_coverage ?? [];
+    const supportedClaims = claimCoverage.filter(
+      (claim) =>
+        claim.coverage === 'supported' &&
+        claim.supporting_count > 0 &&
+        claim.source_families.length > 0,
+    );
+    const claimsMissingProvenance = claimCoverage
+      .filter(
+        (claim) =>
+          claim.coverage === 'unresolved' ||
+          (claim.coverage === 'supported' &&
+            (claim.supporting_count <= 0 || claim.source_families.length === 0)),
+      )
+      .map((claim) => claim.claim_id);
+    const contradictedClaims = claimCoverage.filter(
+      (claim) => claim.coverage === 'contradicted' || claim.coverage === 'contested',
+    );
+    const missingEvidence = Array.from(
+      new Set(
+        [...(structure.missing_evidence ?? []), ...claimsMissingProvenance, ...readinessGaps].filter(
+          (item) => typeof item === 'string' && item.trim().length > 0,
+        ),
+      ),
+    );
+    const verificationState: VerificationPacket['verification_state'] = result.degraded
+      ? 'validation_required'
+      : missingEvidence.length > 0
+        ? 'evidence_incomplete'
+        : 'ready_for_review';
+
+    const packet: VerificationPacket = {
+      contract_version: 'oc-verification-handoff-v1',
+      verification_state: verificationState,
+      resolved_evidence: supportedClaims.map((claim) => {
+        const total = claim.supporting_count + claim.contradicting_count;
+        return {
+          evidence_id: claim.claim_id,
+          source_id: claim.source_families[0],
+          statement: claim.claim,
+          provenance: claim.source_families,
+          confidence: claim.supporting_count / total,
+        };
+      }),
+      missing_evidence: missingEvidence,
+      contradictions: contradictedClaims.map((claim) => claim.claim_id),
+      knowledge_gaps: missingEvidence,
+      human_review_required: true,
+      automatic_scientific_publication_allowed: false,
+      canonical_knowledge_mutation_allowed: false,
+    };
+
+    const request: RunManifestRequest = {
+      run_id: `run:${dossier.project.project_id}:${conversationId}`,
+      research_question: researchQuestion,
+      taxon_id: taxonId,
+      taxonomy_snapshot_id: taxonomySnapshotId,
+      verification_packets: [packet],
+    };
+
+    try {
+      const manifest = await buildRunManifest(request);
+      setState({ status: 'ready', manifest, packet });
+    } catch (error) {
+      if (error instanceof CalyxApiError) {
+        setState({ status: 'error', kind: error.kind, message: error.message });
+        return;
+      }
+      setState({
+        status: 'error',
+        kind: 'server_error',
+        message: 'Run manifest could not be built.',
+      });
+    }
+  }, [dossier, result]);
+
+  if (state.status === 'idle' || state.status === 'building') {
+    return (
+      <div className="mt-1 border-t border-white/10 pt-3">
+        <button
+          type="button"
+          onClick={() => void build()}
+          disabled={state.status === 'building'}
+          className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/70 transition hover:bg-white/10 disabled:opacity-60"
+        >
+          <ScrollText className="h-3.5 w-3.5" />
+          {state.status === 'building'
+            ? 'Building run manifest…'
+            : 'Build run manifest'}
+        </button>
+        <p className="mt-1.5 text-[11px] leading-5 text-white/40">
+          Fingerprints this run and records the evidence chain for human review.
+        </p>
+      </div>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <div className="mt-1 border-t border-white/10 pt-3">
+        <div className="rounded-xl border border-amber-300/30 bg-amber-300/5 px-4 py-3">
+          <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-200">
+            Manifest unavailable
+          </p>
+          <p className="mt-1 text-xs leading-5 text-white/65">{state.message}</p>
+          <button
+            type="button"
+            onClick={() => setState({ status: 'idle' })}
+            className="mt-2 rounded-full border border-white/20 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-white hover:bg-white/5"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const { manifest } = state;
+
+  const exportReviewPacket = () => {
+    const packet = buildResearchStationReviewExport({ dossier, result, manifest });
+    const blob = new Blob([packet], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `orchid-review-${dossier.project.project_id}-${manifest.run_fingerprint.slice(0, 12)}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  return (
+    <div className="mt-1 grid gap-3 border-t border-white/10 pt-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+          Run manifest
+        </span>
+        <span className="rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200">
+          Human review required
+        </span>
+        <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/60">
+          Immutable
+        </span>
+      </div>
+      <p className="font-mono text-[10px] leading-5 text-white/40">
+        Fingerprint:{' '}
+        <span className="text-white/65">{manifest.run_fingerprint.slice(0, 12)}…</span>
+      </p>
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-white/55">
+        {verificationStateLabel(manifest)}
+      </p>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <p className="font-mono text-lg text-emerald-200">{manifest.resolved_evidence_count}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-300/70">
+            Resolved
+          </p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <p className="font-mono text-lg text-white">{manifest.missing_evidence_count}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">Missing</p>
+        </div>
+        <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+          <p className="font-mono text-lg text-white">{manifest.knowledge_gap_count}</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">Gaps</p>
+        </div>
+      </div>
+      {manifest.contradictions.length > 0 && (
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-amber-200/80">
+            Contradictions preserved
+          </p>
+          <ul className="mt-1.5 grid gap-1">
+            {manifest.contradictions.map((c) => (
+              <li key={c} className="text-xs leading-5 text-amber-100/70">
+                {c}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {manifest.missing_evidence_count > 0 && (
+        <p className="text-[11px] leading-5 text-white/45">
+          {manifest.missing_evidence_count}{' '}
+          {manifest.missing_evidence_count === 1 ? 'piece' : 'pieces'} of evidence recorded as
+          missing — not as evidence of absence.
+        </p>
+      )}
+      <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/5 px-3 py-3">
+        <button
+          type="button"
+          onClick={exportReviewPacket}
+          className="inline-flex items-center gap-2 rounded-full border border-emerald-300/30 px-3 py-1.5 font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-100 hover:bg-emerald-300/10"
+        >
+          <ScrollText className="h-3.5 w-3.5" />
+          Export cited review packet
+        </button>
+        <p className="mt-2 text-[11px] leading-5 text-white/45">
+          Downloads the exact governed synthesis, evidence comparison, citations, gaps, and
+          immutable fingerprint. This is a review proposal only; it cannot publish or mutate
+          canonical knowledge.
+        </p>
+      </div>
+      <CandidateProposalPanel
+        manifest={manifest}
+        packet={state.packet}
+        result={result}
+      />
+      <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2.5">
+        <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
+          Governance
+        </p>
+        <p className="mt-1 text-xs leading-5 text-white/50">
+          No automatic publication · No canonical mutation · Human authority required for
+          canonical activation
+        </p>
+      </div>
+    </div>
+  );
+};
 
 const COVERAGE_LABEL: Record<keyof ClaimCoverageGroups, string> = {
   supported: 'Supported by the linked evidence',
@@ -205,8 +587,10 @@ const SynthesisPanel: React.FC<{
 
   const { result } = state;
   const groups = groupClaimCoverage(result.structure);
+  const comparisonRows = claimComparisonRows(result.structure);
   const gaps = synthesisGaps(result.structure);
   const conflicted = hasUnresolvedConflict(result.structure);
+  const evidenceReadiness = governedEvidenceClassReadiness(result.structure);
   const provenance = result.structure?.governed_provenance;
   const coverageOrder: Array<keyof ClaimCoverageGroups> = [
     'supported',
@@ -217,6 +601,127 @@ const SynthesisPanel: React.FC<{
 
   return (
     <div className="mt-4 grid gap-4">
+      <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
+        <div className="flex items-center gap-2 text-emerald-300/80">
+          <ScrollText className="h-3.5 w-3.5" />
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em]">
+            Governed research plan
+          </p>
+        </div>
+        {result.plan ? (
+          <div className="mt-3 grid gap-3">
+            <p className="text-sm leading-6 text-white/80">{result.plan.question}</p>
+            <div className="flex flex-wrap gap-2">
+              {result.plan.domains.map((domain) => (
+                <span
+                  key={domain}
+                  className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-white/60"
+                >
+                  {domain.replaceAll('_', ' ')}
+                </span>
+              ))}
+            </div>
+            <ol className="grid gap-1.5">
+              {result.plan.retrieval_queries.map((query, index) => (
+                <li key={query} className="text-xs leading-5 text-white/60">
+                  <span className="mr-2 font-mono text-white/35">{index + 1}.</span>
+                  {query}
+                </li>
+              ))}
+            </ol>
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/40">
+              Source budget {result.plan.source_budget} · Claims and inferences kept separate
+            </p>
+          </div>
+        ) : (
+          <NothingRecorded>
+            The governed mission returned no valid bounded plan. Synthesis output remains
+            visible, but it is not presented as planned research.
+          </NothingRecorded>
+        )}
+      </div>
+
+      <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+            Evidence readiness
+          </p>
+          {evidenceReadiness ? (
+            <span
+              className={
+                evidenceReadiness.status === 'ready'
+                  ? 'rounded-full border border-emerald-300/40 bg-emerald-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-emerald-200'
+                  : 'rounded-full border border-amber-300/40 bg-amber-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-amber-200'
+              }
+            >
+              {evidenceReadiness.status === 'ready' ? 'Ready for review' : 'Evidence incomplete'}
+            </span>
+          ) : null}
+        </div>
+        {evidenceReadiness ? (
+          <div className="mt-3 grid gap-3">
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="font-mono text-lg text-white">
+                  {evidenceReadiness.literature_present && evidenceReadiness.literature_review_required
+                    ? 'Present'
+                    : 'Missing'}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
+                  Review-required literature
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 px-3 py-2">
+                <p className="font-mono text-lg text-white">
+                  {evidenceReadiness.continuum_evidence_class_count}/
+                  {evidenceReadiness.required_continuum_evidence_class_count}
+                </p>
+                <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
+                  Continuum evidence classes
+                </p>
+              </div>
+            </div>
+            {evidenceReadiness.continuum_evidence_classes.length ? (
+              <div className="flex flex-wrap gap-2">
+                {evidenceReadiness.continuum_evidence_classes.map((evidenceClass) => (
+                  <span
+                    key={evidenceClass}
+                    className="rounded-full border border-white/15 bg-white/5 px-2.5 py-1 font-mono text-[9px] uppercase tracking-[0.12em] text-white/60"
+                  >
+                    {evidenceClass.replaceAll('_', ' ')}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {evidenceReadiness.missing_requirements.length ? (
+              <div>
+                <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-amber-200/80">
+                  Still required
+                </p>
+                <ul className="mt-1.5 grid gap-1">
+                  {evidenceReadiness.missing_requirements.map((requirement) => (
+                    <li key={requirement} className="text-xs leading-5 text-white/65">
+                      {requirement}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            <p className="text-[11px] leading-5 text-white/40">
+              Literature remains human-review-required. Readiness does not authorize scientific
+              publication or canonical knowledge mutation.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <NothingRecorded>
+              The backend returned no internally consistent evidence-readiness contract. Readiness
+              is unavailable, not assumed.
+            </NothingRecorded>
+          </div>
+        )}
+      </div>
+
       {/* The answer, exactly as Calyx composed it. */}
       <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
         {result.answer.trim() ? (
@@ -227,6 +732,110 @@ const SynthesisPanel: React.FC<{
           </NothingRecorded>
         )}
       </div>
+
+      {result.mission ? (
+        <ScientificSynthesis mission={result.mission} />
+      ) : (
+        <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-4">
+          <NothingRecorded>
+            No complete, same-project Brain mission was returned. Scientific conclusions and the
+            Verification Workbench remain unavailable rather than being reconstructed in the
+            browser.
+          </NothingRecorded>
+        </div>
+      )}
+
+      <section
+        aria-label="Evidence comparison"
+        className="rounded-xl border border-white/10 bg-black/20 px-4 py-4"
+        data-testid="evidence-comparison"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-white/55">
+            Claim comparison
+          </p>
+          <p className="text-[11px] leading-5 text-white/40">
+            Backend-reported evidence counts · no browser inference
+          </p>
+        </div>
+        {comparisonRows.length ? (
+          <div className="mt-3 grid gap-3">
+            {comparisonRows.map((row) => {
+              const supportingCount = row.supportingCount;
+              const contradictingCount = row.contradictingCount;
+              const total =
+                supportingCount !== null && contradictingCount !== null
+                  ? supportingCount + contradictingCount
+                  : null;
+              const supportingShare =
+                total !== null && total > 0 && supportingCount !== null
+                  ? (supportingCount / total) * 100
+                  : null;
+              const contradictingShare =
+                total !== null && total > 0 && contradictingCount !== null
+                  ? (contradictingCount / total) * 100
+                  : null;
+              return (
+                <article
+                  key={row.claimId}
+                  className="rounded-xl border border-white/10 bg-black/20 px-3 py-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="max-w-2xl text-xs leading-5 text-white/75">{row.claim}</p>
+                    <span className="rounded-full border border-white/15 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/55">
+                      {row.coverage}
+                    </span>
+                  </div>
+                  {total !== null ? (
+                    <div className="mt-2">
+                      <div
+                        className="flex h-2 overflow-hidden rounded-full bg-white/5"
+                        role="img"
+                        aria-label={`${supportingCount} supporting and ${contradictingCount} contradicting evidence records`}
+                      >
+                        {supportingShare !== null ? (
+                          <span
+                            className="bg-emerald-300/70"
+                            style={{ width: `${supportingShare}%` }}
+                          />
+                        ) : null}
+                        {contradictingShare !== null ? (
+                          <span
+                            className="bg-amber-300/70"
+                            style={{ width: `${contradictingShare}%` }}
+                          />
+                        ) : null}
+                      </div>
+                      <p className="mt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-white/45">
+                        {supportingCount} supporting · {contradictingCount} contradicting
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="mt-2 text-[11px] leading-5 text-white/45">
+                      Evidence counts unavailable — not zero.
+                    </p>
+                  )}
+                  {row.sourceFamilies.length ? (
+                    <p className="mt-2 text-[11px] leading-5 text-white/40">
+                      Sources: {row.sourceFamilies.join(', ')}
+                    </p>
+                  ) : (
+                    <p className="mt-2 text-[11px] leading-5 text-white/40">
+                      Source families unavailable.
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="mt-3">
+            <NothingRecorded>
+              The governed synthesis returned no identified claim coverage to compare.
+            </NothingRecorded>
+          </div>
+        )}
+      </section>
 
       {conflicted && (
         <p className="flex items-start gap-2 text-xs leading-5 text-amber-200/90">
@@ -325,6 +934,7 @@ const SynthesisPanel: React.FC<{
         Continue this thread in Calyx
         <ArrowRight className="h-3.5 w-3.5" />
       </Link>
+      <ManifestPanel dossier={dossier} result={result} />
     </div>
   );
 };
@@ -533,6 +1143,15 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
             ))}
           </ul>
         )}
+      </SectionShell>
+
+      {/* ACTIVITY — canonical audit history for the resolved project */}
+      <SectionShell
+        icon={<ScrollText className="h-3.5 w-3.5" />}
+        eyebrow="Activity"
+        title="Project audit trail"
+      >
+        <ResearchActivityPanel projectId={dossier.project.project_id} />
       </SectionShell>
 
       {/* SYNTHESIS — run over the governed path, never computed here */}

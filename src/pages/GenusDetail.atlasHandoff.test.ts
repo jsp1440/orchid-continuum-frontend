@@ -8,7 +8,9 @@ const source = readFileSync(resolve(process.cwd(), 'src/pages/GenusDetail.tsx'),
 
 describe('Genus Profile → Atlas mounted handoff', () => {
   it('mounts the canonical genus-profile Atlas builder on the live GenusDetail page', () => {
-    expect(source).toContain("import { genusProfileAtlasHref } from '@/lib/genusProfileNavigation';");
+    expect(source).toMatch(
+      /import\s*\{[^}]*genusProfileAtlasHref[^}]*\}\s*from ['"]@\/lib\/genusProfileNavigation['"]/,
+    );
     expect(source).toContain("{ label: 'Atlas', to: genusProfileAtlasHref(genus) }");
     expect(source).toContain('PLATFORM_LINKS(entry.genus).map');
     expect(source).not.toContain("{ label: 'Atlas', to: '/atlas' }");

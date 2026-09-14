@@ -18,8 +18,8 @@ const BIOMES = [
   'Cloud forest',
 ];
 
-const FieldLabel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <label className="block text-[10px] tracking-[0.25em] uppercase text-emerald-200/70 mb-1.5">
+const FieldLabel: React.FC<{ children: React.ReactNode; htmlFor: string }> = ({ children, htmlFor }) => (
+  <label htmlFor={htmlFor} className="block text-[10px] tracking-[0.25em] uppercase text-emerald-200/70 mb-1.5">
     {children}
   </label>
 );
@@ -39,7 +39,7 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
   };
 
   return (
-    <aside className="rounded-2xl border border-white/10 bg-[#142a1f] p-5 lg:sticky lg:top-24 self-start">
+    <aside aria-label="Atlas filters" className="rounded-2xl border border-white/10 bg-[#142a1f] p-5 lg:sticky lg:top-24 self-start">
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2 text-xs tracking-[0.25em] uppercase text-emerald-300/80">
           <Filter className="h-3.5 w-3.5" /> Filters
@@ -47,6 +47,7 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
         <button
           type="button"
           onClick={onReset}
+          aria-label="Reset Atlas filters"
           className="inline-flex items-center gap-1.5 text-[10px] tracking-[0.2em] uppercase text-white/55 hover:text-emerald-200 transition-colors"
         >
           <RefreshCcw className="h-3 w-3" /> Reset
@@ -55,8 +56,9 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
 
       <div className="space-y-4">
         <div>
-          <FieldLabel>Genus</FieldLabel>
+          <FieldLabel htmlFor="atlas-filter-genus">Genus</FieldLabel>
           <input
+            id="atlas-filter-genus"
             className={inputCls}
             placeholder="e.g. Bulbophyllum"
             value={filters.genus ?? ''}
@@ -64,8 +66,9 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
           />
         </div>
         <div>
-          <FieldLabel>Species</FieldLabel>
+          <FieldLabel htmlFor="atlas-filter-species">Species</FieldLabel>
           <input
+            id="atlas-filter-species"
             className={inputCls}
             placeholder="specific epithet"
             value={filters.species ?? ''}
@@ -73,8 +76,9 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
           />
         </div>
         <div>
-          <FieldLabel>Country</FieldLabel>
+          <FieldLabel htmlFor="atlas-filter-country">Country</FieldLabel>
           <input
+            id="atlas-filter-country"
             className={inputCls}
             placeholder="ISO name (e.g. Ecuador)"
             value={filters.country ?? ''}
@@ -83,9 +87,11 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
         </div>
 
         <div>
-          <FieldLabel>Elevation (m)</FieldLabel>
+          <span id="atlas-filter-elevation" className="block text-[10px] tracking-[0.25em] uppercase text-emerald-200/70 mb-1.5">Elevation (m)</span>
           <div className="grid grid-cols-2 gap-2">
             <input
+              id="atlas-filter-elevation-min"
+              aria-label="Minimum elevation (m)"
               type="number"
               className={inputCls}
               placeholder="min"
@@ -93,6 +99,8 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
               onChange={e => update('elevation_min', numOrUndef(e.target.value))}
             />
             <input
+              id="atlas-filter-elevation-max"
+              aria-label="Maximum elevation (m)"
               type="number"
               className={inputCls}
               placeholder="max"
@@ -103,9 +111,11 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
         </div>
 
         <div>
-          <FieldLabel>Year range</FieldLabel>
+          <span id="atlas-filter-years" className="block text-[10px] tracking-[0.25em] uppercase text-emerald-200/70 mb-1.5">Year range</span>
           <div className="grid grid-cols-2 gap-2">
             <input
+              id="atlas-filter-year-from"
+              aria-label="Start year"
               type="number"
               className={inputCls}
               placeholder="from"
@@ -113,6 +123,8 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
               onChange={e => update('year_from', numOrUndef(e.target.value))}
             />
             <input
+              id="atlas-filter-year-to"
+              aria-label="End year"
               type="number"
               className={inputCls}
               placeholder="to"
@@ -123,8 +135,9 @@ const AtlasFilterPanel: React.FC<Props> = ({ filters, onChange, onReset }) => {
         </div>
 
         <div>
-          <FieldLabel>Biome</FieldLabel>
+          <FieldLabel htmlFor="atlas-filter-biome">Biome</FieldLabel>
           <select
+            id="atlas-filter-biome"
             className={inputCls}
             value={filters.biome ?? ''}
             onChange={e => update('biome', e.target.value || undefined)}

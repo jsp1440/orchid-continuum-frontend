@@ -98,12 +98,19 @@ afterEach(() => {
 });
 
 describe("verification workbench states what it has not verified", () => {
-  it("does not present a recorded ledger as an inspectable one", async () => {
+  it("does not present a recorded ledger as a reviewed one", async () => {
+    // The backend retrieval contract (#1135) landed, so the contents ARE now
+    // reachable and the earlier "not retrievable from this surface" wording
+    // would itself be false. What must never collapse is
+    // recorded / inspectable / reviewed: this check confirms the ledger
+    // exists, and nothing more.
     await open(mission());
-    expect(text()).toMatch(/contents are not retrievable from this surface/i);
-    expect(text()).toMatch(/its existence is verified; its contents are not/i);
-    // The old wording implied the reasoning itself had been checked.
+    expect(text()).toMatch(/recording is still not review/i);
+    expect(text()).toMatch(/not that its reasoning was read or found sound/i);
+    // The original overclaim stays gone.
     expect(text()).not.toMatch(/A versioned reasoning ledger exists for this mission\./);
+    // And the old limitation wording is gone too, now that it is untrue.
+    expect(text()).not.toMatch(/contents are not retrievable from this surface/i);
   });
 
   it("still reports the ledger's presence as genuinely verified", async () => {

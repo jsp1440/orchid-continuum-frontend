@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import type { GlobeMark } from './AtlasGlobe';
 import { MAPBOX_STYLE_URL, mapboxConfig } from './mapboxConfig';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 
 /**
  * ATLAS-NEXT — the regional half of the scale ladder.
@@ -79,6 +80,7 @@ function toGeoJson(marks: GlobeMark[], selectedId: string | null) {
 
 const RegionalMap: React.FC<Props> = ({ view, marks, selectedId, onSelect, onViewChange, terrain }) => {
   const hostRef = useRef<HTMLDivElement | null>(null);
+  const reducedMotion = usePrefersReducedMotion();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const mapRef = useRef<any>(null);
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
@@ -239,8 +241,8 @@ const RegionalMap: React.FC<Props> = ({ view, marks, selectedId, onSelect, onVie
   useEffect(() => {
     const map = mapRef.current;
     if (!map || state.kind !== 'ready') return;
-    map.easeTo({ center: [view.lng, view.lat], zoom: view.zoom, duration: 900 });
-  }, [view, state.kind]);
+    map.easeTo({ center: [view.lng, view.lat], zoom: view.zoom, duration: reducedMotion ? 0 : 900 });
+  }, [view, state.kind, reducedMotion]);
 
   // Terrain is an extension point, not a feature yet: wired so a later slice
   // turns it on without restructuring anything.
@@ -267,11 +269,11 @@ const RegionalMap: React.FC<Props> = ({ view, marks, selectedId, onSelect, onVie
   }, [terrain, state.kind]);
 
   return (
-    <div className="absolute inset-0" data-testid="atlas-regional-map">
-      <div ref={hostRef} className="absolute inset-0" />
+    <div role="region" aria-label="Regional Orchid Atlas map" className="absolute inset-0" data-testid="atlas-regional-map">
+      <div ref={hostRef} role="application" aria-label={`Regional map with ${marks.length.toLocaleString()} generalized orchid records`} className="absolute inset-0" />
 
       {state.kind === 'unconfigured' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-[#05070b] px-6">
+        <div role="status" className="absolute inset-0 flex items-center justify-center bg-[#05070b] px-6">
           <div className="max-w-md rounded-xl border border-[#7fa8d8]/30 bg-black/70 px-5 py-4 backdrop-blur">
             <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-[#9dc0e0]">
               Regional map not configured

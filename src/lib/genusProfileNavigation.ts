@@ -24,3 +24,43 @@ export function genusProfileAtlasHref(genus: string): string {
   });
   return `/atlas?${params.toString()}`;
 }
+
+/**
+ * Continue directly from a dedicated Genus Profile into Calyx without first
+ * detouring through Atlas. Only the canonical genus identity crosses this
+ * boundary, explicitly marked as navigation context rather than evidence.
+ */
+export function genusProfileCalyxHref(genus: string): string {
+  const params = new URLSearchParams({
+    genus: boundedGenus(genus),
+    origin: GENUS_PROFILE_ORIGIN,
+    context_is_evidence: 'false',
+  });
+  return `/calyx?${params.toString()}`;
+}
+
+/**
+ * Continue from a dedicated Genus Profile into Research Center while carrying
+ * only the canonical genus identity. The profile is the provenance source;
+ * this must never be re-labelled as Genus of the Day, and the genus remains
+ * navigation context rather than scientific evidence.
+ */
+export function genusProfileResearchHref(genus: string): string {
+  const params = new URLSearchParams({
+    genus: boundedGenus(genus),
+    origin: GENUS_PROFILE_ORIGIN,
+    context_is_evidence: 'false',
+  });
+  return `/research?${params.toString()}`;
+}
+
+/**
+ * Continue from a dedicated Genus Profile into the Species browser using the
+ * receiver's existing genus filter. This carries only the bounded genus name;
+ * no provenance, evidence, locality, or occurrence material is promoted into
+ * the Species surface.
+ */
+export function genusProfileSpeciesHref(genus: string): string {
+  const params = new URLSearchParams({ genus: boundedGenus(genus) });
+  return `/species?${params.toString()}`;
+}

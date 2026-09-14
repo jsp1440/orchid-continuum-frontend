@@ -362,7 +362,7 @@ const ActionButton: React.FC<{
 const Tooltip: React.FC<{ text: string }> = ({ text }) => (
   <span className="inline-flex relative group ml-1 align-middle">
     <Info className="h-3 w-3 text-white/40 group-hover:text-emerald-200 transition-colors" />
-    <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+6px)] whitespace-nowrap max-w-[260px] text-[10px] tracking-normal normal-case px-2 py-1 rounded-md bg-black/85 text-white/85 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+    <span className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-[calc(100%+6px)] w-max max-w-[min(15rem,calc(100vw-2rem))] whitespace-normal text-[10px] tracking-normal normal-case px-2 py-1 rounded-md bg-black/85 text-white/85 opacity-0 group-hover:opacity-100 transition-opacity z-10">
       {text}
     </span>
   </span>

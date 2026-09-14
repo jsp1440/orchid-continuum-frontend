@@ -26,7 +26,9 @@ import Explore from "./pages/Explore";
 import Species from "./pages/Species";
 import MyCollection from "./pages/MyCollection";
 import MyConservatory from "./pages/MyConservatory";
+import CalyxField from "./pages/CalyxField";
 import ResearchCenter from "./pages/ResearchCenter";
+import ResearcherJefferyParham from "./pages/ResearcherJefferyParham";
 import Education from "./pages/Education";
 import Partners from "./pages/Partners";
 import GetInvolved from "./pages/GetInvolved";
@@ -53,6 +55,8 @@ import Climate from "./pages/Climate";
 import EcuadorExpedition from "./pages/EcuadorExpedition";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
+import Literature from "./pages/Literature";
+import LiteraturePaper from "./pages/LiteraturePaper";
 import SavedOrchids from "./pages/SavedOrchids";
 import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
@@ -66,6 +70,7 @@ import RelationshipMatrixNext from "./pages/RelationshipMatrixNext";
 import OrchidIdentificationContinuum from "./pages/OrchidIdentificationContinuum";
 import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
+import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
 
 const queryClient = new QueryClient();
@@ -89,7 +94,8 @@ const App = () => (
                   <Route path="/orchid-identification" element={<OrchidIdentificationContinuum />} />
                   <Route path="/calyx" element={<AtlasAwareCalyxRoute />} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
-                  <Route path="/mission-control/calyx" element={<CalyxWorkspace />} />
+                  <Route path="/calyx-mobile" element={<CalyxMobile />} />
+                  <Route path="/mission-control/calyx" element={<ProtectedRoute title="Mission Control Calyx · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxWorkspace /></ProtectedRoute>} />
                   <Route path="/explore" element={<Explore />} />
                   <Route path="/species" element={<Species />} />
                   <Route path="/genus/:name" element={<GenusDetail />} />
@@ -97,18 +103,10 @@ const App = () => (
                   <Route path="/about" element={<About />} />
                   <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
                   <Route path="/atlas" element={<Atlas />} />
-                  {/* Candidate Living Atlas. Isolated from /atlas by design; three.js
-                      is code-split so it never enters the main bundle. */}
                   <Route
                     path="/atlas-next"
                     element={
-                      <Suspense
-                        fallback={
-                          <div className="flex h-[100dvh] items-center justify-center bg-[#05070b] text-sm text-white/60">
-                            Loading the Atlas…
-                          </div>
-                        }
-                      >
+                      <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-[#05070b] text-sm text-white/60">Loading the Atlas…</div>}>
                         <AtlasNext />
                       </Suspense>
                     }
@@ -116,18 +114,18 @@ const App = () => (
                   <Route path="/atlas/:species" element={<Atlas />} />
                   <Route path="/admin" element={<AdminCenter />} />
                   <Route path="/control-center" element={<AdminCenter />} />
-                  <Route path="/mission-control" element={<MissionControlEntry />} />
-                  <Route path="/orchid-continuum-mission-control" element={<MissionControlEntry />} />
-                  <Route path="/mission-control/intelligence-center" element={<IntelligenceCenter />} />
-                  <Route path="/intelligence-center" element={<IntelligenceCenter />} />
-                  <Route path="/mission-control/science" element={<CalyxScienceStatus />} />
-                  <Route path="/calyx-science" element={<CalyxScienceStatus />} />
+                  <Route path="/mission-control" element={<ProtectedRoute title="Mission Control · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><MissionControlEntry /></ProtectedRoute>} />
+                  <Route path="/orchid-continuum-mission-control" element={<ProtectedRoute title="Mission Control · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><MissionControlEntry /></ProtectedRoute>} />
+                  <Route path="/mission-control/intelligence-center" element={<ProtectedRoute title="Intelligence Center · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><IntelligenceCenter /></ProtectedRoute>} />
+                  <Route path="/intelligence-center" element={<ProtectedRoute title="Intelligence Center · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><IntelligenceCenter /></ProtectedRoute>} />
+                  <Route path="/mission-control/science" element={<ProtectedRoute title="Science operations · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxScienceStatus /></ProtectedRoute>} />
+                  <Route path="/calyx-science" element={<ProtectedRoute title="Science operations · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxScienceStatus /></ProtectedRoute>} />
                   <Route path="/mission-control/matrix-registry-review" element={<ProtectedRoute title="Matrix Registry Review · authenticated reviewers" description="Sign in to derive immutable Matrix registry versions from explicit reviewed canonical concept mappings."><MatrixRegistryConceptReview /></ProtectedRoute>} />
-                  <Route path="/mission-control/readiness/homepage" element={<HomepageReadiness />} />
-                  <Route path="/mission-control/knowledge-graph-readiness" element={<HomepageReadiness />} />
-                  <Route path="/mission-control/ai-orchestration" element={<AIOrchestration />} />
-                  <Route path="/ai-orchestration" element={<AIOrchestration />} />
-                  <Route path="/diagnostics/daily-genus" element={<DailyGenusDiagnostics />} />
+                  <Route path="/mission-control/readiness/homepage" element={<ProtectedRoute title="Homepage readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
+                  <Route path="/mission-control/knowledge-graph-readiness" element={<ProtectedRoute title="Knowledge graph readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
+                  <Route path="/mission-control/ai-orchestration" element={<ProtectedRoute title="AI orchestration · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><AIOrchestration /></ProtectedRoute>} />
+                  <Route path="/ai-orchestration" element={<ProtectedRoute title="AI orchestration · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><AIOrchestration /></ProtectedRoute>} />
+                  <Route path="/diagnostics/daily-genus" element={<ProtectedRoute title="Daily Genus diagnostics · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><DailyGenusDiagnostics /></ProtectedRoute>} />
                   <Route path="/habitats" element={<HabitatJourney mode="biome" />} />
                   <Route path="/habitats/:biome" element={<HabitatJourney mode="biome" />} />
                   <Route path="/ecosystems/:species" element={<HabitatJourney mode="species" />} />
@@ -139,11 +137,14 @@ const App = () => (
                   <Route path="/climate" element={<Climate />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
-                  <Route path="/literature" element={<ComingSoon />} />
+                  <Route path="/literature" element={<Literature />} />
+                  <Route path="/literature/:paperId" element={<LiteraturePaper />} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
+                  <Route path="/field" element={<ProtectedRoute title="Sign in to use Calyx Field" description="Field observations and offline drafts stay behind your Orchid Continuum account boundary."><CalyxField /></ProtectedRoute>} />
                   <Route path="/conservatory/*" element={<ProtectedRoute title="Sign in to view your conservatory" description="Your private living collection, plant passports, QR identifiers, and collection notes live behind authentication."><MyConservatory /></ProtectedRoute>} />
+                  <Route path="/research-station/researchers/jeffery-scott-parham" element={<ResearcherJefferyParham />} />
                   <Route path="/research" element={<ProtectedRoute title="Research Center · members only" description="Sign in to access advanced queries, trait explorers, and the conservation research workspace."><ResearchCenter /></ProtectedRoute>} />
                   <Route path="/account" element={<Account />} />
                   <Route path="/saved" element={<SavedOrchids />} />

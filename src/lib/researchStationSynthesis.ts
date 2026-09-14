@@ -1,7 +1,11 @@
 import {
   createCalyxConversation,
   sendCalyxTurn,
+  type BrainMission,
+  type BrainMissionPlan,
+  type CalyxCitation,
   type CalyxClaimCoverage,
+  type CalyxEvidenceClassReadiness,
   type CalyxSynthesisStructure,
 } from "@/lib/calyxWorkspace";
 import { RESEARCH_STATION_ORIGIN, assertNoLocalityLeak } from "@/lib/researchStationNavigation";
@@ -32,9 +36,211 @@ export type ResearchStationSynthesis = {
   answer: string;
   /** Null when the backend does not supply the structure - never synthesized here. */
   structure: CalyxSynthesisStructure | null;
+  /** The bounded plan persisted by the governed Brain mission; null when unavailable or malformed. */
+  plan: BrainMissionPlan | null;
+  /** The exact governed mission used by the canonical synthesis/verification consumer. */
+  mission: BrainMission | null;
+  /** Display-authorized source citations returned for this exact turn. */
+  citations: CalyxCitation[];
   /** True when the backend composed from linked evidence rather than reasoning generatively. */
   degraded: boolean;
 };
+
+function governedMissionPlan(value: unknown): BrainMissionPlan | null {
+  if (!value || typeof value !== "object") return null;
+  const plan = value as Partial<BrainMissionPlan>;
+  const strings = (items: unknown): items is string[] =>
+    Array.isArray(items) &&
+    items.length > 0 &&
+    items.every((item) => typeof item === "string" && item.trim().length > 0);
+  if (
+    typeof plan.question !== "string" ||
+    !plan.question.trim() ||
+    !strings(plan.domains) ||
+    !strings(plan.retrieval_queries) ||
+    !Number.isInteger(plan.source_budget) ||
+    Number(plan.source_budget) <= 0 ||
+    !Number.isInteger(plan.per_domain_source_budget) ||
+    Number(plan.per_domain_source_budget) <= 0 ||
+    plan.claims_and_inferences_separated !== true
+  ) {
+    return null;
+  }
+  return {
+    question: plan.question.trim(),
+    domains: plan.domains.map((item) => item.trim()),
+    retrieval_queries: plan.retrieval_queries.map((item) => item.trim()),
+    source_budget: Number(plan.source_budget),
+    per_domain_source_budget: Number(plan.per_domain_source_budget),
+    claims_and_inferences_separated: true,
+  };
+}
+
+/**
+ * Accepts the backend readiness contract only when its counts and ready state
+ * agree with the evidence it names. Missing or inconsistent data stays
+ * unavailable; the browser never upgrades it to ready.
+ */
+export function governedEvidenceClassReadiness(
+  structure: CalyxSynthesisStructure | null | undefined,
+): CalyxEvidenceClassReadiness | null {
+  const value = structure?.evidence_class_readiness;
+  if (!value || typeof value !== "object") return null;
+
+  const classes = value.continuum_evidence_classes;
+  const missing = value.missing_requirements;
+  if (
+    (value.status !== "ready" && value.status !== "evidence_incomplete") ||
+    typeof value.literature_present !== "boolean" ||
+    typeof value.literature_review_required !== "boolean" ||
+    !Array.isArray(classes) ||
+    !classes.every((item) => typeof item === "string" && item.trim().length > 0) ||
+    new Set(classes).size !== classes.length ||
+    !Number.isInteger(value.continuum_evidence_class_count) ||
+    value.continuum_evidence_class_count !== classes.length ||
+    !Number.isInteger(value.required_continuum_evidence_class_count) ||
+    value.required_continuum_evidence_class_count < 2 ||
+    !Array.isArray(missing) ||
+    !missing.every((item) => typeof item === "string" && item.trim().length > 0)
+  ) {
+    return null;
+  }
+
+  const satisfiesReadyContract =
+    value.literature_present &&
+    value.literature_review_required &&
+    classes.length >= value.required_continuum_evidence_class_count &&
+    missing.length === 0;
+
+  if (value.status === "ready" && !satisfiesReadyContract) return null;
+  if (value.status === "evidence_incomplete" && satisfiesReadyContract) return null;
+
+  return {
+    ...value,
+    continuum_evidence_classes: [...classes],
+    missing_requirements: [...missing],
+  };
+}
+
+function nonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function governedStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every(nonEmptyString);
+}
+
+function optionalCitationString(value: unknown): string | null {
+  return nonEmptyString(value) ? value.trim() : null;
+}
+
+/**
+ * Retains only display-authorized citation fields with a real title. Invalid
+ * entries disappear instead of becoming invented bibliography in the export.
+ */
+export function governedResearchCitations(value: unknown): CalyxCitation[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== 'object') return [];
+    const citation = item as Partial<CalyxCitation>;
+    if (!nonEmptyString(citation.title)) return [];
+    return [{
+      title: citation.title.trim(),
+      authors: optionalCitationString(citation.authors),
+      publication_date: optionalCitationString(citation.publication_date),
+      journal: optionalCitationString(citation.journal),
+      doi: optionalCitationString(citation.doi),
+      pmid: optionalCitationString(citation.pmid),
+      pmcid: optionalCitationString(citation.pmcid),
+      provider: optionalCitationString(citation.provider),
+      review_state: optionalCitationString(citation.review_state),
+      canonical_evidence: citation.canonical_evidence === true,
+    }];
+  });
+}
+
+/**
+ * Accepts only a complete Brain mission for this exact project and question.
+ *
+ * This prevents a stale, cross-project, or authority-expanding payload from
+ * reaching the canonical verification consumer. Invalid missions remain
+ * unavailable; their prose answer may still render separately.
+ */
+export function governedResearchMission(
+  value: unknown,
+  expectedProjectId: string,
+  expectedQuestion: string,
+): BrainMission | null {
+  if (!value || typeof value !== "object") return null;
+  const mission = value as Partial<BrainMission>;
+  const validation = mission.validation;
+  const publication = mission.publication_eligibility;
+  const ledger = mission.reasoning_ledger;
+
+  const conclusionsValid =
+    Array.isArray(mission.conclusions) &&
+    mission.conclusions.every(
+      (conclusion) =>
+        conclusion &&
+        typeof conclusion === "object" &&
+        nonEmptyString(conclusion.text) &&
+        (conclusion.type === undefined || nonEmptyString(conclusion.type)) &&
+        (conclusion.claim_ids === undefined ||
+          (Array.isArray(conclusion.claim_ids) &&
+            conclusion.claim_ids.every(
+              (claimId) =>
+                (typeof claimId === "number" && Number.isFinite(claimId)) ||
+                nonEmptyString(claimId),
+            ))),
+    );
+
+  const confidenceValid =
+    mission.confidence === null ||
+    (typeof mission.confidence === "number" &&
+      Number.isFinite(mission.confidence) &&
+      mission.confidence >= 0 &&
+      mission.confidence <= 1);
+
+  const ledgerValid =
+    ledger === null ||
+    (ledger !== undefined &&
+      nonEmptyString(ledger.ledger_id) &&
+      Number.isInteger(ledger.version) &&
+      ledger.version > 0);
+
+  if (
+    !nonEmptyString(mission.mission_id) ||
+    mission.project_id !== expectedProjectId ||
+    mission.question?.trim() !== expectedQuestion.trim() ||
+    !nonEmptyString(mission.state) ||
+    !nonEmptyString(mission.current_stage) ||
+    !Number.isInteger(mission.steps_executed) ||
+    Number(mission.steps_executed) < 0 ||
+    !Array.isArray(mission.sources) ||
+    !Array.isArray(mission.supporting_evidence) ||
+    !Array.isArray(mission.contradicting_evidence) ||
+    !governedStringArray(mission.missing_evidence) ||
+    !confidenceValid ||
+    !conclusionsValid ||
+    !ledgerValid ||
+    !validation ||
+    typeof validation.valid !== "boolean" ||
+    !governedStringArray(validation.blockers) ||
+    !nonEmptyString(mission.review_status) ||
+    !publication ||
+    typeof publication.eligible !== "boolean" ||
+    publication.automatic_publication !== false ||
+    !governedStringArray(publication.blockers) ||
+    !Array.isArray(mission.blockers) ||
+    typeof mission.partial !== "boolean" ||
+    !nonEmptyString(mission.created_at) ||
+    !nonEmptyString(mission.updated_at)
+  ) {
+    return null;
+  }
+
+  return mission as BrainMission;
+}
 
 export class ResearchStationQuestionMissing extends Error {
   constructor() {
@@ -119,11 +325,69 @@ export async function runResearchStationSynthesis(
     conversationId: turn.conversation_id || conversation.conversation_id,
     answer: turn.answer ?? "",
     structure,
+    plan: governedMissionPlan(turn.research?.mission?.plan),
+    mission: governedResearchMission(turn.research?.mission, projectId, question),
+    citations: governedResearchCitations(turn.research?.citations),
     // Absent structure means an older backend, not a generative answer. Claiming
     // "reasoned generatively" on missing data would overstate what happened, so
     // an unknown composer reads as degraded.
     degraded: structure ? structure.generative !== true : true,
   };
+}
+
+export type ClaimComparisonRow = {
+  claimId: string;
+  claim: string;
+  coverage: "supported" | "contested" | "contradicted" | "unresolved";
+  supportingCount: number | null;
+  contradictingCount: number | null;
+  sourceFamilies: string[];
+};
+
+function governedEvidenceCount(value: unknown): number | null {
+  return Number.isInteger(value) && Number(value) >= 0 ? Number(value) : null;
+}
+
+/**
+ * Builds presentation-only comparison rows from backend claim coverage.
+ *
+ * Counts that are missing, fractional, or negative remain unavailable. Unknown
+ * coverage states become unresolved, and no source family is invented.
+ */
+export function claimComparisonRows(
+  structure: CalyxSynthesisStructure | null | undefined,
+): ClaimComparisonRow[] {
+  return (structure?.claim_coverage ?? []).flatMap((claim) => {
+    const claimId = typeof claim.claim_id === "string" ? claim.claim_id.trim() : "";
+    const statement = typeof claim.claim === "string" ? claim.claim.trim() : "";
+    if (!claimId || !statement) return [];
+
+    const coverage =
+      claim.coverage === "supported" ||
+      claim.coverage === "contested" ||
+      claim.coverage === "contradicted"
+        ? claim.coverage
+        : "unresolved";
+    const sourceFamilies = Array.isArray(claim.source_families)
+      ? Array.from(
+          new Set(
+            claim.source_families
+              .filter((item): item is string => typeof item === "string")
+              .map((item) => item.trim())
+              .filter(Boolean),
+          ),
+        )
+      : [];
+
+    return [{
+      claimId,
+      claim: statement,
+      coverage,
+      supportingCount: governedEvidenceCount(claim.supporting_count),
+      contradictingCount: governedEvidenceCount(claim.contradicting_count),
+      sourceFamilies,
+    }];
+  });
 }
 
 export type ClaimCoverageGroups = {

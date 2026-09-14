@@ -1,0 +1,35 @@
+name: Orchid Deterministic Dispatch
+
+on:
+  workflow_call:
+    inputs:
+      issues_json:
+        required: true
+        type: string
+      wave_hash:
+        required: true
+        type: string
+      artifact_name:
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+  id-token: write
+
+jobs:
+  lane:
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        issue: ${{ fromJSON(inputs.issues_json) }}
+    uses: ./.github/workflows/orchid-budgeted-completion-lane.yml
+    with:
+      issue_number: ${{ format('{0}', matrix.issue) }}
+      wave_hash: ${{ inputs.wave_hash }}
+      artifact_name: ${{ inputs.artifact_name }}
+      provider_authorized: false

@@ -1,0 +1,16 @@
+name: Orchid NO-API Scheduler
+
+# Backward-compatible manual entrypoint; only the canonical workflow schedules ticks.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+  actions: write
+  id-token: write
+
+jobs:
+  canonical:
+    uses: ./.github/workflows/orchid-continuous-completion.yml

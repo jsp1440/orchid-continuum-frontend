@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom';
 import { ArrowRight, Bug, Database, Globe2, ImageOff, MessageCircle, Sprout } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import type { ContinuumDomainState } from '@/lib/featuredTaxonContinuum';
-import { featuredTaxonAtlasHref, featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import {
+  featuredTaxonAtlasHref,
+  featuredTaxonCalyxHref,
+  featuredTaxonGenusProfileHref,
+} from '@/lib/featuredTaxonNavigation';
 import type { WebNodeData } from '@/lib/ocBackend';
 import {
   authoredScientificName,
@@ -161,7 +165,7 @@ function ContinuumPhotograph({
   );
 }
 
-const DailyGenusFeatureContinuum: React.FC = () => {
+const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> = ({ continuation }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = React.useMemo(() => continuum?.media.items ?? [], [continuum]);
 
@@ -215,6 +219,7 @@ const DailyGenusFeatureContinuum: React.FC = () => {
   const relationshipServiceAnswered = continuumStatus === 'ready' && relationships !== null;
   const atlasHref = featuredTaxonAtlasHref(genus);
   const calyxHref = featuredTaxonCalyxHref(genus);
+  const genusProfileHref = featuredTaxonGenusProfileHref(genus);
 
   return (
     <section className="bg-[#f3ead4] px-4 py-10 sm:px-6 lg:px-8" aria-labelledby="featured-genus-title">
@@ -243,7 +248,7 @@ const DailyGenusFeatureContinuum: React.FC = () => {
               Ask Calyx <MessageCircle className="h-3.5 w-3.5" />
             </Link>
             <Link
-              to={`/genus/${encodeURIComponent(genus)}`}
+              to={genusProfileHref}
               className="inline-flex items-center gap-2 rounded-lg border border-[#b59a58] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#665321] hover:bg-[#fff7df]"
             >
               Research profile <ArrowRight className="h-3.5 w-3.5" />
@@ -380,6 +385,17 @@ const DailyGenusFeatureContinuum: React.FC = () => {
             serviceAnswered={relationshipServiceAnswered}
           />
         </div>
+
+        {/* The continuation actions belong to this panel, not to a second band
+            beneath it. Two adjacent cream cards read as two separate offers of
+            the same genus; one card with a footer reads as one. It is passed in
+            rather than built here so each handoff keeps its own governed
+            producer and its own tests. */}
+        {continuation ? (
+          <div className="mt-6 border-t border-[#d1bd8e] pt-5" data-testid="featured-genus-continuation">
+            {continuation}
+          </div>
+        ) : null}
       </div>
     </section>
   );

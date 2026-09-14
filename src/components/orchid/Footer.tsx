@@ -27,7 +27,7 @@ const Footer: React.FC = () => {
       title: 'Explore',
       items: [
         { label: 'Featured Genus', anchor: '#species-in-focus' },
-        { label: 'Knowledge Graph', route: '/knowledge' },
+        { label: 'Intelligence Graph', route: '/knowledge' },
         { label: 'Ask Calyx', route: '/calyx' },
         { label: 'Atlas', route: '/atlas' },
       ],

@@ -13,8 +13,17 @@ export type MissionSource = {
 };
 export type MissionEvidence = { candidate_id?: number | string; candidate_version?: number; subject?: string; predicate?: string; value?: unknown; source_revision_id?: number | string; source_anchor_ids?: Array<number | string>; provenance?: Record<string, unknown>; [key: string]: unknown };
 export type MissionConclusion = { type?: string; text: string; claim_ids?: Array<number | string> };
+export type BrainMissionPlan = {
+  question: string;
+  domains: string[];
+  retrieval_queries: string[];
+  source_budget: number;
+  per_domain_source_budget: number;
+  claims_and_inferences_separated: true;
+};
 export type BrainMission = {
   mission_id: string; project_id: string; question: string; state: string; current_stage: string; steps_executed: number;
+  plan?: BrainMissionPlan | null;
   sources: MissionSource[]; supporting_evidence: MissionEvidence[]; contradicting_evidence: MissionEvidence[]; missing_evidence: string[];
   confidence: number | null; conclusions: MissionConclusion[]; reasoning_ledger: { ledger_id: string; version: number } | null;
   validation: { valid: boolean; blockers: string[] }; review_status: string;
@@ -53,6 +62,15 @@ export type CalyxClaimCoverage = {
   supporting_count: number;
   contradicting_count: number;
 };
+export type CalyxEvidenceClassReadiness = {
+  status: "ready" | "evidence_incomplete";
+  literature_present: boolean;
+  literature_review_required: boolean;
+  continuum_evidence_classes: string[];
+  continuum_evidence_class_count: number;
+  required_continuum_evidence_class_count: number;
+  missing_requirements: string[];
+};
 export type CalyxSynthesisStructure = {
   composer_contract?: string;
   /** False when the answer was composed from linked evidence, not reasoned generatively. */
@@ -60,6 +78,8 @@ export type CalyxSynthesisStructure = {
   degraded_composition?: boolean;
   /** The investigation subject this turn continues, resolved server-side. */
   resolved_subject?: string | null;
+  /** Canonical taxonomy release pinned by the governed backend for this synthesis. */
+  taxonomy_snapshot_id?: string | null;
   follow_up_turn?: boolean;
   claim_coverage?: CalyxClaimCoverage[];
   integrated_across_source_families?: boolean;
@@ -67,6 +87,8 @@ export type CalyxSynthesisStructure = {
   source_families?: string[];
   missing_evidence?: string[];
   canonical_retrieval_gap?: boolean;
+  /** Governed proof that literature and distinct canonical Continuum evidence classes are present. */
+  evidence_class_readiness?: CalyxEvidenceClassReadiness | null;
   external_literature_review_required?: boolean;
   unresolved_conflict?: boolean;
   mission_unavailable?: boolean;
