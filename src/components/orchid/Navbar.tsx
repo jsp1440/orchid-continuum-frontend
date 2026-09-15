@@ -42,6 +42,7 @@ const MORE_GROUPS: MoreGroup[] = [
       { label: 'Ecosystems',       route: '/ecosystems',   description: 'Seven communities of practice' },
       { label: 'Conservation Hub', route: '/conservation', description: 'Organisations & project workspaces' },
       { label: 'Orchid Societies', route: '/societies',    description: 'Local chapters & member tools' },
+      { label: 'Community Observations', route: '/community', description: 'Share field sightings with epistemic provenance' },
       { label: 'Orchids on screen', route: '/culture/orchids-on-screen', description: 'What a century of film made of them' },
     ],
   },
@@ -64,6 +65,8 @@ const MORE_GROUPS: MoreGroup[] = [
       { label: 'Research Center', route: '/research',     description: 'Queries · traits · networks' },
       { label: 'Partners',        route: '/partners',     description: 'Advisors & institutions' },
       { label: 'Get Involved',    route: '/get-involved', description: 'Volunteer · donate · join' },
+      { label: 'Newsletter',      route: '/newsletter',   description: 'Subscribe to field dispatches' },
+      { label: 'Contact',         route: '/contact',      description: 'Reach the Orchid Continuum team' },
     ],
   },
 ];
