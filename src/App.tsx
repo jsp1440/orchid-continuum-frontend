@@ -72,6 +72,8 @@ import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
+import Newsletter from "./pages/Newsletter";
+import Contact from "./pages/Contact";
 
 const queryClient = new QueryClient();
 
@@ -167,6 +169,8 @@ const App = () => (
                   <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
+                  <Route path="/newsletter" element={<Newsletter />} />
+                  <Route path="/contact" element={<Contact />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />
                   <Route path="/coming-soon" element={<ComingSoon />} />
                   <Route path="*" element={<NotFound />} />
