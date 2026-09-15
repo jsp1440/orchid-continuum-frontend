@@ -105,4 +105,66 @@ describe('ConservationHub public partner boundary', () => {
     expect(container.textContent).not.toContain('Quito');
     expect(container.textContent).not.toContain('Loja');
   });
+
+  it('renders explicit conservation graph coverage unknown state when genus arrives from Atlas', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter
+          initialEntries={['/conservation?origin=atlas-next-occurrence-evidence&genus=Dracula']}
+        >
+          <ConservationHub />
+        </MemoryRouter>,
+      );
+    });
+
+    const coverageEl = container.querySelector('[data-testid="conservation-graph-coverage"]');
+    expect(coverageEl).toBeTruthy();
+    const unavailableEl = container.querySelector('[data-testid="conservation-status-unavailable"]');
+    expect(unavailableEl?.textContent).toMatch(/no conservation assessment for Dracula is yet documented/i);
+    // Absence must be labeled as absence-of-record, not absence-of-species
+    expect(unavailableEl?.textContent).toMatch(/absence here is not evidence of absence/i);
+  });
+
+  it('does not render conservation graph coverage section when no Atlas origin is present', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={['/conservation']}>
+          <ConservationHub />
+        </MemoryRouter>,
+      );
+    });
+    expect(container.querySelector('[data-testid="conservation-graph-coverage"]')).toBeNull();
+  });
+
+  it('marks protocol library examples as illustrative placeholders', () => {
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={['/conservation']}>
+          <ConservationHub />
+        </MemoryRouter>,
+      );
+    });
+    const notice = container.querySelector('[data-testid="protocol-library-illustrative-notice"]');
+    expect(notice?.textContent).toMatch(/illustrative.*not verified records/i);
+  });
+
+  it('does not expose occurrence IDs, record IDs, or coordinate fields from the URL', () => {
+    // Regression: even if malicious URL params are added, they must not appear in the DOM
+    act(() => {
+      root.render(
+        <MemoryRouter
+          initialEntries={[
+            '/conservation?origin=atlas-next-occurrence-evidence&genus=Ophrys&occurrenceId=abc123&lat=37.5&lng=23.2&locality=Athens',
+          ]}
+        >
+          <ConservationHub />
+        </MemoryRouter>,
+      );
+    });
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('abc123');
+    expect(text).not.toContain('37.5');
+    expect(text).not.toContain('23.2');
+    expect(text).not.toContain('Athens');
+  });
 });
