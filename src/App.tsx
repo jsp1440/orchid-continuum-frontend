@@ -55,6 +55,7 @@ import Climate from "./pages/Climate";
 import EcuadorExpedition from "./pages/EcuadorExpedition";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
+import Privacy from "./pages/Privacy";
 import Literature from "./pages/Literature";
 import LiteraturePaper from "./pages/LiteraturePaper";
 import SavedOrchids from "./pages/SavedOrchids";
@@ -169,6 +170,7 @@ const App = () => (
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />
                   <Route path="/coming-soon" element={<ComingSoon />} />
+                  <Route path="/privacy" element={<Privacy />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AtlasFilterProvider>

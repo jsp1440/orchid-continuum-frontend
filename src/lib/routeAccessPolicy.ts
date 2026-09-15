@@ -65,6 +65,7 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/project/:slug',
   '/coming-soon/:section',
   '/coming-soon',
+  '/privacy',
   '*',
 ] as const;
 
