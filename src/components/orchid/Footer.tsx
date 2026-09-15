@@ -61,8 +61,6 @@ const Footer: React.FC = () => {
         { label: 'Conservation', route: '/conservation' },
         { label: 'Data & evidence', route: '/knowledge' },
         { label: 'Privacy & data', route: '/privacy' },
-        { label: 'Newsletter', route: '/newsletter' },
-        { label: 'Contact', route: '/contact' },
       ],
     },
   ];
