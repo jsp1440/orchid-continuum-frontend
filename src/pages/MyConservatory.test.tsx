@@ -172,7 +172,9 @@ describe("MyConservatory Add Plant — readiness gate", () => {
     await flush();
 
     expect(container.textContent).toContain("Plant entry is locked");
-    expect(container.textContent).toContain("Deploy and confirm data survives a restart.");
+    // PR #677: bounded UI shows instruction, not raw blocking_reason
+    expect(container.textContent).toContain("Restart survival has not been verified yet.");
+    expect(container.textContent).not.toContain("Deploy and confirm data survives a restart.");
     // The safety-critical assertion: no submittable form exists while blocked.
     expect(container.querySelector("form")).toBeNull();
     expect(container.querySelector('input[required]')).toBeNull();
