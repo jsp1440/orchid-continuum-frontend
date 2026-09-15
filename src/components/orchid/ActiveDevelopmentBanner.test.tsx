@@ -90,4 +90,10 @@ describe('ActiveDevelopmentBanner — PUBLIC-LAUNCH-001 (#679)', () => {
     const btn = container.querySelector('[data-testid="dev-banner-dismiss"]') as HTMLButtonElement;
     expect(btn.getAttribute('aria-label')).toBe('Dismiss active development notice');
   });
+
+  it('banner exposes aria-live="polite" for screen-reader announcements', () => {
+    renderBanner();
+    const banner = container.querySelector('[data-testid="dev-banner"]');
+    expect(banner!.getAttribute('aria-live')).toBe('polite');
+  });
 });

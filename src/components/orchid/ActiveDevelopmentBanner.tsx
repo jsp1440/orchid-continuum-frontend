@@ -36,6 +36,7 @@ const ActiveDevelopmentBanner: React.FC = () => {
   return (
     <div
       role="banner"
+      aria-live="polite"
       aria-label="Active development notice"
       data-testid="dev-banner"
       className="relative z-50 w-full"
@@ -68,7 +69,6 @@ const ActiveDevelopmentBanner: React.FC = () => {
             style={{
               backgroundColor: '#C9A84C',
               color: '#1a2e1a',
-              focusRingColor: '#C9A84C',
             }}
             aria-label="Support Orchid Continuum"
           >
