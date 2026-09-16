@@ -1,23 +1,27 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Camera, FlaskConical, LocateFixed, MapPin, Search, Sprout, Trash2, Wifi, WifiOff } from "lucide-react";
+import { Camera, CloudUpload, FlaskConical, LocateFixed, MapPin, Search, Sprout, Trash2, Upload, Wifi, WifiOff } from "lucide-react";
 import {
   createFieldDraft,
+  markFieldDraftUploaded,
   readFieldDrafts,
   writeFieldDrafts,
   type FieldDraft,
   type FieldLocalityVisibility,
   type FieldMediaDescriptor,
 } from "@/lib/fieldDrafts";
+import { describeUploadFailure, uploadFieldDraft } from "@/lib/fieldObservations";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Journey 5 → Journey 6 handoff. Only the opaque local draft id and the taxon
+ * Journey 5 → Journey 6 handoff. Only an opaque observation id and the taxon
  * label cross into the Deception Lab; coordinates, locality visibility, notes
- * and media never leave this page via the URL.
+ * and media never leave this page via the URL. Once a draft has been uploaded
+ * the durable Calyx observation id is used, so the hypothesis loop attaches to
+ * the same record the curators see; before that, the local draft id is used.
  */
-export function hypothesisLoopHref(draft: Pick<FieldDraft, "id" | "taxonLabel">): string {
-  const params = new URLSearchParams({ tab: "workspace", observation: draft.id });
+export function hypothesisLoopHref(draft: Pick<FieldDraft, "id" | "taxonLabel"> & Partial<Pick<FieldDraft, "upload">>): string {
+  const params = new URLSearchParams({ tab: "workspace", observation: draft.upload?.observationId ?? draft.id });
   if (draft.taxonLabel) params.set("taxon", draft.taxonLabel);
   return `/deception-lab?${params.toString()}`;
 }
@@ -36,7 +40,7 @@ const localityLabels: Record<FieldLocalityVisibility, string> = {
 };
 
 export default function CalyxField() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const accountId = user?.id ?? "";
   const [drafts, setDrafts] = useState<FieldDraft[]>(() =>
     readFieldDrafts(window.localStorage, accountId),
@@ -49,6 +53,8 @@ export default function CalyxField() {
   const [query, setQuery] = useState("");
   const [unidentifiedOnly, setUnidentifiedOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [uploadNotice, setUploadNotice] = useState<string | null>(null);
 
   const filteredDrafts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -91,6 +97,32 @@ export default function CalyxField() {
     );
   }
 
+  async function uploadDraft(draft: FieldDraft) {
+    setError(null);
+    setUploadNotice(null);
+    setUploadingId(draft.id);
+    try {
+      const result = await uploadFieldDraft(draft, { accessToken: session?.access_token ?? null });
+      const now = new Date().toISOString();
+      persist(
+        drafts.map((item) =>
+          item.id === draft.id
+            ? markFieldDraftUploaded(item, { observationId: result.observation.id, hypothesesPath: result.observation.hypotheses_path }, now)
+            : item,
+        ),
+      );
+      setUploadNotice(
+        result.created
+          ? "Uploaded to Calyx as an observer report. It is not published and awaits human curation."
+          : "This draft was already in Calyx; its receipt has been restored on this device.",
+      );
+    } catch (caught) {
+      setError(describeUploadFailure(caught));
+    } finally {
+      setUploadingId(null);
+    }
+  }
+
   function saveDraft() {
     setError(null);
     try {
@@ -116,7 +148,7 @@ export default function CalyxField() {
             <p className="label-eyebrow">Calyx Field · Lance pilot</p>
             <h1 className="mt-2 text-4xl">Field Journal</h1>
             <p className="mt-2 max-w-2xl text-sm text-white/75">
-              Capture a simple observation now. Draft text and media metadata stay on this device until the governed backend upload path is available.
+              Capture a simple observation now. Drafts are saved on this device first. Uploading sends the note, taxon text, locality visibility class and media metadata to Calyx as an observer report under your account boundary — never as a published or verified record, and never with coordinates.
             </p>
           </div>
           <div className="flex items-center gap-2 rounded-full border border-white/20 px-3 py-2 text-xs">
@@ -162,6 +194,7 @@ export default function CalyxField() {
           {locationStatus === "captured" ? <p className="mt-3 rounded-md bg-secondary p-3 text-xs"><MapPin aria-hidden="true" className="mr-1 inline h-4 w-4" />Location captured for secure upload. Exact coordinates are not placed in offline browser storage.</p> : null}
           {media.length ? <p className="mt-3 text-xs text-muted-foreground">{media.length} media file{media.length === 1 ? "" : "s"} selected. File contents remain with the browser picker; only safe metadata is saved in the offline draft.</p> : null}
           {error ? <p role="alert" className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
+          {uploadNotice ? <p role="status" data-testid="field-upload-notice" className="mt-4 rounded-md border border-forest/30 bg-secondary p-3 text-sm">{uploadNotice}</p> : null}
 
           <button type="button" onClick={saveDraft} className="mt-6 w-full rounded-md bg-primary px-4 py-3 font-semibold text-primary-foreground">Save offline draft</button>
         </section>
@@ -194,9 +227,31 @@ export default function CalyxField() {
                 </div>
                 <p className="mt-3 text-sm">{draft.note}</p>
                 {!draft.taxonLabel ? <p className="mt-3 rounded-md bg-secondary p-2 text-xs"><strong>Calyx suggestion pending.</strong> Any future identification is a suggestion, not a verified determination.</p> : null}
-                {draft.media.length ? <p className="mt-3 text-xs text-muted-foreground">{draft.media.length} media attachment{draft.media.length === 1 ? "" : "s"} awaiting governed upload.</p> : null}
+                {draft.media.length ? (
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {draft.media.length} media attachment{draft.media.length === 1 ? "" : "s"}{" "}
+                    {draft.status === "uploaded" ? "— metadata uploaded; file contents stay with the browser picker." : "awaiting governed upload."}
+                  </p>
+                ) : null}
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Local draft · not published</p>
+                  {draft.status === "uploaded" ? (
+                    <p className="flex items-center gap-1 text-[11px] uppercase tracking-wide text-forest" data-testid="field-draft-uploaded">
+                      <CloudUpload aria-hidden="true" className="h-3.5 w-3.5" /> In Calyx · observer report · curation pending
+                    </p>
+                  ) : (
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Local draft · not published</p>
+                  )}
+                  {draft.status === "local_only" ? (
+                    <button
+                      type="button"
+                      onClick={() => void uploadDraft(draft)}
+                      disabled={uploadingId !== null}
+                      data-testid="field-draft-upload"
+                      className="inline-flex items-center gap-1 rounded-md border bg-white px-2 py-1 text-xs hover:bg-secondary disabled:opacity-60"
+                    >
+                      <Upload aria-hidden="true" className="h-3.5 w-3.5" /> {uploadingId === draft.id ? "Uploading…" : "Upload to Calyx"}
+                    </button>
+                  ) : null}
                   <Link
                     to={hypothesisLoopHref(draft)}
                     data-testid="field-draft-hypotheses-link"

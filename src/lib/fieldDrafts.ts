@@ -6,6 +6,20 @@ export type FieldMediaDescriptor = {
   type: string;
 };
 
+export type FieldDraftStatus = "local_only" | "uploaded";
+
+/**
+ * Receipt for a draft that reached the governed backend upload path
+ * (journey 5). Only the durable observation id, the upload time and the
+ * hypothesis-loop path are kept on the device; the record itself lives in
+ * Calyx and is never treated as published or verified here.
+ */
+export type FieldDraftUpload = {
+  observationId: string;
+  uploadedAt: string;
+  hypothesesPath: string;
+};
+
 export type FieldDraft = {
   schemaVersion: 1;
   id: string;
@@ -15,7 +29,8 @@ export type FieldDraft = {
   taxonLabel: string | null;
   localityVisibility: FieldLocalityVisibility;
   media: FieldMediaDescriptor[];
-  status: "local_only";
+  status: FieldDraftStatus;
+  upload?: FieldDraftUpload;
 };
 
 export type NewFieldDraft = {
@@ -79,9 +94,25 @@ export function createFieldDraft(
   };
 }
 
+function isFieldDraftUpload(value: unknown): value is FieldDraftUpload {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<FieldDraftUpload>;
+  return (
+    typeof candidate.observationId === "string" &&
+    candidate.observationId.length > 0 &&
+    typeof candidate.uploadedAt === "string" &&
+    typeof candidate.hypothesesPath === "string" &&
+    candidate.hypothesesPath.startsWith("/api/field-observations/")
+  );
+}
+
 function isFieldDraft(value: unknown): value is FieldDraft {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<FieldDraft>;
+  const statusValid =
+    candidate.status === "local_only"
+      ? candidate.upload === undefined
+      : candidate.status === "uploaded" && isFieldDraftUpload(candidate.upload);
   return (
     candidate.schemaVersion === 1 &&
     typeof candidate.id === "string" &&
@@ -94,8 +125,32 @@ function isFieldDraft(value: unknown): value is FieldDraft {
     LOCALITY_VISIBILITIES.has(candidate.localityVisibility as FieldLocalityVisibility) &&
     Array.isArray(candidate.media) &&
     candidate.media.every(isMediaDescriptor) &&
-    candidate.status === "local_only"
+    statusValid
   );
+}
+
+/**
+ * Record that a draft reached Calyx. The draft keeps its note, taxon text,
+ * locality class and media metadata on the device (the user can still read
+ * it offline); only the receipt is added. Re-marking with the same
+ * observation id is a no-op apart from the timestamp.
+ */
+export function markFieldDraftUploaded(
+  draft: FieldDraft,
+  upload: { observationId: string; hypothesesPath: string },
+  now: string,
+): FieldDraft {
+  const observationId = normalizeText(upload.observationId, 120);
+  if (!observationId) throw new Error("Calyx did not return an observation id.");
+  if (!upload.hypothesesPath.startsWith("/api/field-observations/")) {
+    throw new Error("Calyx returned an unexpected hypothesis-loop path.");
+  }
+  return {
+    ...draft,
+    updatedAt: now,
+    status: "uploaded",
+    upload: { observationId, uploadedAt: now, hypothesesPath: upload.hypothesesPath },
+  };
 }
 
 function requireAccountId(accountId: string): string {

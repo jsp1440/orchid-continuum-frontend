@@ -1647,6 +1647,180 @@ async function calyxRoute(req, res, url) {
 let requestOrigin = "*";
 let requestHeaders = "";
 
+
+/* -------------------------------------------------- field journey (J5→J6) --- */
+
+/**
+ * Journey 5 (field observations) and journey 6 (competing hypotheses) in the
+ * shapes `src/lib/fieldObservations.ts` and `src/lib/fieldHypotheses.ts`
+ * declare. Deterministic, provider-free, and — like everything here — a test
+ * double: the hypothesis wording is fixture prose, not the backend library.
+ * Locality is refused on the same key list the real guard uses, so the browser
+ * journey proves the client never sends it.
+ */
+const FIELD_LOCALITY_KEYS = new Set([
+  "lat", "latitude", "lon", "lng", "longitude", "coord", "coords", "coordinate", "coordinates",
+  "locality", "verbatim_locality", "location", "site", "place", "grid", "gps", "elevation_m",
+]);
+function localityKeyIn(value, path = "") {
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) { const hit = localityKeyIn(item, `${path}[${index}]`); if (hit) return hit; }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      const where = path ? `${path}.${key}` : key;
+      if (FIELD_LOCALITY_KEYS.has(key.trim().toLowerCase())) return where;
+      const hit = localityKeyIn(nested, where); if (hit) return hit;
+    }
+  }
+  return null;
+}
+const fieldStore = { observations: new Map(), byDraft: new Map(), sets: new Map(), hypotheses: new Map() };
+const FIELD_KG = "blocked_pending_human_scientific_review";
+
+function fieldObservationOut(record) {
+  return { ...record, photo_count: 0, scientific_status: "observer_report", knowledge_graph_publication: FIELD_KG,
+    hypotheses_path: `/api/field-observations/${record.id}/hypotheses` };
+}
+
+function hypothesisFixture(setId, observationId, template) {
+  return {
+    hypothesis_id: `${setId}-${template.template_id}`, set_id: setId, observation_id: observationId,
+    template_id: template.template_id, hypothesis_class: template.hypothesis_class, ko_0038_strategy: template.strategy,
+    epistemic_status: "HYPOTHESIS", statement: template.statement, predictions: [template.prediction],
+    would_support: [template.support], would_contradict: [template.contradict], cue_matches: template.cues,
+    question_family_ids: ["pollinator-specificity"], status: "PROPOSED", review_state: "machine_assisted", human_review: null,
+    evidence_balance: { supporting: 0, contradicting: 0, unknown: 0 }, evidence_state: "no_evidence", evidence: [],
+    knowledge_graph_publication: FIELD_KG,
+  };
+}
+
+function generateFixtureSet(observationId, snapshot) {
+  const interaction = snapshot.interaction || {};
+  const behaviors = Array.isArray(interaction.visitor_behaviors) ? interaction.visitor_behaviors : [];
+  const templates = [];
+  if (interaction.visitor_observed && behaviors.includes("pseudocopulation_like_contact")) {
+    templates.push({ template_id: "sexual-deception", hypothesis_class: "sexual_deception", strategy: "sexual deception",
+      statement: "Fixture: the flower is pollinated by male insects attempting to mate with the labellum.",
+      prediction: "Only male visitors of one group make column contact.", support: "Pollinarium seen on a male visitor.",
+      contradict: "Nectar found and visitors feed.", cues: ["visitor_observed", "pseudocopulation_like_contact"] });
+  } else {
+    templates.push({ template_id: "food-deception", hypothesis_class: "food_deception", strategy: "generalised food deception",
+      statement: "Fixture: the flower attracts foraging visitors without offering a reward.",
+      prediction: "Visitors probe and leave quickly.", support: "Repeated probing with no nectar found.",
+      contradict: "Nectar present at the spur.", cues: interaction.visitor_observed ? ["visitor_observed"] : [] });
+  }
+  templates.push({ template_id: "non-pollinating-visit", hypothesis_class: "non_pollinating_visit", strategy: "none (visit without pollination)",
+    statement: "Fixture: the visitor observed does not transfer pollen.", prediction: "No pollinia removal after visits.",
+    support: "Visits recorded, pollinia intact.", contradict: "Pollinia removed after the visit.", cues: [] });
+  templates.push({ template_id: "identification-uncertainty", hypothesis_class: "identification_uncertainty", strategy: "not applicable",
+    statement: "Fixture: the orchid or visitor identification is uncertain and the pattern may belong to another taxon.",
+    prediction: "Re-identification changes the candidate set.", support: "Expert confirms a different taxon.",
+    contradict: "Identification confirmed from voucher photographs.", cues: [] });
+  const setId = `set-${createHash("sha256").update(`${observationId}\n${JSON.stringify(snapshot)}`).digest("hex").slice(0, 12)}`;
+  const hypotheses = templates.map((template) => hypothesisFixture(setId, observationId, template));
+  return {
+    set_id: setId, observation_id: observationId, observation_fingerprint: setId.slice(4), created: true,
+    generated_at: new Date().toISOString(),
+    generation: { mode: "deterministic_rule_library", library_version: "reference-fixture/0", contract_version: "field-hypotheses/v1",
+      provider_called: false, basis: "Fixture rule table in e2e/support/reference-backend.mjs.", cues: [] , cue_tokens: [] },
+    observation: { observer_id: snapshot.observer_id, observed_at: snapshot.observed_at, taxon_hint: snapshot.taxon_hint ?? null,
+      epistemic_certainty: snapshot.epistemic_certainty || "POSSIBLE", locality_sensitivity: snapshot.locality_sensitivity || "PRIVATE",
+      media_count: Array.isArray(snapshot.media_content_hashes) ? snapshot.media_content_hashes.length : 0 },
+    minimum_competing_hypotheses: 2, hypotheses,
+    follow_up_protocol: [
+      { step_id: "watch-15", instruction: "Watch the flower for fifteen minutes without touching it and note every visitor.", purpose: "Distinguish visitors that contact the column from those that do not.", non_destructive: true, while_on_site: true, discriminates: ["sexual_deception", "non_pollinating_visit"] },
+      { step_id: "photo-column", instruction: "Photograph the column and pollinia; do not remove anything.", purpose: "Record whether pollinia are present after visits.", non_destructive: true, while_on_site: true, discriminates: ["non_pollinating_visit"] },
+    ],
+    protocol_constraints: ["Never dissect or remove floral parts.", "Record locality only in the Field Journal under its sensitivity class."],
+    review_state: "machine_assisted", knowledge_graph_publication: FIELD_KG,
+  };
+}
+
+function evidenceState(balance) {
+  const { supporting, contradicting, unknown } = balance;
+  if (!supporting && !contradicting && !unknown) return "no_evidence";
+  if (supporting && contradicting) return "conflicting";
+  if (supporting) return "supporting_only";
+  if (contradicting) return "contradicting_only";
+  return "unknown_only";
+}
+
+async function fieldRoute(req, res, url) {
+  const path = url.pathname;
+  const body = req.method === "POST" ? safeJson(await readBody(req)) : {};
+  const leak = req.method === "POST" ? localityKeyIn(body) : null;
+  if (leak) return json(res, 422, { detail: [{ type: "value_error", loc: ["body"], msg: `Value error, SENSITIVE_LOCALITY_FORBIDDEN: ${leak}` }] });
+
+  if (path === "/api/field-observations" && req.method === "POST") {
+    const userId = bearer(req);
+    if (!userId) return json(res, 401, { detail: "Owner session or API key is required" });
+    if (typeof body.note !== "string" || !body.note.trim()) {
+      return json(res, 422, { detail: [{ type: "string_too_short", loc: ["body", "note"], msg: "String should have at least 1 character" }] });
+    }
+    const draftKey = body.client_draft_id ? `${userId}\n${body.client_draft_id}` : null;
+    if (draftKey && fieldStore.byDraft.has(draftKey)) return json(res, 200, fieldObservationOut(fieldStore.byDraft.get(draftKey)));
+    const now = new Date().toISOString();
+    const record = {
+      contract_version: "field-observations/v1",
+      id: `fo-${createHash("sha256").update(draftKey || randomUUID()).digest("hex").slice(0, 24)}`,
+      observer_subject: userId, observed_at: body.observed_at, note: body.note, taxon_hint: body.taxon_hint ?? null,
+      epistemic_certainty: body.epistemic_certainty || "POSSIBLE", curation_state: "PENDING", curation_reason: null,
+      curated_by: null, curated_at: null, locality_visibility: body.locality_visibility || "private",
+      media: Array.isArray(body.media) ? body.media : [], client_draft_id: body.client_draft_id ?? null,
+      created_at: now, updated_at: now,
+    };
+    fieldStore.observations.set(record.id, record);
+    if (draftKey) fieldStore.byDraft.set(draftKey, record);
+    return json(res, 201, fieldObservationOut(record));
+  }
+
+  let match = /^\/api\/field-observations\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = fieldStore.observations.get(decodeURIComponent(match[1]));
+    return record ? json(res, 200, fieldObservationOut(record)) : json(res, 404, { detail: "Observation not found" });
+  }
+
+  match = /^\/api\/field-observations\/([^/]+)\/hypotheses$/.exec(path);
+  if (match) {
+    const observationId = decodeURIComponent(match[1]);
+    if (req.method === "POST") {
+      const set = generateFixtureSet(observationId, body);
+      fieldStore.sets.set(observationId, set);
+      for (const hypothesis of set.hypotheses) fieldStore.hypotheses.set(hypothesis.hypothesis_id, hypothesis);
+      return json(res, 200, set);
+    }
+    if (req.method === "GET") {
+      const set = fieldStore.sets.get(observationId);
+      return set ? json(res, 200, { ...set, created: false }) : json(res, 404, { detail: "No hypothesis set for this observation" });
+    }
+  }
+
+  match = /^\/api\/field-hypotheses\/([^/]+)\/evidence$/.exec(path);
+  if (match && req.method === "POST") {
+    const hypothesis = fieldStore.hypotheses.get(decodeURIComponent(match[1]));
+    if (!hypothesis) return json(res, 404, { detail: "Hypothesis not found" });
+    const stance = String(body.stance || "").toUpperCase();
+    if (!["SUPPORTING", "CONTRADICTING", "UNKNOWN"].includes(stance)) return json(res, 422, { detail: "stance must be SUPPORTING, CONTRADICTING or UNKNOWN" });
+    if (typeof body.recorder_subject === "string" && body.recorder_subject.includes("@")) return json(res, 422, { detail: "recorder_subject must be opaque" });
+    const evidence = { ...body, stance, evidence_id: `ev-${randomUUID().slice(0, 8)}`, hypothesis_id: hypothesis.hypothesis_id, recorded_at: new Date().toISOString(), created: true };
+    hypothesis.evidence.push(evidence);
+    hypothesis.evidence_balance[stance.toLowerCase()] += 1;
+    hypothesis.evidence_state = evidenceState(hypothesis.evidence_balance);
+    hypothesis.status = "UNDER_EVALUATION";
+    return json(res, 200, hypothesis);
+  }
+
+  match = /^\/api\/field-hypotheses\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const hypothesis = fieldStore.hypotheses.get(decodeURIComponent(match[1]));
+    return hypothesis ? json(res, 200, hypothesis) : json(res, 404, { detail: "Hypothesis not found" });
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+
 const server = createServer(async (req, res) => {
   requestOrigin = req.headers.origin || "*";
   requestHeaders = String(req.headers["access-control-request-headers"] || "");
@@ -1664,6 +1838,9 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith("/auth/v1")) return await identityRoute(req, res, url);
     if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);
     if (url.pathname.startsWith("/api/research/")) return await researchRoute(req, res, url);
+    if (url.pathname.startsWith("/api/field-observations") || url.pathname.startsWith("/api/field-hypotheses")) {
+      return await fieldRoute(req, res, url);
+    }
     if (
       url.pathname.startsWith("/api/species/") ||
       url.pathname.startsWith("/api/mycorrhizal/") ||
