@@ -28,9 +28,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // Hoisted mock factories — must be available when vi.mock() factories run
 // ---------------------------------------------------------------------------
 
+type MockOwnerSession = {
+  authenticated: boolean;
+  status: string;
+  owner: string;
+  token?: string;
+  expires_at: string | null;
+  allowedActions: Record<string, unknown>;
+  reason?: string;
+};
+
 const mockValidateOwnerSession = vi.hoisted(() =>
-  vi.fn(async () => ({
-    authenticated: false as const,
+  vi.fn(async (): Promise<MockOwnerSession> => ({
+    authenticated: false,
     status: 'error',
     owner: '',
     token: undefined,
