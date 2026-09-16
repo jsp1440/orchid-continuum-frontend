@@ -18,8 +18,11 @@
  * - upload is idempotent: the local draft id travels as `client_draft_id`, so a
  *   retry after a dropped connection resolves to the same observation.
  *
- * Authentication is the backend's owner-session / API-key boundary. A 401 or 403
- * surfaces as `authentication_required` and the draft stays on this device.
+ * Authentication is the backend's owner-session / API-key boundary. Like the
+ * Conservatory client, the member session's access token is attached as a
+ * bearer when the caller supplies one; the owner-session cookie, when present,
+ * takes precedence server-side. A 401 or 403 surfaces as
+ * `authentication_required` and the draft stays on this device.
  */
 
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
@@ -152,13 +155,22 @@ function detailMessage(payload: unknown): string | null {
   return null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<{ status: number; body: T }> {
+export interface FieldObservationRequestOptions {
+  /** Member session access token; sent as `Authorization: Bearer …` when present. */
+  accessToken?: string | null;
+}
+
+async function request<T>(path: string, init?: RequestInit, options: FieldObservationRequestOptions = {}): Promise<{ status: number; body: T }> {
   let response: Response;
   try {
     response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
       ...init,
       credentials: "include",
-      headers: { Accept: "application/json", ...(init?.headers ?? {}) },
+      headers: {
+        Accept: "application/json",
+        ...(options.accessToken ? { Authorization: `Bearer ${options.accessToken}` } : {}),
+        ...(init?.headers ?? {}),
+      },
     });
   } catch (error) {
     throw new FieldObservationApiError("network_error", error instanceof Error ? error.message : "Field observation request failed");
@@ -200,22 +212,24 @@ function assertObservation(body: unknown): FieldObservation {
 }
 
 /** Upload one offline draft. Idempotent per account and draft id. */
-export async function uploadFieldDraft(draft: FieldDraft): Promise<FieldObservationUploadResult> {
+export async function uploadFieldDraft(draft: FieldDraft, options: FieldObservationRequestOptions = {}): Promise<FieldObservationUploadResult> {
   const payload = draftToObservationPayload(draft);
-  const { status, body } = await request<FieldObservation>(FIELD_OBSERVATIONS_PATH, json(payload));
+  const { status, body } = await request<FieldObservation>(FIELD_OBSERVATIONS_PATH, json(payload), options);
   return { observation: assertObservation(body), created: status === 201 };
 }
 
-export async function getFieldObservation(observationId: string): Promise<FieldObservation> {
-  const { body } = await request<FieldObservation>(`${FIELD_OBSERVATIONS_PATH}/${encodeURIComponent(observationId)}`);
+export async function getFieldObservation(observationId: string, options: FieldObservationRequestOptions = {}): Promise<FieldObservation> {
+  const { body } = await request<FieldObservation>(`${FIELD_OBSERVATIONS_PATH}/${encodeURIComponent(observationId)}`, undefined, options);
   return assertObservation(body);
 }
 
-export async function listFieldObservations(options: { limit?: number; offset?: number } = {}): Promise<FieldObservationList> {
+export async function listFieldObservations(
+  options: FieldObservationRequestOptions & { limit?: number; offset?: number } = {},
+): Promise<FieldObservationList> {
   const params = new URLSearchParams();
   if (options.limit !== undefined) params.set("limit", String(options.limit));
   if (options.offset !== undefined) params.set("offset", String(options.offset));
   const query = params.toString();
-  const { body } = await request<FieldObservationList>(`${FIELD_OBSERVATIONS_PATH}${query ? `?${query}` : ""}`);
+  const { body } = await request<FieldObservationList>(`${FIELD_OBSERVATIONS_PATH}${query ? `?${query}` : ""}`, undefined, options);
   return body;
 }

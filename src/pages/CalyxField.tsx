@@ -40,7 +40,7 @@ const localityLabels: Record<FieldLocalityVisibility, string> = {
 };
 
 export default function CalyxField() {
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const accountId = user?.id ?? "";
   const [drafts, setDrafts] = useState<FieldDraft[]>(() =>
     readFieldDrafts(window.localStorage, accountId),
@@ -102,7 +102,7 @@ export default function CalyxField() {
     setUploadNotice(null);
     setUploadingId(draft.id);
     try {
-      const result = await uploadFieldDraft(draft);
+      const result = await uploadFieldDraft(draft, { accessToken: session?.access_token ?? null });
       const now = new Date().toISOString();
       persist(
         drafts.map((item) =>

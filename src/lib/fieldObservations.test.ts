@@ -103,6 +103,15 @@ describe("uploadFieldDraft", () => {
     expect(init.body as string).not.toMatch(/latitude|longitude|coordinates/);
   });
 
+  it("attaches the member session bearer only when one is supplied", async () => {
+    const fetchMock = vi.fn().mockImplementation(() => Promise.resolve(jsonResponse(observation(), 201)));
+    vi.stubGlobal("fetch", fetchMock);
+    await uploadFieldDraft(draft, { accessToken: "member-jwt" });
+    expect(new Headers(fetchMock.mock.calls[0][1].headers).get("Authorization")).toBe("Bearer member-jwt");
+    await uploadFieldDraft(draft);
+    expect(new Headers(fetchMock.mock.calls[1][1].headers).has("Authorization")).toBe(false);
+  });
+
   it("reports created=false when the backend already held the draft (idempotent 200)", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(observation(), 200)));
     await expect(uploadFieldDraft(draft)).resolves.toMatchObject({ created: false });
