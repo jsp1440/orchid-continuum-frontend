@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Leaf, Eye, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
+import { COMMUNITY_API_BASE, backendJsonRequest, jsonInit } from '@/lib/backendJson';
 
 const FOREST = '#1a2e1a';
 const PARCHMENT = '#f5f0e8';
@@ -20,16 +21,23 @@ const CERTAINTY_OPTIONS: { value: EpistemicCertainty; label: string; desc: strin
 
 type ObservationStatus = 'SUBMITTED' | 'SCREENED' | 'APPROVED' | 'REJECTED' | 'QUARANTINED';
 
+/**
+ * Backend contract (community-observation MVP, backend app/community_observation):
+ * the list endpoint returns only { id, moderation_state, created_at } per item;
+ * richer fields are optional so approved records render honestly with whatever
+ * the backend actually discloses. Coordinates are never part of this contract.
+ */
 interface ObservationItem {
   id: string;
-  species_name: string;
-  notes: string | null;
-  observed_at: string | null;
-  epistemic_certainty: EpistemicCertainty;
-  status: ObservationStatus;
-  submitted_at: string;
-  location_redacted?: boolean;
+  created_at: string;
+  moderation_state?: ObservationStatus;
+  taxon_name_verbatim?: string | null;
+  epistemic_label?: EpistemicCertainty | null;
+  observation_date?: string | null;
+  notes?: string | null;
 }
+
+const NOT_LIVE_COPY = 'in development and not yet live. Nothing was recorded.';
 
 const CERTAINTY_COLORS: Record<EpistemicCertainty, string> = {
   CERTAIN: 'bg-emerald-300/15 border-emerald-300/40 text-emerald-200',
@@ -52,30 +60,39 @@ const CommunityObservation: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitUnavailable, setSubmitUnavailable] = useState(false);
 
   // Browse state
   const [observations, setObservations] = useState<ObservationItem[]>([]);
   const [browseLoading, setBrowseLoading] = useState(false);
   const [browseError, setBrowseError] = useState<string | null>(null);
+  const [browseUnavailable, setBrowseUnavailable] = useState(false);
 
   useEffect(() => {
     if (activeTab !== 'browse') return;
     const c = new AbortController();
     setBrowseLoading(true);
     setBrowseError(null);
-    fetch('/api/community/observations?status=approved&limit=20', { signal: c.signal })
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.json();
-      })
-      .then((data: { observations?: ObservationItem[] } | ObservationItem[]) => {
-        const items = Array.isArray(data) ? data : (data.observations ?? []);
-        setObservations(items);
+    setBrowseUnavailable(false);
+    backendJsonRequest<{ items?: ObservationItem[]; observations?: ObservationItem[] } | ObservationItem[]>(
+      `${COMMUNITY_API_BASE}/observations?moderation_state=APPROVED&limit=20`,
+      { signal: c.signal },
+    )
+      .then(result => {
+        if (result.kind === 'ok') {
+          const data = result.data;
+          const items = Array.isArray(data) ? data : (data.items ?? data.observations ?? []);
+          setObservations(items.filter(item => item && typeof item.id === 'string'));
+        } else if (result.kind === 'rejected') {
+          setBrowseError(`Unable to load observations (${result.detail}).`);
+        } else {
+          setBrowseUnavailable(true);
+        }
         setBrowseLoading(false);
       })
       .catch(err => {
-        if (err.name === 'AbortError') return;
-        setBrowseError('Unable to load observations. The community feed may not be live yet.');
+        if (err instanceof Error && err.name === 'AbortError') return;
+        setBrowseUnavailable(true);
         setBrowseLoading(false);
       });
     return () => c.abort();
@@ -87,34 +104,43 @@ const CommunityObservation: React.FC = () => {
       setSubmitError('Species name is required.');
       return;
     }
+    if (!observedDate) {
+      setSubmitError('Observation date is required.');
+      return;
+    }
     setSubmitting(true);
     setSubmitError(null);
-    const payload: Record<string, string> = {
-      species_name: species.trim().slice(0, 200),
-      epistemic_certainty: certainty,
-      notes: notes.trim().slice(0, MAX_NOTES_LENGTH),
+    // Field names follow the backend ObservationSubmitRequest contract. Only a
+    // country/region phrase is ever sent as locality; coordinates are never collected.
+    const payload = {
+      taxon_name_verbatim: species.trim().slice(0, 200),
+      epistemic_label: certainty,
+      observation_date: observedDate,
+      location_verbatim: locationCountry.trim() ? locationCountry.trim().slice(0, 100) : 'Not disclosed',
+      notes: notes.trim() ? notes.trim().slice(0, MAX_NOTES_LENGTH) : null,
+      evidence_media_ids: [] as string[],
     };
-    if (observedDate) payload.observed_at = observedDate;
-    if (locationCountry.trim()) payload.location_country = locationCountry.trim().slice(0, 100);
 
-    try {
-      const r = await fetch('/api/community/observations', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    // Success requires a parsed JSON acknowledgement with an id. A 404, a 401,
+    // or the static host's HTML 200 rewrite means the intake is not live, and the
+    // visitor is told so instead of being shown a false "submitted" state.
+    const result = await backendJsonRequest<{ id?: string; moderation_state?: string }>(
+      `${COMMUNITY_API_BASE}/observations`,
+      jsonInit('POST', payload),
+    );
+    if (result.kind === 'ok' && typeof result.data.id === 'string') {
       setSubmitSuccess(true);
       setSpecies('');
       setNotes('');
       setCertainty('POSSIBLE');
       setObservedDate('');
       setLocationCountry('');
-    } catch {
-      setSubmitError('Submission failed. Please try again or contact info@orchidcontinuum.org.');
-    } finally {
-      setSubmitting(false);
+    } else if (result.kind === 'rejected') {
+      setSubmitError(`Submission was not accepted (${result.detail}). Please review and try again, or contact info@orchidcontinuum.org.`);
+    } else {
+      setSubmitUnavailable(true);
     }
+    setSubmitting(false);
   };
 
   return (
@@ -196,7 +222,28 @@ const CommunityObservation: React.FC = () => {
           {/* Submit tab */}
           {activeTab === 'submit' && (
             <div>
-              {submitSuccess ? (
+              {submitUnavailable ? (
+                <div
+                  className="rounded-2xl border border-amber-300/30 bg-amber-300/5 p-8"
+                  data-testid="community-submit-unavailable"
+                  role="status"
+                >
+                  <div className="text-[10px] tracking-[0.25em] uppercase text-amber-200/80">In development</div>
+                  <div className="serif mt-2 text-2xl text-amber-50">Community submissions are not yet live.</div>
+                  <p className="mt-2 text-white/65">
+                    Observation intake is {NOT_LIVE_COPY} Your report stays on this page; you can also write to{' '}
+                    <a href="mailto:info@orchidcontinuum.org" className="underline text-amber-200">info@orchidcontinuum.org</a>.
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-4 rounded-full px-5 py-2 text-sm transition-colors"
+                    style={{ backgroundColor: 'rgba(252,211,77,0.15)', color: '#FDE68A', border: '1px solid rgba(252,211,77,0.3)' }}
+                    onClick={() => setSubmitUnavailable(false)}
+                  >
+                    Back to the form
+                  </button>
+                </div>
+              ) : submitSuccess ? (
                 <div
                   className="flex items-center gap-4 rounded-2xl border border-emerald-300/30 bg-emerald-300/5 p-8"
                   data-testid="community-submit-success"
@@ -406,16 +453,28 @@ const CommunityObservation: React.FC = () => {
                 </div>
               )}
 
+              {browseUnavailable && (
+                <div
+                  className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-5 text-sm text-amber-100/80"
+                  role="status"
+                  data-testid="community-browse-unavailable"
+                >
+                  <span className="text-[10px] tracking-[0.2em] uppercase text-amber-200/80 mr-2">In development</span>
+                  The community feed is not yet live. No observations are being published from this page yet.
+                </div>
+              )}
+
               {browseError && (
                 <div
                   className="rounded-xl border border-amber-300/20 bg-amber-300/5 p-5 text-sm text-amber-100/80"
                   role="status"
+                  data-testid="community-browse-error"
                 >
                   {browseError}
                 </div>
               )}
 
-              {!browseLoading && !browseError && observations.length === 0 && (
+              {!browseLoading && !browseError && !browseUnavailable && observations.length === 0 && (
                 <div
                   className="rounded-xl border border-white/10 bg-white/[0.02] p-8 text-center text-white/50 text-sm"
                   role="status"
@@ -439,27 +498,29 @@ const CommunityObservation: React.FC = () => {
                     >
                       <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
-                          <div className="serif text-xl text-white/90 italic">{obs.species_name}</div>
-                          {obs.observed_at && (
+                          <div className="serif text-xl text-white/90 italic">
+                            {obs.taxon_name_verbatim?.trim() || 'Approved community record'}
+                          </div>
+                          {obs.observation_date && (
                             <div className="text-[11px] text-white/40 mt-0.5">
-                              Observed {obs.observed_at}
+                              Observed {obs.observation_date}
                             </div>
                           )}
                         </div>
-                        <span
-                          className={`text-[10px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border ${CERTAINTY_COLORS[obs.epistemic_certainty]}`}
-                        >
-                          {obs.epistemic_certainty}
-                        </span>
+                        {obs.epistemic_label && CERTAINTY_COLORS[obs.epistemic_label] && (
+                          <span
+                            className={`text-[10px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border ${CERTAINTY_COLORS[obs.epistemic_label]}`}
+                          >
+                            {obs.epistemic_label}
+                          </span>
+                        )}
                       </div>
                       {obs.notes && (
                         <p className="mt-3 text-sm text-white/65 leading-relaxed">{obs.notes}</p>
                       )}
                       <div className="mt-3 flex items-center gap-2 text-[10px] text-white/35">
-                        <span>Community report · {new Date(obs.submitted_at).toLocaleDateString()}</span>
-                        {obs.location_redacted && (
-                          <span className="border border-white/15 rounded px-1.5 py-0.5">Locality protected</span>
-                        )}
+                        <span>Community report · {new Date(obs.created_at).toLocaleDateString()}</span>
+                        <span className="border border-white/15 rounded px-1.5 py-0.5">Locality protected</span>
                       </div>
                     </li>
                   ))}
