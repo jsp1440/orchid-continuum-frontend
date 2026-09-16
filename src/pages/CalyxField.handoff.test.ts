@@ -13,6 +13,17 @@ describe("Field Journal → Deception Lab handoff link", () => {
     expect(Array.from(url.searchParams.keys()).sort()).toEqual(["observation", "tab", "taxon"]);
   });
 
+  it("uses the durable Calyx observation id once a draft has been uploaded", () => {
+    const href = hypothesisLoopHref({
+      id: "local-draft-1",
+      taxonLabel: "Ophrys apifera",
+      upload: { observationId: "fo-abc123", uploadedAt: "2026-09-16T12:05:00.000Z", hypothesesPath: "/api/field-observations/fo-abc123/hypotheses" },
+    });
+    const url = new URL(href, "https://example.test");
+    expect(url.searchParams.get("observation")).toBe("fo-abc123");
+    expect(Array.from(url.searchParams.keys()).sort()).toEqual(["observation", "tab", "taxon"]);
+  });
+
   it("omits the taxon parameter for unidentified drafts and never adds locality fields", () => {
     const href = hypothesisLoopHref({ id: "draft-2", taxonLabel: null });
     const url = new URL(href, "https://example.test");

@@ -3,6 +3,7 @@ import {
   createFieldDraft,
   FIELD_DRAFT_LIMIT,
   fieldDraftStorageKey,
+  markFieldDraftUploaded,
   readFieldDrafts,
   writeFieldDrafts,
 } from "@/lib/fieldDrafts";
@@ -109,5 +110,52 @@ describe("field draft persistence", () => {
         "user-a",
       ),
     ).toThrow("Discard or upload a draft");
+  });
+});
+
+describe("field draft upload receipts", () => {
+  const base = createFieldDraft(
+    { note: "Bee on the labellum", taxonLabel: "Ophrys", localityVisibility: "research_restricted" },
+    { id: "draft-up", now: "2026-09-16T12:00:00.000Z" },
+  );
+
+  it("marks a draft uploaded with only the durable id, time and hypothesis path", () => {
+    const uploaded = markFieldDraftUploaded(
+      base,
+      { observationId: " fo-abc123 ", hypothesesPath: "/api/field-observations/fo-abc123/hypotheses" },
+      "2026-09-16T12:05:00.000Z",
+    );
+    expect(uploaded.status).toBe("uploaded");
+    expect(uploaded.upload).toEqual({
+      observationId: "fo-abc123",
+      uploadedAt: "2026-09-16T12:05:00.000Z",
+      hypothesesPath: "/api/field-observations/fo-abc123/hypotheses",
+    });
+    expect(uploaded.note).toBe(base.note);
+    expect(uploaded).not.toHaveProperty("published");
+    expect(uploaded).not.toHaveProperty("coordinates");
+  });
+
+  it("round-trips uploaded drafts and drops receipts that are inconsistent with their status", () => {
+    const storage = new MemoryStorage();
+    const uploaded = markFieldDraftUploaded(
+      base,
+      { observationId: "fo-1", hypothesesPath: "/api/field-observations/fo-1/hypotheses" },
+      "2026-09-16T12:05:00.000Z",
+    );
+    writeFieldDrafts(storage, [uploaded, base], "user-a");
+    expect(readFieldDrafts(storage, "user-a")).toEqual([uploaded, base]);
+
+    storage.setItem(fieldDraftStorageKey("user-a"), JSON.stringify([
+      { ...uploaded, upload: undefined },                       // uploaded without a receipt
+      { ...base, upload: uploaded.upload },                     // local_only carrying a receipt
+      { ...uploaded, upload: { ...uploaded.upload, hypothesesPath: "https://evil.example/x" } },
+    ]));
+    expect(readFieldDrafts(storage, "user-a")).toEqual([]);
+  });
+
+  it("refuses receipts without an observation id or with a foreign hypothesis path", () => {
+    expect(() => markFieldDraftUploaded(base, { observationId: "  ", hypothesesPath: "/api/field-observations/x/hypotheses" }, "2026-09-16T12:05:00.000Z")).toThrow("observation id");
+    expect(() => markFieldDraftUploaded(base, { observationId: "fo-1", hypothesesPath: "/somewhere/else" }, "2026-09-16T12:05:00.000Z")).toThrow("hypothesis-loop path");
   });
 });
