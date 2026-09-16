@@ -96,6 +96,20 @@ const ConservationHub: React.FC = () => {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">
               Use the organization, project, and protocol surfaces below to continue the conservation investigation without treating an incomplete record as evidence of absence.
             </p>
+            <div
+              data-testid="conservation-graph-coverage"
+              className="mt-4 pt-4 border-t border-emerald-300/15"
+            >
+              <div className="text-[10px] tracking-[0.22em] uppercase text-emerald-200/70 mb-1">
+                Conservation graph coverage
+              </div>
+              <p
+                data-testid="conservation-status-unavailable"
+                className="text-sm text-white/55 leading-relaxed"
+              >
+                No conservation assessment for <em>{genus}</em> is yet documented in the Orchid Continuum Knowledge Graph. Conservation status is shown only when a verified, human-reviewed record explicitly authorizes public display — absence here is not evidence of absence in the scientific literature.
+              </p>
+            </div>
           </div>
         </section>
       )}
@@ -187,9 +201,15 @@ const ConservationHub: React.FC = () => {
                 Shared protocol library
               </span>
             </div>
-            <h3 className="font-serif text-2xl text-white mb-5">
+            <h3 className="font-serif text-2xl text-white mb-1">
               Methods that travel between teams
             </h3>
+            <p
+              data-testid="protocol-library-illustrative-notice"
+              className="text-xs text-white/40 mb-5"
+            >
+              Illustrative protocol examples — not verified records. Actual published protocols appear only when contributed by a verified organization.
+            </p>
             <ul className="space-y-4">
               {protocols.map(p => (
                 <li

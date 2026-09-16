@@ -74,6 +74,7 @@ import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
 import Newsletter from "./pages/Newsletter";
 import Contact from "./pages/Contact";
+import DeceptionLab from "./pages/DeceptionLab";
 
 const queryClient = new QueryClient();
 
@@ -171,6 +172,7 @@ const App = () => (
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
                   <Route path="/newsletter" element={<Newsletter />} />
                   <Route path="/contact" element={<Contact />} />
+                  <Route path="/deception-lab" element={<DeceptionLab />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />
                   <Route path="/coming-soon" element={<ComingSoon />} />
                   <Route path="*" element={<NotFound />} />
