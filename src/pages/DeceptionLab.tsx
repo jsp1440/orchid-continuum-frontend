@@ -334,7 +334,8 @@ const DeceptionLab: React.FC = () => {
       {/* Tab navigation */}
       <nav className="bg-[#0d2535] border-t border-[#d4b34a]/20" aria-label="Deception Lab sections">
         <div className="max-w-5xl mx-auto px-6 lg:px-10">
-          <div className="flex gap-0">
+          {/* Wraps below the tablet breakpoint: three mono-spaced labels do not fit a 390px phone in one row. */}
+          <div className="flex flex-wrap gap-0">
             {(
               [
                 { id: 'questions',    label: 'Scientific questions' },
@@ -350,7 +351,7 @@ const DeceptionLab: React.FC = () => {
                 data-testid={`tab-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
                 className={
-                  'font-mono text-[11px] tracking-[0.18em] uppercase px-5 py-3 border-b-2 transition-colors ' +
+                  'font-mono text-[11px] tracking-[0.18em] uppercase px-3 sm:px-5 py-3 border-b-2 transition-colors ' +
                   (activeTab === tab.id
                     ? 'border-[#d4b34a] text-[#d4b34a]'
                     : 'border-transparent text-[#7a9ab8] hover:text-[#e7dfd1]')
