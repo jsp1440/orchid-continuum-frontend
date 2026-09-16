@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   FlaskConical,
   BookOpen,
@@ -12,7 +12,11 @@ import {
   ChevronDown,
   ChevronUp,
   ExternalLink,
+  Lock,
 } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
+import AuthModal from '@/components/auth/AuthModal';
+import { HypothesisLoopPanel } from '@/components/deception-lab/HypothesisLoopPanel';
 
 /**
  * Deception Lab — Orchid Continuum original research workspace for
@@ -235,8 +239,45 @@ const INTEGRATIONS: IntegrationLink[] = [
 // Main page
 // ---------------------------------------------------------------------------
 
+type LabTab = 'questions' | 'workspace' | 'integrations';
+
+const LAB_TABS: ReadonlySet<LabTab> = new Set<LabTab>(['questions', 'workspace', 'integrations']);
+
+/**
+ * Journey 5 → Journey 6 handoff (Field Journal → Deception Lab).
+ *
+ * Only two opaque values may cross the boundary: the local draft/observation
+ * id and the free-text taxon label. Coordinates, place names, locality
+ * visibility and any other Field Journal fields are deliberately NOT read
+ * from the URL, so a shared link can never carry sensitive locality into
+ * the research workspace.
+ */
+const OBSERVATION_ID_MAX = 128;
+const TAXON_HINT_MAX = 240;
+
+export function readLabHandoff(params: URLSearchParams): {
+  tab: LabTab;
+  observationId?: string;
+  taxonHint?: string;
+} {
+  const rawTab = params.get('tab');
+  const tab: LabTab = rawTab && LAB_TABS.has(rawTab as LabTab) ? (rawTab as LabTab) : 'questions';
+  const observation = (params.get('observation') ?? '').trim();
+  const taxon = (params.get('taxon') ?? '').replace(/\s+/g, ' ').trim();
+  return {
+    tab,
+    observationId:
+      observation && observation.length <= OBSERVATION_ID_MAX ? observation : undefined,
+    taxonHint: taxon ? taxon.slice(0, TAXON_HINT_MAX) : undefined,
+  };
+}
+
 const DeceptionLab: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<'questions' | 'workspace' | 'integrations'>('questions');
+  const [searchParams] = useSearchParams();
+  const handoff = readLabHandoff(searchParams);
+  const [activeTab, setActiveTab] = useState<LabTab>(handoff.tab);
+  const { user, loading: authLoading } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
 
   return (
     <div
@@ -357,6 +398,51 @@ const DeceptionLab: React.FC = () => {
                 contradicting evidence for each, and receive Calyx-generated actionable follow-up
                 protocols — all within a provenance-preserving record.
               </p>
+            </div>
+
+            {/* Live observation → hypothesis loop (backend contract field-hypotheses/v1) */}
+            <div data-testid="hypothesis-loop-live" className="mb-6">
+              {user ? (
+                <HypothesisLoopPanel
+                  observerId={user.id}
+                  observationId={handoff.observationId}
+                  initialTaxonHint={handoff.taxonHint}
+                />
+              ) : (
+                <div
+                  data-testid="hypothesis-loop-signin"
+                  className="bg-white border border-[#d4b34a]/25 rounded-sm p-6"
+                >
+                  <div className="flex items-start gap-3">
+                    <Lock className="h-4 w-4 text-[#d4b34a] shrink-0 mt-0.5" aria-hidden="true" />
+                    <div>
+                      <div className="font-mono text-[10px] tracking-[0.25em] uppercase text-[#d4b34a] mb-2">
+                        Live hypothesis loop · members
+                      </div>
+                      <p className="font-body text-[13px] text-[#3d3028]/75 leading-relaxed">
+                        Sign in to turn a Field Journal observation into competing hypotheses with
+                        per-hypothesis supporting, contradicting and unknown evidence. Hypotheses are
+                        provisional research aids pending human scientific review; sensitive locality
+                        is never sent or shown.
+                      </p>
+                      {authLoading ? (
+                        <p className="mt-4 font-mono text-[10px] tracking-[0.2em] uppercase text-[#3d3028]/50">
+                          Checking session…
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setShowAuth(true)}
+                          className="mt-4 font-mono text-[11px] tracking-[0.2em] uppercase px-5 py-2.5 rounded-full bg-[#1a2e1a] text-[#f5f0e8] hover:bg-[#14281c] transition-colors"
+                        >
+                          Sign in to continue
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <AuthModal open={showAuth} onClose={() => setShowAuth(false)} initialMode="signin" />
+                </div>
+              )}
             </div>
 
             {/* Hypothesis loop diagram */}

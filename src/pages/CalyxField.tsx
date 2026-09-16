@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
-import { Camera, LocateFixed, MapPin, Search, Sprout, Trash2, Wifi, WifiOff } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Camera, FlaskConical, LocateFixed, MapPin, Search, Sprout, Trash2, Wifi, WifiOff } from "lucide-react";
 import {
   createFieldDraft,
   readFieldDrafts,
@@ -9,6 +10,17 @@ import {
   type FieldMediaDescriptor,
 } from "@/lib/fieldDrafts";
 import { useAuth } from "@/contexts/AuthContext";
+
+/**
+ * Journey 5 → Journey 6 handoff. Only the opaque local draft id and the taxon
+ * label cross into the Deception Lab; coordinates, locality visibility, notes
+ * and media never leave this page via the URL.
+ */
+export function hypothesisLoopHref(draft: Pick<FieldDraft, "id" | "taxonLabel">): string {
+  const params = new URLSearchParams({ tab: "workspace", observation: draft.id });
+  if (draft.taxonLabel) params.set("taxon", draft.taxonLabel);
+  return `/deception-lab?${params.toString()}`;
+}
 
 function nextDraftIdentity() {
   return {
@@ -183,7 +195,16 @@ export default function CalyxField() {
                 <p className="mt-3 text-sm">{draft.note}</p>
                 {!draft.taxonLabel ? <p className="mt-3 rounded-md bg-secondary p-2 text-xs"><strong>Calyx suggestion pending.</strong> Any future identification is a suggestion, not a verified determination.</p> : null}
                 {draft.media.length ? <p className="mt-3 text-xs text-muted-foreground">{draft.media.length} media attachment{draft.media.length === 1 ? "" : "s"} awaiting governed upload.</p> : null}
-                <p className="mt-3 text-[11px] uppercase tracking-wide text-muted-foreground">Local draft · not published</p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-[11px] uppercase tracking-wide text-muted-foreground">Local draft · not published</p>
+                  <Link
+                    to={hypothesisLoopHref(draft)}
+                    data-testid="field-draft-hypotheses-link"
+                    className="inline-flex items-center gap-1 rounded-md border bg-white px-2 py-1 text-xs hover:bg-secondary"
+                  >
+                    <FlaskConical aria-hidden="true" className="h-3.5 w-3.5" /> Explore hypotheses
+                  </Link>
+                </div>
               </article>
             ))}
             {!filteredDrafts.length ? <p className="rounded-xl border border-dashed p-8 text-center text-sm text-muted-foreground">No matching drafts on this device.</p> : null}
