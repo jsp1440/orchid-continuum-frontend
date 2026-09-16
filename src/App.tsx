@@ -72,6 +72,7 @@ import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
+import CommunityObservation from "./pages/CommunityObservation";
 import Newsletter from "./pages/Newsletter";
 import Contact from "./pages/Contact";
 import DeceptionLab from "./pages/DeceptionLab";
@@ -170,6 +171,7 @@ const App = () => (
                   <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
+                  <Route path="/community" element={<CommunityObservation />} />
                   <Route path="/newsletter" element={<Newsletter />} />
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/deception-lab" element={<DeceptionLab />} />
