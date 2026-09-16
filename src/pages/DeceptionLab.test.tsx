@@ -17,7 +17,7 @@ vi.mock('@/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
-import DeceptionLab from './DeceptionLab';
+import DeceptionLab, { readLabHandoff } from './DeceptionLab';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,15 +25,20 @@ import DeceptionLab from './DeceptionLab';
 
 let container: HTMLDivElement;
 
-function renderLab() {
+function renderLab(initialEntry = '/deception-lab') {
   act(() => {
     createRoot(container).render(
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[initialEntry]}>
         <DeceptionLab />
       </MemoryRouter>,
     );
   });
 }
+
+const openWorkspace = () =>
+  act(() => {
+    (container.querySelector('[data-testid="tab-workspace"]') as HTMLButtonElement).click();
+  });
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -207,5 +212,92 @@ describe('DeceptionLab', () => {
     });
     const text = firstCard?.textContent ?? '';
     expect(text).toMatch(/not established facts/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Journey 6 mount: live HypothesisLoopPanel inside the workspace tab
+// ---------------------------------------------------------------------------
+
+describe('DeceptionLab · live hypothesis loop (Journey 6)', () => {
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    mockUseAuth.mockReturnValue({ user: null, signOut: vi.fn(), loading: false });
+  });
+
+  afterEach(() => {
+    document.body.removeChild(container);
+    mockUseAuth.mockReset();
+    mockUseAuth.mockReturnValue({ user: null, signOut: vi.fn(), loading: false });
+  });
+
+  it('unauthenticated: workspace shows a sign-in prompt and does not mount the live panel', () => {
+    renderLab();
+    openWorkspace();
+    expect(container.querySelector('[data-testid="hypothesis-loop-signin"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="hypothesis-loop-panel"]')).toBeNull();
+    // The static loop description remains available to everyone.
+    expect(container.querySelector('[data-testid="hypothesis-loop"]')).toBeTruthy();
+    const prompt = container.querySelector('[data-testid="hypothesis-loop-signin"]')?.textContent ?? '';
+    expect(prompt).toMatch(/human scientific review/i);
+    expect(prompt).toMatch(/sensitive locality/i);
+  });
+
+  it('authenticated: mounts HypothesisLoopPanel with the opaque auth subject and no network call before submit', () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    mockUseAuth.mockReturnValue({
+      user: { id: 'auth-subject-123', email: 'private@example.org' } as never,
+      signOut: vi.fn(),
+      loading: false,
+    });
+    renderLab();
+    openWorkspace();
+    expect(container.querySelector('[data-testid="hypothesis-loop-panel"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="hypothesis-loop-signin"]')).toBeNull();
+    expect(container.querySelector('[data-testid="observation-cue-form"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="generate-hypotheses"]')).toBeTruthy();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('private@example.org');
+    fetchSpy.mockRestore();
+  });
+
+  it('Field Journal handoff URL opens the workspace tab and pre-fills only the taxon hint', () => {
+    mockUseAuth.mockReturnValue({
+      user: { id: 'auth-subject-123' } as never,
+      signOut: vi.fn(),
+      loading: false,
+    });
+    renderLab(
+      '/deception-lab?tab=workspace&observation=field-journal-draft:abc&taxon=Ophrys%20apifera' +
+        '&lat=51.5&lng=-0.12&locality=Secret%20Fen&place=Hidden%20Meadow',
+    );
+    expect(container.querySelector('[data-testid="tab-panel-workspace"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="tab-workspace"]')?.getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    const taxon = container.querySelector('[data-testid="taxon-hint"]') as HTMLInputElement;
+    expect(taxon.value).toBe('Ophrys apifera');
+    // Locality-bearing params are ignored entirely: never rendered, never pre-filled.
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('Secret Fen');
+    expect(text).not.toContain('Hidden Meadow');
+    expect(text).not.toContain('51.5');
+    expect(text).not.toContain('-0.12');
+    const inputs = Array.from(container.querySelectorAll('input, textarea, select')) as HTMLInputElement[];
+    expect(inputs.some((el) => /Secret|Hidden|51\.5|-0\.12/.test(el.value))).toBe(false);
+  });
+
+  it('readLabHandoff: unknown tab falls back to questions; oversized ids are dropped; taxon is trimmed', () => {
+    expect(readLabHandoff(new URLSearchParams('tab=bogus')).tab).toBe('questions');
+    expect(readLabHandoff(new URLSearchParams('tab=integrations')).tab).toBe('integrations');
+    const long = 'x'.repeat(129);
+    expect(readLabHandoff(new URLSearchParams({ observation: long })).observationId).toBeUndefined();
+    expect(readLabHandoff(new URLSearchParams({ observation: 'draft-1' })).observationId).toBe('draft-1');
+    expect(readLabHandoff(new URLSearchParams({ taxon: '  Ophrys   apifera ' })).taxonHint).toBe(
+      'Ophrys apifera',
+    );
+    const handoff = readLabHandoff(new URLSearchParams('lat=1&lng=2&locality=Fen'));
+    expect(handoff).toEqual({ tab: 'questions', observationId: undefined, taxonHint: undefined });
   });
 });
