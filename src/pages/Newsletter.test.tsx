@@ -17,6 +17,39 @@ vi.mock('@/contexts/AuthContext', () => ({
 }));
 
 const { default: Newsletter } = await import('@/pages/Newsletter');
+const { CONSTITUENT_API_BASE } = await import('@/lib/constituentApi');
+
+const jsonResponse = (body: unknown, status = 200): Response =>
+  ({
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers({ 'content-type': 'application/json' }),
+    json: () => Promise.resolve(body),
+  }) as unknown as Response;
+
+/** What a static host returns for an unknown /api path: HTML with HTTP 200. */
+const htmlRewriteResponse = (): Response =>
+  ({
+    ok: true,
+    status: 200,
+    headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+    json: () => Promise.reject(new SyntaxError('Unexpected token <')),
+  }) as unknown as Response;
+
+async function setInputValue(el: HTMLInputElement, value: string) {
+  const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+  await act(async () => {
+    nativeSet?.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
+async function submit(selector: string) {
+  const form = container.querySelector(selector) as HTMLFormElement;
+  await act(async () => {
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  });
+}
 
 let container: HTMLDivElement;
 let root: Root;
@@ -90,31 +123,61 @@ describe('Newsletter page — COMMS-001 (#681)', () => {
     expect(form?.querySelector('textarea')).toBeNull();
   });
 
-  it('subscribe API path is an internal relative URL', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ preference_state: 'SUBSCRIBED' }),
-    } as Response);
+  it('subscribe posts JSON to the canonical Calyx backend origin with the backend field names', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ normalized_email: 'orchid@example.org', state: 'SUBSCRIBED' }));
 
     renderNewsletter();
+    await setInputValue(container.querySelector('#subscribe-email') as HTMLInputElement, 'orchid@example.org');
+    await submit('[data-testid="subscribe-form"]');
 
-    // Inject a valid email value using the native setter trick required in jsdom
-    const emailInput = container.querySelector('#subscribe-email') as HTMLInputElement;
-    const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    await act(async () => {
-      nativeSet?.call(emailInput, 'orchid@example.org');
-      emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchSpy.mock.calls[0];
+    expect(String(url)).toBe(`${CONSTITUENT_API_BASE}/subscribe`);
+    expect(String(url)).toMatch(/^https:\/\//);
+    const body = JSON.parse(String((init as RequestInit).body));
+    expect(body).toMatchObject({ email: 'orchid@example.org', frequency: 'monthly', format: 'html' });
+    expect(body).not.toHaveProperty('preferred_frequency');
+    expect(container.querySelector('[data-testid="subscribe-success"]')).toBeTruthy();
+  });
 
-    const form = container.querySelector('[data-testid="subscribe-form"]') as HTMLFormElement;
-    await act(async () => {
-      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-    });
+  it('subscribe fails closed when the host answers with HTML 200 (route not live): no false success', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(htmlRewriteResponse());
 
-    if (fetchSpy.mock.calls.length > 0) {
-      const url = String(fetchSpy.mock.calls[0][0]);
-      expect(url).not.toMatch(/^https?:\/\//);
-    }
+    renderNewsletter();
+    await setInputValue(container.querySelector('#subscribe-email') as HTMLInputElement, 'orchid@example.org');
+    await submit('[data-testid="subscribe-form"]');
+
+    expect(container.querySelector('[data-testid="subscribe-success"]')).toBeNull();
+    const notice = container.querySelector('[data-testid="subscribe-unavailable"]');
+    expect(notice).toBeTruthy();
+    expect(notice?.textContent).toMatch(/not yet live/i);
+    expect(notice?.textContent).toMatch(/nothing was recorded/i);
+    expect(notice?.querySelector('a[href^="mailto:info@orchidcontinuum.org"]')).toBeTruthy();
+  });
+
+  it('subscribe treats 401/404 as not live rather than as an error or a success', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ detail: 'Owner session or API key is required' }, 401));
+
+    renderNewsletter();
+    await setInputValue(container.querySelector('#subscribe-email') as HTMLInputElement, 'orchid@example.org');
+    await submit('[data-testid="subscribe-form"]');
+
+    expect(container.querySelector('[data-testid="subscribe-success"]')).toBeNull();
+    expect(container.querySelector('[data-testid="subscribe-unavailable"]')).toBeTruthy();
+  });
+
+  it('subscribe surfaces a backend 422 rejection as an error, not as success', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ detail: 'Email address is not valid.' }, 422));
+
+    renderNewsletter();
+    await setInputValue(container.querySelector('#subscribe-email') as HTMLInputElement, 'orchid@example.org');
+    await submit('[data-testid="subscribe-form"]');
+
+    expect(container.querySelector('[data-testid="subscribe-success"]')).toBeNull();
+    expect(container.querySelector('[data-testid="subscribe-unavailable"]')).toBeNull();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Email address is not valid.');
   });
 });
 
@@ -138,32 +201,57 @@ describe('Newsletter — unsubscribe form', () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it('unsubscribe calls POST /api/constituent/unsubscribe', async () => {
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({ preference_state: 'UNSUBSCRIBED' }),
-    } as Response);
+  it('unsubscribe posts to the canonical backend /api/constituent/unsubscribe and only succeeds on JSON', async () => {
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(jsonResponse({ normalized_email: 'orchid@example.org', state: 'UNSUBSCRIBED' }));
 
     renderNewsletter();
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
     const tab = tabs.find((t) => t.textContent?.toLowerCase().includes('unsubscribe'));
     act(() => (tab as HTMLButtonElement).click());
 
-    const emailInput = container.querySelector('#unsub-email') as HTMLInputElement;
-    const nativeSet = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
-    await act(async () => {
-      nativeSet?.call(emailInput, 'orchid@example.org');
-      emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await setInputValue(container.querySelector('#unsub-email') as HTMLInputElement, 'orchid@example.org');
+    await submit('[data-testid="unsubscribe-form"]');
 
-    const form = container.querySelector('[data-testid="unsubscribe-form"]') as HTMLFormElement;
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0][0])).toBe(`${CONSTITUENT_API_BASE}/unsubscribe`);
+    expect(container.querySelector('[data-testid="unsubscribe-success"]')).toBeTruthy();
+  });
+
+  it('unsubscribe fails closed on HTML 200 (route not live)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(htmlRewriteResponse());
+
+    renderNewsletter();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    const tab = tabs.find((t) => t.textContent?.toLowerCase().includes('unsubscribe'));
+    act(() => (tab as HTMLButtonElement).click());
+
+    await setInputValue(container.querySelector('#unsub-email') as HTMLInputElement, 'orchid@example.org');
+    await submit('[data-testid="unsubscribe-form"]');
+
+    expect(container.querySelector('[data-testid="unsubscribe-success"]')).toBeNull();
+    expect(container.querySelector('[data-testid="unsubscribe-unavailable"]')).toBeTruthy();
+  });
+});
+
+describe('Newsletter — preferences form', () => {
+  it('preferences lookup fails closed on HTML 200 instead of pretending to load', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(htmlRewriteResponse());
+
+    renderNewsletter();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    const tab = tabs.find((t) => t.textContent?.toLowerCase().includes('preferences'));
+    act(() => (tab as HTMLButtonElement).click());
+
+    const emailInput = container.querySelector('input[type="email"]') as HTMLInputElement;
+    await setInputValue(emailInput, 'orchid@example.org');
+    const form = emailInput.closest('form') as HTMLFormElement;
     await act(async () => {
       form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
     });
 
-    const fetchMock = vi.mocked(globalThis.fetch);
-    if (fetchMock.mock.calls.length > 0) {
-      expect(String(fetchMock.mock.calls[0][0])).toBe('/api/constituent/unsubscribe');
-    }
+    expect(container.querySelector('[data-testid="preferences-unavailable"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="preferences-success"]')).toBeNull();
   });
 });

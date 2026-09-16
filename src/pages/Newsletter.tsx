@@ -3,16 +3,44 @@ import { ArrowLeft, CheckCircle2, Mail, MailX, Settings2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
+import {
+  CONTACT_EMAIL,
+  INTAKE_UNAVAILABLE_COPY,
+  constituentRequest,
+  jsonInit,
+} from '@/lib/constituentApi';
 
 const FOREST = '#1a2e1a';
 const PARCHMENT = '#f5f0e8';
 const GOLD = '#C9A84C';
 const NAVY = '#0d2535';
 
-const API_BASE = '/api/constituent';
-
 type Tab = 'subscribe' | 'preferences' | 'unsubscribe';
-type SubmitState = 'idle' | 'loading' | 'success' | 'error';
+type SubmitState = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
+
+/** Honest state when the constituent route is not live (or the static host answered with HTML). */
+const IntakeUnavailable: React.FC<{ testId: string; what: string }> = ({ testId, what }) => (
+  <div
+    data-testid={testId}
+    role="status"
+    className="rounded-2xl p-8 text-center"
+    style={{ border: `1px solid ${GOLD}55`, backgroundColor: `${GOLD}11` }}
+  >
+    <p className="font-mono text-[10px] uppercase tracking-[0.25em]" style={{ color: GOLD }}>
+      In development
+    </p>
+    <p className="mt-3 text-lg font-semibold" style={{ color: PARCHMENT }}>
+      {what} is not yet live.
+    </p>
+    <p className="mt-2 max-w-sm text-sm leading-relaxed" style={{ color: `${PARCHMENT}cc` }}>
+      {INTAKE_UNAVAILABLE_COPY} You can reach us at{' '}
+      <a href={`mailto:${CONTACT_EMAIL}`} className="underline" style={{ color: GOLD }}>
+        {CONTACT_EMAIL}
+      </a>
+      .
+    </p>
+  </div>
+);
 
 const TOPIC_OPTIONS = [
   { value: 'conservation', label: 'Conservation science' },
@@ -54,27 +82,28 @@ const SubscribeForm: React.FC = () => {
     }
     setState('loading');
     setErrorMsg('');
-    try {
-      const res = await fetch(`${API_BASE}/subscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: email.trim().toLowerCase(),
-          topics: topics.length ? topics : undefined,
-          preferred_frequency: frequency,
-          source: 'orchid-continuum-newsletter-page',
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { detail?: string }).detail ?? `HTTP ${res.status}`);
-      }
+    const result = await constituentRequest<{ normalized_email: string; state: string }>(
+      '/subscribe',
+      jsonInit('POST', {
+        email: email.trim().toLowerCase(),
+        topics,
+        frequency,
+        format: 'html',
+      }),
+    );
+    if (result.kind === 'ok') {
       setState('success');
-    } catch (err) {
+    } else if (result.kind === 'rejected') {
       setState('error');
-      setErrorMsg(err instanceof Error ? err.message : 'Subscription failed. Please try again.');
+      setErrorMsg(result.detail);
+    } else {
+      setState('unavailable');
     }
   };
+
+  if (state === 'unavailable') {
+    return <IntakeUnavailable testId="subscribe-unavailable" what="Newsletter sign-up" />;
+  }
 
   if (state === 'success') {
     return (
@@ -220,40 +249,46 @@ const PreferencesForm: React.FC = () => {
     e.preventDefault();
     if (!isValidEmail(email)) { setErrorMsg('Please enter a valid email.'); return; }
     setState('loading');
-    try {
-      const res = await fetch(`${API_BASE}/preferences?email=${encodeURIComponent(email.trim().toLowerCase())}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as { topics?: string[]; preferred_frequency?: string };
-      setTopics(data.topics ?? []);
-      setFrequency(data.preferred_frequency ?? 'monthly');
+    const result = await constituentRequest<{ topics?: string[]; frequency?: string }>(
+      `/preferences?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+    );
+    if (result.kind === 'ok') {
+      setTopics(result.data.topics ?? []);
+      setFrequency(result.data.frequency ?? 'monthly');
       setLoaded(true);
       setState('idle');
       setErrorMsg('');
-    } catch {
+    } else if (result.kind === 'rejected') {
       setState('error');
       setErrorMsg('Could not load preferences. Verify your email and try again.');
+    } else {
+      setState('unavailable');
     }
   };
 
   const savePrefs = async (e: React.FormEvent) => {
     e.preventDefault();
     setState('loading');
-    try {
-      const res = await fetch(`${API_BASE}/preferences`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), topics, preferred_frequency: frequency }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await constituentRequest<{ normalized_email: string }>(
+      `/preferences?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+      jsonInit('PATCH', { topics, frequency }),
+    );
+    if (result.kind === 'ok') {
       setState('success');
-    } catch {
+    } else if (result.kind === 'rejected') {
       setState('error');
       setErrorMsg('Failed to save preferences.');
+    } else {
+      setState('unavailable');
     }
   };
 
   const toggleTopic = (value: string) =>
     setTopics((prev) => prev.includes(value) ? prev.filter((t) => t !== value) : [...prev, value]);
+
+  if (state === 'unavailable') {
+    return <IntakeUnavailable testId="preferences-unavailable" what="Preference management" />;
+  }
 
   if (state === 'success') {
     return (
@@ -332,19 +367,23 @@ const UnsubscribeForm: React.FC = () => {
     if (!isValidEmail(email)) { setErrorMsg('Please enter a valid email.'); return; }
     setState('loading');
     setErrorMsg('');
-    try {
-      const res = await fetch(`${API_BASE}/unsubscribe`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: email.trim().toLowerCase() }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const result = await constituentRequest<{ normalized_email: string; state: string }>(
+      '/unsubscribe',
+      jsonInit('POST', { email: email.trim().toLowerCase() }),
+    );
+    if (result.kind === 'ok') {
       setState('success');
-    } catch {
+    } else if (result.kind === 'rejected') {
       setState('error');
-      setErrorMsg('Unsubscribe failed. Please try again or email info@orchidcontinuum.org directly.');
+      setErrorMsg(`Unsubscribe failed. Please try again or email ${CONTACT_EMAIL} directly.`);
+    } else {
+      setState('unavailable');
     }
   };
+
+  if (state === 'unavailable') {
+    return <IntakeUnavailable testId="unsubscribe-unavailable" what="Unsubscribe" />;
+  }
 
   if (state === 'success') {
     return (

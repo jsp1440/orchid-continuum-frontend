@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Bug, Lightbulb, MessageSquare } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
+import { CONTACT_EMAIL, constituentRequest, jsonInit } from '@/lib/constituentApi';
 
 const FOREST = '#1a2e1a';
 const PARCHMENT = '#f5f0e8';
@@ -9,7 +10,7 @@ const GOLD = '#C9A84C';
 const NAVY = '#0d2535';
 
 type Category = 'general' | 'bug' | 'suggestion';
-type SubmitState = 'idle' | 'loading' | 'success' | 'error';
+type SubmitState = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
 
 const CATEGORIES: Array<{ value: Category; label: string; icon: React.ComponentType<{ className?: string }> }> = [
   { value: 'general', label: 'General inquiry', icon: MessageSquare },
@@ -54,32 +55,53 @@ const Contact: React.FC = () => {
       source: 'orchid-continuum-contact-page',
     };
 
-    try {
-      // Best-effort: POST to constituent contact endpoint. Falls back to mailto.
-      const res = await fetch('/api/constituent/contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok && res.status !== 404) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-      // If 404 (endpoint not yet live), fall through to mailto fallback.
-      if (res.status === 404) {
-        openMailto(payload);
-      }
+    // Only a parsed JSON acknowledgement from the backend counts as "received".
+    // A 404, a 401, or the static host's HTML 200 rewrite means the intake is not
+    // live, and the visitor is told so honestly instead of being shown a success.
+    const result = await constituentRequest<{ message?: string }>('/contact', jsonInit('POST', payload));
+    if (result.kind === 'ok') {
       setState('success');
-    } catch {
-      // Network error — mailto fallback
-      openMailto(payload);
-      setState('success');
+    } else if (result.kind === 'rejected') {
+      setState('error');
+      setErrorMsg(result.detail);
+    } else {
+      setState('unavailable');
     }
   };
 
-  function openMailto(payload: { category: string; name: string; email: string; subject: string; body: string }) {
-    const sub = encodeURIComponent(`[${payload.category.toUpperCase()}] ${payload.subject || 'Orchid Continuum contact'}`);
-    const bd = encodeURIComponent(`Name: ${payload.name}\nEmail: ${payload.email}\n\n${payload.body}`);
-    window.open(`mailto:info@orchidcontinuum.org?subject=${sub}&body=${bd}`, '_blank');
+  const mailtoHref = (() => {
+    const sub = encodeURIComponent(`[${category.toUpperCase()}] ${subject.trim() || 'Orchid Continuum contact'}`);
+    const bd = encodeURIComponent(`Name: ${name.trim()}\nEmail: ${email.trim()}\n\n${sanitizeBody(body)}`);
+    return `mailto:${CONTACT_EMAIL}?subject=${sub}&body=${bd}`;
+  })();
+
+  if (state === 'unavailable') {
+    return (
+      <div className="flex min-h-screen flex-col" style={{ backgroundColor: FOREST }}>
+        <Navbar />
+        <main className="flex flex-1 items-center justify-center px-6 pt-24">
+          <div data-testid="contact-unavailable" role="status" className="max-w-md rounded-2xl p-10 text-center" style={{ border: `1px solid ${GOLD}55` }}>
+            <p className="font-mono text-[10px] uppercase tracking-[0.25em]" style={{ color: GOLD }}>In development</p>
+            <h2 className="mt-3 font-serif text-2xl font-bold" style={{ color: PARCHMENT }}>Contact intake is not yet live.</h2>
+            <p className="mt-3 text-sm leading-relaxed" style={{ color: `${PARCHMENT}bb` }}>
+              Your message was not sent or stored. Please email us directly — the link below opens your mail client with your message filled in.
+            </p>
+            <a
+              href={mailtoHref}
+              data-testid="contact-mailto"
+              className="mt-6 inline-block rounded-full px-6 py-3 text-sm font-semibold uppercase tracking-widest"
+              style={{ backgroundColor: GOLD, color: FOREST }}
+            >
+              Email {CONTACT_EMAIL}
+            </a>
+            <button type="button" onClick={() => setState('idle')} className="mt-4 block w-full text-xs underline" style={{ color: `${PARCHMENT}99` }}>
+              Back to the form
+            </button>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
   }
 
   if (state === 'success') {
