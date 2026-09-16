@@ -63,9 +63,12 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/classroom/investigation',
   '/org/:slug',
   '/project/:slug',
+  '/deception-lab',
   '/coming-soon/:section',
   '/coming-soon',
   '/community',
+  '/newsletter',
+  '/contact',
   '*',
 ] as const;
 
