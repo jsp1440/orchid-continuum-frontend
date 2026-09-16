@@ -1,5 +1,6 @@
-import { Database, Gauge, Inbox } from 'lucide-react';
+import { Database, Gauge, Inbox, ShieldCheck } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
+import IntakeReview from './IntakeReview';
 import IntelligenceCenter from './IntelligenceCenter';
 import MissionControl from './MissionControl';
 import TaxonomyOperations from './TaxonomyOperations';
@@ -26,10 +27,22 @@ export default function MissionControlEntry() {
     return <TaxonomyOperations />;
   }
 
+  if (view === 'intake-review') {
+    return <IntakeReview />;
+  }
+
   return (
     <>
       <MissionControl />
       <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3">
+        <Link
+          to="/mission-control?view=intake-review"
+          className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/50 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f6dc82] shadow-2xl transition hover:bg-[#173823]"
+          aria-label="Open Intake Review"
+          data-testid="mission-control-intake-review-link"
+        >
+          <ShieldCheck className="h-4 w-4" /> Intake Review
+        </Link>
         <Link
           to="/mission-control?view=taxonomy-operations"
           className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/50 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f6dc82] shadow-2xl transition hover:bg-[#173823]"
