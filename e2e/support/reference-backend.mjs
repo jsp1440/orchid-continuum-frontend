@@ -1978,6 +1978,12 @@ async function constituentRoute(req, res, url) {
     }
     return json(res, 200, { reference_id, category: body.category || "general", state: "received", review: "human_review_required", agent_exposure: "never_forwarded_to_agents", message: "Received. A person will read this; it is not passed to automated agents." });
   }
+  if (path === "/api/constituent/subscriptions/summary" && req.method === "GET") {
+    const rows = Array.from(publicIntake.subscriptions.values());
+    const by_state = {};
+    for (const row of rows) by_state[row.state] = (by_state[row.state] || 0) + 1;
+    return json(res, 200, { total: rows.length, by_state, welcome_communications_awaiting_approval: rows.filter((row) => row.state === "subscribed").length });
+  }
   if (path === "/api/constituent/contact/messages" && req.method === "GET") {
     const items = Array.from(publicIntake.contactMessages.values()).sort((a, b) => (a.received_at < b.received_at ? 1 : -1));
     return json(res, 200, { items, total: items.length, offset: 0, limit: 20 });
