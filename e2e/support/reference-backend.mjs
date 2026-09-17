@@ -1821,6 +1821,170 @@ async function fieldRoute(req, res, url) {
   return json(res, 404, { detail: "Not Found" });
 }
 
+
+/* ------------------------------------------- public intake (J10, J12, J13) --- */
+
+/**
+ * Community observations (`/api/community/*`, orchid-calyx-backend
+ * app/community_observation) and the constituent platform
+ * (`/api/constituent/*`, app/constituent_platform) in the shapes the public
+ * pages consume. Public writes need no bearer; the moderation view, the
+ * preference centre without a manage token, and the owner routes answer 401,
+ * exactly as the real backend does. Fixture data only.
+ */
+const publicIntake = {
+  communityObservations: new Map(),
+  subscriptions: new Map(),
+  contactMessages: new Map(),
+};
+// One already-approved record so the browse tab has something to list. Its
+// verbatim locality is present in the store and must never appear in a list.
+const SEEDED_APPROVED_ID = "11111111-2222-4333-8444-555555555555";
+publicIntake.communityObservations.set(SEEDED_APPROVED_ID, {
+  id: SEEDED_APPROVED_ID,
+  submitter_auth_subject: "fixture-member",
+  taxon_name_verbatim: "Fixture orchid (approved record)",
+  location_verbatim: "FIXTURE-LOCALITY-MUST-NOT-LEAK",
+  observation_date: "2026-06-01",
+  epistemic_label: "POSSIBLE",
+  moderation_state: "APPROVED",
+  notes: null,
+  evidence_media_ids: [],
+  created_at: "2026-06-02T09:00:00.000Z",
+  moderated_at: "2026-06-03T09:00:00.000Z",
+  moderation_reason: "fixture",
+});
+
+function minimalObservation(record) {
+  return { id: record.id, moderation_state: record.moderation_state, created_at: record.created_at };
+}
+
+function normalizeEmailFixture(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized || normalized.length > 320 || /\s/.test(normalized) || normalized.split("@").length !== 2) return null;
+  const [local, domain] = normalized.split("@");
+  if (!local || !domain || domain.startsWith(".") || domain.endsWith(".")) return null;
+  return normalized;
+}
+
+async function communityRoute(req, res, url) {
+  const path = url.pathname;
+  if (path === "/api/community/observations" && req.method === "POST") {
+    const body = safeJson(await readBody(req));
+    for (const field of ["taxon_name_verbatim", "location_verbatim", "observation_date", "epistemic_label"]) {
+      if (!body[field]) return json(res, 422, { detail: [{ type: "missing", loc: ["body", field], msg: "Field required" }] });
+    }
+    const record = {
+      id: randomUUID(),
+      submitter_auth_subject: req.headers["x-auth-subject"] || "anonymous",
+      taxon_name_verbatim: String(body.taxon_name_verbatim).slice(0, 500),
+      location_verbatim: String(body.location_verbatim).slice(0, 1000),
+      observation_date: body.observation_date,
+      epistemic_label: body.epistemic_label,
+      moderation_state: "SUBMITTED",
+      notes: body.notes ?? null,
+      evidence_media_ids: Array.isArray(body.evidence_media_ids) ? body.evidence_media_ids : [],
+      created_at: new Date().toISOString(),
+      moderated_at: null,
+      moderation_reason: null,
+    };
+    publicIntake.communityObservations.set(record.id, record);
+    return json(res, 200, minimalObservation(record));
+  }
+  if (path === "/api/community/observations" && req.method === "GET") {
+    const state = url.searchParams.get("moderation_state");
+    const limit = Math.min(Number(url.searchParams.get("limit") || 50), 200);
+    let items = Array.from(publicIntake.communityObservations.values());
+    if (state) items = items.filter((item) => item.moderation_state === state);
+    items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    return json(res, 200, { items: items.slice(0, limit).map(minimalObservation), total: items.length });
+  }
+  let match = /^\/api\/community\/observations\/([^/]+)\/moderate$/.exec(path);
+  if (match && req.method === "PATCH") {
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = publicIntake.communityObservations.get(decodeURIComponent(match[1]));
+    if (!record) return json(res, 404, { detail: "Observation not found" });
+    const body = safeJson(await readBody(req));
+    record.moderation_state = body.new_state;
+    record.moderated_at = new Date().toISOString();
+    return json(res, 200, minimalObservation(record));
+  }
+  match = /^\/api\/community\/observations\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    // The full record carries verbatim locality: moderation view only.
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = publicIntake.communityObservations.get(decodeURIComponent(match[1]));
+    return record ? json(res, 200, record) : json(res, 404, { detail: "Observation not found" });
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+
+async function constituentRoute(req, res, url) {
+  const path = url.pathname;
+  const body = ["POST", "PATCH"].includes(req.method) ? safeJson(await readBody(req)) : {};
+  const ownerRoutes = new Set(["/api/constituent/contact/messages", "/api/constituent/subscriptions/summary"]);
+  if (ownerRoutes.has(path) || (path === "/api/constituent/newsletter/archive" && req.method === "POST")) {
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+  }
+
+  if (path === "/api/constituent/subscribe" && req.method === "POST") {
+    const normalized = normalizeEmailFixture(body.email);
+    if (!normalized) return json(res, 422, { detail: "INVALID_EMAIL" });
+    const topics = Array.isArray(body.topics) ? body.topics : [];
+    if (!topics.every((t) => /^[a-z0-9][a-z0-9_-]{0,39}$/.test(String(t)))) return json(res, 422, { detail: "invalid topic slug" });
+    if (!["immediate", "daily", "weekly", "monthly", "quarterly"].includes(body.frequency || "weekly")) return json(res, 422, { detail: "invalid frequency" });
+    const record = publicIntake.subscriptions.get(normalized) || { constituent_id: randomUUID(), normalized_email: normalized, suppressions: [] };
+    Object.assign(record, { state: "subscribed", topics: [...new Set(topics)].sort(), frequency: body.frequency || "weekly", format: body.format || "html", updated_at: new Date().toISOString() });
+    record.suppressions = record.suppressions.filter((s) => s !== "unsubscribe");
+    publicIntake.subscriptions.set(normalized, record);
+    return json(res, 200, {
+      constituent_id: record.constituent_id, normalized_email: normalized, state: "subscribed",
+      welcome_email_communication_state: "awaiting_approval", manage_token: null,
+      message: "Subscribed. The welcome email is held for human approval before any dispatch (CommunicationState.AWAITING_APPROVAL).",
+    });
+  }
+  if (path === "/api/constituent/unsubscribe" && req.method === "POST") {
+    const normalized = normalizeEmailFixture(body.email);
+    if (!normalized) return json(res, 422, { detail: "INVALID_EMAIL" });
+    const record = publicIntake.subscriptions.get(normalized) || { constituent_id: randomUUID(), normalized_email: normalized, topics: [], frequency: "weekly", format: "html", suppressions: [] };
+    record.state = "unsubscribed";
+    if (!record.suppressions.includes("unsubscribe")) record.suppressions.push("unsubscribe");
+    publicIntake.subscriptions.set(normalized, record);
+    return json(res, 200, { normalized_email: normalized, state: "unsubscribed", message: "Unsubscribed. No further community, fundraising or marketing email will be sent to this address." });
+  }
+  if (path === "/api/constituent/preferences") {
+    // Email alone never unlocks the preference centre (no manage token is issued
+    // by this fixture, and no owner bearer is presented by the public page).
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const normalized = normalizeEmailFixture(url.searchParams.get("email"));
+    const record = normalized ? publicIntake.subscriptions.get(normalized) : null;
+    if (!record) return json(res, 404, { detail: "No subscription record for this address." });
+    if (req.method === "PATCH") Object.assign(record, body, { updated_at: new Date().toISOString() });
+    return json(res, 200, record);
+  }
+  if (path === "/api/constituent/newsletter/archive" && req.method === "GET") {
+    return json(res, 200, { items: [], total: 0, offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 20) });
+  }
+  if (path === "/api/constituent/contact" && req.method === "POST") {
+    const normalized = normalizeEmailFixture(body.email);
+    if (!normalized) return json(res, 422, { detail: "INVALID_EMAIL" });
+    if (!["general", "bug", "suggestion"].includes(body.category || "general")) return json(res, 422, { detail: "invalid category" });
+    const text = String(body.body || "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "").trim();
+    if (text.length < 10) return json(res, 422, { detail: "body must be at least 10 characters of plain text" });
+    if (text.length > 4000) return json(res, 422, { detail: "body must be at most 4000 characters" });
+    const reference_id = `cm-${createHash("sha256").update(`${normalized}\n${text}\n${body.subject || ""}`).digest("hex").slice(0, 24)}`;
+    if (!publicIntake.contactMessages.has(reference_id)) {
+      publicIntake.contactMessages.set(reference_id, { reference_id, category: body.category || "general", name: body.name ?? null, normalized_email: normalized, subject: body.subject ?? null, body: text, source: body.source ?? null, received_at: new Date().toISOString(), state: "received", review: "human_review_required", agent_exposure: "never_forwarded_to_agents", content_trust: "untrusted_plain_text" });
+    }
+    return json(res, 200, { reference_id, category: body.category || "general", state: "received", review: "human_review_required", agent_exposure: "never_forwarded_to_agents", message: "Received. A person will read this; it is not passed to automated agents." });
+  }
+  if (path === "/api/constituent/contact/messages" && req.method === "GET") {
+    const items = Array.from(publicIntake.contactMessages.values()).sort((a, b) => (a.received_at < b.received_at ? 1 : -1));
+    return json(res, 200, { items, total: items.length, offset: 0, limit: 20 });
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+
 const server = createServer(async (req, res) => {
   requestOrigin = req.headers.origin || "*";
   requestHeaders = String(req.headers["access-control-request-headers"] || "");
@@ -1841,6 +2005,8 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith("/api/field-observations") || url.pathname.startsWith("/api/field-hypotheses")) {
       return await fieldRoute(req, res, url);
     }
+    if (url.pathname.startsWith("/api/community/")) return await communityRoute(req, res, url);
+    if (url.pathname.startsWith("/api/constituent/")) return await constituentRoute(req, res, url);
     if (
       url.pathname.startsWith("/api/species/") ||
       url.pathname.startsWith("/api/mycorrhizal/") ||
