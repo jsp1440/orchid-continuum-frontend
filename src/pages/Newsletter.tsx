@@ -9,6 +9,7 @@ import {
   constituentRequest,
   jsonInit,
 } from '@/lib/constituentApi';
+import { forgetManageToken, readManageToken, rememberManageToken } from '@/lib/newsletterManageToken';
 
 const FOREST = '#1a2e1a';
 const PARCHMENT = '#f5f0e8';
@@ -16,7 +17,7 @@ const GOLD = '#C9A84C';
 const NAVY = '#0d2535';
 
 type Tab = 'subscribe' | 'preferences' | 'unsubscribe';
-type SubmitState = 'idle' | 'loading' | 'success' | 'error' | 'unavailable';
+type SubmitState = 'idle' | 'loading' | 'success' | 'error' | 'unavailable' | 'needs_token';
 
 /** Honest state when the constituent route is not live (or the static host answered with HTML). */
 const IntakeUnavailable: React.FC<{ testId: string; what: string }> = ({ testId, what }) => (
@@ -68,6 +69,7 @@ const SubscribeForm: React.FC = () => {
   const [frequency, setFrequency] = useState('monthly');
   const [state, setState] = useState<SubmitState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [manageable, setManageable] = useState(false);
 
   const toggleTopic = (value: string) =>
     setTopics((prev) =>
@@ -82,7 +84,7 @@ const SubscribeForm: React.FC = () => {
     }
     setState('loading');
     setErrorMsg('');
-    const result = await constituentRequest<{ normalized_email: string; state: string }>(
+    const result = await constituentRequest<{ normalized_email: string; state: string; manage_token?: string | null }>(
       '/subscribe',
       jsonInit('POST', {
         email: email.trim().toLowerCase(),
@@ -92,6 +94,10 @@ const SubscribeForm: React.FC = () => {
       }),
     );
     if (result.kind === 'ok') {
+      // The backend issues a per-address preference-centre token when it has a
+      // signing secret. Kept in this browser only; never shown, never sent
+      // anywhere but the preferences route for this same address.
+      setManageable(rememberManageToken(result.data.normalized_email ?? email, result.data.manage_token));
       setState('success');
     } else if (result.kind === 'rejected') {
       setState('error');
@@ -119,6 +125,11 @@ const SubscribeForm: React.FC = () => {
         <p className="max-w-sm text-sm leading-relaxed" style={{ color: `${PARCHMENT}cc` }}>
           A confirmation email will be sent once our team has reviewed the request. No spam — ever.
         </p>
+        {manageable ? (
+          <p data-testid="subscribe-manageable" className="max-w-sm text-sm leading-relaxed" style={{ color: `${PARCHMENT}cc` }}>
+            You can adjust topics and cadence from this browser in the Preferences tab.
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -245,13 +256,23 @@ const PreferencesForm: React.FC = () => {
   const [state, setState] = useState<SubmitState>('idle');
   const [errorMsg, setErrorMsg] = useState('');
 
+  /**
+   * The preference centre never opens on an address alone. It opens with the
+   * token this browser received at subscription (or, later, the one a
+   * confirmation email carries). Without one the backend answers 401 and the
+   * page says so, rather than claiming the feature is not live.
+   */
+  const preferencesPath = () => {
+    const normalized = email.trim().toLowerCase();
+    const token = readManageToken(normalized);
+    return `/preferences?email=${encodeURIComponent(normalized)}${token ? `&token=${encodeURIComponent(token)}` : ''}`;
+  };
+
   const loadPrefs = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValidEmail(email)) { setErrorMsg('Please enter a valid email.'); return; }
     setState('loading');
-    const result = await constituentRequest<{ topics?: string[]; frequency?: string }>(
-      `/preferences?email=${encodeURIComponent(email.trim().toLowerCase())}`,
-    );
+    const result = await constituentRequest<{ topics?: string[]; frequency?: string }>(preferencesPath());
     if (result.kind === 'ok') {
       setTopics(result.data.topics ?? []);
       setFrequency(result.data.frequency ?? 'monthly');
@@ -261,6 +282,8 @@ const PreferencesForm: React.FC = () => {
     } else if (result.kind === 'rejected') {
       setState('error');
       setErrorMsg('Could not load preferences. Verify your email and try again.');
+    } else if (result.kind === 'unavailable' && (result.status === 401 || result.status === 403)) {
+      setState('needs_token');
     } else {
       setState('unavailable');
     }
@@ -270,7 +293,7 @@ const PreferencesForm: React.FC = () => {
     e.preventDefault();
     setState('loading');
     const result = await constituentRequest<{ normalized_email: string }>(
-      `/preferences?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+      preferencesPath(),
       jsonInit('PATCH', { topics, frequency }),
     );
     if (result.kind === 'ok') {
@@ -278,6 +301,8 @@ const PreferencesForm: React.FC = () => {
     } else if (result.kind === 'rejected') {
       setState('error');
       setErrorMsg('Failed to save preferences.');
+    } else if (result.kind === 'unavailable' && (result.status === 401 || result.status === 403)) {
+      setState('needs_token');
     } else {
       setState('unavailable');
     }
@@ -288,6 +313,23 @@ const PreferencesForm: React.FC = () => {
 
   if (state === 'unavailable') {
     return <IntakeUnavailable testId="preferences-unavailable" what="Preference management" />;
+  }
+
+  if (state === 'needs_token') {
+    return (
+      <div data-testid="preferences-needs-token" role="status" className="rounded-2xl p-8 text-center" style={{ border: `1px solid ${GOLD}55`, backgroundColor: `${GOLD}11` }}>
+        <p className="font-mono text-[10px] uppercase tracking-[0.25em]" style={{ color: GOLD }}>Preference centre</p>
+        <p className="mt-3 text-lg font-semibold" style={{ color: PARCHMENT }}>This address needs its preferences link.</p>
+        <p className="mt-2 max-w-sm text-sm leading-relaxed" style={{ color: `${PARCHMENT}cc` }}>
+          Preferences never open on an email address alone. Subscribe from this browser to manage them here, use the link in your
+          confirmation email, or write to{' '}
+          <a href={`mailto:${CONTACT_EMAIL}`} className="underline" style={{ color: GOLD }}>{CONTACT_EMAIL}</a>. Nothing was changed.
+        </p>
+        <button type="button" onClick={() => setState('idle')} className="mt-5 rounded-full px-5 py-2 text-sm font-semibold" style={{ border: `1px solid ${GOLD}55`, color: PARCHMENT }}>
+          Back
+        </button>
+      </div>
+    );
   }
 
   if (state === 'success') {
@@ -372,6 +414,7 @@ const UnsubscribeForm: React.FC = () => {
       jsonInit('POST', { email: email.trim().toLowerCase() }),
     );
     if (result.kind === 'ok') {
+      forgetManageToken(email);
       setState('success');
     } else if (result.kind === 'rejected') {
       setState('error');
