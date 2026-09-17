@@ -8,6 +8,7 @@ import {
   createIntakeReviewClient,
   IntakeReviewApiError,
   MODERATION_TARGETS,
+  PENDING_STATES,
   moderationTargetLabel,
   type ContactMessage,
   type IntakeReviewClient,
@@ -53,7 +54,7 @@ export default function IntakeReview({ client }: IntakeReviewProps) {
     setState("loading");
     setError(null);
     try {
-      const [observations, inbox, counts] = await Promise.all([api.listPending("SUBMITTED"), api.listContactMessages(), api.subscriptionSummary()]);
+      const [observations, inbox, counts] = await Promise.all([api.listPending(), api.listContactMessages(), api.subscriptionSummary()]);
       setPending(observations);
       setMessages(inbox.items);
       setSummary(counts);
@@ -82,7 +83,18 @@ export default function IntakeReview({ client }: IntakeReviewProps) {
     setError(null);
     try {
       const result = await api.moderate(observation.id, target, reasons[observation.id]);
-      setPending((current) => current.filter((item) => item.id !== observation.id));
+      if (PENDING_STATES.includes(result.moderation_state as (typeof PENDING_STATES)[number])) {
+        setPending((current) =>
+          current.map((item) =>
+            item.id === observation.id
+              ? { ...item, moderation_state: result.moderation_state }
+              : item,
+          ),
+        );
+      } else {
+        setPending((current) => current.filter((item) => item.id !== observation.id));
+      }
+      setReasons((current) => ({ ...current, [observation.id]: "" }));
       setDecisionNote(
         result.moderation_state === "APPROVED"
           ? `Observation ${observation.id.slice(0, 8)}… approved: it now appears in the community feed as an observer report (${observation.epistemic_label} self-assessed), not as a scientific finding.`
@@ -174,7 +186,7 @@ export default function IntakeReview({ client }: IntakeReviewProps) {
                           </p>
                         </div>
                         <span className="rounded-full border px-2 py-0.5 text-[11px] uppercase tracking-wide">
-                          {observation.epistemic_label} · self-assessed
+                          {observation.moderation_state} · {observation.epistemic_label} self-assessed
                         </span>
                       </div>
                       <p className="mt-3 flex items-start gap-2 text-sm" data-testid={`intake-pending-locality-${observation.id}`}>

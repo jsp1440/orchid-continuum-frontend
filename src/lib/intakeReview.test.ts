@@ -20,14 +20,26 @@ describe("createIntakeReviewClient", () => {
       if (url.includes("moderation_state=SUBMITTED")) {
         return Promise.resolve(jsonResponse({ items: [{ id: "a", moderation_state: "SUBMITTED", created_at: "2026-06-01T00:00:00Z" }, { id: "b", moderation_state: "SUBMITTED", created_at: "2026-06-02T00:00:00Z" }], total: 2 }));
       }
+      if (url.includes("moderation_state=SCREENED")) {
+        return Promise.resolve(jsonResponse({ items: [{ id: "c", moderation_state: "SCREENED", created_at: "2026-06-03T00:00:00Z" }], total: 1 }));
+      }
+      if (url.includes("moderation_state=QUARANTINED")) {
+        return Promise.resolve(jsonResponse({ items: [], total: 0 }));
+      }
       if (url.endsWith("/api/community/observations/a")) return Promise.resolve(jsonResponse(record("a", "2026-06-01T00:00:00Z")));
       if (url.endsWith("/api/community/observations/b")) return Promise.resolve(jsonResponse(record("b", "2026-06-02T00:00:00Z")));
+      if (url.endsWith("/api/community/observations/c")) return Promise.resolve(jsonResponse({ ...record("c", "2026-06-03T00:00:00Z"), moderation_state: "SCREENED" }));
       return Promise.resolve(jsonResponse({ detail: "unexpected" }, 500));
     });
     vi.stubGlobal("fetch", fetchMock);
     const pending = await createIntakeReviewClient({ accessToken: "owner-jwt" }).listPending();
-    expect(pending.map((item) => item.id)).toEqual(["b", "a"]);
+    expect(pending.map((item) => item.id)).toEqual(["c", "b", "a"]);
     expect(fetchMock.mock.calls[0][0]).toBe(`${BASE}/api/community/observations?moderation_state=SUBMITTED&limit=50`);
+    expect(fetchMock.mock.calls.slice(0, 3).map(([url]) => url)).toEqual([
+      `${BASE}/api/community/observations?moderation_state=SUBMITTED&limit=50`,
+      `${BASE}/api/community/observations?moderation_state=SCREENED&limit=50`,
+      `${BASE}/api/community/observations?moderation_state=QUARANTINED&limit=50`,
+    ]);
     for (const [, init] of fetchMock.mock.calls) {
       expect(init.credentials).toBe("include");
       expect(new Headers(init.headers).get("Authorization")).toBe("Bearer owner-jwt");
@@ -36,7 +48,7 @@ describe("createIntakeReviewClient", () => {
 
   it("maps a 401 on the moderation view to authentication_required", async () => {
     vi.stubGlobal("fetch", vi.fn().mockImplementation((url: string) =>
-      Promise.resolve(url.includes("moderation_state=") ? jsonResponse({ items: [{ id: "a", moderation_state: "SUBMITTED", created_at: "x" }], total: 1 }) : jsonResponse({ detail: "Owner session or API key is required" }, 401)),
+      Promise.resolve(url.includes("moderation_state=SUBMITTED") ? jsonResponse({ items: [{ id: "a", moderation_state: "SUBMITTED", created_at: "x" }], total: 1 }) : url.includes("moderation_state=") ? jsonResponse({ items: [], total: 0 }) : jsonResponse({ detail: "Owner session or API key is required" }, 401)),
     ));
     const error = await createIntakeReviewClient().listPending().catch((e: unknown) => e);
     expect(error).toBeInstanceOf(IntakeReviewApiError);

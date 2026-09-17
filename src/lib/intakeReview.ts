@@ -61,7 +61,7 @@ export interface SubscriptionSummary {
 }
 
 export interface IntakeReviewClient {
-  listPending(state?: PendingState): Promise<PendingObservation[]>;
+  listPending(states?: readonly PendingState[]): Promise<PendingObservation[]>;
   moderate(observationId: string, state: ModerationTarget, reason?: string): Promise<{ id: string; moderation_state: ModerationState }>;
   listContactMessages(): Promise<{ items: ContactMessage[]; total: number }>;
   subscriptionSummary(): Promise<SubscriptionSummary>;
@@ -130,16 +130,23 @@ async function request<T>(path: string, init: RequestInit, options: IntakeReview
 
 export function createIntakeReviewClient(options: IntakeReviewClientOptions = {}): IntakeReviewClient {
   return {
-    async listPending(state: PendingState = "SUBMITTED") {
+    async listPending(states: readonly PendingState[] = PENDING_STATES) {
       // The public list carries ids and states only; each full record is the
-      // owner-only moderation view and is fetched separately.
-      const listing = await request<{ items: Array<{ id: string; moderation_state: string; created_at: string }> }>(
-        `/api/community/observations?moderation_state=${encodeURIComponent(state)}&limit=50`,
-        { method: "GET" },
-        options,
+      // owner-only moderation view and is fetched separately. Query every
+      // non-terminal state so screening or quarantining a report never makes
+      // it disappear from the only human-review surface.
+      const listings = await Promise.all(
+        states.map((state) =>
+          request<{ items: Array<{ id: string; moderation_state: string; created_at: string }> }>(
+            `/api/community/observations?moderation_state=${encodeURIComponent(state)}&limit=50`,
+            { method: "GET" },
+            options,
+          ),
+        ),
       );
+      const itemsById = new Map(listings.flatMap((listing) => listing.items).map((item) => [item.id, item]));
       const records = await Promise.all(
-        listing.items.map((item) =>
+        Array.from(itemsById.values()).map((item) =>
           request<PendingObservation>(`/api/community/observations/${encodeURIComponent(item.id)}`, { method: "GET" }, options),
         ),
       );

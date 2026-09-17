@@ -61,7 +61,7 @@ describe("IntakeReview", () => {
     await render(fakeClient());
     const item = byTestId("intake-pending-item-obs-1");
     expect(item?.textContent).toContain("Cattleya labiata");
-    expect(item?.textContent).toContain("PROBABLE · self-assessed");
+    expect(item?.textContent).toContain("SUBMITTED · PROBABLE self-assessed");
     expect(byTestId("intake-pending-locality-obs-1")?.textContent).toContain("Verbatim locality (protected · moderation view only): Serra do Mar, Brazil");
     expect(byTestId("intake-contact-item-cm-1")?.textContent).toContain("Atlas blank on iPad");
     expect(byTestId("intake-subscription-summary")?.textContent).toContain("Welcome emails held for approval2");
@@ -92,6 +92,18 @@ describe("IntakeReview", () => {
     await render(fakeClient());
     const labels = Array.from(container.querySelectorAll<HTMLButtonElement>("[data-testid^='moderate-obs-1-']")).map((button) => button.textContent?.trim());
     expect(labels).toEqual(["Mark screened", "Quarantine", "Approve for community feed", "Reject"]);
+  });
+
+  it("keeps screened and quarantined reports in the review queue", async () => {
+    const client = fakeClient({
+      moderate: vi.fn().mockResolvedValue({ id: "obs-1", moderation_state: "SCREENED" }),
+    });
+    await render(client);
+    await act(async () => { byTestId("moderate-obs-1-SCREENED")?.click(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(byTestId("intake-pending-item-obs-1")?.textContent).toContain("SCREENED · PROBABLE self-assessed");
+    expect(byTestId("intake-review-decision")?.textContent).toMatch(/recorded as screened/);
+    expect(byTestId("intake-pending-empty")).toBeNull();
   });
 
   it("shows the owner-session state, changing nothing, when the boundary refuses", async () => {
