@@ -22,10 +22,15 @@ import {
   type MycorrhizalPartner,
 } from '@/lib/ocBackend';
 import {
+  ATLAS_LOCALITY_POLICY,
+  atlasLayerLabel,
+  atlasLayerMessage,
   fetchSpeciesDossier,
   resolveFederatedSpecies,
   sectionMessage,
+  type AtlasLayer,
   type FederationResolveResult,
+  type SpeciesAtlasEnvelope,
   type SpeciesDossierEnvelope,
   type DossierSection,
   type EvidenceReceipt,
@@ -442,6 +447,12 @@ const SpeciesDossier: React.FC = () => {
                     </div>
                   )}
                 </Block>
+
+                {!dossierLoading && !dossierError && dossier && (
+                  <Block icon={MapIcon} title="Atlas layers">
+                    <AtlasEnvelopeBlock atlas={dossier.atlas} />
+                  </Block>
+                )}
               </div>
             </div>
           )}
@@ -584,6 +595,88 @@ function DossierSectionBlock({
       {section.receipts.length > 0 && (
         <ul className="mt-3 space-y-2">
           {section.receipts.map((receipt, i) => (
+            <EvidenceReceiptCard key={`${receipt.source_id}-${i}`} receipt={receipt} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function AtlasLayerRow({ layer }: { layer: AtlasLayer }) {
+  return (
+    <li
+      data-testid="atlas-layer"
+      data-layer-id={layer.layer_id}
+      data-layer-state={layer.state}
+      className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/40 p-4"
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/80">
+          {layer.label || atlasLayerLabel(layer.layer_id)}
+        </span>
+        <EvidenceStatePill state={layer.state} />
+      </div>
+      <p data-testid="atlas-layer-message" className="mt-2 font-body text-[12px] text-[#cfc8b8]/70">
+        {atlasLayerMessage(layer)}
+      </p>
+      {layer.receipts.length > 0 && (
+        <ul className="mt-3 space-y-2">
+          {layer.receipts.map((receipt, i) => (
+            <EvidenceReceiptCard key={`${receipt.source_id}-${i}`} receipt={receipt} />
+          ))}
+        </ul>
+      )}
+    </li>
+  );
+}
+
+/**
+ * Renders the governed Atlas envelope as evidence, never as a map: each
+ * published layer with its state, counts and receipts; each withheld layer by
+ * name; and the standing locality policy. No coordinate from `points` is
+ * ever read here.
+ */
+function AtlasEnvelopeBlock({ atlas }: { atlas: SpeciesAtlasEnvelope }) {
+  const hasLayers = atlas.layers.length > 0;
+  const hasWithheld = atlas.unavailable_layers.length > 0;
+  return (
+    <div data-testid="atlas-envelope" className="space-y-3">
+      <p data-testid="atlas-locality-policy" className="font-body text-[12px] text-[#cfc8b8]/60">
+        {ATLAS_LOCALITY_POLICY}
+      </p>
+      {!hasLayers && !hasWithheld && (
+        <Empty>The governed Atlas envelope names no layers for this species yet.</Empty>
+      )}
+      {hasLayers && (
+        <ul className="space-y-3">
+          {atlas.layers.map((layer, i) => (
+            <AtlasLayerRow key={`${layer.layer_id}-${i}`} layer={layer} />
+          ))}
+        </ul>
+      )}
+      {hasWithheld && (
+        <div>
+          <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
+            Not published in this envelope
+          </span>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {atlas.unavailable_layers.map((layerId) => (
+              <li
+                key={layerId}
+                data-testid="atlas-unavailable-layer"
+                data-layer-id={layerId}
+                className="rounded-full border border-white/[0.08] px-2.5 py-0.5 font-mono text-[10px] uppercase tracking-[0.12em] text-[#cfc8b8]/60"
+              >
+                {atlasLayerLabel(layerId)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {atlas.provenance.length > 0 && (
+        <ul className="space-y-2">
+          {atlas.provenance.map((receipt, i) => (
             <EvidenceReceiptCard key={`${receipt.source_id}-${i}`} receipt={receipt} />
           ))}
         </ul>

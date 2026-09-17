@@ -638,3 +638,112 @@ describe('Species Dossier → Atlas mounted continuity', () => {
     expect(atlasLink()).toBeNull();
   });
 });
+
+describe('Atlas envelope rendered as evidence, never as coordinates (journey 7)', () => {
+  it('lists each published layer by state and count, and each withheld layer by name, without drawing a single coordinate', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        atlas: {
+          contract_version: 'oc-species-atlas-v1',
+          taxon_id: 'cattleya-labiata',
+          generated_at: '2026-08-01T00:00:00Z',
+          layers: [
+            {
+              layer_id: 'occurrences',
+              label: 'Occurrence points',
+              state: 'provisional',
+              point_count: 2,
+              feature_count: null,
+              points: [
+                {
+                  occurrence_id: 'occ-1',
+                  latitude: -8.123456,
+                  longitude: -35.654321,
+                  coordinate_uncertainty_m: 5000,
+                  event_date: '2019-03-02',
+                  country_code: 'BR',
+                  elevation_m: 640,
+                  evidence_state: 'provisional',
+                  receipt: receipt({ source_id: 'gbif', source_name: 'GBIF' }),
+                },
+                {
+                  occurrence_id: 'occ-2',
+                  latitude: -8.223456,
+                  longitude: -35.754321,
+                  coordinate_uncertainty_m: null,
+                  event_date: null,
+                  country_code: 'BR',
+                  elevation_m: null,
+                  evidence_state: 'provisional',
+                  receipt: receipt({ source_id: 'gbif', source_name: 'GBIF' }),
+                },
+              ],
+              features: [],
+              receipts: [receipt({ source_id: 'gbif', source_name: 'GBIF Occurrence Index', license: 'CC0' })],
+              unavailable_reason: null,
+            },
+            {
+              layer_id: 'protected_areas',
+              label: 'Protected areas',
+              state: 'unavailable',
+              point_count: null,
+              feature_count: null,
+              points: [],
+              features: [],
+              receipts: [],
+              unavailable_reason: 'No governed protected-area source is connected.',
+            },
+          ],
+          unavailable_layers: ['range', 'elevation', 'climate'],
+          provenance: [],
+        },
+      }),
+    );
+    renderPage();
+    await flush();
+
+    const envelope = container.querySelector('[data-testid="atlas-envelope"]');
+    expect(envelope).not.toBeNull();
+    expect(container.querySelector('[data-testid="atlas-locality-policy"]')?.textContent).toMatch(
+      /never draws coordinates/i,
+    );
+
+    const layers = Array.from(container.querySelectorAll('[data-testid="atlas-layer"]'));
+    expect(layers.map((el) => el.getAttribute('data-layer-id'))).toEqual(['occurrences', 'protected_areas']);
+    expect(layers[0].getAttribute('data-layer-state')).toBe('provisional');
+    expect(layers[0].querySelector('[data-testid="atlas-layer-message"]')?.textContent).toMatch(/2 points counted/);
+    expect(layers[0].querySelector('[data-testid="evidence-license"]')?.textContent).toContain('CC0');
+    expect(layers[1].querySelector('[data-testid="atlas-layer-message"]')?.textContent).toBe(
+      'No governed protected-area source is connected.',
+    );
+
+    const withheld = Array.from(container.querySelectorAll('[data-testid="atlas-unavailable-layer"]'));
+    expect(withheld.map((el) => el.getAttribute('data-layer-id'))).toEqual(['range', 'elevation', 'climate']);
+    expect(withheld.map((el) => el.textContent)).toEqual(['Range', 'Elevation', 'Climate']);
+
+    // The two occurrence points carried coordinates, an elevation and a
+    // country code. None of them may reach the DOM.
+    const text = envelope?.textContent ?? '';
+    for (const forbidden of ['-8.123456', '-35.654321', '-8.223456', '-35.754321', '640', 'BR', 'occ-1', 'occ-2']) {
+      expect(text).not.toContain(forbidden);
+    }
+    expect(text).not.toMatch(/-?\d{1,3}\.\d{4,}/);
+  });
+
+  it('says honestly when the envelope names no layers at all', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+    renderPage();
+    await flush();
+    const envelope = container.querySelector('[data-testid="atlas-envelope"]');
+    expect(envelope?.textContent).toMatch(/names no layers for this species yet/i);
+    expect(container.querySelectorAll('[data-testid="atlas-layer"]').length).toBe(0);
+    expect(container.querySelectorAll('[data-testid="atlas-unavailable-layer"]').length).toBe(0);
+  });
+
+  it('does not render an Atlas envelope when the dossier fetch failed', async () => {
+    mocks.fetchSpeciesDossier.mockRejectedValue(new Error('backend down'));
+    renderPage();
+    await flush();
+    expect(container.querySelector('[data-testid="atlas-envelope"]')).toBeNull();
+  });
+});

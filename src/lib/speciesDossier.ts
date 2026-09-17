@@ -204,3 +204,52 @@ export function sectionMessage(section: DossierSection): string {
   }
   return section.summary || 'Evidence is available in the linked records.';
 }
+
+// ---------------------------------------------------------------------------
+// Atlas envelope presentation (Release-1 journey 7)
+// ---------------------------------------------------------------------------
+
+/** Human labels for the layer ids the governed Atlas envelope may name. */
+export const ATLAS_LAYER_LABELS: Record<string, string> = {
+  occurrences: 'Occurrence points',
+  range: 'Range',
+  countries: 'Countries',
+  elevation: 'Elevation',
+  phenology: 'Phenology',
+  habitat: 'Habitat',
+  climate: 'Climate',
+  pollinators: 'Pollinators',
+  pollinator_routes: 'Pollinator routes',
+  mycorrhizae: 'Mycorrhizae',
+  protected_areas: 'Protected areas',
+  threats: 'Threats',
+  historical_records: 'Historical records',
+  all: 'All layers',
+};
+
+export function atlasLayerLabel(layerId: string): string {
+  return ATLAS_LAYER_LABELS[layerId] ?? layerId.replace(/_/g, ' ');
+}
+
+/**
+ * The species page shows Atlas layers as counts, evidence states and
+ * receipts only. It never draws a coordinate, so a layer that carries points
+ * is described by how many were counted, not by where they are.
+ */
+export const ATLAS_LOCALITY_POLICY =
+  'This page never draws coordinates. Layers appear here only as counts, evidence states and receipts from the governed Atlas envelope; sensitive localities are withheld at the source.';
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+export function atlasLayerMessage(layer: AtlasLayer): string {
+  if (layer.state === 'unavailable') {
+    return layer.unavailable_reason || 'This layer is not published in the governed Atlas envelope.';
+  }
+  const counted: string[] = [];
+  if (layer.point_count !== null) counted.push(plural(layer.point_count, 'point'));
+  if (layer.feature_count !== null) counted.push(plural(layer.feature_count, 'feature'));
+  const summary = counted.length > 0 ? `${counted.join(', ')} counted` : 'Published in the governed Atlas envelope';
+  return `${summary}. Exact localities are never drawn on this page.`;
+}
