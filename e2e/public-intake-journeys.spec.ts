@@ -77,14 +77,40 @@ test("newsletter subscribe sends only structured fields and reports a held welco
   expect(successText).not.toMatch(/welcome email (has been|was) sent|check your inbox/i);
 });
 
-test("the preference centre refuses email-only access and the page says so honestly", async () => {
+test("the preference centre opens with the token this browser received at subscription, and saves", async () => {
+  await expect(page.getByTestId("subscribe-manageable")).toBeVisible();
   await page.getByRole("tab", { name: "Preferences" }).click();
   await expect(page.getByTestId("preferences-lookup-form")).toBeVisible();
   await page.locator("#prefs-email").fill(READER);
+  const load = page.waitForResponse((response) => /\/api\/constituent\/preferences\?/.test(response.url()) && response.request().method() === "GET");
   await page.getByTestId("preferences-lookup-form").getByRole("button").last().click();
-  await expect(page.getByTestId("preferences-unavailable")).toBeVisible({ timeout: 20_000 });
-  await expect(page.getByTestId("preferences-unavailable")).toContainText(/not yet live|in development/i);
-  await expect(page.getByTestId("preferences-edit-form")).toHaveCount(0);
+  const loadResponse = await load;
+  expect(loadResponse.status()).toBe(200);
+  expect(new URL(loadResponse.url()).searchParams.get("token")).toBeTruthy();
+  await expect(page.getByTestId("preferences-edit-form")).toBeVisible({ timeout: 20_000 });
+  await page.locator("#prefs-frequency").selectOption("monthly");
+  await page.getByTestId("preferences-edit-form").getByRole("button", { name: /save preferences/i }).click();
+  await expect(page.getByTestId("preferences-success")).toBeVisible({ timeout: 20_000 });
+});
+
+test("a browser without the token cannot open the preference centre on an email alone, and the page says so honestly", async ({ browser }) => {
+  const context = await browser.newContext();
+  const fresh = await context.newPage();
+  await fresh.route("**/*", (route) => {
+    const host = new URL(route.request().url()).hostname;
+    return host === "127.0.0.1" || host === "localhost" ? route.continue() : route.abort("blockedbyclient");
+  });
+  await fresh.goto("/newsletter", { waitUntil: "domcontentloaded" });
+  await fresh.getByRole("tab", { name: "Preferences" }).click();
+  await fresh.locator("#prefs-email").fill(READER);
+  const load = fresh.waitForResponse((response) => /\/api\/constituent\/preferences\?/.test(response.url()));
+  await fresh.getByTestId("preferences-lookup-form").getByRole("button").last().click();
+  expect((await load).status()).toBe(401);
+  await expect(fresh.getByTestId("preferences-needs-token")).toBeVisible({ timeout: 20_000 });
+  await expect(fresh.getByTestId("preferences-needs-token")).toContainText(/never open on an email address alone/i);
+  await expect(fresh.getByTestId("preferences-edit-form")).toHaveCount(0);
+  await expect(fresh.getByTestId("preferences-unavailable")).toHaveCount(0);
+  await context.close();
 });
 
 test("unsubscribe succeeds for the reader and would answer the same for an unknown address", async () => {

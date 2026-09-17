@@ -182,6 +182,74 @@ describe('Newsletter page — COMMS-001 (#681)', () => {
 });
 
 describe('Newsletter — unsubscribe form', () => {
+  it('subscribe remembers the manage token the backend issued and offers the Preferences tab', async () => {
+    window.localStorage.clear();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ normalized_email: 'reader@example.org', state: 'subscribed', manage_token: 'tok-abc' }),
+    );
+    renderNewsletter();
+    await setInputValue(container.querySelector('#subscribe-email') as HTMLInputElement, 'Reader@Example.org');
+    await submit('[data-testid="subscribe-form"]');
+    expect(container.querySelector('[data-testid="subscribe-success"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="subscribe-manageable"]')).toBeTruthy();
+    expect(window.localStorage.getItem('orchid-continuum.newsletter.manage-token.v1.reader%40example.org')).toBe('tok-abc');
+  });
+
+  it('subscribe without a token stores nothing and does not promise browser preference management', async () => {
+    window.localStorage.clear();
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ normalized_email: 'reader@example.org', state: 'subscribed', manage_token: null }),
+    );
+    renderNewsletter();
+    await setInputValue(container.querySelector('#subscribe-email') as HTMLInputElement, 'reader@example.org');
+    await submit('[data-testid="subscribe-form"]');
+    expect(container.querySelector('[data-testid="subscribe-success"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="subscribe-manageable"]')).toBeNull();
+    expect(window.localStorage.length).toBe(0);
+  });
+
+  it('preferences sends the remembered token and opens the edit form on 200', async () => {
+    window.localStorage.setItem('orchid-continuum.newsletter.manage-token.v1.reader%40example.org', 'tok-abc');
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      jsonResponse({ topics: ['taxonomy'], frequency: 'weekly' }),
+    );
+    renderNewsletter();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    act(() => (tabs.find((t) => t.textContent?.toLowerCase().includes('preferences')) as HTMLButtonElement).click());
+    await setInputValue(container.querySelector('#prefs-email') as HTMLInputElement, 'reader@example.org');
+    await submit('[data-testid="preferences-lookup-form"]');
+    const url = String(fetchSpy.mock.calls[0][0]);
+    expect(url).toBe(`${CONSTITUENT_API_BASE}/preferences?email=reader%40example.org&token=tok-abc`);
+    expect(container.querySelector('[data-testid="preferences-edit-form"]')).toBeTruthy();
+    window.localStorage.clear();
+  });
+
+  it('preferences without a token shows the needs-token state on 401, not "not live" and not an edit form', async () => {
+    window.localStorage.clear();
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ detail: 'Owner session or API key is required' }, 401));
+    renderNewsletter();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    act(() => (tabs.find((t) => t.textContent?.toLowerCase().includes('preferences')) as HTMLButtonElement).click());
+    await setInputValue(container.querySelector('#prefs-email') as HTMLInputElement, 'reader@example.org');
+    await submit('[data-testid="preferences-lookup-form"]');
+    expect(String(fetchSpy.mock.calls[0][0])).not.toContain('token=');
+    expect(container.querySelector('[data-testid="preferences-needs-token"]')?.textContent).toMatch(/never open on an email address alone/i);
+    expect(container.querySelector('[data-testid="preferences-unavailable"]')).toBeNull();
+    expect(container.querySelector('[data-testid="preferences-edit-form"]')).toBeNull();
+  });
+
+  it('unsubscribe forgets the browser token for that address', async () => {
+    window.localStorage.setItem('orchid-continuum.newsletter.manage-token.v1.reader%40example.org', 'tok-abc');
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ normalized_email: 'reader@example.org', state: 'unsubscribed' }));
+    renderNewsletter();
+    const tabs = Array.from(container.querySelectorAll('[role="tab"]'));
+    act(() => (tabs.find((t) => t.textContent?.toLowerCase().includes('unsubscribe')) as HTMLButtonElement).click());
+    await setInputValue(container.querySelector('#unsub-email') as HTMLInputElement, 'reader@example.org');
+    await submit('[data-testid="unsubscribe-form"]');
+    expect(container.querySelector('[data-testid="unsubscribe-success"]')).toBeTruthy();
+    expect(window.localStorage.getItem('orchid-continuum.newsletter.manage-token.v1.reader%40example.org')).toBeNull();
+  });
+
   it('renders the unsubscribe submit button', () => {
     renderNewsletter();
     const tabs = Array.from(container.querySelectorAll('[role="tab"]'));

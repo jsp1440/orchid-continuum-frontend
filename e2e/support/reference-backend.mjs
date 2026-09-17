@@ -1859,6 +1859,10 @@ function minimalObservation(record) {
   return { id: record.id, moderation_state: record.moderation_state, created_at: record.created_at };
 }
 
+function fixtureManageToken(normalizedEmail) {
+  return createHash("sha256").update(`fixture-manage:${normalizedEmail}`).digest("hex").slice(0, 40);
+}
+
 function normalizeEmailFixture(value) {
   const normalized = String(value || "").trim().toLowerCase();
   if (!normalized || normalized.length > 320 || /\s/.test(normalized) || normalized.split("@").length !== 2) return null;
@@ -1939,7 +1943,7 @@ async function constituentRoute(req, res, url) {
     publicIntake.subscriptions.set(normalized, record);
     return json(res, 200, {
       constituent_id: record.constituent_id, normalized_email: normalized, state: "subscribed",
-      welcome_email_communication_state: "awaiting_approval", manage_token: null,
+      welcome_email_communication_state: "awaiting_approval", manage_token: fixtureManageToken(normalized),
       message: "Subscribed. The welcome email is held for human approval before any dispatch (CommunicationState.AWAITING_APPROVAL).",
     });
   }
@@ -1953,10 +1957,12 @@ async function constituentRoute(req, res, url) {
     return json(res, 200, { normalized_email: normalized, state: "unsubscribed", message: "Unsubscribed. No further community, fundraising or marketing email will be sent to this address." });
   }
   if (path === "/api/constituent/preferences") {
-    // Email alone never unlocks the preference centre (no manage token is issued
-    // by this fixture, and no owner bearer is presented by the public page).
-    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    // Email alone never unlocks the preference centre: the per-address manage
+    // token issued at subscription or an owner bearer is required.
     const normalized = normalizeEmailFixture(url.searchParams.get("email"));
+    const token = url.searchParams.get("token");
+    const tokenValid = Boolean(normalized && token && token === fixtureManageToken(normalized));
+    if (!tokenValid && !bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
     const record = normalized ? publicIntake.subscriptions.get(normalized) : null;
     if (!record) return json(res, 404, { detail: "No subscription record for this address." });
     if (req.method === "PATCH") Object.assign(record, body, { updated_at: new Date().toISOString() });
