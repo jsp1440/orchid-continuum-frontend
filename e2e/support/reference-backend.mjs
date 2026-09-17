@@ -112,7 +112,9 @@ function dossierFixture() {
       taxon_id: DOSSIER_FIXTURE_TAXON_ID,
       generated_at: "2026-01-01T00:00:00.000Z",
       layers: [],
-      unavailable_layers: ["all"],
+      // Mirrors orchid-calyx-backend PostgresSpeciesRepository._atlas_envelope:
+      // every layer withheld by name, no coordinates anywhere.
+      unavailable_layers: ["occurrences", "range", "protected_areas", "elevation", "climate"],
       provenance: [],
     },
     related_species: [],

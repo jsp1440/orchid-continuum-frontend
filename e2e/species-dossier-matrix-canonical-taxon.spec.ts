@@ -49,3 +49,20 @@ test("Species Dossier carries the exact canonical taxon into Matrix as non-evide
   expect(arrived.searchParams.has("longitude")).toBe(false);
   expect(offHostDataRequests).toEqual([]);
 });
+
+test("Species Dossier shows the governed Atlas envelope as evidence and never draws a coordinate (journey 7)", async ({ page }) => {
+  await page.goto(`/species/${encodeURIComponent(CANONICAL_TAXON_ID)}`);
+
+  const envelope = page.getByTestId("atlas-envelope");
+  await expect(envelope).toBeVisible();
+  await expect(page.getByTestId("atlas-locality-policy")).toContainText(/never draws coordinates/i);
+
+  const withheld = page.getByTestId("atlas-unavailable-layer");
+  await expect(withheld).toHaveCount(5);
+  await expect(withheld).toHaveText(["Occurrence points", "Range", "Protected areas", "Elevation", "Climate"]);
+  await expect(page.getByTestId("atlas-layer")).toHaveCount(0);
+
+  const text = (await envelope.textContent()) ?? "";
+  expect(text).not.toMatch(/-?\d{1,3}\.\d{4,}/);
+  expect(page.url()).toContain(`/species/${encodeURIComponent(CANONICAL_TAXON_ID)}`);
+});
