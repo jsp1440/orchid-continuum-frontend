@@ -60,6 +60,7 @@ const Footer: React.FC = () => {
         { label: 'Get involved', route: '/get-involved' },
         { label: 'Conservation', route: '/conservation' },
         { label: 'Data & evidence', route: '/knowledge' },
+        { label: 'Privacy & data', route: '/privacy' },
       ],
     },
   ];
@@ -175,8 +176,11 @@ const Footer: React.FC = () => {
           <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-[#e7dfd1]/55">
             © {new Date().getFullYear()} Orchid Continuum · Open knowledge for living systems
           </div>
-          <div className="font-mono text-[10px] tracking-[0.22em] uppercase text-[#e7dfd1]/55">
-            Fiscally sponsored by Ecologistics — ecologistics.org
+          <div className="flex items-center gap-4 font-mono text-[10px] tracking-[0.22em] uppercase text-[#e7dfd1]/55">
+            <span>Fiscally sponsored by Ecologistics — ecologistics.org</span>
+            <Link to="/privacy" className="hover:text-[#d4b34a] transition-colors">
+              Privacy
+            </Link>
           </div>
         </div>
       </div>
