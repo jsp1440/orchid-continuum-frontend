@@ -747,3 +747,73 @@ describe('Atlas envelope rendered as evidence, never as coordinates (journey 7)'
     expect(container.querySelector('[data-testid="atlas-envelope"]')).toBeNull();
   });
 });
+
+
+describe('governed identity from the dossier (journeys 2, 18)', () => {
+  function identityRow(): HTMLElement | null {
+    return container.querySelector('[data-testid="dossier-identity"]');
+  }
+
+  it('shows accepted name, authorship, rank and taxonomic status as the dossier states them', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        identity: {
+          taxon_id: 'cattleya-labiata',
+          display_name: 'Cattleya labiata',
+          full_scientific_name: 'Cattleya labiata Lindl.',
+          accepted_name: 'Cattleya labiata',
+          authorship: 'Lindl.',
+          rank: 'species',
+          genus: 'Cattleya',
+          specific_epithet: 'labiata',
+          taxonomic_status: 'recorded_in_orchid_taxonomy_table',
+          synonyms: [],
+        },
+      }),
+    );
+    renderPage();
+    await flush();
+    const row = identityRow();
+    expect(row).not.toBeNull();
+    const text = row?.textContent ?? '';
+    expect(text).toContain('Accepted name');
+    expect(text).toContain('Cattleya labiata');
+    expect(text).toContain('Lindl.');
+    expect(text).toContain('species');
+    expect(text).toContain('recorded_in_orchid_taxonomy_table');
+  });
+
+  it('shows a variety with its rank and an honest dash when authorship is not stated', async () => {
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        identity: {
+          taxon_id: '104',
+          display_name: 'Dendrobium nobile var. alba',
+          full_scientific_name: 'Dendrobium nobile var. alba',
+          accepted_name: 'Dendrobium nobile var. alba',
+          authorship: null,
+          rank: 'variety',
+          genus: 'Dendrobium',
+          specific_epithet: 'nobile',
+          taxonomic_status: 'recorded_in_orchid_taxonomy_table',
+          synonyms: [],
+        },
+      }),
+    );
+    renderPage();
+    await flush();
+    const text = identityRow()?.textContent ?? '';
+    expect(text).toContain('Dendrobium nobile var. alba');
+    expect(text).toContain('variety');
+    const authorship = Array.from(identityRow()?.querySelectorAll('dt') ?? []).find((dt) => dt.textContent === 'Authorship');
+    expect(authorship?.nextElementSibling?.textContent).toBe('—');
+  });
+
+  it('renders no governed identity row when the dossier fetch failed', async () => {
+    mocks.fetchSpeciesDossier.mockRejectedValue(new Error('backend down'));
+    renderPage();
+    await flush();
+    expect(identityRow()).toBeNull();
+    expect(container.textContent).toContain('Orchidaceae'); // the public taxonomy fields still render
+  });
+});
