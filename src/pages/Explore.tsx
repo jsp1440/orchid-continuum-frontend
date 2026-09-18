@@ -78,6 +78,11 @@ const Explore: React.FC = () => {
       title="Explore the Continuum"
       titleAccent="by what matters to you."
       intro="These are the faceted galleries the Continuum is being built toward. None of them filter anything yet; the Species browser below is the surface that works today."
+      /* PageShell's hero badge reads "Live data · Orchid Continuum + GBIF" and
+         defaults to on. Nothing on this page is fed by live data or by GBIF, so
+         leaving it would reinstate by inheritance the external-linkage claim the
+         rest of this page removes. Partners.tsx opts out the same way. */
+      showDemoBanner={false}
     >
       {/* What works today */}
       <section className="py-10">

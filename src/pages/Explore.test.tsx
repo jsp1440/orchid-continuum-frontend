@@ -99,6 +99,11 @@ it('claims no external data linkage that is not wired', () => {
   const text = container.textContent ?? '';
   expect(text).not.toMatch(/globi/i);
   expect(text).not.toMatch(/iucn-aligned|iucn-categorized/i);
+  // PageShell's hero badge says "Live data · Orchid Continuum + GBIF" and is on
+  // by default, so removing the page's own claims is not enough — the rendered
+  // page inherits one. This asserts over what a visitor actually sees.
+  expect(text).not.toMatch(/gbif/i);
+  expect(text).not.toMatch(/live data/i);
 });
 
 it('does not expose internal API paths to the public', () => {
