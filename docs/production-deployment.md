@@ -9,7 +9,7 @@ Production deployments of the integrated Orchid Continuum application must build
 - build command: `npm ci && npm run build`
 - output directory: `dist`
 
-A separately generated marketing site does not contain the React application routes and must not be treated as the integrated application deployment.
+A separately generated marketing site does not contain the React application routes and must not be treated as the integrated application deployment. Production is hosted on Render (Static Site); the backend and worker are Render services with Neon Postgres.
 
 ## Required environment
 
@@ -36,6 +36,7 @@ The repository contains both:
 
 - `public/_redirects` for Netlify-compatible/static hosts;
 - `vercel.json` for Vercel SPA rewrites.
+- `render.yaml` for the canonical Render Static Site build and SPA rewrite.
 
 Other hosts must configure the equivalent fallback:
 
