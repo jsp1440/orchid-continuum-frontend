@@ -301,6 +301,17 @@ const SpeciesDossier: React.FC = () => {
                       value={data?.species ?? data?.specific_epithet}
                     />
                   </dl>
+                  {!dossierLoading && !dossierError && dossier && (
+                    <dl
+                      data-testid="dossier-identity"
+                      className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-white/[0.06] pt-4"
+                    >
+                      <Field label="Accepted name" value={dossier.identity.accepted_name} />
+                      <Field label="Authorship" value={dossier.identity.authorship} />
+                      <Field label="Rank" value={dossier.identity.rank} />
+                      <Field label="Taxonomic status" value={dossier.identity.taxonomic_status} />
+                    </dl>
+                  )}
                 </Block>
 
                 {/* Conservation */}
