@@ -1,10 +1,11 @@
 export const SPECIES_DOSSIER_CALYX_ORIGIN = 'species-dossier-calyx';
 export const SPECIES_DOSSIER_CALYX_PATH = '/calyx';
 
+import { boundedCanonicalTaxon } from './canonicalTaxonName';
+
 const MAX_TAXON_CONTEXT_TEXT = 160;
 const UNSAFE_CONTEXT_PUNCTUATION = /[<>{}\\]/;
 const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
-const SAFE_BINOMIAL = /^[A-Z][A-Za-z-]+\s+[a-z][A-Za-z-]+$/;
 
 function hasControlCharacter(value: string): boolean {
   return [...value].some((character) => {
@@ -26,7 +27,7 @@ function boundedSpecies(value: string | null | undefined): string | null {
     taxon.length > MAX_TAXON_CONTEXT_TEXT ||
     hasControlCharacter(taxon) ||
     UNSAFE_CONTEXT_PUNCTUATION.test(taxon) ||
-    !SAFE_BINOMIAL.test(taxon)
+    !boundedCanonicalTaxon(taxon)
   ) {
     return null;
   }
