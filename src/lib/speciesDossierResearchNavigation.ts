@@ -1,10 +1,11 @@
 export const SPECIES_DOSSIER_RESEARCH_ORIGIN = 'species-dossier-research';
 export const SPECIES_DOSSIER_RESEARCH_PATH = '/research';
 
+import { boundedCanonicalTaxon } from './canonicalTaxonName';
+
 const MAX_TAXON_CONTEXT_TEXT = 160;
 const UNSAFE_CONTEXT_PUNCTUATION = /[<>{}\\]/;
 const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
-const SAFE_BINOMIAL = /^[A-Z][A-Za-z-]+\s+[a-z][A-Za-z-]+$/;
 
 export interface SpeciesDossierResearchContext {
   origin: typeof SPECIES_DOSSIER_RESEARCH_ORIGIN;
@@ -29,7 +30,7 @@ function boundedSpecies(value: string | null | undefined): string | null {
     text.length > MAX_TAXON_CONTEXT_TEXT ||
     hasControlCharacter(text) ||
     UNSAFE_CONTEXT_PUNCTUATION.test(text) ||
-    !SAFE_BINOMIAL.test(text)
+    !boundedCanonicalTaxon(text)
   ) {
     return null;
   }

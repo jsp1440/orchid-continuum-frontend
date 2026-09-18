@@ -1,14 +1,12 @@
-const SAFE_GENUS = /^[A-Z][A-Za-z-]+$/;
-const SAFE_BINOMIAL = /^([A-Z][A-Za-z-]+)\s+([a-z][A-Za-z-]+)$/;
+import { boundedCanonicalTaxon } from './canonicalTaxonName';
 
+/**
+ * A binomial, a hybrid with its sign, or one infraspecific rank — the shapes the
+ * backend's shared name split presents as `accepted_name`. Anything else is not
+ * a canonical species identity and yields no continuation.
+ */
 function boundedCanonicalSpecies(value: unknown): string | null {
-  const species = String(value ?? '').trim();
-  if (!species || species.length > 180) return null;
-
-  const match = species.match(SAFE_BINOMIAL);
-  if (!match || !SAFE_GENUS.test(match[1])) return null;
-
-  return `${match[1]} ${match[2]}`;
+  return boundedCanonicalTaxon(value)?.taxon ?? null;
 }
 
 /**

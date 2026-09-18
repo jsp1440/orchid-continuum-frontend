@@ -71,3 +71,23 @@ describe('speciesDossierContinuumActions', () => {
     }
   });
 });
+
+describe('infraspecific and hybrid dossier subjects (backend #1481/#1483 name shapes)', () => {
+  it('carries a variety and a hybrid into Atlas, Research, and Calyx as the same exact subject', async () => {
+    const { speciesDossierContinuumActions } = await import('@/lib/speciesDossierContinuumNavigation');
+    for (const acceptedName of ['Dendrobium nobile var. alba', 'Phalaenopsis × intermedia']) {
+      const actions = speciesDossierContinuumActions({ acceptedName, fullScientificName: `${acceptedName} Lindl.` });
+      expect(actions).not.toBeNull();
+      const encoded = encodeURIComponent(acceptedName).replace(/%20/g, '+');
+      expect(actions?.atlas).toBe(`/atlas?species=${encoded}`);
+      expect(actions?.research).toContain(encoded);
+      expect(actions?.calyx).toContain(encoded);
+    }
+  });
+
+  it('still fails closed when the first supplied identity carries authorship or a bare rank marker', async () => {
+    const { speciesDossierContinuumActions } = await import('@/lib/speciesDossierContinuumNavigation');
+    expect(speciesDossierContinuumActions({ acceptedName: 'Dendrobium nobile var. alba Rolfe' })).toBeNull();
+    expect(speciesDossierContinuumActions({ acceptedName: 'Dendrobium nobile var.' })).toBeNull();
+  });
+});
