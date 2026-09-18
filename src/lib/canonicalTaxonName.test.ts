@@ -20,6 +20,22 @@ describe('boundedCanonicalTaxon', () => {
     expect(boundedCanonicalTaxon('  Dendrobium   nobile  var.  alba ')?.taxon).toBe('Dendrobium nobile var. alba');
   });
 
+  it('accepts a rank marker in any case, as the backend does, but nothing else', () => {
+    // The backend matches markers with token.lower(), so a source row spelled
+    // VAR. keeps its accepted name there; the frontend must not drop every
+    // continuation for it.
+    expect(boundedCanonicalTaxon('Dendrobium nobile VAR. alba')).toEqual({
+      genus: 'Dendrobium',
+      taxon: 'Dendrobium nobile VAR. alba',
+      rank: 'variety',
+    });
+    expect(boundedCanonicalTaxon('Ophrys apifera SubSp. jurana')?.rank).toBe('subspecies');
+    // Case tolerance stops at the marker: a capitalised epithet is not an
+    // epithet, and a lowercase genus is not a genus.
+    expect(boundedCanonicalTaxon('Dendrobium nobile VAR. Alba')).toBeNull();
+    expect(boundedCanonicalTaxon('dendrobium nobile var. alba')).toBeNull();
+  });
+
   it('fails closed on everything that is not exactly a canonical name', () => {
     for (const rejected of [
       'Cattleya labiata Lindl.', // authorship is not part of the name

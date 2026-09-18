@@ -18,7 +18,32 @@
 const GENUS = '[A-Z][A-Za-z-]+';
 const EPITHET = '[a-z][a-z-]+';
 const HYBRID_SIGN = '(?:×|x)';
-const INFRASPECIFIC_RANK = '(?:subsp\\.|ssp\\.|var\\.|subvar\\.|f\\.|fo\\.|forma|subf\\.|nothosubsp\\.|nothovar\\.|cv\\.)';
+const RANK_MARKERS = [
+  'subsp.', 'ssp.', 'var.', 'subvar.', 'f.', 'fo.', 'forma',
+  'subf.', 'nothosubsp.', 'nothovar.', 'cv.',
+] as const;
+
+/** `var.` -> `[vV][aA][rR]\.` — case-insensitive for this token only. */
+function anyCase(marker: string): string {
+  return [...marker]
+    .map(character => {
+      if (character === '.') return '\\.';
+      const lower = character.toLowerCase();
+      const upper = character.toUpperCase();
+      return lower === upper ? lower : `[${lower}${upper}]`;
+    })
+    .join('');
+}
+
+/**
+ * Only the rank marker is case-insensitive, matching the backend's
+ * `token.lower() in INFRASPECIFIC_RANKS`. A source row spelled
+ * `Dendrobium nobile VAR. alba` keeps its accepted name on the backend, so the
+ * frontend must not silently drop every continuation for it. Genus and epithet
+ * stay case-sensitive: a capitalised epithet is not a valid epithet, and a
+ * lowercase genus is not a genus.
+ */
+const INFRASPECIFIC_RANK = `(?:${RANK_MARKERS.map(anyCase).join('|')})`;
 
 export const CANONICAL_TAXON_NAME = new RegExp(
   `^(${GENUS})\\s+(?:(${HYBRID_SIGN})\\s+)?(${EPITHET})(?:\\s+(${INFRASPECIFIC_RANK})\\s+(${EPITHET}))?$`,
@@ -60,7 +85,7 @@ export function boundedCanonicalTaxon(value: unknown): CanonicalTaxonName | null
   const [, genus, hybridSign, epithet, rankMarker, infraEpithet] = match;
   const parts = [genus, hybridSign, epithet, rankMarker, infraEpithet].filter(Boolean) as string[];
   const rank: CanonicalTaxonName['rank'] = rankMarker
-    ? RANK_LABEL[rankMarker]
+    ? RANK_LABEL[rankMarker.toLowerCase()]
     : hybridSign
       ? 'hybrid'
       : 'species';
