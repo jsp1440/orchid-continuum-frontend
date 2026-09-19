@@ -13,10 +13,11 @@ async function read(path) {
 }
 
 async function main() {
-  const [app, redirects, vercel] = await Promise.all([
+  const [app, redirects, vercel, render] = await Promise.all([
     read('src/App.tsx'),
     read('public/_redirects'),
     read('vercel.json'),
+    read('render.yaml'),
   ]);
 
   const failures = [];
@@ -39,6 +40,12 @@ async function main() {
     failures.push('vercel.json does not contain an index.html SPA rewrite');
   }
 
+  if (!render.includes('runtime: static')
+    || !render.includes('source: /*')
+    || !render.includes('destination: /index.html')) {
+    failures.push('render.yaml does not contain a static-site index.html SPA rewrite');
+  }
+
   if (failures.length > 0) {
     console.error('Deployment contract validation failed:');
     for (const failure of failures) console.error(`- ${failure}`);
@@ -47,7 +54,7 @@ async function main() {
   }
 
   console.log('Deployment contract valid.');
-  console.log(`Verified ${requiredRoutes.length} critical client routes and two SPA fallback mechanisms.`);
+  console.log(`Verified ${requiredRoutes.length} critical client routes and three SPA fallback mechanisms.`);
 }
 
 main().catch((error) => {
