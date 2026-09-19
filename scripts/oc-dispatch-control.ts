@@ -25,6 +25,24 @@ const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value
 const labelsOf = (issue: Issue) => issue.labels.map(label => label.name);
 const steward = (issue: Issue) => labelsOf(issue).includes('oc-portfolio-steward');
 
+// A completion-graph node is the only thing that can carry a queued issue into a
+// lane. The graph's own `issues` array binds three of its seventy-nine nodes, so
+// an issue the graph does not name is unreachable however it is labelled. This
+// accepts the binding from the issue side too: `oc-node:<node-id>`, deliberately
+// applied and visible on the issue, exactly as `oc-cap:` declares a capability.
+// Reading a node out of the title or body stays refused; that is the heuristic
+// these declarations replaced.
+const NODE_LABEL = /^oc-node:\s*([a-z0-9][a-z0-9-]*)$/i;
+export function declaredNodesByIssue(issues: Issue[]): Record<number, string[]> {
+  const declared: Record<number, string[]> = {};
+  for (const issue of issues) {
+    const nodeIds = labelsOf(issue).map(label => NODE_LABEL.exec(label)?.[1]?.toLowerCase())
+      .filter((nodeId): nodeId is string => nodeId !== undefined);
+    if (nodeIds.length > 0) declared[issue.number] = [...new Set(nodeIds)];
+  }
+  return declared;
+}
+
 export function lineageFor(issue: number, prs: Pull[]) {
   return prs.filter(pr => new RegExp(`^OC-AUTO-ISSUE:\\s*#${issue}\\s*$`, 'm').test(pr.body || '') ||
     new RegExp(`^oc-auto-${issue}(?:-|$)`).test(pr.head.ref) ||
@@ -58,11 +76,13 @@ function admission(snapshot: Snapshot, queued: number[], now: string, root: Comp
   // eligible issue (not just the first eight in GitHub's API ordering).
   const allEligible = issues.filter(issue => selectLanes({ issues: [issue] }).selected.length > 0).map(i => i.number);
   return buildGraphDispatchPlan({ maxActiveLanes: MAX_ACTIVE_LANES, runningCount: running,
-    queuedIssueNumbers: queued.filter(i => allEligible.includes(i)), openWorkRefs: openRefs(snapshot, issues), now, occupiedNodeIds }, root);
+    queuedIssueNumbers: queued.filter(i => allEligible.includes(i)), openWorkRefs: openRefs(snapshot, issues), now, occupiedNodeIds,
+    declaredNodesByIssue: declaredNodesByIssue(snapshot.issues) }, root);
 }
 function findNode(root: CompletionNode, id: string): CompletionNode | undefined {
   return root.id === id ? root : root.children.map(child => findNode(child, id)).find(Boolean);
 }
+const LANE_STATES = ['queued', 'prepared', 'validating', 'blocked', 'owner-gate', 'runtime-backoff'] as const;
 export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Date().toISOString(), root = COMPLETION_GRAPH) {
   if (!/^[a-f0-9]{40}$/.test(snapshot.integrationSha) || !/^[a-f0-9]{40}$/.test(snapshot.implementationSha)) throw new Error('Unknown implementation/integration revision');
   const occupied = new Set(leases.filter(isActive).map(lease => lease.issue));
@@ -93,8 +113,9 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
     prLineage: snapshot.prs.filter(pr => pr.state === 'open').map(pr => ({ number: pr.number, head: pr.head })).sort((a,b) => a.number-b.number),
     repositoryState: { implementationSha: snapshot.implementationSha, admission: leaves.map(({ issueNumber, nodeId, fingerprint }) => ({ issueNumber, nodeId, fingerprint })) },
   });
-  const inventory = Object.fromEntries(['queued', 'prepared', 'validating', 'blocked', 'owner-gate', 'runtime-backoff']
-    .map(state => [state, snapshot.issues.filter(i => i.state === 'open' && !steward(i) && labelsOf(i).includes(`oc-${state}`)).length]));
+  const inventory = Object.fromEntries(LANE_STATES
+    .map(state => [state, snapshot.issues.filter(i => i.state === 'open' && !steward(i) && labelsOf(i).includes(`oc-${state}`)).length])
+  ) as Record<(typeof LANE_STATES)[number], number>;
   return { ...plan, leaves, wave, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
 }
 export type Plan = ReturnType<typeof makePlan>;

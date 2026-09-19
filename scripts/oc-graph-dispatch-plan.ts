@@ -10,6 +10,8 @@ export type GraphDispatchPlanInput = {
   queuedIssueNumbers?: number[];
   openWorkRefs?: string[];
   occupiedNodeIds?: string[];
+  /** Issue-side bindings, keyed by issue number. See `declaredNodesByIssue` in oc-dispatch-control. */
+  declaredNodesByIssue?: Record<number, string[]>;
   now?: string;
 };
 
@@ -19,6 +21,12 @@ export type GraphDispatchPlan = {
   leaves: Array<{ nodeId: string; nodeName: string; issueNumber: number; reasons: string[] }>;
   untrackedLeaves: Array<{ nodeId: string; nodeName: string; reasons: string[] }>;
   surfacedBlockers: Array<{ nodeId: string; nodeName: string; status: string }>;
+  /** Queued issues bound to no node in the graph, from either side. They can never be admitted. */
+  unboundQueued: number[];
+  /** Declarations naming a node this graph does not contain. A binding failure, never a guess. */
+  unknownNodeDeclarations: Array<{ issueNumber: number; nodeId: string }>;
+  /** Lane capacity and queued work both exist, yet nothing could be admitted. */
+  starved: boolean;
 };
 
 function cloneGraph(root: CompletionNode): CompletionNode {
@@ -39,10 +47,51 @@ function issueNumberFromRef(ref: string): number | null {
   return match ? Number(match[1]) : null;
 }
 
-function trackedQueuedIssue(node: CompletionNode, queued: ReadonlySet<number>): number | null {
+function collectNodeIds(root: CompletionNode, into: Set<string> = new Set()): Set<string> {
+  into.add(root.id);
+  for (const child of root.children) collectNodeIds(child, into);
+  return into;
+}
+
+/**
+ * Index the issue-side bindings by node.
+ *
+ * A declaration naming a node this graph does not contain is reported as exactly
+ * that. Guessing which node was meant is the heuristic these bindings replaced.
+ */
+function indexDeclarations(root: CompletionNode, declaredNodesByIssue: Record<number, string[]>) {
+  const known = collectNodeIds(root);
+  const declared = new Map<string, number[]>();
+  const unknown: GraphDispatchPlan['unknownNodeDeclarations'] = [];
+  for (const [key, nodeIds] of Object.entries(declaredNodesByIssue)) {
+    const issueNumber = Number(key);
+    if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) throw new Error('Invalid declared issue identity');
+    for (const nodeId of nodeIds) {
+      if (!known.has(nodeId)) { unknown.push({ issueNumber, nodeId }); continue; }
+      const bound = declared.get(nodeId) ?? [];
+      if (!bound.includes(issueNumber)) bound.push(issueNumber);
+      declared.set(nodeId, bound);
+    }
+  }
+  return { declared, unknown };
+}
+
+function graphSideIssues(root: CompletionNode, into: Set<number> = new Set()): Set<number> {
+  for (const ref of root.issues ?? []) {
+    const issue = issueNumberFromRef(ref);
+    if (issue !== null) into.add(issue);
+  }
+  for (const child of root.children) graphSideIssues(child, into);
+  return into;
+}
+
+function trackedQueuedIssue(node: CompletionNode, queued: ReadonlySet<number>, declared: ReadonlyMap<string, number[]>): number | null {
   for (const ref of node.issues ?? []) {
     const issue = issueNumberFromRef(ref);
     if (issue !== null && queued.has(issue)) return issue;
+  }
+  for (const issue of declared.get(node.id) ?? []) {
+    if (queued.has(issue)) return issue;
   }
   return null;
 }
@@ -64,6 +113,9 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
   const queued = new Set(input.queuedIssueNumbers ?? []);
   const openWorkRefs = new Set(input.openWorkRefs ?? []);
   const now = input.now ?? new Date().toISOString();
+  const { declared, unknown } = indexDeclarations(root, input.declaredNodesByIssue ?? {});
+  const bound = new Set([...graphSideIssues(root), ...[...declared.values()].flat()]);
+  const unboundQueued = [...queued].filter(issue => !bound.has(issue)).sort((a, b) => a - b);
   const graph = cloneGraph(root);
   for (const id of input.occupiedNodeIds ?? []) {
     const node = findNode(graph, id);
@@ -84,7 +136,7 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     if (!result.selected) break;
 
     const selected = result.selected;
-    const issueNumber = trackedQueuedIssue(selected.node, queued);
+    const issueNumber = trackedQueuedIssue(selected.node, queued, declared);
     if (issueNumber !== null && !issues.includes(issueNumber)) {
       issues.push(issueNumber);
       leaves.push({
@@ -108,6 +160,10 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     leaves,
     untrackedLeaves,
     surfacedBlockers: [...blockerMap.values()],
+    unboundQueued,
+    unknownNodeDeclarations: unknown,
+    // Reporting this run as a healthy no-op is what let the binding gap run unseen.
+    starved: capacity > 0 && queued.size > 0 && issues.length === 0,
   };
 }
 
@@ -117,6 +173,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
     runningCount: Number(process.env.OC_RUNNING_COUNT ?? 0),
     queuedIssueNumbers: JSON.parse(process.env.OC_QUEUED_ISSUES_JSON ?? '[]'),
     openWorkRefs: JSON.parse(process.env.OC_OPEN_WORK_REFS_JSON ?? '[]'),
+    declaredNodesByIssue: JSON.parse(process.env.OC_DECLARED_NODES_JSON ?? '{}'),
     now: process.env.OC_NOW || undefined,
   };
   const plan = buildGraphDispatchPlan(input);

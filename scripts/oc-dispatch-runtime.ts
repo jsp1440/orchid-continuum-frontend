@@ -74,6 +74,25 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
     providerCostUsd: 0, ...extra }, null, 2) + '\n');
   output('outcome', outcome);
 }
+/**
+ * An idle wave with queued work and free capacity is a binding failure, not health.
+ * Say which side is missing: issues no node names, or nodes no queued issue names.
+ */
+export function bindingReport(plan: Plan) {
+  const lines: string[] = [];
+  if (plan.starved) {
+    lines.push(`STARVED: ${plan.capacity} free lane(s) and ${plan.inventory.queued} queued issue(s), nothing admitted. ` +
+      `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no queued issue.`);
+  }
+  if (plan.unboundQueued.length > 0) {
+    lines.push(`Unbound queued issues (no completion-graph node names them; bind one with an oc-node:<node-id> label): ${plan.unboundQueued.join(', ')}.`);
+  }
+  for (const { issueNumber, nodeId } of plan.unknownNodeDeclarations) {
+    lines.push(`Issue #${issueNumber} declares node '${nodeId}', which is not in the completion graph. Binding refused.`);
+  }
+  return lines.length > 0 ? `${lines.join('\n')}\n` : '';
+}
+
 async function main() {
   const command = process.argv[2];
   const store = new GitHubLeaseStore();
@@ -89,7 +108,7 @@ async function main() {
     writeFileSync(join(dir, `wave-${plan.wave.hash}.json`), plan.wave.canonical + '\n');
     output('issues', JSON.stringify(plan.issues));
     output('wave_hash', plan.wave.hash);
-    const summary = `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=false; no execution leases acquired.\n`;
+    const summary = `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=false; no execution leases acquired.\n${bindingReport(plan)}`;
     process.stdout.write(summary);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
     return;
