@@ -34,11 +34,11 @@
       "predicate": "reported_pollinated_by",
       "object": "Eucera (solitary bees)",
       "evidence_state": "CONTESTED",
-      "geographic_scope": "Mediterranean range",
+      "geographic_scope": "sporadically reported, chiefly in the Mediterranean",
       "provenance": [
         {
           "source_type": "peer_reviewed_literature",
-          "citation": "Darwin, C. (1862). On the Various Contrivances by which British and Foreign Orchids are Fertilised by Insects. John Murray, London.",
+          "citation": "Kullenberg, B. (1961). Studies in Ophrys pollination. Zoologiska Bidrag fran Uppsala 34: 1-340.",
           "identifier": null
         }
       ]
@@ -48,10 +48,10 @@
       "predicate": "reported_reproductive_strategy",
       "object": "Habitual self-pollination",
       "evidence_state": "SUPPORTED",
-      "geographic_scope": "North-western range",
+      "geographic_scope": "predominant throughout the range",
       "provenance": [
         {
-          "source_type": "peer_reviewed_literature",
+          "source_type": "scholarly_monograph",
           "citation": "Darwin, C. (1862). On the Various Contrivances by which British and Foreign Orchids are Fertilised by Insects. John Murray, London.",
           "identifier": null
         }
@@ -104,7 +104,7 @@
     "scope": "Mediterranean range; North-western range",
     "environmental_notes": [
       "Most records associate the taxon with calcareous grassland.",
-      "The reported reproductive strategy differs between parts of the range, so scope is part of the claim rather than context for it."
+      "The reports carry different scopes, but nothing retrieved establishes that those scopes are separate places, so the difference does not divide the range."
     ],
     "coordinates_present": false
   },
@@ -118,13 +118,13 @@
     {
       "name": "habitual self-pollination",
       "kind": "competing_mechanism",
-      "statement": "In the North-western range the subject reproduces without any insect, so the pollination relationship is not required to explain seed set there.",
+      "statement": "Habitual self-pollination is reported as the reproductive strategy (predominant throughout the range), which is a separate account of how seed set occurs.",
       "evidence_state": "SUPPORTED"
     },
     {
       "name": "no pollinator relationship in this population",
       "kind": "null_explanation",
-      "statement": "An observed insect visit does not establish pollination. Where a non-insect strategy already accounts for seed set, a visiting insect may be incidental.",
+      "statement": "An observed insect visit does not establish pollination. Where another retrieved strategy already accounts for seed set, a visiting insect may be incidental.",
       "evidence_state": "REPORTED_UNVERIFIED"
     }
   ],
@@ -134,11 +134,11 @@
         "reported_pollinated_by Eucera (solitary bees)",
         "reported_reproductive_strategy Habitual self-pollination"
       ],
-      "description": "One report describes an insect-mediated system; the other describes reproduction that needs no insect. They are not reconciled by preferring the better-supported one.",
+      "description": "One report gives Eucera (solitary bees); the other gives Habitual self-pollination. Both are carried. They are not reconciled by preferring the better-supported one.",
       "resolution": "unresolved_presented_as_contested",
       "scopes": [
-        "Mediterranean range",
-        "North-western range"
+        "sporadically reported, chiefly in the Mediterranean",
+        "predominant throughout the range"
       ]
     }
   ],
@@ -146,7 +146,8 @@
     "no population-level pollination observation is held",
     "no source quantifies the contribution of either strategy",
     "Eucera (solitary bees) is identified to genus, not species, in the retrieved evidence.",
-    "No local observation supports any retrieved claim; the evidence is literature and aggregated records only."
+    "No local observation supports any retrieved claim; the evidence is literature and aggregated records only.",
+    "The source for Ophrys apifera reported_pollinated_by Eucera (solitary bees) establishes this at genus level; nothing retrieved reports it for this species specifically."
   ],
   "known_unknowns": [
     "Whether the two reproductive strategies co-occur in one population or partition by geography.",
@@ -154,8 +155,8 @@
     "What conditions, if any, shift a population between strategies."
   ],
   "confidence": {
-    "qualitative": "moderate",
-    "basis": "The identity is resolved and both strategies are reported in the primary literature. Held below high because the reports conflict, no local observation supports either, and no source quantifies their contribution.",
+    "qualitative": "low",
+    "basis": "The taxonomic identity is resolved. Reports conflict and nothing retrieved settles the disagreement. 5 gap(s) remain in the retrieved evidence.",
     "numeric_precision_claimed": false
   },
   "locality_policy": {
@@ -187,9 +188,9 @@
   },
   "execution": {
     "traversal": {
-      "path_count": 6,
+      "path_count": 8,
       "node_count": 7,
-      "edge_count": 6,
+      "edge_count": 7,
       "engine": "app.brain.reasoning_map.ReasoningMapEngine"
     },
     "explanation": null,

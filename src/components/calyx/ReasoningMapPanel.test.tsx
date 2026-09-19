@@ -79,8 +79,15 @@ describe("the reasoning map as Calyx renders it", () => {
     const block = container.querySelector('[data-testid="reasoning-contradictions"]');
     expect(block).not.toBeNull();
     const text = block?.textContent ?? "";
-    expect(text).toMatch(/Mediterranean range/);
-    expect(text).toMatch(/North-western range/);
+    // Read the scopes off the fixture rather than naming them. They were
+    // hard-coded as "Mediterranean range" and "North-western range", which
+    // the executor stopped emitting (orchid-calyx-backend#1510 reworded scopes
+    // when it made resolution mean established disjointness). The point of this
+    // test is that each side is shown with the place it came from, so assert
+    // that against whatever the contract actually carries.
+    const scopes = map.contradictions[0].scopes ?? [];
+    expect(scopes.length).toBeGreaterThan(1);
+    for (const scope of scopes) expect(text).toContain(scope);
     expect(text).toMatch(/Left standing/i);
   });
 
@@ -123,7 +130,11 @@ describe("the reasoning map as Calyx renders it", () => {
     render(<ReasoningMapView map={map} />);
     const block = container.querySelector('[data-testid="reasoning-confidence"]');
     const text = block?.textContent ?? "";
-    expect(text).toMatch(/moderate/i);
+    // Not a hard-coded "moderate": a contradiction left standing must hold
+    // confidence down, and the executor now returns "low" for this fixture.
+    // Pinning the literal would have re-asserted the behaviour #1510 removed.
+    expect(text).toMatch(new RegExp(map.confidence.qualitative, "i"));
+    expect(map.confidence.qualitative).not.toMatch(/^high$/i);
     expect(text).toContain(map.confidence.basis);
     expect(text).not.toMatch(/\d+\s*%/);
     expect(map.confidence.numeric_precision_claimed).toBe(false);
