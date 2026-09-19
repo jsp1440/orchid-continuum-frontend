@@ -384,8 +384,6 @@ const COORDINATE_SHAPE = new RegExp(
     // Two long digit runs side by side: a projected coordinate, including the
     // Swiss and other national grids.
     "\\b\\d{5,8}\\s+\\d{5,8}\\b",
-    // Ordnance Survey national grid, spaced or not.
-    "\\b[HNOST][A-Z]\\s?\\d{2,5}\\s?\\d{2,5}\\b",
     // Open Location Code.
     "\\b[23456789CFGHJMPQRVWX]{4,8}\\+[23456789CFGHJMPQRVWX]{2,7}\\b",
     // Geohash: base-32 without a, i, l or o, and containing a digit. The
@@ -400,14 +398,23 @@ const COORDINATE_SHAPE = new RegExp(
     // panel is supposed to display, which is defending the page by breaking
     // what it exists to show. A bare address as an entire field value is caught;
     // one buried mid-sentence is not, and that gap is stated rather than hidden.
-    "^\\s*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}\\s*$",
+    "^[\\s(\u201c\"']*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}[\\s.,)\u201d\"']*$",
     // Degrees and decimal minutes with no symbol: `5145.20N 0115.47W`. This is
     // what a GPS receiver emits (NMEA), carries ~10m, and writes no pair the
-    // decimal arm can see.
-    "\\b\\d{3,5}\\.\\d{1,4}\\s*[NSEW]\\b",
-    // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but it is
-    // the whole-number form of a shape already covered for decimals.
-    "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
+    // decimal arm can see. Both halves are required: this list is built with
+    // the `i` flag, so a single-half arm let `[NSEW]` match the lowercase `w`
+    // in "A 150.0 W lamp over the bench" and the `s` in "exposure 1234.5 s",
+    // and withholding takes the whole field -- a privacy defence deleting the
+    // environmental context that `environmental_notes` exists to carry.
+    "\\b\\d{3,5}\\.\\d{1,4}\\s*[NS]\\D{0,4}\\d{3,5}\\.\\d{1,4}\\s*[EW]\\b",
+    // A bare projected pair standing alone as a whole field, underscore or
+    // space. Anchoring is the discriminator: every identifier this arm used to
+    // eat -- `specimen_12345_67890`, `GBIF_1234567_890123`, `OC_51234_06789` --
+    // carries a leading alphabetic token, and a coordinate does not. Without
+    // it, `632540_5712345` prints a usable easting and northing in the twenty
+    // fields the panel does not repaint; an underscore hides a position no
+    // better than a space does.
+    "^\\s*\\d{5,8}[\\s_]\\d{5,8}\\s*$",
     "[@=]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?\\s*[/,]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?",
     "(?:^|[^\\d.])[-+]?\\d{1,3}\\s*,\\s*[-+]\\d{1,3}(?!\\d|\\.\\d)",
     "\\d{1,3}\\s+\\d{1,2}['‘’′]\\d{1,2}(?:[\"“”″])?\\s*[NSEW]\\b",
@@ -468,23 +475,47 @@ function foldDigits(text: string): string {
 }
 
 function normalised(text: string): string {
-  // `_` becomes a space before this text is painted, so the scan has to see the
-  // string the reader will see. Doing it here covers every arm; `SEP` covered
-  // only the decimal-pair one, which is why `632540_5712345` passed the scan
-  // and the render then synthesised `632540 5712345` in the locality footer --
-  // the page manufacturing the coordinate it had just certified absent.
-  const painted = (value: string) => value.replace(/_/g, " ");
   try {
-    return painted(foldDigits(text.normalize("NFKC")));
+    return foldDigits(text.normalize("NFKC"));
   } catch {
-    return painted(foldDigits(text));
+    return foldDigits(text);
   }
 }
 
+/**
+ * Shapes whose letters carry the meaning, matched case-sensitively.
+ *
+ * These cannot live in the alternation above, because it is built with `i` and
+ * JS has no inline `(?-i)`. Left there, `[HNOST][A-Z]` matched any two-letter
+ * word starting h, n, o, s or t -- of, no, to, st, so, he -- and because both
+ * spaces are optional a single digit run satisfied the rest. "a survey of 1961
+ * records" was an Ordnance Survey grid reference to this scanner, and
+ * withholding takes the whole field, so an ordinary sentence in a citation or
+ * an evidence gap became `[coordinate withheld]`. The shipped fixture escaped
+ * only because its citation reads `Kullenberg, B. (1961)` and `B. (` is not a
+ * two-letter word.
+ *
+ * Grid references and hemisphere letters are written uppercase by convention,
+ * so requiring that costs no true positive and drops every one of those.
+ */
+const COORDINATE_SHAPE_CASED = new RegExp(
+  [
+    // Ordnance Survey national grid, spaced or not.
+    "\\b[HNOST][A-Z]\\s?\\d{2,5}\\s?\\d{2,5}\\b",
+    // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but the
+    // whole-number form of a shape already covered for decimals. Case-sensitive
+    // for the same reason: lowercased, `[NS]`/`[EW]` eat "12 s 34 w".
+    "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
+  ].join("|"),
+  "g",
+);
+
 /** True when the text carries something shaped like a coordinate. */
 export function carriesCoordinate(text: string): boolean {
+  const subject = normalised(text);
   COORDINATE_SHAPE.lastIndex = 0;
-  return COORDINATE_SHAPE.test(normalised(text));
+  COORDINATE_SHAPE_CASED.lastIndex = 0;
+  return COORDINATE_SHAPE.test(subject) || COORDINATE_SHAPE_CASED.test(subject);
 }
 
 /** What stands in for a coordinate this surface refused to print. */
@@ -652,6 +683,39 @@ export function sanitiseLocality<T>(input: T): Sanitised<T> {
   return { value, fieldsWithheld };
 }
 
+/**
+ * Apply the panel's `_`-to-space repaint before anything is scanned.
+ *
+ * Three fields are rendered with underscores rewritten. Doing that after the
+ * scan meant the reader saw a string the scan never examined, and
+ * `632540_5712345` became `632540 5712345` in the locality footer under that
+ * footer's own statement that nothing had matched.
+ *
+ * Repainting here instead of at the render sites is what makes the footer
+ * count honest: the substitutions the reader sees are the substitutions
+ * `sanitiseLocality` made, because there is only one pass. Withholding at the
+ * render site fixed the leak but never reached `fieldsWithheld`, so the page
+ * printed the marker and denied it in the same sentence.
+ */
+function repaintBeforeScan(map: ReasoningMap): ReasoningMap {
+  const paint = (text: string) => text.replace(/_/g, " ");
+  return {
+    ...map,
+    locality_policy: {
+      ...map.locality_policy,
+      disclosure: paint(map.locality_policy.disclosure),
+    },
+    relationships: map.relationships.map(relationship => ({
+      ...relationship,
+      predicate: paint(relationship.predicate),
+    })),
+    contradictions: map.contradictions.map(contradiction => ({
+      ...contradiction,
+      between: contradiction.between.map(paint),
+    })),
+  };
+}
+
 export interface LocalityScan {
   /** How many fields this pass withheld. */
   fieldsWithheld: number;
@@ -668,7 +732,7 @@ export interface LocalityScan {
  * positions onto the page under the sentence "none carried a coordinate".
  */
 export function sanitiseMap(map: ReasoningMap): { map: ReasoningMap; scan: LocalityScan } {
-  const { value, fieldsWithheld } = sanitiseLocality(map);
+  const { value, fieldsWithheld } = sanitiseLocality(repaintBeforeScan(map));
   return {
     map: value,
     scan: {
