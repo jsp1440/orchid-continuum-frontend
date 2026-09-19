@@ -13,9 +13,11 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import {
+  BROWSER_DRIVEN_SCRIPTS,
   CapabilityUnknown,
   DETERMINISTIC_CAPABILITIES,
   LOCAL_EXECUTORS,
+  NOT_LANE_EXECUTABLE,
   PROVIDER_CAPABILITIES,
   SHARED_CAPABILITIES,
   commandsFor,
@@ -280,12 +282,75 @@ describe('agreement with the other two repositories', () => {
     const local = Object.keys(LOCAL_EXECUTORS).filter(
       (name) => !(name in SHARED_CAPABILITIES),
     );
-    expect(local.sort()).toEqual([
-      'build-verification',
-      'route-verification',
-      'typecheck-execution',
-    ]);
+    expect(local.sort()).toEqual(['build-verification', 'typecheck-execution']);
     for (const name of local) expect(DETERMINISTIC_CAPABILITIES[name]).toMatch(/^npm run /);
+  });
+
+  it('binds no capability to a command the worker cannot run', () => {
+    // The defect this pins: `route-verification` was bound to `npm run
+    // verify:routes`, which drives Playwright. The worker installs with
+    // `npm ci --ignore-scripts`, so no browser binary exists and the lane
+    // returned `outcome: failed` twice on issue #171 with
+    // `browserType.launch: Executable doesn't exist`.
+    const pkg = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    for (const command of Object.values(LOCAL_EXECUTORS) as string[]) {
+      const script = command.slice('npm run '.length);
+      expect(BROWSER_DRIVEN_SCRIPTS).not.toContain(script);
+      // Belt and braces: catch a newly browser-driven script by its body too.
+      expect(pkg.scripts[script]).not.toMatch(/playwright|browser-route-sweep|puppeteer/);
+    }
+  });
+
+  it('lists every browser-driven npm script as browser-driven', () => {
+    const pkg = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    const driven = Object.entries(pkg.scripts)
+      .filter(([, body]) => /playwright|browser-route-sweep|puppeteer/.test(body))
+      .map(([name]) => name);
+    expect(driven.sort()).toEqual([...BROWSER_DRIVEN_SCRIPTS].sort());
+  });
+
+  it('reports an unrunnable capability as deterministic, never as unknown', () => {
+    for (const name of Object.keys(NOT_LANE_EXECUTABLE)) {
+      const routing = routeIssue({ number: 171, body: '', labels: [`oc-cap:${name}`] });
+      expect(routing.deterministicElsewhere).toContain(name);
+      expect(routing.blockingProvider).toEqual([]);
+      expect(routing.fullyBlocked).toBe(false);
+      expect(commandsFor(routing)).toEqual([]);
+      expect(refusalRecord({ number: 171 }, routing).reason).toMatch(/not a provider blocker/);
+    }
+  });
+
+  it('still runs the executable work in an issue that also names an unrunnable one', () => {
+    const routing = routeIssue({
+      number: 171,
+      body: '',
+      labels: ['oc-cap:route-verification', 'oc-cap:test-execution'],
+    });
+    expect(routing.providerFree).toBe(true);
+    expect(commandsFor(routing)).toEqual(['npm run test']);
+    expect(routing.deterministicElsewhere).toEqual(['route-verification']);
+  });
+
+  it('never both binds and disowns the same capability', () => {
+    for (const name of Object.keys(NOT_LANE_EXECUTABLE)) {
+      expect(name in LOCAL_EXECUTORS).toBe(false);
+    }
+  });
+
+  it('says why each unrunnable capability cannot run', () => {
+    const entries = Object.values(NOT_LANE_EXECUTABLE) as {
+      command: string;
+      reason: string;
+    }[];
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(entry.command).toMatch(/^npm run /);
+      expect(entry.reason.length).toBeGreaterThan(20);
+    }
   });
 
   it('maps every locally executable capability to a real npm script', () => {
