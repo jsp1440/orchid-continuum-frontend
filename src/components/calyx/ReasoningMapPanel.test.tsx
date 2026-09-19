@@ -79,8 +79,21 @@ describe("the reasoning map as Calyx renders it", () => {
     const block = container.querySelector('[data-testid="reasoning-contradictions"]');
     expect(block).not.toBeNull();
     const text = block?.textContent ?? "";
-    expect(text).toMatch(/Mediterranean range/);
-    expect(text).toMatch(/North-western range/);
+    // Read the scopes off the fixture rather than naming them. They were
+    // hard-coded as "Mediterranean range" and "North-western range", which
+    // the executor stopped emitting (orchid-calyx-backend#1510 reworded scopes
+    // when it made resolution mean established disjointness). The point of this
+    // test is that each side is shown with the place it came from, so assert
+    // that against whatever the contract actually carries.
+    const scopes = map.contradictions[0].scopes ?? [];
+    expect(scopes.length).toBeGreaterThan(1);
+    for (const scope of scopes) {
+      // Without this guard the assertion is vacuous: two empty strings satisfy
+      // `length > 1`, and `toContain("")` is always true, so a panel that
+      // rendered no scope at all would pass. Found by mutation during review.
+      expect(scope.trim().length).toBeGreaterThan(0);
+      expect(text).toContain(scope);
+    }
     expect(text).toMatch(/Left standing/i);
   });
 
@@ -123,7 +136,17 @@ describe("the reasoning map as Calyx renders it", () => {
     render(<ReasoningMapView map={map} />);
     const block = container.querySelector('[data-testid="reasoning-confidence"]');
     const text = block?.textContent ?? "";
-    expect(text).toMatch(/moderate/i);
+    // Not a hard-coded "moderate": a contradiction left standing must hold
+    // confidence down, and the executor now returns "low" for this fixture.
+    // Pinning the literal would have re-asserted the behaviour #1510 removed.
+    // A bare substring match on "low" is satisfied by allow, below and follow,
+    // so a panel that never rendered the value could pass. Require the value as
+    // a whole word, and pin it to a plain alphabetic vocabulary so the pattern
+    // cannot be built from a metacharacter. Both found by mutation during review.
+    const qualitative = map.confidence.qualitative;
+    expect(qualitative).toMatch(/^[a-z]+$/i);
+    expect(text).toMatch(new RegExp(`\\b${qualitative}\\b`, "i"));
+    expect(qualitative).not.toMatch(/^high$/i);
     expect(text).toContain(map.confidence.basis);
     expect(text).not.toMatch(/\d+\s*%/);
     expect(map.confidence.numeric_precision_claimed).toBe(false);
