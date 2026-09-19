@@ -35,6 +35,14 @@ concurrency:
 jobs:
   budget-preflight:
     runs-on: ubuntu-latest
+    # Admits or refuses one issue against the budget: reads a wave artifact and
+    # writes a receipt. It mints no OIDC token and dispatches no workflow, so it
+    # does not get `id-token: write` or `actions: write` — the same latent
+    # privilege the classify narrowing removed, on a job that also takes
+    # attacker-controlled issue text as input.
+    permissions:
+      contents: read
+      issues: write
     outputs:
       allowed: ${{ steps.budget.outputs.allowed }}
       lease_id: ${{ steps.budget.outputs.lease_id }}
@@ -82,6 +90,13 @@ jobs:
   # five minutes, for 24 queued issues, while the run reported success.
   classify:
     runs-on: ubuntu-latest
+    # This job's entire input is issue text and labels, which anyone who can open
+    # an issue controls. It reads one issue and writes one local file, so it gets
+    # exactly that: without this block it inherits the workflow-level grant, which
+    # includes `actions: write` and `id-token: write`.
+    permissions:
+      contents: read
+      issues: read
     outputs:
       provider_free: ${{ steps.route.outputs.provider_free }}
       commands: ${{ steps.route.outputs.commands }}
@@ -97,6 +112,18 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           REPO: ${{ github.repository }}
         run: node scripts/oc-provider-free-route.mjs
+      # Without this the routing record dies with the runner, and a refusal that
+      # explains itself only in a job log is not durable. `provider-free-worker`
+      # had the same gap and is fixed in the same commit; `settle` already
+      # uploaded.
+      - name: Preserve the routing record
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-route-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-receipts/*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
   provider-free-worker:
     needs: classify
@@ -121,10 +148,29 @@ jobs:
       # The commands are chosen from a fixed registry, never from issue text.
       - name: Execute declared deterministic capabilities
         run: node scripts/oc-provider-free-execute.mjs
+      # The routing record said what the lane decided; this one says what it
+      # actually ran, with an exit code and output tail per command. Without the
+      # upload it dies with the runner and `audit` cannot read it — the same
+      # defect the classify job was just fixed for, one job over.
+      - name: Preserve the execution receipt
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-exec-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-receipts/*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
   provider-worker:
     needs: budget-preflight
     if: inputs.provider_authorized && needs.budget-preflight.outputs.allowed == 'true' && needs.budget-preflight.outputs.lease_id != ''
+    # A reusable-workflow call forwards whatever grant this job holds, so an
+    # unset block here hands the called workflow all five workflow-level
+    # permissions. It opens a draft pull request and comments, and that is all.
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
     uses: ./.github/workflows/orchid-completion-lane.yml
     with:
       issue_number: ${{ inputs.issue_number }}
@@ -138,6 +184,11 @@ jobs:
     needs: [budget-preflight, provider-worker]
     if: always() && needs.budget-preflight.outputs.lease_id != ''
     runs-on: ubuntu-latest
+    # Releases the lease and refills capacity by relabelling issues. Nothing
+    # here opens a pull request, dispatches a workflow, or needs an OIDC token.
+    permissions:
+      contents: read
+      issues: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

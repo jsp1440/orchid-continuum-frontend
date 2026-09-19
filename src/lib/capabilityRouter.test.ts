@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import {
   CapabilityUnknown,
   DETERMINISTIC_CAPABILITIES,
@@ -222,15 +223,42 @@ describe('agreement with the other two repositories', () => {
   // were provider capabilities. It compared nothing against either other
   // repository, so it passed while 11 of the 14 shared deterministic
   // capabilities raised CapabilityUnknown here and were refused as though they
-  // needed a provider. These read the vendored contract instead.
-  const brain = JSON.parse(
-    readFileSync(new URL('../../contracts/oc-shared-capabilities.v1.json', import.meta.url), 'utf8'),
-  ) as { schema: string; capabilities: { name: string; provider_required: boolean }[] };
+  // needed a provider.
+  //
+  // This reads the vendored contract. Naming the variable `brain` made that
+  // read as a cross-repository check when it is not one: SHARED_CAPABILITIES is
+  // built from this same file, so comparing them is an identity and a checker
+  // corrupted the contract with `sed` while every test stayed green. The name
+  // says what it is now, and the hash below is what actually pins it.
+  const vendored = readFileSync(
+    new URL('../../contracts/oc-shared-capabilities.v1.json', import.meta.url),
+    'utf8',
+  );
+  const contract = JSON.parse(vendored) as {
+    schema: string;
+    capabilities: { name: string; provider_required: boolean }[];
+  };
+  const provenance = JSON.parse(
+    readFileSync(
+      new URL('../../contracts/oc-shared-capabilities.provenance.json', import.meta.url),
+      'utf8',
+    ),
+  ) as { sha256: string; upstream: { commit: string } };
+
+  it('pins the vendored contract to the hash it was vendored at', () => {
+    // Editing the contract without re-vendoring now fails here. This catches a
+    // local change, not drift in the Brain — the provenance file says so in as
+    // many words, because a pin that is claimed and not performed is worse than
+    // no pin: the router's own comment claimed this one before it existed.
+    const digest = createHash('sha256').update(vendored).digest('hex');
+    expect(digest).toBe(provenance.sha256);
+    expect(provenance.upstream.commit).toMatch(/^[0-9a-f]{40}$/);
+  });
 
   it('classifies every shared capability exactly as the shared contract does', () => {
-    expect(brain.schema).toBe('oc.cognitive-integration-capabilities.v1');
-    expect(brain.capabilities.length).toBeGreaterThan(0);
-    for (const capability of brain.capabilities) {
+    expect(contract.schema).toBe('oc.cognitive-integration-capabilities.v1');
+    expect(contract.capabilities.length).toBeGreaterThan(0);
+    for (const capability of contract.capabilities) {
       expect(SHARED_CAPABILITIES[capability.name]).toBe(capability.provider_required);
     }
   });
@@ -238,7 +266,7 @@ describe('agreement with the other two repositories', () => {
   it('routes every shared deterministic capability without raising', () => {
     // The defect this pins: a backend-owned deterministic capability such as
     // `reconcile` used to throw here, and a throw routes provider_free=false.
-    for (const capability of brain.capabilities.filter((c) => !c.provider_required)) {
+    for (const capability of contract.capabilities.filter((c) => !c.provider_required)) {
       const routing = routeIssue(issue(`OC-SWARM-CAPABILITY: ${capability.name}`));
       expect(routing.blockingProvider).toEqual([]);
       expect(routing.fullyBlocked).toBe(false);
@@ -246,7 +274,7 @@ describe('agreement with the other two repositories', () => {
   });
 
   it('never runs deterministic work it cannot actually execute', () => {
-    const elsewhere = brain.capabilities.find(
+    const elsewhere = contract.capabilities.find(
       (c) => !c.provider_required && !(c.name in LOCAL_EXECUTORS),
     );
     expect(elsewhere).toBeDefined();
@@ -275,16 +303,13 @@ describe('agreement with the other two repositories', () => {
   });
 
   it('declares its frontend-only capabilities as deterministic', () => {
-    // No other repository has a TypeScript project, a router or a Vite build,
-    // so these three have no shared counterpart by design.
+    // No other repository has a TypeScript project or a Vite build, so these
+    // have no shared counterpart by design. `route-verification` was here too
+    // until it was removed: it could not succeed in this job.
     const local = Object.keys(LOCAL_EXECUTORS).filter(
       (name) => !(name in SHARED_CAPABILITIES),
     );
-    expect(local.sort()).toEqual([
-      'build-verification',
-      'route-verification',
-      'typecheck-execution',
-    ]);
+    expect(local.sort()).toEqual(['build-verification', 'typecheck-execution']);
     for (const name of local) expect(DETERMINISTIC_CAPABILITIES[name]).toMatch(/^npm run /);
   });
 
@@ -295,6 +320,24 @@ describe('agreement with the other two repositories', () => {
     for (const command of Object.values(LOCAL_EXECUTORS) as string[]) {
       expect(command.startsWith('npm run ')).toBe(true);
       expect(pkg.scripts[command.slice('npm run '.length)]).toBeDefined();
+    }
+  });
+});
+
+
+describe('a capability that cannot succeed is not offered', () => {
+  it('does not bind route-verification to an executor', () => {
+    // `npm run verify:routes` drives Playwright against a preview server that
+    // nothing in the provider-free job starts, so it would fail on every run,
+    // turn the scheduled controller red every five minutes, and teach everyone
+    // to ignore it. It returns with the step that starts the server.
+    expect(Object.values(LOCAL_EXECUTORS)).not.toContain('npm run verify:routes');
+    expect(Object.keys(LOCAL_EXECUTORS)).not.toContain('route-verification');
+  });
+
+  it('still classifies every capability it binds an executor to', () => {
+    for (const name of Object.keys(LOCAL_EXECUTORS)) {
+      expect(DETERMINISTIC_CAPABILITIES[name]).toBeDefined();
     }
   });
 });
