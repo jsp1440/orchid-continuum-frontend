@@ -1,0 +1,200 @@
+{
+  "schema_version": "1.0.0",
+  "question": "What pollinates the bee orchid, and is the answer the same everywhere it grows?",
+  "intent": {
+    "decomposition": [
+      "Resolve the subject to an accepted taxon.",
+      "Retrieve reported reproductive relationships for that taxon.",
+      "Retrieve the geographic scope each report applies to.",
+      "Compare reports that disagree rather than choosing between them.",
+      "State what the retrieved evidence does not cover."
+    ],
+    "deterministic": true
+  },
+  "capabilities_selected": [
+    "taxonomy-resolution",
+    "literature-evidence-lookup",
+    "interaction-kg-lookup",
+    "geospatial-context",
+    "reasoning-map-assembly",
+    "contradiction-detection",
+    "evidence-gap-detection",
+    "locality-redaction"
+  ],
+  "taxonomic_identity": {
+    "accepted_name": "Ophrys apifera",
+    "authorship": "Huds.",
+    "rank": "species",
+    "taxonomic_status": "recorded_in_orchid_taxonomy_table",
+    "resolved_against": "knowledge graph taxon node"
+  },
+  "relationships": [
+    {
+      "subject": "Ophrys apifera",
+      "predicate": "reported_pollinated_by",
+      "object": "Eucera (solitary bees)",
+      "evidence_state": "CONTESTED",
+      "geographic_scope": "Mediterranean range",
+      "provenance": [
+        {
+          "source_type": "peer_reviewed_literature",
+          "citation": "Darwin, C. (1862). On the Various Contrivances by which British and Foreign Orchids are Fertilised by Insects. John Murray, London.",
+          "identifier": null
+        }
+      ]
+    },
+    {
+      "subject": "Ophrys apifera",
+      "predicate": "reported_reproductive_strategy",
+      "object": "Habitual self-pollination",
+      "evidence_state": "SUPPORTED",
+      "geographic_scope": "North-western range",
+      "provenance": [
+        {
+          "source_type": "peer_reviewed_literature",
+          "citation": "Darwin, C. (1862). On the Various Contrivances by which British and Foreign Orchids are Fertilised by Insects. John Murray, London.",
+          "identifier": null
+        }
+      ]
+    },
+    {
+      "subject": "Ophrys apifera",
+      "predicate": "co_occurs_with",
+      "object": "Calcareous grassland",
+      "evidence_state": "REPORTED_UNVERIFIED",
+      "geographic_scope": null,
+      "provenance": [
+        {
+          "source_type": "occurrence_dataset",
+          "citation": "Aggregated occurrence records held in the Continuum, habitat field only.",
+          "identifier": null
+        }
+      ]
+    },
+    {
+      "subject": "Ophrys apifera",
+      "predicate": "reported_from",
+      "object": "Mediterranean range",
+      "evidence_state": "REPORTED_UNVERIFIED",
+      "geographic_scope": null,
+      "provenance": [
+        {
+          "source_type": "occurrence_dataset",
+          "citation": "Aggregated occurrence records, country resolution only.",
+          "identifier": null
+        }
+      ]
+    },
+    {
+      "subject": "Ophrys apifera",
+      "predicate": "reported_from",
+      "object": "North-western range",
+      "evidence_state": "REPORTED_UNVERIFIED",
+      "geographic_scope": null,
+      "provenance": [
+        {
+          "source_type": "occurrence_dataset",
+          "citation": "Aggregated occurrence records, country resolution only.",
+          "identifier": null
+        }
+      ]
+    }
+  ],
+  "geographic_context": {
+    "scope": "Mediterranean range; North-western range",
+    "environmental_notes": [
+      "Most records associate the taxon with calcareous grassland.",
+      "The reported reproductive strategy differs between parts of the range, so scope is part of the claim rather than context for it."
+    ],
+    "coordinates_present": false
+  },
+  "mechanisms": [
+    {
+      "name": "sexual deception",
+      "kind": "proposed_mechanism",
+      "statement": "Eucera (solitary bees) is reported to pollinate the subject by sexual deception.",
+      "evidence_state": "SUPPORTED"
+    },
+    {
+      "name": "habitual self-pollination",
+      "kind": "competing_mechanism",
+      "statement": "In the North-western range the subject reproduces without any insect, so the pollination relationship is not required to explain seed set there.",
+      "evidence_state": "SUPPORTED"
+    },
+    {
+      "name": "no pollinator relationship in this population",
+      "kind": "null_explanation",
+      "statement": "An observed insect visit does not establish pollination. Where a non-insect strategy already accounts for seed set, a visiting insect may be incidental.",
+      "evidence_state": "REPORTED_UNVERIFIED"
+    }
+  ],
+  "contradictions": [
+    {
+      "between": [
+        "reported_pollinated_by Eucera (solitary bees)",
+        "reported_reproductive_strategy Habitual self-pollination"
+      ],
+      "description": "One report describes an insect-mediated system; the other describes reproduction that needs no insect. They are not reconciled by preferring the better-supported one.",
+      "resolution": "unresolved_presented_as_contested",
+      "scopes": [
+        "Mediterranean range",
+        "North-western range"
+      ]
+    }
+  ],
+  "evidence_gaps": [
+    "no population-level pollination observation is held",
+    "no source quantifies the contribution of either strategy",
+    "Eucera (solitary bees) is identified to genus, not species, in the retrieved evidence.",
+    "No local observation supports any retrieved claim; the evidence is literature and aggregated records only."
+  ],
+  "known_unknowns": [
+    "Whether the two reproductive strategies co-occur in one population or partition by geography.",
+    "Whether the insect-mediated mechanism is currently active throughout the range.",
+    "What conditions, if any, shift a population between strategies."
+  ],
+  "confidence": {
+    "qualitative": "moderate",
+    "basis": "The identity is resolved and both strategies are reported in the primary literature. Held below high because the reports conflict, no local observation supports either, and no source quantifies their contribution.",
+    "numeric_precision_claimed": false
+  },
+  "locality_policy": {
+    "protected_taxon_present": true,
+    "disclosure": "WITHHELD_PENDING_REVIEW",
+    "redaction_applied": true
+  },
+  "recommended_next_evidence": [
+    "Pollinator observation records with the insect identified to species.",
+    "Exclusion experiments separating self-pollinated from insect-mediated seed set.",
+    "Any source reporting both strategies in one population, which would resolve the contradiction by scope rather than leaving it contested."
+  ],
+  "handoffs": {
+    "research_station": {
+      "available": true,
+      "carries_evidence_states": true
+    },
+    "education": {
+      "available": true,
+      "audience_adaptation_may_change_meaning": false
+    }
+  },
+  "governance": {
+    "scientific_review_required": true,
+    "automatic_publication": false,
+    "automatic_candidate_knowledge": false,
+    "automatic_knowledge_promotion": false,
+    "production_runtime_enabled": false
+  },
+  "execution": {
+    "traversal": {
+      "path_count": 6,
+      "node_count": 7,
+      "edge_count": 6,
+      "engine": "app.brain.reasoning_map.ReasoningMapEngine"
+    },
+    "explanation": null,
+    "explanation_available": false,
+    "explanation_capability": "natural-language-explanation",
+    "provider_calls": 0
+  }
+}
