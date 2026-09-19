@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Scatter, ScatterChart, XAxis, YAxis } from "recharts";
 
+import ReasoningMapPanel from "@/components/calyx/ReasoningMapPanel";
 import ScientificSynthesis from "@/components/calyx/ScientificSynthesis";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
@@ -914,6 +915,20 @@ export default function CalyxWorkspace() {
         </div>
 
         {loading ? <p className="text-sm text-muted-foreground">Loading Calyx systems…</p> : null}
+        {/* The worked scientific question. This is the surface where evidence,
+            hypothesis, contradiction, uncertainty and unknown stay apart — the
+            conversation above can summarise, but it must not be the only place
+            a reader sees how an answer was reached. */}
+        <section className="rounded-xl border bg-card p-5" data-testid="calyx-reasoning-section">
+          <h2 className="font-semibold">Worked question</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            One orchid-science question traced from the evidence to the answer, including where the
+            sources disagree and what is still unknown.
+          </p>
+          <div className="mt-4">
+            <ReasoningMapPanel />
+          </div>
+        </section>
         {snapshot.errors.length ? <section className="rounded-xl border p-4"><h2 className="font-semibold">Degraded connections</h2><ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">{snapshot.errors.map((error) => <li key={error}>{error}</li>)}</ul></section> : null}
         <section className="grid gap-4 md:grid-cols-3"><article className="rounded-xl border p-5"><h2 className="font-semibold">Platform capabilities</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.capabilities ? "Canonical capability contract available." : "Capability service unavailable."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Conversation persistence</h2><p className="mt-2 text-sm text-muted-foreground">{conversation?.persistence_mode ? `${conversation.persistence_mode} conversation state reported by the backend.` : "A server thread will be created when you send the first message."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Durable orchestrator</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.orchestratorState === "available" ? "Authenticated orchestrator status available." : snapshot.orchestratorState === "authentication_required" ? <><Link className="underline" to="/mission-control">Sign in at Mission Control</Link> to enable the durable orchestrator.</> : "Orchestrator status unavailable."}</p></article></section>
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"><Link className="rounded-xl border p-5 hover:bg-muted" to="/relationship-matrix"><h2 className="font-semibold">Relationship Matrix</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/orchid-identification"><h2 className="font-semibold">Orchid Identification</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/continuum-next"><h2 className="font-semibold">Homepage Intelligence</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/university"><h2 className="font-semibold">Orchid University</h2></Link></section>
