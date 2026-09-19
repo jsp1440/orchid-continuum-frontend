@@ -384,8 +384,6 @@ const COORDINATE_SHAPE = new RegExp(
     // Two long digit runs side by side: a projected coordinate, including the
     // Swiss and other national grids.
     "\\b\\d{5,8}\\s+\\d{5,8}\\b",
-    // Ordnance Survey national grid, spaced or not.
-    "\\b[HNOST][A-Z]\\s?\\d{2,5}\\s?\\d{2,5}\\b",
     // Open Location Code.
     "\\b[23456789CFGHJMPQRVWX]{4,8}\\+[23456789CFGHJMPQRVWX]{2,7}\\b",
     // Geohash: base-32 without a, i, l or o, and containing a digit. The
@@ -417,9 +415,6 @@ const COORDINATE_SHAPE = new RegExp(
     // fields the panel does not repaint; an underscore hides a position no
     // better than a space does.
     "^\\s*\\d{5,8}[\\s_]\\d{5,8}\\s*$",
-    // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but it is
-    // the whole-number form of a shape already covered for decimals.
-    "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
     "[@=]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?\\s*[/,]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?",
     "(?:^|[^\\d.])[-+]?\\d{1,3}\\s*,\\s*[-+]\\d{1,3}(?!\\d|\\.\\d)",
     "\\d{1,3}\\s+\\d{1,2}['‘’′]\\d{1,2}(?:[\"“”″])?\\s*[NSEW]\\b",
@@ -487,10 +482,40 @@ function normalised(text: string): string {
   }
 }
 
+/**
+ * Shapes whose letters carry the meaning, matched case-sensitively.
+ *
+ * These cannot live in the alternation above, because it is built with `i` and
+ * JS has no inline `(?-i)`. Left there, `[HNOST][A-Z]` matched any two-letter
+ * word starting h, n, o, s or t -- of, no, to, st, so, he -- and because both
+ * spaces are optional a single digit run satisfied the rest. "a survey of 1961
+ * records" was an Ordnance Survey grid reference to this scanner, and
+ * withholding takes the whole field, so an ordinary sentence in a citation or
+ * an evidence gap became `[coordinate withheld]`. The shipped fixture escaped
+ * only because its citation reads `Kullenberg, B. (1961)` and `B. (` is not a
+ * two-letter word.
+ *
+ * Grid references and hemisphere letters are written uppercase by convention,
+ * so requiring that costs no true positive and drops every one of those.
+ */
+const COORDINATE_SHAPE_CASED = new RegExp(
+  [
+    // Ordnance Survey national grid, spaced or not.
+    "\\b[HNOST][A-Z]\\s?\\d{2,5}\\s?\\d{2,5}\\b",
+    // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but the
+    // whole-number form of a shape already covered for decimals. Case-sensitive
+    // for the same reason: lowercased, `[NS]`/`[EW]` eat "12 s 34 w".
+    "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
+  ].join("|"),
+  "g",
+);
+
 /** True when the text carries something shaped like a coordinate. */
 export function carriesCoordinate(text: string): boolean {
+  const subject = normalised(text);
   COORDINATE_SHAPE.lastIndex = 0;
-  return COORDINATE_SHAPE.test(normalised(text));
+  COORDINATE_SHAPE_CASED.lastIndex = 0;
+  return COORDINATE_SHAPE.test(subject) || COORDINATE_SHAPE_CASED.test(subject);
 }
 
 /** What stands in for a coordinate this surface refused to print. */

@@ -133,3 +133,32 @@ describe("the repaint, and the footer count that has to match it", () => {
     expect(scan.fieldsWithheld).toBe(0);
   });
 });
+
+describe("prose the grid-reference arm used to blank", () => {
+  // `[HNOST][A-Z]` in a list built with `i` matched any two-letter word
+  // starting h, n, o, s or t -- of, no, to, st, so, he -- and both spaces
+  // being optional meant one digit run satisfied the rest. "a survey of 1961
+  // records" was an Ordnance Survey grid reference to this scanner, and
+  // withholding takes the whole field. The shipped fixture escaped only
+  // because its citation reads `Kullenberg, B. (1961)`.
+  const renders = [
+    "a survey of 1961 records",
+    "notes of 1862 refer to it",
+    "the population of 1200 plants",
+    "no 12345 was recorded",
+    "south of 1961",
+    "st 12345 marks the site",
+    "to 1234 5678 metres",
+    "held 1961 records of 3400 plants",
+    "voucher 12345 of 67890 collected",
+    "exposure 12 s 34 w lamp",
+  ];
+  for (const text of renders) {
+    it(`renders "${text}"`, () => expect(carriesCoordinate(text)).toBe(false));
+  }
+
+  const grids = ["SP 51234 06789", "TQ1234", "NY 1234 5678", "ST 12 34", "51N 1W"];
+  for (const text of grids) {
+    it(`still catches ${text}`, () => expect(carriesCoordinate(text)).toBe(true));
+  }
+});
