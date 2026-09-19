@@ -15,7 +15,7 @@
       "expiresAt": "2026-09-19T22:45:21.726Z",
       "reservedUsd": 0,
       "lane": "provider-free",
-      "state": "reserved"
+      "state": "provider-free-done"
     }
   ]
 }
