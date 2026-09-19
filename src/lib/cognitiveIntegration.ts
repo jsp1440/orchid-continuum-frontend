@@ -225,16 +225,154 @@ export function contestedRelationships(map: ReasoningMap): Relationship[] {
   return map.relationships.filter((r) => r.evidence_state === "CONTESTED");
 }
 
+/** Relationships a source contradicts. Distinct from merely uncorroborated. */
+export function refutedRelationships(map: ReasoningMap): Relationship[] {
+  return map.relationships.filter((r) => r.evidence_state === "REFUTED");
+}
+
+/** Relationships nothing corroborates and nothing contradicts. */
+export function uncorroboratedRelationships(map: ReasoningMap): Relationship[] {
+  return map.relationships.filter((r) => r.evidence_state === "REPORTED_UNVERIFIED");
+}
+
+export type Settlement =
+  /** A disagreement is standing. Nothing here may be read as the answer. */
+  | "unsettled"
+  /** Both accounts hold, in different places. Neither replaces the other. */
+  | "settled_by_scope"
+  /** Retrieved evidence settled it, or nothing disagreed in the first place. */
+  | "settled";
+
+/**
+ * How far the reasoning got, in the only three states it can honestly be in.
+ *
+ * Reading `contradictions` alone is not enough. A relationship carrying
+ * `CONTESTED` is a disagreement whether or not anything wrote it up, and a map
+ * that states one while listing no contradiction has described a conflict it
+ * has not accounted for — the header must not call that an answer.
+ *
+ * `settled_by_scope` is deliberately not folded into `settled`. Scope
+ * resolution means both accounts survive, partitioned; saying "the evidence
+ * points to one account" would discard the half that applies elsewhere.
+ */
+export function settlement(map: ReasoningMap): Settlement {
+  if (
+    map.contradictions.some((c) => c.resolution === "unresolved_presented_as_contested")
+  ) {
+    return "unsettled";
+  }
+  if (contestedRelationships(map).length > 0 && map.contradictions.length === 0) {
+    return "unsettled";
+  }
+  if (map.contradictions.some((c) => c.resolution === "resolved_by_scope")) {
+    return "settled_by_scope";
+  }
+  return "settled";
+}
+
 /**
  * Whether anything here may be read as an answer.
  *
- * False when a contradiction is left standing: the honest surface for that is
+ * False when a disagreement is left standing: the honest surface for that is
  * "sources disagree", not a conclusion.
  */
 export function hasSettledAnswer(map: ReasoningMap): boolean {
-  return !map.contradictions.some(
-    (c) => c.resolution === "unresolved_presented_as_contested",
+  return settlement(map) !== "unsettled";
+}
+
+/**
+ * Coordinate shapes, so this surface does not print one.
+ *
+ * The backend redacts and fails closed, and the map arrives carrying
+ * `coordinates_present: false`. This does not take that on trust. A protected
+ * locality leaked by a bug upstream is disclosed the moment it is painted, and
+ * the reader has no way to know the field they are looking at was supposed to
+ * have been cleaned. So the text is checked here too, immediately before it is
+ * rendered, in whatever field it arrives in.
+ *
+ * The shapes: a decimal pair (comma, semicolon or space separated), a
+ * lat/lon-labelled number, and degrees-minutes with either apostrophe, with or
+ * without a hemisphere letter.
+ */
+const COORDINATE_SHAPE = new RegExp(
+  [
+    "[-+]?\\d{1,3}\\.\\d+\\s*(?:[,;]\\s*|\\s+)[-+]?\\d{1,3}\\.\\d+",
+    "\\b(?:lat|latitude|lon|lng|long|longitude)\\b\\s*[=:]?\\s*[-+]?\\d+(?:\\.\\d+)?",
+    "\\d{1,3}\\s*\u00b0\\s*\\d{1,2}\\s*['\u2018\u2019\u2032]?" +
+      "(?:\\s*\\d{1,2}(?:\\.\\d+)?\\s*[\"\u201c\u201d\u2033]?)?\\s*[NSEW]?",
+    "\\d{1,3}(?:\\.\\d+)?\\s*\u00b0\\s*[NSEW]\\b",
+  ].join("|"),
+  "gi",
+);
+
+/** What stands in for a coordinate this surface refused to print. */
+export const WITHHELD_COORDINATE = "[coordinate withheld]";
+
+/** True when the text carries something shaped like a coordinate. */
+export function carriesCoordinate(text: string): boolean {
+  COORDINATE_SHAPE.lastIndex = 0;
+  return COORDINATE_SHAPE.test(text);
+}
+
+/**
+ * The text with any coordinate shape replaced, and never the original.
+ *
+ * Replacing rather than dropping the whole field keeps the surrounding claim
+ * readable, and leaves a visible mark where something was removed — a silent
+ * scrub would let a leak pass unnoticed by the person best placed to report it.
+ */
+export function withholdCoordinates(text: string): string {
+  return text.replace(COORDINATE_SHAPE, WITHHELD_COORDINATE);
+}
+
+/** Every rendered string in the map, so the scan below cannot miss a field. */
+function renderedStrings(map: ReasoningMap): string[] {
+  const strings: string[] = [map.question, map.taxonomic_identity.accepted_name];
+  for (const relationship of map.relationships) {
+    strings.push(relationship.subject, relationship.predicate, relationship.object);
+    if (relationship.geographic_scope) strings.push(relationship.geographic_scope);
+    for (const source of relationship.provenance) strings.push(source.citation);
+  }
+  for (const mechanism of map.mechanisms) strings.push(mechanism.statement);
+  for (const contradiction of map.contradictions) {
+    strings.push(contradiction.description, ...contradiction.between);
+    for (const scope of contradiction.scopes) if (scope) strings.push(scope);
+  }
+  strings.push(
+    map.geographic_context.scope,
+    ...map.geographic_context.environmental_notes,
+    ...map.evidence_gaps,
+    ...map.known_unknowns,
+    ...map.recommended_next_evidence,
+    map.confidence.basis,
   );
+  return strings;
+}
+
+export interface LocalityScan {
+  /** True when nothing coordinate-shaped arrived in any rendered field. */
+  clean: boolean;
+  /** How many rendered fields had something withheld. */
+  fieldsWithheld: number;
+  /** True when the map claimed no coordinates and carried one anyway. */
+  contradictsDeclaredPolicy: boolean;
+}
+
+/**
+ * What this surface found when it checked the map it was handed.
+ *
+ * The footer states the result of this scan rather than a fixed sentence. A
+ * printed guarantee the code does not enforce reads to a reviewer as
+ * enforcement, which is worse than printing nothing.
+ */
+export function scanLocality(map: ReasoningMap): LocalityScan {
+  const fieldsWithheld = renderedStrings(map).filter(carriesCoordinate).length;
+  return {
+    clean: fieldsWithheld === 0,
+    fieldsWithheld,
+    contradictsDeclaredPolicy:
+      fieldsWithheld > 0 && map.geographic_context.coordinates_present === false,
+  };
 }
 
 /** True when the reasoning was assembled without any provider call. */

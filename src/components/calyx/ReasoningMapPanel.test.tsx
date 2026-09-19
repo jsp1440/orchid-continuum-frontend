@@ -208,6 +208,11 @@ describe("when the map cannot be retrieved", () => {
       root.render(<ReasoningMapPanel loader={loader} />);
     });
     expect(container.textContent).toMatch(/outside what the system can answer/i);
+    // "What it would need" is the capability the backend names in the refusal.
+    // Asserting only the example list leaves that field dead on this surface.
+    expect(
+      container.querySelector('[data-testid="reasoning-required-capability"]')?.textContent,
+    ).toContain("free-text-intent-parsing");
     expect(
       container.querySelector('[data-testid="reasoning-supported-questions"]')?.textContent,
     ).toMatch(/bee orchid/i);
@@ -232,5 +237,139 @@ describe("the fixture is the backend's real output", () => {
     expect(map.execution?.provider_calls).toBe(0);
     expect(map.taxonomic_identity.accepted_name).toBe("Ophrys apifera");
     expect(map.governance.automatic_knowledge_promotion).toBe(false);
+  });
+});
+
+/**
+ * Each of these reproduces a defect an independent checker got through the
+ * rendered surface on PR #705. They are written as the checker demonstrated
+ * them — construct the input, render, read the DOM — so that a regression
+ * reappears here rather than in a review.
+ */
+describe("what an independent checker got through this surface", () => {
+  function variant(edit: (draft: ReasoningMap) => void): ReasoningMap {
+    const draft = structuredClone(map);
+    edit(draft);
+    return draft;
+  }
+
+  // The refused-question capability is covered above, in the test whose name
+  // promised it: "explains what an unsupported question would need".
+
+  it("withholds coordinates in every field, whatever the map claims about itself", () => {
+    // The seven shapes that reached the DOM, in the fields they reached it through.
+    const poisoned = variant((draft) => {
+      draft.relationships[0].provenance[0].citation = "Field notes, 51.752300, -1.257800";
+      draft.relationships[0].geographic_scope = "51.75213, -1.25782";
+      draft.relationships[1].provenance[0].citation = "Survey at 50°45'12\"N";
+      draft.mechanisms[0].statement = "Observed at 45.464200, 9.190000.";
+      draft.evidence_gaps = ["No survey near 48.856600, 2.352200."];
+      draft.confidence.basis = "Based on records at 40.416800, -3.703800.";
+      draft.recommended_next_evidence = ["Resurvey 52.520000, 13.405000."];
+      draft.geographic_context.environmental_notes = ["Transect at lat 51.7520 lon -1.2577."];
+    });
+    render(<ReasoningMapView map={poisoned} />);
+
+    const rendered = `${container.textContent ?? ""} ${container.innerHTML}`;
+    for (const leak of [
+      "51.752300",
+      "-1.257800",
+      "51.75213",
+      "50°45'12\"N",
+      "45.464200",
+      "48.856600",
+      "40.416800",
+      "52.520000",
+      "lat 51.7520",
+    ]) {
+      expect(rendered).not.toContain(leak);
+    }
+
+    // And it says what it did, rather than asserting a guarantee it did not keep.
+    const footer = container.querySelector('[data-testid="reasoning-locality"]');
+    expect(footer?.textContent).toContain("withheld a coordinate");
+    expect(footer?.textContent).not.toContain("none carried a coordinate");
+    expect(
+      container.querySelector('[data-testid="reasoning-locality-breach"]'),
+    ).not.toBeNull();
+  });
+
+  it("states plainly that it found nothing when the map is clean", () => {
+    render(<ReasoningMapView map={map} />);
+    const footer = container.querySelector('[data-testid="reasoning-locality"]');
+    expect(footer?.textContent).toContain("none carried a coordinate");
+    expect(
+      container.querySelector('[data-testid="reasoning-locality-breach"]'),
+    ).toBeNull();
+  });
+
+  it("does not call a question answered while a relationship is still contested", () => {
+    // A CONTESTED relationship with nothing written up about it is a
+    // disagreement the map has not accounted for, not a settled answer.
+    const undescribed = variant((draft) => {
+      draft.contradictions = [];
+    });
+    expect(
+      undescribed.relationships.some((r) => r.evidence_state === "CONTESTED"),
+    ).toBe(true);
+    render(<ReasoningMapView map={undescribed} />);
+    expect(container.querySelector('[data-testid="reasoning-answer"]')).toBeNull();
+    expect(container.querySelector('[data-testid="reasoning-unsettled"]')).not.toBeNull();
+  });
+
+  it("does not describe an evidence-resolved contradiction as left standing", () => {
+    const resolved = variant((draft) => {
+      draft.contradictions[0].resolution = "resolved_by_evidence";
+    });
+    render(<ReasoningMapView map={resolved} />);
+    const note = container.querySelector('[data-testid="contradiction-resolution"]');
+    expect(note?.textContent).toContain("Settled by the retrieved evidence");
+    expect(note?.textContent).not.toContain("Left standing");
+  });
+
+  it("does not reduce a scope-resolved disagreement to one account", () => {
+    const byScope = variant((draft) => {
+      draft.contradictions[0].resolution = "resolved_by_scope";
+    });
+    render(<ReasoningMapView map={byScope} />);
+    const headline = container.querySelector("[data-settlement]");
+    expect(headline?.getAttribute("data-settlement")).toBe("settled_by_scope");
+    // Both survive, partitioned. Saying "one account" discards the other half.
+    expect(headline?.textContent).not.toContain("one account");
+    expect(headline?.textContent).toContain("Neither replaces the other");
+  });
+
+  it("distinguishes an empty gap list from a complete body of evidence", () => {
+    const noGaps = variant((draft) => {
+      draft.evidence_gaps = [];
+      draft.known_unknowns = [];
+    });
+    render(<ReasoningMapView map={noGaps} />);
+    const gaps = container.querySelector('[data-testid="reasoning-gaps"]');
+    expect(gaps?.querySelectorAll("li")).toHaveLength(0);
+    expect(gaps?.textContent).toContain("not a finding that the evidence is complete");
+  });
+
+  it("writes the contradiction in the same English as the rest of the page", () => {
+    render(<ReasoningMapView map={map} />);
+    const block = container.querySelector('[data-testid="reasoning-contradictions"]');
+    expect(block?.textContent).not.toMatch(/[a-z]_[a-z]/);
+    expect(block?.textContent).toContain("reported pollinated by");
+  });
+
+  it("counts a refuted claim as contradicted, not as merely uncorroborated", () => {
+    const refuted = variant((draft) => {
+      draft.relationships[draft.relationships.length - 1].evidence_state = "REFUTED";
+    });
+    render(<ReasoningMapView map={refuted} />);
+    const tally = container.querySelector('[data-testid="evidence-tally"]');
+    expect(tally?.textContent).toContain("1 contradicted");
+  });
+
+  it("renders the geographic context the reasoning path requires", () => {
+    render(<ReasoningMapView map={map} />);
+    const geography = container.querySelector('[data-testid="reasoning-geography"]');
+    expect(geography).not.toBeNull();
+    expect(geography?.textContent).toContain(map.geographic_context.scope);
   });
 });
