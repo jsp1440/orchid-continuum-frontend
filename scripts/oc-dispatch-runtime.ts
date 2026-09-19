@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertAdmission, assertReceipts, claimLease, isActive, lineageFor, makePlan, reconcileExpired, transitionLease, validateLedger, validatePlan,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, lineageFor, makePlan, reconcileExpired, transitionLease, validateLedger, validatePlan,
   type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
@@ -166,6 +166,50 @@ async function main() {
     assertReceipts(plan, receipts);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
       `All ${plan.issues.length} admitted issues have matching governed lane receipts. Calls/cost: ${receipts.every(r => r.providerCalls === 0 && r.providerCostUsd === 0) ? "0 / $0" : "see reservation and provider receipts"}.\n`);
+    return;
+  }
+  if (command === 'admit-deterministic' || command === 'settle-deterministic') {
+    const number = Number(process.env.ISSUE_NUMBER);
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Invalid issue number');
+    const id = process.env.GITHUB_RUN_ID || '';
+    const attempt = process.env.GITHUB_RUN_ATTEMPT || '';
+    if (command === 'admit-deterministic') {
+      // No provider authorization is consulted, because nothing here can spend.
+      const result = await claimDeterministicLease(store, plan, snapshot(), { issueNumber: number, runId: id, runAttempt: attempt, now: now() });
+      output('allowed', String(result.allowed));
+      output('lease_id', result.lease?.id || '');
+      // A refusal is still a receipt: the audit must see that this issue was
+      // deliberately not executed, and why, rather than nothing at all.
+      if (!result.allowed) receipt(number, plan.wave.hash, 'not_executed', { reason: result.reason });
+      return;
+    }
+    const leaseId = process.env.OC_LEASE_ID || '';
+    const evidencePath = join(process.env.OC_EVIDENCE_DIR || '.oc-evidence', `${number}.json`);
+    // Absence of evidence is never success. A worker that never ran, or crashed
+    // before writing, settles as `not_executed`, not as a pass.
+    const evidence = existsSync(evidencePath)
+      ? JSON.parse(readFileSync(evidencePath, 'utf8')) as { outcome?: string; results?: unknown[]; provider_calls?: number }
+      : null;
+    const executed = evidence?.outcome === 'done' || evidence?.outcome === 'failed';
+    const outcome = !executed ? 'not_executed' : evidence?.outcome === 'done' ? 'provider_free_done' : 'provider_free_failed';
+    if (evidence && evidence.provider_calls !== 0) throw new Error('Deterministic lane reported a provider call');
+    const record = api<Issue>(`issues/${number}`);
+    const labels = record.labels.map(l => l.name);
+    // A successful deterministic run is evidence, not acceptance: it moves to
+    // validation, never straight to done. A failure returns for repair.
+    const next = outcome === 'provider_free_done' ? ['oc-validating']
+      : outcome === 'provider_free_failed' ? ['oc-queued', 'oc-repair'] : ['oc-queued'];
+    api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
+      .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });
+    if (leaseId) {
+      await transitionLease(store, leaseId, id, attempt,
+        outcome === 'provider_free_done' ? 'provider-free-done' : 'provider-free-failed');
+    }
+    receipt(number, plan.wave.hash, outcome, {
+      lane: 'provider-free',
+      commands: (evidence?.results ?? []).length,
+      evidence: evidence ?? 'absent',
+    });
     return;
   }
   const issue = Number(process.env.ISSUE_NUMBER);

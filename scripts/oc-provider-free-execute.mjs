@@ -1,6 +1,11 @@
 /**
  * Run the deterministic capabilities an issue declared, and record the result.
  *
+ * This writes execution evidence only. The authoritative lane receipt is written
+ * by `oc-dispatch-runtime.ts settle-deterministic`, which reads this file, so
+ * there is exactly one record of what the lane did and it is written by the job
+ * that knows whether execution happened.
+ *
  * Commands come from the router's fixed registry, never from issue text, so
  * nothing an issue author writes can become a command. Zero provider calls by
  * construction: no provider secret is present in this job.
@@ -44,8 +49,12 @@ const evidence = {
   completed_at: new Date().toISOString(),
 };
 
-mkdirSync('.oc-receipts', { recursive: true });
-writeFileSync(`.oc-receipts/provider-free-${issueNumber}.json`, JSON.stringify(evidence, null, 2));
+// Evidence, not the lane receipt. Settlement reads this and writes the single
+// authoritative receipt the audit consumes, so a run that executed can never be
+// recorded by a parallel job as `provider_not_authorized`.
+const evidenceDir = process.env.OC_EVIDENCE_DIR || '.oc-evidence';
+mkdirSync(evidenceDir, { recursive: true });
+writeFileSync(`${evidenceDir}/${issueNumber}.json`, JSON.stringify(evidence, null, 2));
 
 // Completion rests on this evidence, not on the job having run.
 const body = [
