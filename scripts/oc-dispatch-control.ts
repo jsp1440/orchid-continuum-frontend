@@ -17,7 +17,7 @@ export type Lease = {
   /** Absent on leases written before the deterministic lane existed; those were all paid. */
   lane?: LeaseLane;
   state: 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done'
-    | 'provider-free-done' | 'provider-free-failed';
+    | 'provider-free-done' | 'provider-free-failed' | 'not-executed';
 };
 export const laneOf = (lease: Lease): LeaseLane => lease.lane ?? 'provider';
 export type Ledger = { schema: 1; programStartedAt: string; programSpent: number; dailySpent: Record<string, number>; leases: Lease[] };
@@ -159,7 +159,7 @@ export function validateLedger(ledger: Ledger) {
       !Number.isFinite(l.reservedUsd) || (laneOf(l) === 'provider-free' ? l.reservedUsd !== 0 : l.reservedUsd <= 0) ||
       (l.lane !== undefined && l.lane !== 'provider' && l.lane !== 'provider-free') ||
       !['reserved','running','validating','blocked','owner-gate','runtime-backoff','done',
-        'provider-free-done','provider-free-failed'].includes(l.state))) throw new Error('Malformed lease');
+        'provider-free-done','provider-free-failed','not-executed'].includes(l.state))) throw new Error('Malformed lease');
   const active = ledger.leases.filter(isActive);
   if (new Set(active.map(l => l.issue)).size !== active.length || new Set(active.map(l => l.nodeId)).size !== active.length) throw new Error('Duplicate active leases in ledger');
 }
@@ -217,7 +217,14 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
     if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
     // The same issue, lineage, node and integration revision produce the same
     // fingerprint, so an unchanged attempt is never run a second time.
-    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint)) return { allowed: false, reason: 'unchanged_attempt', lease: null };
+    //
+    // A lane that never executed is excluded. Barring work on the strength of an
+    // attempt that did not happen is how the dedupe became the defect it was
+    // added to fix: the issue was relabelled `oc-queued`, admitted on every
+    // later pulse, refused, receipted and reported green, forever.
+    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint && l.state !== 'not-executed')) {
+      return { allowed: false, reason: 'unchanged_attempt', lease: null };
+    }
     const lease: Lease = { id: sha({ issue: input.issueNumber, run: input.runId, attempt: input.runAttempt, wave: plan.wave.hash, lane: 'provider-free' }),
       issue: input.issueNumber, nodeId: leaf.nodeId, fingerprint: leaf.fingerprint, waveHash: plan.wave.hash,
       runId: input.runId, runAttempt: input.runAttempt, expiresAt: new Date(Date.parse(input.now) + 90 * 60000).toISOString(),
@@ -238,7 +245,7 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
     if (!lease || lease.runId !== runId || lease.runAttempt !== runAttempt) throw new Error('Lease fencing token mismatch');
     if (lease.state === state) return lease;
     if (!isActive(lease) || (state === 'reserved')) throw new Error('Terminal lease cannot be revived');
-    if (laneOf(lease) === 'provider-free' && !['running', 'provider-free-done', 'provider-free-failed'].includes(state)) {
+    if (laneOf(lease) === 'provider-free' && !['running', 'provider-free-done', 'provider-free-failed', 'not-executed'].includes(state)) {
       throw new Error('Deterministic lease cannot settle into a provider outcome');
     }
     lease.state = state;

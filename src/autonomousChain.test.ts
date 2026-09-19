@@ -160,3 +160,56 @@ describe('verifying an admission does not change the question', () => {
     expect(() => assertAdmission(plan, withSibling, ISSUE, NOW)).not.toThrow();
   });
 });
+
+describe('a lane that never executed does not bar the work forever', () => {
+  const relabel = (labels: string[], next: string[]) =>
+    [...new Set(labels.filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))];
+
+  it('admits the issue again on the next pulse, and the one after', async () => {
+    // The dedupe added to stop #171 running three times in four minutes then
+    // refused work that never ran once: settlement relabelled the issue
+    // `oc-queued` while writing a terminal lease that burned the fingerprint,
+    // so every later pulse admitted it, refused it, receipted it and reported
+    // the wave green -- the failure this whole PR exists to fix, one level down.
+    const store = new MemoryStore({ schema: 1, programStartedAt: NOW, programSpent: 0, dailySpent: {}, leases: [] });
+    let labels = [...LABELS];
+
+    const first = await claimDeterministicLease(store, makePlan(snapshot(labels), [], NOW), snapshot(labels),
+      { issueNumber: ISSUE, runId: '1', runAttempt: '1', now: NOW });
+    expect(first.allowed).toBe(true);
+
+    // The worker never ran: settlement records `not-executed` and re-queues.
+    await transitionLease(store, first.lease!.id, '1', '1', 'not-executed');
+    labels = relabel(labels, ['oc-queued']);
+
+    for (const run of ['2', '3', '4']) {
+      const plan = makePlan(snapshot(labels), store.ledger.leases, NOW);
+      expect(plan.issues).toEqual([ISSUE]);
+      const again = await claimDeterministicLease(store, plan, snapshot(labels),
+        { issueNumber: ISSUE, runId: run, runAttempt: '1', now: NOW });
+      expect(again.allowed, `pulse ${run} refused: ${again.reason}`).toBe(true);
+      await transitionLease(store, again.lease!.id, run, '1', 'not-executed');
+    }
+  });
+
+  it('still refuses a second run of work that did execute', async () => {
+    const store = new MemoryStore({ schema: 1, programStartedAt: NOW, programSpent: 0, dailySpent: {}, leases: [] });
+    const first = await claimDeterministicLease(store, makePlan(snapshot(LABELS), [], NOW), snapshot(LABELS),
+      { issueNumber: ISSUE, runId: '1', runAttempt: '1', now: NOW });
+    await transitionLease(store, first.lease!.id, '1', '1', 'provider-free-done');
+
+    const again = await claimDeterministicLease(store, makePlan(snapshot(LABELS), store.ledger.leases, NOW), snapshot(LABELS),
+      { issueNumber: ISSUE, runId: '2', runAttempt: '1', now: NOW });
+
+    expect(again.allowed).toBe(false);
+    expect(again.reason).toBe('unchanged_attempt');
+  });
+
+  it('parks a genuine failure rather than re-queueing it for one accidental retry', async () => {
+    // `oc-repair` without `oc-queued`: the selector will not pick it up, so the
+    // state says what is true -- unchanged failing work is not retried -- rather
+    // than claiming it is queued while the fingerprint bars it.
+    const failed = snapshot(relabel([...LABELS], ['oc-repair']));
+    expect(selectLanes({ issues: failed.issues }).selected).toEqual([]);
+  });
+});

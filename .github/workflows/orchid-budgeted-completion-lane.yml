@@ -197,12 +197,15 @@ jobs:
           OC_LEASE_ID: ${{ needs.deterministic-preflight.outputs.lease_id }}
           OC_WAVE_HASH: ${{ inputs.wave_hash }}
         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts settle-deterministic
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      # `always()`, so a settlement that throws still leaves the audit a receipt
+      # rather than an unexplained gap and a lane held until the lease expires.
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
           path: .oc-receipts/*.json
           include-hidden-files: true
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   provider-worker:
     needs: budget-preflight

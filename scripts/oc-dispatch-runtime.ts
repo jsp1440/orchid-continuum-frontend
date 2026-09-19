@@ -230,28 +230,51 @@ async function main() {
     const evidencePath = join(process.env.OC_EVIDENCE_DIR || '.oc-evidence', `${number}.json`);
     // Absence of evidence is never success. A worker that never ran, or crashed
     // before writing, settles as `not_executed`, not as a pass.
-    const evidence = existsSync(evidencePath)
-      ? JSON.parse(readFileSync(evidencePath, 'utf8')) as { outcome?: string; results?: unknown[]; provider_calls?: number }
-      : null;
-    const executed = evidence?.outcome === 'done' || evidence?.outcome === 'failed';
+    type Evidence = { issue?: number; wave_hash?: string; run?: string; outcome?: string; results?: unknown[]; provider_calls?: number };
+    // Malformed evidence is evidence that nothing trustworthy was recorded, not
+    // a reason to crash without a receipt and hold the lane for ninety minutes.
+    let evidence: Evidence | null = null;
+    let rejected = '';
+    if (existsSync(evidencePath)) {
+      try { evidence = JSON.parse(readFileSync(evidencePath, 'utf8')) as Evidence; }
+      catch { rejected = 'evidence was not valid JSON'; }
+    }
+    // The lease is fenced on runId/runAttempt, but the outcome was being decided
+    // before and independently of that fence: settlement accepted an artifact
+    // without checking whose it was, and recorded one issue's pass from another
+    // issue's evidence in another wave.
+    if (evidence && !rejected) {
+      if (evidence.issue !== number) rejected = `evidence belongs to issue #${evidence.issue}`;
+      else if (evidence.wave_hash !== plan.wave.hash) rejected = 'evidence belongs to another wave';
+      else if (evidence.run !== `${id}:${attempt}`) rejected = `evidence belongs to run ${evidence.run}`;
+      else if (evidence.provider_calls === undefined) rejected = 'evidence records no provider_calls';
+      else if (evidence.provider_calls !== 0) throw new Error('Deterministic lane reported a provider call');
+    }
+    if (rejected) evidence = null;
+    const executed = !rejected && (evidence?.outcome === 'done' || evidence?.outcome === 'failed');
     const outcome = !executed ? 'not_executed' : evidence?.outcome === 'done' ? 'provider_free_done' : 'provider_free_failed';
-    if (evidence && evidence.provider_calls !== 0) throw new Error('Deterministic lane reported a provider call');
     const record = api<Issue>(`issues/${number}`);
     const labels = record.labels.map(l => l.name);
     // A successful deterministic run is evidence, not acceptance: it moves to
-    // validation, never straight to done. A failure returns for repair.
+    // validation, never straight to done. A failure parks for repair WITHOUT
+    // `oc-queued`: unchanged failing work must not be retried, and leaving it
+    // queued gave exactly one accidental retry -- the label change altered the
+    // fingerprint -- before stranding it while still claiming it was queued.
+    // A lane that never executed goes back to the queue and, because its lease
+    // records `not-executed`, is genuinely admissible again.
     const next = outcome === 'provider_free_done' ? ['oc-validating']
-      : outcome === 'provider_free_failed' ? ['oc-queued', 'oc-repair'] : ['oc-queued'];
+      : outcome === 'provider_free_failed' ? ['oc-repair'] : ['oc-queued'];
     api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
       .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });
     if (leaseId) {
       await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
-        outcome === 'provider_free_done' ? 'provider-free-done' : 'provider-free-failed');
+        outcome === 'provider_free_done' ? 'provider-free-done'
+          : outcome === 'provider_free_failed' ? 'provider-free-failed' : 'not-executed');
     }
     receipt(number, plan.wave.hash, outcome, {
       lane: 'provider-free',
       commands: (evidence?.results ?? []).length,
-      evidence: evidence ?? 'absent',
+      evidence: evidence ?? (rejected || 'absent'),
     });
     return;
   }
