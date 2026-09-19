@@ -76,33 +76,48 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
 }
 /**
  * A wave that admitted nothing while admissible work was pending is a binding
- * failure. Say which side is missing: issues no node names, or nodes no pending
- * issue names. A wave that admitted nothing because its lanes are busy is not a
- * failure at all, and saying so would train the operator to ignore this.
+ * failure. Every queued issue the wave did not admit is named below exactly
+ * once, with the reason: no node names it, a node does but the ranker did not
+ * select it, or its declaration was refused. A wave that admitted nothing
+ * because its lanes are busy is not a failure at all, and saying so would train
+ * the operator to ignore this.
  *
  * This is written for GITHUB_STEP_SUMMARY, which renders Markdown with HTML
  * passthrough. A bare `<node-id>` is stripped there as an unknown tag, which
  * would delete the one thing the remediation tells an operator to type, and
  * single newlines collapse into one paragraph. Hence the backticks and the list.
  */
+/** What the `plan` step prints and writes to the step summary. */
+export function planSummary(plan: Plan) {
+  return `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; ` +
+    `capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=false; no execution leases acquired.\n` +
+    bindingReport(plan);
+}
+
 export function bindingReport(plan: Plan) {
   const lines: string[] = [];
-  const pending = plan.inventory.queued + plan.inventory.prepared;
-  // `starved` comes from the eligibility-filtered set the ranker actually saw,
-  // and stands on its own. `pending` is a raw label census that also counts work
-  // already executing, so it only speaks when no lane is occupied -- otherwise a
-  // healthy wave with five lanes running reports itself starved.
+  // Only numbers this report can account for. The label census counts work that
+  // is executing and work that never reached the ranker, so printing it as a
+  // count of pending work states a total the lines below then contradict.
+  const reached = plan.queuedReachingAdmission;
+  const census = plan.inventory.queued + plan.inventory.prepared;
   const idle = plan.capacity > 0 && plan.issues.length === 0
-    && (plan.starved || (pending > 0 && plan.inventory.active === 0));
+    && (plan.starved || (census > 0 && plan.inventory.active === 0));
   if (idle) {
-    lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${pending} pending issue(s), nothing admitted. ` +
+    lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${reached} issue(s) reached graph admission, nothing admitted. ` +
       `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no pending issue.`);
   }
-  if (idle && !plan.starved) {
-    lines.push('- No pending issue reached graph admission: each was filtered out first by an open PR lineage, an `OC-AUTO-HOLD`, or a lane label.');
+  if (idle && census > reached) {
+    lines.push(`- A further ${census - reached} issue(s) are labelled pending but never reached admission: an open PR lineage, an \`OC-AUTO-HOLD\`, or a lane label.`);
   }
-  if (plan.unboundQueued.length > 0) {
-    lines.push(`- Pending issues bound to no completion-graph node (bind one with an \`oc-node:<node-id>\` label naming a leaf): ${plan.unboundQueued.join(', ')}.`);
+  // Below the fold, every queued issue the wave did not admit is named exactly
+  // once, whatever the reason. A silent issue is the defect this exists to catch.
+  if (plan.capacity > 0 && plan.unboundQueued.length > 0) {
+    lines.push(`- No completion-graph node names these issues (bind one with an \`oc-node:<node-id>\` label naming a leaf): ${plan.unboundQueued.join(', ')}.`);
+  }
+  if (plan.capacity > 0 && plan.unreachableQueued.length > 0) {
+    const named = plan.unreachableQueued.map(({ issueNumber, nodeIds }) => `#${issueNumber} (\`${nodeIds.join('`, `')}\`)`);
+    lines.push(`- A node names these issues, and the ranker did not select it this wave -- its status, its dependencies, work already open on it, or another issue took it: ${named.join(', ')}.`);
   }
   for (const { issueNumber, nodeId } of plan.unknownNodeDeclarations) {
     lines.push(`- Issue #${issueNumber} declares node \`${nodeId}\`, which is not in the completion graph. Binding refused.`);
@@ -128,7 +143,7 @@ async function main() {
     writeFileSync(join(dir, `wave-${plan.wave.hash}.json`), plan.wave.canonical + '\n');
     output('issues', JSON.stringify(plan.issues));
     output('wave_hash', plan.wave.hash);
-    const summary = `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=false; no execution leases acquired.\n${bindingReport(plan)}`;
+    const summary = planSummary(plan);
     process.stdout.write(summary);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
     return;

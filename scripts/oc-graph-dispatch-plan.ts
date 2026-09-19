@@ -21,14 +21,18 @@ export type GraphDispatchPlan = {
   leaves: Array<{ nodeId: string; nodeName: string; issueNumber: number; reasons: string[] }>;
   untrackedLeaves: Array<{ nodeId: string; nodeName: string; reasons: string[] }>;
   surfacedBlockers: Array<{ nodeId: string; nodeName: string; status: string }>;
-  /** Queued issues bound to no node in the graph, from either side. They can never be admitted. */
+  /** Queued issues no node names at all, from either side. They can never be admitted. */
   unboundQueued: number[];
+  /** Queued issues a node does name, where the ranker did not select that node this wave. */
+  unreachableQueued: Array<{ issueNumber: number; nodeIds: string[] }>;
   /** Declarations naming a node this graph does not contain. A binding failure, never a guess. */
   unknownNodeDeclarations: Array<{ issueNumber: number; nodeId: string }>;
   /** Declarations naming a real node that is not a leaf, so the ranker can never select it. */
   unadmissibleNodeDeclarations: Array<{ issueNumber: number; nodeId: string }>;
   /** Lane capacity and queued work both exist, yet nothing could be admitted. */
   starved: boolean;
+  /** How many queued issues reached the ranker, as against the raw label census. */
+  queuedReachingAdmission: number;
 };
 
 function cloneGraph(root: CompletionNode): CompletionNode {
@@ -94,13 +98,32 @@ function indexDeclarations(root: CompletionNode, declaredNodesByIssue: Record<nu
   return { declared, unknown, unadmissible };
 }
 
-function graphSideIssues(root: CompletionNode, into: Set<number> = new Set()): Set<number> {
-  for (const ref of root.issues ?? []) {
-    const issue = issueNumberFromRef(ref);
-    if (issue !== null) into.add(issue);
-  }
-  for (const child of root.children) graphSideIssues(child, into);
-  return into;
+/**
+ * Which nodes name each issue, graph side and declaration side together.
+ *
+ * Being named is not the same as being admissible, and conflating the two is how
+ * an issue disappeared from every report line: a node that names it may be a
+ * branch, may be the wrong status, may have unsatisfied dependencies, or may
+ * have gone to another issue. So naming is recorded here and reconciled against
+ * what the wave actually admitted, rather than assumed to imply admissibility.
+ */
+function indexNamedBy(root: CompletionNode, declared: ReadonlyMap<string, number[]>) {
+  const namedBy = new Map<number, string[]>();
+  const add = (issue: number, nodeId: string) => {
+    const nodes = namedBy.get(issue) ?? [];
+    if (!nodes.includes(nodeId)) nodes.push(nodeId);
+    namedBy.set(issue, nodes);
+  };
+  const walk = (node: CompletionNode) => {
+    for (const ref of node.issues ?? []) {
+      const issue = issueNumberFromRef(ref);
+      if (issue !== null) add(issue, node.id);
+    }
+    node.children.forEach(walk);
+  };
+  walk(root);
+  for (const [nodeId, issues] of declared) for (const issue of issues) add(issue, nodeId);
+  return namedBy;
 }
 
 function trackedQueuedIssue(node: CompletionNode, queued: ReadonlySet<number>, declared: ReadonlyMap<string, number[]>): number | null {
@@ -132,8 +155,7 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
   const openWorkRefs = new Set(input.openWorkRefs ?? []);
   const now = input.now ?? new Date().toISOString();
   const { declared, unknown, unadmissible } = indexDeclarations(root, input.declaredNodesByIssue ?? {});
-  const bound = new Set([...graphSideIssues(root), ...[...declared.values()].flat()]);
-  const unboundQueued = [...queued].filter(issue => !bound.has(issue)).sort((a, b) => a - b);
+  const namedBy = indexNamedBy(root, declared);
   const graph = cloneGraph(root);
   for (const id of input.occupiedNodeIds ?? []) {
     const node = findNode(graph, id);
@@ -172,6 +194,17 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     isolated.status = 'OWNER_ACTION';
   }
 
+  // Every queued issue the wave did not admit lands in exactly one bucket, so
+  // none can fall silently between them. A declaration problem is the most
+  // specific answer and takes precedence; then "no node names it"; then "a node
+  // does, and the ranker did not reach it".
+  const explained = new Set([...unknown, ...unadmissible].map(entry => entry.issueNumber));
+  const unaccounted = [...queued].filter(issue => !issues.includes(issue) && !explained.has(issue)).sort((a, b) => a - b);
+  const unboundQueued = unaccounted.filter(issue => (namedBy.get(issue) ?? []).length === 0);
+  const unreachableQueued = unaccounted
+    .filter(issue => (namedBy.get(issue) ?? []).length > 0)
+    .map(issue => ({ issueNumber: issue, nodeIds: namedBy.get(issue) ?? [] }));
+
   return {
     capacity,
     issues,
@@ -179,6 +212,8 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     untrackedLeaves,
     surfacedBlockers: [...blockerMap.values()],
     unboundQueued,
+    unreachableQueued,
+    queuedReachingAdmission: queued.size,
     unknownNodeDeclarations: unknown,
     unadmissibleNodeDeclarations: unadmissible,
     // Reporting this run as a healthy no-op is what let the binding gap run unseen.
