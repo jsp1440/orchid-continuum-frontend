@@ -30,6 +30,10 @@ const { ReasoningMapView } = await import("@/components/calyx/ReasoningMapPanel"
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const SHAPES: [string, string][] = [
+  ["projected pair joined by an underscore", "632540_5712345"],
+  ["degrees and decimal minutes, no symbol", "5145.20N 0115.47W"],
+  ["integer degrees with hemispheres", "51N 1W"],
+  ["what3words without the prefix", "filled.count.soap"],
   ["OS grid spaced", "SP 51234 06789"],
   ["OS grid short", "TQ1234"],
   ["geohash", "gcpuvpk44"],
@@ -86,5 +90,33 @@ describe("every known coordinate shape, against every rendered field", () => {
     }
     expect(leaks).toEqual([]);
     expect(falseClean).toBe(0);
+  });
+});
+
+describe("the fields this page repaints", () => {
+  // `locality_policy.disclosure`, `relationships[].predicate` and
+  // `contradictions[].between[]` are rendered with `_` rewritten to a space.
+  // That rewrite runs after sanitisation, so `632540_5712345` passed the scan
+  // and the render then synthesised `632540 5712345` inside the locality
+  // footer -- under that footer's own statement that nothing had matched.
+  // The generic matrix above cannot cover this: the same string in any other
+  // field renders literally and is not a coordinate on screen.
+  it("withholds a pair the repaint would otherwise synthesise", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root: Root = createRoot(container);
+    const poisoned = JSON.parse(JSON.stringify(fixture)) as ReasoningMap;
+    (poisoned.locality_policy as { disclosure: string }).disclosure = "632540_5712345";
+    act(() => root.render(<ReasoningMapView map={poisoned} />));
+    const text = container.textContent ?? "";
+    act(() => root.unmount());
+    container.remove();
+
+    expect(text).not.toMatch(/632540[\s_]5712345/);
+    expect(text).toContain("[coordinate withheld]");
+    // The half I previously claimed was asserted here and was not, while being
+    // false: the page printed the marker and denied it in the same sentence,
+    // because the render-site repaint never reached the footer count.
+    expect(text).not.toContain("No field this page renders matched a coordinate pattern");
   });
 });
