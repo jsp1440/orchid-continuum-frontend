@@ -38,13 +38,14 @@ const items: Item[] = [
 ];
 
 const EcosystemsBand: React.FC = () => {
+  const id = React.useId();
   return (
-    <section id="ecosystems" className="bg-cream border-t border-quiet">
+    <section id="ecosystems" aria-labelledby={`${id}-heading`} className="bg-cream border-t border-quiet">
       <div className="max-w-7xl mx-auto px-6 lg:px-10 py-24 lg:py-28">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-end mb-12">
           <div className="lg:col-span-8">
             <div className="label-eyebrow">Communities of practice</div>
-            <h2 className="mt-6 font-display text-4xl lg:text-5xl leading-[1.08] text-ink max-w-3xl">
+            <h2 id={`${id}-heading`} className="mt-6 font-display text-4xl lg:text-5xl leading-[1.08] text-ink max-w-3xl">
               One living platform,{' '}
               <span className="italic text-forest">seven ways to belong.</span>
             </h2>
@@ -58,10 +59,11 @@ const EcosystemsBand: React.FC = () => {
           <div className="lg:col-span-4 lg:text-right">
             <Link
               to="/ecosystems"
-              className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] uppercase text-forest border border-forest hover:bg-[#1f3d2b]/5 rounded-full px-5 py-2.5 transition-colors"
+              aria-label="Explore all seven communities of practice"
+              className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.2em] uppercase text-forest border border-forest hover:bg-[#1f3d2b]/5 rounded-full px-5 py-2.5 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-forest"
             >
               Explore all seven
-              <ArrowUpRight className="h-4 w-4" />
+              <ArrowUpRight aria-hidden="true" className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -71,16 +73,18 @@ const EcosystemsBand: React.FC = () => {
             <Link
               key={it.label}
               to={it.route}
-              className="group rounded-sm border border-quiet bg-warm-white p-5 hover:border-[#1f3d2b]/40 hover:shadow-[0_12px_24px_-16px_rgba(28,26,23,0.18)] transition-all"
+              aria-labelledby={`${id}-${it.index}-label`}
+              aria-describedby={`${id}-${it.index}-description`}
+              className="group rounded-sm border border-quiet bg-warm-white p-5 hover:border-[#1f3d2b]/40 hover:shadow-[0_12px_24px_-16px_rgba(28,26,23,0.18)] transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-forest"
             >
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">{it.index}</span>
-                <it.Icon className="h-4 w-4 text-forest" />
+                <span aria-hidden="true" className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">{it.index}</span>
+                <it.Icon aria-hidden="true" className="h-4 w-4 text-forest" />
               </div>
-              <div className="mt-5 font-display text-base text-ink leading-tight">
+              <div id={`${id}-${it.index}-label`} className="mt-5 font-display text-base text-ink leading-tight">
                 {it.label}
               </div>
-              <div className="mt-1 font-body text-[12px] text-charcoal/70 leading-snug">
+              <div id={`${id}-${it.index}-description`} className="mt-1 font-body text-[12px] text-charcoal/70 leading-snug">
                 {it.blurb}
               </div>
             </Link>
