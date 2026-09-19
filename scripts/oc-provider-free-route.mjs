@@ -24,7 +24,8 @@ const issue = JSON.parse(raw);
 
 let routing;
 try {
-  routing = routeIssue({ number: issueNumber, body: issue.body });
+  // Labels carry declarations too, so they have to reach the router.
+  routing = routeIssue({ number: issueNumber, body: issue.body, labels: issue.labels });
 } catch (error) {
   // An unclassified capability is a routing failure, not a licence to spend.
   const reason = error instanceof CapabilityUnknown ? 'unclassified_capability' : 'invalid_declaration';

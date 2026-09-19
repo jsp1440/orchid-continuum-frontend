@@ -87,6 +87,77 @@ describe('capability routing', () => {
   });
 });
 
+describe('declaring a capability with a label', () => {
+  // Why this exists: all 24 queued issues routed `undeclared`, and nothing in
+  // the repository writes an OC-SWARM-CAPABILITY line. The marker had a reader
+  // and no producer, so the lane could never fire for a real issue.
+  it('accepts a declaration carried by a label', () => {
+    const routing = routeIssue({
+      number: 289,
+      body: 'no marker in this body',
+      labels: [{ name: 'oc-queued' }, { name: 'oc-cap:test-execution' }],
+    });
+    expect(routing.undeclared).toBe(false);
+    expect(routing.providerFree).toBe(true);
+    expect(commandsFor(routing)).toEqual(['npm run test']);
+  });
+
+  it('accepts plain string labels as well as label objects', () => {
+    const routing = routeIssue({ number: 1, body: '', labels: ['oc-cap:lint-execution'] });
+    expect(commandsFor(routing)).toEqual(['npm run lint']);
+  });
+
+  it('parks a provider capability marked optional by label', () => {
+    const routing = routeIssue({
+      number: 1,
+      body: '',
+      labels: [
+        'oc-cap:test-execution',
+        'oc-cap:open-ended-code-authoring',
+        'oc-cap-optional:open-ended-code-authoring',
+      ],
+    });
+    expect(routing.providerFree).toBe(true);
+    expect(routing.optionalProvider).toEqual(['open-ended-code-authoring']);
+  });
+
+  it('merges label and body declarations without duplicating them', () => {
+    const routing = routeIssue({
+      number: 1,
+      body: 'OC-SWARM-CAPABILITY: test-execution',
+      labels: ['oc-cap:test-execution', 'oc-cap:lint-execution'],
+    });
+    expect(routing.deterministic).toEqual(['lint-execution', 'test-execution']);
+  });
+
+  it('ignores labels that are not declarations', () => {
+    const routing = routeIssue({
+      number: 1,
+      body: '',
+      labels: [{ name: 'oc-queued' }, { name: 'oc-p0' }, { name: 'frontend' }],
+    });
+    expect(routing.undeclared).toBe(true);
+    expect(routing.providerFree).toBe(false);
+  });
+
+  it('still refuses to infer a lane from the description', () => {
+    // The heuristic this module replaced escalated on words like these.
+    const routing = routeIssue({
+      number: 1,
+      body: 'Architecture: a security boundary, a race condition, scientific inference.',
+      labels: [{ name: 'oc-queued' }],
+    });
+    expect(routing.undeclared).toBe(true);
+    expect(commandsFor(routing)).toEqual([]);
+  });
+
+  it('refuses an unclassified capability declared by label', () => {
+    expect(() => routeIssue({ number: 1, body: '', labels: ['oc-cap:telepathy'] })).toThrow(
+      CapabilityUnknown,
+    );
+  });
+});
+
 describe('the command surface', () => {
   it('only ever yields commands from the fixed registry', () => {
     const registry = new Set(Object.values(LOCAL_EXECUTORS));

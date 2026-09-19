@@ -94,6 +94,39 @@ export const PROVIDER_CAPABILITIES = Object.freeze(
 const CAPABILITY_MARKER = /^OC-SWARM-CAPABILITY:\s*([a-z0-9][a-z0-9-]*)\s*$/gim;
 const OPTIONAL_MARKER = /^OC-SWARM-PROVIDER-OPTIONAL:\s*([a-z0-9][a-z0-9-]*)\s*$/gim;
 
+/**
+ * A declaration can also be carried by a label, which is why the lane had no
+ * input at all.
+ *
+ * Every one of the 24 queued issues routed `undeclared`, and nothing in this
+ * repository writes an `OC-SWARM-CAPABILITY:` line — the marker had a reader and
+ * no producer, so the provider-free lane could never fire for any real issue.
+ * Editing an owner's issue body to add one is not triage, so the declaration is
+ * accepted from a label as well: `oc-cap:test-execution`, and
+ * `oc-cap-optional:` for a provider capability the task can proceed without.
+ *
+ * A label is still an explicit declaration, applied deliberately and visible on
+ * the issue. It is emphatically not inference from prose: reading intent out of
+ * the description is the "does the body contain a hard word" heuristic this
+ * module exists to replace, and it stays gone.
+ */
+const CAPABILITY_LABEL = /^oc-cap:\s*([a-z0-9][a-z0-9-]*)$/i;
+const OPTIONAL_LABEL = /^oc-cap-optional:\s*([a-z0-9][a-z0-9-]*)$/i;
+
+function labelNames(issue) {
+  const labels = Array.isArray(issue?.labels) ? issue.labels : [];
+  return labels.map(l => String(typeof l === 'string' ? l : l?.name || '').trim());
+}
+
+function fromLabels(issue, pattern) {
+  const found = [];
+  for (const label of labelNames(issue)) {
+    const match = pattern.exec(label);
+    if (match) found.push(match[1].toLowerCase());
+  }
+  return found;
+}
+
 export class CapabilityUnknown extends Error {}
 
 /** Guard the one inconsistency a local binding could introduce. */
@@ -128,8 +161,13 @@ export function routeIssue(issue) {
   assertLocalExecutorsAreDeterministic();
 
   const body = String(issue?.body || '');
-  const declared = [...new Set(collect(body, CAPABILITY_MARKER))];
-  const optional = new Set(collect(body, OPTIONAL_MARKER));
+  const declared = [
+    ...new Set([...collect(body, CAPABILITY_MARKER), ...fromLabels(issue, CAPABILITY_LABEL)]),
+  ];
+  const optional = new Set([
+    ...collect(body, OPTIONAL_MARKER),
+    ...fromLabels(issue, OPTIONAL_LABEL),
+  ]);
 
   const executable = [];
   const notExecutableHere = [];
