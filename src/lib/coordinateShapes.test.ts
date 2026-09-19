@@ -12,7 +12,11 @@
  */
 
 import { describe, expect, it } from "vitest";
-import { carriesCoordinate } from "./cognitiveIntegration";
+import {
+  WITHHELD_COORDINATE,
+  carriesCoordinate,
+  paintUnderscores,
+} from "./cognitiveIntegration";
 
 describe("shapes that reached the DOM before", () => {
   it("catches what3words written without the /// prefix", () => {
@@ -21,12 +25,16 @@ describe("shapes that reached the DOM before", () => {
     expect(carriesCoordinate("///filled.count.soap")).toBe(true);
   });
 
-  it("catches a projected pair joined by an underscore", () => {
-    // The panel rewrites `_` to a space before painting, so this passed the
-    // scan and the render then synthesised `632540 5712345` in the locality
-    // footer -- the page manufacturing the coordinate it certified absent.
-    expect(carriesCoordinate("632540_5712345")).toBe(true);
+  it("catches a projected pair joined by an underscore, where it is painted", () => {
+    // The raw string is not a coordinate and must not be treated as one --
+    // assuming otherwise withheld `specimen_12345_67890`. It becomes one only
+    // in the three fields the panel repaints, and `paintUnderscores` is the
+    // check at that point. Before this, the scan passed and the render then
+    // synthesised `632540 5712345` inside the locality footer, under the
+    // footer's own statement that nothing had matched.
     expect(carriesCoordinate("632540 5712345")).toBe(true);
+    expect(paintUnderscores("632540_5712345")).toBe(WITHHELD_COORDINATE);
+    expect(carriesCoordinate("632540_5712345")).toBe(false);
   });
 
   it("catches degrees and decimal minutes with no symbol", () => {
@@ -71,5 +79,44 @@ describe("what this still does not catch, stated rather than hidden", () => {
     // discriminator between an address and a dotted identifier, which is a
     // design decision rather than a pattern tweak.
     expect(carriesCoordinate("the colony sits at filled.count.soap today")).toBe(false);
+  });
+});
+
+describe("what the repaint must not eat", () => {
+  // The DDM arm inherited the `i` flag and ate lowercase w and s, so a lamp
+  // wattage erased a whole environmental_notes entry. Both halves now required.
+  const renders = [
+    "A 150.0 W lamp over the bench",
+    "600.0 W HPS, 12 h photoperiod",
+    "1000.5 W metal halide",
+    "exposure 1234.5 s",
+    "600.5 s between captures",
+    // Assuming the underscore rewrite everywhere ate these. Only three of the
+    // panel's fields are repainted, and none of these is one of them.
+    "specimen_12345_67890",
+    "OC_51234_06789",
+    "GBIF_1234567_890123",
+    "node_1234567_89012",
+  ];
+  for (const text of renders) {
+    it(`renders ${text}`, () => expect(carriesCoordinate(text)).toBe(false));
+  }
+
+  it("still catches the real DDM pair", () => {
+    expect(carriesCoordinate("5145.20N 0115.47W")).toBe(true);
+  });
+
+  it("catches a what3words address ending a sentence", () => {
+    expect(carriesCoordinate("filled.count.soap.")).toBe(true);
+    expect(carriesCoordinate("filled.count.soap,")).toBe(true);
+  });
+});
+
+describe("the repaint itself", () => {
+  it("withholds a pair the underscore rewrite would synthesise", () => {
+    expect(paintUnderscores("632540_5712345")).toBe(WITHHELD_COORDINATE);
+  });
+  it("leaves an identifier the rewrite does not reach", () => {
+    expect(paintUnderscores("reported_pollinated_by")).toBe("reported pollinated by");
   });
 });

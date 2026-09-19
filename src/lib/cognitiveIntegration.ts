@@ -400,11 +400,15 @@ const COORDINATE_SHAPE = new RegExp(
     // panel is supposed to display, which is defending the page by breaking
     // what it exists to show. A bare address as an entire field value is caught;
     // one buried mid-sentence is not, and that gap is stated rather than hidden.
-    "^\\s*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}\\s*$",
+    "^\\s*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}[\\s.,)\"'\u201d]*$",
     // Degrees and decimal minutes with no symbol: `5145.20N 0115.47W`. This is
     // what a GPS receiver emits (NMEA), carries ~10m, and writes no pair the
-    // decimal arm can see.
-    "\\b\\d{3,5}\\.\\d{1,4}\\s*[NSEW]\\b",
+    // decimal arm can see. Both halves are required: this list is built with
+    // the `i` flag, so a single-half arm let `[NSEW]` match the lowercase `w`
+    // in "A 150.0 W lamp over the bench" and the `s` in "exposure 1234.5 s",
+    // and withholding takes the whole field -- a privacy defence deleting the
+    // environmental context that `environmental_notes` exists to carry.
+    "\\b\\d{3,5}\\.\\d{1,4}\\s*[NS]\\D{0,4}\\d{3,5}\\.\\d{1,4}\\s*[EW]\\b",
     // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but it is
     // the whole-number form of a shape already covered for decimals.
     "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
@@ -468,16 +472,10 @@ function foldDigits(text: string): string {
 }
 
 function normalised(text: string): string {
-  // `_` becomes a space before this text is painted, so the scan has to see the
-  // string the reader will see. Doing it here covers every arm; `SEP` covered
-  // only the decimal-pair one, which is why `632540_5712345` passed the scan
-  // and the render then synthesised `632540 5712345` in the locality footer --
-  // the page manufacturing the coordinate it had just certified absent.
-  const painted = (value: string) => value.replace(/_/g, " ");
   try {
-    return painted(foldDigits(text.normalize("NFKC")));
+    return foldDigits(text.normalize("NFKC"));
   } catch {
-    return painted(foldDigits(text));
+    return foldDigits(text);
   }
 }
 
@@ -485,6 +483,24 @@ function normalised(text: string): string {
 export function carriesCoordinate(text: string): boolean {
   COORDINATE_SHAPE.lastIndex = 0;
   return COORDINATE_SHAPE.test(normalised(text));
+}
+
+/**
+ * Re-check a field the panel is about to repaint.
+ *
+ * Three fields are rendered with `_` rewritten to a space. That rewrite runs
+ * after `sanitiseMap`, so the scan saw a different string from the reader:
+ * `632540_5712345` passed, and the render then synthesised `632540 5712345`
+ * inside the locality footer -- the page manufacturing the coordinate it had
+ * just certified absent.
+ *
+ * Checking here rather than rewriting inside `normalised()` keeps the property
+ * where the painting is. Assuming the rewrite globally withheld
+ * `specimen_12345_67890` and `GBIF_1234567_890123`, which are the ordinary
+ * shape of `provenance[].identifier` and are never repainted.
+ */
+export function paintUnderscores(text: string): string {
+  return withholdField(text.replace(/_/g, " "));
 }
 
 /** What stands in for a coordinate this surface refused to print. */

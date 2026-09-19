@@ -10,6 +10,7 @@ import {
   isKnownVocabulary,
   refutedRelationships,
   sanitiseFailure,
+  paintUnderscores,
   sanitiseMap,
   settlement,
   supportedRelationships,
@@ -180,7 +181,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
               <ul className="mt-2 list-disc pl-5 text-muted-foreground">
                 {contradiction.between.map((claim, claimIndex) => (
                   <li key={claimIndex}>
-                    {claim.replace(/_/g, " ")}
+                    {paintUnderscores(claim)}
                     {contradiction.scopes[claimIndex]
                       ? ` — reported from the ${contradiction.scopes[claimIndex]}`
                       : null}
@@ -205,7 +206,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
           <div className="border-b pb-3 last:border-b-0 last:pb-0" key={index}>
             <p>
               <span className="font-medium">{relationship.subject}</span>{" "}
-              {relationship.predicate.replace(/_/g, " ")}{" "}
+              {paintUnderscores(relationship.predicate)}{" "}
               <span className="font-medium">{relationship.object}</span>
             </p>
             <p className="mt-1 text-xs">
@@ -315,7 +316,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
 
       <footer className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
         <p data-testid="reasoning-locality">
-          Locality is {map.locality_policy.disclosure.toLowerCase().replace(/_/g, " ")}.{" "}
+          Locality is {paintUnderscores(map.locality_policy.disclosure.toLowerCase())}.{" "}
           {locality.fieldsWithheld > 0
             ? `This page withheld a coordinate from ${locality.fieldsWithheld} field(s) before rendering.`
             : "No field this page renders matched a coordinate pattern."}
