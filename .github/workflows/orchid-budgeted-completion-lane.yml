@@ -75,6 +75,53 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+  # Deterministic work does not need, and must not wait for, provider
+  # authorization. Before this job existed the lane had only a provider worker,
+  # so an issue needing nothing but `npm run test` was refused with the same
+  # `provider_not_authorized` receipt as one needing a model, and dropped — every
+  # five minutes, for 24 queued issues, while the run reported success.
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      provider_free: ${{ steps.route.outputs.provider_free }}
+      commands: ${{ steps.route.outputs.commands }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Route this issue by declared capability
+        id: route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: node scripts/oc-provider-free-route.mjs
+
+  provider-free-worker:
+    needs: classify
+    if: needs.classify.outputs.provider_free == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ inputs.issue_number }}
+      REPO: ${{ github.repository }}
+      WAVE_HASH: ${{ inputs.wave_hash }}
+      COMMANDS: ${{ needs.classify.outputs.commands }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      # No provider secret is present in this job, and none is forwarded to it.
+      # The commands are chosen from a fixed registry, never from issue text.
+      - name: Execute declared deterministic capabilities
+        run: node scripts/oc-provider-free-execute.mjs
+
   provider-worker:
     needs: budget-preflight
     if: inputs.provider_authorized && needs.budget-preflight.outputs.allowed == 'true' && needs.budget-preflight.outputs.lease_id != ''
