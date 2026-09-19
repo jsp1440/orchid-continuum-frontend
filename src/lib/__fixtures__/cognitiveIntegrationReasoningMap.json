@@ -34,11 +34,11 @@
       "predicate": "reported_pollinated_by",
       "object": "Eucera (solitary bees)",
       "evidence_state": "CONTESTED",
-      "geographic_scope": "Mediterranean range",
+      "geographic_scope": "sporadically reported, chiefly in the Mediterranean",
       "provenance": [
         {
           "source_type": "peer_reviewed_literature",
-          "citation": "Darwin, C. (1862). On the Various Contrivances by which British and Foreign Orchids are Fertilised by Insects. John Murray, London.",
+          "citation": "Kullenberg, B. (1961). Studies in Ophrys pollination. Zoologiska Bidrag fran Uppsala 34: 1-340.",
           "identifier": null
         }
       ]
@@ -48,10 +48,10 @@
       "predicate": "reported_reproductive_strategy",
       "object": "Habitual self-pollination",
       "evidence_state": "SUPPORTED",
-      "geographic_scope": "North-western range",
+      "geographic_scope": "predominant throughout the range",
       "provenance": [
         {
-          "source_type": "peer_reviewed_literature",
+          "source_type": "scholarly_monograph",
           "citation": "Darwin, C. (1862). On the Various Contrivances by which British and Foreign Orchids are Fertilised by Insects. John Murray, London.",
           "identifier": null
         }
@@ -118,7 +118,7 @@
     {
       "name": "habitual self-pollination",
       "kind": "competing_mechanism",
-      "statement": "In the North-western range the subject reproduces without any insect, so the pollination relationship is not required to explain seed set there.",
+      "statement": "Habitual self-pollination is reported as the reproductive strategy (predominant throughout the range), which is a separate account of how seed set occurs.",
       "evidence_state": "SUPPORTED"
     },
     {
@@ -137,8 +137,8 @@
       "description": "One report describes an insect-mediated system; the other describes reproduction that needs no insect. They are not reconciled by preferring the better-supported one.",
       "resolution": "unresolved_presented_as_contested",
       "scopes": [
-        "Mediterranean range",
-        "North-western range"
+        "sporadically reported, chiefly in the Mediterranean",
+        "predominant throughout the range"
       ]
     }
   ],
@@ -154,8 +154,8 @@
     "What conditions, if any, shift a population between strategies."
   ],
   "confidence": {
-    "qualitative": "moderate",
-    "basis": "The identity is resolved and both strategies are reported in the primary literature. Held below high because the reports conflict, no local observation supports either, and no source quantifies their contribution.",
+    "qualitative": "low",
+    "basis": "The taxonomic identity is resolved. Reports conflict and nothing retrieved settles the disagreement. 4 gap(s) remain in the retrieved evidence.",
     "numeric_precision_claimed": false
   },
   "locality_policy": {

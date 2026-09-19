@@ -79,8 +79,14 @@ describe("the reasoning map as Calyx renders it", () => {
     const block = container.querySelector('[data-testid="reasoning-contradictions"]');
     expect(block).not.toBeNull();
     const text = block?.textContent ?? "";
-    expect(text).toMatch(/Mediterranean range/);
-    expect(text).toMatch(/North-western range/);
+    // Both scopes come from the fixture. They are deliberately asymmetric —
+    // autogamy is predominant throughout the range while insect pollination is
+    // a sporadic local exception — so a hardcoded "Mediterranean versus
+    // north-west" here would pin a tidier split than the record supports.
+    for (const scope of map.contradictions[0].scopes) {
+      expect(scope).toBeTruthy();
+      expect(text).toContain(scope as string);
+    }
     expect(text).toMatch(/Left standing/i);
   });
 
@@ -123,7 +129,11 @@ describe("the reasoning map as Calyx renders it", () => {
     render(<ReasoningMapView map={map} />);
     const block = container.querySelector('[data-testid="reasoning-confidence"]');
     const text = block?.textContent ?? "";
-    expect(text).toMatch(/moderate/i);
+    // Read the level from the fixture rather than hardcoding it: the backend
+    // derives it from the contradictions and gaps it actually found, so pinning
+    // a literal here would fail whenever the evidence changes rather than when
+    // the rendering does.
+    expect(text.toLowerCase()).toContain(map.confidence.qualitative);
     expect(text).toContain(map.confidence.basis);
     expect(text).not.toMatch(/\d+\s*%/);
     expect(map.confidence.numeric_precision_claimed).toBe(false);
