@@ -294,6 +294,46 @@ describe("what an independent checker got through this surface", () => {
     ).not.toBeNull();
   });
 
+  it.each([
+    ["spelled-out degrees", "Recorded at 51.7520 degrees north, 1.2577 degrees west."],
+    ["UTM grid reference", "Recorded at UTM 30U 620000 5735000."],
+    ["MGRS grid reference", "Recorded at 30U WV 20000 35000."],
+    ["European comma decimals", "Recorded at 51,7520 1,2577."],
+    ["Open Location Code", "Recorded at 9C3XGV24+RQ."],
+    ["spelled-out degrees-minutes", "Recorded at 51 deg 45 min N, 1 deg 15 min W."],
+  ])("withholds a position written as %s", (_label, leak) => {
+    // A backend checker walked these past an equivalent pattern. Four of them
+    // never write a digits-and-dot pair, which is what a first pass assumes a
+    // coordinate looks like, so the same gap existed on this side.
+    const poisoned = variant((draft) => {
+      draft.relationships[0].provenance[0].citation = leak;
+    });
+    render(<ReasoningMapView map={poisoned} />);
+    const rendered = `${container.textContent ?? ""} ${container.innerHTML}`;
+    const digits = leak.match(/[0-9][0-9,.]{2,}/g) ?? [];
+    for (const run of digits) {
+      expect(rendered).not.toContain(run);
+    }
+    expect(
+      container.querySelector('[data-testid="reasoning-locality"]')?.textContent,
+    ).toContain("withheld a coordinate");
+  });
+
+  it("does not mistake a citation, a page range or a thousands separator for a position", () => {
+    // Over-withholding would mangle the provenance this panel exists to show.
+    const ordinary = variant((draft) => {
+      draft.relationships[0].provenance[0].citation =
+        "Kullenberg, B. (1961). Zoologiska Bidrag fran Uppsala 34: 1-340.";
+      draft.evidence_gaps = ["1,234 records were aggregated for this taxon."];
+    });
+    render(<ReasoningMapView map={ordinary} />);
+    expect(container.textContent).toContain("34: 1-340");
+    expect(container.textContent).toContain("1,234 records");
+    expect(
+      container.querySelector('[data-testid="reasoning-locality"]')?.textContent,
+    ).toContain("none carried a coordinate");
+  });
+
   it("states plainly that it found nothing when the map is clean", () => {
     render(<ReasoningMapView map={map} />);
     const footer = container.querySelector('[data-testid="reasoning-locality"]');

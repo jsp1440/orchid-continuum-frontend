@@ -290,17 +290,44 @@ export function hasSettledAnswer(map: ReasoningMap): boolean {
  * have been cleaned. So the text is checked here too, immediately before it is
  * rendered, in whatever field it arrives in.
  *
- * The shapes: a decimal pair (comma, semicolon or space separated), a
- * lat/lon-labelled number, and degrees-minutes with either apostrophe, with or
- * without a hemisphere letter.
+ * The shapes, widened after a backend checker walked five more past an
+ * equivalent pattern: a decimal pair however separated; a lat/lon-labelled
+ * number; degrees and minutes written with symbols or with words; degrees with
+ * a spelled-out hemisphere ("51.7520 degrees north" carries ~10 m and contains
+ * no decimal pair at all); European comma decimals; UTM and MGRS grid
+ * references; and Open Location Codes. Four of those five never write a
+ * digits-and-dot pair, which is what a first pass assumes a coordinate is.
+ *
+ * This is a list of shapes someone thought of, not a proof. It is why the
+ * footer reports what the scan found rather than asserting the page is clean.
  */
+const DEGREE_WORD = "(?:\u00b0|deg\\.?|degrees?)";
+const MINUTE_WORD = "(?:['\u2018\u2019\u2032]|min\\.?|minutes?)";
+const HEMISPHERE = "(?:[NSEW]\\b|north|south|east|west)";
+
 const COORDINATE_SHAPE = new RegExp(
   [
+    // A decimal pair, comma, semicolon or whitespace separated.
     "[-+]?\\d{1,3}\\.\\d+\\s*(?:[,;]\\s*|\\s+)[-+]?\\d{1,3}\\.\\d+",
-    "\\b(?:lat|latitude|lon|lng|long|longitude)\\b\\s*[=:]?\\s*[-+]?\\d+(?:\\.\\d+)?",
-    "\\d{1,3}\\s*\u00b0\\s*\\d{1,2}\\s*['\u2018\u2019\u2032]?" +
-      "(?:\\s*\\d{1,2}(?:\\.\\d+)?\\s*[\"\u201c\u201d\u2033]?)?\\s*[NSEW]?",
-    "\\d{1,3}(?:\\.\\d+)?\\s*\u00b0\\s*[NSEW]\\b",
+    // A lat/lon-labelled number, with or without a separator character.
+    "\\b(?:lat|latitude|lng|lon|long|longitude)\\b\\s*[=:]?\\s*[-+]?\\d+(?:\\.\\d+)?",
+    // Degrees and minutes, symbol or word, straight or typographic apostrophe.
+    `\\d{1,3}\\s*${DEGREE_WORD}\\s*\\d{1,2}\\s*${MINUTE_WORD}`,
+    // Degrees with a hemisphere, symbol or spelled out. This arm catches
+    // "51.7520 degrees north", which carries ~10 m and no decimal pair.
+    `\\d{1,3}(?:\\.\\d+)?\\s*${DEGREE_WORD}\\s*${HEMISPHERE}`,
+    // European comma decimals, as a pair. Exactly three digits after the comma
+    // is a thousands separator ("1,234 records") and is deliberately excluded.
+    "\\d{1,3},(?:\\d{1,2}|\\d{4,})\\s*(?:[; ]\\s*)[-+]?\\d{1,3},(?:\\d{1,2}|\\d{4,})",
+    // UTM and MGRS grid references, which locate a site with no degrees at all.
+    // The digit run is a pair, an easting and a northing. Matching only the
+    // first leaves the second sitting next to the marker, which is most of a
+    // position and reads as though it had been removed.
+    "\\b\\d{1,2}\\s*[C-HJ-NP-X]\\s*[A-Z]{2}\\s*\\d{4,10}(?:\\s+\\d{4,10})?\\b",
+    "\\bUTM\\b[^\\n]{0,24}?\\d{5,7}\\s+\\d{5,8}",
+    "\\b\\d{1,2}[C-HJ-NP-X]\\s+\\d{5,7}\\s+\\d{5,8}\\b",
+    // Open Location Code (plus code).
+    "\\b[23456789CFGHJMPQRVWX]{4,8}\\+[23456789CFGHJMPQRVWX]{2,7}\\b",
   ].join("|"),
   "gi",
 );
