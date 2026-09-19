@@ -25,6 +25,8 @@ export type GraphDispatchPlan = {
   unboundQueued: number[];
   /** Declarations naming a node this graph does not contain. A binding failure, never a guess. */
   unknownNodeDeclarations: Array<{ issueNumber: number; nodeId: string }>;
+  /** Declarations naming a real node that is not a leaf, so the ranker can never select it. */
+  unadmissibleNodeDeclarations: Array<{ issueNumber: number; nodeId: string }>;
   /** Lane capacity and queued work both exist, yet nothing could be admitted. */
   starved: boolean;
 };
@@ -53,27 +55,43 @@ function collectNodeIds(root: CompletionNode, into: Set<string> = new Set()): Se
   return into;
 }
 
+/** `selectAdmissibleLeaf` only ever returns a leaf, so only a leaf can carry an issue. */
+function collectLeafIds(root: CompletionNode, into: Set<string> = new Set()): Set<string> {
+  if (root.children.length === 0) into.add(root.id);
+  for (const child of root.children) collectLeafIds(child, into);
+  return into;
+}
+
 /**
  * Index the issue-side bindings by node.
  *
- * A declaration naming a node this graph does not contain is reported as exactly
- * that. Guessing which node was meant is the heuristic these bindings replaced.
+ * Three outcomes, kept apart on purpose. A declaration naming a node this graph
+ * does not contain is reported as exactly that; guessing which node was meant is
+ * the heuristic these bindings replaced. A declaration naming a real node that is
+ * not a leaf -- a domain or a portfolio -- is reported too, rather than counted
+ * as a binding: the ranker only ever selects leaves, so such an issue can never
+ * be admitted, and silently treating it as bound would remove it from
+ * `unboundQueued` and leave the operator with no line to act on. Naming a domain
+ * instead of a leaf is the likeliest way to mislabel an issue.
  */
 function indexDeclarations(root: CompletionNode, declaredNodesByIssue: Record<number, string[]>) {
   const known = collectNodeIds(root);
+  const leaves = collectLeafIds(root);
   const declared = new Map<string, number[]>();
   const unknown: GraphDispatchPlan['unknownNodeDeclarations'] = [];
+  const unadmissible: GraphDispatchPlan['unadmissibleNodeDeclarations'] = [];
   for (const [key, nodeIds] of Object.entries(declaredNodesByIssue)) {
     const issueNumber = Number(key);
     if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) throw new Error('Invalid declared issue identity');
     for (const nodeId of nodeIds) {
       if (!known.has(nodeId)) { unknown.push({ issueNumber, nodeId }); continue; }
+      if (!leaves.has(nodeId)) { unadmissible.push({ issueNumber, nodeId }); continue; }
       const bound = declared.get(nodeId) ?? [];
       if (!bound.includes(issueNumber)) bound.push(issueNumber);
       declared.set(nodeId, bound);
     }
   }
-  return { declared, unknown };
+  return { declared, unknown, unadmissible };
 }
 
 function graphSideIssues(root: CompletionNode, into: Set<number> = new Set()): Set<number> {
@@ -113,7 +131,7 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
   const queued = new Set(input.queuedIssueNumbers ?? []);
   const openWorkRefs = new Set(input.openWorkRefs ?? []);
   const now = input.now ?? new Date().toISOString();
-  const { declared, unknown } = indexDeclarations(root, input.declaredNodesByIssue ?? {});
+  const { declared, unknown, unadmissible } = indexDeclarations(root, input.declaredNodesByIssue ?? {});
   const bound = new Set([...graphSideIssues(root), ...[...declared.values()].flat()]);
   const unboundQueued = [...queued].filter(issue => !bound.has(issue)).sort((a, b) => a - b);
   const graph = cloneGraph(root);
@@ -162,6 +180,7 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     surfacedBlockers: [...blockerMap.values()],
     unboundQueued,
     unknownNodeDeclarations: unknown,
+    unadmissibleNodeDeclarations: unadmissible,
     // Reporting this run as a healthy no-op is what let the binding gap run unseen.
     starved: capacity > 0 && queued.size > 0 && issues.length === 0,
   };

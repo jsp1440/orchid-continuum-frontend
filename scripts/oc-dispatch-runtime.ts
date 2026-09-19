@@ -75,8 +75,10 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
   output('outcome', outcome);
 }
 /**
- * An idle wave with queued work and free capacity is a binding failure, not health.
- * Say which side is missing: issues no node names, or nodes no queued issue names.
+ * A wave that admitted nothing while admissible work was pending is a binding
+ * failure. Say which side is missing: issues no node names, or nodes no pending
+ * issue names. A wave that admitted nothing because its lanes are busy is not a
+ * failure at all, and saying so would train the operator to ignore this.
  *
  * This is written for GITHUB_STEP_SUMMARY, which renders Markdown with HTML
  * passthrough. A bare `<node-id>` is stripped there as an unknown tag, which
@@ -85,22 +87,28 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
  */
 export function bindingReport(plan: Plan) {
   const lines: string[] = [];
-  // `inventory.queued` is a label census; `starved` comes from the eligibility-
-  // filtered set the ranker actually saw. Either alone leaves a reporting hole,
-  // so an idle wave is called out when either says there was work to do.
-  const idle = plan.capacity > 0 && plan.issues.length === 0 && (plan.starved || plan.inventory.queued > 0);
+  const pending = plan.inventory.queued + plan.inventory.prepared;
+  // `starved` comes from the eligibility-filtered set the ranker actually saw,
+  // and stands on its own. `pending` is a raw label census that also counts work
+  // already executing, so it only speaks when no lane is occupied -- otherwise a
+  // healthy wave with five lanes running reports itself starved.
+  const idle = plan.capacity > 0 && plan.issues.length === 0
+    && (plan.starved || (pending > 0 && plan.inventory.active === 0));
   if (idle) {
-    lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${plan.inventory.queued} issue(s) labelled \`oc-queued\`, nothing admitted. ` +
-      `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no queued issue.`);
+    lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${pending} pending issue(s), nothing admitted. ` +
+      `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no pending issue.`);
   }
   if (idle && !plan.starved) {
-    lines.push('- No queued issue reached graph admission at all: every one was filtered out first by lineage, a hold, or a lane label.');
+    lines.push('- No pending issue reached graph admission: each was filtered out first by an open PR lineage, an `OC-AUTO-HOLD`, or a lane label.');
   }
   if (plan.unboundQueued.length > 0) {
-    lines.push(`- Unbound queued issues (no completion-graph node names them; bind one with an \`oc-node:<node-id>\` label): ${plan.unboundQueued.join(', ')}.`);
+    lines.push(`- Pending issues bound to no completion-graph node (bind one with an \`oc-node:<node-id>\` label naming a leaf): ${plan.unboundQueued.join(', ')}.`);
   }
   for (const { issueNumber, nodeId } of plan.unknownNodeDeclarations) {
     lines.push(`- Issue #${issueNumber} declares node \`${nodeId}\`, which is not in the completion graph. Binding refused.`);
+  }
+  for (const { issueNumber, nodeId } of plan.unadmissibleNodeDeclarations) {
+    lines.push(`- Issue #${issueNumber} declares node \`${nodeId}\`, which is not a leaf, so the ranker can never select it. Binding refused; name a leaf instead.`);
   }
   return lines.length > 0 ? `\n${lines.join('\n')}\n` : '';
 }

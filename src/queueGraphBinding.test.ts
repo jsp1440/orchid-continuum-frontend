@@ -76,6 +76,29 @@ describe('binding a queued issue from the issue side', () => {
     expect(plan.issues).not.toContain(171);
   });
 
+  it('refuses a declaration naming a real node that is not a leaf, and still reports the issue as unbound', () => {
+    // A domain, not a leaf. `selectAdmissibleLeaf` only ever returns leaves, so
+    // this issue can never be admitted -- and counting it as bound would delete
+    // the one line telling the operator to fix the label.
+    const plan = buildGraphDispatchPlan({
+      maxActiveLanes: 8, runningCount: 0, queuedIssueNumbers: QUEUED_AT_STARVATION, now: NOW,
+      declaredNodesByIssue: { 703: ['domain-species-dossier'] },
+    });
+
+    expect(plan.unadmissibleNodeDeclarations).toEqual([{ issueNumber: 703, nodeId: 'domain-species-dossier' }]);
+    expect(plan.issues).toEqual([]);
+    expect(plan.unboundQueued).toContain(703);
+    expect(plan.unknownNodeDeclarations).toEqual([]);
+  });
+
+  it('binds an uppercase declaration, which GitHub labels can carry', () => {
+    const plan = buildGraphDispatchPlan({
+      maxActiveLanes: 8, runningCount: 0, queuedIssueNumbers: QUEUED_AT_STARVATION, now: NOW,
+      declaredNodesByIssue: declaredNodesByIssue([issue(703, ['oc-queued', `oc-node:${ADMISSIBLE_LEAF.toUpperCase()}`])]),
+    });
+    expect(plan.issues).toContain(703);
+  });
+
   it('refuses a declaration naming a node the graph does not have, rather than guessing one', () => {
     const plan = buildGraphDispatchPlan({
       maxActiveLanes: 8, runningCount: 0, queuedIssueNumbers: QUEUED_AT_STARVATION, now: NOW,
@@ -150,7 +173,7 @@ describe('the oc-node label surface', () => {
 describe('what the scheduler run says when it admits nothing', () => {
   const planWith = (over: Record<string, unknown>) => ({
     capacity: 8, issues: [], leaves: [], untrackedLeaves: [], surfacedBlockers: [],
-    unboundQueued: [], unknownNodeDeclarations: [], starved: false,
+    unboundQueued: [], unknownNodeDeclarations: [], unadmissibleNodeDeclarations: [], starved: false,
     inventory: { queued: 23, prepared: 1, validating: 1, blocked: 22, 'owner-gate': 6, 'runtime-backoff': 23, active: 0 },
     ...over,
   }) as unknown as Parameters<typeof bindingReport>[0];
@@ -162,8 +185,8 @@ describe('what the scheduler run says when it admits nothing', () => {
     }));
     expect(report).toContain('STARVED');
     expect(report).toContain('8 free lane(s)');
-    expect(report).toContain('23 issue(s) labelled `oc-queued`');
-    expect(report).toContain('1 admissible graph leaf/leaves carried no queued issue');
+    expect(report).toContain('24 pending issue(s)');
+    expect(report).toContain('1 admissible graph leaf/leaves carried no pending issue');
   });
 
   it('lists the queued issues no node names, and how to bind one', () => {
@@ -197,16 +220,41 @@ describe('what the scheduler run says when it admits nothing', () => {
   it('calls out an idle wave whose queue never reached the ranker at all', () => {
     // Every queued issue filtered out before graph admission: the planner sees an
     // empty queue and reports starved=false, which used to print nothing.
-    const report = bindingReport(planWith({ starved: false, inventory: { queued: 23, active: 0 } }));
+    const report = bindingReport(planWith({ starved: false, inventory: { queued: 23, prepared: 0, active: 0 } }));
     expect(report).toContain('STARVED');
-    expect(report).toContain('No queued issue reached graph admission at all');
+    expect(report).toContain('No pending issue reached graph admission');
   });
 
   it('says nothing when the wave is genuinely healthy', () => {
     expect(bindingReport(planWith({ issues: [703] }))).toBe('');
   });
 
+  it('does not call a wave starved because its lanes are busy', () => {
+    // 23 issues still carry `oc-queued` while five lanes execute them: the label
+    // census counts work in flight, so on its own it reports a healthy pipeline
+    // as starvation, and an operator learns to ignore the line.
+    const report = bindingReport(planWith({ starved: false, inventory: { queued: 23, prepared: 0, active: 5 } }));
+    expect(report).toBe('');
+  });
+
+  it('still calls out real starvation while other lanes are busy', () => {
+    // `starved` comes from the set the ranker actually saw, so it stands on its
+    // own: eligible work that could not bind is a failure however busy the rest is.
+    const report = bindingReport(planWith({ starved: true, inventory: { queued: 23, prepared: 0, active: 5 } }));
+    expect(report).toContain('STARVED');
+  });
+
+  it('names a declaration that points at a node the ranker can never select', () => {
+    const report = bindingReport(planWith({
+      starved: true,
+      unadmissibleNodeDeclarations: [{ issueNumber: 703, nodeId: 'domain-species-dossier' }],
+    }));
+    expect(report).toContain('#703 declares node `domain-species-dossier`');
+    expect(report).toContain('is not a leaf');
+    expect(report).toContain('name a leaf instead');
+  });
+
   it('says nothing when there is simply no queued work', () => {
-    expect(bindingReport(planWith({ inventory: { queued: 0, active: 0 } }))).toBe('');
+    expect(bindingReport(planWith({ inventory: { queued: 0, prepared: 0, active: 0 } }))).toBe('');
   });
 });
