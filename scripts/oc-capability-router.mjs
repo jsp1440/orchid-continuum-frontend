@@ -18,12 +18,19 @@
  *      shared registry — `contracts/oc-shared-capabilities.v1.json` here, mirrored
  *      from `contracts/cognitive_integration_capabilities_v1.json` in the Brain
  *      and `app/provider_reservoir/capabilities.py` in orchid-calyx-backend.
- *      `capabilityRouter.test.ts` pins this file against the Brain's copy.
+ *      `capabilityRouter.test.ts` pins this file to the hash it was vendored
+ *      at, recorded with its upstream commit in
+ *      `contracts/oc-shared-capabilities.provenance.json`. That catches an edit
+ *      here; it does not catch drift in the Brain, because nothing in this
+ *      repository reads the Brain at build time. The provenance file says so
+ *      rather than leaving the reader to assume otherwise — this comment
+ *      previously claimed a cross-repository pin that did not exist.
  *
  *   2. *Can THIS repository execute it, and with what command?* That is local.
- *      The frontend can run its own tests, linter, typechecker, build and route
- *      sweep; it cannot resolve taxonomy or assemble a reasoning map, which are
- *      backend capabilities.
+ *      The frontend can run its own tests, linter, typechecker and build; it
+ *      cannot resolve taxonomy or assemble a reasoning map, which are backend
+ *      capabilities. The route sweep is deliberately not offered — see
+ *      `LOCAL_EXECUTORS` below for why.
  *
  * Before the split, every shared deterministic capability the frontend could not
  * itself run — 11 of the 14, including `fixture-execution` and `reconcile` —
@@ -57,9 +64,9 @@ export const SHARED_CAPABILITIES = Object.freeze(
  * repository claiming to do locally what the Continuum has agreed needs a model;
  * the test rejects that, and so does `assertLocalExecutorsAreDeterministic`.
  *
- * `typecheck-execution`, `route-verification` and `build-verification` are
+ * `typecheck-execution` and `build-verification` are
  * frontend-local: they have no backend or Brain counterpart because no other
- * repository has a TypeScript project, a router or a Vite build to check. They
+ * repository has a TypeScript project or a Vite build to check. They
  * are deterministic by construction — each is an npm script in this repository.
  */
 export const LOCAL_EXECUTORS = Object.freeze({
@@ -67,7 +74,12 @@ export const LOCAL_EXECUTORS = Object.freeze({
   'lint-execution': 'npm run lint',
   'typecheck-execution': 'npm run typecheck',
   'schema-validation': 'npm run validate:deployment',
-  'route-verification': 'npm run verify:routes',
+  // `route-verification` is deliberately absent. `npm run verify:routes` drives
+  // Playwright against FRONTEND_URL, which defaults to a preview server on
+  // 127.0.0.1:4173 that nothing in this job starts, so it would fail on every
+  // run. A capability that cannot succeed is worse than one that does not
+  // exist: it turns a green controller red every five minutes and teaches
+  // everyone to ignore it. Restore it with the step that starts the server.
   'build-verification': 'npm run build',
 });
 

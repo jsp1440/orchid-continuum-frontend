@@ -1,0 +1,13 @@
+{
+  "schema": "oc.vendored-contract-provenance.v1",
+  "vendored_file": "contracts/oc-shared-capabilities.v1.json",
+  "upstream": {
+    "repository": "jsp1440/Orchid-Continuum-Brain",
+    "path": "contracts/cognitive_integration_capabilities_v1.json",
+    "commit": "7792249cfa333d385274436b265606d7be1ffabd",
+    "verified_at": "2026-09-19"
+  },
+  "sha256": "1e7dbddc9672f2179386d32483a3151c174b389612daf76805161c457757895e",
+  "what_this_catches": "Local edits to the vendored copy. A test hashes the vendored file and compares it to sha256, so changing one without the other fails.",
+  "what_this_does_not_catch": "Drift in the Brain after the commit named above. Nothing in this repository reads the Brain at build time, so a rename or reclassification there is invisible here until someone re-vendors. Detecting that needs a CI step with read access to the Brain, which this workflow does not have."
+}
