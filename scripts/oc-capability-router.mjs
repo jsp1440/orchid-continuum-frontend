@@ -9,14 +9,60 @@
  * issues queued, the controller has planned and refused the same work every five
  * minutes while reporting success.
  *
- * This module is the per-task question that was missing. It mirrors the registry
- * in orchid-calyx-backend (app/provider_reservoir/capabilities.py) and the Brain
- * (contracts/cognitive_integration_capabilities_v1.json); all three must agree,
- * and a test pins that they do.
+ * This module is the per-task question that was missing. It answers it in two
+ * steps, because they are two different questions and conflating them
+ * reintroduced the original bug one level down:
+ *
+ *   1. *Does this capability need a provider?* That is a property of the
+ *      capability and is the same in every repository. The answer lives in the
+ *      shared registry — `contracts/oc-shared-capabilities.v1.json` here, mirrored
+ *      from `contracts/cognitive_integration_capabilities_v1.json` in the Brain
+ *      and `app/provider_reservoir/capabilities.py` in orchid-calyx-backend.
+ *      `capabilityRouter.test.ts` pins this file against the Brain's copy.
+ *
+ *   2. *Can THIS repository execute it, and with what command?* That is local.
+ *      The frontend can run its own tests, linter, typechecker, build and route
+ *      sweep; it cannot resolve taxonomy or assemble a reasoning map, which are
+ *      backend capabilities.
+ *
+ * Before the split, every shared deterministic capability the frontend could not
+ * itself run — 11 of the 14, including `fixture-execution` and `reconcile` —
+ * raised `CapabilityUnknown` and was routed `provider_free=false`, refusing
+ * deterministic work for want of a provider it never needed. A capability this
+ * repository cannot execute is now reported as exactly that: deterministic, with
+ * no executor here. It never becomes a provider requirement, and it never
+ * suppresses the deterministic work in the same issue that this repository *can*
+ * run.
  */
 
-/** Capabilities this repository can execute with no provider, and how. */
-export const DETERMINISTIC_CAPABILITIES = Object.freeze({
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
+const contractPath = fileURLToPath(
+  new URL('../contracts/oc-shared-capabilities.v1.json', import.meta.url),
+);
+
+/** The cross-repository registry: what each capability is, and whether it needs a model. */
+export const SHARED_CONTRACT = Object.freeze(JSON.parse(readFileSync(contractPath, 'utf8')));
+
+/** Shared capability name -> provider_required. The classification, not the execution. */
+export const SHARED_CAPABILITIES = Object.freeze(
+  Object.fromEntries(SHARED_CONTRACT.capabilities.map(c => [c.name, Boolean(c.provider_required)])),
+);
+
+/**
+ * Capabilities this repository can execute with no provider, and how.
+ *
+ * A name here that the shared registry marks `provider_required` would be this
+ * repository claiming to do locally what the Continuum has agreed needs a model;
+ * the test rejects that, and so does `assertLocalExecutorsAreDeterministic`.
+ *
+ * `typecheck-execution`, `route-verification` and `build-verification` are
+ * frontend-local: they have no backend or Brain counterpart because no other
+ * repository has a TypeScript project, a router or a Vite build to check. They
+ * are deterministic by construction — each is an npm script in this repository.
+ */
+export const LOCAL_EXECUTORS = Object.freeze({
   'test-execution': 'npm run test',
   'lint-execution': 'npm run lint',
   'typecheck-execution': 'npm run typecheck',
@@ -25,18 +71,42 @@ export const DETERMINISTIC_CAPABILITIES = Object.freeze({
   'build-verification': 'npm run build',
 });
 
+/** Deterministic capabilities, whether or not this repository can run them. */
+export const DETERMINISTIC_CAPABILITIES = Object.freeze(
+  Object.fromEntries(
+    Object.entries(SHARED_CAPABILITIES)
+      .filter(([, providerRequired]) => !providerRequired)
+      .map(([name]) => [name, LOCAL_EXECUTORS[name] ?? null])
+      .concat(
+        Object.entries(LOCAL_EXECUTORS).filter(([name]) => !Object.hasOwn(SHARED_CAPABILITIES, name)),
+      ),
+  ),
+);
+
 /** Capabilities that genuinely need a language model. */
-export const PROVIDER_CAPABILITIES = Object.freeze([
-  'natural-language-explanation',
-  'free-text-intent-parsing',
-  'open-ended-code-authoring',
-  'literature-summarisation',
-]);
+export const PROVIDER_CAPABILITIES = Object.freeze(
+  Object.entries(SHARED_CAPABILITIES)
+    .filter(([, providerRequired]) => providerRequired)
+    .map(([name]) => name)
+    .sort(),
+);
 
 const CAPABILITY_MARKER = /^OC-SWARM-CAPABILITY:\s*([a-z0-9][a-z0-9-]*)\s*$/gim;
 const OPTIONAL_MARKER = /^OC-SWARM-PROVIDER-OPTIONAL:\s*([a-z0-9][a-z0-9-]*)\s*$/gim;
 
 export class CapabilityUnknown extends Error {}
+
+/** Guard the one inconsistency a local binding could introduce. */
+export function assertLocalExecutorsAreDeterministic() {
+  for (const name of Object.keys(LOCAL_EXECUTORS)) {
+    if (SHARED_CAPABILITIES[name] === true) {
+      throw new Error(
+        `capability '${name}' is provider-required in the shared registry, so this ` +
+          'repository must not bind a deterministic command to it',
+      );
+    }
+  }
+}
 
 function collect(body, pattern) {
   const found = [];
@@ -49,29 +119,36 @@ function collect(body, pattern) {
 /**
  * Classify one issue.
  *
- * Throws on an unclassified capability rather than guessing a lane: guessing
- * toward the provider spends money on work that may not need it, and guessing
- * the other way hands work to an executor that cannot do it and then reports
- * success it did not earn.
+ * Throws on a capability no registry classifies, rather than guessing a lane:
+ * guessing toward the provider spends money on work that may not need it, and
+ * guessing the other way hands work to an executor that cannot do it and then
+ * reports success it did not earn.
  */
 export function routeIssue(issue) {
+  assertLocalExecutorsAreDeterministic();
+
   const body = String(issue?.body || '');
   const declared = [...new Set(collect(body, CAPABILITY_MARKER))];
   const optional = new Set(collect(body, OPTIONAL_MARKER));
 
-  const deterministic = [];
+  const executable = [];
+  const notExecutableHere = [];
   const providerRequired = [];
   for (const name of declared) {
-    if (Object.hasOwn(DETERMINISTIC_CAPABILITIES, name)) deterministic.push(name);
-    else if (PROVIDER_CAPABILITIES.includes(name)) providerRequired.push(name);
-    else throw new CapabilityUnknown(
-      `capability '${name}' is not classified; add it to the registry rather than letting routing guess`,
-    );
+    if (Object.hasOwn(LOCAL_EXECUTORS, name)) executable.push(name);
+    else if (SHARED_CAPABILITIES[name] === false) notExecutableHere.push(name);
+    else if (SHARED_CAPABILITIES[name] === true) providerRequired.push(name);
+    else
+      throw new CapabilityUnknown(
+        `capability '${name}' is not classified; add it to the registry rather than letting routing guess`,
+      );
   }
 
   for (const name of optional) {
-    if (Object.hasOwn(DETERMINISTIC_CAPABILITIES, name)) {
-      throw new Error(`capability '${name}' is deterministic, so marking it optional is meaningless; it runs either way`);
+    if (SHARED_CAPABILITIES[name] === false || Object.hasOwn(LOCAL_EXECUTORS, name)) {
+      throw new Error(
+        `capability '${name}' is deterministic, so marking it optional is meaningless; it runs either way`,
+      );
     }
   }
 
@@ -80,13 +157,17 @@ export function routeIssue(issue) {
 
   return {
     issue: Number(issue?.number) || 0,
-    deterministic: deterministic.sort(),
+    /** Deterministic and runnable here. */
+    deterministic: executable.sort(),
+    /** Deterministic, but belonging to another repository's executor. */
+    deterministicElsewhere: notExecutableHere.sort(),
     blockingProvider: blocking.sort(),
     optionalProvider: parked.sort(),
     /** Deterministic work can run now, whatever the provider budget says. */
-    providerFree: deterministic.length > 0 && blocking.length === 0,
+    providerFree: executable.length > 0 && blocking.length === 0,
     /** Nothing here can run without a provider. */
-    fullyBlocked: deterministic.length === 0 && blocking.length > 0,
+    fullyBlocked:
+      executable.length === 0 && notExecutableHere.length === 0 && blocking.length > 0,
     /** Nothing declared: no lane is inferred, and difficulty is not a signal. */
     undeclared: declared.length === 0,
   };
@@ -94,7 +175,7 @@ export function routeIssue(issue) {
 
 /** The commands a provider-free lane should run for this issue, in order. */
 export function commandsFor(routing) {
-  return routing.deterministic.map(name => DETERMINISTIC_CAPABILITIES[name]);
+  return routing.deterministic.map(name => LOCAL_EXECUTORS[name]);
 }
 
 /**
@@ -110,13 +191,16 @@ export function refusalRecord(issue, routing) {
     issue: routing.issue,
     provider_free: routing.providerFree,
     deterministic_capabilities: routing.deterministic,
+    deterministic_capabilities_without_local_executor: routing.deterministicElsewhere,
     blocking_provider_capabilities: routing.blockingProvider,
     optional_provider_capabilities: routing.optionalProvider,
     reason: routing.undeclared
       ? 'no capability declared; the lane will not infer one from the task description'
       : routing.providerFree
         ? 'deterministic work is available and should not have been refused'
-        : 'every declared capability requires a provider, and none is authorized',
+        : routing.deterministic.length === 0 && routing.blockingProvider.length === 0
+          ? 'every declared capability is deterministic but has no executor in this repository; this is not a provider blocker'
+          : 'every declared capability requires a provider, and none is authorized',
     would_run: commandsFor(routing),
   };
 }

@@ -7,11 +7,13 @@
  */
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { DETERMINISTIC_CAPABILITIES } from './oc-capability-router.mjs';
+import { LOCAL_EXECUTORS } from './oc-capability-router.mjs';
 
 const issueNumber = Number(process.env.ISSUE_NUMBER);
 const repo = process.env.REPO;
-const allowed = new Set(Object.values(DETERMINISTIC_CAPABILITIES));
+// Exactly the commands this repository binds; a shared capability with no
+// local executor contributes no command and must not widen this set.
+const allowed = new Set(Object.values(LOCAL_EXECUTORS));
 const commands = JSON.parse(process.env.COMMANDS || '[]');
 
 if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) throw new Error('Invalid issue number');

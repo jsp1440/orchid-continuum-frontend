@@ -11,10 +11,13 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import {
   CapabilityUnknown,
   DETERMINISTIC_CAPABILITIES,
+  LOCAL_EXECUTORS,
   PROVIDER_CAPABILITIES,
+  SHARED_CAPABILITIES,
   commandsFor,
   refusalRecord,
   routeIssue,
@@ -86,10 +89,10 @@ describe('capability routing', () => {
 
 describe('the command surface', () => {
   it('only ever yields commands from the fixed registry', () => {
-    const registry = new Set(Object.values(DETERMINISTIC_CAPABILITIES));
+    const registry = new Set(Object.values(LOCAL_EXECUTORS));
     const routing = routeIssue(
       issue(
-        Object.keys(DETERMINISTIC_CAPABILITIES)
+        Object.keys(LOCAL_EXECUTORS)
           .map((name) => `OC-SWARM-CAPABILITY: ${name}`)
           .join('\n'),
       ),
@@ -144,23 +147,83 @@ describe('a refusal that survives the refusal', () => {
 });
 
 describe('agreement with the other two repositories', () => {
-  it('classifies the shared capabilities the same way the backend and Brain do', () => {
-    // A capability classified one way here and another way there would route the
-    // same task into two different lanes.
-    for (const name of [
-      'natural-language-explanation',
-      'free-text-intent-parsing',
-      'open-ended-code-authoring',
-      'literature-summarisation',
-    ]) {
-      expect(PROVIDER_CAPABILITIES).toContain(name);
-      expect(Object.keys(DETERMINISTIC_CAPABILITIES)).not.toContain(name);
+  // The old version of this block asserted only that four names it listed inline
+  // were provider capabilities. It compared nothing against either other
+  // repository, so it passed while 11 of the 14 shared deterministic
+  // capabilities raised CapabilityUnknown here and were refused as though they
+  // needed a provider. These read the vendored contract instead.
+  const brain = JSON.parse(
+    readFileSync(new URL('../../contracts/oc-shared-capabilities.v1.json', import.meta.url), 'utf8'),
+  ) as { schema: string; capabilities: { name: string; provider_required: boolean }[] };
+
+  it('classifies every shared capability exactly as the shared contract does', () => {
+    expect(brain.schema).toBe('oc.cognitive-integration-capabilities.v1');
+    expect(brain.capabilities.length).toBeGreaterThan(0);
+    for (const capability of brain.capabilities) {
+      expect(SHARED_CAPABILITIES[capability.name]).toBe(capability.provider_required);
     }
   });
 
-  it('maps every deterministic capability to a real npm script', () => {
-    for (const command of Object.values(DETERMINISTIC_CAPABILITIES) as string[]) {
+  it('routes every shared deterministic capability without raising', () => {
+    // The defect this pins: a backend-owned deterministic capability such as
+    // `reconcile` used to throw here, and a throw routes provider_free=false.
+    for (const capability of brain.capabilities.filter((c) => !c.provider_required)) {
+      const routing = routeIssue(issue(`OC-SWARM-CAPABILITY: ${capability.name}`));
+      expect(routing.blockingProvider).toEqual([]);
+      expect(routing.fullyBlocked).toBe(false);
+    }
+  });
+
+  it('never runs deterministic work it cannot actually execute', () => {
+    const elsewhere = brain.capabilities.find(
+      (c) => !c.provider_required && !(c.name in LOCAL_EXECUTORS),
+    );
+    expect(elsewhere).toBeDefined();
+    const routing = routeIssue(issue(`OC-SWARM-CAPABILITY: ${elsewhere!.name}`));
+    expect(routing.deterministicElsewhere).toEqual([elsewhere!.name]);
+    expect(commandsFor(routing)).toEqual([]);
+    expect(routing.providerFree).toBe(false);
+    // Not executable here is not the same as needing a model, and the receipt
+    // has to say so or the next reader calls it a provider blocker again.
+    expect(refusalRecord({ number: 1 }, routing).reason).toMatch(/not a provider blocker/);
+  });
+
+  it('still runs the local work in an issue that also names backend work', () => {
+    const routing = routeIssue(
+      issue('OC-SWARM-CAPABILITY: test-execution\nOC-SWARM-CAPABILITY: taxonomy-resolution'),
+    );
+    expect(routing.providerFree).toBe(true);
+    expect(commandsFor(routing)).toEqual(['npm run test']);
+    expect(routing.deterministicElsewhere).toEqual(['taxonomy-resolution']);
+  });
+
+  it('binds no local command to a capability the contract says needs a model', () => {
+    for (const name of Object.keys(LOCAL_EXECUTORS)) {
+      expect(SHARED_CAPABILITIES[name]).not.toBe(true);
+    }
+  });
+
+  it('declares its frontend-only capabilities as deterministic', () => {
+    // No other repository has a TypeScript project, a router or a Vite build,
+    // so these three have no shared counterpart by design.
+    const local = Object.keys(LOCAL_EXECUTORS).filter(
+      (name) => !(name in SHARED_CAPABILITIES),
+    );
+    expect(local.sort()).toEqual([
+      'build-verification',
+      'route-verification',
+      'typecheck-execution',
+    ]);
+    for (const name of local) expect(DETERMINISTIC_CAPABILITIES[name]).toMatch(/^npm run /);
+  });
+
+  it('maps every locally executable capability to a real npm script', () => {
+    const pkg = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    ) as { scripts: Record<string, string> };
+    for (const command of Object.values(LOCAL_EXECUTORS) as string[]) {
       expect(command.startsWith('npm run ')).toBe(true);
+      expect(pkg.scripts[command.slice('npm run '.length)]).toBeDefined();
     }
   });
 });
