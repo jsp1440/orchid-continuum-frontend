@@ -392,6 +392,22 @@ const COORDINATE_SHAPE = new RegExp(
     // excluded letters are what stop this matching ordinary words.
     "\\b(?=[0-9bcdefghjkmnpqrstuvwxyz]*\\d)[0-9bcdefghjkmnpqrstuvwxyz]{7,12}\\b",
     "///[a-z]+\\.[a-z]+\\.[a-z]+",
+    // what3words with the `///` left off, which is how people usually write it:
+    // three lowercase words resolving a 3m square, finer than any decimal pair
+    // above. Anchored to the whole field rather than matched inside prose,
+    // because unanchored it also redacts ordinary dotted identifiers -- it ate
+    // `app.brain.reasoning_map.ReasoningMapEngine`, the traversal engine this
+    // panel is supposed to display, which is defending the page by breaking
+    // what it exists to show. A bare address as an entire field value is caught;
+    // one buried mid-sentence is not, and that gap is stated rather than hidden.
+    "^\\s*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}\\s*$",
+    // Degrees and decimal minutes with no symbol: `5145.20N 0115.47W`. This is
+    // what a GPS receiver emits (NMEA), carries ~10m, and writes no pair the
+    // decimal arm can see.
+    "\\b\\d{3,5}\\.\\d{1,4}\\s*[NSEW]\\b",
+    // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but it is
+    // the whole-number form of a shape already covered for decimals.
+    "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
     "[@=]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?\\s*[/,]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?",
     "(?:^|[^\\d.])[-+]?\\d{1,3}\\s*,\\s*[-+]\\d{1,3}(?!\\d|\\.\\d)",
     "\\d{1,3}\\s+\\d{1,2}['‘’′]\\d{1,2}(?:[\"“”″])?\\s*[NSEW]\\b",
@@ -452,10 +468,16 @@ function foldDigits(text: string): string {
 }
 
 function normalised(text: string): string {
+  // `_` becomes a space before this text is painted, so the scan has to see the
+  // string the reader will see. Doing it here covers every arm; `SEP` covered
+  // only the decimal-pair one, which is why `632540_5712345` passed the scan
+  // and the render then synthesised `632540 5712345` in the locality footer --
+  // the page manufacturing the coordinate it had just certified absent.
+  const painted = (value: string) => value.replace(/_/g, " ");
   try {
-    return foldDigits(text.normalize("NFKC"));
+    return painted(foldDigits(text.normalize("NFKC")));
   } catch {
-    return foldDigits(text);
+    return painted(foldDigits(text));
   }
 }
 
