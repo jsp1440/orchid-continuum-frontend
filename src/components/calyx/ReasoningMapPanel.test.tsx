@@ -79,13 +79,19 @@ describe("the reasoning map as Calyx renders it", () => {
     const block = container.querySelector('[data-testid="reasoning-contradictions"]');
     expect(block).not.toBeNull();
     const text = block?.textContent ?? "";
-    // Both scopes come from the fixture. They are deliberately asymmetric —
+    // Both scopes come from the fixture. They are deliberately asymmetric --
     // autogamy is predominant throughout the range while insect pollination is
-    // a sporadic local exception — so a hardcoded "Mediterranean versus
-    // north-west" here would pin a tidier split than the record supports.
-    for (const scope of map.contradictions[0].scopes) {
-      expect(scope).toBeTruthy();
-      expect(text).toContain(scope as string);
+    // a sporadic local exception -- so a hardcoded "Mediterranean versus
+    // north-west" here would pin a tidier split than the record supports, and
+    // the executor stopped emitting those labels in orchid-calyx-backend#1510.
+    // The guards below are not decoration: without them two empty strings
+    // satisfy the loop and `toContain("")` is always true, so a panel that
+    // rendered no scope at all would pass. Found by mutation during review.
+    const scopes = map.contradictions[0].scopes ?? [];
+    expect(scopes.length).toBeGreaterThan(1);
+    for (const scope of scopes) {
+      expect(scope.trim().length).toBeGreaterThan(0);
+      expect(text).toContain(scope);
     }
     expect(text).toMatch(/Left standing/i);
   });
@@ -131,9 +137,17 @@ describe("the reasoning map as Calyx renders it", () => {
     const text = block?.textContent ?? "";
     // Read the level from the fixture rather than hardcoding it: the backend
     // derives it from the contradictions and gaps it actually found, so pinning
-    // a literal here would fail whenever the evidence changes rather than when
-    // the rendering does.
-    expect(text.toLowerCase()).toContain(map.confidence.qualitative);
+    // a literal would fail whenever the evidence changes rather than when the
+    // rendering does. A contradiction left standing also holds confidence down,
+    // so the literal "moderate" would have re-asserted what #1510 removed.
+    // Match as a whole word: a bare substring match on the three-letter "low"
+    // is satisfied by allow, below and follow, so a panel that never rendered
+    // the value could pass. The vocabulary pin keeps a metacharacter out of the
+    // pattern. Both found by mutation during review.
+    const qualitative = map.confidence.qualitative;
+    expect(qualitative).toMatch(/^[a-z]+$/i);
+    expect(text).toMatch(new RegExp(`\\b${qualitative}\\b`, "i"));
+    expect(qualitative).not.toMatch(/^high$/i);
     expect(text).toContain(map.confidence.basis);
     expect(text).not.toMatch(/\d+\s*%/);
     expect(map.confidence.numeric_precision_claimed).toBe(false);
