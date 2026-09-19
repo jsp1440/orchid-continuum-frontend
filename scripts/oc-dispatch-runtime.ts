@@ -77,20 +77,32 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
 /**
  * An idle wave with queued work and free capacity is a binding failure, not health.
  * Say which side is missing: issues no node names, or nodes no queued issue names.
+ *
+ * This is written for GITHUB_STEP_SUMMARY, which renders Markdown with HTML
+ * passthrough. A bare `<node-id>` is stripped there as an unknown tag, which
+ * would delete the one thing the remediation tells an operator to type, and
+ * single newlines collapse into one paragraph. Hence the backticks and the list.
  */
 export function bindingReport(plan: Plan) {
   const lines: string[] = [];
-  if (plan.starved) {
-    lines.push(`STARVED: ${plan.capacity} free lane(s) and ${plan.inventory.queued} queued issue(s), nothing admitted. ` +
+  // `inventory.queued` is a label census; `starved` comes from the eligibility-
+  // filtered set the ranker actually saw. Either alone leaves a reporting hole,
+  // so an idle wave is called out when either says there was work to do.
+  const idle = plan.capacity > 0 && plan.issues.length === 0 && (plan.starved || plan.inventory.queued > 0);
+  if (idle) {
+    lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${plan.inventory.queued} issue(s) labelled \`oc-queued\`, nothing admitted. ` +
       `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no queued issue.`);
   }
+  if (idle && !plan.starved) {
+    lines.push('- No queued issue reached graph admission at all: every one was filtered out first by lineage, a hold, or a lane label.');
+  }
   if (plan.unboundQueued.length > 0) {
-    lines.push(`Unbound queued issues (no completion-graph node names them; bind one with an oc-node:<node-id> label): ${plan.unboundQueued.join(', ')}.`);
+    lines.push(`- Unbound queued issues (no completion-graph node names them; bind one with an \`oc-node:<node-id>\` label): ${plan.unboundQueued.join(', ')}.`);
   }
   for (const { issueNumber, nodeId } of plan.unknownNodeDeclarations) {
-    lines.push(`Issue #${issueNumber} declares node '${nodeId}', which is not in the completion graph. Binding refused.`);
+    lines.push(`- Issue #${issueNumber} declares node \`${nodeId}\`, which is not in the completion graph. Binding refused.`);
   }
-  return lines.length > 0 ? `${lines.join('\n')}\n` : '';
+  return lines.length > 0 ? `\n${lines.join('\n')}\n` : '';
 }
 
 async function main() {

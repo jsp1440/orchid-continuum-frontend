@@ -87,16 +87,28 @@ describe('binding a queued issue from the issue side', () => {
     expect(plan.unboundQueued).toContain(703);
   });
 
-  it('keeps the graph the source of truth where it does bind an issue', () => {
+  // A data assertion, not a behavioural one: it measures the gap, it does not
+  // exercise the planner. The graph-side lookup it describes is covered by the
+  // pre-existing dispatch tests, which go red when it is removed.
+  it('records how few nodes the graph itself binds', () => {
+    let nodes = 0;
     const bound = new Set<number>();
     const walk = (node: typeof COMPLETION_GRAPH) => {
+      nodes += 1;
       (node.issues ?? []).forEach(ref => bound.add(Number(ref.replace(/\D/g, ''))));
       node.children.forEach(walk);
     };
     walk(COMPLETION_GRAPH);
 
-    // Three of seventy-nine nodes. This is the gap the label surface exists to close.
+    // Three of 119. This is the gap the label surface exists to close.
+    expect(nodes).toBe(119);
     expect([...bound].sort((a, b) => a - b)).toEqual([171, 525, 528]);
+  });
+
+  it('admits a graph-bound issue without any declaration', () => {
+    const plan = buildGraphDispatchPlan({ maxActiveLanes: 8, runningCount: 0, queuedIssueNumbers: [525], now: NOW });
+    expect(plan.issues).toEqual([525]);
+    expect(plan.leaves[0]?.nodeId).toBe('cap-research-trait-explorer');
   });
 
   it('is still deterministic once declarations are in play', () => {
@@ -150,23 +162,51 @@ describe('what the scheduler run says when it admits nothing', () => {
     }));
     expect(report).toContain('STARVED');
     expect(report).toContain('8 free lane(s)');
-    expect(report).toContain('23 queued issue(s)');
+    expect(report).toContain('23 issue(s) labelled `oc-queued`');
     expect(report).toContain('1 admissible graph leaf/leaves carried no queued issue');
   });
 
   it('lists the queued issues no node names, and how to bind one', () => {
     const report = bindingReport(planWith({ starved: true, unboundQueued: [166, 703] }));
     expect(report).toContain('166, 703');
-    expect(report).toContain('oc-node:<node-id>');
+    // Backticked, because the step summary renders Markdown with HTML
+    // passthrough and would strip a bare <node-id> as an unknown tag --
+    // deleting the only thing this line tells an operator to type.
+    expect(report).toContain('`oc-node:<node-id>`');
+  });
+
+  it('survives the Markdown renderer the step summary uses', () => {
+    const report = bindingReport(planWith({
+      starved: true,
+      unboundQueued: [166],
+      unknownNodeDeclarations: [{ issueNumber: 703, nodeId: 'cap-no-such-node' }],
+    }));
+    // Every angle-bracketed placeholder is inside code spans, and the lines are
+    // list items separated from the preceding paragraph, so they do not collapse.
+    expect(report.replace(/`[^`]*`/g, '')).not.toContain('<');
+    expect(report.startsWith('\n- ')).toBe(true);
+    report.trimEnd().split('\n').filter(Boolean).forEach(line => expect(line.startsWith('- ')).toBe(true));
   });
 
   it('names a declaration it refused rather than silently dropping it', () => {
     const report = bindingReport(planWith({ unknownNodeDeclarations: [{ issueNumber: 703, nodeId: 'cap-no-such-node' }] }));
-    expect(report).toContain("#703 declares node 'cap-no-such-node'");
+    expect(report).toContain('#703 declares node `cap-no-such-node`');
     expect(report).toContain('Binding refused');
+  });
+
+  it('calls out an idle wave whose queue never reached the ranker at all', () => {
+    // Every queued issue filtered out before graph admission: the planner sees an
+    // empty queue and reports starved=false, which used to print nothing.
+    const report = bindingReport(planWith({ starved: false, inventory: { queued: 23, active: 0 } }));
+    expect(report).toContain('STARVED');
+    expect(report).toContain('No queued issue reached graph admission at all');
   });
 
   it('says nothing when the wave is genuinely healthy', () => {
     expect(bindingReport(planWith({ issues: [703] }))).toBe('');
+  });
+
+  it('says nothing when there is simply no queued work', () => {
+    expect(bindingReport(planWith({ inventory: { queued: 0, active: 0 } }))).toBe('');
   });
 });

@@ -26,8 +26,8 @@ const labelsOf = (issue: Issue) => issue.labels.map(label => label.name);
 const steward = (issue: Issue) => labelsOf(issue).includes('oc-portfolio-steward');
 
 // A completion-graph node is the only thing that can carry a queued issue into a
-// lane. The graph's own `issues` array binds three of its seventy-nine nodes, so
-// an issue the graph does not name is unreachable however it is labelled. This
+// lane. The graph's own `issues` array binds three of its 119 nodes, so an issue
+// the graph does not name is unreachable however it is labelled. This
 // accepts the binding from the issue side too: `oc-node:<node-id>`, deliberately
 // applied and visible on the issue, exactly as `oc-cap:` declares a capability.
 // Reading a node out of the title or body stays refused; that is the heuristic
