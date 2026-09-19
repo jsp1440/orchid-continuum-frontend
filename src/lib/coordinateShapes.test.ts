@@ -15,8 +15,10 @@ import { describe, expect, it } from "vitest";
 import {
   WITHHELD_COORDINATE,
   carriesCoordinate,
-  paintUnderscores,
+  sanitiseMap,
 } from "./cognitiveIntegration";
+import type { ReasoningMap } from "./cognitiveIntegration";
+import fixture from "./__fixtures__/cognitiveIntegrationReasoningMap.json";
 
 describe("shapes that reached the DOM before", () => {
   it("catches what3words written without the /// prefix", () => {
@@ -25,16 +27,12 @@ describe("shapes that reached the DOM before", () => {
     expect(carriesCoordinate("///filled.count.soap")).toBe(true);
   });
 
-  it("catches a projected pair joined by an underscore, where it is painted", () => {
-    // The raw string is not a coordinate and must not be treated as one --
-    // assuming otherwise withheld `specimen_12345_67890`. It becomes one only
-    // in the three fields the panel repaints, and `paintUnderscores` is the
-    // check at that point. Before this, the scan passed and the render then
-    // synthesised `632540 5712345` inside the locality footer, under the
-    // footer's own statement that nothing had matched.
+  it("catches a bare projected pair however it is joined", () => {
+    // An underscore hides an easting and northing no better than a space, so
+    // this is withheld wherever it appears, not only where the panel repaints.
+    // Anchoring to the whole field is what keeps it off the identifiers below.
     expect(carriesCoordinate("632540 5712345")).toBe(true);
-    expect(paintUnderscores("632540_5712345")).toBe(WITHHELD_COORDINATE);
-    expect(carriesCoordinate("632540_5712345")).toBe(false);
+    expect(carriesCoordinate("632540_5712345")).toBe(true);
   });
 
   it("catches degrees and decimal minutes with no symbol", () => {
@@ -112,11 +110,26 @@ describe("what the repaint must not eat", () => {
   });
 });
 
-describe("the repaint itself", () => {
-  it("withholds a pair the underscore rewrite would synthesise", () => {
-    expect(paintUnderscores("632540_5712345")).toBe(WITHHELD_COORDINATE);
+describe("the repaint, and the footer count that has to match it", () => {
+  const poisoned = (disclosure: string) => {
+    const map = JSON.parse(JSON.stringify(fixture)) as ReasoningMap;
+    (map.locality_policy as { disclosure: string }).disclosure = disclosure;
+    return sanitiseMap(map);
+  };
+
+  it("withholds a pair the repaint would synthesise, and counts it", () => {
+    const { map, scan } = poisoned("632540_5712345");
+    expect(map.locality_policy.disclosure).toBe(WITHHELD_COORDINATE);
+    // The count is the point. Withholding at the render site fixed the leak
+    // but never reached here, so the page printed the marker and said in the
+    // same sentence that nothing had matched.
+    expect(scan.fieldsWithheld).toBeGreaterThan(0);
   });
-  it("leaves an identifier the rewrite does not reach", () => {
-    expect(paintUnderscores("reported_pollinated_by")).toBe("reported pollinated by");
+
+  it("repaints an ordinary predicate without withholding it", () => {
+    const { map, scan } = poisoned("WITHHELD_PENDING_REVIEW");
+    expect(map.relationships[0].predicate).toBe("reported pollinated by");
+    expect(map.locality_policy.disclosure).toBe("WITHHELD PENDING REVIEW");
+    expect(scan.fieldsWithheld).toBe(0);
   });
 });

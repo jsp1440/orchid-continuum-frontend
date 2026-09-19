@@ -400,7 +400,7 @@ const COORDINATE_SHAPE = new RegExp(
     // panel is supposed to display, which is defending the page by breaking
     // what it exists to show. A bare address as an entire field value is caught;
     // one buried mid-sentence is not, and that gap is stated rather than hidden.
-    "^\\s*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}[\\s.,)\"'\u201d]*$",
+    "^[\\s(\u201c\"']*[a-z]{3,}\\.[a-z]{3,}\\.[a-z]{3,}[\\s.,)\u201d\"']*$",
     // Degrees and decimal minutes with no symbol: `5145.20N 0115.47W`. This is
     // what a GPS receiver emits (NMEA), carries ~10m, and writes no pair the
     // decimal arm can see. Both halves are required: this list is built with
@@ -409,6 +409,14 @@ const COORDINATE_SHAPE = new RegExp(
     // and withholding takes the whole field -- a privacy defence deleting the
     // environmental context that `environmental_notes` exists to carry.
     "\\b\\d{3,5}\\.\\d{1,4}\\s*[NS]\\D{0,4}\\d{3,5}\\.\\d{1,4}\\s*[EW]\\b",
+    // A bare projected pair standing alone as a whole field, underscore or
+    // space. Anchoring is the discriminator: every identifier this arm used to
+    // eat -- `specimen_12345_67890`, `GBIF_1234567_890123`, `OC_51234_06789` --
+    // carries a leading alphabetic token, and a coordinate does not. Without
+    // it, `632540_5712345` prints a usable easting and northing in the twenty
+    // fields the panel does not repaint; an underscore hides a position no
+    // better than a space does.
+    "^\\s*\\d{5,8}[\\s_]\\d{5,8}\\s*$",
     // Integer degrees with hemispheres, `51N 1W`. Coarse at ~100km, but it is
     // the whole-number form of a shape already covered for decimals.
     "\\b\\d{1,3}\\s*[NS]\\s*[,;]?\\s*\\d{1,3}\\s*[EW]\\b",
@@ -483,24 +491,6 @@ function normalised(text: string): string {
 export function carriesCoordinate(text: string): boolean {
   COORDINATE_SHAPE.lastIndex = 0;
   return COORDINATE_SHAPE.test(normalised(text));
-}
-
-/**
- * Re-check a field the panel is about to repaint.
- *
- * Three fields are rendered with `_` rewritten to a space. That rewrite runs
- * after `sanitiseMap`, so the scan saw a different string from the reader:
- * `632540_5712345` passed, and the render then synthesised `632540 5712345`
- * inside the locality footer -- the page manufacturing the coordinate it had
- * just certified absent.
- *
- * Checking here rather than rewriting inside `normalised()` keeps the property
- * where the painting is. Assuming the rewrite globally withheld
- * `specimen_12345_67890` and `GBIF_1234567_890123`, which are the ordinary
- * shape of `provenance[].identifier` and are never repainted.
- */
-export function paintUnderscores(text: string): string {
-  return withholdField(text.replace(/_/g, " "));
 }
 
 /** What stands in for a coordinate this surface refused to print. */
@@ -668,6 +658,39 @@ export function sanitiseLocality<T>(input: T): Sanitised<T> {
   return { value, fieldsWithheld };
 }
 
+/**
+ * Apply the panel's `_`-to-space repaint before anything is scanned.
+ *
+ * Three fields are rendered with underscores rewritten. Doing that after the
+ * scan meant the reader saw a string the scan never examined, and
+ * `632540_5712345` became `632540 5712345` in the locality footer under that
+ * footer's own statement that nothing had matched.
+ *
+ * Repainting here instead of at the render sites is what makes the footer
+ * count honest: the substitutions the reader sees are the substitutions
+ * `sanitiseLocality` made, because there is only one pass. Withholding at the
+ * render site fixed the leak but never reached `fieldsWithheld`, so the page
+ * printed the marker and denied it in the same sentence.
+ */
+function repaintBeforeScan(map: ReasoningMap): ReasoningMap {
+  const paint = (text: string) => text.replace(/_/g, " ");
+  return {
+    ...map,
+    locality_policy: {
+      ...map.locality_policy,
+      disclosure: paint(map.locality_policy.disclosure),
+    },
+    relationships: map.relationships.map(relationship => ({
+      ...relationship,
+      predicate: paint(relationship.predicate),
+    })),
+    contradictions: map.contradictions.map(contradiction => ({
+      ...contradiction,
+      between: contradiction.between.map(paint),
+    })),
+  };
+}
+
 export interface LocalityScan {
   /** How many fields this pass withheld. */
   fieldsWithheld: number;
@@ -684,7 +707,7 @@ export interface LocalityScan {
  * positions onto the page under the sentence "none carried a coordinate".
  */
 export function sanitiseMap(map: ReasoningMap): { map: ReasoningMap; scan: LocalityScan } {
-  const { value, fieldsWithheld } = sanitiseLocality(map);
+  const { value, fieldsWithheld } = sanitiseLocality(repaintBeforeScan(map));
   return {
     map: value,
     scan: {

@@ -10,7 +10,6 @@ import {
   isKnownVocabulary,
   refutedRelationships,
   sanitiseFailure,
-  paintUnderscores,
   sanitiseMap,
   settlement,
   supportedRelationships,
@@ -125,9 +124,11 @@ function Section({
 }
 
 export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
-  // Sanitised once, then rendered. Nothing below reaches for `received`, so the
-  // footer's count and the text on the page are the same substitutions — a
-  // parallel list of "fields we render" is exactly what drifted before.
+  // Sanitised once, then rendered. Nothing below reaches for `received`, and
+  // the `_`-to-space repaint happens inside this call, before the scan — so the
+  // footer's count and the text on the page really are the same substitutions.
+  // A parallel list of "fields we render" is what drifted before, and doing the
+  // repaint after this call is what made the footer deny its own marker.
   const { map, scan: locality } = sanitiseMap(received);
   // Settlement is a judgement about the evidence, so it reads the map as it
   // arrived. Running it on the sanitised copy let redaction rewrite an
@@ -181,7 +182,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
               <ul className="mt-2 list-disc pl-5 text-muted-foreground">
                 {contradiction.between.map((claim, claimIndex) => (
                   <li key={claimIndex}>
-                    {paintUnderscores(claim)}
+                    {claim}
                     {contradiction.scopes[claimIndex]
                       ? ` — reported from the ${contradiction.scopes[claimIndex]}`
                       : null}
@@ -206,7 +207,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
           <div className="border-b pb-3 last:border-b-0 last:pb-0" key={index}>
             <p>
               <span className="font-medium">{relationship.subject}</span>{" "}
-              {paintUnderscores(relationship.predicate)}{" "}
+              {relationship.predicate}{" "}
               <span className="font-medium">{relationship.object}</span>
             </p>
             <p className="mt-1 text-xs">
@@ -316,7 +317,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
 
       <footer className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
         <p data-testid="reasoning-locality">
-          Locality is {paintUnderscores(map.locality_policy.disclosure.toLowerCase())}.{" "}
+          Locality is {map.locality_policy.disclosure.toLowerCase()}.{" "}
           {locality.fieldsWithheld > 0
             ? `This page withheld a coordinate from ${locality.fieldsWithheld} field(s) before rendering.`
             : "No field this page renders matched a coordinate pattern."}
