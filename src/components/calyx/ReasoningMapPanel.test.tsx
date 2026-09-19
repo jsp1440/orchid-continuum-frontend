@@ -413,3 +413,168 @@ describe("what an independent checker got through this surface", () => {
     expect(geography?.textContent).toContain(map.geographic_context.scope);
   });
 });
+
+/**
+ * A second checker put sixteen coordinate shapes onto the page — fifteen under
+ * a footer stating none had arrived, and one under a banner stating it had been
+ * contained. The cause was structural: the scan walked a hand-written list of
+ * fields, and the list had drifted from what the panel paints.
+ *
+ * These render the whole view and read the DOM, so they fail the same way a
+ * reader would notice.
+ */
+describe("the locality scan cannot drift from what is painted", () => {
+  function variant(edit: (draft: ReasoningMap) => void): ReasoningMap {
+    const draft = structuredClone(map);
+    edit(draft);
+    return draft;
+  }
+
+  const SHAPES: [string, string][] = [
+    ["UTM", "30U 699000 5710000"],
+    ["MGRS without spaces", "30UXC9900010000"],
+    ["Open Location Code", "9C3XGV4C+XX"],
+    ["what3words", "///filled.count.soap"],
+    ["integer degrees", "51, -1"],
+    ["minutes with no degree sign", "51 45'12\"N 1 15'28\"W"],
+    ["full-width digits", "５１．７５２３, －１．２５７８"],
+    ["coordinate in a URL", "https://maps.example.org/@51/-1/15z"],
+    ["decimal pair", "51.752300, -1.257800"],
+  ];
+
+  it.each(SHAPES)("withholds %s wherever it arrives", (_label, payload) => {
+    // `confidence.basis` is a field the old inventory did name, so a shape
+    // getting through here is the pattern's fault rather than the scan's.
+    const poisoned = variant((draft) => {
+      draft.confidence.basis = `Derived from records at ${payload}.`;
+    });
+    render(<ReasoningMapView map={poisoned} />);
+    const rendered = `${container.textContent ?? ""} ${container.innerHTML}`;
+    expect(rendered).not.toContain(payload);
+    expect(
+      container.querySelector('[data-testid="reasoning-locality"]')?.textContent,
+    ).toContain("withheld a coordinate");
+  });
+
+  const UNSCANNED_FIELDS: [string, (d: ReasoningMap, v: string) => void][] = [
+    ["taxonomic authorship", (d, v) => { d.taxonomic_identity.authorship = v; }],
+    ["taxonomic rank", (d, v) => { d.taxonomic_identity.rank = v; }],
+    ["resolved_against", (d, v) => { d.taxonomic_identity.resolved_against = v; }],
+    ["confidence level", (d, v) => { d.confidence.qualitative = v as never; }],
+    ["locality disclosure", (d, v) => { d.locality_policy.disclosure = v; }],
+    ["an unknown evidence state", (d, v) => { d.relationships[0].evidence_state = v as never; }],
+    ["an unknown mechanism kind", (d, v) => { d.mechanisms[0].kind = v as never; }],
+    ["the accepted name itself", (d, v) => { d.taxonomic_identity.accepted_name = `Ophrys apifera ${v}`; }],
+  ];
+
+  it.each(UNSCANNED_FIELDS)("withholds a coordinate arriving in %s", (_label, poison) => {
+    // Each of these was painted and never scanned — except `accepted_name`,
+    // which was scanned and then painted raw, so the footer claimed a
+    // withholding while the coordinate sat in the page's largest text.
+    const payload = "51.752300, -1.257800";
+    const poisoned = variant((draft) => poison(draft, payload));
+    render(<ReasoningMapView map={poisoned} />);
+    const rendered = `${container.textContent ?? ""} ${container.innerHTML}`;
+    expect(rendered).not.toContain(payload);
+    expect(rendered).not.toContain("51.752300");
+  });
+
+  it("never tells the reader a field was withheld while showing it", () => {
+    // The footer counts the same substitutions the reader is looking at,
+    // because the view renders exactly the value the scan returned.
+    const poisoned = variant((draft) => {
+      draft.taxonomic_identity.accepted_name = "Ophrys apifera 51.752300, -1.257800";
+    });
+    render(<ReasoningMapView map={poisoned} />);
+    const footer = container.querySelector('[data-testid="reasoning-locality"]');
+    expect(footer?.textContent).toContain("withheld a coordinate");
+    expect(container.textContent).not.toContain("51.752300");
+  });
+
+  it("withholds the whole field rather than the matched span", () => {
+    // Redacting only the match announces where a position was removed and
+    // leaves the unmatched half of the pair verbatim beside the marker.
+    const poisoned = variant((draft) => {
+      draft.confidence.basis = "Colony at latitude 51.7523; the longitude is -1.2578.";
+    });
+    render(<ReasoningMapView map={poisoned} />);
+    expect(container.textContent).not.toContain("-1.2578");
+    expect(container.textContent).not.toContain("51.7523");
+  });
+
+  it("withholds a pair split across two fields of one record", () => {
+    // Neither half matches alone; they render on the same line.
+    const poisoned = variant((draft) => {
+      draft.relationships[0].subject = "Colony 51.7523";
+      draft.relationships[0].object = "north by -1.2578 west";
+    });
+    render(<ReasoningMapView map={poisoned} />);
+    expect(container.textContent).not.toContain("51.7523");
+    expect(container.textContent).not.toContain("-1.2578");
+  });
+
+  it("scans the refusal surface, including the capability it now names", async () => {
+    // `requiredCapability` was a new unscanned sink, added by the commit that
+    // closed the finding about it not being rendered at all.
+    const failure: ReasoningMapResult = {
+      ok: false,
+      kind: "question_not_supported",
+      message: "Not supported. Seen at 51.752300, -1.257800.",
+      requiredCapability: "free-text-intent-parsing 51.752300, -1.257800",
+      supportedQuestions: ["What pollinates the bee orchid near 51.752300, -1.257800?"],
+    };
+    await act(async () => {
+      root.render(<ReasoningMapPanel loader={async () => failure} />);
+    });
+    expect(container.textContent).not.toContain("51.752300");
+  });
+});
+
+describe("settlement fails closed", () => {
+  function variant(edit: (draft: ReasoningMap) => void): ReasoningMap {
+    const draft = structuredClone(map);
+    edit(draft);
+    return draft;
+  }
+
+  it("does not let a contradiction about something else settle a contested claim", () => {
+    const unrelated = variant((draft) => {
+      draft.contradictions = [
+        {
+          between: ["claim_x", "claim_y"],
+          description: "An unrelated disagreement about leaf morphology.",
+          resolution: "resolved_by_evidence",
+          scopes: [null, null],
+        },
+      ];
+    });
+    expect(unrelated.relationships.some((r) => r.evidence_state === "CONTESTED")).toBe(true);
+    render(<ReasoningMapView map={unrelated} />);
+    // The header must not claim one account while the tally counts a contested one.
+    expect(container.querySelector('[data-testid="reasoning-answer"]')).toBeNull();
+    expect(container.querySelector('[data-testid="reasoning-unsettled"]')).not.toBeNull();
+  });
+
+  it("treats a resolution it does not recognise as unsettled", () => {
+    // The note's lookup already failed closed. Settlement failed open, so the
+    // two contradicted each other in one render.
+    const unknown = variant((draft) => {
+      draft.contradictions[0].resolution = "resolved_by_expert_opinion" as never;
+    });
+    render(<ReasoningMapView map={unknown} />);
+    expect(container.querySelector('[data-testid="reasoning-unsettled"]')).not.toBeNull();
+    const note = container.querySelector('[data-testid="contradiction-resolution"]');
+    expect(note?.textContent).toContain("Left standing");
+  });
+
+  it("counts a relationship state outside the union rather than dropping it", () => {
+    const odd = variant((draft) => {
+      draft.relationships[0].evidence_state = "PROVISIONAL" as never;
+    });
+    render(<ReasoningMapView map={odd} />);
+    const tally = container.querySelector('[data-testid="evidence-tally"]')?.textContent ?? "";
+    const counted = [...tally.matchAll(/(\d+)\s/g)].reduce((sum, m) => sum + Number(m[1]), 0);
+    expect(counted).toBe(odd.relationships.length);
+    expect(tally).toContain("does not recognise");
+  });
+});

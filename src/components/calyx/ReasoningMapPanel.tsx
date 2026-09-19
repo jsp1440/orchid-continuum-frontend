@@ -8,12 +8,12 @@ import {
   fetchReasoningMap,
   isReasoningMapFailure,
   refutedRelationships,
-  scanLocality,
+  sanitiseFailure,
+  sanitiseMap,
   settlement,
   supportedRelationships,
   uncorroboratedRelationships,
   wasAssembledDeterministically,
-  withholdCoordinates,
 } from "@/lib/cognitiveIntegration";
 
 /**
@@ -82,7 +82,7 @@ function StatedList({ items, emptyNote }: { items: string[]; emptyNote: string }
   return (
     <ul className="mt-1 list-disc pl-5">
       {items.map((item, index) => (
-        <li key={index}>{withholdCoordinates(item)}</li>
+        <li key={index}>{item}</li>
       ))}
     </ul>
   );
@@ -108,21 +108,30 @@ function Section({
   );
 }
 
-export function ReasoningMapView({ map }: { map: ReasoningMap }) {
+export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
+  // Sanitised once, then rendered. Nothing below reaches for `received`, so the
+  // footer's count and the text on the page are the same substitutions — a
+  // parallel list of "fields we render" is exactly what drifted before.
+  const { map, scan: locality } = sanitiseMap(received);
   const state = settlement(map);
   const settled = state !== "unsettled";
   const supported = supportedRelationships(map);
   const contested = contestedRelationships(map);
   const refuted = refutedRelationships(map);
   const uncorroborated = uncorroboratedRelationships(map);
-  const locality = scanLocality(map);
+  const other =
+    map.relationships.length -
+    supported.length -
+    contested.length -
+    refuted.length -
+    uncorroborated.length;
 
   return (
     <div className="space-y-4" data-testid="reasoning-map">
       <header className="rounded-xl border bg-background p-5">
         <p className="text-xs uppercase tracking-wide text-muted-foreground">Question</p>
         <p className="mt-1 text-base" data-testid="reasoning-question">
-          {withholdCoordinates(map.question)}
+          {map.question}
         </p>
         <p
           className="mt-4 text-sm font-medium"
@@ -146,15 +155,13 @@ export function ReasoningMapView({ map }: { map: ReasoningMap }) {
         >
           {map.contradictions.map((contradiction, index) => (
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3" key={index}>
-              <p>{withholdCoordinates(contradiction.description)}</p>
+              <p>{contradiction.description}</p>
               <ul className="mt-2 list-disc pl-5 text-muted-foreground">
                 {contradiction.between.map((claim, claimIndex) => (
                   <li key={claimIndex}>
-                    {withholdCoordinates(claim).replace(/_/g, " ")}
+                    {claim.replace(/_/g, " ")}
                     {contradiction.scopes[claimIndex]
-                      ? ` — reported from the ${withholdCoordinates(
-                          contradiction.scopes[claimIndex] as string,
-                        )}`
+                      ? ` — reported from the ${contradiction.scopes[claimIndex]}`
                       : null}
                   </li>
                 ))}
@@ -176,28 +183,29 @@ export function ReasoningMapView({ map }: { map: ReasoningMap }) {
         {map.relationships.map((relationship, index) => (
           <div className="border-b pb-3 last:border-b-0 last:pb-0" key={index}>
             <p>
-              <span className="font-medium">{withholdCoordinates(relationship.subject)}</span>{" "}
-              {withholdCoordinates(relationship.predicate).replace(/_/g, " ")}{" "}
-              <span className="font-medium">{withholdCoordinates(relationship.object)}</span>
+              <span className="font-medium">{relationship.subject}</span>{" "}
+              {relationship.predicate.replace(/_/g, " ")}{" "}
+              <span className="font-medium">{relationship.object}</span>
             </p>
             <p className="mt-1 text-xs">
               <span data-testid="evidence-state">
                 {STATE_LABEL[relationship.evidence_state] ?? relationship.evidence_state}
               </span>
               {relationship.geographic_scope
-                ? ` · ${withholdCoordinates(relationship.geographic_scope)}`
+                ? ` · ${relationship.geographic_scope}`
                 : null}
             </p>
             {relationship.provenance.map((source, sourceIndex) => (
               <p className="mt-1 text-xs text-muted-foreground" key={sourceIndex}>
-                {withholdCoordinates(source.citation)}
+                {source.citation}
               </p>
             ))}
           </div>
         ))}
         <p className="text-xs text-muted-foreground" data-testid="evidence-tally">
           {supported.length} supported, {contested.length} contested, {refuted.length} contradicted,{" "}
-          {uncorroborated.length} reported without corroboration.
+          {uncorroborated.length} reported without corroboration
+          {other > 0 ? `, ${other} in a state this page does not recognise` : ""}.
         </p>
       </Section>
 
@@ -213,7 +221,7 @@ export function ReasoningMapView({ map }: { map: ReasoningMap }) {
                 {KIND_LABEL[mechanism.kind] ?? mechanism.kind}
               </span>
             </p>
-            <p className="mt-1">{withholdCoordinates(mechanism.statement)}</p>
+            <p className="mt-1">{mechanism.statement}</p>
           </div>
         ))}
       </Section>
@@ -249,7 +257,7 @@ export function ReasoningMapView({ map }: { map: ReasoningMap }) {
         blurb="Scope is part of the claim here, not background to it. Precise localities are not shown."
       >
         <p data-testid="reasoning-geographic-scope">
-          {withholdCoordinates(map.geographic_context.scope)}
+          {map.geographic_context.scope}
         </p>
         <StatedList
           items={map.geographic_context.environmental_notes}
@@ -265,7 +273,7 @@ export function ReasoningMapView({ map }: { map: ReasoningMap }) {
         <p>
           <span className="font-medium capitalize">{map.confidence.qualitative}</span> confidence
         </p>
-        <p className="text-muted-foreground">{withholdCoordinates(map.confidence.basis)}</p>
+        <p className="text-muted-foreground">{map.confidence.basis}</p>
       </Section>
 
       <Section
@@ -342,7 +350,9 @@ export default function ReasoningMapPanel({
     return <ReasoningMapView map={result.map} />;
   }
 
-  const failure = result;
+  // The refusal surface is backend text as well, and it was the one place a
+  // field was added — `requiredCapability` — without anything scanning it.
+  const failure = sanitiseFailure(result);
   return (
       <div className="rounded-xl border bg-background p-5" data-testid="reasoning-unavailable">
         <p className="text-sm font-medium">

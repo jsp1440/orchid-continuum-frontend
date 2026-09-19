@@ -256,13 +256,37 @@ export type Settlement =
  * points to one account" would discard the half that applies elsewhere.
  */
 export function settlement(map: ReasoningMap): Settlement {
+  // Anything not recognised is unsettled. Falling through to "settled" is how
+  // an unknown resolution string ended up printing "The evidence points to one
+  // account" above a note reading "Left standing. Nothing retrieved settles
+  // it." — the note's lookup failed closed and this failed open, in the same
+  // render. A resolution this build does not know about is not one it can
+  // claim was resolved.
+  const known: ContradictionResolution[] = [
+    "unresolved_presented_as_contested",
+    "resolved_by_scope",
+    "resolved_by_evidence",
+  ];
+  if (map.contradictions.some((c) => !known.includes(c.resolution))) {
+    return "unsettled";
+  }
   if (
     map.contradictions.some((c) => c.resolution === "unresolved_presented_as_contested")
   ) {
     return "unsettled";
   }
-  if (contestedRelationships(map).length > 0 && map.contradictions.length === 0) {
-    return "unsettled";
+  // A contested relationship is a disagreement whether or not anything wrote it
+  // up, and a contradiction about some *other* pair of claims does not account
+  // for it. Keying this on `contradictions.length === 0` meant one unrelated
+  // entry — a note about leaf morphology — flipped the header to "one account"
+  // while the tally below it still counted a contested claim.
+  if (contestedRelationships(map).length > 0) {
+    const accounted = map.contradictions.some((c) =>
+      contestedRelationships(map).some((r) =>
+        c.between.some((claim) => claim.includes(r.object) || claim.includes(r.predicate)),
+      ),
+    );
+    if (!accounted) return "unsettled";
   }
   if (map.contradictions.some((c) => c.resolution === "resolved_by_scope")) {
     return "settled_by_scope";
@@ -328,9 +352,50 @@ const COORDINATE_SHAPE = new RegExp(
     "\\b\\d{1,2}[C-HJ-NP-X]\\s+\\d{5,7}\\s+\\d{5,8}\\b",
     // Open Location Code (plus code).
     "\\b[23456789CFGHJMPQRVWX]{4,8}\\+[23456789CFGHJMPQRVWX]{2,7}\\b",
+    // MGRS written without spaces.
+    "\\b\\d{1,2}[C-HJ-NP-X][A-Z]{2}\\d{4,10}\\b",
+    // what3words.
+    "///[a-z]+\\.[a-z]+\\.[a-z]+",
+    // A coordinate in a URL path or query: "/@51/-1/15z", "?ll=51,-1".
+    "[@=]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?\\s*[/,]\\s*[-+]?\\d{1,3}(?:\\.\\d+)?",
+    // Integer degrees with an explicit sign on the second member. Coarse
+    // (~111 km) but still a position, and the sign is what separates it from
+    // an ordinary list of numbers.
+    "(?:^|[^\\d.])[-+]?\\d{1,3}\\s*,\\s*[-+]\\d{1,3}(?!\\d|\\.\\d)",
+    // Minutes and seconds with no degree sign at all: 51 45'12\"N.
+    "\\d{1,3}\\s+\\d{1,2}['\u2018\u2019\u2032]\\d{1,2}(?:[\"\u201c\u201d\u2033])?\\s*[NSEW]\\b",
   ].join("|"),
   "gi",
 );
+
+/**
+ * A wider net, used only to decide whether two *sibling* fields together carry
+ * a position. It allows prose between the two numbers, which the pattern above
+ * deliberately does not — requiring adjacency there keeps ordinary measurements
+ * readable, and requiring it here would miss a pair divided between a subject
+ * and an object that render on one line.
+ */
+const COORDINATE_ACROSS_FIELDS = new RegExp(
+  // The window is generous because the two halves are separated by whatever
+  // other fields the record carries — a predicate and a scope, in practice —
+  // not by a separator someone chose. It is bounded to one record's own text.
+  "[-+]?(?:1[0-7]\\d|\\d{1,2})\\.\\d+\\D{0,80}[-+]?(?:1[0-7]\\d|\\d{1,2})\\.\\d+",
+  "i",
+);
+
+/**
+ * Detection normalises first, because a coordinate does not have to be typed
+ * in ASCII to be a coordinate. NFKC folds full-width digits and punctuation —
+ * "５１．７５２３, －１．２５７８" is the same position as "51.7523, -1.2578",
+ * and `\d` without the `u` flag does not see it.
+ */
+function normalised(text: string): string {
+  try {
+    return text.normalize("NFKC");
+  } catch {
+    return text;
+  }
+}
 
 /** What stands in for a coordinate this surface refused to print. */
 export const WITHHELD_COORDINATE = "[coordinate withheld]";
@@ -338,68 +403,123 @@ export const WITHHELD_COORDINATE = "[coordinate withheld]";
 /** True when the text carries something shaped like a coordinate. */
 export function carriesCoordinate(text: string): boolean {
   COORDINATE_SHAPE.lastIndex = 0;
-  return COORDINATE_SHAPE.test(text);
+  return COORDINATE_SHAPE.test(normalised(text));
 }
 
 /**
- * The text with any coordinate shape replaced, and never the original.
+ * Withhold whole fields, not matched spans.
  *
- * Replacing rather than dropping the whole field keeps the surrounding claim
- * readable, and leaves a visible mark where something was removed — a silent
- * scrub would let a leak pass unnoticed by the person best placed to report it.
+ * Replacing only the match leaks twice. A pair split by prose —
+ * "Colony at latitude 51.7523; the longitude is -1.2578." — matches on the
+ * labelled latitude alone, so the marker announces *that a position was removed
+ * from exactly here* while the unmatched longitude sits verbatim beside it. To
+ * a reader who knows the taxon's range that is more than redacting nothing
+ * would have given away.
+ *
+ * So a field that carries a coordinate anywhere is withheld entirely. The
+ * marker still appears, because a silent scrub would hide the leak from the one
+ * person positioned to report it.
  */
-export function withholdCoordinates(text: string): string {
-  return text.replace(COORDINATE_SHAPE, WITHHELD_COORDINATE);
+export function withholdField(text: string): string {
+  return carriesCoordinate(text) ? WITHHELD_COORDINATE : text;
 }
 
-/** Every rendered string in the map, so the scan below cannot miss a field. */
-function renderedStrings(map: ReasoningMap): string[] {
-  const strings: string[] = [map.question, map.taxonomic_identity.accepted_name];
-  for (const relationship of map.relationships) {
-    strings.push(relationship.subject, relationship.predicate, relationship.object);
-    if (relationship.geographic_scope) strings.push(relationship.geographic_scope);
-    for (const source of relationship.provenance) strings.push(source.citation);
-  }
-  for (const mechanism of map.mechanisms) strings.push(mechanism.statement);
-  for (const contradiction of map.contradictions) {
-    strings.push(contradiction.description, ...contradiction.between);
-    for (const scope of contradiction.scopes) if (scope) strings.push(scope);
-  }
-  strings.push(
-    map.geographic_context.scope,
-    ...map.geographic_context.environmental_notes,
-    ...map.evidence_gaps,
-    ...map.known_unknowns,
-    ...map.recommended_next_evidence,
-    map.confidence.basis,
-  );
-  return strings;
+/** How many fields a sanitising pass withheld. */
+export interface Sanitised<T> {
+  value: T;
+  fieldsWithheld: number;
+}
+
+/**
+ * Sanitise every string in a value, whatever shape the value is.
+ *
+ * The pass this replaced walked a hand-written list of the fields a panel was
+ * believed to render. A checker got coordinates onto the page through eight
+ * fields that list did not name — three taxonomic ones, two enum fallbacks, the
+ * confidence level, the disclosure string and the whole refusal surface — while
+ * the footer, counting the list, reported that none had carried one. A parallel
+ * inventory of what gets painted is a thing that drifts, and it had already
+ * drifted by the time it was written.
+ *
+ * This walks the object instead. There is no inventory to fall out of date, so
+ * a field added upstream is covered the day it arrives rather than the day
+ * someone remembers it.
+ *
+ * Sibling strings are also tested joined, because a pair can be split across
+ * two fields that render on one line — `subject: "Colony 51.7523"`,
+ * `object: "north by -1.2578 west"` — where neither half matches alone.
+ */
+export function sanitiseLocality<T>(input: T): Sanitised<T> {
+  let fieldsWithheld = 0;
+
+  const walk = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      const safe = withholdField(value);
+      if (safe !== value) fieldsWithheld += 1;
+      return safe;
+    }
+    if (Array.isArray(value)) return value.map(walk);
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value as Record<string, unknown>);
+      const strings = entries
+        .filter(([, v]) => typeof v === "string")
+        .map(([, v]) => v as string);
+      // A pair divided between two fields of the same object.
+      const joined = normalised(strings.join(" "));
+      const splitPair =
+        strings.length > 1 &&
+        (carriesCoordinate(joined) || COORDINATE_ACROSS_FIELDS.test(joined)) &&
+        !strings.some(carriesCoordinate);
+      const out: Record<string, unknown> = {};
+      for (const [key, child] of entries) {
+        if (splitPair && typeof child === "string") {
+          out[key] = WITHHELD_COORDINATE;
+          fieldsWithheld += 1;
+        } else {
+          out[key] = walk(child);
+        }
+      }
+      return out;
+    }
+    return value;
+  };
+
+  return { value: walk(input) as T, fieldsWithheld };
 }
 
 export interface LocalityScan {
-  /** True when nothing coordinate-shaped arrived in any rendered field. */
+  /** True when nothing coordinate-shaped arrived in any field. */
   clean: boolean;
-  /** How many rendered fields had something withheld. */
+  /** How many fields were withheld. */
   fieldsWithheld: number;
   /** True when the map claimed no coordinates and carried one anyway. */
   contradictsDeclaredPolicy: boolean;
 }
 
 /**
- * What this surface found when it checked the map it was handed.
+ * The map as it is safe to render, and what was done to it.
  *
- * The footer states the result of this scan rather than a fixed sentence. A
- * printed guarantee the code does not enforce reads to a reviewer as
- * enforcement, which is worse than printing nothing.
+ * The footer states the result of this pass rather than a fixed sentence, and
+ * because the panel renders exactly the value returned here, the count cannot
+ * disagree with the page: it is counting the same substitutions the reader is
+ * looking at.
  */
-export function scanLocality(map: ReasoningMap): LocalityScan {
-  const fieldsWithheld = renderedStrings(map).filter(carriesCoordinate).length;
+export function sanitiseMap(map: ReasoningMap): { map: ReasoningMap; scan: LocalityScan } {
+  const { value, fieldsWithheld } = sanitiseLocality(map);
   return {
-    clean: fieldsWithheld === 0,
-    fieldsWithheld,
-    contradictsDeclaredPolicy:
-      fieldsWithheld > 0 && map.geographic_context.coordinates_present === false,
+    map: value,
+    scan: {
+      clean: fieldsWithheld === 0,
+      fieldsWithheld,
+      contradictsDeclaredPolicy:
+        fieldsWithheld > 0 && map.geographic_context.coordinates_present === false,
+    },
   };
+}
+
+/** The refusal surface is text from the backend too, and is sanitised the same way. */
+export function sanitiseFailure(failure: ReasoningMapFailure): ReasoningMapFailure {
+  return sanitiseLocality(failure).value;
 }
 
 /** True when the reasoning was assembled without any provider call. */
