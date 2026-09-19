@@ -1,0 +1,80 @@
+name: OC Live Completion Ledger
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+  push:
+    branches: [main, oc-live-completion-ledger]
+    paths-ignore:
+      - 'public/data/oc-live-completion-ledger.json'
+      - 'public/data/oc-live-completion-ledger.csv'
+  issues:
+    types: [opened, edited, closed, reopened, labeled, unlabeled, assigned, unassigned]
+
+permissions:
+  contents: write
+  issues: read
+  pull-requests: read
+  actions: read
+
+concurrency:
+  group: oc-live-completion-ledger
+  cancel-in-progress: true
+
+jobs:
+  refresh-ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source revision
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38
+        with:
+          node-version: '22'
+
+      - name: Generate GitHub-backed completion ledger
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/generate-live-completion-ledger.mjs
+
+      - name: Validate ledger contract
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          const ledger = JSON.parse(await readFile('public/data/oc-live-completion-ledger.json', 'utf8'));
+          const csv = await readFile('public/data/oc-live-completion-ledger.csv', 'utf8');
+          if (ledger.source_of_truth !== 'github') throw new Error('source_of_truth must be github');
+          if (!Array.isArray(ledger.completed) || !Array.isArray(ledger.active)) throw new Error('ledger arrays missing');
+          if (ledger.verified_complete_count !== ledger.completed.length) throw new Error('verified count mismatch');
+          const ids = ledger.completed.map((item) => item.id);
+          if (new Set(ids).size !== ids.length) throw new Error('duplicate completion IDs');
+          const allowed = new Set(['running', 'queued', 'owner_gate', 'blocked']);
+          if (ledger.active.some((item) => !allowed.has(item.status))) throw new Error('invalid active status');
+          if (!csv.startsWith('"ledger_id","record_type","status","reference","title","timestamp","evidence_url"')) throw new Error('CSV header mismatch');
+          console.log(`validated ${ledger.completed.length} completions and ${ledger.active.length} live work items`);
+          NODE
+
+      - name: Publish telemetry to dedicated state branch
+        shell: bash
+        run: |
+          cp public/data/oc-live-completion-ledger.json /tmp/oc-live-completion-ledger.json
+          cp public/data/oc-live-completion-ledger.csv /tmp/oc-live-completion-ledger.csv
+          git fetch origin oc-live-ledger-state
+          git checkout -B oc-live-ledger-state origin/oc-live-ledger-state
+          mkdir -p public/data
+          cp /tmp/oc-live-completion-ledger.json public/data/oc-live-completion-ledger.json
+          cp /tmp/oc-live-completion-ledger.csv public/data/oc-live-completion-ledger.csv
+          if git diff --quiet -- public/data/oc-live-completion-ledger.json public/data/oc-live-completion-ledger.csv; then
+            echo 'No telemetry changes.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/data/oc-live-completion-ledger.json public/data/oc-live-completion-ledger.csv
+          git commit -m 'chore(mission-control): refresh live completion telemetry'
+          git push origin HEAD:oc-live-ledger-state
