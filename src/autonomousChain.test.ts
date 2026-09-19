@@ -136,3 +136,27 @@ describe('QUEUED -> BOUND -> ADMITTED -> LEASED -> EXECUTED -> RECEIPT -> SETTLE
     expect(routing.blocking ?? []).toEqual([]);
   });
 });
+
+describe('verifying an admission does not change the question', () => {
+  // Honest scope: this covers the verification path, which had none at all. It
+  // does NOT reproduce the live drift -- it passes under the old snapshot
+  // isolation too, so it pins the absence of a crash, not the fix.
+  it('accepts its own plan when a sibling issue holds a repair PR', async () => {
+    const { assertAdmission } = await import('../scripts/oc-dispatch-control');
+    // `openRefs` excludes the PR of an `oc-repair` issue from open tracked work.
+    // Re-planning with the other issues deleted put that PR back, suppressed a
+    // different set of leaves, and refused a correct admission as drift.
+    const withSibling: Snapshot = {
+      ...snapshot(LABELS),
+      issues: [
+        ...snapshot(LABELS).issues,
+        { number: 900, state: 'open', title: 'a sibling under repair', body: 'OC-AUTO-ISSUE: #900', labels: [{ name: 'oc-queued' }, { name: 'oc-repair' }] },
+      ],
+      prs: [{ number: 901, state: 'open', body: 'OC-AUTO-ISSUE: #900', head: { ref: 'oc-auto-900', sha: 'd'.repeat(40) } }],
+    };
+
+    const plan = makePlan(withSibling, [], NOW);
+    expect(plan.issues).toContain(ISSUE);
+    expect(() => assertAdmission(plan, withSibling, ISSUE, NOW)).not.toThrow();
+  });
+});

@@ -88,10 +88,17 @@ function findNode(root: CompletionNode, id: string): CompletionNode | undefined 
   return root.id === id ? root : root.children.map(child => findNode(child, id)).find(Boolean);
 }
 const LANE_STATES = ['queued', 'prepared', 'validating', 'blocked', 'owner-gate', 'runtime-backoff'] as const;
-export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Date().toISOString(), root = COMPLETION_GRAPH) {
+export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Date().toISOString(), root = COMPLETION_GRAPH, onlyIssue?: number) {
   if (!/^[a-f0-9]{40}$/.test(snapshot.integrationSha) || !/^[a-f0-9]{40}$/.test(snapshot.implementationSha)) throw new Error('Unknown implementation/integration revision');
   const occupied = new Set(leases.filter(isActive).map(lease => lease.issue));
-  const plan = admission(snapshot, snapshot.issues.filter(i => !occupied.has(i.number)).map(i => i.number), now, root, runningCount(snapshot, leases), leases.filter(isActive).map(l => l.nodeId));
+  // `onlyIssue` narrows the QUEUE, never the snapshot. Removing the other issues
+  // instead would change `openRefs`, whose `repairPrs` exclusion is computed from
+  // the issue list -- so a sibling's repair PR would stop being excluded, a
+  // different set of leaves would be admissible, and a verification meant to
+  // reproduce one decision would be answering a different question.
+  const queued = snapshot.issues.filter(i => !occupied.has(i.number)).map(i => i.number)
+    .filter(number => onlyIssue === undefined || number === onlyIssue);
+  const plan = admission(snapshot, queued, now, root, runningCount(snapshot, leases), leases.filter(isActive).map(l => l.nodeId));
   const leaves = plan.leaves.map(leaf => {
     const issue = snapshot.issues.find(i => i.number === leaf.issueNumber)!;
     const lineage = lineageFor(issue.number, snapshot.prs);
@@ -130,8 +137,7 @@ export function assertAdmission(plan: Plan, snapshot: Snapshot, issueNumber: num
   if (plan.implementationSha !== snapshot.implementationSha || plan.integrationSha !== snapshot.integrationSha) throw new Error('Implementation or integration revision changed; replan');
   const expected = plan.leaves.find(leaf => leaf.issueNumber === issueNumber);
   if (!expected || !plan.issues.includes(issueNumber)) throw new Error('Issue missing from admitted dispatch plan');
-  const isolated = { ...snapshot, issues: snapshot.issues.filter(i => i.number === issueNumber) };
-  const current = makePlan(isolated, [], now, root).leaves.find(leaf => leaf.issueNumber === issueNumber);
+  const current = makePlan(snapshot, [], now, root, issueNumber).leaves.find(leaf => leaf.issueNumber === issueNumber);
   if (!current || current.nodeId !== expected.nodeId || current.fingerprint !== expected.fingerprint) {
     // Naming the field that moved, because "graph/admission/issue/lineage" names
     // four causes and identifies none, and a lane that refuses without saying
