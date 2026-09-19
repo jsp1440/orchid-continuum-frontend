@@ -46,6 +46,49 @@ export class GitHubLeaseStore implements LeaseStore {
     }
   }
 }
+/**
+ * A ledger store for the lane that cannot spend.
+ *
+ * `GitHubLeaseStore.read()` throws on a missing ledger deliberately: for the
+ * paid lane, "no accounting file" must never read as "nothing has been spent".
+ * The deterministic lane reserves exactly zero, so an absent ledger is simply an
+ * empty one -- and because the paid lane has refused before reading since the
+ * day it was written, no ledger has ever been created. This is the only lane
+ * permitted to create it, and it still cannot write a non-zero reservation.
+ */
+export class DeterministicLeaseStore extends GitHubLeaseStore {
+  async read() {
+    try {
+      return await super.read();
+    } catch (error) {
+      if (!status(error, 404)) throw error;
+      return { version: '', ledger: { schema: 1, programStartedAt: now(), programSpent: 0, dailySpent: {}, leases: [] } as Ledger };
+    }
+  }
+
+  async compareAndSwap(version: string, ledger: Ledger) {
+    if (version !== '') return super.compareAndSwap(version, ledger);
+    if (ledger.programSpent !== 0 || Object.keys(ledger.dailySpent).length > 0) {
+      throw new Error('Refusing to initialize accounting with a non-zero balance');
+    }
+    try { api(`git/ref/heads/${stateBranch}`); }
+    catch (error) {
+      if (!status(error, 404)) throw error;
+      api('git/refs', 'POST', { ref: `refs/heads/${stateBranch}`, sha: process.env.GITHUB_SHA || '' });
+    }
+    try {
+      api(`contents/${statePath}`, 'PUT', { branch: stateBranch,
+        message: 'chore(autonomy): initialize durable dispatch ledger',
+        content: Buffer.from(JSON.stringify(ledger, null, 2) + '\n').toString('base64') });
+      return true;
+    } catch (error) {
+      // Someone else created it first; re-read and retry rather than overwrite.
+      if (status(error, 409) || status(error, 422)) return false;
+      throw error;
+    }
+  }
+}
+
 function snapshot(): Snapshot {
   const issues = pages<Issue & { pull_request?: unknown }>('issues?state=all').filter(i => !i.pull_request)
     .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })).sort((a,b) => a.name.localeCompare(b.name)) }));
@@ -175,7 +218,7 @@ async function main() {
     const attempt = process.env.GITHUB_RUN_ATTEMPT || '';
     if (command === 'admit-deterministic') {
       // No provider authorization is consulted, because nothing here can spend.
-      const result = await claimDeterministicLease(store, plan, snapshot(), { issueNumber: number, runId: id, runAttempt: attempt, now: now() });
+      const result = await claimDeterministicLease(new DeterministicLeaseStore(), plan, snapshot(), { issueNumber: number, runId: id, runAttempt: attempt, now: now() });
       output('allowed', String(result.allowed));
       output('lease_id', result.lease?.id || '');
       // A refusal is still a receipt: the audit must see that this issue was
@@ -202,7 +245,7 @@ async function main() {
     api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
       .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });
     if (leaseId) {
-      await transitionLease(store, leaseId, id, attempt,
+      await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
         outcome === 'provider_free_done' ? 'provider-free-done' : 'provider-free-failed');
     }
     receipt(number, plan.wave.hash, outcome, {

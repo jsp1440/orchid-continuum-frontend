@@ -280,3 +280,23 @@ describe('the lane workflow cannot report two things about one issue', () => {
     expect(lane.jobs['budget-preflight'].if).toContain("!= 'true'");
   });
 });
+
+describe('the deterministic lane may create the ledger the paid lane never could', () => {
+  it('refuses to initialize accounting with a balance', async () => {
+    const { DeterministicLeaseStore } = await import('../scripts/oc-dispatch-runtime');
+    const store = new DeterministicLeaseStore();
+    await expect(store.compareAndSwap('', { ...emptyLedger(), programSpent: 12 }))
+      .rejects.toThrow('non-zero balance');
+    await expect(store.compareAndSwap('', { ...emptyLedger(), dailySpent: { '2026-09-19': 3 } }))
+      .rejects.toThrow('non-zero balance');
+  });
+
+  it('still lets the paid lane treat a missing ledger as unknown spend', async () => {
+    // The base store must keep throwing on 404: for the paid lane, no accounting
+    // file has never meant nothing has been spent.
+    const { GitHubLeaseStore } = await import('../scripts/oc-dispatch-runtime');
+    expect(Object.getPrototypeOf(new (await import('../scripts/oc-dispatch-runtime')).DeterministicLeaseStore()))
+      .not.toBe(GitHubLeaseStore.prototype.constructor);
+    expect(new (await import('../scripts/oc-dispatch-runtime')).DeterministicLeaseStore()).toBeInstanceOf(GitHubLeaseStore);
+  });
+});
