@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "programStartedAt": "2026-09-19T21:15:22.086Z",
+  "programSpent": 0,
+  "dailySpent": {},
+  "leases": [
+    {
+      "id": "4fcdbc3204215ea1b104674dad99ca1b074d899b37692f3af5bd2021f33df691",
+      "issue": 243,
+      "nodeId": "cap-conservatory-collection",
+      "fingerprint": "135dbf50946863bcc8cff94c9755c54d5b386b2e2ba0623668fb5d7b2ab1ac6f",
+      "waveHash": "f623b9149714b970fb05ca6756ba047d0ad31a13d2bc380b9c12b47596f9f6ae",
+      "runId": "35469789739",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-19T22:45:21.726Z",
+      "reservedUsd": 0,
+      "lane": "provider-free",
+      "state": "reserved"
+    }
+  ]
+}
