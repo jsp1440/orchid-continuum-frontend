@@ -133,7 +133,13 @@ export function assertAdmission(plan: Plan, snapshot: Snapshot, issueNumber: num
   const isolated = { ...snapshot, issues: snapshot.issues.filter(i => i.number === issueNumber) };
   const current = makePlan(isolated, [], now, root).leaves.find(leaf => leaf.issueNumber === issueNumber);
   if (!current || current.nodeId !== expected.nodeId || current.fingerprint !== expected.fingerprint) {
-    throw new Error('Graph/admission/issue/lineage drift; dispatch refused');
+    // Naming the field that moved, because "graph/admission/issue/lineage" names
+    // four causes and identifies none, and a lane that refuses without saying
+    // why cannot be repaired from its own logs.
+    const drift = !current ? 'the isolated re-plan admitted nothing'
+      : current.nodeId !== expected.nodeId ? `node ${expected.nodeId} -> ${current.nodeId}`
+      : `fingerprint ${expected.fingerprint.slice(0, 12)} -> ${current.fingerprint.slice(0, 12)}`;
+    throw new Error(`Graph/admission/issue/lineage drift; dispatch refused (${drift})`);
   }
   return expected;
 }
