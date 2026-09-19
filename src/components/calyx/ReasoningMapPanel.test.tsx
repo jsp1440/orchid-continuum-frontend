@@ -87,7 +87,13 @@ describe("the reasoning map as Calyx renders it", () => {
     // that against whatever the contract actually carries.
     const scopes = map.contradictions[0].scopes ?? [];
     expect(scopes.length).toBeGreaterThan(1);
-    for (const scope of scopes) expect(text).toContain(scope);
+    for (const scope of scopes) {
+      // Without this guard the assertion is vacuous: two empty strings satisfy
+      // `length > 1`, and `toContain("")` is always true, so a panel that
+      // rendered no scope at all would pass. Found by mutation during review.
+      expect(scope.trim().length).toBeGreaterThan(0);
+      expect(text).toContain(scope);
+    }
     expect(text).toMatch(/Left standing/i);
   });
 
@@ -133,8 +139,14 @@ describe("the reasoning map as Calyx renders it", () => {
     // Not a hard-coded "moderate": a contradiction left standing must hold
     // confidence down, and the executor now returns "low" for this fixture.
     // Pinning the literal would have re-asserted the behaviour #1510 removed.
-    expect(text).toMatch(new RegExp(map.confidence.qualitative, "i"));
-    expect(map.confidence.qualitative).not.toMatch(/^high$/i);
+    // A bare substring match on "low" is satisfied by allow, below and follow,
+    // so a panel that never rendered the value could pass. Require the value as
+    // a whole word, and pin it to a plain alphabetic vocabulary so the pattern
+    // cannot be built from a metacharacter. Both found by mutation during review.
+    const qualitative = map.confidence.qualitative;
+    expect(qualitative).toMatch(/^[a-z]+$/i);
+    expect(text).toMatch(new RegExp(`\\b${qualitative}\\b`, "i"));
+    expect(qualitative).not.toMatch(/^high$/i);
     expect(text).toContain(map.confidence.basis);
     expect(text).not.toMatch(/\d+\s*%/);
     expect(map.confidence.numeric_precision_claimed).toBe(false);
