@@ -36,6 +36,24 @@ describe('boundedCanonicalTaxon', () => {
     expect(boundedCanonicalTaxon('dendrobium nobile var. alba')).toBeNull();
   });
 
+  it('accepts conventionally capitalised cultivars only at cv.', () => {
+    expect(boundedCanonicalTaxon('Cattleya labiata cv. Alba')).toEqual({
+      genus: 'Cattleya',
+      taxon: 'Cattleya labiata cv. Alba',
+      rank: 'cultivar',
+    });
+    expect(boundedCanonicalTaxon('Cattleya labiata CV. Alba')?.rank).toBe('cultivar');
+    expect(boundedCanonicalTaxon('Cattleya labiata cv. alba')).toBeNull();
+    expect(boundedCanonicalTaxon('Cattleya labiata var. Alba')).toBeNull();
+  });
+
+  it('rejects author connectives where a real infraspecific epithet is required', () => {
+    for (const connective of ['ex', 'et', 'in', 'and', 'nec', 'non', 'emend', 'sensu']) {
+      expect(boundedCanonicalTaxon(`Dendrobium nobile f. ${connective}`)).toBeNull();
+    }
+    expect(boundedCanonicalTaxon('Dendrobium nobile var. al-ba')?.rank).toBe('variety');
+  });
+
   it('fails closed on everything that is not exactly a canonical name', () => {
     for (const rejected of [
       'Cattleya labiata Lindl.', // authorship is not part of the name
