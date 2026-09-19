@@ -288,7 +288,7 @@ describe("what an independent checker got through this surface", () => {
     // And it says what it did, rather than asserting a guarantee it did not keep.
     const footer = container.querySelector('[data-testid="reasoning-locality"]');
     expect(footer?.textContent).toContain("withheld a coordinate");
-    expect(footer?.textContent).not.toContain("none carried a coordinate");
+    expect(footer?.textContent).not.toMatch(/none carried|no coordinates appear/i);
     expect(
       container.querySelector('[data-testid="reasoning-locality-breach"]'),
     ).not.toBeNull();
@@ -329,15 +329,20 @@ describe("what an independent checker got through this surface", () => {
     render(<ReasoningMapView map={ordinary} />);
     expect(container.textContent).toContain("34: 1-340");
     expect(container.textContent).toContain("1,234 records");
+    // The footer states what the scan did, not that the page is clean — a
+    // pattern list finding nothing is not the same as nothing being there.
     expect(
       container.querySelector('[data-testid="reasoning-locality"]')?.textContent,
-    ).toContain("none carried a coordinate");
+    ).toContain("No field this page renders matched a coordinate pattern");
   });
 
   it("states plainly that it found nothing when the map is clean", () => {
     render(<ReasoningMapView map={map} />);
     const footer = container.querySelector('[data-testid="reasoning-locality"]');
-    expect(footer?.textContent).toContain("none carried a coordinate");
+    expect(footer?.textContent).toContain("No field this page renders matched a coordinate pattern");
+    // It must never certify absence. "My patterns found nothing" and "nothing
+    // was there" are different claims, and only the first one is ours.
+    expect(footer?.textContent).not.toMatch(/none carried|no coordinates appear/i);
     expect(
       container.querySelector('[data-testid="reasoning-locality-breach"]'),
     ).toBeNull();
@@ -460,10 +465,7 @@ describe("the locality scan cannot drift from what is painted", () => {
     ["taxonomic authorship", (d, v) => { d.taxonomic_identity.authorship = v; }],
     ["taxonomic rank", (d, v) => { d.taxonomic_identity.rank = v; }],
     ["resolved_against", (d, v) => { d.taxonomic_identity.resolved_against = v; }],
-    ["confidence level", (d, v) => { d.confidence.qualitative = v as never; }],
     ["locality disclosure", (d, v) => { d.locality_policy.disclosure = v; }],
-    ["an unknown evidence state", (d, v) => { d.relationships[0].evidence_state = v as never; }],
-    ["an unknown mechanism kind", (d, v) => { d.mechanisms[0].kind = v as never; }],
     ["the accepted name itself", (d, v) => { d.taxonomic_identity.accepted_name = `Ophrys apifera ${v}`; }],
   ];
 
@@ -477,6 +479,35 @@ describe("the locality scan cannot drift from what is painted", () => {
     const rendered = `${container.textContent ?? ""} ${container.innerHTML}`;
     expect(rendered).not.toContain(payload);
     expect(rendered).not.toContain("51.752300");
+  });
+
+  it.each([
+    ["confidence level", (d: ReasoningMap, v: string) => { d.confidence.qualitative = v as never; }],
+    ["evidence state", (d: ReasoningMap, v: string) => { d.relationships[0].evidence_state = v as never; }],
+    ["mechanism kind", (d: ReasoningMap, v: string) => { d.mechanisms[0].kind = v as never; }],
+  ])("keeps a coordinate in %s off the page without rewriting the field", (_label, poison) => {
+    // These are drawn from fixed vocabularies, so redaction leaves them alone:
+    // overwriting `evidence_state` with the withheld marker took a CONTESTED
+    // relationship out of the tally and flipped the headline to "one account".
+    // They stay safe because nothing paints an unrecognised value raw.
+    const payload = "51.752300, -1.257800";
+    const poisoned = variant((draft) => poison(draft, payload));
+    render(<ReasoningMapView map={poisoned} />);
+    const rendered = `${container.textContent ?? ""} ${container.innerHTML}`;
+    expect(rendered).not.toContain(payload);
+    expect(rendered).toContain("not recognised by this page");
+  });
+
+  it("keeps a damaged evidence state from reading as agreement", () => {
+    // The F-1 failure, from the other direction: whatever destroys the state,
+    // the page must not conclude the sources agree.
+    const damaged = variant((draft) => {
+      draft.relationships[0].evidence_state = "[coordinate withheld]" as never;
+      draft.contradictions = [];
+    });
+    render(<ReasoningMapView map={damaged} />);
+    expect(container.querySelector('[data-testid="reasoning-answer"]')).toBeNull();
+    expect(container.querySelector('[data-testid="reasoning-unsettled"]')).not.toBeNull();
   });
 
   it("never tells the reader a field was withheld while showing it", () => {
@@ -576,5 +607,122 @@ describe("settlement fails closed", () => {
     const counted = [...tally.matchAll(/(\d+)\s/g)].reduce((sum, m) => sum + Number(m[1]), 0);
     expect(counted).toBe(odd.relationships.length);
     expect(tally).toContain("does not recognise");
+  });
+});
+
+/**
+ * `settlement()` decides whether the page may present an answer, so every way
+ * it can fail *open* is a way the page can claim agreement it does not have.
+ */
+describe("settlement never fails open", () => {
+  function variant(edit: (draft: ReasoningMap) => void): ReasoningMap {
+    const draft = structuredClone(map);
+    edit(draft);
+    return draft;
+  }
+
+  it("an empty predicate does not let any contradiction account for everything", () => {
+    // `claim.includes("")` is true, so one blank field made every contradiction
+    // account for every contested relationship.
+    const blanked = variant((draft) => {
+      draft.relationships[0].predicate = "";
+      draft.contradictions = [
+        {
+          between: ["leaf_shape ovate", "leaf_shape lanceolate"],
+          description: "A disagreement about leaf shape.",
+          resolution: "resolved_by_evidence",
+          scopes: [null, null],
+        },
+      ];
+    });
+    render(<ReasoningMapView map={blanked} />);
+    expect(container.querySelector('[data-testid="reasoning-unsettled"]')).not.toBeNull();
+  });
+
+  it("a coincidental substring does not settle a contested claim", () => {
+    // A contradiction explicitly not about pollination used to settle the
+    // contested pollination claim, because its text contained the word "Bees".
+    const coincidence = variant((draft) => {
+      draft.relationships[0].object = "Bees";
+      draft.contradictions = [
+        {
+          between: ["Bees were not recorded in the 1961 survey", "leaf morphology differs"],
+          description: "A disagreement about morphology.",
+          resolution: "resolved_by_evidence",
+          scopes: [null, null],
+        },
+      ];
+    });
+    render(<ReasoningMapView map={coincidence} />);
+    expect(container.querySelector('[data-testid="reasoning-unsettled"]')).not.toBeNull();
+  });
+
+  it("a genuine write-up does settle it, so the guard is not simply always-on", () => {
+    // The guard has to be able to say yes, or it is not a guard.
+    const genuine = variant((draft) => {
+      draft.contradictions[0].resolution = "resolved_by_evidence";
+    });
+    render(<ReasoningMapView map={genuine} />);
+    expect(container.querySelector('[data-testid="reasoning-answer"]')).not.toBeNull();
+  });
+});
+
+describe("withholding a coordinate never changes what the page concludes", () => {
+  function variant(edit: (draft: ReasoningMap) => void): ReasoningMap {
+    const draft = structuredClone(map);
+    edit(draft);
+    return draft;
+  }
+
+  //: A record whose own text is withheld, alongside the contradiction that
+  //: describes it. Display and judgement pull apart here: the sanitised copy
+  //: can no longer be matched against the write-up, so a panel that judged
+  //: from it would report a different scientific conclusion purely because a
+  //: coordinate was removed.
+  const withheldButAccountedFor = (draft: ReasoningMap) => {
+    draft.relationships[0].subject = "Colony 51.7523";
+    draft.relationships[0].object = "north by -1.2578 west";
+    draft.contradictions = [
+      {
+        between: [
+          "reported_pollinated_by north by -1.2578 west",
+          "reported_reproductive_strategy Habitual self-pollination",
+        ],
+        description: "The two reports disagree.",
+        resolution: "resolved_by_evidence",
+        scopes: [null, null],
+      },
+    ];
+  };
+
+  it("reaches the same conclusion it would have reached without the redaction", () => {
+    const clean = variant((draft) => {
+      draft.contradictions = [
+        {
+          between: [
+            "reported_pollinated_by Eucera (solitary bees)",
+            "reported_reproductive_strategy Habitual self-pollination",
+          ],
+          description: "The two reports disagree.",
+          resolution: "resolved_by_evidence",
+          scopes: [null, null],
+        },
+      ];
+    });
+    render(<ReasoningMapView map={clean} />);
+    expect(container.querySelector('[data-testid="reasoning-answer"]')).not.toBeNull();
+
+    render(<ReasoningMapView map={variant(withheldButAccountedFor)} />);
+    expect(container.querySelector('[data-testid="reasoning-answer"]')).not.toBeNull();
+    expect(container.textContent).not.toContain("51.7523");
+  });
+
+  it("still counts the withheld record in the evidence tally", () => {
+    // The tally reads the evidence too. A withheld record that vanished from
+    // it would make the page understate how much it is standing on.
+    render(<ReasoningMapView map={variant(withheldButAccountedFor)} />);
+    const tally = container.querySelector('[data-testid="evidence-tally"]')?.textContent ?? "";
+    expect(tally).toContain("1 contested");
+    expect(tally).not.toContain("does not recognise");
   });
 });

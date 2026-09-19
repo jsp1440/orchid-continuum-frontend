@@ -104,7 +104,7 @@
     "scope": "Mediterranean range; North-western range",
     "environmental_notes": [
       "Most records associate the taxon with calcareous grassland.",
-      "The reported reproductive strategy differs between parts of the range, so scope is part of the claim rather than context for it."
+      "The reports carry different scopes, but nothing retrieved establishes that those scopes are separate places, so the difference does not divide the range."
     ],
     "coordinates_present": false
   },
@@ -124,7 +124,7 @@
     {
       "name": "no pollinator relationship in this population",
       "kind": "null_explanation",
-      "statement": "An observed insect visit does not establish pollination. Where a non-insect strategy already accounts for seed set, a visiting insect may be incidental.",
+      "statement": "An observed insect visit does not establish pollination. Where another retrieved strategy already accounts for seed set, a visiting insect may be incidental.",
       "evidence_state": "REPORTED_UNVERIFIED"
     }
   ],
@@ -134,7 +134,7 @@
         "reported_pollinated_by Eucera (solitary bees)",
         "reported_reproductive_strategy Habitual self-pollination"
       ],
-      "description": "One report describes an insect-mediated system; the other describes reproduction that needs no insect. They are not reconciled by preferring the better-supported one.",
+      "description": "One report gives Eucera (solitary bees); the other gives Habitual self-pollination. Both are carried. They are not reconciled by preferring the better-supported one.",
       "resolution": "unresolved_presented_as_contested",
       "scopes": [
         "sporadically reported, chiefly in the Mediterranean",
@@ -146,7 +146,8 @@
     "no population-level pollination observation is held",
     "no source quantifies the contribution of either strategy",
     "Eucera (solitary bees) is identified to genus, not species, in the retrieved evidence.",
-    "No local observation supports any retrieved claim; the evidence is literature and aggregated records only."
+    "No local observation supports any retrieved claim; the evidence is literature and aggregated records only.",
+    "The source for Ophrys apifera reported_pollinated_by Eucera (solitary bees) establishes this at genus level; nothing retrieved reports it for this species specifically."
   ],
   "known_unknowns": [
     "Whether the two reproductive strategies co-occur in one population or partition by geography.",
@@ -155,7 +156,7 @@
   ],
   "confidence": {
     "qualitative": "low",
-    "basis": "The taxonomic identity is resolved. Reports conflict and nothing retrieved settles the disagreement. 4 gap(s) remain in the retrieved evidence.",
+    "basis": "The taxonomic identity is resolved. Reports conflict and nothing retrieved settles the disagreement. 5 gap(s) remain in the retrieved evidence.",
     "numeric_precision_claimed": false
   },
   "locality_policy": {
@@ -187,9 +188,9 @@
   },
   "execution": {
     "traversal": {
-      "path_count": 6,
+      "path_count": 8,
       "node_count": 7,
-      "edge_count": 6,
+      "edge_count": 7,
       "engine": "app.brain.reasoning_map.ReasoningMapEngine"
     },
     "explanation": null,

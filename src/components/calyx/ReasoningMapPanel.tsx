@@ -7,6 +7,7 @@ import {
   contestedRelationships,
   fetchReasoningMap,
   isReasoningMapFailure,
+  isKnownVocabulary,
   refutedRelationships,
   sanitiseFailure,
   sanitiseMap,
@@ -49,6 +50,20 @@ const KIND_LABEL: Record<string, string> = {
  * up printed as standing: everything that is not the branch you thought of
  * falls into the wrong half.
  */
+/**
+ * What a vocabulary field renders as when its value is not one this build
+ * knows.
+ *
+ * These fields are deliberately exempt from locality redaction, because
+ * overwriting `evidence_state` with a withheld marker took a CONTESTED
+ * relationship out of the tally and flipped the headline to "one account" — a
+ * scientific-integrity failure caused by the privacy defence. Exempting them
+ * is only safe while nothing paints one raw, so nothing does: an unrecognised
+ * value cannot carry a coordinate onto the page, and it cannot quietly read as
+ * agreement either.
+ */
+const UNRECOGNISED = "not recognised by this page";
+
 const RESOLUTION_NOTE: Record<string, string> = {
   resolved_by_scope: "These apply to different places, so they do not actually conflict.",
   resolved_by_evidence: "Settled by the retrieved evidence, not by preferring a side.",
@@ -113,14 +128,20 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
   // footer's count and the text on the page are the same substitutions — a
   // parallel list of "fields we render" is exactly what drifted before.
   const { map, scan: locality } = sanitiseMap(received);
-  const state = settlement(map);
+  // Settlement is a judgement about the evidence, so it reads the map as it
+  // arrived. Running it on the sanitised copy let redaction rewrite an
+  // evidence state and flip a contested question to "one account" — a
+  // scientific-integrity failure produced by the privacy defence. The raw map
+  // is used for this one decision and is never painted.
+  const state = settlement(received);
   const settled = state !== "unsettled";
-  const supported = supportedRelationships(map);
-  const contested = contestedRelationships(map);
-  const refuted = refutedRelationships(map);
-  const uncorroborated = uncorroboratedRelationships(map);
+  // The tally counts the evidence too, for the same reason.
+  const supported = supportedRelationships(received);
+  const contested = contestedRelationships(received);
+  const refuted = refutedRelationships(received);
+  const uncorroborated = uncorroboratedRelationships(received);
   const other =
-    map.relationships.length -
+    received.relationships.length -
     supported.length -
     contested.length -
     refuted.length -
@@ -189,7 +210,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
             </p>
             <p className="mt-1 text-xs">
               <span data-testid="evidence-state">
-                {STATE_LABEL[relationship.evidence_state] ?? relationship.evidence_state}
+                {STATE_LABEL[relationship.evidence_state] ?? UNRECOGNISED}
               </span>
               {relationship.geographic_scope
                 ? ` · ${relationship.geographic_scope}`
@@ -218,7 +239,7 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
           <div key={index}>
             <p>
               <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                {KIND_LABEL[mechanism.kind] ?? mechanism.kind}
+                {KIND_LABEL[mechanism.kind] ?? UNRECOGNISED}
               </span>
             </p>
             <p className="mt-1">{mechanism.statement}</p>
@@ -271,7 +292,12 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
         blurb="Qualitative. There is no percentage, because nothing retrieved supports one."
       >
         <p>
-          <span className="font-medium capitalize">{map.confidence.qualitative}</span> confidence
+          <span className="font-medium capitalize">
+            {isKnownVocabulary("qualitative", map.confidence.qualitative)
+              ? map.confidence.qualitative
+              : UNRECOGNISED}
+          </span>{" "}
+          confidence
         </p>
         <p className="text-muted-foreground">{map.confidence.basis}</p>
       </Section>
@@ -290,9 +316,9 @@ export function ReasoningMapView({ map: received }: { map: ReasoningMap }) {
       <footer className="rounded-xl border bg-muted/30 p-4 text-xs text-muted-foreground">
         <p data-testid="reasoning-locality">
           Locality is {map.locality_policy.disclosure.toLowerCase().replace(/_/g, " ")}.{" "}
-          {locality.clean
-            ? "This page checked every line it renders; none carried a coordinate."
-            : `This page checked every line it renders and withheld a coordinate from ${locality.fieldsWithheld} of them.`}
+          {locality.fieldsWithheld > 0
+            ? `This page withheld a coordinate from ${locality.fieldsWithheld} field(s) before rendering.`
+            : "No field this page renders matched a coordinate pattern."}
         </p>
         {locality.contradictsDeclaredPolicy ? (
           <p
