@@ -36,6 +36,31 @@ class MemoryStore implements LeaseStore {
 
 export const emptyLedger = (): Ledger => ({ schema: 1, programStartedAt: NOW, programSpent: 0, dailySpent: {}, leases: [] });
 
+// Settlement fixtures own a persisted lease, just like the reusable lane.
+// An absent ledger must not silently bypass the fence in a successful test.
+const settlementLedgerApi = `
+if (path.includes('contents/.oc/dispatch-ledger.json')) {
+  const file = process.env.OC_SETTLEMENT_LEDGER;
+  if (method === 'PUT') {
+    const body = JSON.parse(fs.readFileSync(0, 'utf8'));
+    fs.writeFileSync(file, Buffer.from(body.content, 'base64').toString());
+    console.log('{}'); process.exit(0);
+  }
+  console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(fs.readFileSync(file)).toString('base64') }));
+  process.exit(0);
+}
+`;
+function installSettlementLease(env: Record<string, string | undefined>, plan: ReturnType<typeof makePlan>) {
+  env.OC_LEASE_ID = 'fixture-owned';
+  env.OC_SETTLEMENT_LEDGER = join(env.OC_PLAN_DIR!, 'lease.json');
+  writeFileSync(env.OC_TEST_LOG!, '');
+  const leaf = plan.leaves[0];
+  const owned: Lease = { id: 'fixture-owned', issue: leaf.issueNumber, nodeId: leaf.nodeId,
+    fingerprint: leaf.fingerprint, waveHash: plan.wave.hash, runId: '1', runAttempt: '1',
+    expiresAt: '2099-01-01T00:00:00.000Z', reservedUsd: 0, lane: 'provider-free', state: 'reserved' };
+  writeFileSync(env.OC_SETTLEMENT_LEDGER, JSON.stringify({ ...emptyLedger(), leases: [owned] }));
+}
+
 describe('a deterministic lane takes a lease of its own', () => {
   const setup = () => {
     const snapshot = snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]);
@@ -189,7 +214,7 @@ const args = process.argv.slice(2);
 fs.appendFileSync(process.env.OC_TEST_LOG, JSON.stringify(args) + '\\n');
 const path = args[1];
 const method = args[args.indexOf('--method') + 1];
-if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+${settlementLedgerApi}
 if (method === 'PATCH') {
   // The body arrives on stdin via \`--input -\`, not in argv.
   const body = fs.readFileSync(0, 'utf8');
@@ -215,13 +240,14 @@ console.log('{}');
       OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
       PROVIDER_AUTHORIZED: 'false',
     };
+    installSettlementLease(env, plan);
     // Evidence as the executor actually writes it, so a test must opt out of the
     // fencing fields rather than accidentally omit them.
     const writeEvidence = (evidence: Record<string, unknown>) => {
       mkdirSync(env.OC_EVIDENCE_DIR, { recursive: true });
       writeFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), JSON.stringify({
         schema: 'oc.provider-free-evidence.v1', issue: 703, wave_hash: plan.wave.hash,
-        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [], ...evidence,
+        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [{ command: 'npm run test', exit_code: 0 }], ...evidence,
       }));
     };
     const writeRaw = (body: string) => {
@@ -334,6 +360,45 @@ console.log('{}');
     expect(run.status, run.stderr).toBe(0);
     expect(run.stderr).not.toContain('reported a provider call');
     expect(JSON.stringify(h.receipt())).toContain('records no provider_calls');
+  });
+
+  it.each([
+    {}, { id: 'foreign' }, { issue: 704 }, { nodeId: 'another-node' },
+    { fingerprint: 'changed' }, { waveHash: 'another-wave' }, { runId: '2' },
+    { runAttempt: '2' }, { state: 'provider-free-done' },
+    { expiresAt: '2020-01-01T00:00:00.000Z' }, { lane: 'provider', reservedUsd: 0.5 },
+  ])('refuses an unowned settlement before any issue write: %j', (change) => {
+    const h = harness();
+    const file = join(h.env.OC_PLAN_DIR, 'lease.json');
+    const ledger = JSON.parse(readFileSync(file, 'utf8'));
+    if (Object.keys(change).length === 0) ledger.leases = [];
+    else Object.assign(ledger.leases[0], change);
+    writeFileSync(file, JSON.stringify(ledger));
+    h.writeEvidence({ outcome: 'done' });
+    const before = readFileSync(file, 'utf8');
+    const run = h.settle();
+    expect(run.status).toBe(1);
+    expect(h.patched()).toEqual([]);
+    expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(h.receipt()).toMatchObject({ outcome: 'dispatch_refused', providerCalls: 0 });
+  });
+
+  it('refuses a missing lease id rather than bypassing the ledger', () => {
+    const h = harness();
+    h.writeEvidence({ outcome: 'done' });
+    expect(h.settle({ OC_LEASE_ID: '' }).status).toBe(1);
+    expect(h.patched()).toEqual([]);
+    expect(h.receipt()).toMatchObject({ outcome: 'dispatch_refused' });
+  });
+
+  it.each(['done', 'failed'])('does not call an empty command list execution: %s', (outcome) => {
+    const h = harness();
+    h.writeEvidence({ outcome, results: [] });
+    const run = h.settle();
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({ outcome: 'not_executed', commands: 0 });
+    expect(h.patched().at(-1)!.labels).toContain('oc-queued');
+    expect(h.patched().at(-1)!.labels).not.toContain('oc-validating');
   });
 
   it('refuses evidence claiming a provider call', () => {
@@ -503,7 +568,7 @@ console.log('{}');
       reservedUsd: 0, lane: 'provider-free', state: 'reserved' }]);
     mkdirSync(h.env.OC_EVIDENCE_DIR, { recursive: true });
     writeFileSync(join(h.env.OC_EVIDENCE_DIR, '703.json'), JSON.stringify({
-      issue: 703, wave_hash: h.plan.wave.hash, run: '1:1', provider_calls: 0, outcome: 'done', results: [] }));
+      issue: 703, wave_hash: h.plan.wave.hash, run: '1:1', provider_calls: 0, outcome: 'done', results: [{ command: 'npm run test', exit_code: 0 }] }));
 
     const run = h.cmd('settle-deterministic', { OC_LEASE_ID: 'live' });
 
@@ -699,7 +764,7 @@ const args = process.argv.slice(2);
 fs.appendFileSync(process.env.OC_TEST_LOG, JSON.stringify(args) + '\\n');
 const path = args[1];
 const method = args[args.indexOf('--method') + 1];
-if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+${settlementLedgerApi}
 if (method === 'PATCH') {
   const body = fs.readFileSync(0, 'utf8');
   fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + body + '\\n');
@@ -722,11 +787,12 @@ console.log('{}');
       OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
       PROVIDER_AUTHORIZED: 'false',
     };
+    installSettlementLease(env, plan);
     const writeEvidence = (evidence: Record<string, unknown>) => {
       mkdirSync(env.OC_EVIDENCE_DIR, { recursive: true });
       writeFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), JSON.stringify({
         schema: 'oc.provider-free-evidence.v1', issue: 703, wave_hash: plan.wave.hash,
-        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [], ...evidence,
+        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [{ command: 'npm run test', exit_code: 0 }], ...evidence,
       }));
     };
     const settle = (extra: Record<string, string> = {}) => spawnSync(process.execPath,
@@ -799,13 +865,13 @@ console.log('{}');
     // which is true of a workflow whose step has nothing to upload.
     const h = harness();
     h.writeEvidence({ outcome: 'done', results: [{ command: 'npm run test', exit_code: 0 }] });
-    // A lease id the ledger cannot resolve: the ledger read 404s, so the
-    // transition throws before it can record anything.
+    // A lease id the ledger cannot resolve must be refused before relabelling.
     const run = h.settle({ OC_LEASE_ID: 'a-lease-this-ledger-does-not-have' });
 
     expect(run.status).not.toBe(0);
     expect(h.receiptExists(), 'settlement threw and left the audit no receipt').toBe(true);
-    expect(h.receipt()).toMatchObject({ issue: 703, outcome: 'provider_free_done', providerCalls: 0 });
+    expect(h.patched(), 'a foreign lease must not relabel the issue').toEqual([]);
+    expect(h.receipt()).toMatchObject({ issue: 703, outcome: 'dispatch_refused', providerCalls: 0 });
   });
 });
 
@@ -903,7 +969,7 @@ const fs = require('node:fs');
 const args = process.argv.slice(2);
 const path = args[1];
 const method = args[args.indexOf('--method') + 1];
-if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+${settlementLedgerApi}
 if (method === 'PATCH') {
   fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + fs.readFileSync(0, 'utf8') + '\\n');
   console.log('{}'); process.exit(0);
@@ -925,12 +991,13 @@ console.log('{}');
       OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
       PROVIDER_AUTHORIZED: 'false',
     };
+    installSettlementLease(env, plan);
     writeFileSync(env.OC_TEST_LOG, '');
     const writeEvidence = (evidence: Record<string, unknown>) => {
       mkdirSync(env.OC_EVIDENCE_DIR, { recursive: true });
       writeFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), JSON.stringify({
         schema: 'oc.provider-free-evidence.v1', issue: 703, wave_hash: plan.wave.hash,
-        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [], ...evidence,
+        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [{ command: 'npm run test', exit_code: 0 }], ...evidence,
       }));
     };
     const settle = () => spawnSync(process.execPath,

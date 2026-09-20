@@ -264,13 +264,16 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
     if (ledger.leases.some(l => (l.issue === input.issueNumber || l.nodeId === leaf.nodeId) && isActive(l))) return { allowed: false, reason: 'lease_owned', lease: null };
     if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
     // The same issue, lineage, node and integration revision produce the same
-    // fingerprint, so an unchanged attempt is never run a second time.
+    // fingerprint. A successful attempt remains barred; an explicit repair may
+    // retry a failed deterministic attempt only on a newer implementation.
     //
     // A lane that never executed is excluded. Barring work on the strength of an
     // attempt that did not happen is how the dedupe became the defect it was
     // added to fix: the issue was relabelled `oc-queued`, admitted on every
     // later pulse, refused, receipted and reported green, forever.
-    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint && l.state !== 'not-executed')) {
+    const repairing = labelsOf(snapshot.issues.find(issue => issue.number === input.issueNumber)!).includes('oc-repair');
+    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint && l.state !== 'not-executed' &&
+        !(repairing && failedOnOlderImplementation(l, snapshot.implementationSha)))) {
       return { allowed: false, reason: 'unchanged_attempt', lease: null };
     }
     // The `not-executed` escape hatch had no floor. An issue whose worker can
@@ -298,6 +301,12 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
 /** How many times a fingerprint may settle `not-executed` before the lane stops trying. */
 export const NOT_EXECUTED_CEILING = 3;
 
+function failedOnOlderImplementation(lease: Lease, implementationSha: string) {
+  return laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed' &&
+    typeof lease.implementationSha === 'string' && /^[a-f0-9]{40}$/.test(lease.implementationSha) &&
+    lease.implementationSha !== implementationSha;
+}
+
 /**
  * Return deterministic failures that may safely re-enter the queue.
  *
@@ -309,18 +318,21 @@ export const NOT_EXECUTED_CEILING = 3;
  * revision all remain parked.
  */
 export function providerFreeRepairsReadyForRequeue(snapshot: Snapshot, leases: Lease[]) {
-  const parked = snapshot.issues.filter(issue => {
+  if (!/^[a-f0-9]{40}$/.test(snapshot.implementationSha)) return [];
+  const parked = eligibleIssues(snapshot).filter(issue => {
     const labels = new Set(labelsOf(issue));
-    if (issue.state === 'closed' || !labels.has('oc-repair') || labels.has('oc-queued') ||
-        ['oc-blocked', 'oc-owner-gate', 'oc-runtime-backoff', 'oc-validating', 'oc-done'].some(label => labels.has(label))) return false;
+    if (!labels.has('oc-repair') || labels.has('oc-queued') || labels.has('oc-prepared') ||
+        leases.some(lease => lease.issue === issue.number && isActive(lease))) return false;
+    // Reuse normal admission exclusions before restoring queue state: owner
+    // holds, publication holds, running work, stewards and durable PRs all apply.
+    const candidate = { ...issue, labels: [...issue.labels, { name: 'oc-queued' }] };
+    if (selectLanes({ issues: [candidate] }).selected.length === 0) return false;
     const failures = leases.filter(lease => lease.issue === issue.number &&
       laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed');
     if (failures.length === 0) return false;
     // Legacy failures without an exact implementation revision are not safe to
     // reinterpret; they stay visible for an owner or repair PR.
-    if (failures.some(lease => lease.implementationSha === snapshot.implementationSha)) return false;
-    return failures.some(lease => lease.implementationSha !== undefined &&
-      lease.implementationSha !== snapshot.implementationSha);
+    return failures.every(lease => failedOnOlderImplementation(lease, snapshot.implementationSha));
   });
   return parked.map(issue => issue.number).sort((a, b) => a - b);
 }

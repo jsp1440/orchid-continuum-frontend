@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
-  claimDeterministicLease, declaredNodesByIssue, laneOf, makePlan, transitionLease,
+  claimDeterministicLease, declaredNodesByIssue, laneOf, makePlan, transitionLease, providerFreeRepairsReadyForRequeue,
   type Ledger, type LeaseStore, type Snapshot,
 } from '../scripts/oc-dispatch-control';
 import { bindingReport } from '../scripts/oc-dispatch-runtime';
@@ -314,5 +314,36 @@ describe('the two governance facts the lane states about itself', () => {
 
     expect(result.allowed).toBe(false);
     expect(reads, 'the ledger was read on a claim that was never authorized').toBe(0);
+  });
+});
+
+
+describe('a repaired implementation can actually claim its requeued work', () => {
+  it('allows one failed deterministic retry per implementation without resetting successful work', async () => {
+    const store = new MemoryStore({ schema: 1, programStartedAt: NOW, programSpent: 0, dailySpent: {}, leases: [] });
+    const current = snapshot([...LABELS, 'oc-repair']);
+    const firstPlan = makePlan(current, [], NOW);
+    const first = await claimDeterministicLease(store, firstPlan, current,
+      { issueNumber: ISSUE, runId: '21', runAttempt: '1', now: NOW });
+    await transitionLease(store, first.lease!.id, '21', '1', 'provider-free-failed');
+    const repaired = { ...current, implementationSha: 'c'.repeat(40),
+      issues: current.issues.map(issue => ({ ...issue, labels: issue.labels.filter(l => l.name !== 'oc-queued') })) };
+    expect(providerFreeRepairsReadyForRequeue(repaired, store.ledger.leases)).toEqual([ISSUE]);
+    repaired.issues[0].labels = current.issues[0].labels;
+    const nextPlan = makePlan(repaired, store.ledger.leases, NOW);
+    expect(nextPlan.leaves[0].fingerprint).toBe(firstPlan.leaves[0].fingerprint);
+    const retry = await claimDeterministicLease(store, nextPlan, repaired,
+      { issueNumber: ISSUE, runId: '22', runAttempt: '1', now: NOW });
+    expect(retry.allowed, retry.reason).toBe(true);
+    await transitionLease(store, retry.lease!.id, '22', '1', 'provider-free-failed');
+    const repeated = await claimDeterministicLease(store, nextPlan, repaired,
+      { issueNumber: ISSUE, runId: '23', runAttempt: '1', now: NOW });
+    expect(repeated.reason).toBe('unchanged_attempt');
+    expect(store.ledger.programSpent).toBe(0);
+    expect(store.ledger.dailySpent).toEqual({});
+    store.ledger.leases[1].state = 'provider-free-done';
+    const newer = { ...repaired, implementationSha: 'd'.repeat(40) };
+    expect((await claimDeterministicLease(store, makePlan(newer, store.ledger.leases, NOW), newer,
+      { issueNumber: ISSUE, runId: '24', runAttempt: '1', now: NOW })).reason).toBe('unchanged_attempt');
   });
 });

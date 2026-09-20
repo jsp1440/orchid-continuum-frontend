@@ -22,6 +22,7 @@ const allowed = new Set(Object.values(LOCAL_EXECUTORS));
 const commands = JSON.parse(process.env.COMMANDS || '[]');
 
 if (!Number.isSafeInteger(issueNumber) || issueNumber <= 0) throw new Error('Invalid issue number');
+if (!Array.isArray(commands) || commands.length === 0) throw new Error('No deterministic commands to execute');
 for (const command of commands) {
   if (!allowed.has(command)) throw new Error(`refusing to run '${command}': not in the capability registry`);
 }

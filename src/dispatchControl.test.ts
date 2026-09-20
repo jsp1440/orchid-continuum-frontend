@@ -137,6 +137,29 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([1]);
     expect(providerFreeRepairsReadyForRequeue(snapshot, [{ ...failed, implementationSha: snapshot.implementationSha }])).toEqual([]);
   });
+  it.each(['oc-owner-gate', 'oc-publication-hold', 'oc-running', 'oc-blocked', 'oc-runtime-backoff',
+    'oc-validating', 'oc-done', 'oc-portfolio-steward'])('keeps a repaired issue parked behind %s', (hold) => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair', hold]);
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: 'c'.repeat(40),
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+  });
+  it('preserves body holds, unknown revision evidence, and active leases when repairing', () => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair']);
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: 'c'.repeat(40),
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    snapshot.issues[0].body = 'OC-AUTO-HOLD: true';
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+    snapshot.issues[0].body = '';
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, implementationSha: undefined }])).toEqual([]);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, id: 'active', state: 'reserved' }])).toEqual([]);
+    snapshot.prs.push({ number: 88, state: 'closed', body: 'OC-LINEAGE-ISSUE: #1', head: { ref: 'oc-auto/1-work', sha: 'd'.repeat(40) } });
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+  });
   it('detects hash tampering, unadmitted issues, missing/duplicate/mismatched actual receipts', () => {
     const { root, snapshot } = fixture(); const plan = makePlan(snapshot, [], now, root);
     const receipts = plan.issues.map(issue => ({ issue, waveHash: plan.wave.hash, outcome: 'provider_not_authorized' }));

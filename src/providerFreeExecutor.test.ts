@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -46,7 +46,7 @@ require('node:fs').appendFileSync(process.env.OC_TEST_LOG, JSON.stringify(proces
     OC_EVIDENCE_DIR: join(dir, 'evidence'), OC_TEST_LOG: join(dir, 'gh.log'),
     GITHUB_STEP_SUMMARY: join(dir, 'summary'),
   };
-  const run = (commands: unknown[]) => spawnSync(process.execPath,
+  const run = (commands: unknown) => spawnSync(process.execPath,
     [resolve('scripts/oc-provider-free-execute.mjs')],
     { env: { ...env, COMMANDS: JSON.stringify(commands) }, encoding: 'utf8', cwd: process.cwd() });
   const evidence = () => JSON.parse(readFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), 'utf8'));
@@ -54,6 +54,15 @@ require('node:fs').appendFileSync(process.env.OC_TEST_LOG, JSON.stringify(proces
 }
 
 describe('the provider-free executor', () => {
+  it.each([[], {}, null, 'npm run test'])('refuses empty or malformed commands without a success artifact: %j', (commands) => {
+    const h = harness();
+    const run = h.run(commands);
+    expect(run.status).toBe(1);
+    expect(run.stderr).toContain('No deterministic commands to execute');
+    expect(existsSync(join(h.env.OC_EVIDENCE_DIR, '703.json'))).toBe(false);
+    expect(existsSync(h.env.OC_TEST_LOG)).toBe(false);
+  });
+
   it('refuses a command that is not in the capability registry', () => {
     const h = harness();
     const done = h.run(['rm -rf /']);

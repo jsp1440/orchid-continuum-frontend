@@ -344,6 +344,24 @@ async function main() {
       return;
     }
     const leaseId = process.env.OC_LEASE_ID || '';
+    // Verify ownership before any issue mutation. A stale settlement must not
+    // erase a newer lane's running/repair state, even if its evidence looks valid.
+    try {
+      const { ledger } = await new DeterministicLeaseStore().read();
+      validateLedger(ledger);
+      const owned = ledger.leases.find(lease => lease.id === leaseId);
+      const admitted = plan.leaves.find(leaf => leaf.issueNumber === number);
+      if (!leaseId || !owned || !admitted || owned.issue !== number ||
+          owned.nodeId !== admitted.nodeId || owned.fingerprint !== admitted.fingerprint ||
+          owned.waveHash !== plan.wave.hash || owned.runId !== id || owned.runAttempt !== attempt ||
+          laneOf(owned) !== 'provider-free' || !isActive(owned) || owned.expiresAt <= now()) {
+        throw new Error('Deterministic settlement does not own a current fenced lease');
+      }
+    } catch (error) {
+      receipt(number, plan.wave.hash, 'dispatch_refused', { lane: 'provider-free',
+        reason: error instanceof Error ? error.message : 'Lease verification failed' });
+      throw error;
+    }
     const evidencePath = join(process.env.OC_EVIDENCE_DIR || '.oc-evidence', `${number}.json`);
     // Absence of evidence is never success. A worker that never ran, or crashed
     // before writing, settles as `not_executed`, not as a pass.
@@ -367,6 +385,8 @@ async function main() {
       else if (evidence.provider_calls === undefined) rejected = 'evidence records no provider_calls';
       else if (evidence.provider_calls !== 0) throw new Error('Deterministic lane reported a provider call');
       else if (!Array.isArray(evidence.results)) rejected = 'evidence records no results array';
+      else if (evidence.results.length === 0) rejected = 'evidence records no executed commands';
+      else if (evidence.results.some(r => typeof r?.command !== 'string' || !r.command.trim())) rejected = 'a recorded result has no command';
       else if (evidence.results.some(r => !Number.isSafeInteger(r?.exit_code))) rejected = 'a recorded command has no exit code';
     }
     if (rejected) evidence = null;
@@ -380,15 +400,7 @@ async function main() {
     // turn a failure into a pass.
     // Strictly one-directional: a recorded non-zero exit turns a claimed `done`
     // into a failure, and nothing can turn a claimed `failed` into a pass. An
-    // empty results list is not evidence of failure either, so it is left
-    // alone. Say plainly what that means rather than only what it is not: a
-    // forged `outcome: 'done'` carrying NO commands is recorded as
-    // `provider_free_done` and moves the issue to `oc-validating` having run
-    // nothing. It is unreachable from this repository's own producers --
-    // `routeIssue` sets `providerFree` only when there is at least one command,
-    // and the evidence file is written after the command loop -- so it needs a
-    // forged artifact that also clears the issue, wave and run fence.
-    // `commands: 0` is on the receipt for anyone auditing that case.
+    // empty results list was rejected above: no execution cannot be a pass.
     const failedCommands = (evidence?.results ?? []).filter(r => r.exit_code !== 0);
     const contradicted = executed && evidence?.outcome === 'done' && failedCommands.length > 0
       ? `evidence claimed 'done' over ${failedCommands.map(r => `${r.command} (exit ${r.exit_code})`).join(', ')}` : '';
@@ -418,26 +430,16 @@ async function main() {
     // A lane that never executed goes back to the queue and, because its lease
     // records `not-executed`, is genuinely admissible again.
     //
-    // OWNER DECISION, stated rather than quietly taken: while
-    // `provider_authorized` is false, nothing in this repository restores
-    // `oc-queued` to an `oc-repair` issue. `orchid-completion-lane.yml` is the
-    // only writer of that label and it is reachable only through
-    // `provider-worker`. So `oc-repair` is a second resting place alongside
-    // `oc-blocked`, and a person moves the work out of it.
-    //
-    // Re-queueing instead is NOT free: the fingerprint bar would refuse the
-    // unchanged attempt on every pulse while the issue still consumed one of
-    // eight admission slots, which starves a queue that already has 22 waiting.
-    // That trade is the owner's to make, so this stays as it is and is reported.
+    // Reconciliation may restore a failed deterministic issue only when its
+    // implementation changes and all owner/admission holds still permit it.
+    // Same-revision failures remain parked and successful work stays deduped.
     const next = outcome === 'provider_free_done' ? ['oc-validating']
       : outcome === 'provider_free_failed' ? ['oc-repair'] : ['oc-queued'];
     api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
       .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });
-    if (leaseId) {
-      await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
-        outcome === 'provider_free_done' ? 'provider-free-done'
-          : outcome === 'provider_free_failed' ? 'provider-free-failed' : 'not-executed');
-    }
+    await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
+      outcome === 'provider_free_done' ? 'provider-free-done'
+        : outcome === 'provider_free_failed' ? 'provider-free-failed' : 'not-executed');
     return;
   }
   const issue = Number(process.env.ISSUE_NUMBER);
