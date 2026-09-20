@@ -268,33 +268,47 @@ export type DeterministicClaim = { issueNumber: number; runId: string; runAttemp
  * reach `decideBudget`, `programSpent` or `dailySpent` at all.
  */
 export async function claimDeterministicLease(store: LeaseStore, plan: Plan, snapshot: Snapshot, input: DeterministicClaim, root = COMPLETION_GRAPH) {
-  const leaf = assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
-  if (!/^\d+$/.test(input.runId) || !/^\d+$/.test(input.runAttempt)) throw new Error('Missing executable workflow invocation');
+  // Validate the immutable plan identity before reading live labels. A live label
+  // may legitimately move while another run is executing the same admitted work.
+  validatePlan(plan);
+  if (plan.implementationSha !== snapshot.implementationSha || plan.integrationSha !== snapshot.integrationSha) {
+    throw new Error('Implementation or integration revision changed; replan');
+  }
+  const leaf = plan.leaves.find(candidate => candidate.issueNumber === input.issueNumber);
+  if (!leaf || !plan.issues.includes(input.issueNumber)) throw new Error('Issue missing from admitted dispatch plan');
+  if (!/^\\d+$/.test(input.runId) || !/^\\d+$/.test(input.runAttempt)) throw new Error('Missing executable workflow invocation');
+
   for (let attempt = 0; attempt < 8; attempt++) {
     const { version, ledger } = await store.read();
     validateLedger(ledger);
-    if (ledger.leases.some(l => (l.issue === input.issueNumber || l.nodeId === leaf.nodeId) && isActive(l))) return { allowed: false, reason: 'lease_owned', lease: null };
-    if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
-    // The same issue, lineage, node and integration revision produce the same
-    // fingerprint. A successful attempt remains barred; an explicit repair may
-    // retry a failed deterministic attempt only on a newer implementation.
-    //
-    // A lane that never executed is excluded. Barring work on the strength of an
-    // attempt that did not happen is how the dedupe became the defect it was
-    // added to fix: the issue was relabelled `oc-queued`, admitted on every
-    // later pulse, refused, receipted and reported green, forever.
+
+    // A second scheduler pulse can arrive after the first pulse has settled the
+    // issue and changed its labels to oc-validating/oc-done. The strict
+    // isolated re-plan below must still reject a genuinely changed or unbound
+    // issue, but an exact durable fingerprint is proof that this pulse is only
+    // stale. Return a governed refusal so the workflow can write its
+    // not_executed receipt instead of failing the whole canary.
+    const matching = ledger.leases.filter(candidate => candidate.fingerprint === leaf.fingerprint);
+    if (matching.some(candidate => isActive(candidate))) return { allowed: false, reason: 'lease_owned', lease: null };
+
     const repairing = labelsOf(snapshot.issues.find(issue => issue.number === input.issueNumber)!).includes('oc-repair');
-    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint && l.state !== 'not-executed' &&
-        !(repairing && failedOnOlderImplementation(l, snapshot.implementationSha)))) {
+    if (matching.some(candidate => candidate.state !== 'not-executed' &&
+        !(repairing && failedOnOlderImplementation(candidate, snapshot.implementationSha)))) {
       return { allowed: false, reason: 'unchanged_attempt', lease: null };
     }
-    // The `not-executed` escape hatch had no floor. An issue whose worker can
-    // never write evidence -- a failing `npm ci`, a dead runner, a capability
+
+    // No matching terminal evidence exists, so the live admission proof remains
+    // mandatory. This keeps label, graph, lineage and capability drift fail-closed.
+    assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
+    if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
+
+    // The not-executed escape hatch had no floor. An issue whose worker can
+    // never write evidence -- a failing npm ci, a dead runner, a capability
     // with no local executor -- was admitted, refused and receipted on every
     // pulse of a five-minute cron, appending one lease each time and reporting
     // a green audit each time. At 474 bytes a lease that is 133 KiB a day, and
     // the ledger passes the contents API's 1 MiB ceiling inside eight days,
-    // breaking every lane's `read()`, not just this one's.
+    // breaking every lane's read(), not just this one's.
     if (ledger.leases.filter(l => l.fingerprint === leaf.fingerprint && l.state === 'not-executed').length >= NOT_EXECUTED_CEILING) {
       return { allowed: false, reason: 'not_executed_ceiling', lease: null };
     }
