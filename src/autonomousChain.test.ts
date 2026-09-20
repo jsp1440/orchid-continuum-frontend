@@ -218,3 +218,63 @@ describe('a lane that never executed does not bar the work forever', () => {
     expect(selectLanes({ issues: failed.issues }).selected).toEqual([]);
   });
 });
+
+
+describe('the two governance facts the lane states about itself', () => {
+  /**
+   * Both were unpinned, and both are the shape this work exists to remove: a
+   * statement the system makes about itself that nothing checks.
+   */
+  it('reads provider_authorized from the environment rather than asserting it', async () => {
+    // It was a hard-coded `false` in the summary template, so the one
+    // governance fact the step summary states could not be wrong -- and would
+    // have gone on printing `false` if the environment ever said otherwise.
+    const { planSummary } = await import('../scripts/oc-dispatch-runtime');
+    const plan = {
+      capacity: 8, issues: [], leaves: [], untrackedLeaves: [], surfacedBlockers: [],
+      unboundQueued: [], unreachableQueued: [], unknownNodeDeclarations: [],
+      unadmissibleNodeDeclarations: [], starved: false, queuedReachingAdmission: 0,
+      reachedAdmission: [], pendingNotReachingAdmission: [],
+      inventory: { queued: 0, prepared: 0, validating: 0, blocked: 0, 'owner-gate': 0, 'runtime-backoff': 0, active: 0 },
+      wave: { hash: 'w', packet: {}, canonical: '' },
+    } as unknown as Parameters<typeof planSummary>[0];
+
+    const before = process.env.PROVIDER_AUTHORIZED;
+    try {
+      process.env.PROVIDER_AUTHORIZED = 'false';
+      expect(planSummary(plan)).toContain('provider_authorized=false');
+      process.env.PROVIDER_AUTHORIZED = 'true';
+      expect(planSummary(plan)).toContain('provider_authorized=true');
+    } finally {
+      if (before === undefined) delete process.env.PROVIDER_AUTHORIZED;
+      else process.env.PROVIDER_AUTHORIZED = before;
+    }
+  });
+
+  it('refuses an unauthorized paid claim before the ledger is read at all', async () => {
+    // `decideBudget` denies it a step later anyway, so the suite stayed green
+    // with the guard deleted. "Never even read" is the property, and a store
+    // that throws on any read is the only thing that can hold it.
+    const { claimLease, makePlan } = await import('../scripts/oc-dispatch-control');
+    const snapshot = {
+      issues: [{ number: 703, state: 'open', title: 't', body: null,
+        labels: [{ name: 'oc-queued' }, { name: 'oc-node:gate-journey-research-matrix' }].sort((a, b) => a.name.localeCompare(b.name)) }],
+      prs: [], integrationSha: 'a'.repeat(40), implementationSha: 'b'.repeat(40), material: { architecture: 'm' },
+    } as unknown as Parameters<typeof makePlan>[0];
+    const plan = makePlan(snapshot, [], '2026-09-19T21:00:00.000Z');
+
+    let reads = 0;
+    const store = {
+      async read() { reads += 1; throw new Error('the ledger must not be read on an unauthorized claim'); },
+      async compareAndSwap() { throw new Error('and it must certainly not be written'); },
+    } as unknown as Parameters<typeof claimLease>[0];
+
+    const result = await claimLease(store, plan, snapshot, {
+      issueNumber: 703, runId: '1', runAttempt: '1',
+      providerAuthorized: false, requestedUsd: 4, now: '2026-09-19T21:00:00.000Z',
+    });
+
+    expect(result.allowed).toBe(false);
+    expect(reads, 'the ledger was read on a claim that was never authorized').toBe(0);
+  });
+});

@@ -8,7 +8,7 @@ import { decideBudget } from './oc-budget-governor.mjs';
 
 export { MAX_ACTIVE_LANES };
 export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }> };
-export type Pull = { number: number; state: string; body: string | null; head: { ref: string; sha: string } };
+export type Pull = { number: number; state: string; merged?: boolean; body: string | null; head: { ref: string; sha: string } };
 export type Snapshot = { issues: Issue[]; prs: Pull[]; integrationSha: string; implementationSha: string; material: Record<string, string> };
 export type LeaseLane = 'provider' | 'provider-free';
 export type Lease = {
@@ -150,14 +150,21 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
       // commonest case and the one the old text told the operator to go and
       // close -- there is nothing open to close, and the lane will never pick
       // the issue up again on its own.
-      const named = lineage.map(pr => `#${pr.number} (${pr.state === 'open' ? 'open' : 'closed'})`).join(', ');
+      const state = (pr: Pull) => pr.state === 'open' ? 'open' : pr.merged ? 'merged' : 'closed';
+      const named = lineage.map(pr => `#${pr.number} (${state(pr)})`).join(', ');
+      if (lineage.length === 1 && lineage[0].merged) {
+        // The operator-relevant fact, and the one the old wording hid: there is
+        // no open PR to go and close, the work is already in, and the lane will
+        // not pick this issue up again by itself.
+        return `its PR lineage ${named}; the work is already merged, so nothing here will re-admit it`;
+      }
       return lineage.length === 1
         ? `its PR lineage ${named}; only a single OPEN PR on an \`oc-repair\` issue is repairable`
         : `an ambiguous PR lineage ${named}; repair needs exactly one open PR`;
     }
     return 'no rule this report knows about -- read `selectLanes`';
   };
-  const pendingNotReachingAdmission = snapshot.issues
+  const pendingNotReachingAdmission = onlyIssue !== undefined ? [] : snapshot.issues
     .filter(i => i.state === 'open' && !steward(i) && labelsOf(i).some(l => ['oc-queued', 'oc-prepared'].includes(l)))
     .filter(i => !plan.reachedAdmission.includes(i.number))
     .map(i => ({ issueNumber: i.number, reason: reasonFor(i) }))
@@ -200,7 +207,11 @@ export function validateLedger(ledger: Ledger) {
 export type Claim = { issueNumber: number; runId: string; runAttempt: string; providerAuthorized: boolean; requestedUsd: number; now: string };
 export async function claimLease(store: LeaseStore, plan: Plan, snapshot: Snapshot, input: Claim, root = COMPLETION_GRAPH) {
   const leaf = assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
-  // Never even read or initialize accounting as authority when authorization is false.
+  // Refused before the ledger is read at all. `decideBudget` would deny it a
+  // step later anyway, so this is not the only thing between an unauthorized
+  // caller and a reservation -- but "never even read" is the stated property,
+  // and it needs a test that fails if the read happens. There is one now: a
+  // store whose `read()` throws.
   if (!input.providerAuthorized) return { allowed: false, reason: 'provider_not_authorized', lease: null };
   if (!/^\d+$/.test(input.runId) || !/^\d+$/.test(input.runAttempt)) throw new Error('Missing executable workflow invocation');
   for (let attempt = 0; attempt < 8; attempt++) {

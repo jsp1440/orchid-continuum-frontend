@@ -99,7 +99,12 @@ export class DeterministicLeaseStore extends GitHubLeaseStore {
 function snapshot(): Snapshot {
   const issues = pages<Issue & { pull_request?: unknown }>('issues?state=all').filter(i => !i.pull_request)
     .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })).sort((a,b) => a.name.localeCompare(b.name)) }));
-  const prs = pages<Pull>('pulls?state=all').map(({ number, state, body, head }) => ({ number, state, body, head: { ref: head.ref, sha: head.sha } })).sort((a,b) => a.number-b.number);
+  // `merged_at` is what distinguishes a merged PR from a closed one, and the
+  // report needs it: "closed" tells the operator to go and look at something
+  // that is already in. It is not on `Pull` because nothing else consumes it.
+  const prs = pages<Pull & { merged_at: string | null }>('pulls?state=all')
+    .map(({ number, state, merged_at, body, head }) => ({ number, state, merged: Boolean(merged_at), body, head: { ref: head.ref, sha: head.sha } }))
+    .sort((a,b) => a.number-b.number);
   const integration = api<{ object: { sha: string } }>('git/ref/heads/oc-autonomous-integration');
   const material = Object.fromEntries(['CLAUDE.md', 'package.json', 'src/lib/completion-graph/scheduler.ts']
     .map(path => [path, readFileSync(path, 'utf8')]));
@@ -149,10 +154,20 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
  * one thing the remediation tells an operator to type, and single newlines
  * collapse into one paragraph. Hence the backticks and the list.
  */
-/** What the `plan` step prints and writes to the step summary. */
+/**
+ * What the `plan` step prints and writes to the step summary.
+ *
+ * `provider_authorized` is READ, not asserted. It was a hard-coded `false` in
+ * this template, so the one governance fact the summary states about itself was
+ * the one fact it could not get wrong -- and it would have gone on printing
+ * `false` if the environment ever said otherwise. Two other call sites in this
+ * file already derive it from the environment; so does this one now.
+ */
 export function planSummary(plan: Plan) {
+  const providerAuthorized = process.env.PROVIDER_AUTHORIZED === 'true';
   return `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; ` +
-    `capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=false; no execution leases acquired.\n` +
+    `capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=${providerAuthorized}; ` +
+    `no execution leases acquired.\n` +
     bindingReport(plan);
 }
 
@@ -172,10 +187,6 @@ export function bindingReport(plan: Plan) {
   // Deliberately NOT gated on `idle`. An issue that never reached the ranker is
   // just as invisible in a wave that admitted one issue as in a wave that
   // admitted none, and it was the partially-admitting wave that printed nothing.
-  for (const { issueNumber, reason } of plan.pendingNotReachingAdmission) {
-    if (plan.capacity <= 0) break;
-    lines.push(`- Issue #${issueNumber} is labelled pending and never reached admission: ${reason}.`);
-  }
   // An issue the wave ADMITTED is being executed, whatever else it declared. A
   // refusal line about a second declaration would be the only thing this report
   // says about it, and it would be false.
@@ -183,6 +194,18 @@ export function bindingReport(plan: Plan) {
   const said = new Set<number>(admitted);
   const take = (issue: number) => said.has(issue) ? false : (said.add(issue), true);
 
+  for (const { issueNumber, reason } of plan.pendingNotReachingAdmission) {
+    if (plan.capacity <= 0) break;
+    // Through `take()` like every other line-type. The first version of this
+    // loop consulted neither `said` nor `admitted`, so the one line added to
+    // fix the "once each" promise was the one line that did not keep it: an
+    // issue could be named here and again below, and an ADMITTED issue could be
+    // told it "never reached admission" while the lane was executing it.
+    // `makePlan` happens to keep these sets disjoint today, which is exactly
+    // the reasoning that left the last guard dead and unnoticed.
+    if (!take(issueNumber)) continue;
+    lines.push(`- Issue #${issueNumber} is labelled pending and never reached admission: ${reason}.`);
+  }
   if (plan.capacity > 0) {
     const unbound = plan.unboundQueued.filter(take);
     if (unbound.length > 0) {
@@ -333,8 +356,15 @@ async function main() {
     // turn a failure into a pass.
     // Strictly one-directional: a recorded non-zero exit turns a claimed `done`
     // into a failure, and nothing can turn a claimed `failed` into a pass. An
-    // empty results list is not evidence of failure either, so it is left alone
-    // -- `commands: 0` is already on the receipt for anyone auditing that case.
+    // empty results list is not evidence of failure either, so it is left
+    // alone. Say plainly what that means rather than only what it is not: a
+    // forged `outcome: 'done'` carrying NO commands is recorded as
+    // `provider_free_done` and moves the issue to `oc-validating` having run
+    // nothing. It is unreachable from this repository's own producers --
+    // `routeIssue` sets `providerFree` only when there is at least one command,
+    // and the evidence file is written after the command loop -- so it needs a
+    // forged artifact that also clears the issue, wave and run fence.
+    // `commands: 0` is on the receipt for anyone auditing that case.
     const failedCommands = (evidence?.results ?? []).filter(r => r.exit_code !== 0);
     const contradicted = executed && evidence?.outcome === 'done' && failedCommands.length > 0
       ? `evidence claimed 'done' over ${failedCommands.map(r => `${r.command} (exit ${r.exit_code})`).join(', ')}` : '';

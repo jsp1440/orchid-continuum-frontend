@@ -492,20 +492,26 @@ describe('makePlan derives the shortfall itself, and names the real reason', () 
     ...over,
   }) as unknown as Parameters<typeof bindingReport>[0];
 
-  it('names a merged PR lineage as a merged one, not as an open one', () => {
+  it('says a merged lineage is merged, because there is nothing to go and close', () => {
     // The live #703 shape, exactly: only `oc-queued`, and one CLOSED, merged PR.
     const plan = makePlan(base(
       [{ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }] }],
-      [{ number: 705, state: 'closed', title: 'Closes #703.', body: 'Closes #703.', head: { ref: 'f' } }],
+      [{ number: 705, state: 'closed', merged: true, title: 'Closes #703.', body: 'Closes #703.', head: { ref: 'f' } }],
     ));
 
     const reason = reasonFor(plan, 703);
     expect(reason).toBeDefined();
-    expect(reason).toContain('#705 (closed)');
-    // The three things the old line claimed, none of which is true here.
+    // `merged`, not `closed`: the operator-relevant fact is that there is no
+    // open PR to go and close and the lane will not re-admit this by itself.
+    // The report could not say it at all until `Pull` carried the field.
+    expect(reason).toContain('#705 (merged)');
+    expect(reason).toContain('already merged');
+    // The three things the old line claimed, none of which is true here. These
+    // name strings `reasonFor` can actually return, so they can fail.
     expect(reason).not.toContain('OC-AUTO-HOLD');
-    expect(reason).not.toMatch(/\bopen PR lineage\b/);
-    expect(bindingReport(plan)).toContain('#705 (closed)');
+    expect(reason).not.toContain('label');
+    expect(reason).not.toContain('active lease');
+    expect(bindingReport(plan)).toContain('#705 (merged)');
   });
 
   it('says an active lease is executing it, rather than calling it unreached', () => {
@@ -596,5 +602,213 @@ describe('makePlan derives the shortfall itself, and names the real reason', () 
     expect(report.match(/Issue #900/g)).toHaveLength(1);
     expect(report).toContain('not-a-real-node-at-all');
     expect(report).toContain('cap-species-dossier-evidence-rendering');
+  });
+});
+
+
+describe('the reason is the rule that actually decides', () => {
+  /**
+   * `reasonFor` walks `selectLanes`' rules in order, and the ORDER was
+   * unpinned: moving the lease check after the label check, or the hold check
+   * before it, left the whole 2503-test suite green. "In `selectLanes`' own
+   * order" was an unverified claim about the one thing these lines are for.
+   *
+   * Each case below holds TWO conditions at once, so only the right precedence
+   * produces the right line.
+   */
+  const SHA = 'a'.repeat(40);
+  const base = (issues: unknown[], prs: unknown[] = []) => ({
+    issues, prs, integrationSha: SHA, implementationSha: 'b'.repeat(40), material: { architecture: 'm' },
+  }) as unknown as Parameters<typeof makePlan>[0];
+  const reasonFor = (plan: ReturnType<typeof makePlan>, issueNumber: number) =>
+    plan.pendingNotReachingAdmission.find(entry => entry.issueNumber === issueNumber)?.reason;
+  const lease = (issue: number) => ({
+    id: 'l', issue, nodeId: 'gate-journey-research-matrix', fingerprint: 'f', waveHash: 'w',
+    runId: '1', runAttempt: '1', expiresAt: '2099-01-01T00:00:00.000Z', reservedUsd: 0,
+    lane: 'provider-free' as const, state: 'running' as const });
+
+  it('reports the lease, not the label, when an executing issue also carries one', () => {
+    const snapshot = base([{ number: 905, state: 'open', title: 't', body: null,
+      labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] }]);
+    const plan = makePlan(snapshot, [lease(905)], NOW);
+
+    expect(reasonFor(plan, 905)).toBe('an active lease is executing it');
+  });
+
+  it('reports the lease, not the hold marker, when both apply', () => {
+    const snapshot = base([{ number: 905, state: 'open', title: 't', body: 'OC-AUTO-HOLD: true',
+      labels: [{ name: 'oc-queued' }] }]);
+    const plan = makePlan(snapshot, [lease(905)], NOW);
+
+    expect(reasonFor(plan, 905)).toBe('an active lease is executing it');
+  });
+
+  it('reports the label, not the hold marker, when both apply', () => {
+    // `selectLanes` tests BLOCKED_LABELS before the OC-AUTO-HOLD body marker.
+    const plan = makePlan(base([{ number: 906, state: 'open', title: 't', body: 'OC-AUTO-HOLD: true',
+      labels: [{ name: 'oc-queued' }, { name: 'oc-publication-hold' }] }]));
+
+    expect(reasonFor(plan, 906)).toContain('oc-publication-hold');
+    expect(reasonFor(plan, 906)).not.toContain('OC-AUTO-HOLD');
+  });
+
+  it('reports the label, not the lineage, when both apply', () => {
+    const plan = makePlan(base(
+      [{ number: 907, state: 'open', title: 't', body: null,
+         labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] }],
+      [{ number: 908, state: 'closed', title: 'Closes #907.', body: 'Closes #907.', head: { ref: 'f' } }],
+    ));
+
+    expect(reasonFor(plan, 907)).toContain('oc-blocked');
+    expect(reasonFor(plan, 907)).not.toContain('#908');
+  });
+
+  it('holds an oc-repair issue whose single PR is closed, which is the live case', () => {
+    // #296 and #523 are both `oc-repair` with one CLOSED PR, so two of the five
+    // lines the live run printed take this branch -- and dropping the
+    // `state === 'open'` sub-condition left the suite green.
+    const plan = makePlan(base(
+      [{ number: 296, state: 'open', title: 't', body: null,
+         labels: [{ name: 'oc-queued' }, { name: 'oc-repair' }] }],
+      [{ number: 303, state: 'closed', title: 'Closes #296.', body: 'Closes #296.', head: { ref: 'f' } }],
+    ));
+
+    expect(reasonFor(plan, 296)).toContain('#303 (closed)');
+    expect(reasonFor(plan, 296)).toContain('only a single OPEN PR');
+  });
+
+  it('admits an oc-repair issue whose single PR is open', () => {
+    const plan = makePlan(base(
+      [{ number: 297, state: 'open', title: 't', body: null,
+         labels: [{ name: 'oc-queued' }, { name: 'oc-repair' }, { name: 'oc-node:gate-journey-research-matrix' }] }],
+      [{ number: 304, state: 'open', title: 'Closes #297.', body: 'Closes #297.', head: { ref: 'f' } }],
+    ));
+
+    expect(plan.reachedAdmission).toContain(297);
+    expect(reasonFor(plan, 297)).toBeUndefined();
+  });
+
+  it('does not report a closed issue that still carries a pending label', () => {
+    const plan = makePlan(base([{ number: 910, state: 'closed', title: 't', body: null,
+      labels: [{ name: 'oc-queued' }] }]));
+
+    expect(plan.pendingNotReachingAdmission).toEqual([]);
+  });
+
+  it('reports an oc-prepared issue, not only an oc-queued one', () => {
+    const plan = makePlan(base(
+      [{ number: 911, state: 'open', title: 't', body: null, labels: [{ name: 'oc-prepared' }] }],
+      [{ number: 912, state: 'closed', title: 'Closes #911.', body: 'Closes #911.', head: { ref: 'f' } }],
+    ));
+
+    expect(reasonFor(plan, 911)).toContain('#912');
+  });
+
+  it('lists the issues in ascending order, so two runs read the same', () => {
+    const plan = makePlan(base([
+      { number: 930, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] },
+      { number: 902, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] },
+      { number: 915, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] },
+    ]));
+
+    expect(plan.pendingNotReachingAdmission.map(e => e.issueNumber)).toEqual([902, 915, 930]);
+  });
+
+  it('says nothing about pending issues when the plan was narrowed to one issue', () => {
+    // `assertAdmission` re-plans with `onlyIssue`, so that plan is not a wave
+    // plan. It used to report every OTHER pending issue with the fallback
+    // string -- a confident statement about issues it had deliberately excluded.
+    const snapshot = base(
+      [
+        { number: 905, state: 'open', title: 't', body: null,
+          labels: [{ name: 'oc-queued' }, { name: 'oc-node:gate-journey-research-matrix' }] },
+        { number: 906, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }] },
+      ],
+      [{ number: 909, state: 'closed', title: 'Closes #906.', body: 'Closes #906.', head: { ref: 'f' } }],
+    );
+
+    const narrowed = makePlan(snapshot, [], NOW, undefined, 905);
+
+    expect(narrowed.pendingNotReachingAdmission).toEqual([]);
+    // And the wave plan still reports #906, with the rule that really holds it
+    // rather than the fallback.
+    const wave = makePlan(snapshot, [], NOW);
+    expect(reasonFor(wave, 906)).toContain('#909');
+    expect(JSON.stringify(wave.pendingNotReachingAdmission)).not.toContain('no rule this report knows about');
+  });
+
+  it('lists refused declarations in ascending issue order too', () => {
+    // The other sort. Reversing it left the suite green, so two runs of the
+    // same wave could print the same facts in different orders.
+    const planWith = (over: Record<string, unknown>) => ({
+      capacity: 8, issues: [], leaves: [], untrackedLeaves: [], surfacedBlockers: [],
+      unboundQueued: [], unreachableQueued: [], unknownNodeDeclarations: [],
+      unadmissibleNodeDeclarations: [], starved: true, queuedReachingAdmission: 23,
+      reachedAdmission: [], pendingNotReachingAdmission: [],
+      inventory: { queued: 23, prepared: 1, validating: 1, blocked: 22, 'owner-gate': 6, 'runtime-backoff': 23, active: 0 },
+      ...over,
+    }) as unknown as Parameters<typeof bindingReport>[0];
+
+    const report = bindingReport(planWith({
+      unknownNodeDeclarations: [
+        { issueNumber: 930, nodeId: 'not-real-a' },
+        { issueNumber: 902, nodeId: 'not-real-b' },
+        { issueNumber: 915, nodeId: 'not-real-c' },
+      ],
+    }));
+
+    const order = [...report.matchAll(/Issue #(\d+)/g)].map(m => Number(m[1]));
+    expect(order).toEqual([902, 915, 930]);
+  });
+
+  it('has no reachable path to the fallback reason', () => {
+    // `reasonFor` ends with "no rule this report knows about". Changing that
+    // string leaves the suite green, and it should: every pending issue that
+    // did not reach admission was excluded by one of the rules above it, and an
+    // issue excluded by none of them would have been selected and would not be
+    // in this list at all. So the fallback is unreachable rather than untested,
+    // and this asserts the property instead of claiming coverage of the string.
+    const snapshot = base([
+      { number: 940, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }] },
+      { number: 941, state: 'open', title: 't', body: 'OC-AUTO-HOLD: true', labels: [{ name: 'oc-queued' }] },
+      { number: 942, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] },
+      { number: 943, state: 'open', title: 't', body: null, labels: [{ name: 'oc-prepared' }] },
+    ]);
+    const plan = makePlan(snapshot, [], NOW);
+
+    const reasons = plan.pendingNotReachingAdmission.map(e => e.reason);
+    expect(reasons).not.toContain('no rule this report knows about -- read `selectLanes`');
+    // Every issue is either reported with a real reason or reached the ranker.
+    for (const issue of [940, 941, 942, 943]) {
+      const reported = plan.pendingNotReachingAdmission.some(e => e.issueNumber === issue);
+      expect(reported || plan.reachedAdmission.includes(issue)).toBe(true);
+    }
+  });
+
+  it('names an admitted issue nowhere, even if a pending entry claims it', () => {
+    // The loop added for the shortfall consulted neither `said` nor `admitted`,
+    // so an ADMITTED issue could be told it never reached admission while the
+    // lane was executing it. `makePlan` keeps the sets disjoint today, which is
+    // exactly the reasoning that left the previous guard dead and unnoticed.
+    const planWith = (over: Record<string, unknown>) => ({
+      capacity: 8, issues: [], leaves: [], untrackedLeaves: [], surfacedBlockers: [],
+      unboundQueued: [], unreachableQueued: [], unknownNodeDeclarations: [],
+      unadmissibleNodeDeclarations: [], starved: false, queuedReachingAdmission: 23,
+      reachedAdmission: [], pendingNotReachingAdmission: [],
+      inventory: { queued: 23, prepared: 1, validating: 1, blocked: 22, 'owner-gate': 6, 'runtime-backoff': 23, active: 0 },
+      ...over,
+    }) as unknown as Parameters<typeof bindingReport>[0];
+
+    const maligned = bindingReport(planWith({
+      issues: [901], capacity: 7,
+      pendingNotReachingAdmission: [{ issueNumber: 901, reason: 'a lane label' }],
+    }));
+    expect(maligned).toBe('');
+
+    const twice = bindingReport(planWith({
+      starved: true, unboundQueued: [901],
+      pendingNotReachingAdmission: [{ issueNumber: 901, reason: 'a lane label' }],
+    }));
+    expect(twice.match(/901/g)).toHaveLength(1);
   });
 });

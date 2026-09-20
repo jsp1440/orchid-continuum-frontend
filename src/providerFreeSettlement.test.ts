@@ -1099,3 +1099,57 @@ console.log('{}');
   });
 
 });
+
+
+describe('the report reads merged state from the API, not from a fixture', () => {
+  /**
+   * `merged: Boolean(merged_at)` could be replaced with `merged: false` and the
+   * suite stayed green, because every test that asserted "(merged)" built the
+   * `Pull` object by hand. That is the same untested-production-wiring shape as
+   * `pendingNotReachingAdmission: []`: the behaviour is pinned, the wiring that
+   * feeds it is not. This runs the real `plan` command against a fake `gh`.
+   */
+  it('prints (merged) for a PR the API reports as merged', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oc-merged-')); paths.push(dir);
+    const bin = join(dir, 'bin'); mkdirSync(bin);
+    const gh = join(bin, 'gh');
+    writeFileSync(gh, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const path = args[1];
+if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+if (/git\\/ref\\/heads\\//.test(path)) { console.log(JSON.stringify({ object: { sha: '${'a'.repeat(40)}' } })); process.exit(0); }
+if (path.includes('/issues?') && /[?&]page=1(&|$)/.test(path)) {
+  console.log(JSON.stringify([{ number: 703, state: 'open', title: 'deterministic work', body: null,
+    labels: [{ name: 'oc-queued' }] }]));
+  process.exit(0);
+}
+if (path.includes('/pulls?') && /[?&]page=1(&|$)/.test(path)) {
+  // The shape the real API returns: closed, with a merge timestamp.
+  console.log(JSON.stringify([{ number: 705, state: 'closed', merged_at: '2026-09-19T02:01:41Z',
+    body: 'Closes #703.', head: { ref: 'oc-auto-703-x', sha: '${'c'.repeat(40)}' } }]));
+  process.exit(0);
+}
+if (path.includes('?')) { console.log('[]'); process.exit(0); }
+console.log('{}');
+`);
+    chmodSync(gh, 0o755);
+    const outDir = join(dir, 'out'); mkdirSync(outDir);
+    const summary = join(dir, 'summary');
+    writeFileSync(summary, '');
+    const env = {
+      ...process.env, PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend',
+      GITHUB_OUTPUT: join(dir, 'outputs'), OC_PLAN_DIR: outDir,
+      GITHUB_STEP_SUMMARY: summary, PROVIDER_AUTHORIZED: 'false',
+    };
+    const run = spawnSync(process.execPath,
+      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'plan'], { env, encoding: 'utf8' });
+
+    expect(run.status, run.stderr).toBe(0);
+    const printed = readFileSync(summary, 'utf8');
+    expect(printed).toContain('#705 (merged)');
+    expect(printed).toContain('already merged');
+    expect(printed).not.toContain('#705 (closed)');
+  });
+});
