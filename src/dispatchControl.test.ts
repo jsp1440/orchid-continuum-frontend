@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimLease, laneOf, makePlan, reconcileExpired, runningCount, transitionLease,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, laneOf, makePlan, reconcileExpired, runningCount, transitionLease,
   providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -50,6 +50,21 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(laneOf(legacy)).toBe('provider-free');
     expect(() => validateLedger(ledger)).not.toThrow();
     expect(() => validateLedger({ ...ledger, leases: [{ ...legacy, state: 'running' }] })).toThrow('Malformed lease');
+  });
+
+  it('turns a stale deterministic plan into a deduplicated refusal after settlement', async () => {
+    const { root, snapshot } = fixture(1); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const first = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 1, runId: '100', runAttempt: '1', now }, root);
+    expect(first.allowed).toBe(true);
+    await transitionLease(store, first.lease!.id, '100', '1', 'provider-free-done');
+
+    // The first run has settled the exact fingerprint and moved the issue out
+    // of the queue before this run reaches its live admission check.
+    snapshot.issues[0] = issue(1, ['oc-validating']);
+    const stale = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 1, runId: '101', runAttempt: '1', now }, root);
+    expect(stale).toMatchObject({ allowed: false, reason: 'unchanged_attempt', lease: null });
+    expect(store.ledger.leases).toHaveLength(1);
   });
 
   it('selects eight independent queued/prepared issues, with deterministic graph priority', () => {
