@@ -884,3 +884,218 @@ console.log('{}');
     expect(h.stored().leases[0].state).toBe('blocked');
   });
 });
+
+
+describe('the labels a settlement writes are the ones the selector can act on', () => {
+  /**
+   * Round 6 found that sending a `not_executed` outcome to `oc-blocked` instead
+   * of `oc-queued` left the full 2485-test suite green. That is the burial
+   * defect this whole lane exists to remove, unpinned at the exact line the
+   * narrative turns on: every test asserted the receipt's `outcome`, and none
+   * asserted the label that decides whether the work is ever seen again.
+   */
+  const harness = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oc-labels-')); paths.push(dir);
+    const bin = join(dir, 'bin'); mkdirSync(bin);
+    const gh = join(bin, 'gh');
+    writeFileSync(gh, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const path = args[1];
+const method = args[args.indexOf('--method') + 1];
+if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+if (method === 'PATCH') {
+  fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + fs.readFileSync(0, 'utf8') + '\\n');
+  console.log('{}'); process.exit(0);
+}
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:${LEAF}' }] })); process.exit(0); }
+console.log('{}');
+`);
+    chmodSync(gh, 0o755);
+    const planDir = join(dir, 'wave'); mkdirSync(planDir);
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const snapshot = { ...snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]),
+      integrationSha: 'a'.repeat(40), implementationSha: head };
+    const plan = makePlan(snapshot, [], NOW);
+    writeFileSync(join(planDir, 'plan.json'), JSON.stringify(plan));
+    const env = {
+      ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend',
+      GITHUB_OUTPUT: join(dir, 'outputs'), OC_TEST_LOG: join(dir, 'requests'), OC_PLAN_DIR: planDir,
+      OC_RECEIPT_DIR: join(dir, 'receipts'), OC_EVIDENCE_DIR: join(dir, 'evidence'),
+      OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
+      PROVIDER_AUTHORIZED: 'false',
+    };
+    writeFileSync(env.OC_TEST_LOG, '');
+    const writeEvidence = (evidence: Record<string, unknown>) => {
+      mkdirSync(env.OC_EVIDENCE_DIR, { recursive: true });
+      writeFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), JSON.stringify({
+        schema: 'oc.provider-free-evidence.v1', issue: 703, wave_hash: plan.wave.hash,
+        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [], ...evidence,
+      }));
+    };
+    const settle = () => spawnSync(process.execPath,
+      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'settle-deterministic'], { env, encoding: 'utf8' });
+    const labels = () => readFileSync(env.OC_TEST_LOG, 'utf8').trim().split('\n').filter(Boolean)
+      .filter(line => line.startsWith('PATCHBODY '))
+      .map(line => (JSON.parse(line.slice('PATCHBODY '.length)) as { labels: string[] }).labels).at(-1)!;
+    const receipt = () => JSON.parse(readFileSync(join(env.OC_RECEIPT_DIR, '703.json'), 'utf8'));
+    return { writeEvidence, settle, labels, receipt };
+  };
+
+  it('returns a lane that never executed to the queue, not to a blocked label', () => {
+    const h = harness();
+    // No evidence written at all: the worker died before it could.
+    h.settle();
+
+    expect(h.receipt()).toMatchObject({ outcome: 'not_executed' });
+    expect(h.labels()).toContain('oc-queued');
+    for (const buried of ['oc-blocked', 'oc-validating', 'oc-repair', 'oc-done']) {
+      expect(h.labels(), `not_executed must not land on ${buried}`).not.toContain(buried);
+    }
+  });
+
+  it('sends a passing run to validation and nothing else', () => {
+    const h = harness();
+    h.writeEvidence({ outcome: 'done', results: [{ command: 'npm run test', exit_code: 0 }] });
+    h.settle();
+
+    expect(h.labels()).toContain('oc-validating');
+    expect(h.labels()).not.toContain('oc-queued');
+    expect(h.labels()).not.toContain('oc-repair');
+  });
+
+  it('sends a failing run to repair and nothing else', () => {
+    const h = harness();
+    h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run test', exit_code: 1 }] });
+    h.settle();
+
+    expect(h.labels()).toContain('oc-repair');
+    expect(h.labels()).not.toContain('oc-validating');
+    // The documented owner decision: NOT re-queued. If this ever changes, the
+    // paragraph at oc-dispatch-runtime.ts explaining why must change with it.
+    expect(h.labels()).not.toContain('oc-queued');
+  });
+});
+
+describe('the ceiling is a number, and it is the number the lane documents', () => {
+  it('is three, not merely "some constant"', () => {
+    // `NOT_EXECUTED_CEILING = 3 -> 10` survived the suite, because every test
+    // that exercised the ceiling counted up to the constant itself.
+    expect(NOT_EXECUTED_CEILING).toBe(3);
+  });
+});
+
+
+describe('the lane jobs declare the permissions they use', () => {
+  /**
+   * Removing `deterministic-preflight`'s whole `permissions:` block left the
+   * suite green. Without it the job inherits the workflow-level `actions: write`
+   * and `id-token: write`, which it never uses -- an over-broad token on the one
+   * job that touches the durable ledger.
+   */
+  const lane = load(readFileSync('.github/workflows/orchid-budgeted-completion-lane.yml', 'utf8')) as {
+    permissions?: Record<string, string>;
+    jobs: Record<string, { permissions?: Record<string, string> }>;
+  };
+
+  it.each(['deterministic-preflight', 'provider-free-worker', 'settle-deterministic'])(
+    '%s declares its own permissions rather than inheriting the wide set', job => {
+      const declared = lane.jobs[job].permissions;
+      expect(declared, `${job} inherits the workflow-level permissions`).toBeDefined();
+      // The two it must never pick up by inheritance.
+      expect(Object.keys(declared!)).not.toContain('actions');
+      expect(Object.keys(declared!)).not.toContain('id-token');
+    });
+
+  it('and the workflow-level set really is wider, so the declarations matter', () => {
+    expect(Object.keys(lane.permissions ?? {})).toEqual(expect.arrayContaining(['actions', 'id-token']));
+  });
+});
+
+
+describe('a lane that hit the ceiling stops arriving', () => {
+  /**
+   * Removing the relabel left the suite green: the claim would go on being
+   * refused, receipted and re-planned on every pulse of a five-minute cron
+   * for ever. The ceiling is only a bound if the issue also leaves the queue.
+   */
+  const harness = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oc-ceiling-')); paths.push(dir);
+    const bin = join(dir, 'bin'); mkdirSync(bin);
+    const ledgerFile = join(dir, 'ledger.json');
+    const planDir = join(dir, 'wave'); mkdirSync(planDir);
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const snapshot = { ...snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]),
+      integrationSha: 'a'.repeat(40), implementationSha: head };
+    const plan = makePlan(snapshot, [], NOW);
+    writeFileSync(join(planDir, 'plan.json'), JSON.stringify(plan));
+    const fingerprint = plan.leaves.find(l => l.issueNumber === 703)!.fingerprint;
+    // Already at the ceiling, all of them `not-executed`.
+    writeFileSync(ledgerFile, JSON.stringify({
+      schema: 1, programStartedAt: NOW, programSpent: 0, dailySpent: {},
+      leases: Array.from({ length: NOT_EXECUTED_CEILING }, (_, i) => ({
+        id: `spent-${i}`, issue: 703, nodeId: LEAF, fingerprint, waveHash: plan.wave.hash,
+        runId: String(i), runAttempt: '1', expiresAt: '2020-01-01T00:00:00.000Z',
+        reservedUsd: 0, lane: 'provider-free', state: 'not-executed',
+      })),
+    }));
+    const gh = join(bin, 'gh');
+    writeFileSync(gh, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const path = args[1];
+const method = args[args.indexOf('--method') + 1];
+if (path.includes('contents/.oc/dispatch-ledger.json')) {
+  if (method === 'PUT') { const b = JSON.parse(fs.readFileSync(0, 'utf8'));
+    fs.writeFileSync(process.env.OC_LEDGER_FILE, Buffer.from(b.content, 'base64').toString());
+    console.log('{}'); process.exit(0); }
+  console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(fs.readFileSync(process.env.OC_LEDGER_FILE)).toString('base64') }));
+  process.exit(0);
+}
+if (method === 'PATCH') {
+  fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + fs.readFileSync(0, 'utf8') + '\\n');
+  console.log('{}'); process.exit(0);
+}
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:${LEAF}' }] })); process.exit(0); }
+if (/git\\/ref\\/heads\\//.test(path)) { console.log(JSON.stringify({ object: { sha: '${'a'.repeat(40)}' } })); process.exit(0); }
+// The runtime re-derives the snapshot and refuses on drift, so the listing
+// has to carry the same issue the plan was built from. One page, then empty.
+if (path.includes('/issues?') && /[?&]page=1(&|$)/.test(path)) {
+  console.log(JSON.stringify([{ number: 703, state: 'open', title: 'deterministic work', body: null,
+    labels: [{ name: 'oc-queued' }, { name: 'oc-node:${LEAF}' }] }]));
+  process.exit(0);
+}
+if (path.includes('?')) { console.log('[]'); process.exit(0); }
+console.log('{}');
+`);
+    chmodSync(gh, 0o755);
+    const env = {
+      ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend',
+      GITHUB_OUTPUT: join(dir, 'outputs'), OC_TEST_LOG: join(dir, 'requests'), OC_PLAN_DIR: planDir,
+      OC_RECEIPT_DIR: join(dir, 'receipts'), OC_EVIDENCE_DIR: join(dir, 'evidence'),
+      OC_LEDGER_FILE: ledgerFile, OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703',
+      GITHUB_RUN_ID: '99', GITHUB_RUN_ATTEMPT: '1', PROVIDER_AUTHORIZED: 'false', GITHUB_SHA: head,
+    };
+    writeFileSync(env.OC_TEST_LOG, '');
+    const admit = () => spawnSync(process.execPath,
+      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'admit-deterministic'], { env, encoding: 'utf8' });
+    const labels = () => readFileSync(env.OC_TEST_LOG, 'utf8').trim().split('\n').filter(Boolean)
+      .filter(line => line.startsWith('PATCHBODY '))
+      .map(line => (JSON.parse(line.slice('PATCHBODY '.length)) as { labels: string[] }).labels);
+    const receipt = () => JSON.parse(readFileSync(join(env.OC_RECEIPT_DIR, '703.json'), 'utf8'));
+    return { admit, labels, receipt };
+  };
+
+  it('takes the issue out of the queue when the claim is refused at the ceiling', () => {
+    const h = harness();
+    const run = h.admit();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({ outcome: 'not_executed', reason: 'not_executed_ceiling' });
+    const last = h.labels().at(-1);
+    expect(last, 'the ceiling must relabel, or the issue arrives again every pulse').toBeDefined();
+    expect(last).toContain('oc-blocked');
+    expect(last).not.toContain('oc-queued');
+  });
+
+});

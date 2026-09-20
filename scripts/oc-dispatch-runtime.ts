@@ -172,9 +172,9 @@ export function bindingReport(plan: Plan) {
   // Deliberately NOT gated on `idle`. An issue that never reached the ranker is
   // just as invisible in a wave that admitted one issue as in a wave that
   // admitted none, and it was the partially-admitting wave that printed nothing.
-  if (plan.capacity > 0 && plan.pendingNotReachingAdmission.length > 0) {
-    lines.push(`- These issues are labelled pending and never reached admission -- an open PR lineage, an \`OC-AUTO-HOLD\`, or a lane label holds each one: ` +
-      `${plan.pendingNotReachingAdmission.map(n => `#${n}`).join(', ')}.`);
+  for (const { issueNumber, reason } of plan.pendingNotReachingAdmission) {
+    if (plan.capacity <= 0) break;
+    lines.push(`- Issue #${issueNumber} is labelled pending and never reached admission: ${reason}.`);
   }
   // An issue the wave ADMITTED is being executed, whatever else it declared. A
   // refusal line about a second declaration would be the only thing this report
@@ -194,24 +194,33 @@ export function bindingReport(plan: Plan) {
       lines.push(`- A node names these issues, and the ranker did not select it this wave -- its status, its dependencies, work already open on it, or another issue took it: ${named.join(', ')}.`);
     }
   }
-  // One line per ISSUE, not per declaration: an issue that declared two unknown
-  // nodes has one binding problem, and both ids belong in the one line an
-  // operator will act on.
-  const group = (entries: ReadonlyArray<{ issueNumber: number; nodeId: string }>) => {
-    const byIssue = new Map<number, string[]>();
-    for (const { issueNumber, nodeId } of entries) {
-      if (admitted.has(issueNumber)) continue;
-      byIssue.set(issueNumber, [...(byIssue.get(issueNumber) ?? []), nodeId]);
-    }
-    return [...byIssue].sort((a, b) => a[0] - b[0]);
+  // One line per ISSUE, not per declaration, and not per declaration KIND
+  // either. An issue can declare a node that is not in the graph AND a node
+  // that is not a leaf; grouping within each category still gave it a line from
+  // each loop, and the cross-category guard that was supposed to stop that was
+  // consulted nowhere -- both `said.add` calls could be deleted with the full
+  // suite green. Fixing only the half an operator is told about would not admit
+  // the issue, so both halves go in the one line.
+  const refusals = new Map<number, { unknown: string[]; unadmissible: string[] }>();
+  const note = (issueNumber: number, kind: 'unknown' | 'unadmissible', nodeId: string) => {
+    if (admitted.has(issueNumber) || said.has(issueNumber)) return;
+    const entry = refusals.get(issueNumber) ?? { unknown: [], unadmissible: [] };
+    entry[kind].push(nodeId);
+    refusals.set(issueNumber, entry);
   };
-  for (const [issueNumber, nodeIds] of group(plan.unknownNodeDeclarations)) {
-    said.add(issueNumber);
-    lines.push(`- Issue #${issueNumber} declares ${nodeIds.length > 1 ? 'nodes' : 'node'} \`${nodeIds.join('`, `')}\`, which ${nodeIds.length > 1 ? 'are' : 'is'} not in the completion graph. Binding refused.`);
-  }
-  for (const [issueNumber, nodeIds] of group(plan.unadmissibleNodeDeclarations)) {
-    said.add(issueNumber);
-    lines.push(`- Issue #${issueNumber} declares ${nodeIds.length > 1 ? 'nodes' : 'node'} \`${nodeIds.join('`, `')}\`, which ${nodeIds.length > 1 ? 'are' : 'is'} not a leaf, so the ranker can never select ${nodeIds.length > 1 ? 'them' : 'it'}. Binding refused; name a leaf instead.`);
+  for (const { issueNumber, nodeId } of plan.unknownNodeDeclarations) note(issueNumber, 'unknown', nodeId);
+  for (const { issueNumber, nodeId } of plan.unadmissibleNodeDeclarations) note(issueNumber, 'unadmissible', nodeId);
+
+  const list = (nodeIds: string[]) => `\`${nodeIds.join('`, `')}\``;
+  for (const [issueNumber, { unknown, unadmissible }] of [...refusals].sort((a, b) => a[0] - b[0])) {
+    const parts: string[] = [];
+    if (unknown.length > 0) {
+      parts.push(`${unknown.length > 1 ? 'nodes' : 'node'} ${list(unknown)}, which ${unknown.length > 1 ? 'are' : 'is'} not in the completion graph`);
+    }
+    if (unadmissible.length > 0) {
+      parts.push(`${unadmissible.length > 1 ? 'nodes' : 'node'} ${list(unadmissible)}, which ${unadmissible.length > 1 ? 'are' : 'is'} not a leaf, so the ranker can never select ${unadmissible.length > 1 ? 'them' : 'it'}`);
+    }
+    lines.push(`- Issue #${issueNumber} declares ${parts.join('; and ')}. Binding refused; name a leaf that exists.`);
   }
   return lines.length > 0 ? `\n${lines.join('\n')}\n` : '';
 }

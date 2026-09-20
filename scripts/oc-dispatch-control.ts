@@ -3,7 +3,7 @@ import { buildGraphDispatchPlan } from './oc-graph-dispatch-plan';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
 import type { CompletionNode } from '../src/lib/completion-graph/types';
 import { buildWaveContext } from './oc-wave-context.mjs';
-import { MAX_ACTIVE_LANES, selectLanes } from './oc-multilane-selector.mjs';
+import { BLOCKED_LABELS, MAX_ACTIVE_LANES, selectLanes } from './oc-multilane-selector.mjs';
 import { decideBudget } from './oc-budget-governor.mjs';
 
 export { MAX_ACTIVE_LANES };
@@ -128,15 +128,40 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
   const inventory = Object.fromEntries(LANE_STATES
     .map(state => [state, snapshot.issues.filter(i => i.state === 'open' && !steward(i) && labelsOf(i).includes(`oc-${state}`)).length])
   ) as Record<(typeof LANE_STATES)[number], number>;
-  // The census/reached shortfall was reported as a bare count with three
-  // candidate causes and no identities -- the same "names the causes, identifies
-  // none" shape this lane's reporting exists to remove. These are the issues the
-  // count was standing in for, so a report can name them.
+  // The census/reached shortfall was first reported as a bare count, then as a
+  // list of numbers under a line naming three candidate causes and identifying
+  // none of them -- and on a live run every one of those three was false for
+  // #703, whose real cause (an already-MERGED PR lineage) was not among them.
+  // Printing a guess is the same defect as printing a count.
+  //
+  // So the reason is derived per issue, from the exclusion that actually applies,
+  // in `selectLanes`' own order. `occupied` comes first because `makePlan` filters
+  // on it before the selector ever runs: an issue whose lease is executing right
+  // now was being reported as work that never reached admission.
+  const reasonFor = (issue: Issue): string => {
+    if (occupied.has(issue.number)) return 'an active lease is executing it';
+    const labels = labelsOf(issue);
+    const blocking = labels.find(l => BLOCKED_LABELS.has(l));
+    if (blocking) return `the \`${blocking}\` label`;
+    if (/^OC-AUTO-HOLD:\s*true\s*$/m.test(issue.body || '')) return 'an `OC-AUTO-HOLD: true` marker in its body';
+    const lineage = lineageFor(issue.number, snapshot.prs);
+    if (lineage.length > 0 && !(labels.includes('oc-repair') && lineage.length === 1 && lineage[0].state === 'open')) {
+      // Any lineage holds it, not only an open one. A single merged PR is the
+      // commonest case and the one the old text told the operator to go and
+      // close -- there is nothing open to close, and the lane will never pick
+      // the issue up again on its own.
+      const named = lineage.map(pr => `#${pr.number} (${pr.state === 'open' ? 'open' : 'closed'})`).join(', ');
+      return lineage.length === 1
+        ? `its PR lineage ${named}; only a single OPEN PR on an \`oc-repair\` issue is repairable`
+        : `an ambiguous PR lineage ${named}; repair needs exactly one open PR`;
+    }
+    return 'no rule this report knows about -- read `selectLanes`';
+  };
   const pendingNotReachingAdmission = snapshot.issues
     .filter(i => i.state === 'open' && !steward(i) && labelsOf(i).some(l => ['oc-queued', 'oc-prepared'].includes(l)))
-    .map(i => i.number)
-    .filter(number => !plan.reachedAdmission.includes(number))
-    .sort((a, b) => a - b);
+    .filter(i => !plan.reachedAdmission.includes(i.number))
+    .map(i => ({ issueNumber: i.number, reason: reasonFor(i) }))
+    .sort((a, b) => a.issueNumber - b.issueNumber);
   return { ...plan, leaves, wave, pendingNotReachingAdmission, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
 }
 export type Plan = ReturnType<typeof makePlan>;

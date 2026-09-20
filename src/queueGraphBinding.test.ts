@@ -233,7 +233,7 @@ describe('what the scheduler run says when it admits nothing', () => {
     // Every queued issue filtered out before graph admission: the planner sees an
     // empty queue and reports starved=false, which used to print nothing.
     const report = bindingReport(planWith({ starved: false, queuedReachingAdmission: 0,
-      pendingNotReachingAdmission: [166, 167, 168], inventory: { queued: 23, prepared: 0, active: 0 } }));
+      pendingNotReachingAdmission: [166, 167, 168].map(n => ({ issueNumber: n, reason: 'a lane label' })), inventory: { queued: 23, prepared: 0, active: 0 } }));
     expect(report).toContain('STARVED');
     expect(report).toContain('0 issue(s) reached graph admission');
     expect(report).toContain('never reached admission');
@@ -245,7 +245,7 @@ describe('what the scheduler run says when it admits nothing', () => {
     // label." Three candidate causes, no cause identified, and five issues that
     // appeared nowhere else in a report promising to name every one of them.
     const report = bindingReport(planWith({ starved: true, queuedReachingAdmission: 18,
-      pendingNotReachingAdmission: [166, 167, 610, 675, 683] }));
+      pendingNotReachingAdmission: [166, 167, 610, 675, 683].map(n => ({ issueNumber: n, reason: 'a lane label' })) }));
 
     for (const number of [166, 167, 610, 675, 683]) expect(report).toContain(`#${number}`);
     expect(report).not.toMatch(/A further \d+ issue\(s\)/);
@@ -256,7 +256,7 @@ describe('what the scheduler run says when it admits nothing', () => {
     // `plan.issues.length === 0`. One admitted issue and the other five went
     // unmentioned -- no names, and not even the count.
     const report = bindingReport(planWith({ issues: [703], capacity: 7,
-      queuedReachingAdmission: 18, pendingNotReachingAdmission: [166, 167] }));
+      queuedReachingAdmission: 18, pendingNotReachingAdmission: [166, 167].map(n => ({ issueNumber: n, reason: 'a lane label' })) }));
 
     expect(report).toContain('#166');
     expect(report).toContain('#167');
@@ -334,7 +334,7 @@ describe('what the scheduler run says when it admits nothing', () => {
     }));
     expect(report).toContain('#703 declares node `domain-species-dossier`');
     expect(report).toContain('is not a leaf');
-    expect(report).toContain('name a leaf instead');
+    expect(report).toContain('name a leaf that exists');
   });
 
   it('says nothing when there is no lane free to admit into', () => {
@@ -450,5 +450,151 @@ describe('no unadmitted queued issue is left unnamed', () => {
 
     expect(plan.issues).toEqual([703]);
     expect(plan.unreachableQueued.map(entry => entry.issueNumber)).toEqual([704]);
+  });
+});
+
+
+describe('makePlan derives the shortfall itself, and names the real reason', () => {
+  /**
+   * Round 6 found three things here, and the first two are the same defect the
+   * lane exists to remove.
+   *
+   * The line printed three candidate causes -- "an open PR lineage, an
+   * `OC-AUTO-HOLD`, or a lane label" -- and identified none. On this branch's
+   * own run all three were FALSE for #703: its only labels were `oc-queued`,
+   * its body had no hold marker, and its lineage PR was closed and MERGED. The
+   * true cause was not on the list, and the remedy the line implied (go and
+   * close the open PR) did not exist.
+   *
+   * It also omitted an issue whose lease was executing at that moment, which is
+   * the commonest cause of all, because `admit-deterministic` never relabels to
+   * `oc-running`.
+   *
+   * And the production wiring was unpinned: every report test injected
+   * `pendingNotReachingAdmission` through a fixture, so `makePlan` could return
+   * `[]` unconditionally with the whole suite green. These tests go through
+   * `makePlan`.
+   */
+  const SHA = 'a'.repeat(40);
+  const base = (issues: unknown[], prs: unknown[] = []) => ({
+    issues, prs, integrationSha: SHA, implementationSha: 'b'.repeat(40), material: { architecture: 'm' },
+  }) as unknown as Parameters<typeof makePlan>[0];
+
+  const reasonFor = (plan: ReturnType<typeof makePlan>, issueNumber: number) =>
+    plan.pendingNotReachingAdmission.find(entry => entry.issueNumber === issueNumber)?.reason;
+
+  const planWith = (over: Record<string, unknown>) => ({
+    capacity: 8, issues: [], leaves: [], untrackedLeaves: [], surfacedBlockers: [],
+    unboundQueued: [], unreachableQueued: [], unknownNodeDeclarations: [],
+    unadmissibleNodeDeclarations: [], starved: false, queuedReachingAdmission: 23,
+    reachedAdmission: [], pendingNotReachingAdmission: [],
+    inventory: { queued: 23, prepared: 1, validating: 1, blocked: 22, 'owner-gate': 6, 'runtime-backoff': 23, active: 0 },
+    ...over,
+  }) as unknown as Parameters<typeof bindingReport>[0];
+
+  it('names a merged PR lineage as a merged one, not as an open one', () => {
+    // The live #703 shape, exactly: only `oc-queued`, and one CLOSED, merged PR.
+    const plan = makePlan(base(
+      [{ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }] }],
+      [{ number: 705, state: 'closed', title: 'Closes #703.', body: 'Closes #703.', head: { ref: 'f' } }],
+    ));
+
+    const reason = reasonFor(plan, 703);
+    expect(reason).toBeDefined();
+    expect(reason).toContain('#705 (closed)');
+    // The three things the old line claimed, none of which is true here.
+    expect(reason).not.toContain('OC-AUTO-HOLD');
+    expect(reason).not.toMatch(/\bopen PR lineage\b/);
+    expect(bindingReport(plan)).toContain('#705 (closed)');
+  });
+
+  it('says an active lease is executing it, rather than calling it unreached', () => {
+    const snapshot = base([
+      { number: 905, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:gate-journey-research-matrix' }] },
+    ]);
+    const lease = { id: 'l', issue: 905, nodeId: 'gate-journey-research-matrix', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: '2099-01-01T00:00:00.000Z', reservedUsd: 0,
+      lane: 'provider-free' as const, state: 'running' as const };
+    const plan = makePlan(snapshot, [lease], NOW);
+
+    expect(reasonFor(plan, 905)).toBe('an active lease is executing it');
+  });
+
+  it('names a lane label when that is what holds it', () => {
+    const plan = makePlan(base([
+      { number: 800, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] },
+    ]));
+
+    expect(reasonFor(plan, 800)).toContain('oc-blocked');
+  });
+
+  it('names an OC-AUTO-HOLD marker when that is what holds it', () => {
+    const plan = makePlan(base([
+      { number: 801, state: 'open', title: 't', body: 'OC-AUTO-HOLD: true', labels: [{ name: 'oc-queued' }] },
+    ]));
+
+    expect(reasonFor(plan, 801)).toContain('OC-AUTO-HOLD');
+  });
+
+  it('leaves the shortfall empty when every pending issue reached the ranker', () => {
+    const plan = makePlan(base([
+      { number: 900, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }] },
+    ]));
+
+    expect(plan.reachedAdmission).toContain(900);
+    expect(plan.pendingNotReachingAdmission).toEqual([]);
+  });
+
+  it('does not count a portfolio steward issue as unreached work', () => {
+    // `selectLanes` skips stewards, so reporting one as held would be a
+    // permanent phantom line nobody can clear.
+    const plan = makePlan(base([
+      { number: 950, state: 'open', title: 't', body: null,
+        labels: [{ name: 'oc-queued' }, { name: 'oc-portfolio-steward' }, { name: 'oc-blocked' }] },
+    ]));
+
+    expect(plan.pendingNotReachingAdmission).toEqual([]);
+  });
+
+  it('says nothing at all when there is no free lane to admit into', () => {
+    const plan = makePlan(base([
+      { number: 800, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-blocked' }] },
+    ]));
+
+    expect(bindingReport({ ...plan, capacity: 0 })).toBe('');
+  });
+
+  it('says nothing more about an issue an earlier line already named', () => {
+    // `note()` consults `said`, not only `admitted`. The per-issue grouping
+    // alone cannot cover this: the earlier line comes from a different bucket
+    // entirely. The planner partitions these today, so this pins the promise
+    // against the input `bindingReport` is given rather than the input it
+    // currently gets -- which is exactly how the last version of this guard
+    // came to be dead code nobody noticed.
+    const report = bindingReport(planWith({
+      starved: true,
+      unboundQueued: [901],
+      unknownNodeDeclarations: [{ issueNumber: 901, nodeId: 'not-a-real-node-at-all' }],
+    }));
+
+    expect(report).toContain('901');
+    expect(report.match(/901/g)).toHaveLength(1);
+    expect(report).not.toContain('Binding refused');
+  });
+
+  it('names an issue once when its two refused declarations are of different kinds', () => {
+    // Round 6: grouping held WITHIN a category and not across the two, so an
+    // issue declaring one unknown node and one non-leaf node got a line from
+    // each loop. Both halves now go in the one line, because fixing only the
+    // half the operator is told about would not admit the issue.
+    const report = bindingReport(planWith({
+      starved: true,
+      unknownNodeDeclarations: [{ issueNumber: 900, nodeId: 'not-a-real-node-at-all' }],
+      unadmissibleNodeDeclarations: [{ issueNumber: 900, nodeId: 'cap-species-dossier-evidence-rendering' }],
+    }));
+
+    expect(report.match(/Issue #900/g)).toHaveLength(1);
+    expect(report).toContain('not-a-real-node-at-all');
+    expect(report).toContain('cap-species-dossier-evidence-rendering');
   });
 });

@@ -43,7 +43,7 @@ export type GraphDispatchPlan = {
    * label census and `reachedAdmission` and fills it in. The field lives on the
    * shape so that every plan has it and a report can never read `undefined`.
    */
-  pendingNotReachingAdmission: number[];
+  pendingNotReachingAdmission: Array<{ issueNumber: number; reason: string }>;
 };
 
 function cloneGraph(root: CompletionNode): CompletionNode {
