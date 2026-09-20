@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimLease, makePlan, reconcileExpired, runningCount, transitionLease,
-  providerFreeRepairsReadyForRequeue, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
+import { assertAdmission, assertReceipts, claimLease, laneOf, makePlan, reconcileExpired, runningCount, transitionLease,
+  providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
 const now = '2026-09-14T04:00:00.000Z';
@@ -27,6 +27,31 @@ function claim(store: LeaseStore, plan: ReturnType<typeof makePlan>, snapshot: S
   return claimLease(store, plan, snapshot, { issueNumber: number, runId, runAttempt: '1', providerAuthorized: true, requestedUsd: 0.5, now }, root);
 }
 describe('canonical graph → durable lease → independent dispatch → refill', () => {
+  it('accepts the historical zero-cost deterministic terminal lease, but rejects ambiguous zero-cost leases', () => {
+    const legacy: Ledger['leases'][number] = {
+      id: 'legacy-deterministic',
+      issue: 243,
+      nodeId: 'cap-conservatory-collection',
+      fingerprint: 'f'.repeat(64),
+      waveHash: 'w'.repeat(64),
+      runId: '35469789739',
+      runAttempt: '1',
+      expiresAt: '2026-09-19T22:45:21.726Z',
+      reservedUsd: 0,
+      state: 'provider-free-done',
+    };
+    const ledger: Ledger = {
+      schema: 1,
+      programStartedAt: '2026-09-19T21:15:22.086Z',
+      programSpent: 0,
+      dailySpent: {},
+      leases: [legacy],
+    };
+    expect(laneOf(legacy)).toBe('provider-free');
+    expect(() => validateLedger(ledger)).not.toThrow();
+    expect(() => validateLedger({ ...ledger, leases: [{ ...legacy, state: 'running' }] })).toThrow('Malformed lease');
+  });
+
   it('selects eight independent queued/prepared issues, with deterministic graph priority', () => {
     const { root, snapshot } = fixture();
     root.children.forEach((node, i) => { node.priority = i; });
