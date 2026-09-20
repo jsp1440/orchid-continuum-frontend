@@ -45,6 +45,8 @@ type JoinSpec = {
   files: string[];
   tests: string[];
   prs: string[];
+  /** Explicit canonical issue bindings. These are graph metadata, not title/body inference. */
+  issues?: number[];
   /** 1 when a browser pass was run, 0 when attempted and blocked, null when not attempted. */
   browser: 0 | 1 | null;
   browserNote: string;
@@ -136,6 +138,7 @@ const JOINS: JoinSpec[] = [
     files: ['src/lib/researchStationNavigation.ts', 'src/features/calyx-workspace/identificationContext.ts', 'src/pages/OrchidIdentificationContinuum.tsx'],
     tests: ['src/features/calyx-workspace/identificationResearchHandoff.test.ts', 'src/lib/continuumJourney.test.ts'],
     prs: ['#330'],
+    issues: [660],
     browser: 1,
     browserNote: 'Browser pass run against /orchid-identification with a research-station origin.',
     provenanceNote: 'The taxon read fails closed rather than truncating: a shortened binomial is a different organism. An untrusted project id degrades alone without discarding the subject.',
@@ -210,6 +213,7 @@ function joinGate(join: JoinSpec): CompletionNode {
       { kind: 'note', ref: 'browser', note: join.browserNote },
     ],
     prs: join.prs,
+    issues: join.issues,
     nextAction: join.nextAction,
     lastAccomplishment: join.lastAccomplishment,
     lastUpdated: RECONCILED_AT,
