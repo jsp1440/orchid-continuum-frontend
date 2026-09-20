@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { load } from 'js-yaml';
 import {
   claimDeterministicLease, isActive, laneOf, reconcileExpired, transitionLease, validateLedger,
-  RECEIPT_OUTCOMES, type Issue, type Ledger, type Lease, type LeaseStore, type Snapshot,
+  NOT_EXECUTED_CEILING, RECEIPT_OUTCOMES, type Issue, type Ledger, type Lease, type LeaseStore, type Snapshot,
 } from '../scripts/oc-dispatch-control';
 import { makePlan } from '../scripts/oc-dispatch-control';
 
@@ -123,12 +123,44 @@ describe('the ledger keeps the two lanes apart', () => {
     await expect(transitionLease(store, 'd', '1', '1', 'done')).rejects.toThrow('provider outcome');
   });
 
-  it('expires a deterministic lease as failed, not as blocked', async () => {
+  it('expires a deterministic lease as not-executed, because settlement never ran', async () => {
+    // `settle-deterministic` is the only writer of a provider-free outcome, and
+    // it always transitions the lease. So an expired one is the single case in
+    // which we KNOW no evidence was judged -- which is `not-executed`, not a
+    // failure.
+    //
+    // It was recorded as `provider-free-failed`, which is not excluded from the
+    // fingerprint bar, while the reconcile callback stripped `oc-queued` and
+    // applied `oc-blocked`. The issue became unselectable and permanently
+    // unclaimable at once: restoring the labels by hand still left the claim
+    // returning `unchanged_attempt`. That is precisely the trap `not-executed`
+    // was added to remove, relocated to the expiry path.
     const store = new MemoryStore(ledgerWith(lease({ id: 'd', lane: 'provider-free', reservedUsd: 0, expiresAt: '2020-01-01T00:00:00.000Z' })));
     await reconcileExpired(store, NOW, async () => true);
 
-    expect(store.ledger.leases[0].state).toBe('provider-free-failed');
+    expect(store.ledger.leases[0].state).toBe('not-executed');
     expect(isActive(store.ledger.leases[0])).toBe(false);
+  });
+
+  it('leaves an expired provider lease blocked, because something unseen was running', async () => {
+    const store = new MemoryStore(ledgerWith(lease({ id: 'p', lane: 'provider', reservedUsd: 4, expiresAt: '2020-01-01T00:00:00.000Z' })));
+    await reconcileExpired(store, NOW, async () => true);
+
+    expect(store.ledger.leases[0].state).toBe('blocked');
+  });
+
+  it('lets the expired deterministic issue be claimed again on the next pulse', async () => {
+    // The whole point of the state: after the expiry, the work is admissible.
+    const store = new MemoryStore(ledgerWith(lease({ id: 'd', lane: 'provider-free', reservedUsd: 0, expiresAt: '2020-01-01T00:00:00.000Z' })));
+    await reconcileExpired(store, NOW, async () => true);
+    const snapshot = snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]);
+    const plan = makePlan(snapshot, [], NOW);
+    // Same fingerprint as the expired lease, which is the case that used to bar it.
+    store.ledger.leases[0].fingerprint = plan.leaves.find(l => l.issueNumber === 703)!.fingerprint;
+
+    const claim = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 703, runId: '2', runAttempt: '1', now: NOW });
+
+    expect(claim.allowed, claim.reason).toBe(true);
   });
 });
 
@@ -196,13 +228,15 @@ console.log('{}');
       mkdirSync(env.OC_EVIDENCE_DIR, { recursive: true });
       writeFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), body);
     };
-    const settle = () => spawnSync(process.execPath,
-      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'settle-deterministic'], { env, encoding: 'utf8' });
+    const settle = (extra: Record<string, string> = {}) => spawnSync(process.execPath,
+      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'settle-deterministic'],
+      { env: { ...env, ...extra }, encoding: 'utf8' });
+    const receiptExists = () => existsSync(join(env.OC_RECEIPT_DIR, '703.json'));
     const receipt = () => JSON.parse(readFileSync(join(env.OC_RECEIPT_DIR, '703.json'), 'utf8'));
     const patched = () => readFileSync(env.OC_TEST_LOG, 'utf8').trim().split('\n')
       .filter(line => line.startsWith('PATCHBODY '))
       .map(line => JSON.parse(line.slice('PATCHBODY '.length)) as { labels: string[] });
-    return { env, writeEvidence, writeRaw, settle, receipt, patched };
+    return { env, writeEvidence, writeRaw, settle, receipt, receiptExists, patched };
   };
 
   it('records a run that executed and passed as provider_free_done, never as provider_not_authorized', () => {
@@ -576,5 +610,277 @@ describe('the lane workflow, where it has to hold', () => {
     const refusal = lane.jobs['deterministic-preflight'].steps!.find(step => (step.uses ?? '').includes('upload-artifact'))!;
     expect(refusal.if).toContain("allowed == 'false'");
     expect(refusal.with!.name).toContain('oc-lane-');
+  });
+});
+
+
+describe('a lane that cannot produce evidence stops trying', () => {
+  /**
+   * `not-executed` was added so that a lane which never ran did not bar its own
+   * work for ever. It had no floor. An issue whose worker can never write
+   * evidence -- a failing `npm ci`, a dead runner, a declared capability with no
+   * local executor -- was admitted, refused, receipted and reported green on
+   * every pulse of a five-minute cron, appending one lease each time.
+   *
+   * 288 pulses a day at 474 bytes a lease is 133 KiB a day for ONE stuck issue,
+   * and the ledger passes the contents API's 1 MiB ceiling in about eight days
+   * -- at which point `read()` breaks for every lane, not just this one.
+   */
+  const setup = () => {
+    const snapshot = snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]);
+    const plan = makePlan(snapshot, [], NOW);
+    const fingerprint = plan.leaves.find(l => l.issueNumber === 703)!.fingerprint;
+    return { snapshot, plan, fingerprint };
+  };
+
+  const claim = (store: MemoryStore, plan: ReturnType<typeof makePlan>, snapshot: Snapshot, run: string) =>
+    claimDeterministicLease(store, plan, snapshot, { issueNumber: 703, runId: run, runAttempt: '1', now: NOW });
+
+  it('admits the same unchanged work exactly NOT_EXECUTED_CEILING times', async () => {
+    const { snapshot, plan, fingerprint } = setup();
+    const store = new MemoryStore(emptyLedger());
+    const reasons: string[] = [];
+
+    for (let pulse = 1; pulse <= NOT_EXECUTED_CEILING + 3; pulse++) {
+      const result = await claim(store, plan, snapshot, String(pulse));
+      reasons.push(result.reason);
+      // The worker dies without writing evidence, so settlement records exactly
+      // what the reconcile path would: nothing was executed.
+      if (result.allowed) await transitionLease(store, result.lease!.id, String(pulse), '1', 'not-executed');
+    }
+
+    expect(reasons.filter(r => r === 'reserved')).toHaveLength(NOT_EXECUTED_CEILING);
+    expect(reasons.slice(NOT_EXECUTED_CEILING)).toEqual(['not_executed_ceiling', 'not_executed_ceiling', 'not_executed_ceiling']);
+    expect(store.ledger.leases).toHaveLength(NOT_EXECUTED_CEILING);
+    expect(store.ledger.leases.every(l => l.fingerprint === fingerprint && l.state === 'not-executed')).toBe(true);
+  });
+
+  it('bounds the ledger instead of appending a lease on every pulse for ever', async () => {
+    const { snapshot, plan } = setup();
+    const store = new MemoryStore(emptyLedger());
+
+    for (let pulse = 1; pulse <= 50; pulse++) {
+      const result = await claim(store, plan, snapshot, String(pulse));
+      if (result.allowed) await transitionLease(store, result.lease!.id, String(pulse), '1', 'not-executed');
+    }
+
+    // 50 pulses is under five hours of the `*/5` cron. Unbounded, this was 50.
+    expect(store.ledger.leases).toHaveLength(NOT_EXECUTED_CEILING);
+  });
+
+  it('still admits work whose fingerprint moved, because that is different work', async () => {
+    const { snapshot, plan } = setup();
+    const store = new MemoryStore(emptyLedger());
+    for (let pulse = 1; pulse <= NOT_EXECUTED_CEILING; pulse++) {
+      const result = await claim(store, plan, snapshot, String(pulse));
+      await transitionLease(store, result.lease!.id, String(pulse), '1', 'not-executed');
+    }
+    expect((await claim(store, plan, snapshot, '9')).reason).toBe('not_executed_ceiling');
+
+    // A new integration revision is a new fingerprint: the ceiling is per
+    // unchanged attempt, not a permanent ban on the issue.
+    const moved = { ...snapshot, integrationSha: 'c'.repeat(40) };
+    const movedPlan = makePlan(moved, [], NOW);
+
+    expect((await claim(store, movedPlan, moved, '10')).allowed).toBe(true);
+  });
+});
+
+
+describe('the receipt is the audit record, so it may not be a self-report', () => {
+  /** The same subprocess harness as the settlement suite above. */
+  const harness = () => {
+    const dir = mkdtempSync(join(tmpdir(), 'oc-settle2-')); paths.push(dir);
+    const bin = join(dir, 'bin'); mkdirSync(bin);
+    const gh = join(bin, 'gh');
+    writeFileSync(gh, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+fs.appendFileSync(process.env.OC_TEST_LOG, JSON.stringify(args) + '\\n');
+const path = args[1];
+const method = args[args.indexOf('--method') + 1];
+if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+if (method === 'PATCH') {
+  const body = fs.readFileSync(0, 'utf8');
+  fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + body + '\\n');
+  console.log('{}'); process.exit(0);
+}
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 'deterministic work', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:${LEAF}' }] })); process.exit(0); }
+console.log('{}');
+`);
+    chmodSync(gh, 0o755);
+    const planDir = join(dir, 'wave'); mkdirSync(planDir);
+    const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
+    const snapshot = { ...snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]),
+      integrationSha: 'a'.repeat(40), implementationSha: head };
+    const plan = makePlan(snapshot, [], NOW);
+    writeFileSync(join(planDir, 'plan.json'), JSON.stringify(plan));
+    const env = {
+      ...process.env, PATH: `${bin}:${process.env.PATH}`, GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend',
+      GITHUB_OUTPUT: join(dir, 'outputs'), OC_TEST_LOG: join(dir, 'requests'), OC_PLAN_DIR: planDir,
+      OC_RECEIPT_DIR: join(dir, 'receipts'), OC_EVIDENCE_DIR: join(dir, 'evidence'),
+      OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
+      PROVIDER_AUTHORIZED: 'false',
+    };
+    const writeEvidence = (evidence: Record<string, unknown>) => {
+      mkdirSync(env.OC_EVIDENCE_DIR, { recursive: true });
+      writeFileSync(join(env.OC_EVIDENCE_DIR, '703.json'), JSON.stringify({
+        schema: 'oc.provider-free-evidence.v1', issue: 703, wave_hash: plan.wave.hash,
+        run: '1:1', provider_calls: 0, provider_cost_usd: 0, results: [], ...evidence,
+      }));
+    };
+    const settle = (extra: Record<string, string> = {}) => spawnSync(process.execPath,
+      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'settle-deterministic'],
+      { env: { ...env, ...extra }, encoding: 'utf8' });
+    const receipt = () => JSON.parse(readFileSync(join(env.OC_RECEIPT_DIR, '703.json'), 'utf8'));
+    const receiptExists = () => existsSync(join(env.OC_RECEIPT_DIR, '703.json'));
+    const patched = () => readFileSync(env.OC_TEST_LOG, 'utf8').trim().split('\n')
+      .filter(line => line.startsWith('PATCHBODY '))
+      .map(line => JSON.parse(line.slice('PATCHBODY '.length)) as { labels: string[] });
+    return { env, writeEvidence, settle, receipt, receiptExists, patched };
+  };
+
+  it('does not call a run done over commands that did not exit zero', () => {
+    // Correctly fenced evidence -- right issue, right wave, right run, zero
+    // provider calls -- claiming `done` while carrying the proof it failed.
+    // Settlement took `outcome` on the worker's word, wrote
+    // `outcome: provider_free_done` into the authoritative receipt, counted the
+    // two failing commands as `commands: 2`, and moved the issue to
+    // `oc-validating`.
+    const h = harness();
+    h.writeEvidence({ outcome: 'done', results: [
+      { command: 'npm run test', exit_code: 1, output_tail: ['47 tests failed'] },
+      { command: 'npm run typecheck', exit_code: 2 },
+    ] });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({ outcome: 'provider_free_failed', commands: 2 });
+    expect(h.receipt().contradicted).toContain('npm run test (exit 1)');
+    expect(h.patched().at(-1)!.labels).toContain('oc-repair');
+    expect(h.patched().at(-1)!.labels).not.toContain('oc-validating');
+  });
+
+  it('never turns a self-reported failure into a pass', () => {
+    // One-directional on purpose: exit codes may only move the verdict towards
+    // failure. A worker that says it failed is believed without argument.
+    const h = harness();
+    h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run test', exit_code: 0 }] });
+    h.settle();
+
+    expect(h.receipt()).toMatchObject({ outcome: 'provider_free_failed' });
+    expect(h.receipt().contradicted).toBeUndefined();
+  });
+
+  it('leaves an honest pass alone', () => {
+    const h = harness();
+    h.writeEvidence({ outcome: 'done', results: [{ command: 'npm run test', exit_code: 0 }] });
+    h.settle();
+
+    expect(h.receipt()).toMatchObject({ outcome: 'provider_free_done' });
+    expect(h.receipt().contradicted).toBeUndefined();
+  });
+
+  it('refuses evidence whose commands carry no exit code at all', () => {
+    const h = harness();
+    h.writeEvidence({ outcome: 'done', results: [{ command: 'npm run test' }] });
+    h.settle();
+
+    expect(h.receipt()).toMatchObject({ outcome: 'not_executed' });
+    expect(h.receipt().evidence).toContain('exit code');
+  });
+
+  it('writes the receipt before the settlement can throw, not after', () => {
+    // `if: always()` on the upload promised the audit a receipt when settlement
+    // throws, and `if-no-files-found: ignore` meant it silently uploaded
+    // nothing: `receipt()` ran AFTER `transitionLease`, so a fencing mismatch,
+    // ledger contention or any `gh` failure left no file at all. The test that
+    // carried this name only asserted `upload.if === 'always()'` on a YAML node,
+    // which is true of a workflow whose step has nothing to upload.
+    const h = harness();
+    h.writeEvidence({ outcome: 'done', results: [{ command: 'npm run test', exit_code: 0 }] });
+    // A lease id the ledger cannot resolve: the ledger read 404s, so the
+    // transition throws before it can record anything.
+    const run = h.settle({ OC_LEASE_ID: 'a-lease-this-ledger-does-not-have' });
+
+    expect(run.status).not.toBe(0);
+    expect(h.receiptExists(), 'settlement threw and left the audit no receipt').toBe(true);
+    expect(h.receipt()).toMatchObject({ issue: 703, outcome: 'provider_free_done', providerCalls: 0 });
+  });
+});
+
+
+describe('reconciling an expired lease does not bury the issue', () => {
+  /**
+   * The other half of the expiry defect, and the half that needs the real
+   * runtime: `beforeRelease` stripped `oc-queued` and added `oc-blocked` for
+   * EVERY lane. `oc-blocked` is in the selector's BLOCKED_LABELS, so the issue
+   * became unselectable -- on the strength of an attempt that produced no
+   * evidence either way.
+   */
+  const harness = (lease: Partial<Lease>) => {
+    const dir = mkdtempSync(join(tmpdir(), 'oc-reconcile-')); paths.push(dir);
+    const bin = join(dir, 'bin'); mkdirSync(bin);
+    const ledgerFile = join(dir, 'ledger.json');
+    const ledger: Ledger = { schema: 1, programStartedAt: NOW, programSpent: 0, dailySpent: {},
+      leases: [{ id: 'expired', issue: 703, nodeId: LEAF, fingerprint: 'f', waveHash: 'w',
+        runId: '99', runAttempt: '1', expiresAt: '2020-01-01T00:00:00.000Z',
+        reservedUsd: 0, lane: 'provider-free', state: 'reserved', ...lease } as Lease] };
+    writeFileSync(ledgerFile, JSON.stringify(ledger));
+    const gh = join(bin, 'gh');
+    writeFileSync(gh, `#!/usr/bin/env node
+const fs = require('node:fs');
+const args = process.argv.slice(2);
+const path = args[1];
+const method = args[args.indexOf('--method') + 1];
+if (path.includes('contents/.oc/dispatch-ledger.json')) {
+  if (method === 'PUT') {
+    const body = JSON.parse(fs.readFileSync(0, 'utf8'));
+    fs.writeFileSync(process.env.OC_LEDGER_FILE, Buffer.from(body.content, 'base64').toString());
+    console.log('{}'); process.exit(0);
+  }
+  console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(fs.readFileSync(process.env.OC_LEDGER_FILE)).toString('base64') }));
+  process.exit(0);
+}
+if (/actions\\/runs\\/\\d+$/.test(path)) { console.log(JSON.stringify({ status: 'completed' })); process.exit(0); }
+if (method === 'PATCH') {
+  fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + fs.readFileSync(0, 'utf8') + '\\n');
+  console.log('{}'); process.exit(0);
+}
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-running' }, { name: 'oc-node:${LEAF}' }] })); process.exit(0); }
+console.log('{}');
+`);
+    chmodSync(gh, 0o755);
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`,
+      GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend', GITHUB_OUTPUT: join(dir, 'outputs'),
+      OC_TEST_LOG: join(dir, 'requests'), OC_LEDGER_FILE: ledgerFile };
+    writeFileSync(env.OC_TEST_LOG, '');
+    const reconcile = () => spawnSync(process.execPath,
+      ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'reconcile'], { env, encoding: 'utf8' });
+    const labels = () => readFileSync(env.OC_TEST_LOG, 'utf8').trim().split('\n').filter(Boolean)
+      .filter(line => line.startsWith('PATCHBODY '))
+      .map(line => (JSON.parse(line.slice('PATCHBODY '.length)) as { labels: string[] }).labels);
+    const stored = () => JSON.parse(readFileSync(ledgerFile, 'utf8')) as Ledger;
+    return { reconcile, labels, stored };
+  };
+
+  it('returns an expired deterministic issue to the queue instead of blocking it', () => {
+    const h = harness({ lane: 'provider-free', reservedUsd: 0 });
+    const run = h.reconcile();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.labels().at(-1)).toContain('oc-queued');
+    expect(h.labels().at(-1)).not.toContain('oc-blocked');
+    expect(h.stored().leases[0].state).toBe('not-executed');
+  });
+
+  it('still blocks an expired provider lease, which was doing something unseen', () => {
+    const h = harness({ lane: 'provider', reservedUsd: 4 });
+    const run = h.reconcile();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.labels().at(-1)).toContain('oc-blocked');
+    expect(h.labels().at(-1)).not.toContain('oc-queued');
+    expect(h.stored().leases[0].state).toBe('blocked');
   });
 });

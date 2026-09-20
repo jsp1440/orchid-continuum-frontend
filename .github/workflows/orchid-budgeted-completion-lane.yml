@@ -105,6 +105,12 @@ jobs:
     needs: classify
     if: needs.classify.outputs.provider_free == 'true'
     runs-on: ubuntu-latest
+    # Declared, not inherited. Without this the job picks up the workflow-level
+    # `actions: write` and `id-token: write` it has no use for. It reads the plan
+    # and writes the ledger branch and a refusal label, and nothing else.
+    permissions:
+      contents: write
+      issues: write
     outputs:
       allowed: ${{ steps.lease.outputs.allowed }}
       lease_id: ${{ steps.lease.outputs.lease_id }}

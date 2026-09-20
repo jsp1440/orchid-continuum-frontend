@@ -10,6 +10,24 @@ import { afterEach, describe, expect, it } from 'vitest';
  * Its allowlist, its `provider_calls: 0` and its outcome computation were all
  * unpinned: each could be removed with the full suite green.
  */
+/**
+ * Every command below is a real entry in the capability registry, run for real.
+ * They are the two CHEAPEST entries on purpose: `npm run validate:deployment`
+ * (~150ms, exit 0) and `npm run verify:routes` (~580ms, exit 1 wherever no
+ * browser is installed, which is every lane runner).
+ *
+ * The earlier version used `npm run typecheck`, at ~28s a call. `spawnSync`
+ * blocks the thread it runs on, so three of those plus two route sweeps held
+ * the vitest worker for 83-95s, its `onTaskUpdate` RPC timed out, and the run
+ * reported `2467 passed | 2 skipped` with `1 error` and exit 1 -- a red
+ * required check whose summary line reads like a pass. The generous per-test
+ * timeouts did not bound it, because the RPC gave up first.
+ *
+ * So: keep the commands cheap, and bound them tightly enough that a slow one
+ * becomes a named failing test rather than a worker that stopped answering.
+ */
+const TIMEOUT = 30000;
+
 const paths: string[] = [];
 afterEach(() => paths.splice(0).forEach(path => rmSync(path, { recursive: true, force: true })));
 
@@ -55,21 +73,21 @@ describe('the provider-free executor', () => {
 
   it('records zero provider calls, because it makes none', () => {
     const h = harness();
-    h.run(['npm run typecheck']);
+    h.run(['npm run validate:deployment']);
 
     expect(h.evidence()).toMatchObject({ provider_calls: 0, provider_cost_usd: 0 });
   });
 
   it('fences the evidence to its own issue, wave and run', () => {
     const h = harness();
-    h.run(['npm run typecheck']);
+    h.run(['npm run validate:deployment']);
 
     expect(h.evidence()).toMatchObject({ issue: 703, wave_hash: 'w', run: '11:1' });
   });
 
   it('calls a run done only when every command exited zero', () => {
     const h = harness();
-    const done = h.run(['npm run typecheck']);
+    const done = h.run(['npm run validate:deployment']);
 
     expect(done.status).toBe(0);
     expect(h.evidence().outcome).toBe('done');
@@ -86,14 +104,14 @@ describe('the provider-free executor', () => {
     expect(done.status).toBe(1);
     expect(h.evidence().outcome).toBe('failed');
     expect(h.evidence().results.some((r: { exit_code: number }) => r.exit_code !== 0)).toBe(true);
-  }, 180000);
+  }, TIMEOUT);
 
   it('does not call a run done because one of its commands passed', () => {
     const h = harness();
-    const done = h.run(['npm run typecheck', 'npm run verify:routes']);
+    const done = h.run(['npm run validate:deployment', 'npm run verify:routes']);
 
     expect(done.status).toBe(1);
     expect(h.evidence().outcome).toBe('failed');
     expect(h.evidence().results.map((r: { exit_code: number }) => r.exit_code)).toEqual([0, 1]);
-  }, 240000);
-}, 180000);
+  }, TIMEOUT);
+}, TIMEOUT);

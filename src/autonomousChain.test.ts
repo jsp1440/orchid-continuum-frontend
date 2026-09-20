@@ -133,7 +133,12 @@ describe('QUEUED -> BOUND -> ADMITTED -> LEASED -> EXECUTED -> RECEIPT -> SETTLE
     // PROVIDER_AUTHORIZED, and the commands come from the local registry.
     const routing = routeIssue({ number: ISSUE, body: null, labels: LABELS.map(name => ({ name })) });
     expect(routing.providerFree).toBe(true);
-    expect(routing.blocking ?? []).toEqual([]);
+    // Was `routing.blocking ?? []`, a field routeIssue does not return: the
+    // assertion read `undefined ?? []` and could not fail. The field is
+    // `blockingProvider`, and a mutation setting it unconditionally left this
+    // test green.
+    expect(routing.blockingProvider).toEqual([]);
+    expect('blockingProvider' in routing).toBe(true);
   });
 });
 

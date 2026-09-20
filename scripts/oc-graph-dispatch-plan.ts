@@ -33,6 +33,17 @@ export type GraphDispatchPlan = {
   starved: boolean;
   /** How many queued issues reached the ranker, as against the raw label census. */
   queuedReachingAdmission: number;
+  /** WHICH queued issues reached the ranker. A count cannot be subtracted from a census to get names. */
+  reachedAdmission: number[];
+  /**
+   * Pending-labelled issues that never reached the ranker at all, by number.
+   *
+   * Always empty here: this planner is only ever handed the issues that already
+   * reached it, so it cannot see the ones that did not. `makePlan` has both the
+   * label census and `reachedAdmission` and fills it in. The field lives on the
+   * shape so that every plan has it and a report can never read `undefined`.
+   */
+  pendingNotReachingAdmission: number[];
 };
 
 function cloneGraph(root: CompletionNode): CompletionNode {
@@ -214,6 +225,8 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     unboundQueued,
     unreachableQueued,
     queuedReachingAdmission: queued.size,
+    reachedAdmission: [...queued].sort((a, b) => a - b),
+    pendingNotReachingAdmission: [],
     unknownNodeDeclarations: unknown,
     unadmissibleNodeDeclarations: unadmissible,
     // Reporting this run as a healthy no-op is what let the binding gap run unseen.

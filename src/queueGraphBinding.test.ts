@@ -184,6 +184,7 @@ describe('what the scheduler run says when it admits nothing', () => {
     capacity: 8, issues: [], leaves: [], untrackedLeaves: [], surfacedBlockers: [],
     unboundQueued: [], unreachableQueued: [], unknownNodeDeclarations: [],
     unadmissibleNodeDeclarations: [], starved: false, queuedReachingAdmission: 23,
+    reachedAdmission: [], pendingNotReachingAdmission: [],
     inventory: { queued: 23, prepared: 1, validating: 1, blocked: 22, 'owner-gate': 6, 'runtime-backoff': 23, active: 0 },
     ...over,
   }) as unknown as Parameters<typeof bindingReport>[0];
@@ -232,10 +233,74 @@ describe('what the scheduler run says when it admits nothing', () => {
     // Every queued issue filtered out before graph admission: the planner sees an
     // empty queue and reports starved=false, which used to print nothing.
     const report = bindingReport(planWith({ starved: false, queuedReachingAdmission: 0,
-      inventory: { queued: 23, prepared: 0, active: 0 } }));
+      pendingNotReachingAdmission: [166, 167, 168], inventory: { queued: 23, prepared: 0, active: 0 } }));
     expect(report).toContain('STARVED');
     expect(report).toContain('0 issue(s) reached graph admission');
-    expect(report).toContain('A further 23 issue(s) are labelled pending but never reached admission');
+    expect(report).toContain('never reached admission');
+  });
+
+  it('names the issues that never reached admission, rather than counting them', () => {
+    // Live on 07ebd53: "A further 5 issue(s) are labelled pending but never
+    // reached admission: an open PR lineage, an `OC-AUTO-HOLD`, or a lane
+    // label." Three candidate causes, no cause identified, and five issues that
+    // appeared nowhere else in a report promising to name every one of them.
+    const report = bindingReport(planWith({ starved: true, queuedReachingAdmission: 18,
+      pendingNotReachingAdmission: [166, 167, 610, 675, 683] }));
+
+    for (const number of [166, 167, 610, 675, 683]) expect(report).toContain(`#${number}`);
+    expect(report).not.toMatch(/A further \d+ issue\(s\)/);
+  });
+
+  it('names them in a wave that admitted something, where the count used to vanish', () => {
+    // The shortfall line was gated on the wave being idle, and `idle` requires
+    // `plan.issues.length === 0`. One admitted issue and the other five went
+    // unmentioned -- no names, and not even the count.
+    const report = bindingReport(planWith({ issues: [703], capacity: 7,
+      queuedReachingAdmission: 18, pendingNotReachingAdmission: [166, 167] }));
+
+    expect(report).toContain('#166');
+    expect(report).toContain('#167');
+    // Still not starved: a wave that admitted work is not a binding failure.
+    expect(report).not.toContain('STARVED');
+  });
+
+  it('names an issue once, however many declarations it got wrong', () => {
+    const report = bindingReport(planWith({ starved: true,
+      unknownNodeDeclarations: [{ issueNumber: 703, nodeId: 'cap-no-such-node' }, { issueNumber: 703, nodeId: 'cap-also-not-real' }] }));
+
+    expect(report.match(/Issue #703/g)).toHaveLength(1);
+    expect(report).toContain('`cap-no-such-node`, `cap-also-not-real`');
+  });
+
+  it('names an issue once even if two buckets claim it', () => {
+    // The planner partitions these buckets, so this cannot arise from
+    // `buildGraphDispatchPlan` today. `bindingReport` takes a plan, and the
+    // promise it makes is "once each" -- which has to hold for the input it is
+    // given, not only for the input it currently gets.
+    const report = bindingReport(planWith({ starved: true, unboundQueued: [703],
+      unreachableQueued: [{ issueNumber: 703, nodeIds: ['gate-journey-research-matrix'] }] }));
+
+    expect(report.match(/703/g)).toHaveLength(1);
+  });
+
+  it('says nothing about an issue the wave admitted, whichever bucket names it', () => {
+    // Belt and braces over the planner's own exclusion: an admitted issue is
+    // being executed, so no line in this report may suggest otherwise.
+    const report = bindingReport(planWith({ issues: [703], capacity: 7,
+      unboundQueued: [703], unreachableQueued: [{ issueNumber: 703, nodeIds: ['x'] }] }));
+
+    expect(report).toBe('');
+  });
+
+  it('says nothing about a refused declaration on an issue the wave admitted', () => {
+    // An issue can declare two nodes, bind on one and have the other refused.
+    // The report's only line about it read "Binding refused" -- while the lane
+    // was executing it.
+    const report = bindingReport(planWith({ issues: [703], capacity: 7,
+      unknownNodeDeclarations: [{ issueNumber: 703, nodeId: 'cap-no-such-node' }] }));
+
+    expect(report).not.toContain('#703');
+    expect(report).toBe('');
   });
 
   it('says nothing when the wave is genuinely healthy', () => {

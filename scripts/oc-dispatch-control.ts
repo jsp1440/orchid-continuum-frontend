@@ -128,7 +128,16 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
   const inventory = Object.fromEntries(LANE_STATES
     .map(state => [state, snapshot.issues.filter(i => i.state === 'open' && !steward(i) && labelsOf(i).includes(`oc-${state}`)).length])
   ) as Record<(typeof LANE_STATES)[number], number>;
-  return { ...plan, leaves, wave, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
+  // The census/reached shortfall was reported as a bare count with three
+  // candidate causes and no identities -- the same "names the causes, identifies
+  // none" shape this lane's reporting exists to remove. These are the issues the
+  // count was standing in for, so a report can name them.
+  const pendingNotReachingAdmission = snapshot.issues
+    .filter(i => i.state === 'open' && !steward(i) && labelsOf(i).some(l => ['oc-queued', 'oc-prepared'].includes(l)))
+    .map(i => i.number)
+    .filter(number => !plan.reachedAdmission.includes(number))
+    .sort((a, b) => a - b);
+  return { ...plan, leaves, wave, pendingNotReachingAdmission, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
 }
 export type Plan = ReturnType<typeof makePlan>;
 
@@ -225,6 +234,16 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
     if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint && l.state !== 'not-executed')) {
       return { allowed: false, reason: 'unchanged_attempt', lease: null };
     }
+    // The `not-executed` escape hatch had no floor. An issue whose worker can
+    // never write evidence -- a failing `npm ci`, a dead runner, a capability
+    // with no local executor -- was admitted, refused and receipted on every
+    // pulse of a five-minute cron, appending one lease each time and reporting
+    // a green audit each time. At 474 bytes a lease that is 133 KiB a day, and
+    // the ledger passes the contents API's 1 MiB ceiling inside eight days,
+    // breaking every lane's `read()`, not just this one's.
+    if (ledger.leases.filter(l => l.fingerprint === leaf.fingerprint && l.state === 'not-executed').length >= NOT_EXECUTED_CEILING) {
+      return { allowed: false, reason: 'not_executed_ceiling', lease: null };
+    }
     const lease: Lease = { id: sha({ issue: input.issueNumber, run: input.runId, attempt: input.runAttempt, wave: plan.wave.hash, lane: 'provider-free' }),
       issue: input.issueNumber, nodeId: leaf.nodeId, fingerprint: leaf.fingerprint, waveHash: plan.wave.hash,
       runId: input.runId, runAttempt: input.runAttempt, expiresAt: new Date(Date.parse(input.now) + 90 * 60000).toISOString(),
@@ -236,6 +255,9 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
   }
   throw new Error('Ledger contention; dispatch refused');
 }
+
+/** How many times a fingerprint may settle `not-executed` before the lane stops trying. */
+export const NOT_EXECUTED_CEILING = 3;
 
 export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state']) {
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -260,10 +282,21 @@ export async function reconcileExpired(store: LeaseStore, now: string, runComple
     // Time alone is not proof a worker stopped. API failure/unknown status keeps capacity occupied.
     if (await runCompleted(lease.runId)) {
       await beforeRelease(lease);
-      // A deterministic lease has no provider outcome to settle into; an expired
-      // one failed, and must not be recorded as anything softer.
+      // An expired deterministic lease is the ONE case where we know settlement
+      // did not run: `settle-deterministic` is the only writer of a provider-free
+      // outcome, and it always transitions the lease. So an expiry means no
+      // evidence was ever judged -- which is the definition of `not-executed`,
+      // not of a failure.
+      //
+      // Recording it as `provider-free-failed` burned the fingerprint (that
+      // state is not excluded from the dedupe) while `beforeRelease` stripped
+      // `oc-queued` and applied `oc-blocked`. The issue became unselectable AND
+      // permanently unclaimable: even after an owner restored the labels by
+      // hand, the claim still returned `unchanged_attempt`. That is the defect
+      // this lane's `not-executed` state was added to remove, relocated to the
+      // one path that can still produce it.
       await transitionLease(store, lease.id, lease.runId, lease.runAttempt,
-        laneOf(lease) === 'provider-free' ? 'provider-free-failed' : 'blocked');
+        laneOf(lease) === 'provider-free' ? 'not-executed' : 'blocked');
     }
   }
 }
