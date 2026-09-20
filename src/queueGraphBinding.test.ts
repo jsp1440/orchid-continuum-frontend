@@ -124,9 +124,9 @@ describe('binding a queued issue from the issue side', () => {
     };
     walk(COMPLETION_GRAPH);
 
-    // Three of 119. This is the gap the label surface exists to close.
+    // Four of 119. This is the gap the label surface exists to close.
     expect(nodes).toBe(119);
-    expect([...bound].sort((a, b) => a - b)).toEqual([171, 525, 528]);
+    expect([...bound].sort((a, b) => a - b)).toEqual([171, 525, 528, 660]);
   });
 
   it('admits a graph-bound issue without any declaration', () => {
