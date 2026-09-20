@@ -16,12 +16,24 @@ export type Lease = {
   runId: string; runAttempt: string; expiresAt: string; reservedUsd: number;
   /** The exact implementation revision that produced this attempt. */
   implementationSha?: string;
-  /** Absent on leases written before the deterministic lane existed; those were all paid. */
+  /**
+   * Leases written by the first deterministic lane predate the lane field. A terminal
+   * provider-free outcome with a zero reservation is unambiguous legacy state.
+   * Active or ordinary terminal leases without a lane remain provider leases so
+   * an ambiguous zero-cost record still fails closed.
+   */
   lane?: LeaseLane;
   state: 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done'
     | 'provider-free-done' | 'provider-free-failed' | 'not-executed';
 };
-export const laneOf = (lease: Lease): LeaseLane => lease.lane ?? 'provider';
+export function laneOf(lease: Lease): LeaseLane {
+  if (lease.lane) return lease.lane;
+  if (lease.reservedUsd === 0 &&
+      ['provider-free-done', 'provider-free-failed', 'not-executed'].includes(lease.state)) {
+    return 'provider-free';
+  }
+  return 'provider';
+}
 export type Ledger = { schema: 1; programStartedAt: string; programSpent: number; dailySpent: Record<string, number>; leases: Lease[] };
 export interface LeaseStore {
   read(): Promise<{ version: string; ledger: Ledger }>;
