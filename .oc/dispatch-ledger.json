@@ -16,6 +16,20 @@
       "reservedUsd": 0,
       "lane": "provider-free",
       "state": "provider-free-done"
+    },
+    {
+      "id": "8c7ed96e7ba01daa8efb0cb1130faf588eab7f925ae29ba90e75f54fb3883387",
+      "issue": 660,
+      "nodeId": "gate-journey-research-matrix",
+      "fingerprint": "d8fee89ecd05c3c2494668ae1b6cd89fb1d940c21fc4b18654bebbba7dac64cb",
+      "waveHash": "87f38d05a4ab14f88de6d3b11a38165a10ae0f4facc1651af37916c5f21f2b45",
+      "runId": "35538210418",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-20T22:48:01.387Z",
+      "reservedUsd": 0,
+      "implementationSha": "b1e807c46591ee717058828a20bd3976e8c45bcd",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
