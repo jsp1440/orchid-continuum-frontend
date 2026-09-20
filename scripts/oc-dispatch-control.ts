@@ -276,7 +276,7 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
   }
   const leaf = plan.leaves.find(candidate => candidate.issueNumber === input.issueNumber);
   if (!leaf || !plan.issues.includes(input.issueNumber)) throw new Error('Issue missing from admitted dispatch plan');
-  if (!/^\\d+$/.test(input.runId) || !/^\\d+$/.test(input.runAttempt)) throw new Error('Missing executable workflow invocation');
+  if (!/^\d+$/.test(input.runId) || !/^\d+$/.test(input.runAttempt)) throw new Error('Missing executable workflow invocation');
 
   for (let attempt = 0; attempt < 8; attempt++) {
     const { version, ledger } = await store.read();
