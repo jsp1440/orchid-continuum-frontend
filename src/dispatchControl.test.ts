@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assertAdmission, assertReceipts, claimLease, makePlan, reconcileExpired, runningCount, transitionLease,
-  type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
+  providerFreeRepairsReadyForRequeue, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
 const now = '2026-09-14T04:00:00.000Z';
@@ -124,6 +124,18 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(makePlan(structuredClone(snapshot), [], now, root).wave.hash).toBe(plan.wave.hash);
     snapshot.issues.find(i => i.number === number)!.labels.push({ name: 'oc-blocked' });
     expect(() => assertAdmission(plan, snapshot, number, now, root)).toThrow('drift');
+  });
+  it('requeues a deterministic repair only after a new implementation revision', () => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair']);
+    const oldSha = snapshot.implementationSha;
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: oldSha,
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+    snapshot.implementationSha = 'c'.repeat(40);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([1]);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [{ ...failed, implementationSha: snapshot.implementationSha }])).toEqual([]);
   });
   it('detects hash tampering, unadmitted issues, missing/duplicate/mismatched actual receipts', () => {
     const { root, snapshot } = fixture(); const plan = makePlan(snapshot, [], now, root);

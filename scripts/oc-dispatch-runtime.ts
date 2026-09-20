@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, transitionLease, validateLedger, validatePlan,
-  type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
+  providerFreeRepairsReadyForRequeue, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY || '';
@@ -291,6 +291,22 @@ async function main() {
         api(`issues/${lease.issue}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name)
           .filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat(free ? 'oc-queued' : 'oc-blocked'))] });
       });
+    }
+    const { ledger } = await store.read();
+    // Avoid a live GitHub snapshot unless the ledger contains a terminal
+    // deterministic failure that could actually be eligible for repair. This
+    // keeps expiry reconciliation provider-free and avoids turning a missing
+    // issue/PR read into a false failure for ordinary lease expiry.
+    if (ledger.leases.some(lease => laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed')) {
+      const current = snapshot();
+      for (const issueNumber of providerFreeRepairsReadyForRequeue(current, ledger.leases)) {
+        const record = current.issues.find(issue => issue.number === issueNumber);
+        if (!record) continue;
+        // A new implementation revision is the only automatic repair signal.
+        // Keep the repair marker as provenance and add the queue marker so the
+        // normal graph/dependency admission path owns the retry.
+        api(`issues/${issueNumber}`, 'PATCH', { labels: [...new Set(record.labels.map(label => label.name).concat('oc-queued'))] });
+      }
     }
     return;
   }

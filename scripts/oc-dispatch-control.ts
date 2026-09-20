@@ -14,6 +14,8 @@ export type LeaseLane = 'provider' | 'provider-free';
 export type Lease = {
   id: string; issue: number; nodeId: string; fingerprint: string; waveHash: string;
   runId: string; runAttempt: string; expiresAt: string; reservedUsd: number;
+  /** The exact implementation revision that produced this attempt. */
+  implementationSha?: string;
   /** Absent on leases written before the deterministic lane existed; those were all paid. */
   lane?: LeaseLane;
   state: 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done'
@@ -49,8 +51,8 @@ export function declaredNodesByIssue(issues: Issue[]): Record<number, string[]> 
 }
 
 export function lineageFor(issue: number, prs: Pull[]) {
-  return prs.filter(pr => new RegExp(`^OC-AUTO-ISSUE:\\s*#${issue}\\s*$`, 'm').test(pr.body || '') ||
-    new RegExp(`^oc-auto-${issue}(?:-|$)`).test(pr.head.ref) ||
+  return prs.filter(pr => new RegExp(`^OC-(?:AUTO|LINEAGE)-ISSUE:\\s*#${issue}\\s*$`, 'mi').test(pr.body || '') ||
+    new RegExp(`^oc-auto(?:-|/)${issue}(?:-|$)`, 'i').test(pr.head.ref) ||
     new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+(?:jsp1440/orchid-continuum-frontend)?#${issue}\\b`, 'i').test(pr.body || ''));
 }
 function eligibleIssues(snapshot: Snapshot) {
@@ -198,6 +200,7 @@ export function validateLedger(ledger: Ledger) {
   // lease must still reserve something. Neither rule is weakened by the other.
   if (ledger.leases.some(l => !Number.isSafeInteger(l.issue) || l.issue <= 0 || !Number.isFinite(Date.parse(l.expiresAt)) ||
       !Number.isFinite(l.reservedUsd) || (laneOf(l) === 'provider-free' ? l.reservedUsd !== 0 : l.reservedUsd <= 0) ||
+      (l.implementationSha !== undefined && !/^[a-f0-9]{40}$/.test(l.implementationSha)) ||
       (l.lane !== undefined && l.lane !== 'provider' && l.lane !== 'provider-free') ||
       !['reserved','running','validating','blocked','owner-gate','runtime-backoff','done',
         'provider-free-done','provider-free-failed','not-executed'].includes(l.state))) throw new Error('Malformed lease');
@@ -230,7 +233,7 @@ export async function claimLease(store: LeaseStore, plan: Plan, snapshot: Snapsh
     const lease: Lease = { id: sha({ issue: input.issueNumber, run: input.runId, attempt: input.runAttempt, wave: plan.wave.hash }),
       issue: input.issueNumber, nodeId: leaf.nodeId, fingerprint: leaf.fingerprint, waveHash: plan.wave.hash,
       runId: input.runId, runAttempt: input.runAttempt, expiresAt: new Date(Date.parse(input.now) + 90 * 60000).toISOString(),
-      reservedUsd: Math.ceil(input.requestedUsd * 100) / 100, state: 'reserved' };
+      reservedUsd: Math.ceil(input.requestedUsd * 100) / 100, implementationSha: plan.implementationSha, state: 'reserved' };
     // Reservations charge the ledger immediately and are never auto-refunded on
     // unknown provider outcomes. Concurrent lanes cannot each spend the same balance.
     const next = structuredClone(ledger);
@@ -283,7 +286,7 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
     const lease: Lease = { id: sha({ issue: input.issueNumber, run: input.runId, attempt: input.runAttempt, wave: plan.wave.hash, lane: 'provider-free' }),
       issue: input.issueNumber, nodeId: leaf.nodeId, fingerprint: leaf.fingerprint, waveHash: plan.wave.hash,
       runId: input.runId, runAttempt: input.runAttempt, expiresAt: new Date(Date.parse(input.now) + 90 * 60000).toISOString(),
-      reservedUsd: 0, lane: 'provider-free', state: 'reserved' };
+      reservedUsd: 0, implementationSha: plan.implementationSha, lane: 'provider-free', state: 'reserved' };
     const next = structuredClone(ledger);
     next.leases.push(lease);
     // Deliberately no programSpent/dailySpent write: this lane cannot spend.
@@ -294,6 +297,33 @@ export async function claimDeterministicLease(store: LeaseStore, plan: Plan, sna
 
 /** How many times a fingerprint may settle `not-executed` before the lane stops trying. */
 export const NOT_EXECUTED_CEILING = 3;
+
+/**
+ * Return deterministic failures that may safely re-enter the queue.
+ *
+ * A failed provider-free attempt is intentionally removed from `oc-queued` so
+ * the same immutable implementation cannot thrash every scheduler pulse. Once
+ * a different implementation revision exists, the old failure is no longer a
+ * proof about the current code and one bounded retry becomes safe. Missing
+ * revision evidence, owner holds, and an already-failed attempt at the current
+ * revision all remain parked.
+ */
+export function providerFreeRepairsReadyForRequeue(snapshot: Snapshot, leases: Lease[]) {
+  const parked = snapshot.issues.filter(issue => {
+    const labels = new Set(labelsOf(issue));
+    if (issue.state === 'closed' || !labels.has('oc-repair') || labels.has('oc-queued') ||
+        ['oc-blocked', 'oc-owner-gate', 'oc-runtime-backoff', 'oc-validating', 'oc-done'].some(label => labels.has(label))) return false;
+    const failures = leases.filter(lease => lease.issue === issue.number &&
+      laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed');
+    if (failures.length === 0) return false;
+    // Legacy failures without an exact implementation revision are not safe to
+    // reinterpret; they stay visible for an owner or repair PR.
+    if (failures.some(lease => lease.implementationSha === snapshot.implementationSha)) return false;
+    return failures.some(lease => lease.implementationSha !== undefined &&
+      lease.implementationSha !== snapshot.implementationSha);
+  });
+  return parked.map(issue => issue.number).sort((a, b) => a - b);
+}
 
 export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state']) {
   for (let attempt = 0; attempt < 8; attempt++) {

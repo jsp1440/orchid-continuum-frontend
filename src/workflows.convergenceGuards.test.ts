@@ -52,6 +52,12 @@ describe('continuous completion convergence guards', () => {
     const prs = [...Array.from({ length: 501 }, (_, i) => ({ ...unrelated, number: 100 + i })), snapshot.prs[0]];
     expect(lineageFor(11, prs).map(pr => pr.number)).toEqual([90]);
   });
+  it('recognizes every durable lineage marker emitted by governed workers', () => {
+    const { snapshot } = fixture();
+    const marker = { ...snapshot.prs[0], number: 91, body: 'OC-LINEAGE-ISSUE: #11', head: { ref: 'repair-11', sha: 'd'.repeat(40) } };
+    const slashBranch = { ...snapshot.prs[0], number: 92, body: 'bounded repair', head: { ref: 'oc-auto/11-round-2', sha: 'e'.repeat(40) } };
+    expect(lineageFor(11, [snapshot.prs[0], marker, slashBranch]).map(pr => pr.number)).toEqual([90, 91, 92]);
+  });
 
   it('verifies admission at the executable worker before writing any running label', () => {
     const runtime = readFileSync('scripts/oc-dispatch-runtime.ts', 'utf8');
