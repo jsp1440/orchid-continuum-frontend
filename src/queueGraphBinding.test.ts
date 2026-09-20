@@ -812,3 +812,151 @@ describe('the reason is the rule that actually decides', () => {
     expect(twice.match(/901/g)).toHaveLength(1);
   });
 });
+
+
+describe('the numbers the lane prints about itself come from the lane', () => {
+  /**
+   * Instance nine, and the third time this exact shape has been found here.
+   *
+   * The STARVED line's count comes from `queuedReachingAdmission`. Replacing
+   * that producer with `0` left the whole 2519-test suite green, because the
+   * only tests asserting the count hand-build a plan with
+   * `queuedReachingAdmission: 23` AND `reachedAdmission: []` -- a combination
+   * `buildGraphDispatchPlan` cannot produce, since it derives both from the
+   * same set. The number was asserted against a fixture, never against
+   * computed output.
+   *
+   * The PR's own R6 entry recounts this: "every report test injected
+   * `pendingNotReachingAdmission` through a fixture, so the production wiring
+   * of the R5 fix was untested". Same defect, one field over.
+   *
+   * So these go through `makePlan` and assert the printed line against the
+   * queue that produced it.
+   */
+  const SHA = 'a'.repeat(40);
+  const snapshotOf = (issues: unknown[], prs: unknown[] = []) => ({
+    issues, prs, integrationSha: SHA, implementationSha: 'b'.repeat(40), material: { architecture: 'm' },
+  }) as unknown as Parameters<typeof makePlan>[0];
+  const queued = (number: number, extra: string[] = []) => ({
+    number, state: 'open', title: 't', body: null,
+    labels: [{ name: 'oc-queued' }, ...extra.map(name => ({ name }))].sort((a, b) => a.name.localeCompare(b.name)),
+  });
+
+  it('prints the number of issues that actually reached the ranker', () => {
+    // Three reach the ranker; two are held by a lineage and never get there.
+    const snapshot = snapshotOf(
+      [queued(801), queued(802), queued(803), queued(804), queued(805)],
+      [
+        { number: 901, state: 'closed', title: 'Closes #804.', body: 'Closes #804.', head: { ref: 'a' } },
+        { number: 902, state: 'closed', title: 'Closes #805.', body: 'Closes #805.', head: { ref: 'b' } },
+      ],
+    );
+    const plan = makePlan(snapshot, [], NOW);
+
+    // Derived, not asserted: whatever reached the ranker is what must print.
+    expect(plan.reachedAdmission).toEqual([801, 802, 803]);
+    expect(plan.queuedReachingAdmission).toBe(plan.reachedAdmission.length);
+    expect(bindingReport(plan)).toContain(`${plan.reachedAdmission.length} issue(s) reached graph admission`);
+    expect(bindingReport(plan)).toContain('3 issue(s) reached graph admission');
+  });
+
+  it('the count follows the queue when the queue changes', () => {
+    // Two runs, different queues, so a constant cannot satisfy both.
+    const one = makePlan(snapshotOf([queued(801), queued(802)]), [], NOW);
+    const two = makePlan(snapshotOf([queued(801)]), [], NOW);
+
+    expect(bindingReport(one)).toContain('2 issue(s) reached graph admission');
+    expect(bindingReport(two)).toContain('1 issue(s) reached graph admission');
+  });
+
+  it('counts a wave whose only pending work is oc-prepared as pending work', () => {
+    // `census` gates whether the STARVED line prints at all, and dropping
+    // `inventory.prepared` from it left the suite green -- so a wave with only
+    // prepared work would silently stop reporting starvation.
+    const prepared = {
+      number: 810, state: 'open', title: 't', body: null,
+      labels: [{ name: 'oc-prepared' }, { name: 'oc-blocked' }].sort((a, b) => a.name.localeCompare(b.name)),
+    };
+    const plan = makePlan(snapshotOf([prepared]), [], NOW);
+
+    expect(plan.inventory.queued).toBe(0);
+    expect(plan.inventory.prepared).toBe(1);
+    expect(plan.starved).toBe(false);
+    expect(bindingReport(plan)).toContain('STARVED');
+  });
+
+  it('does not count a closed issue that still carries a pending label', () => {
+    // The inventory census's own `state === 'open'`, as distinct from the
+    // pending filter's. `inventory` is printed verbatim in every step summary,
+    // so a closed issue would inflate a number the lane states about itself.
+    const plan = makePlan(snapshotOf([
+      queued(820),
+      { number: 821, state: 'closed', title: 't', body: null, labels: [{ name: 'oc-queued' }] },
+    ]), [], NOW);
+
+    expect(plan.inventory.queued).toBe(1);
+    expect(planSummary(plan)).toContain('"queued":1');
+  });
+});
+
+
+describe('onlyIssue narrows the queue, and that is all it narrows', () => {
+  /**
+   * The R4 fix: `assertAdmission` re-plans for one issue, and it must narrow
+   * the QUEUE rather than the snapshot -- filtering the snapshot changes
+   * `openRefs`, whose repair-PR exclusion is computed from the issue list, so a
+   * sibling's repair PR would stop being excluded and a different set of leaves
+   * would be admissible.
+   *
+   * Deleting the narrowing left the suite green. It was disclosed in the PR
+   * body as unpinned while the commit message counted zero survivors -- two
+   * documents about the same head disagreeing. Pinned now, so both can say the
+   * same thing.
+   */
+  const SHA = 'a'.repeat(40);
+  const snapshotOf = (issues: unknown[], prs: unknown[] = []) => ({
+    issues, prs, integrationSha: SHA, implementationSha: 'b'.repeat(40), material: { architecture: 'm' },
+  }) as unknown as Parameters<typeof makePlan>[0];
+  const bound = (number: number, node: string) => ({
+    number, state: 'open', title: 't', body: null,
+    labels: [{ name: 'oc-queued' }, { name: `oc-node:${node}` }].sort((a, b) => a.name.localeCompare(b.name)),
+  });
+
+  it('admits only the named issue, from a queue that could admit several', () => {
+    const snapshot = snapshotOf([
+      bound(801, 'gate-journey-research-matrix'),
+      bound(802, 'cap-conservatory-collection'),
+    ]);
+
+    const wave = makePlan(snapshot, [], NOW);
+    expect(wave.issues.length).toBeGreaterThan(1);
+
+    const narrowed = makePlan(snapshot, [], NOW, undefined, 802);
+    expect(narrowed.issues).toEqual([802]);
+  });
+
+  it('leaves the snapshot intact, so the other issues still shape the plan', () => {
+    // The property the narrowing exists for: the sibling is still IN the
+    // snapshot, so its repair PR is still excluded from `openRefs` and the same
+    // leaves stay admissible. Narrowing the snapshot instead would change that.
+    const snapshot = snapshotOf(
+      [
+        bound(801, 'gate-journey-research-matrix'),
+        { number: 802, state: 'open', title: 't', body: null,
+          labels: [{ name: 'oc-queued' }, { name: 'oc-repair' }].sort((a, b) => a.name.localeCompare(b.name)) },
+      ],
+      [{ number: 902, state: 'open', title: 'Closes #802.', body: 'Closes #802.', head: { ref: 'oc-auto-802-x' } }],
+    );
+
+    const wave = makePlan(snapshot, [], NOW);
+    const narrowed = makePlan(snapshot, [], NOW, undefined, 801);
+
+    // The decision about #801 is the same one the wave made.
+    expect(narrowed.issues).toEqual([801]);
+    expect(wave.issues).toContain(801);
+    const inWave = wave.leaves.find(l => l.issueNumber === 801);
+    const inNarrowed = narrowed.leaves.find(l => l.issueNumber === 801);
+    expect(inNarrowed?.nodeId).toBe(inWave?.nodeId);
+    expect(inNarrowed?.fingerprint).toBe(inWave?.fingerprint);
+  });
+});

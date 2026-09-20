@@ -1,3 +1,7 @@
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
 import {
   claimDeterministicLease, declaredNodesByIssue, laneOf, makePlan, transitionLease,
@@ -248,6 +252,40 @@ describe('the two governance facts the lane states about itself', () => {
     } finally {
       if (before === undefined) delete process.env.PROVIDER_AUTHORIZED;
       else process.env.PROVIDER_AUTHORIZED = before;
+    }
+  });
+
+  it('writes the receipt\'s providerAuthorized from the environment too', async () => {
+    // The same defect `planSummary` had, on the AUTHORITATIVE artifact the
+    // audit reads. The commit that fixed `planSummary` said "two other call
+    // sites already derive it from the environment" -- true, and neither was
+    // pinned, so this one could be hard-coded `false` with the suite green.
+    const dir = mkdtempSync(join(tmpdir(), 'oc-receipt-env-'));
+    try {
+      const before = process.env.PROVIDER_AUTHORIZED;
+      const read = () => JSON.parse(readFileSync(join(dir, '703.json'), 'utf8'));
+      try {
+        for (const value of ['true', 'false']) {
+          process.env.PROVIDER_AUTHORIZED = value;
+          process.env.OC_RECEIPT_DIR = dir;
+          const run = spawnSync(process.execPath,
+            ['--import', 'tsx', '-e',
+             `process.env.OC_RECEIPT_DIR=${JSON.stringify(dir)};` +
+             `process.env.PROVIDER_AUTHORIZED=${JSON.stringify(value)};` +
+             `process.env.GITHUB_OUTPUT=${JSON.stringify(join(dir, 'out'))};` +
+             `const m = await import(${JSON.stringify(resolve('scripts/oc-dispatch-runtime.ts'))});` +
+             `m.writeReceiptForTest(703, 'w', 'not_executed');`],
+            { encoding: 'utf8' });
+          expect(run.status, run.stderr).toBe(0);
+          expect(read().providerAuthorized).toBe(value === 'true');
+        }
+      } finally {
+        if (before === undefined) delete process.env.PROVIDER_AUTHORIZED;
+        else process.env.PROVIDER_AUTHORIZED = before;
+        delete process.env.OC_RECEIPT_DIR;
+      }
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

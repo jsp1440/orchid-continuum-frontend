@@ -121,6 +121,14 @@ function readPlan() {
   if (process.env.OC_WAVE_HASH !== plan.wave.hash) throw new Error('Wrong shared wave artifact');
   return plan;
 }
+/**
+ * Exported ONLY so a test can assert that `providerAuthorized` follows the
+ * environment. It is the authoritative artifact the audit reads, and the field
+ * could be hard-coded `false` with the whole suite green.
+ */
+export function writeReceiptForTest(issue: number, waveHash: string, outcome: string, extra: object = {}) {
+  return receipt(issue, waveHash, outcome, extra);
+}
 function receipt(issue: number, waveHash: string, outcome: string, extra: object = {}) {
   const dir = process.env.OC_RECEIPT_DIR || '.oc-receipts';
   mkdirSync(dir, { recursive: true });
