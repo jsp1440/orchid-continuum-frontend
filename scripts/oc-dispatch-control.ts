@@ -21,6 +21,12 @@ export interface LeaseStore {
   compareAndSwap(version: string, ledger: Ledger): Promise<boolean>;
 }
 export const isActive = (lease: Lease) => lease.state === 'reserved' || lease.state === 'running';
+export function terminalIssueLabel(state: Lease['state']) {
+  if (state === 'done' || state === 'provider-free-done') return 'oc-done';
+  if (state === 'owner-gate') return 'oc-owner-gate';
+  if (state === 'runtime-backoff') return 'oc-runtime-backoff';
+  return 'oc-blocked';
+}
 const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const labelsOf = (issue: Issue) => issue.labels.map(label => label.name);
 const steward = (issue: Issue) => labelsOf(issue).includes('oc-portfolio-steward');
@@ -176,7 +182,13 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
   }
   throw new Error('Ledger contention; settlement refused');
 }
-export async function reconcileExpired(store: LeaseStore, now: string, runCompleted: (runId: string) => Promise<boolean>, beforeRelease: (lease: Lease) => Promise<void> = async () => {}) {
+export async function reconcileExpired(
+  store: LeaseStore,
+  now: string,
+  runCompleted: (runId: string) => Promise<boolean>,
+  beforeRelease: (lease: Lease) => Promise<void> = async () => {},
+  afterRelease: (lease: Lease) => Promise<void> = async () => {},
+) {
   const { ledger } = await store.read();
   validateLedger(ledger);
   const report = { inspected: 0, recovered: 0, kept: 0, errors: 0 };
@@ -189,7 +201,11 @@ export async function reconcileExpired(store: LeaseStore, now: string, runComple
         continue;
       }
       await beforeRelease(lease);
-      await transitionLease(store, lease.id, lease.runId, lease.runAttempt, 'blocked');
+      const finalLease = await transitionLease(store, lease.id, lease.runId, lease.runAttempt, 'blocked');
+      // The issue label is a side effect outside the ledger CAS. If a
+      // concurrent settlement won the race, preserve that terminal outcome
+      // instead of leaving completed work labelled blocked.
+      if (finalLease) await afterRelease(finalLease);
       report.recovered++;
     } catch {
       // One stale lease with unavailable evidence must not prevent unrelated
