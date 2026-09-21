@@ -13,7 +13,7 @@ export type Snapshot = { issues: Issue[]; prs: Pull[]; integrationSha: string; i
 export type Lease = {
   id: string; issue: number; nodeId: string; fingerprint: string; waveHash: string;
   runId: string; runAttempt: string; expiresAt: string; reservedUsd: number;
-  state: 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done';
+  state: 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done' | 'provider-free-done';
 };
 export type Ledger = { schema: 1; programStartedAt: string; programSpent: number; dailySpent: Record<string, number>; leases: Lease[] };
 export interface LeaseStore {
@@ -116,8 +116,9 @@ export function validateLedger(ledger: Ledger) {
       !Number.isFinite(ledger.programSpent) || ledger.programSpent < 0 || !Array.isArray(ledger.leases) ||
       !ledger.dailySpent || Object.values(ledger.dailySpent).some(n => !Number.isFinite(n) || n < 0)) throw new Error('Invalid durable ledger');
   if (ledger.leases.some(l => !Number.isSafeInteger(l.issue) || l.issue <= 0 || !Number.isFinite(Date.parse(l.expiresAt)) ||
-      !Number.isFinite(l.reservedUsd) || l.reservedUsd <= 0 ||
-      !['reserved','running','validating','blocked','owner-gate','runtime-backoff','done'].includes(l.state))) throw new Error('Malformed lease');
+      !Number.isFinite(l.reservedUsd) || l.reservedUsd < 0 ||
+      !['reserved','running','validating','blocked','owner-gate','runtime-backoff','done','provider-free-done'].includes(l.state) ||
+      (isActive(l) && l.reservedUsd <= 0))) throw new Error('Malformed lease');
   const active = ledger.leases.filter(isActive);
   if (new Set(active.map(l => l.issue)).size !== active.length || new Set(active.map(l => l.nodeId)).size !== active.length) throw new Error('Duplicate active leases in ledger');
 }
@@ -159,9 +160,17 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
     const { version, ledger } = await store.read();
     validateLedger(ledger);
     const lease = ledger.leases.find(l => l.id === id);
-    if (!lease || lease.runId !== runId || lease.runAttempt !== runAttempt) throw new Error('Lease fencing token mismatch');
+    // Reconciliation races with settlement and with a previous retry. Once the
+    // lease is gone there is nothing left to release; treating that as a safe
+    // no-op is what makes release idempotent without weakening fencing for an
+    // existing lease.
+    if (!lease) return null;
+    if (lease.runId !== runId || lease.runAttempt !== runAttempt) throw new Error('Lease fencing token mismatch');
     if (lease.state === state) return lease;
-    if (!isActive(lease) || (state === 'reserved')) throw new Error('Terminal lease cannot be revived');
+    // A concurrent settlement may have released this lease after the caller's
+    // snapshot. Never revive the terminal record and never fail the whole
+    // reconciliation pass over an already-released slot.
+    if (!isActive(lease) || (state === 'reserved')) return lease;
     lease.state = state;
     if (await store.compareAndSwap(version, ledger)) return lease;
   }
@@ -170,13 +179,26 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
 export async function reconcileExpired(store: LeaseStore, now: string, runCompleted: (runId: string) => Promise<boolean>, beforeRelease: (lease: Lease) => Promise<void> = async () => {}) {
   const { ledger } = await store.read();
   validateLedger(ledger);
+  const report = { inspected: 0, recovered: 0, kept: 0, errors: 0 };
   for (const lease of ledger.leases.filter(l => isActive(l) && l.expiresAt <= now)) {
+    report.inspected++;
     // Time alone is not proof a worker stopped. API failure/unknown status keeps capacity occupied.
-    if (await runCompleted(lease.runId)) {
+    try {
+      if (!(await runCompleted(lease.runId))) {
+        report.kept++;
+        continue;
+      }
       await beforeRelease(lease);
       await transitionLease(store, lease.id, lease.runId, lease.runAttempt, 'blocked');
+      report.recovered++;
+    } catch {
+      // One stale lease with unavailable evidence must not prevent unrelated
+      // expired leases from being reconciled. Keeping it active is the
+      // fail-closed outcome; a later pass can retry with fresh evidence.
+      report.errors++;
     }
   }
+  return report;
 }
 export function validatePlan(plan: Plan) {
   if (buildWaveContext(plan.wave.packet).hash !== plan.wave.hash) throw new Error('Wave context hash mismatch');
