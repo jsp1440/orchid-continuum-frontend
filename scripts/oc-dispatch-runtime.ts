@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertAdmission, assertReceipts, claimLease, isActive, lineageFor, makePlan, reconcileExpired, transitionLease, validateLedger, validatePlan,
+import { assertAdmission, assertReceipts, claimLease, isActive, lineageFor, makePlan, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
   type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
@@ -97,10 +97,11 @@ async function main() {
   if (command === 'reconcile') {
     try { await store.read(); } catch (error) { if (status(error, 404)) return; throw error; }
     {
-      await reconcileExpired(store, now(), async run => api<{ status: string }>(`actions/runs/${run}`).status === 'completed', async lease => {
+      await reconcileExpired(store, now(), async run => api<{ status: string }>(`actions/runs/${run}`).status === 'completed', async () => {}, async lease => {
         const record = api<Issue>(`issues/${lease.issue}`);
+        const transient = ['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-blocked', 'oc-owner-gate', 'oc-runtime-backoff', 'oc-done'];
         api(`issues/${lease.issue}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name)
-          .filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat('oc-blocked'))] });
+          .filter(l => !transient.includes(l)).concat(terminalIssueLabel(lease.state)))] });
       });
     }
     return;
