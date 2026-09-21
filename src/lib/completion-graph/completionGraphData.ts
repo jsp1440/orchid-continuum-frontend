@@ -678,10 +678,10 @@ const deploymentContractGate: CompletionNode = {
   evidence: [
     { kind: 'file', ref: 'scripts/verify-deployment-contract.mjs' },
     { kind: 'commit', ref: 'c8238e778cf5cd4b29710102de5f162feddbd500', note: 'Executed via `npm run validate:deployment` against this exact HEAD.' },
-    { kind: 'ci', ref: 'npm run validate:deployment', note: 'Local execution output: "Deployment contract valid. Verified 5 critical client routes and two SPA fallback mechanisms." Exit code 0. This is a static-file contract check (App.tsx routes, public/_redirects, vercel.json), not a live deployment probe.' },
+    { kind: 'ci', ref: 'npm run validate:deployment', note: 'Local execution output: "Deployment contract valid. Verified 5 critical client routes and two SPA fallback mechanisms." Exit code 0. This is a static-file contract check (App.tsx routes and public/_redirects, the sole Render routing mechanism), not a live deployment probe.' },
   ],
   nextAction: 'This checks local contract files only — still needs a real browser/live pass against the actual deployed origin to confirm the routes resolve correctly in production, not just that the config declares them.',
-  lastAccomplishment: 'Ran `npm run validate:deployment` against current HEAD this pass: passed cleanly, confirming /university, /university/lab, /conservatory/*, /mission-control, /calyx are all declared routes with a working SPA fallback in both public/_redirects and vercel.json.',
+  lastAccomplishment: 'Ran `npm run validate:deployment` against current HEAD this pass: passed cleanly, confirming /university, /university/lab, /conservatory/*, /mission-control, /calyx are all declared routes with a working SPA fallback in public/_redirects.',
   lastUpdated: CENSUS_DATE,
   children: [],
 };
@@ -704,7 +704,7 @@ const universityProductionLiveVerification: CompletionNode = {
   },
   evidence: [
     { kind: 'file', ref: 'scripts/verify-university-production.mjs', note: 'Real script: fetches a live frontend origin\'s /university/lab route, asserts an attested full Git-SHA meta tag, and cross-checks a live API origin.' },
-    { kind: 'ci', ref: 'npm run verify:university-production', note: 'Executed this pass with no arguments: "FAIL: frontend URL is required", exit code 1. The script takes the production frontend/API origins as positional CLI arguments; no canonical production URL is documented anywhere in this repository (README, docs/, vercel.json, package.json) for an autonomous run to supply.' },
+    { kind: 'ci', ref: 'npm run verify:university-production', note: 'Executed this pass with no arguments: "FAIL: frontend URL is required", exit code 1. The script takes the production frontend/API origins as positional CLI arguments; no canonical production URL is documented anywhere in this repository (README, docs/, package.json) for an autonomous run to supply.' },
   ],
   ownerActions: ['Provide the canonical deployed production frontend_origin and api_origin (or wire them as CI secrets/args in a scheduled workflow) so verify-university-production.mjs can run to completion and this gate can move off OWNER_ACTION.'],
   nextAction: 'Once the owner supplies (or CI is wired with) the real production origins, run `npm run verify:university-production -- <frontendUrl> <apiUrl>` and record the resulting evidence JSON.',
