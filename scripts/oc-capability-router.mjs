@@ -67,9 +67,37 @@ export const LOCAL_EXECUTORS = Object.freeze({
   'lint-execution': 'npm run lint',
   'typecheck-execution': 'npm run typecheck',
   'schema-validation': 'npm run validate:deployment',
-  'route-verification': 'npm run verify:routes',
   'build-verification': 'npm run build',
 });
+
+/**
+ * npm scripts this repository has but the lane cannot run, and why.
+ *
+ * `route-verification` was bound to `npm run verify:routes` and was not
+ * executable: that script drives Playwright, the worker installs with
+ * `npm ci --ignore-scripts`, and so no browser binary exists. Issue #171
+ * declared it, and the lane returned `outcome: failed` twice on
+ * `browserType.launch: Executable doesn't exist` before the capability was
+ * taken off the issue. The sweep itself is fine; binding it here was the
+ * mistake, because a registry entry is a claim that the worker can run it.
+ *
+ * This mirrors `DETERMINISTIC_EXECUTORS` in orchid-calyx-backend, which after
+ * #1509 "lists programs, not aspirations, and a test asserts every name in it
+ * is one the worker actually accepts". The same invariant is pinned here.
+ */
+export const NOT_LANE_EXECUTABLE = Object.freeze({
+  'route-verification': {
+    command: 'npm run verify:routes',
+    reason: 'drives a Playwright browser, which `npm ci --ignore-scripts` does not install',
+  },
+});
+
+/** npm scripts that need a browser binary, so can never be lane commands. */
+export const BROWSER_DRIVEN_SCRIPTS = Object.freeze([
+  'verify:routes',
+  'test:e2e',
+  'test:e2e:report',
+]);
 
 /** Deterministic capabilities, whether or not this repository can run them. */
 export const DETERMINISTIC_CAPABILITIES = Object.freeze(
@@ -175,6 +203,10 @@ export function routeIssue(issue) {
   for (const name of declared) {
     if (Object.hasOwn(LOCAL_EXECUTORS, name)) executable.push(name);
     else if (SHARED_CAPABILITIES[name] === false) notExecutableHere.push(name);
+    // Deterministic, named by this repository, and known to be unrunnable in the
+    // lane. It is not unknown, so raising would refuse it the way a provider
+    // requirement would; it is reported as what it is.
+    else if (Object.hasOwn(NOT_LANE_EXECUTABLE, name)) notExecutableHere.push(name);
     else if (SHARED_CAPABILITIES[name] === true) providerRequired.push(name);
     else
       throw new CapabilityUnknown(
@@ -183,7 +215,11 @@ export function routeIssue(issue) {
   }
 
   for (const name of optional) {
-    if (SHARED_CAPABILITIES[name] === false || Object.hasOwn(LOCAL_EXECUTORS, name)) {
+    if (
+      SHARED_CAPABILITIES[name] === false ||
+      Object.hasOwn(LOCAL_EXECUTORS, name) ||
+      Object.hasOwn(NOT_LANE_EXECUTABLE, name)
+    ) {
       throw new Error(
         `capability '${name}' is deterministic, so marking it optional is meaningless; it runs either way`,
       );
