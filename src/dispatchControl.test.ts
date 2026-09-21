@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimLease, makePlan, reconcileExpired, runningCount, transitionLease, validateLedger,
+import { assertAdmission, assertReceipts, claimLease, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease, validateLedger,
   type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -151,6 +151,21 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     });
     expect(report).toMatchObject({ recovered: 1, errors: 0 });
     expect(store.ledger.leases[0].state).toBe('done');
+  });
+  it('preserves the concurrent terminal outcome for the issue label side effect', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    const terminalStates: string[] = [];
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      await transitionLease(store, lease.id, '100', '1', 'done');
+    }, async finalLease => {
+      terminalStates.push(finalLease.state);
+    });
+    expect(report).toMatchObject({ recovered: 1, errors: 0 });
+    expect(terminalStates).toEqual(['done']);
+    expect(terminalIssueLabel(store.ledger.leases[0].state)).toBe('oc-done');
+    expect(terminalIssueLabel('blocked')).toBe('oc-blocked');
   });
   it('authorization=false makes zero reservations even with the full budget remaining', async () => {
     const { root, snapshot } = fixture(); const store = new MemoryStore(); const plan = makePlan(snapshot, [], now, root);
