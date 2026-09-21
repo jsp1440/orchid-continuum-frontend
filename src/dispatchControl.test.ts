@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimLease, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease, validateLedger,
-  type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, laneOf, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
+  providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
 const now = '2026-09-14T04:00:00.000Z';
@@ -27,6 +27,46 @@ function claim(store: LeaseStore, plan: ReturnType<typeof makePlan>, snapshot: S
   return claimLease(store, plan, snapshot, { issueNumber: number, runId, runAttempt: '1', providerAuthorized: true, requestedUsd: 0.5, now }, root);
 }
 describe('canonical graph → durable lease → independent dispatch → refill', () => {
+  it('accepts the historical zero-cost deterministic terminal lease, but rejects ambiguous zero-cost leases', () => {
+    const legacy: Ledger['leases'][number] = {
+      id: 'legacy-deterministic',
+      issue: 243,
+      nodeId: 'cap-conservatory-collection',
+      fingerprint: 'f'.repeat(64),
+      waveHash: 'w'.repeat(64),
+      runId: '35469789739',
+      runAttempt: '1',
+      expiresAt: '2026-09-19T22:45:21.726Z',
+      reservedUsd: 0,
+      state: 'provider-free-done',
+    };
+    const ledger: Ledger = {
+      schema: 1,
+      programStartedAt: '2026-09-19T21:15:22.086Z',
+      programSpent: 0,
+      dailySpent: {},
+      leases: [legacy],
+    };
+    expect(laneOf(legacy)).toBe('provider-free');
+    expect(() => validateLedger(ledger)).not.toThrow();
+    expect(() => validateLedger({ ...ledger, leases: [{ ...legacy, state: 'running' }] })).toThrow('Malformed lease');
+  });
+
+  it('turns a stale deterministic plan into a deduplicated refusal after settlement', async () => {
+    const { root, snapshot } = fixture(1); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const first = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 1, runId: '100', runAttempt: '1', now }, root);
+    expect(first.allowed).toBe(true);
+    await transitionLease(store, first.lease!.id, '100', '1', 'provider-free-done');
+
+    // The first run has settled the exact fingerprint and moved the issue out
+    // of the queue before this run reaches its live admission check.
+    snapshot.issues[0] = issue(1, ['oc-validating']);
+    const stale = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 1, runId: '101', runAttempt: '1', now }, root);
+    expect(stale).toMatchObject({ allowed: false, reason: 'unchanged_attempt', lease: null });
+    expect(store.ledger.leases).toHaveLength(1);
+  });
+
   it('selects eight independent queued/prepared issues, with deterministic graph priority', () => {
     const { root, snapshot } = fixture();
     root.children.forEach((node, i) => { node.priority = i; });
@@ -167,6 +207,35 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(terminalIssueLabel(store.ledger.leases[0].state)).toBe('oc-done');
     expect(terminalIssueLabel('blocked')).toBe('oc-blocked');
   });
+  it.each([
+    ['provider-free-done', 'oc-validating'],
+    ['provider-free-failed', 'oc-repair'],
+    ['not-executed', 'oc-queued'],
+  ] as const)('preserves concurrent deterministic %s without promoting acceptance', async (state, label) => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const result = await claimDeterministicLease(store, plan, snapshot,
+      { issueNumber: plan.issues[0], runId: '100', runAttempt: '1', now }, root);
+    const labels: string[] = [];
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true,
+      async () => { await transitionLease(store, result.lease!.id, '100', '1', state); },
+      async finalLease => { labels.push(terminalIssueLabel(finalLease.state)); });
+    expect(report).toEqual({ inspected: 1, recovered: 1, kept: 0, errors: 0 });
+    expect(store.ledger.leases[0].state).toBe(state);
+    expect(labels).toEqual([label]);
+    expect(runningCount(snapshot, store.ledger.leases)).toBe(0);
+    expect(store.ledger.programSpent).toBe(0);
+  });
+  it('keeps executable transitions strict while reconciliation release is idempotent', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    await transitionLease(store, lease.id, '100', '1', 'done');
+    await expect(transitionLease(store, lease.id, 'other-run', '1', 'blocked')).rejects.toThrow('fencing');
+    await expect(transitionLease(store, lease.id, '100', '1', 'running', { requireActive: true })).rejects.toThrow('Terminal');
+    await expect(transitionLease(store, 'removed', '100', '1', 'running', { requireActive: true })).rejects.toThrow('fencing');
+    expect(store.ledger.leases[0].state).toBe('done');
+  });
   it('authorization=false makes zero reservations even with the full budget remaining', async () => {
     const { root, snapshot } = fixture(); const store = new MemoryStore(); const plan = makePlan(snapshot, [], now, root);
     const result = await claimLease(store, plan, snapshot, { issueNumber: plan.issues[0], runId: '100', runAttempt: '1', providerAuthorized: false, requestedUsd: 0.5, now }, root);
@@ -184,6 +253,41 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(makePlan(structuredClone(snapshot), [], now, root).wave.hash).toBe(plan.wave.hash);
     snapshot.issues.find(i => i.number === number)!.labels.push({ name: 'oc-blocked' });
     expect(() => assertAdmission(plan, snapshot, number, now, root)).toThrow('drift');
+  });
+  it('requeues a deterministic repair only after a new implementation revision', () => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair']);
+    const oldSha = snapshot.implementationSha;
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: oldSha,
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+    snapshot.implementationSha = 'c'.repeat(40);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([1]);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [{ ...failed, implementationSha: snapshot.implementationSha }])).toEqual([]);
+  });
+  it.each(['oc-owner-gate', 'oc-publication-hold', 'oc-running', 'oc-blocked', 'oc-runtime-backoff',
+    'oc-validating', 'oc-done', 'oc-portfolio-steward'])('keeps a repaired issue parked behind %s', (hold) => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair', hold]);
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: 'c'.repeat(40),
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+  });
+  it('preserves body holds, unknown revision evidence, and active leases when repairing', () => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair']);
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: 'c'.repeat(40),
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    snapshot.issues[0].body = 'OC-AUTO-HOLD: true';
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+    snapshot.issues[0].body = '';
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, implementationSha: undefined }])).toEqual([]);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, id: 'active', state: 'reserved' }])).toEqual([]);
+    snapshot.prs.push({ number: 88, state: 'closed', body: 'OC-LINEAGE-ISSUE: #1', head: { ref: 'oc-auto/1-work', sha: 'd'.repeat(40) } });
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
   });
   it('detects hash tampering, unadmitted issues, missing/duplicate/mismatched actual receipts', () => {
     const { root, snapshot } = fixture(); const plan = makePlan(snapshot, [], now, root);

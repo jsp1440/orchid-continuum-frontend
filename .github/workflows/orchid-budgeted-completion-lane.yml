@@ -33,7 +33,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Routing decides before the provider preflight runs, so only the lane that
+  # did not execute can ever write a `provider_not_authorized` receipt.
+  classify:
+    runs-on: ubuntu-latest
+    outputs:
+      provider_free: ${{ steps.route.outputs.provider_free }}
+      commands: ${{ steps.route.outputs.commands }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Route this issue by declared capability
+        id: route
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+        run: node scripts/oc-provider-free-route.mjs
+
   budget-preflight:
+    needs: classify
+    if: needs.classify.outputs.provider_free != 'true'
     runs-on: ubuntu-latest
     outputs:
       allowed: ${{ steps.budget.outputs.allowed }}
@@ -76,31 +98,51 @@ jobs:
           if-no-files-found: error
 
   # Deterministic work does not need, and must not wait for, provider
-  # authorization. Before this job existed the lane had only a provider worker,
-  # so an issue needing nothing but `npm run test` was refused with the same
-  # `provider_not_authorized` receipt as one needing a model, and dropped — every
-  # five minutes, for 24 queued issues, while the run reported success.
-  classify:
+  # authorization. It still takes a lease, so unchanged work is not run again on
+  # the next pulse: the fingerprint check lives behind the provider gate in
+  # `claimLease`, which is why #171 executed three times in four minutes.
+  deterministic-preflight:
+    needs: classify
+    if: needs.classify.outputs.provider_free == 'true'
     runs-on: ubuntu-latest
+    # Declared, not inherited. Without this the job picks up the workflow-level
+    # `actions: write` and `id-token: write` it has no use for. It reads the plan
+    # and writes the ledger branch and a refusal label, and nothing else.
+    permissions:
+      contents: write
+      issues: write
     outputs:
-      provider_free: ${{ steps.route.outputs.provider_free }}
-      commands: ${{ steps.route.outputs.commands }}
+      allowed: ${{ steps.lease.outputs.allowed }}
+      lease_id: ${{ steps.lease.outputs.lease_id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
-      - name: Route this issue by declared capability
-        id: route
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
+      - name: Reserve a zero-cost lane and refuse unchanged work
+        id: lease
         env:
           GH_TOKEN: ${{ github.token }}
           ISSUE_NUMBER: ${{ inputs.issue_number }}
-          REPO: ${{ github.repository }}
-        run: node scripts/oc-provider-free-route.mjs
+          OC_WAVE_HASH: ${{ inputs.wave_hash }}
+        run: npx --no-install tsx scripts/oc-dispatch-runtime.ts admit-deterministic
+      - name: Preserve the not-executed receipt
+        if: steps.lease.outputs.allowed == 'false'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-receipts/*.json
+          include-hidden-files: true
+          if-no-files-found: error
 
   provider-free-worker:
-    needs: classify
-    if: needs.classify.outputs.provider_free == 'true'
+    needs: [classify, deterministic-preflight]
+    if: needs.deterministic-preflight.outputs.allowed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -121,6 +163,55 @@ jobs:
       # The commands are chosen from a fixed registry, never from issue text.
       - name: Execute declared deterministic capabilities
         run: node scripts/oc-provider-free-execute.mjs
+      - name: Preserve execution evidence for settlement
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-evidence-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-evidence/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
+
+  # The one authoritative receipt for a deterministic lane, written by the job
+  # that can tell whether execution actually happened.
+  settle-deterministic:
+    needs: [deterministic-preflight, provider-free-worker]
+    if: always() && needs.deterministic-preflight.outputs.lease_id != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: .oc-wave
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        continue-on-error: true
+        with:
+          name: oc-evidence-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-evidence
+      - name: Settle the deterministic lane against its evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          OC_LEASE_ID: ${{ needs.deterministic-preflight.outputs.lease_id }}
+          OC_WAVE_HASH: ${{ inputs.wave_hash }}
+        run: npx --no-install tsx scripts/oc-dispatch-runtime.ts settle-deterministic
+      # `always()`, so a settlement that throws still leaves the audit a receipt
+      # rather than an unexplained gap and a lane held until the lease expires.
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
+          path: .oc-receipts/*.json
+          include-hidden-files: true
+          if-no-files-found: ignore
 
   provider-worker:
     needs: budget-preflight
