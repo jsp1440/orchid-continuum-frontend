@@ -1,3 +1,15 @@
-/admin /index.html 200
-/control-center /index.html 200
-/* /index.html 200
+# Render static-site routing for Orchid Continuum.
+#
+# Render is the sole production deployment target. Order matters: every
+# specific rule must precede the SPA catch-all, or the catch-all swallows it.
+
+# Served as a static document, not by the SPA router.
+/research-station/researchers/jeffery-scott-parham  /researcher-jeffery-scott-parham.html  200
+
+/admin           /index.html  200
+/control-center  /index.html  200
+
+# SPA fallback. This is why an API call must never use a relative path: any
+# unmatched path returns index.html with status 200, so a relative request
+# resolves to the app shell and looks like a successful response.
+/*  /index.html  200

@@ -40,6 +40,16 @@ export interface LeaseStore {
   compareAndSwap(version: string, ledger: Ledger): Promise<boolean>;
 }
 export const isActive = (lease: Lease) => lease.state === 'reserved' || lease.state === 'running';
+export function terminalIssueLabel(state: Lease['state']) {
+  if (state === 'done') return 'oc-done';
+  // Passing commands prove execution, not product acceptance.
+  if (state === 'provider-free-done' || state === 'validating') return 'oc-validating';
+  if (state === 'provider-free-failed') return 'oc-repair';
+  if (state === 'not-executed') return 'oc-queued';
+  if (state === 'owner-gate') return 'oc-owner-gate';
+  if (state === 'runtime-backoff') return 'oc-runtime-backoff';
+  return 'oc-blocked';
+}
 const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const labelsOf = (issue: Issue) => issue.labels.map(label => label.name);
 const steward = (issue: Issue) => labelsOf(issue).includes('oc-portfolio-steward');
@@ -363,14 +373,28 @@ export function providerFreeRepairsReadyForRequeue(snapshot: Snapshot, leases: L
   return parked.map(issue => issue.number).sort((a, b) => a - b);
 }
 
-export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state']) {
+export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state'], options: { requireActive?: boolean } = {}) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const { version, ledger } = await store.read();
     validateLedger(ledger);
     const lease = ledger.leases.find(l => l.id === id);
-    if (!lease || lease.runId !== runId || lease.runAttempt !== runAttempt) throw new Error('Lease fencing token mismatch');
+    // Reconciliation races with settlement and with a previous retry. Once the
+    // lease is gone there is nothing left to release; treating that as a safe
+    // no-op is what makes release idempotent without weakening fencing for an
+    // existing lease.
+    if (!lease) {
+      if (options.requireActive) throw new Error('Lease fencing token mismatch');
+      return null;
+    }
+    if (lease.runId !== runId || lease.runAttempt !== runAttempt) throw new Error('Lease fencing token mismatch');
+    // Reconciliation may observe a release twice. An executable worker must
+    // still fail closed if its lease disappeared or settled after preflight.
+    if (options.requireActive && !isActive(lease)) throw new Error('Terminal lease cannot be revived');
     if (lease.state === state) return lease;
-    if (!isActive(lease) || (state === 'reserved')) throw new Error('Terminal lease cannot be revived');
+    // A concurrent settlement may have released this lease after the caller's
+    // snapshot. Preserve its outcome; missing/already-released leases are safe
+    // no-ops, while an existing lease still requires the exact run fence above.
+    if (!isActive(lease) || state === 'reserved') return lease;
     if (laneOf(lease) === 'provider-free' && !['running', 'provider-free-done', 'provider-free-failed', 'not-executed'].includes(state)) {
       throw new Error('Deterministic lease cannot settle into a provider outcome');
     }
@@ -379,30 +403,40 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
   }
   throw new Error('Ledger contention; settlement refused');
 }
-export async function reconcileExpired(store: LeaseStore, now: string, runCompleted: (runId: string) => Promise<boolean>, beforeRelease: (lease: Lease) => Promise<void> = async () => {}) {
+export async function reconcileExpired(
+  store: LeaseStore,
+  now: string,
+  runCompleted: (runId: string) => Promise<boolean>,
+  beforeRelease: (lease: Lease) => Promise<void> = async () => {},
+  afterRelease: (lease: Lease) => Promise<void> = async () => {},
+) {
   const { ledger } = await store.read();
   validateLedger(ledger);
+  const report = { inspected: 0, recovered: 0, kept: 0, errors: 0 };
   for (const lease of ledger.leases.filter(l => isActive(l) && l.expiresAt <= now)) {
+    report.inspected++;
     // Time alone is not proof a worker stopped. API failure/unknown status keeps capacity occupied.
-    if (await runCompleted(lease.runId)) {
+    try {
+      if (!(await runCompleted(lease.runId))) {
+        report.kept++;
+        continue;
+      }
       await beforeRelease(lease);
-      // An expired deterministic lease is the ONE case where we know settlement
-      // did not run: `settle-deterministic` is the only writer of a provider-free
-      // outcome, and it always transitions the lease. So an expiry means no
-      // evidence was ever judged -- which is the definition of `not-executed`,
-      // not of a failure.
-      //
-      // Recording it as `provider-free-failed` burned the fingerprint (that
-      // state is not excluded from the dedupe) while `beforeRelease` stripped
-      // `oc-queued` and applied `oc-blocked`. The issue became unselectable AND
-      // permanently unclaimable: even after an owner restored the labels by
-      // hand, the claim still returned `unchanged_attempt`. That is the defect
-      // this lane's `not-executed` state was added to remove, relocated to the
-      // one path that can still produce it.
-      await transitionLease(store, lease.id, lease.runId, lease.runAttempt,
+      // Expiry without settlement is not execution evidence. Deterministic
+      // work may retry within its existing bound; unseen paid work stays blocked.
+      const finalLease = await transitionLease(store, lease.id, lease.runId, lease.runAttempt,
         laneOf(lease) === 'provider-free' ? 'not-executed' : 'blocked');
+      // Use the outcome that actually won the CAS, including a concurrent
+      // settlement, before synchronizing issue labels outside the ledger.
+      if (finalLease) await afterRelease(finalLease);
+      report.recovered++;
+    } catch {
+      // Unavailable evidence for one run must not stop unaffected lanes.
+      // Its reservation remains occupied until termination can be established.
+      report.errors++;
     }
   }
+  return report;
 }
 export function validatePlan(plan: Plan) {
   if (buildWaveContext(plan.wave.packet).hash !== plan.wave.hash) throw new Error('Wave context hash mismatch');

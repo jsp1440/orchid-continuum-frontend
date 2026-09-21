@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, laneOf, makePlan, reconcileExpired, runningCount, transitionLease,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, laneOf, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
   providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -143,9 +143,98 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     await claim(store, plan, snapshot, root, plan.issues[0]);
     await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => false);
     expect(store.ledger.leases[0].state).toBe('reserved');
-    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => { throw new Error('API unavailable'); })).rejects.toThrow();
+    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => { throw new Error('API unavailable'); }))
+      .resolves.toMatchObject({ inspected: 1, recovered: 0, errors: 1 });
     await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true);
     expect(store.ledger.leases[0].state).toBe('blocked');
+  });
+  it('accepts legacy terminal provider-free records without treating them as active leases', async () => {
+    const { root, snapshot } = fixture(8); const store = new MemoryStore();
+    store.ledger.leases.push({
+      id: 'legacy', issue: 1, nodeId: 'leaf-1', fingerprint: 'legacy-fingerprint',
+      waveHash: 'legacy-wave', runId: '100', runAttempt: '1', expiresAt: now,
+      reservedUsd: 0, state: 'provider-free-done',
+    });
+    expect(() => validateLedger(store.ledger)).not.toThrow();
+    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true)).resolves.toMatchObject({ inspected: 0 });
+    expect(makePlan(snapshot, store.ledger.leases, now, root).issues).toEqual([1,2,3,4,5,6,7,8]);
+  });
+  it('treats a lease removed by a concurrent release as an idempotent no-op', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      store.ledger.leases = [];
+    })).resolves.toMatchObject({ recovered: 1, errors: 0 });
+    expect(store.ledger.leases).toEqual([]);
+    expect(await transitionLease(store, lease.id, '100', '1', 'blocked')).toBeNull();
+  });
+  it('continues reconciling other leases when one stale run has unavailable evidence', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    await claim(store, plan, snapshot, root, plan.issues[0]);
+    await claim(store, plan, snapshot, root, plan.issues[1], '101');
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async runId => {
+      if (runId === '100') throw new Error('hosted evidence unavailable');
+      return true;
+    });
+    expect(report).toMatchObject({ inspected: 2, recovered: 1, errors: 1 });
+    expect(store.ledger.leases.find(lease => lease.runId === '100')?.state).toBe('reserved');
+    expect(store.ledger.leases.find(lease => lease.runId === '101')?.state).toBe('blocked');
+  });
+  it('does not revive a lease already released during reconciliation', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      await transitionLease(store, lease.id, '100', '1', 'done');
+    });
+    expect(report).toMatchObject({ recovered: 1, errors: 0 });
+    expect(store.ledger.leases[0].state).toBe('done');
+  });
+  it('preserves the concurrent terminal outcome for the issue label side effect', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    const terminalStates: string[] = [];
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      await transitionLease(store, lease.id, '100', '1', 'done');
+    }, async finalLease => {
+      terminalStates.push(finalLease.state);
+    });
+    expect(report).toMatchObject({ recovered: 1, errors: 0 });
+    expect(terminalStates).toEqual(['done']);
+    expect(terminalIssueLabel(store.ledger.leases[0].state)).toBe('oc-done');
+    expect(terminalIssueLabel('blocked')).toBe('oc-blocked');
+  });
+  it.each([
+    ['provider-free-done', 'oc-validating'],
+    ['provider-free-failed', 'oc-repair'],
+    ['not-executed', 'oc-queued'],
+  ] as const)('preserves concurrent deterministic %s without promoting acceptance', async (state, label) => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const result = await claimDeterministicLease(store, plan, snapshot,
+      { issueNumber: plan.issues[0], runId: '100', runAttempt: '1', now }, root);
+    const labels: string[] = [];
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true,
+      async () => { await transitionLease(store, result.lease!.id, '100', '1', state); },
+      async finalLease => { labels.push(terminalIssueLabel(finalLease.state)); });
+    expect(report).toEqual({ inspected: 1, recovered: 1, kept: 0, errors: 0 });
+    expect(store.ledger.leases[0].state).toBe(state);
+    expect(labels).toEqual([label]);
+    expect(runningCount(snapshot, store.ledger.leases)).toBe(0);
+    expect(store.ledger.programSpent).toBe(0);
+  });
+  it('keeps executable transitions strict while reconciliation release is idempotent', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    await transitionLease(store, lease.id, '100', '1', 'done');
+    await expect(transitionLease(store, lease.id, 'other-run', '1', 'blocked')).rejects.toThrow('fencing');
+    await expect(transitionLease(store, lease.id, '100', '1', 'running', { requireActive: true })).rejects.toThrow('Terminal');
+    await expect(transitionLease(store, 'removed', '100', '1', 'running', { requireActive: true })).rejects.toThrow('fencing');
+    expect(store.ledger.leases[0].state).toBe('done');
   });
   it('authorization=false makes zero reservations even with the full budget remaining', async () => {
     const { root, snapshot } = fixture(); const store = new MemoryStore(); const plan = makePlan(snapshot, [], now, root);

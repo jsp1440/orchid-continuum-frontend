@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, transitionLease, validateLedger, validatePlan,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
   providerFreeRepairsReadyForRequeue, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
@@ -279,17 +279,15 @@ async function main() {
   if (command === 'reconcile') {
     try { await store.read(); } catch (error) { if (status(error, 404)) return; throw error; }
     {
-      await reconcileExpired(store, now(), async run => api<{ status: string }>(`actions/runs/${run}`).status === 'completed', async lease => {
+      await reconcileExpired(store, now(), async run => api<{ status: string }>(`actions/runs/${run}`).status === 'completed', async () => {}, async lease => {
         const record = api<Issue>(`issues/${lease.issue}`);
-        // A provider lease that expired was doing something we cannot see, so it
-        // blocks. A deterministic one that expired did nothing we can see: its
-        // settlement never ran. Blocking it strips `oc-queued`, which makes it
-        // unselectable forever, on the strength of an attempt that produced no
-        // evidence either way. It goes back to the queue instead, and the
-        // `not-executed` lease keeps it genuinely admissible.
-        const free = laneOf(lease) === 'provider-free';
-        api(`issues/${lease.issue}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name)
-          .filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat(free ? 'oc-queued' : 'oc-blocked'))] });
+        // Labels follow the final persisted outcome, never the expired snapshot.
+        // Preserve independently applied owner/publication holds during recovery.
+        const labels = record.labels.map(l => l.name);
+        const held = labels.includes('oc-owner-gate') || /^OC-AUTO-HOLD:\s*true\s*$/m.test(record.body || '');
+        const transient = ['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-blocked', 'oc-runtime-backoff', 'oc-done', 'oc-repair'];
+        api(`issues/${lease.issue}`, 'PATCH', { labels: [...new Set(labels
+          .filter(l => !transient.includes(l)).concat(held ? 'oc-owner-gate' : terminalIssueLabel(lease.state)))] });
       });
     }
     const { ledger } = await store.read();
@@ -420,6 +418,17 @@ async function main() {
       evidence: evidence ?? (rejected || 'absent'),
       ...(contradicted ? { contradicted } : {}),
     });
+    // Reconciliation releases are deliberately idempotent. Worker settlement
+    // still requires an active fenced lease at the CAS, before changing labels.
+    try {
+      await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
+        outcome === 'provider_free_done' ? 'provider-free-done'
+          : outcome === 'provider_free_failed' ? 'provider-free-failed' : 'not-executed', { requireActive: true });
+    } catch (error) {
+      receipt(number, plan.wave.hash, 'dispatch_refused', { lane: 'provider-free', evidence,
+        reason: error instanceof Error ? error.message : 'Lease transition failed' });
+      throw error;
+    }
     const record = api<Issue>(`issues/${number}`);
     const labels = record.labels.map(l => l.name);
     // A successful deterministic run is evidence, not acceptance: it moves to
@@ -437,9 +446,6 @@ async function main() {
       : outcome === 'provider_free_failed' ? ['oc-repair'] : ['oc-queued'];
     api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
       .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });
-    await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
-      outcome === 'provider_free_done' ? 'provider-free-done'
-        : outcome === 'provider_free_failed' ? 'provider-free-failed' : 'not-executed');
     return;
   }
   const issue = Number(process.env.ISSUE_NUMBER);
@@ -477,7 +483,7 @@ async function main() {
       if (!budget.allowed) throw new Error(`Budget revoked: ${budget.reason}`);
       if (command === 'start') {
         if (process.env.GITHUB_JOB !== 'execute') throw new Error('Only the executable lane can start a lease');
-        await transitionLease(store, lease.id, runId, runAttempt, 'running');
+        await transitionLease(store, lease.id, runId, runAttempt, 'running', { requireActive: true });
         api(`issues/${issue}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name).filter(l => l !== 'oc-queued' && l !== 'oc-prepared').concat('oc-running'))] });
         output('execute', 'true');
       }
@@ -509,7 +515,7 @@ async function main() {
     // Labels first: a crash retains the lease conservatively. CAS release cannot
     // erase a successor's lease, and all writes retain unrelated owner holds.
     api(`issues/${issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat(`oc-${outcome}`))] });
-    await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome);
+    await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome, { requireActive: true });
     receipt(issue, plan.wave.hash, outcome, { providerCalls: null, providerCostUsd: null, accounting: 'reservation retained; no unverified billing claims' });
     // Immediate per-lane refill. Does not wait for sibling lanes; planner reads durable capacity.
     api('actions/workflows/orchid-continuous-completion.yml/dispatches', 'POST', { ref: process.env.GITHUB_REF_NAME });

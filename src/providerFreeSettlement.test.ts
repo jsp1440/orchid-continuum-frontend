@@ -46,7 +46,14 @@ if (path.includes('contents/.oc/dispatch-ledger.json')) {
     fs.writeFileSync(file, Buffer.from(body.content, 'base64').toString());
     console.log('{}'); process.exit(0);
   }
-  console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(fs.readFileSync(file)).toString('base64') }));
+  const content = fs.readFileSync(file);
+  console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(content).toString('base64') }));
+  // A release can win after the initial ownership check but before settlement's CAS.
+  if (process.env.OC_RELEASE_AFTER_READ) {
+    const ledger = JSON.parse(content);
+    ledger.leases = [];
+    fs.writeFileSync(file, JSON.stringify(ledger));
+  }
   process.exit(0);
 }
 `;
@@ -389,6 +396,15 @@ console.log('{}');
     expect(h.settle({ OC_LEASE_ID: '' }).status).toBe(1);
     expect(h.patched()).toEqual([]);
     expect(h.receipt()).toMatchObject({ outcome: 'dispatch_refused' });
+  });
+
+  it('refuses a release racing after preflight before touching issue labels', () => {
+    const h = harness();
+    h.writeEvidence({ outcome: 'done' });
+    const run = h.settle({ OC_RELEASE_AFTER_READ: 'true' });
+    expect(run.status).toBe(1);
+    expect(h.patched()).toEqual([]);
+    expect(h.receipt()).toMatchObject({ outcome: 'dispatch_refused', evidence: { outcome: 'done' } });
   });
 
   it.each(['done', 'failed'])('does not call an empty command list execution: %s', (outcome) => {
@@ -884,7 +900,7 @@ describe('reconciling an expired lease does not bury the issue', () => {
    * became unselectable -- on the strength of an attempt that produced no
    * evidence either way.
    */
-  const harness = (lease: Partial<Lease>) => {
+  const harness = (lease: Partial<Lease>, options: { raceState?: Lease['state']; labels?: string[]; body?: string } = {}) => {
     const dir = mkdtempSync(join(tmpdir(), 'oc-reconcile-')); paths.push(dir);
     const bin = join(dir, 'bin'); mkdirSync(bin);
     const ledgerFile = join(dir, 'ledger.json');
@@ -908,18 +924,27 @@ if (path.includes('contents/.oc/dispatch-ledger.json')) {
   console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(fs.readFileSync(process.env.OC_LEDGER_FILE)).toString('base64') }));
   process.exit(0);
 }
-if (/actions\\/runs\\/\\d+$/.test(path)) { console.log(JSON.stringify({ status: 'completed' })); process.exit(0); }
+if (/actions\\/runs\\/\\d+$/.test(path)) {
+  if (process.env.OC_RACE_STATE) {
+    const ledger = JSON.parse(fs.readFileSync(process.env.OC_LEDGER_FILE, 'utf8'));
+    ledger.leases[0].state = process.env.OC_RACE_STATE;
+    fs.writeFileSync(process.env.OC_LEDGER_FILE, JSON.stringify(ledger));
+  }
+  console.log(JSON.stringify({ status: 'completed' })); process.exit(0);
+}
 if (method === 'PATCH') {
   fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + fs.readFileSync(0, 'utf8') + '\\n');
   console.log('{}'); process.exit(0);
 }
-if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-running' }, { name: 'oc-node:${LEAF}' }] })); process.exit(0); }
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 't', body: process.env.OC_ISSUE_BODY || null, labels: JSON.parse(process.env.OC_ISSUE_LABELS) })); process.exit(0); }
 console.log('{}');
 `);
     chmodSync(gh, 0o755);
     const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`,
       GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend', GITHUB_OUTPUT: join(dir, 'outputs'),
-      OC_TEST_LOG: join(dir, 'requests'), OC_LEDGER_FILE: ledgerFile };
+      OC_TEST_LOG: join(dir, 'requests'), OC_LEDGER_FILE: ledgerFile,
+      OC_RACE_STATE: options.raceState || '', OC_ISSUE_BODY: options.body || '',
+      OC_ISSUE_LABELS: JSON.stringify((options.labels || ['oc-running', `oc-node:${LEAF}`]).map(name => ({ name }))) };
     writeFileSync(env.OC_TEST_LOG, '');
     const reconcile = () => spawnSync(process.execPath,
       ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), 'reconcile'], { env, encoding: 'utf8' });
@@ -948,6 +973,27 @@ console.log('{}');
     expect(h.labels().at(-1)).toContain('oc-blocked');
     expect(h.labels().at(-1)).not.toContain('oc-queued');
     expect(h.stored().leases[0].state).toBe('blocked');
+  });
+  it('uses a concurrent deterministic settlement for labels, without claiming product completion', () => {
+    const h = harness({}, { raceState: 'provider-free-done' });
+    const run = h.reconcile();
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.labels().at(-1)).toContain('oc-validating');
+    expect(h.labels().at(-1)).not.toContain('oc-queued');
+    expect(h.labels().at(-1)).not.toContain('oc-done');
+    expect(h.stored().leases[0].state).toBe('provider-free-done');
+  });
+  it.each([
+    { labels: ['oc-running', 'oc-owner-gate'] },
+    { body: 'OC-AUTO-HOLD: true' },
+  ])('retains an independently applied owner/publication hold during expiry recovery: %j', options => {
+    const h = harness({}, options);
+    const run = h.reconcile();
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.labels().at(-1)).toContain('oc-owner-gate');
+    expect(h.labels().at(-1)).not.toContain('oc-running');
+    expect(h.labels().at(-1)).not.toContain('oc-queued');
+    expect(h.stored().leases[0].state).toBe('not-executed');
   });
 });
 

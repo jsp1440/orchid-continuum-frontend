@@ -62,7 +62,7 @@ describe('continuous completion convergence guards', () => {
   it('verifies admission at the executable worker before writing any running label', () => {
     const runtime = readFileSync('scripts/oc-dispatch-runtime.ts', 'utf8');
     const admission = runtime.indexOf('assertAdmission(plan, current, issue, now())');
-    const start = runtime.indexOf("transitionLease(store, lease.id, runId, runAttempt, 'running')");
+    const start = runtime.indexOf("transitionLease(store, lease.id, runId, runAttempt, 'running', { requireActive: true })");
     const label = runtime.indexOf(".concat('oc-running')");
     expect(admission).toBeGreaterThan(-1);
     expect(start).toBeGreaterThan(admission);
