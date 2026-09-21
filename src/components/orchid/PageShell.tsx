@@ -126,9 +126,8 @@ const PageShell: React.FC<PageShellProps> = ({
                 This module is turned off for this deployment.
               </h2>
               <p className="text-sm text-white/60">
-                Enable it by setting the corresponding{' '}
-                <code className="text-emerald-200">VITE_ENABLE_*</code>{' '}
-                feature flag and redeploying.
+                It will appear here once it is switched on for this
+                deployment.
               </p>
             </div>
           </section>
