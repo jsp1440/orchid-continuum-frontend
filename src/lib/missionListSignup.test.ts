@@ -44,9 +44,9 @@ describe('submitMissionListSignup', () => {
   });
 
   it('does NOT report delivered for a 200 that is the SPA shell', async () => {
-    // The original bug: vercel.json and public/_redirects rewrite every
-    // unmatched path to index.html, so the old relative POST got 200 + HTML
-    // and the form told the visitor they were subscribed.
+    // The original bug: Render's public/_redirects rewrites every unmatched
+    // path to index.html, so the old relative POST got 200 + HTML and the
+    // form told the visitor they were subscribed.
     vi.stubGlobal(
       'fetch',
       vi.fn(async () =>

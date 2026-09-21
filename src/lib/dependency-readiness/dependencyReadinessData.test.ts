@@ -72,8 +72,8 @@ describe('requirement derivation is code-grounded, not symmetric', () => {
     }
   });
 
-  it('does not require Render/Vercel deploy credentials, since only public probes exist', () => {
-    const record = findRecord('render-vercel-deploy-credentials');
+  it('does not require Render deploy credentials, since only public probes exist', () => {
+    const record = findRecord('render-deploy-credentials');
     for (const requirement of record.requirements) {
       expect(requirement.required).toBe(false);
     }

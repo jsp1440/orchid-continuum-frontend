@@ -1,10 +1,11 @@
 /**
  * Mission-list signup delivery.
  *
- * The signup forms used to POST to a relative `/api/crm/.../subscribe`. Both
- * `vercel.json` and `public/_redirects` rewrite every unmatched path to
- * `/index.html`, and there is no `api/` directory in this repo, so that request
- * resolved with **200 and a page of HTML**. `fetch` only rejects on a network
+ * The signup forms used to POST to a relative `/api/crm/.../subscribe`. Orchid
+ * Continuum is served from Render, whose `public/_redirects` rewrites every
+ * unmatched path to `/index.html` with status 200, and there is no `api/`
+ * directory in this repo, so that request resolved with **200 and a page of
+ * HTML**. `fetch` only rejects on a network
  * failure, so the `catch` never ran, and `/get-involved` showed the visitor
  * "You're on the list" while their address went nowhere.
  *
