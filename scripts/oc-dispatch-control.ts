@@ -8,7 +8,7 @@ import { decideBudget } from './oc-budget-governor.mjs';
 
 export { MAX_ACTIVE_LANES };
 export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }> };
-export type Pull = { number: number; state: string; merged?: boolean; body: string | null; head: { ref: string; sha: string } };
+export type Pull = { number: number; state: string; merged?: boolean; baseRef?: string; body: string | null; head: { ref: string; sha: string } };
 export type Snapshot = { issues: Issue[]; prs: Pull[]; integrationSha: string; implementationSha: string; material: Record<string, string> };
 export type LeaseLane = 'provider' | 'provider-free';
 export type Lease = {
@@ -75,7 +75,11 @@ export function declaredNodesByIssue(issues: Issue[]): Record<number, string[]> 
 export function lineageFor(issue: number, prs: Pull[]) {
   return prs.filter(pr => new RegExp(`^OC-(?:AUTO|LINEAGE)-ISSUE:\\s*#${issue}\\s*$`, 'mi').test(pr.body || '') ||
     new RegExp(`^oc-auto(?:-|/)${issue}(?:-|$)`, 'i').test(pr.head.ref) ||
-    new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+(?:jsp1440/orchid-continuum-frontend)?#${issue}\\b`, 'i').test(pr.body || ''));
+    new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+(?:jsp1440/orchid-continuum-frontend)?#${issue}\\b`, 'i').test(pr.body || '') ||
+    // Reviewed integration PRs such as #677 explicitly say "Implements #676".
+    // Ignoring that declaration makes a merged implementation look like new
+    // work. Only affirmative declarations count, not incidental prose/titles.
+    new RegExp(`^implement(?:s|ed)?\\s+(?:issue\\s+)?(?:jsp1440/orchid-continuum-frontend)?#${issue}\\b`, 'mi').test(pr.body || ''));
 }
 function eligibleIssues(snapshot: Snapshot) {
   return snapshot.issues.map(issue => {
@@ -180,7 +184,8 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
         // The operator-relevant fact, and the one the old wording hid: there is
         // no open PR to go and close, the work is already in, and the lane will
         // not pick this issue up again by itself.
-        return `its PR lineage ${named}; the work is already merged, so nothing here will re-admit it`;
+        const target = lineage[0].baseRef ? ` into \`${lineage[0].baseRef}\`` : ' into its target branch';
+        return `its PR lineage ${named}; the PR is already merged${target}; reconcile current main and issue acceptance before settling it`;
       }
       return lineage.length === 1
         ? `its PR lineage ${named}; only a single OPEN PR on an \`oc-repair\` issue is repairable`
