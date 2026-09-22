@@ -68,6 +68,7 @@ export const LOCAL_EXECUTORS = Object.freeze({
   'typecheck-execution': 'npm run typecheck',
   'schema-validation': 'npm run validate:deployment',
   'route-verification': 'npm run verify:routes',
+  'render-route-verification': 'npm run verify:render-routes',
   'build-verification': 'npm run build',
 });
 
