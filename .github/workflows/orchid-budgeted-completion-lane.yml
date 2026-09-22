@@ -166,6 +166,19 @@ jobs:
       - name: Install Chromium for browser route verification
         if: contains(needs.classify.outputs.commands, 'npm run verify:routes')
         run: npx --no-install playwright install --with-deps chromium
+      - name: Build and start preview for browser route verification
+        if: contains(needs.classify.outputs.commands, 'npm run verify:routes')
+        run: |
+          npm run build
+          nohup npx --no-install vite preview --host 127.0.0.1 --port 4173 >/tmp/oc-vite-preview.log 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 2 http://127.0.0.1:4173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/oc-vite-preview.log
+          exit 1
       # No provider secret is present in this job, and none is forwarded to it.
       # The commands are chosen from a fixed registry, never from issue text.
       - name: Execute declared deterministic capabilities
