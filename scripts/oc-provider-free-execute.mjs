@@ -34,7 +34,8 @@ for (const command of commands) {
   const run = spawnSync(argv[0], argv.slice(1), { encoding: 'utf8', shell: false });
   const exitCode = run.status ?? 1;
   const tail = String(run.stdout || '').trimEnd().split('\n').slice(-8);
-  results.push({ command, exit_code: exitCode, output_tail: tail });
+  const errorTail = String(run.stderr || '').trimEnd().split('\n').slice(-8);
+  results.push({ command, exit_code: exitCode, output_tail: tail, error_tail: errorTail });
   if (exitCode !== 0) failed = true;
 }
 
