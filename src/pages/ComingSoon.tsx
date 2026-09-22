@@ -146,6 +146,8 @@ const ComingSoon: React.FC = () => {
               Orchid Continuum
             </div>
 
+            <p className="mt-5 inline-flex rounded-full border border-[#C9A84C]/40 px-3 py-1 text-xs text-[#C9A84C]">In development</p>
+
             <h1
               className="cs-serif mt-5"
               style={{

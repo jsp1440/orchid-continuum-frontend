@@ -6,6 +6,17 @@ import { computeGateScore } from './scoring';
 describe('COMPLETION_GRAPH structural integrity', () => {
   const allNodes = flattenGraph(COMPLETION_GRAPH);
 
+  it('#167 reconciles the stale thematic census without changing bindings or claiming product acceptance', () => {
+    const thematic = allNodes.find(node => node.id === 'cap-atlas-next-thematic-5')!;
+    expect(thematic.status).toBe('PARTIAL');
+    expect(thematic.threeLevels.productComplete).toBe('NOT_MET');
+    expect(thematic.gateScores?.browserEndToEnd).toBeNull();
+    expect(thematic.gateScores?.deployedOperational).toBeNull();
+    expect(thematic.evidence.some(e => e.ref === 'src/features/atlas-next/useAtlasData.ts')).toBe(true);
+    expect(thematic.evidence.some(e => e.ref === 'src/components/orchid/HomeAtlasContinuum.tsx')).toBe(true);
+    expect(allNodes.some(node => node.id === 'cap-atlas-guided-tours-6')).toBe(true);
+  });
+
   it('#525 scores only the trait consumer without claiming a live backend or completing the remaining station', () => {
     const station = allNodes.find((node) => node.id === 'domain-research-station')!;
     const leaves = getLeaves(station);

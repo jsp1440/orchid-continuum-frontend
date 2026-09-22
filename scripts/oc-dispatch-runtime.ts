@@ -102,8 +102,8 @@ function snapshot(): Snapshot {
   // `merged_at` is what distinguishes a merged PR from a closed one, and the
   // report needs it: "closed" tells the operator to go and look at something
   // that is already in. It is not on `Pull` because nothing else consumes it.
-  const prs = pages<Pull & { merged_at: string | null }>('pulls?state=all')
-    .map(({ number, state, merged_at, body, head }) => ({ number, state, merged: Boolean(merged_at), body, head: { ref: head.ref, sha: head.sha } }))
+  const prs = pages<Pull & { merged_at: string | null; base?: { ref: string } }>('pulls?state=all')
+    .map(({ number, state, merged_at, body, head, base }) => ({ number, state, merged: Boolean(merged_at), baseRef: base?.ref, body, head: { ref: head.ref, sha: head.sha } }))
     .sort((a,b) => a.number-b.number);
   const integration = api<{ object: { sha: string } }>('git/ref/heads/oc-autonomous-integration');
   const material = Object.fromEntries(['CLAUDE.md', 'package.json', 'src/lib/completion-graph/scheduler.ts']

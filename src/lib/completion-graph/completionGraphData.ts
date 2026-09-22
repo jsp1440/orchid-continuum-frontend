@@ -48,10 +48,10 @@ const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: 'c4efd478c274cc804b2f5e067c83c44acdb06f60',
-  reconciledAt: '2026-09-08T00:00:00.000Z',
+  reconciledAgainstSha: '2f6f16191c376919649e02a791480064c5425517',
+  reconciledAt: '2026-09-21T00:00:00.000Z',
   scope:
-    'Initial census (#281) and earlier audited domains are retained at their recorded evidence dates. The #528 pass verifies the Pollinator/Mycorrhiza relationship surfaces against canonical Supabase-backed species, atlas_occurrences, and species_mycorrhizal reads and replaces that domain\'s census placeholder with a scored capability. Browser and deployed operation remain unevaluated. Census coverage is reported alongside each percentage.',
+    'The #167 queue reconciliation scores the existing Atlas thematic implementation against main 2f6f161. Earlier domains retain their recorded evidence dates; this is not a new portfolio-wide audit. Homepage thematic presentation and public/research separation remain partial. Browser and deployed operation remain unevaluated. Census coverage is reported alongside each percentage.',
 };
 
 let autoId = 0;
@@ -304,17 +304,34 @@ const atlasDomain = branch({
     type: 'module',
     nextAction: 'See child capabilities.',
   }, [
-    censusPending({
-      idHint: 'cap-atlas-next-thematic',
-      parentId: 'module-atlas-next',
-      name: 'Public thematic Atlas / advanced research Atlas',
-      evidence: [
-        { kind: 'route', ref: '/atlas-next' },
-        { kind: 'file', ref: 'src/features/atlas-next/useAtlasData.publicErrors.test.ts' },
-      ],
-      nextAction: 'Score real-vs-fixture data coverage and public/research mode separation.',
-      lane: 'PRODUCT_COMPLETION',
-    }),
+    {
+      // Retain the original census allocation so existing oc-node bindings and
+      // every later census ID stay stable. UNKNOWN was an unscored August
+      // census entry, not a serialized state or a missing migration.
+      ...censusPending({
+        idHint: 'cap-atlas-next-thematic',
+        parentId: 'module-atlas-next',
+        name: 'Public thematic Atlas / advanced research Atlas',
+        evidence: [
+          { kind: 'route', ref: '/atlas-next' },
+          { kind: 'file', ref: 'src/features/atlas-next/useAtlasData.publicErrors.test.ts' },
+          { kind: 'file', ref: 'src/features/atlas-next/questions.ts', note: 'Record-location and knowledge-gap questions are implemented; unsupported scientific themes remain explicitly withheld.' },
+          { kind: 'file', ref: 'src/features/atlas-next/useAtlasData.ts', note: 'Canonical occurrence reader; transport failure differs from empty evidence. No fixture coordinates are substituted.' },
+          { kind: 'file', ref: 'src/features/atlas-next/AtlasNextShell.tsx', note: 'Public access is fixed explicitly. The full public/research split is not yet implemented.' },
+          { kind: 'file', ref: 'src/components/orchid/HomeAtlasContinuum.tsx', note: 'Homepage shares featured-genus evidence and links to Atlas; the requested 4–6 thematic homepage choices remain unfinished.' },
+          { kind: 'test', ref: 'src/features/atlas-next/failClosed.test.ts' },
+          { kind: 'test', ref: 'src/features/atlas-next/featuredGenusResearchJourney.test.ts' },
+          { kind: 'issue', ref: '#167', note: 'Continue the existing implementation and PR #174 lineage; do not claim deployed visual acceptance from source inspection.' },
+        ],
+        nextAction: 'Finish the bounded thematic homepage presentation and public/research disclosure using canonical evidence; preserve owner visual-review hold and unavailable themes.',
+        lane: 'PRODUCT_COMPLETION',
+      }),
+      status: 'PARTIAL',
+      threeLevels: { codeComplete: 'PARTIAL', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+      gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1,
+        scientificProvenanceSecurity: 1, browserEndToEnd: null, deployedOperational: null },
+      lastUpdated: '2026-09-21T00:00:00.000Z',
+    },
     censusPending({
       idHint: 'cap-atlas-guided-tours',
       parentId: 'module-atlas-next',

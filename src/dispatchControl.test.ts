@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, laneOf, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, laneOf, lineageFor, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
   providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -27,6 +27,25 @@ function claim(store: LeaseStore, plan: ReturnType<typeof makePlan>, snapshot: S
   return claimLease(store, plan, snapshot, { issueNumber: number, runId, runAttempt: '1', providerAuthorized: true, requestedUsd: 0.5, now }, root);
 }
 describe('canonical graph → durable lease → independent dispatch → refill', () => {
+  it('preserves explicit implementation lineage even when its PR merged only into integration', () => {
+    const { root, snapshot } = fixture(1);
+    snapshot.prs = [{ number: 677, state: 'closed', merged: true, baseRef: 'oc-autonomous-integration',
+      body: 'Implements #1 against current main.', head: { ref: 'reviewed-readiness', sha: 'c'.repeat(40) } }];
+    const plan = makePlan(snapshot, [], now, root);
+    expect(plan.issues).toEqual([]);
+    expect(plan.pendingNotReachingAdmission[0].reason).toContain('oc-autonomous-integration');
+    expect(plan.pendingNotReachingAdmission[0].reason).toContain('reconcile current main and issue acceptance');
+  });
+
+  it.each(['Implements #676', 'Implemented issue #676', 'implements jsp1440/orchid-continuum-frontend#676'])('recognizes an affirmative implementation declaration: %s', body => {
+    expect(lineageFor(676, [{ number: 677, body, state: 'closed', merged: true,
+      head: { ref: 'reviewed-readiness', sha: 'c'.repeat(40) } }])).toHaveLength(1);
+  });
+
+  it.each(['Does not implement #676', 'Implements jsp1440/orchid-calyx-backend#676', 'Implements #6760', 'See #676'])('does not invent lineage from a different scope: %s', body => {
+    expect(lineageFor(676, [{ number: 677, body, state: 'open', head: { ref: 'unrelated', sha: 'c'.repeat(40) } }])).toEqual([]);
+  });
+
   it('accepts the historical zero-cost deterministic terminal lease, but rejects ambiguous zero-cost leases', () => {
     const legacy: Ledger['leases'][number] = {
       id: 'legacy-deterministic',
