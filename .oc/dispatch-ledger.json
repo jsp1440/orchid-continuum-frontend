@@ -114,6 +114,20 @@
       "implementationSha": "b26c045b0ff4a3c739d28f2ec8a51cf0944dddf3",
       "lane": "provider-free",
       "state": "provider-free-failed"
+    },
+    {
+      "id": "a2ac721e21f1e02bb4d00d18e3675f5fcc362f88ad2553987dfb148ed879b6b3",
+      "issue": 166,
+      "nodeId": "cap-homepage-featured-genus",
+      "fingerprint": "66bd2a4d29c3c24f763b640ff879684f12d221b2e6bab818d6f2bd16d8471ccb",
+      "waveHash": "da3dae7dee894bba6891a47c8cd25c422adc249a9f3e24ffa33ea9734e0ac149",
+      "runId": "35793253388",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-23T00:07:53.563Z",
+      "reservedUsd": 0,
+      "implementationSha": "f870c41b82ba2fd16ada162ea1df1f2743e16789",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
