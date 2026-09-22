@@ -40,6 +40,15 @@ describe('Render is the only deployment target', () => {
     expect(catchAll).toBe(rules.length - 1);
   });
 
+  it('declares the same SPA fallback on the canonical Render service', () => {
+    const blueprint = readFileSync('render.yaml', 'utf8');
+    expect(blueprint).toContain('name: orchid-continuum-frontend');
+    expect(blueprint).toContain('runtime: static');
+    expect(blueprint).toContain('branch: main');
+    expect(blueprint).toContain('staticPublishPath: ./dist');
+    expect(blueprint).toMatch(/type: rewrite[\s\S]*source: \/\*[\s\S]*destination: \/index\.html/);
+  });
+
   it('serves the researcher page as a static document, before the catch-all', () => {
     const redirects = readFileSync('public/_redirects', 'utf8');
     expect(redirects).toContain('/researcher-jeffery-scott-parham.html');
