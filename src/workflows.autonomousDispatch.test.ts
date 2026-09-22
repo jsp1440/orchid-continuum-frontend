@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 type Job = { if?: string; needs?: string | string[]; uses?: string; outputs?: object; permissions?: object;
-  steps?: Array<{ uses?: string; run?: string; with?: Record<string, unknown> }> };
+  steps?: Array<{ uses?: string; run?: string; if?: string; with?: Record<string, unknown> }> };
 const read = (file: string) => readFileSync(`.github/workflows/${file}.yml`, 'utf8');
 const text = read('orchid-continuous-completion');
 const workflow = yaml.load(text) as { jobs: Record<string, Job>; env: Record<string, unknown> };
@@ -37,6 +37,13 @@ describe('canonical provider-free autonomous dispatch', () => {
     const canary = yaml.load(read('frontend-openai-runtime-canary')) as { jobs: Record<string, Job> };
     expect(canary.jobs.canary.if).toContain("needs.budget-preflight.outputs.allowed == 'true'");
     expect(read('frontend-openai-runtime-canary')).toContain("PROVIDER_AUTHORIZED: 'false'");
+  });
+  it('installs the browser only for the deterministic browser route capability', () => {
+    const lane = yaml.load(read('orchid-budgeted-completion-lane')) as { jobs: Record<string, Job> };
+    const worker = lane.jobs['provider-free-worker'];
+    const install = worker.steps?.find(step => step.run?.includes('playwright install'));
+    expect(install?.if).toContain("contains(needs.classify.outputs.commands, 'npm run verify:routes')");
+    expect(install?.run).toContain('playwright install --with-deps chromium');
   });
   it('preserves the suspended Anthropic recovery circuit breaker with no executable canary', () => {
     const recovery = yaml.load(read('orchid-claude-runtime-recovery')) as { jobs: Record<string, Job>; permissions: Record<string, string> };

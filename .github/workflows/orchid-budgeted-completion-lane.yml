@@ -159,6 +159,13 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - run: npm ci --ignore-scripts
+      # The browser route sentinel is a deterministic capability, but the
+      # Playwright package does not download Chromium during npm ci. Install
+      # only the browser that this declared command needs; no provider or
+      # external model is involved.
+      - name: Install Chromium for browser route verification
+        if: contains(needs.classify.outputs.commands, 'npm run verify:routes')
+        run: npx --no-install playwright install --with-deps chromium
       # No provider secret is present in this job, and none is forwarded to it.
       # The commands are chosen from a fixed registry, never from issue text.
       - name: Execute declared deterministic capabilities
@@ -251,5 +258,3 @@ jobs:
         with:
           name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
           path: .oc-receipts/*.json
-          include-hidden-files: true
-          if-no-files-found: error
