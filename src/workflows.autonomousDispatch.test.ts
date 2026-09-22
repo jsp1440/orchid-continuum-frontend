@@ -44,6 +44,10 @@ describe('canonical provider-free autonomous dispatch', () => {
     const install = worker.steps?.find(step => step.run?.includes('playwright install'));
     expect(install?.if).toContain("contains(needs.classify.outputs.commands, 'npm run verify:routes')");
     expect(install?.run).toContain('playwright install --with-deps chromium');
+    const preview = worker.steps?.find(step => step.run?.includes('vite preview'));
+    expect(preview?.if).toContain("contains(needs.classify.outputs.commands, 'npm run verify:routes')");
+    expect(preview?.run).toContain('npm run build');
+    expect(preview?.run).toContain('127.0.0.1:4173');
   });
   it('preserves the suspended Anthropic recovery circuit breaker with no executable canary', () => {
     const recovery = yaml.load(read('orchid-claude-runtime-recovery')) as { jobs: Record<string, Job>; permissions: Record<string, string> };
