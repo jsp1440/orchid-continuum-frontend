@@ -408,7 +408,7 @@ function issuePacket(issue: SupervisorIssueSnapshot): SupervisorTaskRecord | nul
       fingerprint: packetFingerprint([semanticKey, binding?.evidenceReference ?? 'explicit-capability']),
       semanticKey,
     },
-    priority: priority(issue.labels),
+    priority: binding?.priority ?? priority(issue.labels),
     lifecycleState: lifecycleState(issue, status),
     status,
     action: status === 'eligible'
