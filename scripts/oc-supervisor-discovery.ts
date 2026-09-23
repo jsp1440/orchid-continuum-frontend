@@ -67,7 +67,7 @@ function repositoryNames(): string[] {
     'jsp1440/orchid-continuum-frontend',
     ...configured,
     process.env.GITHUB_REPOSITORY ?? '',
-  ].filter((value) => /^[\\w.-]+\\/[\\w.-]+$/.test(value)))];
+  ].filter((value) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)))];
 }
 
 function currentRepository(): string {
@@ -111,7 +111,7 @@ function createIssue(title: string, body: string, labels: string[]): number {
     ['issue', 'create', '--title', title, '--body', body, ...labelArgs],
     { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] },
   ).trim();
-  const match = url.match(/\\/issues\\/(\\d+)\\/?$/);
+  const match = url.match(/\/issues\/(\d+)\/?$/);
   if (!match) throw new Error('Supervisor issue materialization returned no issue URL');
   return Number(match[1]);
 }
@@ -297,11 +297,11 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
     errors,
   };
   mkdirSync('.oc-wave', { recursive: true });
-  writeFileSync('.oc-wave/supervisor-discovery.json', JSON.stringify(result, null, 2) + '\\n');
+  writeFileSync('.oc-wave/supervisor-discovery.json', JSON.stringify(result, null, 2) + '\n');
   return result;
 }
 
 if (import.meta.url === 'file://' + process.argv[1]) {
   const result = runSupervisorDiscovery();
-  process.stdout.write(JSON.stringify(result) + '\\n');
+  process.stdout.write(JSON.stringify(result) + '\n');
 }
