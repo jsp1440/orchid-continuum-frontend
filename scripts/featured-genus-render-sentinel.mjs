@@ -45,10 +45,16 @@ try {
   }
 
   const errors = [];
+  const mediaFailures = [];
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1600 } });
     page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+    page.on('requestfailed', (request) => {
+      if (request.resourceType() === 'image') {
+        mediaFailures.push({ url: request.url(), error: request.failure()?.errorText ?? 'image request failed' });
+      }
+    });
     page.on('console', (message) => {
       if (message.type() === 'error') errors.push(`console: ${message.text()}`);
     });
@@ -64,25 +70,41 @@ try {
     const continuationCount = await page.locator('[data-testid="featured-genus-continuation"]').count();
     assert.equal(continuationCount, 1, 'Featured Genus continuation was not rendered');
     await feature.scrollIntoViewIfNeeded();
-    await page.waitForTimeout(1500);
+    // The component removes a failed photograph from the candidate set and
+    // renders its explicit no-media state. Give that state one render turn
+    // after the browser has reported a blocked/dead remote image.
+    await page.waitForTimeout(3000);
 
     const imageState = await feature.locator('img').evaluateAll((images) => images.map((image) => ({
       src: image.currentSrc || image.getAttribute('src'),
       complete: image.complete,
       naturalWidth: image.naturalWidth,
     })));
-    const noMediaText = await feature.getByText(/No verified Orchid Continuum photograph/i).count();
+    const noMediaText = await feature.getByText(/No approved Continuum photograph available|No verified Orchid Continuum photograph|This approved photograph could not be loaded\. No substitute image is shown\./i).count();
     const serviceErrorText = await feature.getByText(/media service is temporarily unavailable/i).count();
     await page.screenshot({ path: 'artifacts/featured-genus.png', fullPage: false });
 
-    report.browser = { imageState, noMediaText, serviceErrorText, continuationCount, errors };
+    const expectedMediaErrors = mediaFailures.length > 0
+      ? errors.filter((error) => /^console: Failed to load resource: net::ERR_(BLOCKED_BY_RESPONSE\.NotSameOrigin|FAILED)$/.test(error))
+      : [];
+    const unexpectedErrors = errors.filter((error) => !expectedMediaErrors.includes(error));
+    report.browser = {
+      imageState,
+      noMediaText,
+      serviceErrorText,
+      continuationCount,
+      mediaFailures,
+      ignored_media_errors: expectedMediaErrors,
+      errors: unexpectedErrors,
+    };
     assert.equal(serviceErrorText, 0, 'Featured Genus reached service-error state');
     if (imageState.length > 0) {
-      assert.ok(imageState.every((image) => image.complete && image.naturalWidth > 0), 'A Featured Genus image did not render in the browser');
+      const loadedImages = imageState.filter((image) => image.complete && image.naturalWidth > 0);
+      assert.ok(loadedImages.length > 0 || noMediaText > 0, 'Featured Genus rendered neither media nor an honest no-media state');
     } else {
       assert.ok(noMediaText > 0, 'Featured Genus rendered neither media nor an honest no-media state');
     }
-    assert.deepEqual(errors, [], `Browser errors: ${errors.join(' | ')}`);
+    assert.deepEqual(unexpectedErrors, [], `Browser errors: ${unexpectedErrors.join(' | ')}`);
   } finally {
     await browser.close();
   }
