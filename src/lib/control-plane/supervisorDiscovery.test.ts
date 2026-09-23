@@ -286,6 +286,33 @@ describe('portfolio steward discovery', () => {
     expect(secondPacket?.deduplication.fingerprint).toBe(firstPacket?.deduplication.fingerprint);
   });
 
+  it('parks an unchanged deterministic repair without a durable repair lineage', () => {
+    const result = discoverSupervisorWork(
+      root([]),
+      [{
+        repository: 'jsp1440/orchid-continuum-frontend',
+        issues: [{
+          number: 47,
+          repository: 'jsp1440/orchid-continuum-frontend',
+          state: 'open',
+          title: 'Sentinel: Featured Genus deployment audit failing',
+          body: 'The deployed Featured Genus audit failed.',
+          labels: ['oc-repair', 'oc-cap:featured-genus-verification'],
+        }],
+        pullRequests: [],
+      }],
+      NOW,
+    );
+
+    expect(result.packets).toContainEqual(expect.objectContaining({
+      existingIssueNumber: 47,
+      status: 'parked',
+      action: 'observe',
+      lifecycleState: 'parked',
+    }));
+    expect(result.packets.find((packet) => packet.existingIssueNumber === 47)?.action).not.toBe('queue');
+  });
+
   it('records inaccessible repositories as bounded portfolio gaps and never promotes them to work', () => {
     const result = discoverSupervisorWork(
       root([]),
