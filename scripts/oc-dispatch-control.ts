@@ -61,8 +61,8 @@ const steward = (issue: Issue) => labelsOf(issue).includes('oc-portfolio-steward
 // applied and visible on the issue, exactly as `oc-cap:` declares a capability.
 // A generated issue may also carry the canonical line-anchored graph marker in
 // its packet body. Free-form title/prose matching remains refused.
-const NODE_LABEL = /^oc-node:\\s*([a-z0-9][a-z0-9-]*)$/i;
-const NODE_BODY = /^OC-GRAPH-NODE:\\s*([a-z0-9][a-z0-9-]*)\\s*$/im;
+const NODE_LABEL = /^oc-node:\s*([a-z0-9][a-z0-9-]*)$/i;
+const NODE_BODY = /^OC-GRAPH-NODE:\s*([a-z0-9][a-z0-9-]*)\s*$/im;
 export function declaredNodesByIssue(issues: Issue[]): Record<number, string[]> {
   const declared: Record<number, string[]> = {};
   for (const issue of issues) {
