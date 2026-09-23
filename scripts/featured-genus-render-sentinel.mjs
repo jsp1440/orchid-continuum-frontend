@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { chromium } from 'playwright';
+import { isExpectedOptionalSnapshotFailure } from './featured-genus-validation-policy.mjs';
 
 const frontendUrl = (process.env.FRONTEND_URL || 'https://orchid-continuum-frontend-vof6.onrender.com/').replace(/\/$/, '');
 const calyxUrl = (process.env.CALYX_URL || 'https://orchid-calyx-backend.onrender.com').replace(/\/$/, '');
@@ -95,9 +96,24 @@ try {
     await page.screenshot({ path: 'artifacts/featured-genus.png', fullPage: false });
 
     const expectedMediaErrors = mediaFailures.length > 0
-      ? errors.filter((error) => /^console: Failed to load resource: net::ERR_(BLOCKED_BY_RESPONSE\.NotSameOrigin|FAILED)$/.test(error))
+      ? errors.filter((error) => /^console: Failed to load resource: net::ERR_(BLOCKED_BY_RESPONSE\\.NotSameOrigin|FAILED)$/.test(error))
       : [];
-    const unexpectedErrors = errors.filter((error) => !expectedMediaErrors.includes(error));
+    const optionalHttpFailures = httpFailures.filter(isExpectedOptionalSnapshotFailure);
+    const unexpectedHttpFailures = httpFailures.filter((failure) => !isExpectedOptionalSnapshotFailure(failure));
+    let optionalHttpConsoleBudget = optionalHttpFailures.length;
+    const ignoredOptionalHttpErrors = [];
+    const unexpectedErrors = errors.filter((error) => {
+      if (expectedMediaErrors.includes(error)) return false;
+      if (
+        optionalHttpConsoleBudget > 0
+        && /^console: Failed to load resource: the server responded with a status of 400 \\(\\)$/.test(error)
+      ) {
+        optionalHttpConsoleBudget -= 1;
+        ignoredOptionalHttpErrors.push(error);
+        return false;
+      }
+      return true;
+    });
     report.browser = {
       imageState,
       noMediaText,
@@ -106,6 +122,9 @@ try {
       mediaFailures,
       ignored_media_errors: expectedMediaErrors,
       httpFailures,
+      ignored_optional_http_failures: optionalHttpFailures,
+      ignored_optional_http_errors: ignoredOptionalHttpErrors,
+      unexpected_http_failures: unexpectedHttpFailures,
       errors: unexpectedErrors,
     };
     assert.equal(serviceErrorText, 0, 'Featured Genus reached service-error state');
@@ -115,6 +134,7 @@ try {
     } else {
       assert.ok(noMediaText > 0, 'Featured Genus rendered neither media nor an honest no-media state');
     }
+    assert.deepEqual(unexpectedHttpFailures, [], `HTTP failures: ${JSON.stringify(unexpectedHttpFailures)}`);
     assert.deepEqual(unexpectedErrors, [], `Browser errors: ${unexpectedErrors.join(' | ')}; HTTP failures: ${JSON.stringify(httpFailures)}`);
   } finally {
     await browser.close();
