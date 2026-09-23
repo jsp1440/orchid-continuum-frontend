@@ -5,6 +5,7 @@ on:
     paths:
       - 'src/App.tsx'
       - 'public/_redirects'
+      - 'render.yaml'
       - 'scripts/verify-deployment-contract.mjs'
       - 'package.json'
       - '.github/workflows/deployment-contract.yml'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'src/App.tsx'
       - 'public/_redirects'
+      - 'render.yaml'
       - 'scripts/verify-deployment-contract.mjs'
       - 'package.json'
       - '.github/workflows/deployment-contract.yml'
