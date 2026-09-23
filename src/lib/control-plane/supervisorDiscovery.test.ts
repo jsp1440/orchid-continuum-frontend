@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { discoverSupervisorWork } from './supervisorDiscovery';
+import {
+  discoverSupervisorWork,
+  PORTFOLIO_MODULES,
+} from './supervisorDiscovery';
 import type { CompletionNode } from '../completion-graph/types';
 
 const NOW = '2026-09-23T00:00:00.000Z';
@@ -211,6 +214,102 @@ describe('continuous supervisor discovery', () => {
   });
 });
 
+
+describe('portfolio steward discovery', () => {
+  it('materializes a real failed-validation issue through an explicit repository binding', () => {
+    const result = discoverSupervisorWork(
+      root([]),
+      [{
+        repository: 'jsp1440/orchid-continuum-frontend',
+        available: true,
+        issues: [{
+          number: 47,
+          repository: 'jsp1440/orchid-continuum-frontend',
+          state: 'open',
+          title: 'Sentinel: Featured Genus deployment audit failing',
+          body: 'The deployed Featured Genus audit failed. See workflow run 29156535302.',
+          labels: [],
+        }],
+        pullRequests: [{ number: 1200, repository: 'jsp1440/orchid-continuum-frontend', state: 'open', title: 'Release', body: '', labels: [], draft: false }],
+        ciRuns: [{ id: 29156535302, name: 'featured-genus-render-sentinel', status: 'completed', conclusion: 'failure' }],
+      }],
+      NOW,
+    );
+
+    const packet = result.packets.find((candidate) => candidate.existingIssueNumber === 47);
+    expect(packet).toMatchObject({
+      schema: 'oc.supervisor-task.v1',
+      source: { kind: 'failed-validation', repository: 'jsp1440/orchid-continuum-frontend', reference: '#47' },
+      targetModule: 'featured-genus-release-sentinel',
+      capability: 'featured-genus-verification',
+      lane: 'testing',
+      executionMode: 'deterministic',
+      providerRequirement: 'none',
+      priority: 3,
+      status: 'eligible',
+      action: 'queue',
+      validationContract: { failClosed: true },
+    });
+    expect(packet?.sourceEvidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'issue', reference: '#47' }),
+      expect.objectContaining({ kind: 'module-manifest' }),
+    ]));
+    expect(packet?.validationCriteria.join(' ')).toContain('verify:featured-genus');
+    expect(result.portfolio.modules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        moduleId: 'testing',
+        access: 'available',
+        openIssueNumbers: [47],
+        ciRunsObserved: 1,
+      }),
+    ]));
+    expect(result.portfolio.laneCounts.testing).toBeGreaterThanOrEqual(1);
+  });
+
+  it('reuses a queued bound task without creating a second packet or changing its fingerprint', () => {
+    const issue = {
+      number: 47,
+      repository: 'jsp1440/orchid-continuum-frontend',
+      state: 'open' as const,
+      title: 'Sentinel: Featured Genus deployment audit failing',
+      body: 'The deployed Featured Genus audit failed.',
+      labels: ['oc-queued', 'oc-cap:featured-genus-verification'],
+    };
+    const first = discoverSupervisorWork(root([]), [{ repository: issue.repository, issues: [issue] }], NOW);
+    const second = discoverSupervisorWork(root([]), [{ repository: issue.repository, issues: [issue] }], NOW);
+    const firstPacket = first.packets.find((candidate) => candidate.existingIssueNumber === 47);
+    const secondPacket = second.packets.find((candidate) => candidate.existingIssueNumber === 47);
+
+    expect(first.packets.filter((candidate) => candidate.existingIssueNumber === 47)).toHaveLength(1);
+    expect(firstPacket).toMatchObject({ action: 'reuse', lifecycleState: 'queued' });
+    expect(secondPacket?.deduplication.fingerprint).toBe(firstPacket?.deduplication.fingerprint);
+  });
+
+  it('records inaccessible repositories as bounded portfolio gaps and never promotes them to work', () => {
+    const result = discoverSupervisorWork(
+      root([]),
+      [{
+        repository: 'jsp1440/Orchid-Continuum-Brain',
+        available: false,
+        accessError: 'permission denied',
+        issues: [],
+      }],
+      NOW,
+    );
+
+    expect(result.portfolio.modules).toEqual(expect.arrayContaining([
+      expect.objectContaining({ moduleId: 'brain-reasoning', access: 'unavailable' }),
+    ]));
+    expect(result.portfolio.accessGaps.join(' ')).toContain('permission denied');
+    expect(result.packets).toEqual([]);
+  });
+
+  it('keeps the portfolio registry bounded to concrete module evidence rather than filling a quota', () => {
+    expect(PORTFOLIO_MODULES.length).toBeGreaterThanOrEqual(15);
+    expect(PORTFOLIO_MODULES.every((module) => module.repository && module.evidenceReference && module.lane)).toBe(true);
+    expect(new Set(PORTFOLIO_MODULES.map((module) => module.moduleId)).size).toBe(PORTFOLIO_MODULES.length);
+  });
+});
 
 describe('generated packet binding', () => {
   it('binds the exact line-anchored graph marker without reading free-form prose', async () => {
