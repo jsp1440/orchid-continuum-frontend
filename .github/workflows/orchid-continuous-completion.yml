@@ -1,6 +1,6 @@
 name: Orchid Continuous Completion (NO API MODE)
 
-# Canonical supervisor/completion workflow.
+# Canonical supervisor/completion workflow. Portfolio Steward remains outside implementation capacity.
 #
 # GitHub scheduled workflows are best-effort and can be delayed or dropped during
 # scheduler congestion. To keep the autonomous engine awake without operator
