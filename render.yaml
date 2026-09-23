@@ -1,16 +1,16 @@
 # Render Blueprint for the canonical Orchid Continuum frontend.
 #
-# This service is an existing Render Static Site. The declaration is kept
-# intentionally small: it pins the existing repository/branch/build output
-# and makes the SPA route contract part of the service configuration instead
-# of relying only on an out-of-band dashboard rule.
+# Render is the sole production target. The build command is intentionally a
+# fail-closed publication gate: Render must not publish a candidate unless the
+# repository test, lint, typecheck, deployment-contract validation, and build
+# all succeed on the exact revision being deployed.
 services:
   - type: web
     name: orchid-continuum-frontend
     runtime: static
     repo: https://github.com/jsp1440/orchid-continuum-frontend.git
     branch: main
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci && npm run test && npm run lint && npm run typecheck && npm run validate:deployment && npm run build
     staticPublishPath: ./dist
     routes:
       - type: rewrite
