@@ -46,10 +46,20 @@ try {
 
   const errors = [];
   const mediaFailures = [];
+  const httpFailures = [];
   const browser = await chromium.launch({ headless: true });
   try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 1600 } });
     page.on('pageerror', (error) => errors.push(`pageerror: ${error.message}`));
+    page.on('response', (response) => {
+      if (response.status() >= 400) {
+        httpFailures.push({
+          status: response.status(),
+          url: response.url(),
+          resource_type: response.request().resourceType(),
+        });
+      }
+    });
     page.on('requestfailed', (request) => {
       if (request.resourceType() === 'image') {
         mediaFailures.push({ url: request.url(), error: request.failure()?.errorText ?? 'image request failed' });
@@ -95,6 +105,7 @@ try {
       continuationCount,
       mediaFailures,
       ignored_media_errors: expectedMediaErrors,
+      httpFailures,
       errors: unexpectedErrors,
     };
     assert.equal(serviceErrorText, 0, 'Featured Genus reached service-error state');
@@ -104,7 +115,7 @@ try {
     } else {
       assert.ok(noMediaText > 0, 'Featured Genus rendered neither media nor an honest no-media state');
     }
-    assert.deepEqual(unexpectedErrors, [], `Browser errors: ${unexpectedErrors.join(' | ')}`);
+    assert.deepEqual(unexpectedErrors, [], `Browser errors: ${unexpectedErrors.join(' | ')}; HTTP failures: ${JSON.stringify(httpFailures)}`);
   } finally {
     await browser.close();
   }
