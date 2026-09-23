@@ -1,7 +1,15 @@
 name: Orchid NO-API Scheduler
 
-# Backward-compatible manual entrypoint; only the canonical workflow schedules ticks.
+# Redundant autonomous heartbeat for the canonical completion workflow.
+#
+# This workflow is intentionally staggered five minutes after the canonical
+# workflow's own scheduled ticks. GitHub schedule delivery is best-effort, so
+# using two independent schedule registrations reduces the chance that the
+# supervisor goes dormant. The called workflow keeps the same provider, owner,
+# lease, queue, validation, and settlement gates.
 on:
+  schedule:
+    - cron: '7,17,27,37,47,57 * * * *'
   workflow_dispatch:
 
 permissions:
