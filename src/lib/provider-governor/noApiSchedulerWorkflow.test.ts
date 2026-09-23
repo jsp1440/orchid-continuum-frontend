@@ -8,9 +8,9 @@ const wrapper = read('orchid-budgeted-completion-lane');
 const paidProviderPattern = /anthropics\/claude-code-action|google-gemini|openai\/|ANTHROPIC_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY|secrets:\s*inherit/i;
 
 describe('canonical scheduler preserves NO-API policy', () => {
-  it('has a single frequent timer and a compatibility alias to the same graph planner', () => {
+  it('has a single offset five-minute timer and a compatibility alias to the same graph planner', () => {
     const doc = yaml.load(canonical) as { on: { schedule: Array<{ cron: string }> } };
-    expect(doc.on.schedule).toEqual([{ cron: '*/5 * * * *' }]);
+    expect(doc.on.schedule).toEqual([{ cron: '2-59/5 * * * *' }]);
     expect(alias).not.toContain('schedule:');
     expect(alias).toContain('uses: ./.github/workflows/orchid-continuous-completion.yml');
     expect(canonical).toContain('scripts/oc-dispatch-runtime.ts plan');
