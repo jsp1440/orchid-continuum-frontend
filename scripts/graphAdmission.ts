@@ -24,4 +24,4 @@ process.stdout.write(JSON.stringify({
   surfacedBlockers: [],
   suppressedDuplicates: [],
   reasons: result.discovery.reasons,
-}) + '\\n');
+}) + '\n');
