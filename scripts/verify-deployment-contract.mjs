@@ -19,6 +19,15 @@ const requiredRoutes = [
   '/calyx',
 ];
 
+const requiredPublishCommands = [
+  'npm ci',
+  'npm run test',
+  'npm run lint',
+  'npm run typecheck',
+  'npm run validate:deployment',
+  'npm run build',
+];
+
 /** Paths Render must serve as static documents rather than through the SPA. */
 const requiredStaticRewrites = [
   {
@@ -35,6 +44,23 @@ function ruleIndex(redirects, from) {
   return redirects
     .split('\n')
     .findIndex((line) => !line.trim().startsWith('#') && line.includes(from));
+}
+
+function getRenderBuildCommand(blueprint) {
+  const match = blueprint.match(/^\s*buildCommand:\s*(.+)$/m);
+  return match?.[1]?.trim() ?? '';
+}
+
+function validateOrderedPublishGate(command) {
+  let cursor = 0;
+  for (const required of requiredPublishCommands) {
+    const at = command.indexOf(required, cursor);
+    if (at === -1) {
+      return `Render buildCommand is missing required prepublication step: ${required}`;
+    }
+    cursor = at + required.length;
+  }
+  return null;
 }
 
 async function main() {
@@ -72,6 +98,15 @@ async function main() {
     failures.push('render.yaml does not declare the Render SPA rewrite');
   }
 
+  const renderBuildCommand = getRenderBuildCommand(blueprint);
+  const publishGateFailure = validateOrderedPublishGate(renderBuildCommand);
+  if (publishGateFailure) {
+    failures.push(publishGateFailure);
+  }
+  if (!renderBuildCommand.includes('&&')) {
+    failures.push('Render buildCommand must fail closed with && between validation steps');
+  }
+
   const catchAll = ruleIndex(redirects, '/*');
   for (const { from, to } of requiredStaticRewrites) {
     const at = ruleIndex(redirects, from);
@@ -97,7 +132,8 @@ async function main() {
   console.log('Render deployment contract valid.');
   console.log(
     `Verified ${requiredRoutes.length} critical client routes, ` +
-      `${requiredStaticRewrites.length} static rewrite(s), and the SPA fallback.`,
+      `${requiredStaticRewrites.length} static rewrite(s), the SPA fallback, ` +
+      'and the ordered fail-closed prepublication validation gate.',
   );
 }
 
