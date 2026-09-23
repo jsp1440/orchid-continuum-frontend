@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideGraphIssueAction, priorityTier, STALE_NODE_DATA_DAYS } from './graphIssueDecision';
+import { decideGraphIssueAction, decideProviderFreeGraphIssueAction, priorityTier, STALE_NODE_DATA_DAYS } from './graphIssueDecision';
 import { graphNodeMarker } from './executableIssue';
 import type { CompletionNode } from './types';
 
