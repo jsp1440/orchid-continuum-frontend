@@ -106,7 +106,7 @@ try {
       if (expectedMediaErrors.includes(error)) return false;
       if (
         optionalHttpConsoleBudget > 0
-        && /^console: Failed to load resource: the server responded with a status of 400 \\(\\)$/.test(error)
+        && /^console: Failed to load resource: the server responded with a status of 400 \(\)$/.test(error)
       ) {
         optionalHttpConsoleBudget -= 1;
         ignoredOptionalHttpErrors.push(error);
