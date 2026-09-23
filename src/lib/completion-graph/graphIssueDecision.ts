@@ -84,8 +84,16 @@ export type SupervisorTaskPacket = {
     | 'completed' | 'blocked' | 'owner-gate' | 'parked';
 };
 
-type DeterministicGraphTaskDefinition = Omit<SupervisorTaskPacket,
-  'schema' | 'taskId' | 'source' | 'dependencies'>;
+type DeterministicGraphTaskDefinition = {
+  targetRepo: string;
+  targetModule: string;
+  capability: string;
+  riskClass: SupervisorTaskPacket['riskClass'];
+  ownerGateStatus: SupervisorTaskPacket['ownerGateStatus'];
+  providerRequirement: SupervisorTaskPacket['providerRequirement'];
+  validationCriteria: string[];
+  completionEvidenceRequirements: string[];
+};
 
 /**
  * Explicit graph-to-executor bindings are the only way the supervisor may
@@ -107,6 +115,22 @@ export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGra
     completionEvidenceRequirements: [
       'Record the exact implementation SHA, command, and exit code in an oc.provider-free-evidence.v1 receipt.',
       'Keep the graph leaf PARTIAL until its separate live/browser gate is owner-authorized and verified.',
+    ],
+  },
+  'cap-completion-graph-engine': {
+    targetRepo: 'jsp1440/orchid-continuum-frontend',
+    targetModule: 'autonomous-control-plane-core',
+    capability: 'test-execution',
+    riskClass: 'medium',
+    ownerGateStatus: 'none',
+    providerRequirement: 'none',
+    validationCriteria: [
+      'Run npm test against the current revision and preserve the graph/control-plane test results.',
+      'Treat this as stale-evidence refresh only; it does not certify the separate live-browser observatory gate.',
+    ],
+    completionEvidenceRequirements: [
+      'Record the exact implementation SHA, test result, and zero provider spend in an oc.provider-free-evidence.v1 receipt.',
+      'Keep the graph leaf PARTIAL until its live/browser acceptance action is separately verified.',
     ],
   },
 });
