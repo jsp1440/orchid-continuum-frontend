@@ -24,6 +24,10 @@ export function selectLanes({ issues = [], runningCount = 0, maxActiveLanes = MA
     if (labels.has('oc-portfolio-steward') || issue.portfolioSteward) continue;
     if ([...BLOCKED_LABELS].some(label => labels.has(label))) continue;
     if (/^OC-AUTO-HOLD:\s*true\s*$/m.test(issue.body || '')) continue;
+    // A failed deterministic revision is not retryable just because a stale
+    // queue label survived. It needs one concrete open repair lineage; the
+    // absence of a PR is a durable hold, not permission to repeat the run.
+    if (labels.has('oc-repair') && issue.repairablePr !== true) continue;
     // Repair must retain one existing OPEN PR and its branch; ambiguous/closed lineages stay held.
     if (issue.hasDurablePr && !(labels.has('oc-repair') && issue.repairablePr === true)) continue;
     selected.push(issue.number);
