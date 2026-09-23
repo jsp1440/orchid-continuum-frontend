@@ -246,6 +246,8 @@ console.log('{}');
       OC_RECEIPT_DIR: join(dir, 'receipts'), OC_EVIDENCE_DIR: join(dir, 'evidence'),
       OC_WAVE_HASH: plan.wave.hash, ISSUE_NUMBER: '703', GITHUB_RUN_ID: '1', GITHUB_RUN_ATTEMPT: '1',
       PROVIDER_AUTHORIZED: 'false',
+      // Live workflows export this gate; the unit fixture models no required release.
+      EXPECTED_RELEASE_SHA: '',
     };
     installSettlementLease(env, plan);
     // Evidence as the executor actually writes it, so a test must opt out of the
