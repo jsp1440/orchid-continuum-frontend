@@ -45,7 +45,7 @@ export type GraphIssueDecision =
 export type SupervisorTaskPacket = {
   schema: 'oc.supervisor-task.v1';
   taskId: string;
-  source: { kind: 'completion-graph'; repository: string; reference: string };
+  source: { kind: 'completion-graph' | 'issue'; repository: string; reference: string };
   targetRepo: string;
   targetModule: string;
   capability: string;
