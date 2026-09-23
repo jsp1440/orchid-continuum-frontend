@@ -1,10 +1,16 @@
 name: Orchid Continuous Completion (NO API MODE)
 
-# Canonical scheduler. Compatibility entrypoints delegate here; Portfolio
-# Steward remains a separate queue-planning role, outside implementation capacity.
+# Canonical supervisor/completion workflow.
+#
+# GitHub scheduled workflows are best-effort and can be delayed or dropped during
+# scheduler congestion. To keep the autonomous engine awake without operator
+# triggers, this canonical workflow and the lightweight compatibility scheduler
+# use staggered 10-minute schedules that together provide a nominal 5-minute
+# heartbeat. Both enter this same workflow and therefore the same governed queue,
+# lease, validation, and settlement path.
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    - cron: '2,12,22,32,42,52 * * * *'
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, closed]
   issues:
