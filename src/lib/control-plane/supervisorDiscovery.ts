@@ -85,6 +85,7 @@ export type PortfolioIssueBinding = {
   targetModule: string;
   lane: SupervisorLane;
   capability: string;
+  graphNodeId?: string;
   sourceKind: SupervisorSourceKind;
   evidenceReference: string;
   validationCriteria: string[];
@@ -151,7 +152,8 @@ export const PORTFOLIO_ISSUE_BINDINGS: ReadonlyArray<PortfolioIssueBinding> = Ob
     lane: 'testing',
     capability: 'featured-genus-verification',
     sourceKind: 'failed-validation',
-    evidenceReference: 'issue #47 body: failed deployed Featured Genus audit and named workflow run',
+    graphNodeId: 'cap-homepage-featured-genus',
+    evidenceReference: 'src/lib/control-plane/supervisorDiscovery.ts#PORTFOLIO_ISSUE_BINDINGS[frontend#47]',
     validationCriteria: [
       'Run the repository-owned npm run verify:featured-genus sentinel against the exact admitted revision.',
       'Require the sentinel report to prove the expected deployed release, media provenance, browser render, and zero provider spend.',
@@ -384,6 +386,7 @@ function issuePacket(issue: SupervisorIssueSnapshot): SupervisorTaskRecord | nul
     source: { kind, repository: issue.repository, reference: nodeId ?? '#' + issue.number },
     lane,
     sourceEvidence,
+    graphNodeId: binding?.graphNodeId,
     targetRepo: issue.repository,
     targetModule,
     capability,
