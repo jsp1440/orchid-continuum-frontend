@@ -220,7 +220,7 @@ describe('generated packet binding', () => {
         number: 901,
         state: 'open',
         title: 'A title mentioning cap-unbound-feature',
-        body: 'acceptance prose only\\nOC-GRAPH-NODE: cap-deployment-contract-validation\\nmore prose',
+        body: 'acceptance prose only\nOC-GRAPH-NODE: cap-deployment-contract-validation\nmore prose',
         labels: [{ name: 'oc-queued' }],
       },
     ])).toEqual({ 901: ['cap-deployment-contract-validation'] });
