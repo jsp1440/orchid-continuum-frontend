@@ -1,11 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { isExpectedOptionalSnapshotFailure } from "./featured-genus-validation-policy.mjs";
+import { isExpectedMediaConsoleError, isExpectedOptionalSnapshotFailure } from "./featured-genus-validation-policy.mjs";
 
 const optionalSnapshotFailure = (overrides = {}) => ({
   status: 400,
   resource_type: "fetch",
   url: "https://example.supabase.co/rest/v1/daily_genus_snapshot?select=genus%2Csnapshot_date&snapshot_date=eq.2026-09-23",
   ...overrides,
+});
+
+describe("featured genus media validation policy", () => {
+  it("recognizes only the exact blocked-media console errors", () => {
+    expect(isExpectedMediaConsoleError("console: Failed to load resource: net::ERR_BLOCKED_BY_RESPONSE.NotSameOrigin")).toBe(true);
+    expect(isExpectedMediaConsoleError("console: Failed to load resource: net::ERR_FAILED")).toBe(true);
+    expect(isExpectedMediaConsoleError("console: Failed to load resource: the server responded with a status of 400 ()")).toBe(false);
+    expect(isExpectedMediaConsoleError("console: unrelated browser failure")).toBe(false);
+  });
 });
 
 describe("featured genus optional snapshot validation policy", () => {
