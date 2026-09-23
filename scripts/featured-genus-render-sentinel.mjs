@@ -5,7 +5,26 @@ import { chromium } from 'playwright';
 const frontendUrl = (process.env.FRONTEND_URL || 'https://orchid-continuum-frontend-vof6.onrender.com/').replace(/\/$/, '');
 const calyxUrl = (process.env.CALYX_URL || 'https://orchid-calyx-backend.onrender.com').replace(/\/$/, '');
 const genera = ['Cattleya', 'Dracula', 'Dendrobium', 'Bulbophyllum', 'Vanilla'];
-const report = { frontendUrl, calyxUrl, genera: {}, browser: {}, passed: false, failure: null };
+const issueNumber = Number(process.env.ISSUE_NUMBER);
+const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA || '').trim() || null;
+const report = {
+  schema: 'oc.featured-genus-validation.v1',
+  validation_kind: 'featured-genus-deployed',
+  node_id: 'cap-homepage-featured-genus',
+  issue: Number.isSafeInteger(issueNumber) && issueNumber > 0 ? issueNumber : null,
+  wave_hash: process.env.WAVE_HASH || null,
+  run: `${process.env.GITHUB_RUN_ID || ''}:${process.env.GITHUB_RUN_ATTEMPT || ''}`,
+  frontendUrl,
+  calyxUrl,
+  expected_release_sha: expectedReleaseSha,
+  release_sha: null,
+  genera: {},
+  browser: {},
+  provider_calls: 0,
+  provider_cost_usd: 0,
+  passed: false,
+  failure: null,
+};
 
 await fs.mkdir('artifacts', { recursive: true });
 
@@ -35,8 +54,15 @@ try {
     });
 
     await page.goto(frontendUrl, { waitUntil: 'networkidle', timeout: 90_000 });
+    const releaseSha = await page.locator('meta[name="ocu-release-sha"]').getAttribute('content');
+    assert.match(releaseSha || '', /^[a-f0-9]{40}$/, 'deployed frontend did not attest a full release SHA');
+    if (expectedReleaseSha) assert.equal(releaseSha, expectedReleaseSha, 'deployed frontend is not the expected release');
+    report.release_sha = releaseSha;
     const feature = page.locator('section').filter({ hasText: 'Featured Genus' }).first();
     assert.equal(await feature.count(), 1, 'Featured Genus section was not rendered');
+    assert.equal(await page.locator('#featured-genus-title').count(), 1, 'Featured Genus heading was not rendered');
+    const continuationCount = await page.locator('[data-testid="featured-genus-continuation"]').count();
+    assert.equal(continuationCount, 1, 'Featured Genus continuation was not rendered');
     await feature.scrollIntoViewIfNeeded();
     await page.waitForTimeout(1500);
 
@@ -49,7 +75,7 @@ try {
     const serviceErrorText = await feature.getByText(/media service is temporarily unavailable/i).count();
     await page.screenshot({ path: 'artifacts/featured-genus.png', fullPage: false });
 
-    report.browser = { imageState, noMediaText, serviceErrorText, errors };
+    report.browser = { imageState, noMediaText, serviceErrorText, continuationCount, errors };
     assert.equal(serviceErrorText, 0, 'Featured Genus reached service-error state');
     if (imageState.length > 0) {
       assert.ok(imageState.every((image) => image.complete && image.naturalWidth > 0), 'A Featured Genus image did not render in the browser');

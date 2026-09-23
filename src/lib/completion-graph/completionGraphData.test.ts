@@ -213,6 +213,13 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(heroGate?.issues).toContain('#171');
   });
 
+  it('#166 keeps the remaining Featured Genus gate provider-free and explicit', () => {
+    const gate = allNodes.find((n) => n.id === 'cap-homepage-featured-genus');
+    expect(gate?.nextAction).toContain('npm run verify:featured-genus');
+    expect(gate?.evidence.some((e) => e.ref === 'scripts/featured-genus-render-sentinel.mjs')).toBe(true);
+    expect(gate?.nextAction).not.toContain('AI narrative');
+  });
+
   it('#242: Calyx education & show-management surfaces are a real, newly-censused domain', () => {
     const scoredLeafIds = [
       'cap-education-glossary-hub',

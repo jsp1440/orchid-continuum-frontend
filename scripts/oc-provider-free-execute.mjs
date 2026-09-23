@@ -10,7 +10,7 @@
  * nothing an issue author writes can become a command. Zero provider calls by
  * construction: no provider secret is present in this job.
  */
-import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { LOCAL_EXECUTORS } from './oc-capability-router.mjs';
 
@@ -39,6 +39,47 @@ for (const command of commands) {
   if (exitCode !== 0) failed = true;
 }
 
+// A command can carry a product-acceptance proof only through a fixed,
+// repository-owned validator. Ordinary passing commands remain execution
+// evidence and settle to `oc-validating`; they can never smuggle an arbitrary
+// acceptance object into the receipt.
+let acceptance;
+if (!failed && commands.includes('npm run verify:featured-genus')) {
+  try {
+    const report = JSON.parse(readFileSync('artifacts/featured-genus-report.json', 'utf8'));
+    const expectedRun = `${process.env.GITHUB_RUN_ID || ''}:${process.env.GITHUB_RUN_ATTEMPT || ''}`;
+    const releaseSha = String(report.release_sha || '');
+    const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA || '').trim();
+    if (
+      report.schema === 'oc.featured-genus-validation.v1' &&
+      report.validation_kind === 'featured-genus-deployed' &&
+      report.node_id === 'cap-homepage-featured-genus' &&
+      report.issue === issueNumber &&
+      report.wave_hash === (process.env.WAVE_HASH || null) &&
+      report.run === expectedRun &&
+      report.passed === true &&
+      report.provider_calls === 0 &&
+      report.provider_cost_usd === 0 &&
+      /^[a-f0-9]{40}$/.test(releaseSha) &&
+      (!expectedReleaseSha || report.expected_release_sha === expectedReleaseSha) &&
+      (!expectedReleaseSha || releaseSha === expectedReleaseSha)
+    ) {
+      acceptance = {
+        kind: report.validation_kind,
+        node_id: report.node_id,
+        issue: report.issue,
+        passed: true,
+        release_sha: releaseSha,
+        expected_release_sha: report.expected_release_sha || null,
+      };
+    }
+  } catch {
+    // The command's exit code remains the hard evidence. Missing or malformed
+    // acceptance metadata must not turn a successful-looking run into product
+    // completion; settlement will keep it in validation instead.
+  }
+}
+
 const evidence = {
   schema: 'oc.provider-free-evidence.v1',
   issue: issueNumber,
@@ -48,6 +89,7 @@ const evidence = {
   provider_cost_usd: 0,
   outcome: failed ? 'failed' : 'done',
   results,
+  ...(acceptance ? { acceptance } : {}),
   completed_at: new Date().toISOString(),
 };
 
