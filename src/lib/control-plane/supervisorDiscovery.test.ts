@@ -122,6 +122,35 @@ describe('continuous supervisor discovery', () => {
     expect(result.graphSelection).toBeNull();
   });
 
+  it('queues an explicit deterministic issue without waiting for a manual label', () => {
+    const result = discoverSupervisorWork(
+      root([]),
+      [{
+        repository: 'jsp1440/orchid-continuum-frontend',
+        issues: [{
+          number: 911,
+          repository: 'jsp1440/orchid-continuum-frontend',
+          state: 'open',
+          title: 'Deterministic schema check',
+          body: 'OC-SWARM-CAPABILITY: schema-validation',
+          labels: [],
+        }],
+      }],
+      NOW,
+    );
+
+    expect(result.packets).toContainEqual(expect.objectContaining({
+      taskId: 'issue:jsp1440/orchid-continuum-frontend#911:schema-validation',
+      source: expect.objectContaining({ kind: 'deterministic-check' }),
+      status: 'eligible',
+      action: 'queue',
+      executionMode: 'deterministic',
+      lifecycleState: 'discovered',
+      providerRequirement: 'none',
+      deduplication: expect.objectContaining({ fingerprint: expect.stringMatching(/^ocfp1-/) }),
+    }));
+  });
+
   it('surfaces explicit parked and owner-gated work without admitting it', () => {
     const result = discoverSupervisorWork(
       root([]),
