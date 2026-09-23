@@ -241,6 +241,7 @@ describe('portfolio steward discovery', () => {
       schema: 'oc.supervisor-task.v1',
       source: { kind: 'failed-validation', repository: 'jsp1440/orchid-continuum-frontend', reference: '#47' },
       targetModule: 'featured-genus-release-sentinel',
+      graphNodeId: 'cap-homepage-featured-genus',
       capability: 'featured-genus-verification',
       lane: 'testing',
       executionMode: 'deterministic',
