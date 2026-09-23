@@ -128,7 +128,7 @@ export const PORTFOLIO_MODULES: ReadonlyArray<PortfolioModuleDefinition> = Objec
   { moduleId: 'interaction-graph', name: 'Interaction Graph', lane: 'integration', repository: 'jsp1440/orchid-continuum-frontend', evidenceReference: 'open issue #169 and completion graph', state: 'partial', knownIssueNumbers: [169] },
   { moduleId: 'vision-lab', name: 'Vision Lab', lane: 'media-vision', repository: 'jsp1440/orchid-continuum-frontend', evidenceReference: 'src/lib/missionControlOps.ts#vision_lab', state: 'planned' },
   { moduleId: 'university', name: 'University / education', lane: 'education', repository: 'jsp1440/orchid-continuum-frontend', evidenceReference: 'src/lib/missionControlOps.ts#ocu', state: 'partial' },
-  { moduleId: 'conservatory', name: 'Conservatory', lane: 'conservatory' as SupervisorLane, repository: 'jsp1440/orchid-conservatory', evidenceReference: 'open issue #15 and frontend completion issue #243', state: 'partial', knownIssueNumbers: [15] },
+  { moduleId: 'conservatory', name: 'Conservatory', lane: 'conservatory', repository: 'jsp1440/orchid-conservatory', evidenceReference: 'open issue #15 and frontend completion issue #243', state: 'partial', knownIssueNumbers: [15] },
   { moduleId: 'improvement-discovery', name: 'Improvement Discovery Loop', lane: 'improvement-discovery', repository: 'jsp1440/orchid-calyx-backend', evidenceReference: 'open issue #1396', state: 'blocked', knownIssueNumbers: [1396] },
   { moduleId: 'taxonomy-data', name: 'Taxonomy / data integrations', lane: 'taxonomy-data', repository: 'jsp1440/orchid-calyx-backend', evidenceReference: 'open issue #1403 and frontend issue #523', state: 'partial', knownIssueNumbers: [1403] },
   { moduleId: 'testing', name: 'Testing and validation', lane: 'testing', repository: 'jsp1440/orchid-continuum-frontend', evidenceReference: 'open issue #47 and CI inventory', state: 'partial', knownIssueNumbers: [47] },
@@ -167,21 +167,6 @@ export const PORTFOLIO_ISSUE_BINDINGS: ReadonlyArray<PortfolioIssueBinding> = Ob
     providerRequirement: 'none',
   },
 ]);
-
-export type SupervisorIssueSnapshot = {
-  number: number;
-  repository: string;
-  state: 'open' | 'closed';
-  title: string;
-  body: string;
-  labels: string[];
-  updatedAt?: string;
-};
-
-export type SupervisorRepositorySnapshot = {
-  repository: string;
-  issues: SupervisorIssueSnapshot[];
-};
 
 export type SupervisorTaskStatus = 'eligible' | 'parked' | 'blocked' | 'owner-gate' | 'completed';
 export type SupervisorTaskAction = 'materialize' | 'queue' | 'reuse' | 'observe';
