@@ -70,6 +70,37 @@ describe('continuous supervisor discovery', () => {
     expect(packet?.completionEvidenceRequirements.join(' ')).toContain('oc.provider-free-evidence.v1');
   });
 
+  it('advances to the next deterministic leaf after the first packet is terminal', () => {
+    const first = leaf({
+      id: 'cap-completion-graph-engine',
+      name: 'Completion graph engine evidence refresh',
+      lane: 'INTEGRATION_COMPLETION',
+      nextAction: 'Run the graph test suite.',
+    });
+    const second = leaf();
+    const completedFirst = {
+      number: 910,
+      repository: 'jsp1440/orchid-continuum-frontend',
+      state: 'open' as const,
+      title: 'Completion graph engine evidence refresh',
+      body: 'OC-GRAPH-NODE: cap-completion-graph-engine',
+      labels: ['oc-done', 'oc-cap:test-execution'],
+    };
+
+    const result = discoverSupervisorWork(
+      root([first, second]),
+      [{ repository: 'jsp1440/orchid-continuum-frontend', issues: [completedFirst] }],
+      NOW,
+    );
+
+    expect(result.graphSelection?.nodeId).toBe('cap-deployment-contract-validation');
+    expect(result.packets.find((packet) => packet.source.kind === 'completion-graph')).toMatchObject({
+      taskId: 'graph:cap-deployment-contract-validation:schema-validation',
+      action: 'materialize',
+      lifecycleState: 'discovered',
+    });
+  });
+
   it('does not create work from broad unbound backlog prose', () => {
     const result = discoverSupervisorWork(
       root([leaf({ id: 'cap-unbound-feature', priority: 0 })]),
