@@ -59,19 +59,21 @@ const steward = (issue: Issue) => labelsOf(issue).includes('oc-portfolio-steward
 // the graph does not name is unreachable however it is labelled. This
 // accepts the binding from the issue side too: `oc-node:<node-id>`, deliberately
 // applied and visible on the issue, exactly as `oc-cap:` declares a capability.
-// Reading a node out of the title or body stays refused; that is the heuristic
-// these declarations replaced.
+// A generated issue may also carry the canonical line-anchored graph marker in
+// its packet body. Free-form title/prose matching remains refused.
 const NODE_LABEL = /^oc-node:\s*([a-z0-9][a-z0-9-]*)$/i;
+const NODE_BODY = /^OC-GRAPH-NODE:\s*([a-z0-9][a-z0-9-]*)\s*$/im;
 export function declaredNodesByIssue(issues: Issue[]): Record<number, string[]> {
   const declared: Record<number, string[]> = {};
   for (const issue of issues) {
-    const nodeIds = labelsOf(issue).map(label => NODE_LABEL.exec(label)?.[1]?.toLowerCase())
-      .filter((nodeId): nodeId is string => nodeId !== undefined);
+    const nodeIds = [
+      ...labelsOf(issue).map(label => NODE_LABEL.exec(label)?.[1]?.toLowerCase()),
+      NODE_BODY.exec(issue.body || '')?.[1]?.toLowerCase(),
+    ].filter((nodeId): nodeId is string => nodeId !== undefined);
     if (nodeIds.length > 0) declared[issue.number] = [...new Set(nodeIds)];
   }
   return declared;
 }
-
 export function lineageFor(issue: number, prs: Pull[]) {
   return prs.filter(pr => new RegExp(`^OC-(?:AUTO|LINEAGE)-ISSUE:\\s*#${issue}\\s*$`, 'mi').test(pr.body || '') ||
     new RegExp(`^oc-auto(?:-|/)${issue}(?:-|$)`, 'i').test(pr.head.ref) ||

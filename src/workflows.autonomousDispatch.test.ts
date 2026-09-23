@@ -8,7 +8,10 @@ const text = read('orchid-continuous-completion');
 const workflow = yaml.load(text) as { jobs: Record<string, Job>; env: Record<string, unknown> };
 describe('canonical provider-free autonomous dispatch', () => {
   it('uses graph planning, reusable fan-out and an always-run receipt audit', () => {
-    expect(Object.keys(workflow.jobs)).toEqual(['reconcile', 'plan', 'dispatch', 'audit']);
+    expect(Object.keys(workflow.jobs)).toEqual(['reconcile', 'supervisor', 'plan', 'dispatch', 'audit']);
+    expect(workflow.jobs.supervisor.needs).toBe('reconcile');
+    expect(workflow.jobs.supervisor.steps?.some(step => step.run?.includes('oc-supervisor-discovery.ts'))).toBe(true);
+    expect(workflow.jobs.supervisor.permissions).toEqual({ contents: 'read', issues: 'write', 'pull-requests': 'read' });
     expect(workflow.env.MAX_ACTIVE_LANES).toBe(8);
     expect(workflow.env.PROVIDER_AUTHORIZED).toBe('false');
     expect(workflow.jobs.dispatch.uses).toBe('./.github/workflows/orchid-deterministic-dispatch.yml');
