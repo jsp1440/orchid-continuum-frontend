@@ -1,6 +1,6 @@
 const SNAPSHOT_PATH = "/rest/v1/daily_genus_snapshot";
 const CANONICAL_SELECT = "genus,snapshot_date";
-const SNAPSHOT_DATE = /^eq\\.\\d{4}-\\d{2}-\\d{2}$/;
+const SNAPSHOT_DATE = /^eq\.\d{4}-\d{2}-\d{2}$/;
 
 export function isExpectedOptionalSnapshotFailure(response) {
   if (!response || response.status !== 400) return false;
