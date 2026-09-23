@@ -214,6 +214,54 @@ describe('continuous supervisor discovery', () => {
   });
 });
 
+describe('supervisor source adapters', () => {
+  it('classifies dependency, validation, evidence, integration, improvement, and Brain sources', () => {
+    const result = discoverSupervisorWork(
+      root([]),
+      [{
+        repository: 'jsp1440/orchid-continuum-frontend',
+        issues: [
+          { number: 920, repository: 'jsp1440/orchid-continuum-frontend', state: 'open', title: 'Dependency gap',
+            body: 'OC-SWARM-CAPABILITY: schema-validation\nOC-SWARM-DEPENDS-ON: #1', labels: [] },
+          { number: 921, repository: 'jsp1440/orchid-continuum-frontend', state: 'open', title: 'Failed validation',
+            body: 'OC-SWARM-CAPABILITY: test-execution\nOC-VALIDATION-FAILED: test failed', labels: [] },
+          { number: 922, repository: 'jsp1440/orchid-continuum-frontend', state: 'open', title: 'Stale evidence',
+            body: 'OC-SWARM-CAPABILITY: schema-validation\nOC-EVIDENCE-STALE: evidence expired', labels: [] },
+          { number: 923, repository: 'jsp1440/orchid-continuum-frontend', state: 'open', title: 'Integration gap',
+            body: 'OC-SWARM-CAPABILITY: test-execution\nOC-SWARM-WRITES: integration', labels: [] },
+          { number: 924, repository: 'jsp1440/orchid-continuum-frontend', state: 'open', title: 'Improvement discovery',
+            body: 'OC-QUEUE-CAPABILITY: improvement:discovery-loop:v1', labels: ['oc-blocked'] },
+        ],
+      }, {
+        repository: 'jsp1440/Orchid-Continuum-Brain',
+        issues: [{ number: 925, repository: 'jsp1440/Orchid-Continuum-Brain', state: 'open', title: 'Brain module backlog',
+          body: 'OC-SWARM-CAPABILITY: schema-validation', labels: [] }],
+      }],
+      NOW,
+    );
+
+    expect(result.packets.find((packet) => packet.source.reference === '#920')).toMatchObject({
+      source: { kind: 'dependency-gap' }, status: 'eligible', action: 'queue',
+    });
+    expect(result.packets.find((packet) => packet.source.reference === '#921')).toMatchObject({
+      source: { kind: 'failed-validation' }, status: 'eligible', action: 'queue',
+    });
+    expect(result.packets.find((packet) => packet.source.reference === '#922')).toMatchObject({
+      source: { kind: 'stale-evidence' }, status: 'eligible', action: 'queue',
+    });
+    expect(result.packets.find((packet) => packet.source.reference === '#923')).toMatchObject({
+      source: { kind: 'integration-gap' }, status: 'eligible', action: 'queue',
+    });
+    expect(result.packets.find((packet) => packet.source.reference === '#924')).toMatchObject({
+      source: { kind: 'improvement-discovery' }, status: 'blocked', action: 'observe',
+      executionMode: 'provider', providerRequirement: 'required',
+    });
+    expect(result.packets.find((packet) => packet.source.reference === '#925')).toMatchObject({
+      source: { kind: 'brain-backlog' }, status: 'eligible', action: 'queue',
+    });
+  });
+});
+
 
 describe('portfolio steward discovery', () => {
   it('materializes a real failed-validation issue through an explicit repository binding', () => {
