@@ -111,14 +111,44 @@ function currentRepository(): string {
 }
 
 function snapshot(repository: string): SupervisorRepositorySnapshot {
-  const pages = ghJson<GitHubIssue[] | GitHubIssue[][]>([
+  const openPages = ghJson<GitHubIssue[] | GitHubIssue[][]>([
     'api',
     `repos/${repository}/issues?state=open&per_page=100&sort=updated&direction=desc`,
     '--paginate',
     '--slurp',
   ]);
-  const issues: SupervisorIssueSnapshot[] = flattenPaginated(pages)
+
+  // Closed, terminal graph issues are durable completion evidence. The graph
+  // remains PARTIAL when a separate browser/live gate is outstanding, but a
+  // bounded deterministic refresh that already reached oc-done must not be
+  // materialized again under a new issue number on the next scheduler pulse.
+  //
+  // Fetch these only for the current orchestration repository so portfolio
+  // scans of the other repositories remain bounded to their live backlog.
+  const terminalPages = repository === currentRepository()
+    ? ghJson<GitHubIssue[] | GitHubIssue[][]>([
+        'api',
+        `repos/${repository}/issues?state=closed&labels=oc-done&per_page=100&sort=updated&direction=desc`,
+        '--paginate',
+        '--slurp',
+      ])
+    : [];
+  const terminalGraphIssues = flattenPaginated(terminalPages)
     .filter((issue) => !issue.pull_request)
+    .filter((issue) => {
+      const labels = (issue.labels ?? []).map((label) => label.name);
+      return /^OC-GRAPH-NODE:\\s*[a-z0-9][a-z0-9-]*\\s*$/im.test(issue.body ?? '') ||
+        labels.some((label) => /^oc-node:[a-z0-9][a-z0-9-]*$/i.test(label));
+    });
+
+  const inventory = [
+    ...flattenPaginated(openPages).filter((issue) => !issue.pull_request),
+    ...terminalGraphIssues,
+  ];
+  const deduped = inventory.filter((issue, index) =>
+    inventory.findIndex((candidate) => candidate.number === issue.number) === index,
+  );
+  const issues: SupervisorIssueSnapshot[] = deduped
     .map((issue) => ({
       number: issue.number,
       repository,
@@ -195,7 +225,9 @@ function createIssue(title: string, body: string, labels: string[]): number {
 }
 
 function openIssueRefs(issues: SupervisorIssueSnapshot[]): OpenIssueRef[] {
-  return issues.map((issue) => ({ number: issue.number, body: issue.body }));
+  return issues
+    .filter((issue) => issue.state === 'open')
+    .map((issue) => ({ number: issue.number, body: issue.body }));
 }
 
 function materializeGraph(

@@ -84,7 +84,7 @@ describe('continuous supervisor discovery', () => {
     const completedFirst = {
       number: 910,
       repository: 'jsp1440/orchid-continuum-frontend',
-      state: 'open' as const,
+      state: 'closed' as const,
       title: 'Completion graph engine evidence refresh',
       body: 'OC-GRAPH-NODE: cap-completion-graph-engine',
       labels: ['oc-done', 'oc-cap:test-execution'],
@@ -102,6 +102,32 @@ describe('continuous supervisor discovery', () => {
       action: 'materialize',
       lifecycleState: 'discovered',
     });
+  });
+
+  it('treats a closed oc-done graph issue as terminal evidence instead of rematerializing it', () => {
+    const completed = {
+      number: 912,
+      repository: 'jsp1440/orchid-continuum-frontend',
+      state: 'closed' as const,
+      title: 'Deployment contract validation',
+      body: 'OC-GRAPH-NODE: cap-deployment-contract-validation',
+      labels: ['oc-done', 'oc-cap:schema-validation'],
+    };
+
+    const result = discoverSupervisorWork(
+      root([leaf()]),
+      [{ repository: 'jsp1440/orchid-continuum-frontend', issues: [completed] }],
+      NOW,
+    );
+
+    expect(result.graphSelection).toBeNull();
+    expect(result.packets).toContainEqual(expect.objectContaining({
+      existingIssueNumber: 912,
+      status: 'completed',
+      action: 'observe',
+      lifecycleState: 'completed',
+    }));
+    expect(result.packets.some((packet) => packet.action === 'materialize')).toBe(false);
   });
 
   it('does not create work from broad unbound backlog prose', () => {
