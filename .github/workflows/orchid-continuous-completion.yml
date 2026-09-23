@@ -5,7 +5,7 @@ name: Orchid Continuous Completion (NO API MODE)
 on:
   schedule:
     # Keep the five-minute cadence off the top-of-hour Actions load spike.
-    - cron: '2-59/5 * * * *'
+    - cron: '2/5 * * * *'
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, closed]
   issues:
