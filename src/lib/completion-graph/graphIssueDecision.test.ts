@@ -156,6 +156,7 @@ describe('decideProviderFreeGraphIssueAction', () => {
     expect(decision.body).toContain('"schema": "oc.supervisor-task.v1"');
     expect(decision.packet).toMatchObject({
       taskId: 'graph:cap-deployment-contract-validation:schema-validation',
+      graphNodeId: 'cap-deployment-contract-validation',
       providerRequirement: 'none',
       ownerGateStatus: 'none',
     });

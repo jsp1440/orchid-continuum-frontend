@@ -241,6 +241,7 @@ describe('portfolio steward discovery', () => {
       schema: 'oc.supervisor-task.v1',
       source: { kind: 'failed-validation', repository: 'jsp1440/orchid-continuum-frontend', reference: '#47' },
       targetModule: 'featured-genus-release-sentinel',
+      graphNodeId: 'cap-homepage-featured-genus',
       capability: 'featured-genus-verification',
       lane: 'testing',
       executionMode: 'deterministic',
@@ -283,6 +284,33 @@ describe('portfolio steward discovery', () => {
     expect(first.packets.filter((candidate) => candidate.existingIssueNumber === 47)).toHaveLength(1);
     expect(firstPacket).toMatchObject({ action: 'reuse', lifecycleState: 'queued' });
     expect(secondPacket?.deduplication.fingerprint).toBe(firstPacket?.deduplication.fingerprint);
+  });
+
+  it('parks an unchanged deterministic repair without a durable repair lineage', () => {
+    const result = discoverSupervisorWork(
+      root([]),
+      [{
+        repository: 'jsp1440/orchid-continuum-frontend',
+        issues: [{
+          number: 47,
+          repository: 'jsp1440/orchid-continuum-frontend',
+          state: 'open',
+          title: 'Sentinel: Featured Genus deployment audit failing',
+          body: 'The deployed Featured Genus audit failed.',
+          labels: ['oc-repair', 'oc-cap:featured-genus-verification'],
+        }],
+        pullRequests: [],
+      }],
+      NOW,
+    );
+
+    expect(result.packets).toContainEqual(expect.objectContaining({
+      existingIssueNumber: 47,
+      status: 'parked',
+      action: 'observe',
+      lifecycleState: 'parked',
+    }));
+    expect(result.packets.find((packet) => packet.existingIssueNumber === 47)?.action).not.toBe('queue');
   });
 
   it('records inaccessible repositories as bounded portfolio gaps and never promotes them to work', () => {

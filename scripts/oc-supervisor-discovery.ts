@@ -276,6 +276,9 @@ function ensureQueued(issue: SupervisorIssueSnapshot, packet?: SupervisorTaskRec
   if (packet && !labels.has('oc-cap:' + packet.capability)) {
     labelsToAdd.push('oc-cap:' + packet.capability);
   }
+  if (packet?.graphNodeId && !labels.has('oc-node:' + packet.graphNodeId)) {
+    labelsToAdd.push('oc-node:' + packet.graphNodeId);
+  }
   const missing = labelsToAdd.filter((label) => !labels.has(label));
   if (missing.length === 0) {
     return {
@@ -317,7 +320,7 @@ function refillEligibleIssues(
     ])),
   );
   return discovery.packets
-    .filter((packet) => packet.status === 'eligible' && packet.action === 'queue')
+    .filter((packet) => packet.status === 'eligible' && ['queue', 'reuse'].includes(packet.action))
     .map((packet): QueueAction => {
       if (packet.targetRepo !== current) {
         return {

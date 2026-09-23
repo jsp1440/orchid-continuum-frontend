@@ -86,10 +86,10 @@ export type SupervisorTaskPacket = {
   source: { kind: SupervisorSourceKind; repository: string; reference: string };
   lane: SupervisorLane;
   sourceEvidence: SupervisorEvidenceReference[];
+  graphNodeId?: string;
   targetRepo: string;
   targetModule: string;
   capability: string;
-  lane: SupervisorLane;
   executionMode: 'deterministic' | 'provider';
   dependencies: string[];
   riskClass: 'low' | 'medium' | 'high';
@@ -118,6 +118,7 @@ type DeterministicGraphTaskDefinition = {
   targetRepo: string;
   targetModule: string;
   capability: string;
+  lane: SupervisorLane;
   riskClass: SupervisorTaskPacket['riskClass'];
   ownerGateStatus: SupervisorTaskPacket['ownerGateStatus'];
   providerRequirement: SupervisorTaskPacket['providerRequirement'];
@@ -165,6 +166,24 @@ export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGra
       'Keep the graph leaf PARTIAL until its live/browser acceptance action is separately verified.',
     ],
   },
+  'cap-homepage-featured-genus': {
+    targetRepo: 'jsp1440/orchid-continuum-frontend',
+    targetModule: 'featured-genus-release-sentinel',
+    capability: 'featured-genus-verification',
+    lane: 'testing',
+    riskClass: 'medium',
+    ownerGateStatus: 'none',
+    providerRequirement: 'none',
+    validationCriteria: [
+      'Run npm run verify:featured-genus against the exact admitted revision.',
+      'Require the sentinel report to prove deployed release identity, media provenance, browser render, and zero provider spend.',
+      'Keep the leaf in validation or repair when the sentinel is red; never infer completion from comments.',
+    ],
+    completionEvidenceRequirements: [
+      'Record the exact implementation SHA, workflow run, lease, sentinel report, exit code, and provider spend.',
+      'Settle only from the repository-owned sentinel evidence; a passing command alone is not product completion.',
+    ],
+  },
 });
 
 function fingerprintFor(parts: string[]): string {
@@ -196,6 +215,7 @@ export function deterministicGraphTaskFor(node: CompletionNode): SupervisorTaskP
       reference: node.id,
       detail: 'Canonical completion-graph leaf selected by the supervisor admission planner.',
     }],
+    graphNodeId: node.id,
     ...definition,
     executionMode: 'deterministic',
     dependencies: [...(node.dependsOn ?? [])],

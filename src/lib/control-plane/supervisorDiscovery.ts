@@ -85,6 +85,7 @@ export type PortfolioIssueBinding = {
   targetModule: string;
   lane: SupervisorLane;
   capability: string;
+  graphNodeId?: string;
   sourceKind: SupervisorSourceKind;
   evidenceReference: string;
   validationCriteria: string[];
@@ -151,7 +152,8 @@ export const PORTFOLIO_ISSUE_BINDINGS: ReadonlyArray<PortfolioIssueBinding> = Ob
     lane: 'testing',
     capability: 'featured-genus-verification',
     sourceKind: 'failed-validation',
-    evidenceReference: 'issue #47 body: failed deployed Featured Genus audit and named workflow run',
+    graphNodeId: 'cap-homepage-featured-genus',
+    evidenceReference: 'src/lib/control-plane/supervisorDiscovery.ts#PORTFOLIO_ISSUE_BINDINGS[frontend#47]',
     validationCriteria: [
       'Run the repository-owned npm run verify:featured-genus sentinel against the exact admitted revision.',
       'Require the sentinel report to prove the expected deployed release, media provenance, browser render, and zero provider spend.',
@@ -337,7 +339,10 @@ function taskStatus(issue: SupervisorIssueSnapshot, capability: string | null): 
   if (gate === 'owner-gate') return 'owner-gate';
   if (gate === 'blocked') return 'blocked';
   if (issue.labels.some((label) => /^oc-done$/i.test(label))) return 'completed';
-  if (issue.labels.some((label) => /^oc-(running|validating|runtime-backoff)$/i.test(label))) return 'parked';
+  // A failed deterministic attempt is not a fresh queue item. Keep it parked
+  // until revision-aware reconciliation restores the queue after a changed
+  // implementation; otherwise each supervisor pulse would repeat the same revision.
+  if (issue.labels.some((label) => /^oc-(running|validating|runtime-backoff|repair)$/i.test(label))) return 'parked';
   if (!capability || !PROVIDER_FREE_CAPABILITIES.has(capability)) return 'parked';
   return 'eligible';
 }
@@ -384,6 +389,7 @@ function issuePacket(issue: SupervisorIssueSnapshot): SupervisorTaskRecord | nul
     source: { kind, repository: issue.repository, reference: nodeId ?? '#' + issue.number },
     lane,
     sourceEvidence,
+    graphNodeId: binding?.graphNodeId,
     targetRepo: issue.repository,
     targetModule,
     capability,
