@@ -342,6 +342,7 @@ function taskStatus(issue: SupervisorIssueSnapshot, capability: string | null): 
   // A failed deterministic attempt is not a fresh queue item. Keep it parked
   // until revision-aware reconciliation restores the queue after a changed
   // implementation; otherwise each supervisor pulse would repeat the same revision.
+  if (issue.labels.some((label) => /^oc-(running|validating|runtime-backoff|repair)$/i.test(label))) return 'parked';
   if (!capability || !PROVIDER_FREE_CAPABILITIES.has(capability)) return 'parked';
   return 'eligible';
 }
