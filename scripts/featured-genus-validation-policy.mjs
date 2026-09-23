@@ -1,3 +1,9 @@
+const EXPECTED_MEDIA_ERROR = /^console: Failed to load resource: net::ERR_(BLOCKED_BY_RESPONSE\.NotSameOrigin|FAILED)$/;
+
+export function isExpectedMediaConsoleError(error) {
+  return typeof error === "string" && EXPECTED_MEDIA_ERROR.test(error);
+}
+
 const SNAPSHOT_PATH = "/rest/v1/daily_genus_snapshot";
 const CANONICAL_SELECT = "genus,snapshot_date";
 const SNAPSHOT_DATE = /^eq\.\d{4}-\d{2}-\d{2}$/;
