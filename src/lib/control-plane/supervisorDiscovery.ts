@@ -339,7 +339,9 @@ function taskStatus(issue: SupervisorIssueSnapshot, capability: string | null): 
   if (gate === 'owner-gate') return 'owner-gate';
   if (gate === 'blocked') return 'blocked';
   if (issue.labels.some((label) => /^oc-done$/i.test(label))) return 'completed';
-  // A failed deterministic attempt is not a fresh queue item. Keep it parked\n  // until the existing planner sees a concrete repair lineage; otherwise each\n  // supervisor pulse would restore oc-queued and repeat the same revision.\n  if (issue.labels.some((label) => /^oc-(running|validating|runtime-backoff|repair)$/i.test(label))) return 'parked';
+  // A failed deterministic attempt is not a fresh queue item. Keep it parked
+  // until revision-aware reconciliation restores the queue after a changed
+  // implementation; otherwise each supervisor pulse would repeat the same revision.
   if (!capability || !PROVIDER_FREE_CAPABILITIES.has(capability)) return 'parked';
   return 'eligible';
 }
