@@ -150,6 +150,7 @@ function lifecycleState(
   if (issue.labels.some((label) => /^oc-validating$/i.test(label))) return 'validating';
   if (issue.labels.some((label) => /^oc-running$/i.test(label))) return 'executing';
   if (issue.labels.some((label) => /^oc-(queued|prepared)$/i.test(label))) return 'queued';
+  if (status === 'eligible') return 'discovered';
   return 'parked';
 }
 
