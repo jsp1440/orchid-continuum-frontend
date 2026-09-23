@@ -51,15 +51,45 @@ export type SupervisorSourceKind =
   | 'integration-gap'
   | 'deterministic-check'
   | 'improvement-discovery'
+  | 'module-state'
+  | 'ci-evidence'
   | 'issue';
+
+export type SupervisorLane =
+  | 'frontend'
+  | 'backend'
+  | 'brain-reasoning'
+  | 'taxonomy-data'
+  | 'scientific-validation'
+  | 'literature'
+  | 'media-vision'
+  | 'education'
+  | 'conservatory'
+  | 'research-tools'
+  | 'infrastructure'
+  | 'integration'
+  | 'testing'
+  | 'security-governance'
+  | 'documentation'
+  | 'improvement-discovery';
+
+export type SupervisorEvidenceReference = {
+  kind: 'issue' | 'completion-graph' | 'module-manifest' | 'pull-request' | 'ci';
+  repository: string;
+  reference: string;
+  detail: string;
+};
 
 export type SupervisorTaskPacket = {
   schema: 'oc.supervisor-task.v1';
   taskId: string;
   source: { kind: SupervisorSourceKind; repository: string; reference: string };
+  lane: SupervisorLane;
+  sourceEvidence: SupervisorEvidenceReference[];
   targetRepo: string;
   targetModule: string;
   capability: string;
+  lane: SupervisorLane;
   executionMode: 'deterministic' | 'provider';
   dependencies: string[];
   riskClass: 'low' | 'medium' | 'high';
@@ -105,6 +135,7 @@ export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGra
     targetRepo: 'jsp1440/orchid-continuum-frontend',
     targetModule: 'production-release-core',
     capability: 'schema-validation',
+    lane: 'infrastructure',
     riskClass: 'low',
     ownerGateStatus: 'none',
     providerRequirement: 'none',
@@ -121,6 +152,7 @@ export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGra
     targetRepo: 'jsp1440/orchid-continuum-frontend',
     targetModule: 'autonomous-control-plane-core',
     capability: 'test-execution',
+    lane: 'integration',
     riskClass: 'medium',
     ownerGateStatus: 'none',
     providerRequirement: 'none',
@@ -158,6 +190,12 @@ export function deterministicGraphTaskFor(node: CompletionNode): SupervisorTaskP
       repository: definition.targetRepo,
       reference: node.id,
     },
+    sourceEvidence: [{
+      kind: 'completion-graph',
+      repository: definition.targetRepo,
+      reference: node.id,
+      detail: 'Canonical completion-graph leaf selected by the supervisor admission planner.',
+    }],
     ...definition,
     executionMode: 'deterministic',
     dependencies: [...(node.dependsOn ?? [])],

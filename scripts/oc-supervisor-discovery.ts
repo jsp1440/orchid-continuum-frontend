@@ -9,8 +9,11 @@ import {
 import type { CompletionNode } from '../src/lib/completion-graph/types';
 import {
   discoverSupervisorWork,
+  PORTFOLIO_REPOSITORIES,
+  type SupervisorCiRunSnapshot,
   type SupervisorDiscoveryResult,
   type SupervisorIssueSnapshot,
+  type SupervisorPullRequestSnapshot,
   type SupervisorRepositorySnapshot,
 } from '../src/lib/control-plane/supervisorDiscovery';
 import type { OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
@@ -23,6 +26,33 @@ type GitHubIssue = {
   labels?: Array<{ name: string }>;
   pull_request?: unknown;
   updated_at?: string;
+};
+
+type GitHubPullRequest = {
+  number: number;
+  title: string;
+  body: string | null;
+  state: 'open' | 'closed';
+  draft?: boolean;
+  labels?: Array<{ name: string }>;
+  head?: { sha?: string };
+  base?: { ref?: string };
+  updated_at?: string;
+};
+
+type GitHubWorkflowRun = {
+  id: number;
+  name?: string;
+  status?: string;
+  conclusion?: string | null;
+  head_sha?: string;
+  created_at?: string;
+};
+
+type GitHubRepository = {
+  default_branch?: string;
+  default_branch_sha?: string;
+  sha?: string;
 };
 
 type QueueAction = {
@@ -51,6 +81,14 @@ function ghJson<T>(args: string[]): T {
   }) || 'null') as T;
 }
 
+function tryGhJson<T>(args: string[]): T | undefined {
+  try {
+    return ghJson<T>(args);
+  } catch {
+    return undefined;
+  }
+}
+
 function flattenPaginated<T>(value: T[] | T[][]): T[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((page) => Array.isArray(page) ? page : [page]);
@@ -62,9 +100,7 @@ function repositoryNames(): string[] {
     .map((value) => value.trim())
     .filter(Boolean);
   return [...new Set([
-    'jsp1440/Orchid-Continuum-Brain',
-    'jsp1440/orchid-calyx-backend',
-    'jsp1440/orchid-continuum-frontend',
+    ...PORTFOLIO_REPOSITORIES,
     ...configured,
     process.env.GITHUB_REPOSITORY ?? '',
   ].filter((value) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(value)))];
@@ -92,7 +128,49 @@ function snapshot(repository: string): SupervisorRepositorySnapshot {
       labels: (issue.labels ?? []).map((label) => label.name),
       updatedAt: issue.updated_at,
     }));
-  return { repository, issues };
+
+  // PR and CI state are evidence sources, not admission commands. If either
+  // endpoint is unavailable, keep the issue inventory and record the gap in the
+  // repository observation instead of converting an access failure into work.
+  const pullRequests = flattenPaginated(tryGhJson<GitHubPullRequest[] | GitHubPullRequest[][]>([
+    'api',
+    `repos/${repository}/pulls?state=open&per_page=50&sort=updated&direction=desc`,
+  ]) ?? []).map((pull): SupervisorPullRequestSnapshot => ({
+    number: pull.number,
+    repository,
+    state: pull.state,
+    title: pull.title,
+    body: pull.body ?? '',
+    labels: (pull.labels ?? []).map((label) => label.name),
+    draft: pull.draft === true,
+    headSha: pull.head?.sha,
+    baseBranch: pull.base?.ref,
+    updatedAt: pull.updated_at,
+  }));
+  const ciRuns = (tryGhJson<{ workflow_runs?: GitHubWorkflowRun[] }>([
+    'api',
+    `repos/${repository}/actions/runs?per_page=20`,
+  ])?.workflow_runs ?? []).map((run): SupervisorCiRunSnapshot => ({
+    id: run.id,
+    name: run.name ?? '',
+    status: run.status ?? 'unknown',
+    conclusion: run.conclusion ?? null,
+    headSha: run.head_sha,
+    createdAt: run.created_at,
+  }));
+  const metadata = tryGhJson<GitHubRepository>([
+    'api',
+    `repos/${repository}`,
+  ]);
+  return {
+    repository,
+    issues,
+    pullRequests,
+    ciRuns,
+    defaultBranch: metadata?.default_branch,
+    headSha: metadata?.default_branch_sha ?? metadata?.sha,
+    available: true,
+  };
 }
 
 function findNode(root: CompletionNode, id: string): CompletionNode | null {
@@ -192,13 +270,21 @@ function materializeGraph(
   };
 }
 
-function ensureQueued(issue: SupervisorIssueSnapshot): QueueAction {
-  if (issue.labels.some((label) => /^oc-queued$/i.test(label))) {
+function ensureQueued(issue: SupervisorIssueSnapshot, packet?: SupervisorTaskRecord): QueueAction {
+  const labels = new Set(issue.labels);
+  const labelsToAdd = ['oc-queued'];
+  if (packet && !labels.has('oc-cap:' + packet.capability)) {
+    labelsToAdd.push('oc-cap:' + packet.capability);
+  }
+  const missing = labelsToAdd.filter((label) => !labels.has(label));
+  if (missing.length === 0) {
     return {
       action: 'reused',
       repository: issue.repository,
       issueNumber: issue.number,
-      reason: 'The eligible packet is already in the governed queue.',
+      taskId: packet?.taskId,
+      fingerprint: packet?.deduplication.fingerprint,
+      reason: 'The eligible packet is already in the governed queue with its declared capability.',
     };
   }
   execFileSync('gh', [
@@ -207,14 +293,15 @@ function ensureQueued(issue: SupervisorIssueSnapshot): QueueAction {
     String(issue.number),
     '--repo',
     issue.repository,
-    '--add-label',
-    'oc-queued',
+    ...missing.flatMap((label) => ['--add-label', label]),
   ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
   return {
     action: 'queued',
     repository: issue.repository,
     issueNumber: issue.number,
-    reason: 'The supervisor added the canonical queue label for an explicit provider-free packet.',
+    taskId: packet?.taskId,
+    fingerprint: packet?.deduplication.fingerprint,
+    reason: 'The supervisor reconciled the canonical queue label and explicit capability declaration.',
   };
 }
 
@@ -253,7 +340,7 @@ function refillEligibleIssues(
         };
       }
       return {
-        ...ensureQueued(issue),
+        ...ensureQueued(issue, packet),
         taskId: packet.taskId,
         fingerprint: packet.deduplication.fingerprint,
       };
@@ -270,7 +357,14 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
     } catch (error) {
       errors.push('Unable to scan ' + repository + ': ' +
         (error instanceof Error ? error.message : String(error)));
-      repositories.push({ repository, issues: [] });
+      repositories.push({
+        repository,
+        issues: [],
+        pullRequests: [],
+        ciRuns: [],
+        available: false,
+        accessError: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 
