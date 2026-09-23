@@ -39,9 +39,66 @@ export const STALE_NODE_DATA_DAYS = 120;
 export type GraphIssueDecision =
   | { action: 'no-admissible-node'; reason: string }
   | { action: 'reuse-existing'; issueNumber: number; reason: string }
-  | { action: 'create'; title: string; body: string; labels: string[]; markerNodeId: string; reason: string }
+  | { action: 'create'; title: string; body: string; labels: string[]; markerNodeId: string; reason: string; packet?: SupervisorTaskPacket }
   | { action: 'fail-closed'; reason: string };
 
+export type SupervisorTaskPacket = {
+  schema: 'oc.supervisor-task.v1';
+  taskId: string;
+  source: { kind: 'completion-graph'; repository: string; reference: string };
+  targetRepo: string;
+  targetModule: string;
+  capability: string;
+  dependencies: string[];
+  riskClass: 'low' | 'medium' | 'high';
+  ownerGateStatus: 'none' | 'owner-gate' | 'blocked';
+  providerRequirement: 'none' | 'optional' | 'required';
+  validationCriteria: string[];
+  completionEvidenceRequirements: string[];
+};
+
+type DeterministicGraphTaskDefinition = Omit<SupervisorTaskPacket,
+  'schema' | 'taskId' | 'source' | 'dependencies'>;
+
+/**
+ * Explicit graph-to-executor bindings are the only way the supervisor may
+ * materialize provider-free work. A graph sentence is never treated as a
+ * capability by inference.
+ */
+export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGraphTaskDefinition>> = Object.freeze({
+  'cap-deployment-contract-validation': {
+    targetRepo: 'jsp1440/orchid-continuum-frontend',
+    targetModule: 'production-release-core',
+    capability: 'schema-validation',
+    riskClass: 'low',
+    ownerGateStatus: 'none',
+    providerRequirement: 'none',
+    validationCriteria: [
+      'Run npm run validate:deployment against the checked-out revision.',
+      'Validate only static route and SPA-fallback contract files; do not claim live deployment readiness.',
+    ],
+    completionEvidenceRequirements: [
+      'Record the exact implementation SHA, command, and exit code in an oc.provider-free-evidence.v1 receipt.',
+      'Keep the graph leaf PARTIAL until its separate live/browser gate is owner-authorized and verified.',
+    ],
+  },
+});
+
+export function deterministicGraphTaskFor(node: CompletionNode): SupervisorTaskPacket | null {
+  const definition = DETERMINISTIC_GRAPH_TASKS[node.id];
+  if (!definition) return null;
+  return {
+    schema: 'oc.supervisor-task.v1',
+    taskId: `graph:${node.id}:${definition.capability}`,
+    source: {
+      kind: 'completion-graph',
+      repository: definition.targetRepo,
+      reference: node.id,
+    },
+    ...definition,
+    dependencies: [...(node.dependsOn ?? [])],
+  };
+};
 const PRIORITY_TIER_MAX = [
   { max: 9, tier: 'P0' },
   { max: 19, tier: 'P1' },
@@ -93,8 +150,8 @@ function validateNode(node: CompletionNode, now: string): string[] {
   return problems;
 }
 
-function buildIssueBody(node: CompletionNode, tier: string): string {
-  return [
+function buildIssueBody(node: CompletionNode, tier: string, packet?: SupervisorTaskPacket): string {
+  const body = [
     'This bounded work item was materialized directly from the canonical completion graph because the selected admissible leaf had no live executable issue.',
     '',
     `Graph node: \`${node.id}\` (priority tier ${tier})`,
@@ -110,7 +167,21 @@ function buildIssueBody(node: CompletionNode, tier: string): string {
     '- Production deployment, production data/KG mutation, taxonomy activation, publication, credentials, spending, and destructive operations remain owner-gated.',
     '',
     graphNodeMarker(node.id),
-  ].join('\n');
+  ];
+
+  if (packet) {
+    body.push(
+      '',
+      '## Governed task packet',
+      '```json',
+      JSON.stringify(packet, null, 2),
+      '```',
+      `OC-SWARM-CAPABILITY: ${packet.capability}`,
+      'OC-SWARM-PROVIDER-REQUIRED: false',
+    );
+  }
+
+  return body.join('\n');
 }
 
 /**
@@ -156,3 +227,36 @@ export function decideGraphIssueAction(
     reason: `Node ${node.id} (${tier}) has no live tracked issue; materializing a bounded work item from its nextAction.`,
   };
 }
+
+
+/**
+ * Select the graph issue path only for a declared deterministic executor.
+ * Provider-free mode must not turn an arbitrary graph leaf into executable work.
+ */
+export function decideProviderFreeGraphIssueAction(
+  node: CompletionNode | null,
+  openIssues: OpenIssueRef[],
+  now: string,
+): GraphIssueDecision {
+  if (!node) {
+    return { action: 'no-admissible-node', reason: 'No provider-free graph leaf was selected this cycle.' };
+  }
+
+  const packet = deterministicGraphTaskFor(node);
+  if (!packet) {
+    return {
+      action: 'fail-closed',
+      reason: `Refusing to materialize graph node ${node.id}: no explicit provider-free capability binding exists.`,
+    };
+  }
+
+  const decision = decideGraphIssueAction(node, openIssues, now);
+  if (decision.action !== 'create') return decision;
+
+  return {
+    ...decision,
+    body: buildIssueBody(node, priorityTier(node.priority ?? DEFAULT_PRIORITY), packet),
+    labels: [...decision.labels, `oc-cap:${packet.capability}`],
+    packet,
+  };
+};
