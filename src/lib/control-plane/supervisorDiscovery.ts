@@ -93,7 +93,7 @@ function markerCapability(body: string, labels: string[]): string | null {
 }
 
 function graphNodeId(body: string): string | null {
-  return body.match(/^OC-GRAPH-NODE:\\s*([a-z0-9][a-z0-9-]*)\\s*$/im)?.[1]?.toLowerCase() ?? null;
+  return body.match(/^OC-GRAPH-NODE:\s*([a-z0-9][a-z0-9-]*)\s*$/im)?.[1]?.toLowerCase() ?? null;
 }
 
 function riskClass(labels: string[]): SupervisorTaskPacket['riskClass'] {
@@ -103,7 +103,7 @@ function riskClass(labels: string[]): SupervisorTaskPacket['riskClass'] {
 }
 
 function ownerGateStatus(labels: string[], body: string): SupervisorTaskPacket['ownerGateStatus'] {
-  if (labels.some((label) => /^oc-owner-gate$/i.test(label)) || /^OC-AUTO-HOLD:\\s*true\\s*$/im.test(body)) {
+  if (labels.some((label) => /^oc-owner-gate$/i.test(label)) || /^OC-AUTO-HOLD:\s*true\s*$/im.test(body)) {
     return 'owner-gate';
   }
   if (labels.some((label) => /^oc-blocked$/i.test(label))) return 'blocked';
@@ -111,12 +111,12 @@ function ownerGateStatus(labels: string[], body: string): SupervisorTaskPacket['
 }
 
 function dependencies(body: string): string[] {
-  const match = body.match(/^OC-SWARM-DEPENDS-ON:\\s*(.+)$/im);
+  const match = body.match(/^OC-SWARM-DEPENDS-ON:\s*(.+)$/im);
   return match ? match[1].split(',').map((value) => value.trim()).filter(Boolean) : [];
 }
 
 function sourceKind(issue: SupervisorIssueSnapshot, capability: string | null): SupervisorSourceKind {
-  const explicit = issue.body.match(/^OC-SUPERVISOR-SOURCE:\\s*([a-z-]+)\\s*$/im)?.[1] as SupervisorSourceKind | undefined;
+  const explicit = issue.body.match(/^OC-SUPERVISOR-SOURCE:\s*([a-z-]+)\s*$/im)?.[1] as SupervisorSourceKind | undefined;
   if (explicit && SOURCE_KINDS.has(explicit)) return explicit;
   if (graphNodeId(issue.body)) return 'completion-graph';
   if (issue.repository === 'jsp1440/Orchid-Continuum-Brain') return 'brain-backlog';
@@ -346,7 +346,7 @@ export function discoverSupervisorWork(
 }
 
 function graphNodeId(body: string): string | null {
-  return body.match(/^OC-GRAPH-NODE:\\s*([a-z0-9][a-z0-9-]*)\\s*$/im)?.[1]?.toLowerCase() ?? null;
+  return body.match(/^OC-GRAPH-NODE:\s*([a-z0-9][a-z0-9-]*)\s*$/im)?.[1]?.toLowerCase() ?? null;
 }
 
 function riskClass(labels: string[]): SupervisorTaskPacket['riskClass'] {
@@ -356,7 +356,7 @@ function riskClass(labels: string[]): SupervisorTaskPacket['riskClass'] {
 }
 
 function ownerGateStatus(labels: string[], body: string): SupervisorTaskPacket['ownerGateStatus'] {
-  if (labels.some((label) => /^oc-owner-gate$/i.test(label)) || /^OC-AUTO-HOLD:\\s*true\\s*$/im.test(body)) {
+  if (labels.some((label) => /^oc-owner-gate$/i.test(label)) || /^OC-AUTO-HOLD:\s*true\s*$/im.test(body)) {
     return 'owner-gate';
   }
   if (labels.some((label) => /^oc-blocked$/i.test(label))) return 'blocked';
@@ -364,12 +364,12 @@ function ownerGateStatus(labels: string[], body: string): SupervisorTaskPacket['
 }
 
 function dependencies(body: string): string[] {
-  const match = body.match(/^OC-SWARM-DEPENDS-ON:\\s*(.+)$/im);
+  const match = body.match(/^OC-SWARM-DEPENDS-ON:\s*(.+)$/im);
   return match ? match[1].split(',').map((value) => value.trim()).filter(Boolean) : [];
 }
 
 function sourceKind(issue: SupervisorIssueSnapshot, capability: string | null): SupervisorSourceKind {
-  const explicit = issue.body.match(/^OC-SUPERVISOR-SOURCE:\\s*([a-z-]+)\\s*$/im)?.[1] as SupervisorSourceKind | undefined;
+  const explicit = issue.body.match(/^OC-SUPERVISOR-SOURCE:\s*([a-z-]+)\s*$/im)?.[1] as SupervisorSourceKind | undefined;
   if (explicit && SOURCE_KINDS.has(explicit)) return explicit;
   if (graphNodeId(issue.body)) return 'completion-graph';
   if (issue.repository === 'jsp1440/Orchid-Continuum-Brain') return 'brain-backlog';
