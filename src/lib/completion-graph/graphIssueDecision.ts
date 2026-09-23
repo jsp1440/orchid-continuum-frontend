@@ -64,6 +64,7 @@ export type SupervisorLane =
   | 'literature'
   | 'media-vision'
   | 'education'
+  | 'conservatory'
   | 'research-tools'
   | 'infrastructure'
   | 'integration'
