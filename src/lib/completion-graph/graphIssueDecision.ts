@@ -42,19 +42,46 @@ export type GraphIssueDecision =
   | { action: 'create'; title: string; body: string; labels: string[]; markerNodeId: string; reason: string; packet?: SupervisorTaskPacket }
   | { action: 'fail-closed'; reason: string };
 
+export type SupervisorSourceKind =
+  | 'completion-graph'
+  | 'brain-backlog'
+  | 'failed-validation'
+  | 'dependency-gap'
+  | 'stale-evidence'
+  | 'integration-gap'
+  | 'deterministic-check'
+  | 'improvement-discovery'
+  | 'issue';
+
 export type SupervisorTaskPacket = {
   schema: 'oc.supervisor-task.v1';
   taskId: string;
-  source: { kind: 'completion-graph' | 'issue'; repository: string; reference: string };
+  source: { kind: SupervisorSourceKind; repository: string; reference: string };
   targetRepo: string;
   targetModule: string;
   capability: string;
+  executionMode: 'deterministic' | 'provider';
   dependencies: string[];
   riskClass: 'low' | 'medium' | 'high';
   ownerGateStatus: 'none' | 'owner-gate' | 'blocked';
   providerRequirement: 'none' | 'optional' | 'required';
   validationCriteria: string[];
   completionEvidenceRequirements: string[];
+  validationContract: {
+    criteria: string[];
+    failClosed: true;
+  };
+  evidenceContract: {
+    schema: 'oc.provider-free-evidence.v1' | 'oc.task-evidence.v1';
+    requiredFields: string[];
+  };
+  deduplication: {
+    fingerprint: string;
+    semanticKey: string;
+  };
+  priority: number;
+  lifecycleState: 'discovered' | 'queued' | 'leased' | 'executing' | 'validating'
+    | 'completed' | 'blocked' | 'owner-gate' | 'parked';
 };
 
 type DeterministicGraphTaskDefinition = Omit<SupervisorTaskPacket,
@@ -84,19 +111,43 @@ export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGra
   },
 });
 
+function fingerprintFor(parts: string[]): string {
+  let hash = 2166136261;
+  for (const character of parts.join('\\u001f')) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `ocfp1-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
 export function deterministicGraphTaskFor(node: CompletionNode): SupervisorTaskPacket | null {
   const definition = DETERMINISTIC_GRAPH_TASKS[node.id];
   if (!definition) return null;
+  const taskId = `graph:${node.id}:${definition.capability}`;
+  const semanticKey = `${definition.targetRepo}:${node.id}:${definition.capability}`;
+  const criteria = [...definition.validationCriteria];
   return {
     schema: 'oc.supervisor-task.v1',
-    taskId: `graph:${node.id}:${definition.capability}`,
+    taskId,
     source: {
       kind: 'completion-graph',
       repository: definition.targetRepo,
       reference: node.id,
     },
     ...definition,
+    executionMode: 'deterministic',
     dependencies: [...(node.dependsOn ?? [])],
+    validationContract: { criteria, failClosed: true },
+    evidenceContract: {
+      schema: 'oc.provider-free-evidence.v1',
+      requiredFields: ['taskId', 'implementationSha', 'runId', 'leaseId', 'results', 'providerCalls', 'providerCostUsd'],
+    },
+    deduplication: {
+      fingerprint: fingerprintFor([semanticKey, ...criteria]),
+      semanticKey,
+    },
+    priority: node.priority ?? DEFAULT_PRIORITY,
+    lifecycleState: 'discovered',
   };
 };
 const PRIORITY_TIER_MAX = [
@@ -158,7 +209,8 @@ function buildIssueBody(node: CompletionNode, tier: string, packet?: SupervisorT
     `Lane: \`${node.lane ?? 'UNSPECIFIED'}\``,
     '',
     '## Acceptance criteria',
-    node.nextAction,
+    ...(packet?.validationContract.criteria ?? [node.nextAction]),
+    ...(packet ? ['', 'The graph follow-up remains:', node.nextAction] : []),
     '',
     '## Completion discipline',
     '- The completion graph remains authoritative for WHAT work is selected.',
@@ -253,10 +305,11 @@ export function decideProviderFreeGraphIssueAction(
   const decision = decideGraphIssueAction(node, openIssues, now);
   if (decision.action !== 'create') return decision;
 
+  const queuedPacket: SupervisorTaskPacket = { ...packet, lifecycleState: 'queued' };
   return {
     ...decision,
-    body: buildIssueBody(node, priorityTier(node.priority ?? DEFAULT_PRIORITY), packet),
+    body: buildIssueBody(node, priorityTier(node.priority ?? DEFAULT_PRIORITY), queuedPacket),
     labels: [...decision.labels, `oc-cap:${packet.capability}`],
-    packet,
+    packet: queuedPacket,
   };
 };
