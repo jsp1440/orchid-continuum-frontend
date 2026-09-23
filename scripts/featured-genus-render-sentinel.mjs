@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { isExpectedOptionalSnapshotFailure } from './featured-genus-validation-policy.mjs';
+import { isExpectedMediaConsoleError, isExpectedOptionalSnapshotFailure } from './featured-genus-validation-policy.mjs';
 
 const frontendUrl = (process.env.FRONTEND_URL || 'https://orchid-continuum-frontend-vof6.onrender.com/').replace(/\/$/, '');
 const calyxUrl = (process.env.CALYX_URL || 'https://orchid-calyx-backend.onrender.com').replace(/\/$/, '');
@@ -96,7 +96,7 @@ try {
     await page.screenshot({ path: 'artifacts/featured-genus.png', fullPage: false });
 
     const expectedMediaErrors = mediaFailures.length > 0
-      ? errors.filter((error) => /^console: Failed to load resource: net::ERR_(BLOCKED_BY_RESPONSE\\.NotSameOrigin|FAILED)$/.test(error))
+      ? errors.filter(isExpectedMediaConsoleError)
       : [];
     const optionalHttpFailures = httpFailures.filter(isExpectedOptionalSnapshotFailure);
     const unexpectedHttpFailures = httpFailures.filter((failure) => !isExpectedOptionalSnapshotFailure(failure));
