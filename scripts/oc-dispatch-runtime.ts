@@ -342,13 +342,13 @@ async function main() {
       return;
     }
     const leaseId = process.env.OC_LEASE_ID || '';
+    const admitted = plan.leaves.find(leaf => leaf.issueNumber === number);
     // Verify ownership before any issue mutation. A stale settlement must not
     // erase a newer lane's running/repair state, even if its evidence looks valid.
     try {
       const { ledger } = await new DeterministicLeaseStore().read();
       validateLedger(ledger);
       const owned = ledger.leases.find(lease => lease.id === leaseId);
-      const admitted = plan.leaves.find(leaf => leaf.issueNumber === number);
       if (!leaseId || !owned || !admitted || owned.issue !== number ||
           owned.nodeId !== admitted.nodeId || owned.fingerprint !== admitted.fingerprint ||
           owned.waveHash !== plan.wave.hash || owned.runId !== id || owned.runAttempt !== attempt ||
@@ -363,7 +363,24 @@ async function main() {
     const evidencePath = join(process.env.OC_EVIDENCE_DIR || '.oc-evidence', `${number}.json`);
     // Absence of evidence is never success. A worker that never ran, or crashed
     // before writing, settles as `not_executed`, not as a pass.
-    type Evidence = { issue?: number; wave_hash?: string; run?: string; outcome?: string; results?: { command?: string; exit_code?: number }[]; provider_calls?: number };
+    type Acceptance = {
+      kind?: string;
+      node_id?: string;
+      issue?: number;
+      passed?: boolean;
+      release_sha?: string;
+      expected_release_sha?: string | null;
+    };
+    type Evidence = {
+      issue?: number;
+      wave_hash?: string;
+      run?: string;
+      outcome?: string;
+      results?: { command?: string; exit_code?: number }[];
+      provider_calls?: number;
+      provider_cost_usd?: number;
+      acceptance?: Acceptance;
+    };
     // Malformed evidence is evidence that nothing trustworthy was recorded, not
     // a reason to crash without a receipt and hold the lane for ninety minutes.
     let evidence: Evidence | null = null;
@@ -404,6 +421,25 @@ async function main() {
       ? `evidence claimed 'done' over ${failedCommands.map(r => `${r.command} (exit ${r.exit_code})`).join(', ')}` : '';
     const derived = contradicted ? 'failed' : evidence?.outcome;
     const outcome = !executed ? 'not_executed' : derived === 'done' ? 'provider_free_done' : 'provider_free_failed';
+    // Product completion is a stricter, opt-in transition than execution. Only
+    // the fixed Featured Genus deployed-browser validator may supply it, and
+    // its proof must be fenced to this issue, graph leaf, wave/run and release.
+    // A passing test/lint/build/route command therefore remains validating,
+    // while the real feature acceptance can settle to `done` without consulting
+    // a provider or bypassing the lease fence.
+    const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA || '').trim();
+    const acceptance = evidence?.acceptance;
+    const hasFeaturedGenusCommand = Boolean(evidence?.results?.some(
+      result => result.command === 'npm run verify:featured-genus' && result.exit_code === 0,
+    ));
+    const accepted = outcome === 'provider_free_done' && hasFeaturedGenusCommand &&
+      acceptance?.kind === 'featured-genus-deployed' &&
+      acceptance.node_id === admitted.nodeId &&
+      acceptance.issue === number && acceptance.passed === true &&
+      /^[a-f0-9]{40}$/.test(acceptance.release_sha || '') &&
+      (!expectedReleaseSha || acceptance.expected_release_sha === expectedReleaseSha) &&
+      (!expectedReleaseSha || acceptance.release_sha === expectedReleaseSha);
+    const settledOutcome = accepted ? 'done' : outcome;
     // Written FIRST, before the relabel and before the ledger transition. Both
     // of those call out, and either can throw: a fencing-token mismatch, ledger
     // contention, a malformed ledger, any `gh` failure. The workflow's
@@ -412,11 +448,12 @@ async function main() {
     // instead -- the run died between the calls and left precisely the
     // unexplained gap the comment said it prevented. The outcome is fully
     // decided by this point, so nothing is lost by recording it here.
-    receipt(number, plan.wave.hash, outcome, {
+    receipt(number, plan.wave.hash, settledOutcome, {
       lane: 'provider-free',
       commands: (evidence?.results ?? []).length,
       evidence: evidence ?? (rejected || 'absent'),
       ...(contradicted ? { contradicted } : {}),
+      ...(accepted ? { acceptance } : {}),
     });
     // Reconciliation releases are deliberately idempotent. Worker settlement
     // still requires an active fenced lease at the CAS, before changing labels.
@@ -442,7 +479,8 @@ async function main() {
     // Reconciliation may restore a failed deterministic issue only when its
     // implementation changes and all owner/admission holds still permit it.
     // Same-revision failures remain parked and successful work stays deduped.
-    const next = outcome === 'provider_free_done' ? ['oc-validating']
+    const next = settledOutcome === 'done' ? ['oc-done']
+      : outcome === 'provider_free_done' ? ['oc-validating']
       : outcome === 'provider_free_failed' ? ['oc-repair'] : ['oc-queued'];
     api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
       .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });

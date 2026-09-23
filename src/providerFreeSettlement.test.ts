@@ -211,7 +211,7 @@ describe('the four execution states are distinct', () => {
 });
 
 describe('settlement writes the one authoritative receipt', () => {
-  const harness = () => {
+  const harness = (nodeId = LEAF) => {
     const dir = mkdtempSync(join(tmpdir(), 'oc-settle-')); paths.push(dir);
     const bin = join(dir, 'bin'); mkdirSync(bin);
     const gh = join(bin, 'gh');
@@ -228,7 +228,7 @@ if (method === 'PATCH') {
   fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + body + '\\n');
   console.log('{}'); process.exit(0);
 }
-if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 'deterministic work', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:${LEAF}' }] })); process.exit(0); }
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 'deterministic work', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:${nodeId}' }] })); process.exit(0); }
 console.log('{}');
 `);
     chmodSync(gh, 0o755);
@@ -236,7 +236,7 @@ console.log('{}');
     // The runtime re-derives the snapshot from the real checkout, so the plan
     // has to carry the shas it will actually see.
     const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
-    const snapshot = { ...snapshotFor(703, ['oc-queued', `oc-node:${LEAF}`]),
+    const snapshot = { ...snapshotFor(703, ['oc-queued', `oc-node:${nodeId}`]),
       integrationSha: 'a'.repeat(40), implementationSha: head };
     const plan = makePlan(snapshot, [], NOW);
     writeFileSync(join(planDir, 'plan.json'), JSON.stringify(plan));
@@ -291,6 +291,28 @@ console.log('{}');
     expect(labels).toContain('oc-validating');
     expect(labels).not.toContain('oc-done');
     expect(labels).not.toContain('oc-queued');
+  });
+
+  it('settles a fixed deployed Featured Genus acceptance proof to done', () => {
+    const h = harness('cap-homepage-featured-genus');
+    h.writeEvidence({
+      outcome: 'done',
+      results: [{ command: 'npm run verify:featured-genus', exit_code: 0 }],
+      acceptance: {
+        kind: 'featured-genus-deployed',
+        node_id: 'cap-homepage-featured-genus',
+        issue: 703,
+        passed: true,
+        release_sha: 'a'.repeat(40),
+        expected_release_sha: null,
+      },
+    });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({ issue: 703, outcome: 'done', providerCalls: 0, providerCostUsd: 0 });
+    expect(h.patched().at(-1)!.labels).toContain('oc-done');
+    expect(h.patched().at(-1)!.labels).not.toContain('oc-validating');
   });
 
   it('records a run that executed and failed as provider_free_failed, and returns it for repair', () => {

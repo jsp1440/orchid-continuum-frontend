@@ -17,6 +17,7 @@
     "verify:university-production": "node scripts/verify-university-production.mjs",
     "verify:routes": "node scripts/browser-route-sweep.mjs",
     "verify:render-routes": "node scripts/verify-render-routes.mjs",
+    "verify:featured-genus": "node scripts/featured-genus-render-sentinel.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

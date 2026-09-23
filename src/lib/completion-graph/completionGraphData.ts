@@ -1624,8 +1624,10 @@ const homepageFeaturedGenusGate: CompletionNode = {
     { kind: 'test', ref: 'src/components/orchid/DailyGenusFeatureContinuum.test.tsx' },
     { kind: 'test', ref: 'src/components/orchid/HomeSpeciesExhibit.test.ts' },
     { kind: 'test', ref: 'src/components/orchid/featuredGenusSingleGeneration.test.ts' },
+    { kind: 'file', ref: 'scripts/featured-genus-render-sentinel.mjs', note: 'The governed provider-free validator checks approved Calyx media provenance, the mounted Featured Genus section and continuation, browser errors, and the deployed release SHA.' },
+    { kind: 'ci', ref: 'npm run verify:featured-genus', note: 'A passing deployed-browser acceptance report is required before this leaf may settle from validation to done; route smoke/build/test evidence alone remains validation.' },
   ],
-  nextAction: 'Confirm the genus-narrative edge function returns real (non-fallback) AI narrative in a live browser session and that the rotation stays single-generation under real traffic (4 of 6 gate categories confirmed this pass).',
+  nextAction: 'Run `npm run verify:featured-genus` against the current Render release and require the deployed-browser acceptance report (approved media/provenance, synchronized continuation, no browser errors, and an attested release SHA). Provider-backed narrative generation is not part of this provider-free gate.',
   lastUpdated: AUDIT_242_DATE,
   children: [],
 };

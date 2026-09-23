@@ -275,13 +275,15 @@ describe('agreement with the other two repositories', () => {
   });
 
   it('declares its frontend-only capabilities as deterministic', () => {
-    // No other repository has a TypeScript project, a router or a Vite build,
-    // so these three have no shared counterpart by design.
+    // No other repository has a TypeScript project, a router, a deployed
+    // Featured Genus browser sentinel or a Vite build, so these frontend-only
+    // capabilities have no shared counterpart by design.
     const local = Object.keys(LOCAL_EXECUTORS).filter(
       (name) => !(name in SHARED_CAPABILITIES),
     );
     expect(local.sort()).toEqual([
       'build-verification',
+      'featured-genus-verification',
       'render-route-verification',
       'route-verification',
       'typecheck-execution',
