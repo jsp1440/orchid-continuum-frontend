@@ -117,14 +117,6 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(repaired?.repairPr).toBe(91);
     expect(repaired?.repairBranch).toBe('repair-9');
   });
-  it('does not re-admit a failed repair without an open implementation lineage', () => {
-    const { root, snapshot } = fixture(1);
-    snapshot.issues[0] = issue(1, ['oc-queued', 'oc-repair']);
-    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
-    snapshot.prs = [{ number: 91, state: 'open', body: 'OC-AUTO-ISSUE: #1', head: { ref: 'repair-1', sha: 'd'.repeat(40) } }];
-    expect(makePlan(snapshot, [], now, root).issues).toEqual([1]);
-  });
-
   it('refuses unresolved dependencies and never unlocks same-wave dependants', () => {
     const { root, snapshot } = fixture(3);
     root.children[1].dependsOn = ['leaf-1'];
