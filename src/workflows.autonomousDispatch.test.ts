@@ -18,10 +18,11 @@ describe('canonical provider-free autonomous dispatch', () => {
     expect(workflow.jobs.dispatch.if).toBe("always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'");
     expect(workflow.jobs.audit.if).toContain('always()');
   });
-  it('converges the old scheduler onto the canonical entrypoint without another timer', () => {
+  it('adds a staggered scheduled watchdog that still enters the canonical entrypoint', () => {
     const alias = read('orchid-no-api-scheduler');
+    const aliasWorkflow = yaml.load(alias) as { on: { schedule: Array<{ cron: string }> } };
     expect(alias).toContain('uses: ./.github/workflows/orchid-continuous-completion.yml');
-    expect(alias).not.toContain('schedule:');
+    expect(aliasWorkflow.on.schedule).toEqual([{ cron: '7,17,27,37,47,57 * * * *' }]);
   });
   it('tests exact caller code, with no fallback to an older integration implementation', () => {
     for (const name of ['orchid-continuous-completion', 'orchid-budgeted-completion-lane', 'orchid-completion-governed']) {
