@@ -254,6 +254,20 @@
       "implementationSha": "27f38fe58196b4ef3bbaf00e11a264a7543fdc70",
       "lane": "provider-free",
       "state": "provider-free-done"
+    },
+    {
+      "id": "a6fc396864b7262bfff82648f36ec01c116d7ec6a040798ea50373212369efab",
+      "issue": 739,
+      "nodeId": "cap-deployment-contract-validation",
+      "fingerprint": "50d4926b02979e61be3eccbfb1e589fbb7ca2e0d30ad951ffc57c9117d0ef3f5",
+      "waveHash": "0bd2e41583121af4d0887f887f466876152a6905e9f9082ec9306adbfefde07d",
+      "runId": "35820945267",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-23T06:37:20.796Z",
+      "reservedUsd": 0,
+      "implementationSha": "27f38fe58196b4ef3bbaf00e11a264a7543fdc70",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
