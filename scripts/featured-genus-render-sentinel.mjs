@@ -70,7 +70,14 @@ try {
       if (message.type() === 'error') errors.push(`console: ${message.text()}`);
     });
 
-    await page.goto(frontendUrl, { waitUntil: 'networkidle', timeout: 90_000 });
+    // The homepage intentionally performs background work (including optional
+    // remote media requests), so `networkidle` is not a stable render gate: a
+    // healthy DOM can be ready while one remote request keeps the network busy
+    // until Playwright's full navigation timeout. DOM readiness plus the
+    // mounted feature heading proves the deployed app rendered without making
+    // unrelated third-party availability part of admission.
+    await page.goto(frontendUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 });
+    await page.locator('#featured-genus-title').waitFor({ state: 'attached', timeout: 30_000 });
     const releaseSha = await page.locator('meta[name="ocu-release-sha"]').getAttribute('content');
     assert.match(releaseSha || '', /^[a-f0-9]{40}$/, 'deployed frontend did not attest a full release SHA');
     if (expectedReleaseSha) assert.equal(releaseSha, expectedReleaseSha, 'deployed frontend is not the expected release');
