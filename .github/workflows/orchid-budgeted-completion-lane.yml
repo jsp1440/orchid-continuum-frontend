@@ -152,7 +152,7 @@ jobs:
       ISSUE_NUMBER: ${{ inputs.issue_number }}
       REPO: ${{ github.repository }}
       WAVE_HASH: ${{ inputs.wave_hash }}
-      EXPECTED_RELEASE_SHA: ${{ github.sha }}
+      EXPECTED_RELEASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
       COMMANDS: ${{ needs.classify.outputs.commands }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -223,7 +223,7 @@ jobs:
           ISSUE_NUMBER: ${{ inputs.issue_number }}
           OC_LEASE_ID: ${{ needs.deterministic-preflight.outputs.lease_id }}
           OC_WAVE_HASH: ${{ inputs.wave_hash }}
-          EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          EXPECTED_RELEASE_SHA: ${{ github.event.pull_request.base.sha || github.sha }}
         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts settle-deterministic
       # `always()`, so a settlement that throws still leaves the audit a receipt
       # rather than an unexplained gap and a lane held until the lease expires.
