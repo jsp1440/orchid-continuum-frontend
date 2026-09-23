@@ -5,7 +5,6 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
 import {
   decideProviderFreeGraphIssueAction,
-  type SupervisorTaskPacket,
 } from '../src/lib/completion-graph/graphIssueDecision';
 import type { CompletionNode } from '../src/lib/completion-graph/types';
 import {
@@ -13,7 +12,6 @@ import {
   type SupervisorDiscoveryResult,
   type SupervisorIssueSnapshot,
   type SupervisorRepositorySnapshot,
-  type SupervisorTaskRecord,
 } from '../src/lib/control-plane/supervisorDiscovery';
 import type { OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
 
@@ -27,16 +25,21 @@ type GitHubIssue = {
   updated_at?: string;
 };
 
+type QueueAction = {
+  action: 'created' | 'reused' | 'queued' | 'none' | 'skipped';
+  repository?: string;
+  issueNumber?: number;
+  taskId?: string;
+  fingerprint?: string;
+  reason: string;
+};
+
 export type SupervisorRunResult = {
   schema: 'oc.supervisor-discovery.v1';
   discoveredAt: string;
   discovery: SupervisorDiscoveryResult;
-  materialization: {
-    action: 'created' | 'reused' | 'none' | 'skipped';
-    issueNumber?: number;
-    taskId?: string;
-    reason: string;
-  };
+  materialization: QueueAction;
+  queueRefill: QueueAction[];
   errors: string[];
 };
 
@@ -65,6 +68,10 @@ function repositoryNames(): string[] {
     ...configured,
     process.env.GITHUB_REPOSITORY ?? '',
   ].filter((value) => /^[\\w.-]+\\/[\\w.-]+$/.test(value)))];
+}
+
+function currentRepository(): string {
+  return process.env.GITHUB_REPOSITORY || 'jsp1440/orchid-continuum-frontend';
 }
 
 function snapshot(repository: string): SupervisorRepositorySnapshot {
@@ -113,11 +120,11 @@ function openIssueRefs(issues: SupervisorIssueSnapshot[]): OpenIssueRef[] {
   return issues.map((issue) => ({ number: issue.number, body: issue.body }));
 }
 
-function materialize(
+function materializeGraph(
   discovery: SupervisorDiscoveryResult,
   frontendIssues: SupervisorIssueSnapshot[],
   now: string,
-): SupervisorRunResult['materialization'] {
+): QueueAction {
   const candidate = discovery.packets.find((packet) =>
     packet.source.kind === 'completion-graph' &&
     packet.action === 'materialize' &&
@@ -131,9 +138,12 @@ function materialize(
     return reusable
       ? {
           action: 'reused',
+          repository: reusable.targetRepo,
           issueNumber: reusable.existingIssueNumber,
           taskId: reusable.taskId,
-          reason: `Existing governed issue #${reusable.existingIssueNumber} already carries ${reusable.taskId}.`,
+          fingerprint: reusable.deduplication.fingerprint,
+          reason: 'Existing governed issue #' + reusable.existingIssueNumber +
+            ' already carries ' + reusable.taskId + '.',
         }
       : {
           action: 'none',
@@ -146,15 +156,19 @@ function materialize(
     return {
       action: 'skipped',
       taskId: candidate.taskId,
-      reason: `Selected graph node ${candidate.source.reference} disappeared from the checked-out graph; failed closed.`,
+      fingerprint: candidate.deduplication.fingerprint,
+      reason: 'Selected graph node ' + candidate.source.reference +
+        ' disappeared from the checked-out graph; failed closed.',
     };
   }
   const decision = decideProviderFreeGraphIssueAction(node, openIssueRefs(frontendIssues), now);
   if (decision.action === 'reuse-existing') {
     return {
       action: 'reused',
+      repository: candidate.targetRepo,
       issueNumber: decision.issueNumber,
       taskId: candidate.taskId,
+      fingerprint: candidate.deduplication.fingerprint,
       reason: decision.reason,
     };
   }
@@ -162,6 +176,7 @@ function materialize(
     return {
       action: 'skipped',
       taskId: candidate.taskId,
+      fingerprint: candidate.deduplication.fingerprint,
       reason: decision.reason,
     };
   }
@@ -169,10 +184,80 @@ function materialize(
   const issueNumber = createIssue(decision.title, decision.body, decision.labels);
   return {
     action: 'created',
+    repository: candidate.targetRepo,
     issueNumber,
     taskId: candidate.taskId,
+    fingerprint: candidate.deduplication.fingerprint,
     reason: decision.reason,
   };
+}
+
+function ensureQueued(issue: SupervisorIssueSnapshot): QueueAction {
+  if (issue.labels.some((label) => /^oc-queued$/i.test(label))) {
+    return {
+      action: 'reused',
+      repository: issue.repository,
+      issueNumber: issue.number,
+      reason: 'The eligible packet is already in the governed queue.',
+    };
+  }
+  execFileSync('gh', [
+    'issue',
+    'edit',
+    String(issue.number),
+    '--repo',
+    issue.repository,
+    '--add-label',
+    'oc-queued',
+  ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  return {
+    action: 'queued',
+    repository: issue.repository,
+    issueNumber: issue.number,
+    reason: 'The supervisor added the canonical queue label for an explicit provider-free packet.',
+  };
+}
+
+function refillEligibleIssues(
+  discovery: SupervisorDiscoveryResult,
+  repositories: SupervisorRepositorySnapshot[],
+): QueueAction[] {
+  const current = currentRepository();
+  const byIssue = new Map(
+    repositories.flatMap((repository) => repository.issues.map((issue) => [
+      repository.repository + '#' + issue.number,
+      issue,
+    ])),
+  );
+  return discovery.packets
+    .filter((packet) => packet.status === 'eligible' && packet.action === 'queue')
+    .map((packet): QueueAction => {
+      if (packet.targetRepo !== current) {
+        return {
+          action: 'skipped',
+          repository: packet.targetRepo,
+          issueNumber: packet.existingIssueNumber,
+          taskId: packet.taskId,
+          fingerprint: packet.deduplication.fingerprint,
+          reason: 'Eligible packet belongs to another repository; its local supervisor must own queue mutation.',
+        };
+      }
+      const issue = byIssue.get(packet.targetRepo + '#' + packet.existingIssueNumber);
+      if (!issue) {
+        return {
+          action: 'skipped',
+          repository: packet.targetRepo,
+          taskId: packet.taskId,
+          fingerprint: packet.deduplication.fingerprint,
+          reason: 'Issue inventory changed before queue mutation; failed closed.',
+        };
+      }
+      return {
+        ...ensureQueued(issue),
+        taskId: packet.taskId,
+        fingerprint: packet.deduplication.fingerprint,
+      };
+    });
 }
 
 export function runSupervisorDiscovery(): SupervisorRunResult {
@@ -183,33 +268,40 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
     try {
       repositories.push(snapshot(repository));
     } catch (error) {
-      errors.push(`Unable to scan ${repository}: ${error instanceof Error ? error.message : String(error)}`);
+      errors.push('Unable to scan ' + repository + ': ' +
+        (error instanceof Error ? error.message : String(error)));
       repositories.push({ repository, issues: [] });
     }
   }
 
   const discovery = discoverSupervisorWork(COMPLETION_GRAPH, repositories, discoveredAt);
-  const frontend = repositories.find((entry) => entry.repository === 'jsp1440/orchid-continuum-frontend');
-  const materialization = frontend && !errors.some((error) => error.includes('jsp1440/orchid-continuum-frontend'))
-    ? materialize(discovery, frontend.issues, discoveredAt)
+  const frontend = repositories.find((entry) => entry.repository === currentRepository());
+  const frontendAvailable = frontend &&
+    !errors.some((error) => error.startsWith('Unable to scan ' + currentRepository() + ':'));
+  const materialization = frontend && frontendAvailable
+    ? materializeGraph(discovery, frontend.issues, discoveredAt)
     : {
         action: 'skipped' as const,
-        reason: 'Frontend issue inventory was unavailable; no queue mutation was attempted.',
+        reason: 'Current repository issue inventory was unavailable; no queue mutation was attempted.',
       };
+  const queueRefill = frontend && frontendAvailable
+    ? refillEligibleIssues(discovery, repositories)
+    : [];
 
   const result: SupervisorRunResult = {
     schema: 'oc.supervisor-discovery.v1',
     discoveredAt,
     discovery,
     materialization,
+    queueRefill,
     errors,
   };
   mkdirSync('.oc-wave', { recursive: true });
-  writeFileSync('.oc-wave/supervisor-discovery.json', `${JSON.stringify(result, null, 2)}\\n`);
+  writeFileSync('.oc-wave/supervisor-discovery.json', JSON.stringify(result, null, 2) + '\\n');
   return result;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (import.meta.url === 'file://' + process.argv[1]) {
   const result = runSupervisorDiscovery();
-  process.stdout.write(`${JSON.stringify(result)}\\n`);
+  process.stdout.write(JSON.stringify(result) + '\\n');
 }
