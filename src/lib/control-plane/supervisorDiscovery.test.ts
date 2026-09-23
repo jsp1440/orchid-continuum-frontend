@@ -150,3 +150,28 @@ describe('continuous supervisor discovery', () => {
     });
   });
 });
+
+
+describe('generated packet binding', () => {
+  it('binds the exact line-anchored graph marker without reading free-form prose', async () => {
+    const { declaredNodesByIssue } = await import('../../../scripts/oc-dispatch-control');
+    expect(declaredNodesByIssue([
+      {
+        number: 901,
+        state: 'open',
+        title: 'A title mentioning cap-unbound-feature',
+        body: 'acceptance prose only\\nOC-GRAPH-NODE: cap-deployment-contract-validation\\nmore prose',
+        labels: [{ name: 'oc-queued' }],
+      },
+    ])).toEqual({ 901: ['cap-deployment-contract-validation'] });
+    expect(declaredNodesByIssue([
+      {
+        number: 902,
+        state: 'open',
+        title: 'cap-deployment-contract-validation',
+        body: 'free-form prose only',
+        labels: [{ name: 'oc-queued' }],
+      },
+    ])).toEqual({});
+  });
+});
