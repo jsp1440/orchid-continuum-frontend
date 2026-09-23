@@ -118,6 +118,7 @@ type DeterministicGraphTaskDefinition = {
   targetRepo: string;
   targetModule: string;
   capability: string;
+  lane: SupervisorLane;
   riskClass: SupervisorTaskPacket['riskClass'];
   ownerGateStatus: SupervisorTaskPacket['ownerGateStatus'];
   providerRequirement: SupervisorTaskPacket['providerRequirement'];
