@@ -72,6 +72,8 @@ export const LOCAL_EXECUTORS = Object.freeze({
   'render-route-verification': 'npm run verify:render-routes',
   'featured-genus-verification': 'npm run verify:featured-genus',
   'build-verification': 'npm run build',
+  'research-matrix-browser-validation': 'npx playwright test e2e/research-matrix-journey.spec.ts',
+  'conservatory-browser-validation': 'npx playwright test e2e/conservatory-journey.spec.ts',
 });
 
 /** Deterministic capabilities, whether or not this repository can run them. */
