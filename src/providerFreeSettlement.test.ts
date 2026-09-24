@@ -317,6 +317,59 @@ console.log('{}');
     expect(h.patched().at(-1)!.labels).not.toContain('oc-validating');
   });
 
+  it('moves the fixed Research→Matrix browser contract to owner gate, not done', () => {
+    const h = harness('gate-journey-research-matrix');
+    h.writeEvidence({
+      outcome: 'done',
+      results: [{ command: 'npm run verify:research-matrix-browser', exit_code: 0 }],
+    });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({
+      issue: 703,
+      outcome: 'provider_free_done',
+      acceptance: {
+        kind: 'provider-free-browser-contract',
+        node_id: 'gate-journey-research-matrix',
+        disposition: 'owner-gate',
+      },
+    });
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-owner-gate');
+    expect(labels).not.toContain('oc-done');
+    expect(labels).not.toContain('oc-validating');
+  });
+
+  it('moves the fixed Conservatory browser contract to owner gate, not done', () => {
+    const h = harness('cap-conservatory-collection');
+    h.writeEvidence({
+      outcome: 'done',
+      results: [{ command: 'npm run verify:conservatory-browser', exit_code: 0 }],
+    });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-owner-gate');
+    expect(labels).not.toContain('oc-done');
+    expect(labels).not.toContain('oc-validating');
+  });
+
+  it('does not let the Research browser command bless the wrong graph node', () => {
+    const h = harness('cap-conservatory-collection');
+    h.writeEvidence({
+      outcome: 'done',
+      results: [{ command: 'npm run verify:research-matrix-browser', exit_code: 0 }],
+    });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-validating');
+    expect(labels).not.toContain('oc-owner-gate');
+  });
+
   it('records a run that executed and failed as provider_free_failed, and returns it for repair', () => {
     const h = harness();
     h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run test', exit_code: 1 }] });
