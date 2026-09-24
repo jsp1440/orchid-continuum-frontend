@@ -365,7 +365,7 @@
       "reservedUsd": 0,
       "implementationSha": "b23fc465fe39ef46d608ccc426a3609256a6ac9c",
       "lane": "provider-free",
-      "state": "reserved"
+      "state": "provider-free-done"
     }
   ]
 }
