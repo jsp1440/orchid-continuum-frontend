@@ -283,8 +283,10 @@ describe('agreement with the other two repositories', () => {
     );
     expect(local.sort()).toEqual([
       'build-verification',
+      'conservatory-browser-validation',
       'featured-genus-verification',
       'render-route-verification',
+      'research-matrix-browser-validation',
       'route-verification',
       'typecheck-execution',
     ]);
