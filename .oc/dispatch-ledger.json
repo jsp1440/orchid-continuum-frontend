@@ -380,7 +380,7 @@
       "expiresAt": "2026-09-24T07:20:42.797Z",
       "reservedUsd": 0.5,
       "implementationSha": "abe98b1e3f0694115b3cf7f800f4aa9e58b2c0d9",
-      "state": "reserved"
+      "state": "blocked"
     },
     {
       "id": "27568c0d7a27afa41ea142e8af0046444c613bf42f8eee8ea88eb038455ff981",
