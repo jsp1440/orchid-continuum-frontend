@@ -338,6 +338,20 @@
       "implementationSha": "fc72e4564cc4678684722576524c22bd122cc71c",
       "lane": "provider-free",
       "state": "provider-free-done"
+    },
+    {
+      "id": "26e9f1a6cec5f8d89a7d9a664ecd7cdee4c3c74585f5f4042b22125f578f4536",
+      "issue": 243,
+      "nodeId": "cap-conservatory-collection",
+      "fingerprint": "64054c5139429b05498c73252dc39d7b3195589275ddc7471a19c2e9a7ea9401",
+      "waveHash": "c32c6b9bb9b2a54666231faed69b2454013daa6213441619e8dcb6b4d56269a5",
+      "runId": "35955444775",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-24T05:56:44.325Z",
+      "reservedUsd": 0,
+      "implementationSha": "b23fc465fe39ef46d608ccc426a3609256a6ac9c",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
