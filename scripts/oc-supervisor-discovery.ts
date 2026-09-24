@@ -110,6 +110,11 @@ function currentRepository(): string {
   return process.env.GITHUB_REPOSITORY || 'jsp1440/orchid-continuum-frontend';
 }
 
+export function isTerminalGraphIssue(body: string, labels: string[]): boolean {
+  return /^OC-GRAPH-NODE:\s*[a-z0-9][a-z0-9-]*\s*$/im.test(body) ||
+    labels.some((label) => /^oc-node:[a-z0-9][a-z0-9-]*$/i.test(label));
+}
+
 function snapshot(repository: string): SupervisorRepositorySnapshot {
   const openPages = ghJson<GitHubIssue[] | GitHubIssue[][]>([
     'api',
@@ -135,11 +140,7 @@ function snapshot(repository: string): SupervisorRepositorySnapshot {
     : [];
   const terminalGraphIssues = flattenPaginated(terminalPages)
     .filter((issue) => !issue.pull_request)
-    .filter((issue) => {
-      const labels = (issue.labels ?? []).map((label) => label.name);
-      return /^OC-GRAPH-NODE:\\s*[a-z0-9][a-z0-9-]*\\s*$/im.test(issue.body ?? '') ||
-        labels.some((label) => /^oc-node:[a-z0-9][a-z0-9-]*$/i.test(label));
-    });
+    .filter((issue) => isTerminalGraphIssue(issue.body ?? '', (issue.labels ?? []).map((label) => label.name)));
 
   const inventory = [
     ...flattenPaginated(openPages).filter((issue) => !issue.pull_request),
