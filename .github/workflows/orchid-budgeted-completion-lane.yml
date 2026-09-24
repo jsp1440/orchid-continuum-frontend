@@ -165,7 +165,7 @@ jobs:
       # only the browser that this declared command needs; no provider or
       # external model is involved.
       - name: Install Chromium for browser route verification
-        if: contains(needs.classify.outputs.commands, 'npm run verify:routes') || contains(needs.classify.outputs.commands, 'npm run verify:featured-genus')
+        if: contains(needs.classify.outputs.commands, 'npm run verify:routes') || contains(needs.classify.outputs.commands, 'npm run verify:featured-genus') || contains(needs.classify.outputs.commands, 'browser')
         run: npx --no-install playwright install --with-deps chromium
       - name: Build and start preview for browser route verification
         if: contains(needs.classify.outputs.commands, 'npm run verify:routes')
