@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 1.5,
+  "programSpent": 2,
   "dailySpent": {
-    "2026-09-24": 1.5
+    "2026-09-24": 2
   },
   "leases": [
     {
@@ -404,6 +404,19 @@
       "runId": "35967235232",
       "runAttempt": "1",
       "expiresAt": "2026-09-24T08:32:13.760Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "31c5dcd21296619ee7b9ccdd7583c33dc9743caf",
+      "state": "reserved"
+    },
+    {
+      "id": "32c3743ffdd5782092da47735cf90d66184bacbe57b10d1938290f4548c0076f",
+      "issue": 167,
+      "nodeId": "cap-atlas-next-thematic-5",
+      "fingerprint": "57f3ad95790de877ee8778faad50b5a2c99d9d706e2803827f9eedbb44c21fc7",
+      "waveHash": "5f35d0fca155dc240b85157aa31253833e539673e19435190ae397cf851cdc15",
+      "runId": "35967235232",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-24T08:32:16.591Z",
       "reservedUsd": 0.5,
       "implementationSha": "31c5dcd21296619ee7b9ccdd7583c33dc9743caf",
       "state": "reserved"
