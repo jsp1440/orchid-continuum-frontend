@@ -556,7 +556,8 @@ async function main() {
     await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome, { requireActive: true });
     receipt(issue, plan.wave.hash, outcome, { providerCalls: null, providerCostUsd: null, accounting: 'reservation retained; no unverified billing claims' });
     // Immediate per-lane refill. Does not wait for sibling lanes; planner reads durable capacity.
-    api('actions/workflows/orchid-continuous-completion.yml/dispatches', 'POST', { ref: process.env.GITHUB_REF_NAME });
+    const refillRef = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || 'main';
+    api('actions/workflows/orchid-continuous-completion.yml/dispatches', 'POST', { ref: refillRef });
     return;
   }
   throw new Error('Unknown dispatch command');
