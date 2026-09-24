@@ -39,6 +39,19 @@ function root(children: CompletionNode[]): CompletionNode {
   };
 }
 
+describe('terminal graph evidence adapter', () => {
+  it('recognizes the exact OC-GRAPH-NODE line used by materialized graph issues', async () => {
+    const { isTerminalGraphIssue } = await import('../../../scripts/oc-supervisor-discovery');
+
+    expect(isTerminalGraphIssue(
+      'prose before\nOC-GRAPH-NODE: cap-deployment-contract-validation\nprose after',
+      ['oc-done', 'oc-cap:schema-validation'],
+    )).toBe(true);
+    expect(isTerminalGraphIssue('', ['oc-node:cap-completion-graph-engine', 'oc-done'])).toBe(true);
+    expect(isTerminalGraphIssue('mentions OC-GRAPH-NODE in prose only', ['oc-done'])).toBe(false);
+  });
+});
+
 describe('continuous supervisor discovery', () => {
   it('selects only an explicitly bound deterministic graph leaf', () => {
     const selected = leaf();
