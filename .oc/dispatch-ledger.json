@@ -460,6 +460,20 @@
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "state": "blocked"
+    },
+    {
+      "id": "0945487c2c49104519618c33f247673a4e086b3ecb164e8adb10ebf579a3e2f5",
+      "issue": 775,
+      "nodeId": "cap-completion-graph-engine",
+      "fingerprint": "b9d138d8c4f1ceb2dd95b16d73ab766b75091ee6ee532ef43f71f2d7919dc8ec",
+      "waveHash": "a029956f63804a0c5fd881f5013f7cf6f09d8fef303851f0a5f340d81c131e9b",
+      "runId": "36154233039",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T16:59:41.733Z",
+      "reservedUsd": 0,
+      "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
