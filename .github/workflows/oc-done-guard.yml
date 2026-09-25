@@ -1,0 +1,71 @@
+name: OC Done Guard
+
+# `oc-done` is a completion claim. This guard withdraws claims that cannot be
+# substantiated: the issue must be closed, a receipt must name a full
+# implementation SHA reachable from main, and the requested change must be
+# evidenced by changed files or a merged pull request. Refused claims go back
+# to `oc-validating` (bounded per run, idempotent). The rule itself is
+# src/lib/control-plane/ocDoneGuard.ts; its regression runs on pull requests
+# that touch it.
+
+on:
+  pull_request:
+    paths:
+      - "src/lib/control-plane/ocDoneGuard.ts"
+      - "src/lib/control-plane/ocDoneGuard.test.ts"
+      - "scripts/oc-done-guard.ts"
+      - ".github/workflows/oc-done-guard.yml"
+  schedule:
+    - cron: "47 * * * *"
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply label transitions (otherwise report only)"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oc-done-guard-${{ github.repository }}-${{ github.event_name }}
+  cancel-in-progress: false
+
+jobs:
+  rule-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/lib/control-plane/ocDoneGuard.test.ts
+      - run: npx eslint src/lib/control-plane/ocDoneGuard.ts src/lib/control-plane/ocDoneGuard.test.ts scripts/oc-done-guard.ts
+
+  guard:
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: rule-regression
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Audit oc-done claims
+        run: >-
+          npx --no-install tsx scripts/oc-done-guard.ts --repo "$GITHUB_REPOSITORY" --target-branch main --limit 25
+          ${{ (github.event_name == 'schedule' || inputs.apply) && '--apply' || '' }}
