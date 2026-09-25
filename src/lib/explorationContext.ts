@@ -199,7 +199,7 @@ export function nodeToRoute(
       return `/intelligence-graph?species=${q(node.value)}`;
 
     case "literature":
-      return `/coming-soon/literature?species=${q(node.value)}`;
+      return `/literature?species=${q(node.value)}`;
 
     case "image":
       return `/gallery?species=${q(node.value)}`;
