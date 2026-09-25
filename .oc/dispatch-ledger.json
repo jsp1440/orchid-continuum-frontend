@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 5,
+  "programSpent": 5.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 3
+    "2026-09-25": 3.5
   },
   "leases": [
     {
@@ -510,6 +510,19 @@
       "runId": "36154368582",
       "runAttempt": "1",
       "expiresAt": "2026-09-25T17:00:17.022Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "b53eeb66947a5d80aeb90ebfa88d398462efacd1",
+      "state": "reserved"
+    },
+    {
+      "id": "6e7078087475245f26343da4d97a0f7f88a67f838d81a6971eaf00e281efef65",
+      "issue": 779,
+      "nodeId": "cap-kg-genus-evidence",
+      "fingerprint": "c4e4f4ec14307db382072c548ca497a7006616f736d458e29bf19d5b615c0b82",
+      "waveHash": "a99bb4bd1f81528c905e9be4c38d40e1514d7e4ca9fcbc86e3096cd24ec30f31",
+      "runId": "36154368582",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:00:23.419Z",
       "reservedUsd": 0.5,
       "implementationSha": "b53eeb66947a5d80aeb90ebfa88d398462efacd1",
       "state": "reserved"
