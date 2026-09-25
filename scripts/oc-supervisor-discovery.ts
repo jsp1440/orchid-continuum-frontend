@@ -115,6 +115,8 @@ export type BackendReserveRun =
       upstreamReason: string | null;
       failedClosed: string | null;
       heldFingerprints: number;
+      /** Why a green plan filed fewer than it proposed: depth minus open slot-holding lineages. */
+      reserveSlots: { targetDepth: number; preparedOpenCount: number; eligibleCount: number } | null;
       filed: Array<{ issueNumber: number; sourceKey: string; fingerprint: string; labels: string[] }>;
       notFiled: Array<{ sourceKey: string; fingerprint: string | null; reason: string }>;
       suppressed: Array<{ sourceKey: string; reason: string }>;
@@ -450,7 +452,16 @@ export function readReserveFingerprintIndex(
   }
 }
 
-function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] {
+/**
+ * Labels that park an open issue outside the executable queue until a person or
+ * a later settlement clears them. Such an issue is not prepared depth: on
+ * 2026-09-25 four legacy `PREPARED:` issues (#539, #567, #579, #591), all
+ * `oc-blocked`, filled the whole reserve depth of 3 and the first enabled pass
+ * filed nothing from a `refill_planned` plan of 3 proposals.
+ */
+const HELD_LINEAGE_LABELS = new Set(['oc-blocked', 'oc-owner-gate', 'oc-publication-hold', 'oc-done']);
+
+export function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] {
   return issues
     .filter((issue) => issue.state === 'open')
     .map((issue) => ({
@@ -458,6 +469,7 @@ function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] 
       title: issue.title,
       state: 'open' as const,
       kind: 'issue' as const,
+      holdsReserveSlot: !issue.labels.some((label) => HELD_LINEAGE_LABELS.has(label)),
     }));
 }
 
@@ -491,6 +503,7 @@ export async function materializeBackendReservePlan(
     upstreamReason: null,
     failedClosed: null,
     heldFingerprints: 0,
+    reserveSlots: null,
     filed: [],
     notFiled: [],
     suppressed: [],
@@ -515,6 +528,11 @@ export async function materializeBackendReservePlan(
   run.upstreamReason = admission.upstreamReason;
   run.rejected = admission.bridge.rejected;
   run.suppressed = [...admission.bridge.plan.suppressed];
+  run.reserveSlots = {
+    targetDepth: admission.bridge.plan.targetDepth,
+    preparedOpenCount: admission.bridge.plan.preparedOpenCount,
+    eligibleCount: admission.bridge.plan.eligibleCount,
+  };
   if (admission.transportFailure || admission.bridge.upstreamBlocked) {
     run.failedClosed = admission.transportFailure
       ? `transport: ${admission.transportFailure}`
