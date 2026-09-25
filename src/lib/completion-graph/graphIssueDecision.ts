@@ -186,7 +186,7 @@ export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGra
   },
 });
 
-function fingerprintFor(parts: string[]): string {
+export function fingerprintFor(parts: string[]): string {
   let hash = 2166136261;
   for (const character of parts.join('\\u001f')) {
     hash ^= character.charCodeAt(0);

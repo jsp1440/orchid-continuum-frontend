@@ -449,3 +449,79 @@ describe('generated packet binding', () => {
     ])).toEqual({});
   });
 });
+
+describe('bounded graph discovery in the supervisor script', () => {
+  const snapshotIssue = (number: number, body: string, state: 'open' | 'closed' = 'open') => ({
+    number, repository: 'jsp1440/orchid-continuum-frontend', state, title: `#${number}`, body, labels: [] as string[],
+  });
+
+  it('reads the dedupe index by label across open and closed issues, plus the live snapshot', async () => {
+    const { readDiscoveryFingerprintIndex } = await import('../../../scripts/oc-supervisor-discovery');
+    const index = readDiscoveryFingerprintIndex('jsp1440/orchid-continuum-frontend',
+      [snapshotIssue(7, 'OC-DISCOVERY-FINGERPRINT: ocfp1-0000000a')],
+      () => [{ number: 3, state: 'closed', body: 'closed as won\'t fix\nOC-DISCOVERY-FINGERPRINT: ocfp1-0000000b' }]);
+    expect(index).toEqual({ available: true, fingerprints: new Set(['ocfp1-0000000a', 'ocfp1-0000000b']) });
+  });
+
+  it('reports an unreadable index as unavailable, never as empty', async () => {
+    const { readDiscoveryFingerprintIndex } = await import('../../../scripts/oc-supervisor-discovery');
+    const index = readDiscoveryFingerprintIndex('jsp1440/orchid-continuum-frontend', [], () => {
+      throw new Error('gh: HTTP 502');
+    });
+    expect(index).toEqual({ available: false, reason: 'gh: HTTP 502' });
+  });
+
+  it('files at most three, creates every label before the write, and records each outcome', async () => {
+    const { materializeDiscoveredGraphIssues } = await import('../../../scripts/oc-supervisor-discovery');
+    const calls: string[] = [];
+    let next = 900;
+    const run = materializeDiscoveredGraphIssues([], NOW, {
+      fingerprintIndex: { available: true, fingerprints: new Set() },
+      ensureLabel: (name) => { calls.push(`label:${name}`); },
+      createIssue: (title, body, labels) => {
+        calls.push(`create:${labels.join(',')}`);
+        expect(body).toMatch(/^OC-DISCOVERY-FINGERPRINT: ocfp1-[0-9a-f]{8}$/m);
+        expect(title.length).toBeGreaterThan(0);
+        return ++next;
+      },
+    });
+    expect(run.filed.length).toBeGreaterThan(0);
+    expect(run.filed.length).toBeLessThanOrEqual(3);
+    expect(run.notFiled).toEqual([]);
+    for (const filed of run.filed) {
+      const create = calls.findIndex((c) => c.startsWith('create:') && c.includes(`oc-node:${filed.nodeId}`));
+      expect(create).toBeGreaterThan(-1);
+      expect(calls[create]).toContain('oc-discovered');
+      expect(calls[create]).toContain(`oc-cap:${filed.capability}`);
+      // Every label of this candidate was ensured before its create.
+      for (const label of calls[create].slice('create:'.length).split(',')) {
+        expect(calls.indexOf(`label:${label}`)).toBeLessThan(create);
+      }
+    }
+  });
+
+  it('records a failed write as not filed, with the reason, and never as filed', async () => {
+    const { materializeDiscoveredGraphIssues } = await import('../../../scripts/oc-supervisor-discovery');
+    const run = materializeDiscoveredGraphIssues([], NOW, {
+      fingerprintIndex: { available: true, fingerprints: new Set() },
+      ensureLabel: () => {},
+      createIssue: () => { throw new Error('gh: label not found'); },
+    });
+    expect(run.filed).toEqual([]);
+    expect(run.notFiled.length).toBeGreaterThan(0);
+    expect(run.notFiled[0].reason).toContain('label not found');
+  });
+
+  it('files nothing when the index is unavailable, and never calls the writer', async () => {
+    const { materializeDiscoveredGraphIssues } = await import('../../../scripts/oc-supervisor-discovery');
+    let writes = 0;
+    const run = materializeDiscoveredGraphIssues([], NOW, {
+      fingerprintIndex: { available: false, reason: 'gh: HTTP 502' },
+      ensureLabel: () => { writes++; },
+      createIssue: () => { writes++; return 1; },
+    });
+    expect(run.result.failedClosed).toBe(true);
+    expect(run.filed).toEqual([]);
+    expect(writes).toBe(0);
+  });
+});

@@ -24,6 +24,7 @@ import {
 import {
   fetchSpeciesDossier,
   resolveFederatedSpecies,
+  sectionExcerpts,
   sectionMessage,
   type FederationResolveResult,
   type SpeciesDossierEnvelope,
@@ -581,6 +582,21 @@ function DossierSectionBlock({
       >
         {sectionMessage(section)}
       </p>
+      {sectionExcerpts(section).length > 0 && (
+        <dl data-testid="dossier-section-excerpts" className="mt-3 space-y-2">
+          {sectionExcerpts(section).map((excerpt, i) => (
+            <div key={`${excerpt.label}-${i}`}>
+              <dt className="font-mono text-[10px] tracking-[0.12em] uppercase text-[#cfc8b8]/60">
+                {excerpt.label}
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-line font-body text-[12px] text-[#cfc8b8]/85">
+                {excerpt.text}
+                {excerpt.truncated ? ' [excerpt shortened]' : ''}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {section.receipts.length > 0 && (
         <ul className="mt-3 space-y-2">
           {section.receipts.map((receipt, i) => (

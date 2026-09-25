@@ -6,6 +6,14 @@ import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphDat
 import {
   decideProviderFreeGraphIssueAction,
 } from '../src/lib/completion-graph/graphIssueDecision';
+import {
+  DISCOVERY_LABEL,
+  discoverGraphIssues,
+  indexDiscoveryFingerprints,
+  type DiscoveredIssueRef,
+  type FingerprintIndex,
+  type GraphDiscoveryResult,
+} from '../src/lib/completion-graph/graphDiscovery';
 import type { CompletionNode } from '../src/lib/completion-graph/types';
 import {
   discoverSupervisorWork,
@@ -69,12 +77,20 @@ type QueueAction = {
   reason: string;
 };
 
+export type GraphDiscoveryRun = {
+  result: GraphDiscoveryResult;
+  filed: Array<{ issueNumber: number; nodeId: string; fingerprint: string; capability: string }>;
+  /** Candidates the loop proposed but this run could not file, with the exact failure. */
+  notFiled: Array<{ nodeId: string; fingerprint: string; reason: string }>;
+};
+
 export type SupervisorRunResult = {
   schema: 'oc.supervisor-discovery.v1';
   discoveredAt: string;
   discovery: SupervisorDiscoveryResult;
   materialization: QueueAction;
   queueRefill: QueueAction[];
+  graphDiscovery: GraphDiscoveryRun | { skipped: true; reason: string };
   errors: string[];
 };
 
@@ -233,7 +249,7 @@ function createIssue(title: string, body: string, labels: string[]): number {
 function openIssueRefs(issues: SupervisorIssueSnapshot[]): OpenIssueRef[] {
   return issues
     .filter((issue) => issue.state === 'open')
-    .map((issue) => ({ number: issue.number, body: issue.body }));
+    .map((issue) => ({ number: issue.number, body: issue.body, labels: issue.labels }));
 }
 
 function materializeGraph(
@@ -306,6 +322,70 @@ function materializeGraph(
     fingerprint: candidate.deduplication.fingerprint,
     reason: decision.reason,
   };
+}
+
+/**
+ * Every fingerprint already filed, read by LABEL (state=all, so closed issues
+ * count) and never by text search. A failed read is reported as unavailable so
+ * the loop files nothing; it is never treated as "nothing filed yet".
+ */
+export function readDiscoveryFingerprintIndex(
+  repository: string,
+  snapshotIssues: SupervisorIssueSnapshot[],
+  fetchLabelled: (repo: string) => DiscoveredIssueRef[] = (repo) => flattenPaginated(ghJson<GitHubIssue[] | GitHubIssue[][]>([
+    'api',
+    `repos/${repo}/issues?state=all&labels=${DISCOVERY_LABEL}&per_page=100`,
+    '--paginate',
+    '--slurp',
+  ])).filter((issue) => !issue.pull_request).map((issue) => ({ number: issue.number, state: issue.state, body: issue.body })),
+): FingerprintIndex {
+  try {
+    const labelled = fetchLabelled(repository);
+    const fingerprints = indexDiscoveryFingerprints([
+      ...labelled,
+      ...snapshotIssues.map((issue) => ({ number: issue.number, state: issue.state, body: issue.body })),
+    ]);
+    return { available: true, fingerprints };
+  } catch (error) {
+    return { available: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function ensureLabel(repository: string, name: string): void {
+  // `gh issue create --label` fails outright on a label that does not exist,
+  // and a failed create must never read as filed. Labels are made first;
+  // --force makes an existing label a no-op rather than an error.
+  execFileSync('gh', ['label', 'create', name, '--repo', repository, '--force', '--color', 'ededed',
+    '--description', 'Orchid Continuum governed autonomy marker'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+}
+
+export function materializeDiscoveredGraphIssues(
+  frontendIssues: SupervisorIssueSnapshot[],
+  now: string,
+  io: {
+    fingerprintIndex: FingerprintIndex;
+    ensureLabel: (name: string) => void;
+    createIssue: (title: string, body: string, labels: string[]) => number;
+  },
+): GraphDiscoveryRun {
+  const result = discoverGraphIssues(COMPLETION_GRAPH, {
+    now,
+    openIssues: openIssueRefs(frontendIssues),
+    fingerprintIndex: io.fingerprintIndex,
+  });
+  const filed: GraphDiscoveryRun['filed'] = [];
+  const notFiled: GraphDiscoveryRun['notFiled'] = [];
+  for (const candidate of result.candidates) {
+    try {
+      for (const label of candidate.labels) io.ensureLabel(label);
+      const issueNumber = io.createIssue(candidate.title, candidate.body, candidate.labels);
+      filed.push({ issueNumber, nodeId: candidate.nodeId, fingerprint: candidate.fingerprint, capability: candidate.capability });
+    } catch (error) {
+      notFiled.push({ nodeId: candidate.nodeId, fingerprint: candidate.fingerprint,
+        reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return { result, filed, notFiled };
 }
 
 function ensureQueued(issue: SupervisorIssueSnapshot, packet?: SupervisorTaskRecord): QueueAction {
@@ -422,6 +502,16 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
   const queueRefill = frontend && frontendAvailable
     ? refillEligibleIssues(discovery, repositories)
     : [];
+  // The bounded "next unmet gate -> filed issue" loop. It runs only when the
+  // current repository's inventory was read, and it reads its own dedupe index
+  // by label; either read failing means nothing is filed this pass.
+  const graphDiscovery: SupervisorRunResult['graphDiscovery'] = frontend && frontendAvailable
+    ? materializeDiscoveredGraphIssues(frontend.issues, discoveredAt, {
+        fingerprintIndex: readDiscoveryFingerprintIndex(currentRepository(), frontend.issues),
+        ensureLabel: (name) => ensureLabel(currentRepository(), name),
+        createIssue,
+      })
+    : { skipped: true, reason: 'Current repository issue inventory was unavailable; no graph discovery was attempted.' };
 
   const result: SupervisorRunResult = {
     schema: 'oc.supervisor-discovery.v1',
@@ -429,6 +519,7 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
     discovery,
     materialization,
     queueRefill,
+    graphDiscovery,
     errors,
   };
   mkdirSync('.oc-wave', { recursive: true });

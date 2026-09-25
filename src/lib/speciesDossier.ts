@@ -198,6 +198,37 @@ export async function resolveFederatedSpecies(
   return readJson<FederationResolveResult>(response);
 }
 
+export type SectionExcerpt = {
+  /** Human label for the kind of evidence, from the backend's evidence_type. */
+  label: string;
+  text: string;
+  truncated: boolean;
+};
+
+/**
+ * Evidence text a section carries in its `items`, in backend order.
+ *
+ * Only string excerpts are shown; an item without one is provenance-only and
+ * is represented by its receipt. Nothing is inferred or summarised here, and
+ * the section's own state (e.g. provisional) is rendered alongside, so an
+ * excerpt is never presented as verified.
+ */
+export function sectionExcerpts(section: DossierSection): SectionExcerpt[] {
+  const out: SectionExcerpt[] = [];
+  for (const item of section.items ?? []) {
+    const text = typeof item.excerpt === 'string' ? item.excerpt.trim() : '';
+    if (!text) continue;
+    const kind = typeof item.evidence_type === 'string' ? item.evidence_type : '';
+    const label = kind ? kind.replace(/_/g, ' ') : 'evidence';
+    out.push({
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      text,
+      truncated: item.excerpt_truncated === true,
+    });
+  }
+  return out;
+}
+
 export function sectionMessage(section: DossierSection): string {
   if (section.state === 'unavailable') {
     return section.unavailable_reason || 'Evidence is not currently available.';

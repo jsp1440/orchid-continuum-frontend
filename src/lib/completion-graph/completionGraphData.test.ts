@@ -65,6 +65,15 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(traits.gateScores?.integrationCanonicalBranch).toBeNull();
   });
 
+  it('scores the Matrix comparison provenance gate from captured payload tests, not browser or deployment', () => {
+    const leaf = allNodes.find((node) => node.id === 'cap-matrix-report-lexicon');
+    expect(leaf?.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(leaf?.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaf?.gateScores?.deployedOperational).toBeNull();
+    expect(leaf?.status).toBe('PARTIAL');
+    expect(leaf?.evidence.some((e) => e.ref === 'src/lib/matrixCandidateEvidence.test.ts')).toBe(true);
+  });
+
   it('has a single root with parentId null', () => {
     expect(COMPLETION_GRAPH.parentId).toBeNull();
     const nonRootWithNullParent = allNodes.filter((n) => n.id !== COMPLETION_GRAPH.id && n.parentId === null);
@@ -144,9 +153,16 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(leaf?.evidence.some((e) => e.ref === 'src/pages/ComingSoon.tsx')).toBe(false);
   });
 
-  it('records the scheduler->issue-automation gap as confirmed missing, not census-pending', () => {
-    const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
-    expect(gap?.status).toBe('MISSING');
+  it('scores the scheduler->issue-automation loop as wired but not yet proven live', () => {
+    const gap = getLeaves(COMPLETION_GRAPH).find((n) => n.id.startsWith('cap-scheduler-issue-automation'));
+    expect(gap?.status).toBe('PARTIAL');
+    expect(gap?.threeLevels.codeComplete).toBe('MET');
+    // No scheduled run has been observed filing a discovered issue yet, so
+    // integration on the canonical branch scores 0 and product stays NOT_MET.
+    expect(gap?.gateScores?.integrationCanonicalBranch).toBe(0);
+    expect(gap?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(gap?.evidence.some((e) => e.ref === 'src/lib/completion-graph/graphDiscovery.ts')).toBe(true);
+    expect(gap?.evidence.some((e) => e.ref === 'src/lib/completion-graph/graphDiscovery.test.ts')).toBe(true);
   });
 
   it('#281 round 2: Buying Companion, Vision, and Security/governance are no longer single generic census-pending stubs', () => {
