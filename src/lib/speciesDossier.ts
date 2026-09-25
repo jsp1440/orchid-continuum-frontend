@@ -203,7 +203,12 @@ export type SectionExcerpt = {
   label: string;
   text: string;
   truncated: boolean;
+  /** The item's own evidence state, only when it differs from the section's. */
+  evidenceState: string | null;
 };
+
+/** The backend's own truncation marker; the page adds a single, readable one. */
+const BACKEND_TRUNCATION_MARKER = /\s*\[\.\.\.\]$/;
 
 /**
  * Evidence text a section carries in its `items`, in backend order.
@@ -216,14 +221,18 @@ export type SectionExcerpt = {
 export function sectionExcerpts(section: DossierSection): SectionExcerpt[] {
   const out: SectionExcerpt[] = [];
   for (const item of section.items ?? []) {
-    const text = typeof item.excerpt === 'string' ? item.excerpt.trim() : '';
+    const truncated = item.excerpt_truncated === true;
+    const raw = typeof item.excerpt === 'string' ? item.excerpt.trim() : '';
+    const text = truncated ? raw.replace(BACKEND_TRUNCATION_MARKER, '') : raw;
     if (!text) continue;
     const kind = typeof item.evidence_type === 'string' ? item.evidence_type : '';
     const label = kind ? kind.replace(/_/g, ' ') : 'evidence';
+    const itemState = typeof item.evidence_state === 'string' ? item.evidence_state.trim().toLowerCase() : '';
     out.push({
       label: label.charAt(0).toUpperCase() + label.slice(1),
       text,
-      truncated: item.excerpt_truncated === true,
+      truncated,
+      evidenceState: itemState && itemState !== section.state ? itemState : null,
     });
   }
   return out;
