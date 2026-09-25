@@ -115,9 +115,16 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(computeGateScore(gate?.gateScores).percentage).not.toBeNull();
   });
 
-  it('records the scheduler->issue-automation gap as confirmed missing, not census-pending', () => {
-    const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
-    expect(gap?.status).toBe('MISSING');
+  it('scores the scheduler->issue-automation loop as wired but not yet proven live', () => {
+    const gap = getLeaves(COMPLETION_GRAPH).find((n) => n.id.startsWith('cap-scheduler-issue-automation'));
+    expect(gap?.status).toBe('PARTIAL');
+    expect(gap?.threeLevels.codeComplete).toBe('MET');
+    // No scheduled run has been observed filing a discovered issue yet, so
+    // integration on the canonical branch scores 0 and product stays NOT_MET.
+    expect(gap?.gateScores?.integrationCanonicalBranch).toBe(0);
+    expect(gap?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(gap?.evidence.some((e) => e.ref === 'src/lib/completion-graph/graphDiscovery.ts')).toBe(true);
+    expect(gap?.evidence.some((e) => e.ref === 'src/lib/completion-graph/graphDiscovery.test.ts')).toBe(true);
   });
 
   it('#281 round 2: Buying Companion, Vision, and Security/governance are no longer single generic census-pending stubs', () => {

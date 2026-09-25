@@ -645,16 +645,27 @@ const completionGraphEngineGate: CompletionNode = {
   children: [],
 };
 
-const schedulerIssueAutomationGap = confirmedMissing({
-  idHint: 'cap-scheduler-issue-automation',
-  parentId: 'module-autonomous-control-plane-core',
-  name: 'Scheduler output wired to real GitHub issue creation/queueing',
-  evidence: [
-    { kind: 'file', ref: 'src/lib/completion-graph/graphOps.ts', note: 'selectNextUnmetGate() is exported and grep-confirmed to have exactly one consumer: CompletionObservatory.tsx\'s own UI render. No caller files an issue, queues work, or otherwise acts on its output.' },
-  ],
-  nextAction: 'Wire selectNextUnmetGate() output into the autonomous scheduler\'s issue creation/queueing path so "choose next unmet gate -> bounded issue" is a real automated loop, not just a UI display.',
-  lane: 'INTEGRATION_COMPLETION',
-});
+const schedulerIssueAutomationGap: CompletionNode = {
+  ...censusPending({
+    idHint: 'cap-scheduler-issue-automation',
+    parentId: 'module-autonomous-control-plane-core',
+    name: 'Scheduler output wired to real GitHub issue creation/queueing',
+    evidence: [
+      { kind: 'file', ref: 'src/lib/completion-graph/graphDiscovery.ts', note: 'discoverGraphIssues(): walks selectAdmissibleLeaf() ranking, declares the capability from the leaf, dedupes by OC-DISCOVERY-FINGERPRINT against open and closed issues, at most 3 per pass, files nothing when the index cannot be read.' },
+      { kind: 'file', ref: 'scripts/oc-supervisor-discovery.ts', note: 'materializeDiscoveredGraphIssues() runs in the scheduled supervisor job: label-query index, labels created before the write, each filed/not-filed candidate recorded in .oc-wave/supervisor-discovery.json.' },
+      { kind: 'test', ref: 'src/lib/completion-graph/graphDiscovery.test.ts' },
+      { kind: 'test', ref: 'src/lib/control-plane/supervisorDiscovery.test.ts' },
+      { kind: 'file', ref: 'src/lib/completion-graph/graphOps.ts', note: 'selectNextUnmetGate() remains the Observatory display; the executable loop uses the same scheduler ranking through selectAdmissibleLeaf().' },
+    ],
+    nextAction: 'Observe the first scheduled supervisor run on main that files a discovered issue and record its run id and issue number here; until then the loop is code-complete and wired, not proven live.',
+    lane: 'INTEGRATION_COMPLETION',
+  }),
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 0,
+    scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  lastUpdated: '2026-09-25T00:00:00.000Z',
+};
 
 const autonomousControlPlaneDomain = branch({
   id: 'domain-autonomous-control-plane',
