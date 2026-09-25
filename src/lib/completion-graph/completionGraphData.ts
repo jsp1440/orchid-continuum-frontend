@@ -35,6 +35,9 @@ const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
 /** Evidence-check date for nodes added by the #242 audit pass (Homepage, education/show-management). */
 const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
 
+/** Evidence-check date for the #791 pass (judging practice sheet browser-journey spec). */
+const ISSUE_791_DATE = '2026-09-25T00:00:00.000Z';
+
 /**
  * The integration commit this graph's evidence was checked against.
  *
@@ -1722,9 +1725,14 @@ const judgingPracticeGate: CompletionNode = {
     { kind: 'file', ref: 'src/lib/judgingPractice.ts' },
     { kind: 'test', ref: 'src/lib/judgingPractice.test.ts' },
     { kind: 'test', ref: 'src/pages/JudgingPractice.test.tsx' },
+    {
+      kind: 'test',
+      ref: 'e2e/judging-practice-journey.spec.ts',
+      note: 'Real-Chromium Playwright journey against a production `vite build`: rubric provenance disclosure visible on screen, band withheld on an incomplete sheet, a complete sheet resolves the correct band with the not-an-award disclaimer, and non-scored recognitions (CBR) are listed. Added this pass but not yet executed to a green result: this session\'s sandbox blocks launching a browser executable outside the repository working directory, so the spec is durable evidence-producing code, not yet execution evidence. browserEndToEnd stays null rather than being marked met on an unexecuted spec.',
+    },
   ],
-  nextAction: 'Run a live browser pass confirming the rubric provenance disclosure and deterministic scoring render correctly end to end (4 of 6 gate categories confirmed this pass by reading source and tests).',
-  lastUpdated: AUDIT_242_DATE,
+  nextAction: 'Execute e2e/judging-practice-journey.spec.ts in an environment permitted to launch a real browser (CI, or an agent session with that sandbox boundary explicitly granted) and record the result to resolve browserEndToEnd.',
+  lastUpdated: ISSUE_791_DATE,
   children: [],
 };
 
