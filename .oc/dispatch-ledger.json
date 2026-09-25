@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 4.5,
+  "programSpent": 5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 2.5
+    "2026-09-25": 3
   },
   "leases": [
     {
@@ -499,6 +499,19 @@
       "expiresAt": "2026-09-25T16:59:55.959Z",
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
+      "state": "reserved"
+    },
+    {
+      "id": "e3e1588af5b4f50558eaee2c2201d99ab9558263d052513f5c3dbd9e195c7cbc",
+      "issue": 778,
+      "nodeId": "cap-calyx-verification-workbench",
+      "fingerprint": "9c122c7f1dddf413c03833d5086d10134e8cb401d13d147d55b2b91dad4ef8a7",
+      "waveHash": "a99bb4bd1f81528c905e9be4c38d40e1514d7e4ca9fcbc86e3096cd24ec30f31",
+      "runId": "36154368582",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:00:17.022Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "b53eeb66947a5d80aeb90ebfa88d398462efacd1",
       "state": "reserved"
     }
   ]
