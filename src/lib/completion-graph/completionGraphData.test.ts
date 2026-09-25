@@ -226,7 +226,7 @@ describe('COMPLETION_GRAPH structural integrity', () => {
       'domain-conservatory': getLeaves(allNodes.find((n) => n.id === 'domain-conservatory')!).length,
     };
     expect(domainLeafCounts['domain-calyx-verification']).toBe(3);
-    expect(domainLeafCounts['domain-knowledge-graph']).toBe(3);
+    expect(domainLeafCounts['domain-knowledge-graph']).toBe(4);
     expect(domainLeafCounts['domain-conservatory']).toBe(3);
 
     // #522: the naming conflict between the two "Knowledge Graph" routes is

@@ -203,6 +203,9 @@ const PROVIDER_FREE_CAPABILITIES = new Set([
   'render-route-verification',
   'featured-genus-verification',
   'build-verification',
+  // Bound in LOCAL_EXECUTORS to a fixed GBIF name-lookup script. Without it a
+  // nomenclature reserve mission would be reported as needing a provider.
+  'nomenclature-evidence-lookup',
 ]);
 
 const SOURCE_KINDS = new Set<SupervisorSourceKind>([

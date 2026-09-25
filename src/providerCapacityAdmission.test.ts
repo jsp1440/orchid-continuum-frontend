@@ -10,6 +10,7 @@ import { buildGraphDispatchPlan } from '../scripts/oc-graph-dispatch-plan';
 import { bindingReport, planSummary } from '../scripts/oc-dispatch-runtime';
 import { COMPLETION_GRAPH } from './lib/completion-graph/completionGraphData';
 import type { CompletionNode } from './lib/completion-graph/types';
+import reserveIssues from './lib/__fixtures__/reserve-mission-issues-816-818.json';
 
 const NOW = '2026-09-25T20:25:00.000Z';
 const DAY = '2026-09-25';
@@ -194,6 +195,55 @@ describe('the live starvation replay: 14 provider-required queued issues, dailyS
     const claim = await claimDeterministicLease(store, plan, snapshot, { issueNumber: FREE, runId: '1', runAttempt: '1', now: NOW });
     expect(claim).toMatchObject({ allowed: true, reason: 'reserved' });
     expect(store.ledger.dailySpent[DAY]).toBe(10);
+  });
+});
+
+describe('the live reserve missions #816-#818 (verbatim, #819 fixtures) under dailySpent = 10', () => {
+  const RESERVE_LEAF = 'cap-kg-evidence-gap-research-missions';
+  // The fixture stores labels as the plain names GitHub's issue_read returned.
+  const reserve: Issue[] = reserveIssues.issues
+    .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(name => ({ name })) }));
+  const snapshot = (): Snapshot => ({
+    issues: [...LIVE_PROVIDER_QUEUE.map(([n, node]) => providerIssue(n, node)), ...reserve],
+    prs: [], integrationSha: 'a'.repeat(40), implementationSha: 'b'.repeat(40), material: {},
+  });
+
+  it('the fixtures are the provider-free, bound, pending missions the checker replayed', () => {
+    expect(reserve.map(i => i.number)).toEqual([816, 817, 818]);
+    for (const issue of reserve) {
+      expect(issue.labels.map(l => l.name)).toContain('oc-prepared');
+      expect(laneClassOf(issue)).toBe('provider-free');
+    }
+  });
+
+  it('reproduces the live wave without provider slots: eight provider lanes, #816-#818 unreachable', () => {
+    const plan = makePlan(snapshot(), [], NOW);
+    expect(plan.issues).toEqual([793, 794, 797, 798, 799, 800, 801, 802]);
+    expect(plan.unreachableQueued).toEqual(expect.arrayContaining([816, 817, 818]
+      .map(issueNumber => ({ issueNumber, nodeIds: [RESERVE_LEAF] }))));
+  });
+
+  it('admits one reserve mission onto its leaf with dailySpent = 10 and a wave call cap of 1', () => {
+    const snap = snapshot();
+    const capacity = providerCapacityFromEnvironment(LANE_ENV, liveLedger(), NOW);
+    expect(capacity).toMatchObject({ slots: 0, reason: 'daily_hard_cap_exceeded' });
+    const plan = makePlan(snap, [], NOW, COMPLETION_GRAPH, undefined, capacity);
+
+    expect(plan.issues).toEqual([816]);
+    expect(plan.leaves).toEqual([expect.objectContaining({ issueNumber: 816, nodeId: RESERVE_LEAF })]);
+    expect(plan.providerDeferred.map(d => d.issueNumber).sort((a, b) => a - b)).toEqual(LIVE_PROVIDER_QUEUE.map(([n]) => n));
+    expect(plan.providerDeferred.every(d => d.reason === 'provider_capacity: daily_hard_cap_exceeded')).toBe(true);
+    // One per wave on the leaf; the siblings wait for it, as a node holds one lane.
+    expect(plan.unreachableQueued).toEqual(expect.arrayContaining([817, 818]
+      .map(issueNumber => ({ issueNumber, nodeIds: [RESERVE_LEAF] }))));
+    // The admitted mission survives its lane's isolated re-plan.
+    expect(assertAdmission(plan, snap, 816, NOW).nodeId).toBe(RESERVE_LEAF);
+  });
+
+  it('with budget, the one provider slot and the reserve mission share the wave', () => {
+    const plan = makePlan(snapshot(), [], NOW, COMPLETION_GRAPH, undefined,
+      providerCapacityFromEnvironment(LANE_ENV, liveLedger({ dailySpent: { [DAY]: 0 } }), NOW));
+    expect(plan.issues).toEqual([793, 816]);
   });
 });
 

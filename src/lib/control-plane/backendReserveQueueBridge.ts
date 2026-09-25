@@ -113,6 +113,23 @@ function missionText(value: unknown, maxLength: number): string | null {
   return text;
 }
 
+/**
+ * The completion-graph leaf every canonical research mission binds to.
+ *
+ * Without an issue-side binding a filed mission lands in `unboundQueued` and can
+ * never reach a lane. The marker is line-anchored and repository-owned: mission
+ * text is validated free of control characters, so no payload value can forge
+ * a line of its own.
+ */
+export const RESERVE_MISSION_GRAPH_NODE = 'cap-kg-evidence-gap-research-missions';
+
+/**
+ * Capability declared only for a mission whose domain is exactly
+ * `nomenclature`, the one domain with a provider-free executor. Every other
+ * domain declares nothing and keeps the router's honest undeclared refusal.
+ */
+export const NOMENCLATURE_CAPABILITY = 'nomenclature-evidence-lookup';
+
 function sourcePayloadBody(value: unknown): { body: string; reason?: never } | { body?: never; reason: string } {
   if (value === undefined) return { body: '' };
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -153,6 +170,9 @@ function sourcePayloadBody(value: unknown): { body: string; reason?: never } | {
       `- Research question: ${question}`,
       '- Human review required: yes',
       '- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled',
+      '',
+      `OC-GRAPH-NODE: ${RESERVE_MISSION_GRAPH_NODE}`,
+      ...(domain === 'nomenclature' ? [`OC-SWARM-CAPABILITY: ${NOMENCLATURE_CAPABILITY}`] : []),
     ].join('\n'),
   };
 }

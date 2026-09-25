@@ -124,8 +124,8 @@ describe('binding a queued issue from the issue side', () => {
     };
     walk(COMPLETION_GRAPH);
 
-    // Five of 120. The issue-side binding now connects the real Featured Genus sentinel to its canonical graph leaf; cap-research-evidence-chain added the 120th node.
-    expect(nodes).toBe(120);
+    // Five of 121. The issue-side binding now connects the real Featured Genus sentinel to its canonical graph leaf; cap-research-evidence-chain added the 120th node and cap-kg-evidence-gap-research-missions the 121st.
+    expect(nodes).toBe(121);
     expect([...bound].sort((a, b) => a - b)).toEqual([47, 171, 525, 528, 660]);
   });
 
