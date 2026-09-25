@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import capturedPlan from './__fixtures__/evidence_gap_reserve_plan.json';
+import { bridgeBackendReservePlan, type BackendReservePlan } from './backendReserveQueueBridge';
 import {
   discoverSupervisorWork,
   PORTFOLIO_MODULES,
@@ -523,5 +525,121 @@ describe('bounded graph discovery in the supervisor script', () => {
     expect(run.result.failedClosed).toBe(true);
     expect(run.filed).toEqual([]);
     expect(writes).toBe(0);
+  });
+});
+
+describe('opt-in backend evidence-gap reserve pass in the supervisor script', () => {
+  const REPO = 'jsp1440/orchid-continuum-frontend';
+  const heldFingerprint = capturedPlan.proposals[0].material_fingerprint;
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), {
+    status, headers: { 'content-type': 'application/json' },
+  });
+  const harness = () => {
+    const calls: string[] = [];
+    let next = 700;
+    return {
+      calls,
+      ensureLabel: (name: string) => { calls.push(`label:${name}`); },
+      createIssue: (title: string, _body: string, labels: string[]) => {
+        calls.push(`create:${title}|${labels.join(',')}`);
+        return ++next;
+      },
+    };
+  };
+  const emptyIndex = { available: true as const, fingerprints: new Set<string>() };
+
+  it('is off unless OC_ADMIT_BACKEND_RESERVE is exactly 1, and then files and fetches nothing', async () => {
+    const { backendReserveEnabled, materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    expect(backendReserveEnabled({})).toBe(false);
+    expect(backendReserveEnabled({ OC_ADMIT_BACKEND_RESERVE: 'true' })).toBe(false);
+    expect(backendReserveEnabled({ OC_ADMIT_BACKEND_RESERVE: '1' })).toBe(true);
+    const fetchImpl = vi.fn(async () => json(capturedPlan)) as unknown as typeof fetch;
+    const io = harness();
+    const run = await materializeBackendReservePlan([], {
+      enabled: false, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex, fetchImpl, ...io,
+    });
+    expect(run.enabled).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(io.calls).toEqual([]);
+  });
+
+  it('files exactly the bridge creates for a green plan, each with its priority label', async () => {
+    const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    const expected = bridgeBackendReservePlan(capturedPlan as BackendReservePlan, []).plan.create;
+    expect(expected).toHaveLength(3);
+    const io = harness();
+    const run = await materializeBackendReservePlan([], {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.failedClosed).toBeNull();
+    expect(run.paidProviderCalls).toBe(0);
+    expect(run.filed.map((f) => f.sourceKey)).toEqual(expected.map((e) => e.sourceKey));
+    expect(run.filed.map((f) => f.labels)).toEqual(expected.map((e) => [...e.labels, 'oc-discovered']));
+    expect(run.filed.map((f) => f.labels[1])).toEqual(['oc-p1', 'oc-p1', 'oc-p2']);
+    const creates = io.calls.filter((c) => c.startsWith('create:'));
+    expect(creates).toEqual(expected.map((e) => `create:${e.title}|${[...e.labels, 'oc-discovered'].join(',')}`));
+    for (const create of creates) {
+      const at = io.calls.indexOf(create);
+      for (const label of create.split('|')[1].split(',')) {
+        expect(io.calls.indexOf(`label:${label}`)).toBeLessThan(at);
+      }
+    }
+  });
+
+  it.each([
+    ['blocked upstream', async () => json({ ...capturedPlan, status: 'evidence_gaps_unavailable',
+      status_reason: 'kg unreachable', proposals: [] }), 'upstream blocked: evidence_gaps_unavailable (kg unreachable)'],
+    ['http failure', async () => json({ detail: 'down' }, 503), 'transport: http_503'],
+    ['network failure', async () => { throw new TypeError('fetch failed'); }, 'transport: transport_error'],
+  ])('files nothing on a %s and records the reason', async (_name, impl, reason) => {
+    const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    const io = harness();
+    const run = await materializeBackendReservePlan([], {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: impl as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.failedClosed).toBe(reason);
+    expect(run.filed).toEqual([]);
+    expect(io.calls).toEqual([]);
+  });
+
+  it('files nothing and never fetches when the dedupe index is unreadable', async () => {
+    const { materializeBackendReservePlan, readReserveFingerprintIndex } = await import('../../../scripts/oc-supervisor-discovery');
+    const fetchImpl = vi.fn(async () => json(capturedPlan)) as unknown as typeof fetch;
+    const io = harness();
+    const run = await materializeBackendReservePlan([], {
+      enabled: true, baseUrl: 'https://calyx.test', fetchImpl, ...io,
+      fingerprintIndex: readReserveFingerprintIndex(REPO, [], () => { throw new Error('gh: HTTP 502'); }),
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.failedClosed).toBe('reserve dedupe index unavailable: gh: HTTP 502');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(io.calls).toEqual([]);
+  });
+
+  it('sends held fingerprints upstream and never refiles an already-filed fingerprint', async () => {
+    const { materializeBackendReservePlan, readReserveFingerprintIndex } = await import('../../../scripts/oc-supervisor-discovery');
+    const open = [{ number: 41, repository: REPO, state: 'open' as const, title: 'Earlier reserve mission',
+      body: `Prepared from the canonical backend reserve planner. Material fingerprint: ${heldFingerprint}`, labels: ['oc-prepared'] }];
+    const index = readReserveFingerprintIndex(REPO, open, () => []);
+    expect(index).toEqual({ available: true, fingerprints: new Set([heldFingerprint]) });
+    const urls: string[] = [];
+    // The upstream ignores the hint and returns the full plan: local dedupe still holds.
+    const fetchImpl = (async (url: string) => { urls.push(url); return json(capturedPlan); }) as unknown as typeof fetch;
+    const io = harness();
+    const run = await materializeBackendReservePlan(open, {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: index, fetchImpl, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(new URL(urls[0]).searchParams.getAll('fingerprint')).toEqual([heldFingerprint]);
+    expect(run.filed.map((f) => f.fingerprint)).not.toContain(heldFingerprint);
+    expect(run.suppressed).toContainEqual(expect.objectContaining({
+      reason: `material fingerprint ${heldFingerprint} already filed`,
+    }));
+    expect(io.calls.filter((c) => c.startsWith('create:')).length).toBe(run.filed.length);
+    expect(run.filed.length).toBeLessThan(3);
   });
 });
