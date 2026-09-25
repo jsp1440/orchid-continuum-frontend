@@ -20,10 +20,10 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: "Apply label transitions (otherwise report only)"
+        description: "Apply label transitions (default: report only)"
         required: false
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: read
@@ -44,7 +44,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npx vitest run src/lib/control-plane/ocDoneGuard.test.ts
+      - run: npx vitest run src/lib/control-plane/ocDoneGuard.test.ts src/lib/control-plane/ocDoneGuardWorkflow.test.ts
       - run: npx eslint src/lib/control-plane/ocDoneGuard.ts src/lib/control-plane/ocDoneGuard.test.ts scripts/oc-done-guard.ts
 
   guard:
@@ -65,7 +65,13 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Scheduled runs are REPORT-ONLY. Withdrawing oc-done on a schedule would
+      # re-admit work into the lanes, a state mutation the owner has not
+      # authorized. Transitions are applied only when the owner dispatches the
+      # workflow with apply=true or sets the repository variable
+      # OC_DONE_GUARD_APPLY=true. The refusal list is always written to the
+      # step summary, so a report-only run is still evidence.
       - name: Audit oc-done claims
         run: >-
           npx --no-install tsx scripts/oc-done-guard.ts --repo "$GITHUB_REPOSITORY" --target-branch main --limit 25
-          ${{ (github.event_name == 'schedule' || inputs.apply) && '--apply' || '' }}
+          ${{ ((github.event_name == 'workflow_dispatch' && inputs.apply == true) || vars.OC_DONE_GUARD_APPLY == 'true') && '--apply' || '' }}
