@@ -66,6 +66,26 @@ malformed value is rejected at startup and treated as unconfigured, with a
 console warning, because a relative base would resolve every API call to the
 SPA shell described above. `NEXT_PUBLIC_API_BASE_URL` is accepted as an alias.
 
+### What each frontend origin variable must be on Render
+
+`render.yaml` declares no `envVars`; the production values are set in the
+Render dashboard and are **not verifiable from this repository**. The table
+below is what the code does with each variable, with the repository evidence,
+and therefore what the dashboard must hold for the code to behave as designed.
+
+| Variable | On Render | Evidence |
+| --- | --- | --- |
+| `VITE_CALYX_API_URL` | `https://orchid-calyx-backend.onrender.com` (required) | `src/lib/backendConfig.ts:19-24` (`CALYX_BACKEND_BASE_URL`, default is this origin); `src/lib/parallelPlatform.ts:119`; `src/components/conservatory/ConservatoryReadiness.tsx:5` (no default: unset means Conservatory readiness has no origin); `.env.example` "Production value" |
+| `VITE_CALYX_BACKEND_BASE_URL`, `VITE_MISSION_CONTROL_BACKEND_URL` | leave unset | aliases consulted only when `VITE_CALYX_API_URL` is absent, `src/lib/backendConfig.ts:21-22` |
+| `VITE_API_BASE_URL` | `https://orchid-continuum-public-api.onrender.com` (required) | `src/lib/api.ts:77` (no default; fails closed at `:150`); `src/lib/relationshipExplorer.ts:10`; second choice for `BACKEND_BASE_URL` at `src/lib/backendConfig.ts:10`; `.env.example` "Production value". `NEXT_PUBLIC_API_BASE_URL` is an alias (`src/lib/api.ts:77`) |
+| `VITE_BACKEND_BASE_URL` | leave unset | first choice for `BACKEND_BASE_URL` at `src/lib/backendConfig.ts:9`, ahead of `VITE_API_BASE_URL`; not in `.env.example`. Setting it to the Calyx origin would redirect public-API consumers to the wrong service (`src/lib/ocBackend.ts:6` says not to route the public API through it) |
+| `VITE_ORCHID_CONTINUUM_API_BASE_URL`, `VITE_OC_API_BASE_URL` | leave unset | overrides for `OC_BACKEND_BASE` at `src/lib/ocBackend.ts:11-15`, whose default is already the public API origin; not in `.env.example` or `src/vite-env.d.ts` |
+| `VITE_CRM_SUBSCRIBE_URL` | leave unset unless the CRM moves off the Calyx backend | `src/lib/missionListSignup.ts:35-40`: complete override of the subscribe endpoint; otherwise `/api/crm/<workspace>/subscribe` is composed onto the Calyx origin |
+
+Whether the dashboard actually holds these values is a Render-side check; the
+only repository-side proof is the fail-closed behaviour above and the
+`renderDeploymentContract` tests.
+
 ## Development
 
 ```
