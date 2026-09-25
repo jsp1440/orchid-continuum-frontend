@@ -74,6 +74,14 @@ describe('backendReservePlanClient', () => {
     );
   });
 
+  it('sends only well-formed executable domains, deduplicated and sorted', () => {
+    const url = new URL(reservePlanUrl({
+      baseUrl: BASE, mode: 'deterministic-no-api',
+      domains: ['nomenclature', 'Morphology', 'nomenclature', 'x&y=1', 'ecology'],
+    }));
+    expect(url.searchParams.getAll('domain')).toEqual(['ecology', 'nomenclature']);
+  });
+
   it.each([
     ['html', jsonResponse('<!doctype html><html></html>', { contentType: 'text/html' }), 'non_json_response'],
     ['server error', jsonResponse({ detail: 'x' }, { status: 503 }), 'http_503'],

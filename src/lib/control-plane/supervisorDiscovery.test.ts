@@ -547,6 +547,16 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     };
   };
   const emptyIndex = { available: true as const, fingerprints: new Set<string>() };
+  // The captured production plan proposes morphology, phenology and
+  // nomenclature. Only nomenclature has a local executor, so tests of the
+  // filing mechanics (depth, ceiling, labels) use the same plan with every
+  // proposal in that domain; the real mixed plan is asserted on its own below.
+  const executablePlan = {
+    ...capturedPlan,
+    proposals: capturedPlan.proposals.map((proposal) => ({
+      ...proposal, source_payload: { ...proposal.source_payload, domain: 'nomenclature' },
+    })),
+  };
 
   it('is off unless OC_ADMIT_BACKEND_RESERVE is exactly 1, and then files and fetches nothing', async () => {
     const { backendReserveEnabled, materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
@@ -565,12 +575,12 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
 
   it('files exactly the bridge creates for a green plan, each with its priority label', async () => {
     const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
-    const expected = bridgeBackendReservePlan(capturedPlan as BackendReservePlan, []).plan.create;
+    const expected = bridgeBackendReservePlan(executablePlan as BackendReservePlan, []).plan.create;
     expect(expected).toHaveLength(3);
     const io = harness();
     const run = await materializeBackendReservePlan([], {
       enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
-      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+      fetchImpl: (async () => json(executablePlan)) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
     expect(run.failedClosed).toBeNull();
@@ -640,7 +650,7 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     const io = harness();
     const run = await materializeBackendReservePlan(heldLegacy, {
       enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
-      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+      fetchImpl: (async () => json(executablePlan)) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
     expect(run.failedClosed).toBeNull();
@@ -663,7 +673,7 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     const io = harness();
     const run = await materializeBackendReservePlan(settled, {
       enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
-      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+      fetchImpl: (async () => json(executablePlan)) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
     expect(run.failedClosed).toBeNull();
@@ -701,7 +711,7 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     const io = harness();
     const run = await materializeBackendReservePlan(open, {
       enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
-      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+      fetchImpl: (async () => json(executablePlan)) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
     expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 0, eligibleCount: 3, openReserveIssues: 9, ceiling: 9 });
@@ -717,7 +727,7 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     const io = harness();
     const run = await materializeBackendReservePlan(open, {
       enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
-      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+      fetchImpl: (async () => json(executablePlan)) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
     expect(run.filed).toHaveLength(1);
@@ -755,6 +765,57 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     }));
     expect(io.calls.filter((c) => c.startsWith('create:')).length).toBe(run.filed.length);
     expect(run.filed.length).toBeLessThan(3);
+  });
+
+  // The real plan of 2026-09-25 (morphology, phenology, nomenclature): only the
+  // nomenclature mission can execute, so only it is requested and filed.
+  it('requests only executable domains and never files a mission no local executor can run', async () => {
+    const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    const urls: string[] = [];
+    const io = harness();
+    const run = await materializeBackendReservePlan([], {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async (url: string) => { urls.push(url); return json(capturedPlan); }) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(new URL(urls[0]).searchParams.getAll('domain')).toEqual(['nomenclature']);
+    expect(run.filed.map((f) => f.fingerprint)).toEqual([capturedPlan.proposals[2].material_fingerprint]);
+    expect(run.notFiled.map((entry) => entry.reason).sort()).toEqual([
+      'no local executor for reserve domain morphology',
+      'no local executor for reserve domain phenology',
+    ]);
+    expect(io.calls.filter((c) => c.startsWith('create:'))).toHaveLength(1);
+  });
+
+  // #825-#827 (morphology, no executor) filled the whole depth on 2026-09-25
+  // and every later scheduled pass filed nothing (run 36194099171).
+  it('does not let reserve missions no executor can run consume the depth, but counts them at the ceiling', async () => {
+    const { materializeBackendReservePlan, existingWorkRefs } = await import('../../../scripts/oc-supervisor-discovery');
+    const fixture = (await import('../__fixtures__/reserve-mission-issues-825-827.json')).default as {
+      issues: Array<{ number: number; title: string; body: string; labels: string[] }>;
+    };
+    const stranded = fixture.issues.map((issue) => ({ ...issue, repository: REPO, state: 'open' as const }));
+    expect(existingWorkRefs(stranded).map((ref) => ref.holdsReserveSlot)).toEqual([false, false, false]);
+    const io = harness();
+    const run = await materializeBackendReservePlan(stranded, {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async () => json(executablePlan)) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 0, eligibleCount: 3, openReserveIssues: 3, ceiling: 9 });
+    expect(run.filed).toHaveLength(3);
+  });
+
+  it('still counts an open executable (nomenclature) reserve mission against the depth', async () => {
+    const { existingWorkRefs } = await import('../../../scripts/oc-supervisor-discovery');
+    const fixture = (await import('../__fixtures__/reserve-mission-issues-816-818.json')).default as {
+      issues: Array<{ number: number; title: string; body: string }>;
+    };
+    const nomenclature = fixture.issues
+      .filter((issue) => /^- Domain: nomenclature$/m.test(issue.body))
+      .map((issue) => ({ ...issue, repository: REPO, state: 'open' as const, labels: ['oc-prepared', 'oc-p2'] }));
+    expect(nomenclature.length).toBeGreaterThan(0);
+    expect(existingWorkRefs(nomenclature).every((ref) => ref.holdsReserveSlot)).toBe(true);
   });
 });
 

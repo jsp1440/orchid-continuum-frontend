@@ -3,7 +3,12 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
-import { deriveReserveMissionBinding } from './oc-reserve-mission-binding.mjs';
+import {
+  deriveReserveMissionBinding,
+  EXECUTABLE_RESERVE_DOMAINS,
+  isUnexecutableReserveMission,
+  missionDomain,
+} from './oc-reserve-mission-binding.mjs';
 import {
   decideProviderFreeGraphIssueAction,
 } from '../src/lib/completion-graph/graphIssueDecision';
@@ -501,7 +506,12 @@ export function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWor
       title: issue.title,
       state: 'open' as const,
       kind: 'issue' as const,
-      holdsReserveSlot: !issue.labels.some((label) => HELD_LINEAGE_LABELS.has(label)),
+      // A reserve mission no local executor can run (a `morphology` gap, say)
+      // waits on a person, not a lane. Counting it as depth let three such
+      // missions (#825-#827) stop the reserve filing anything on 2026-09-25.
+      // The open ceiling still counts it.
+      holdsReserveSlot: !issue.labels.some((label) => HELD_LINEAGE_LABELS.has(label))
+        && !isUnexecutableReserveMission(issue),
     }));
 }
 
@@ -553,6 +563,7 @@ export async function materializeBackendReservePlan(
     mode: 'deterministic-no-api',
     reserveDepth: MAX_RESERVE_PLAN_DEPTH,
     heldFingerprints: [...held],
+    domains: EXECUTABLE_RESERVE_DOMAINS,
     fetchImpl: io.fetchImpl,
   });
   run.upstreamStatus = admission.bridge.upstreamStatus;
@@ -587,6 +598,14 @@ export async function materializeBackendReservePlan(
     }
     if (held.has(fingerprint)) {
       run.suppressed.push({ sourceKey: prepared.sourceKey, reason: `material fingerprint ${fingerprint} already filed` });
+      continue;
+    }
+    // Defence in depth: a backend that predates the `domain` filter ignores it,
+    // so a mission no local executor can run is refused here as well.
+    const domain = missionDomain(prepared.body);
+    if (domain === null || !EXECUTABLE_RESERVE_DOMAINS.includes(domain)) {
+      run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint,
+        reason: `no local executor for reserve domain ${domain ?? '(unparsed mission block)'}` });
       continue;
     }
     if (prepared.protected || prepared.labels.includes('oc-owner-gate')) {
