@@ -208,4 +208,23 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
       expect(text).not.toContain("()");
     }
   });
+
+  it.each([
+    ["total below a full page", () => ({ items: Array.from({ length: 200 }, (_, i) => ({ conflict_id: i, candidate_ids: [900, 901], state: "OPEN" })), total: 150 })],
+    ["a negative total", () => ({ items: [], total: -1 })],
+    ["pages that repeat the same conflicts", () => ({ items: Array.from({ length: 200 }, (_, i) => ({ conflict_id: i, candidate_ids: [900, 901], state: "OPEN" })), total: 400 })],
+  ])("never reads %s as a complete, uncontested list", async (_name, body) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/conflicts")) return new Response(JSON.stringify(body()));
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    for (let i = 0; i < 4; i += 1) await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting?.querySelector('[data-testid="research-candidate-conflicts-unavailable"]')?.textContent)
+      .toMatch(/unknown/);
+  });
 });

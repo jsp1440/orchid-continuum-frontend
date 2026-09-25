@@ -161,23 +161,27 @@ export type CandidateConflictList = {
  * never "uncontested".
  */
 export async function listCandidateConflicts(): Promise<CandidateConflictList> {
-  const items: CandidateConflict[] = [];
+  const byId = new Map<string, CandidateConflict>();
   let total: number | null = null;
   for (let page = 0; page < MAX_CONFLICT_PAGES; page += 1) {
     const value = await researchRequest<unknown>(
       `/api/candidate-knowledge/conflicts?limit=${CONFLICT_PAGE_SIZE}&offset=${page * CONFLICT_PAGE_SIZE}`,
     );
     const pageItems = assertItems<CandidateConflict>(value, "candidate conflicts", isConflict);
-    items.push(...pageItems);
-    const reported = isRecord(value) && typeof value.total === "number" && Number.isFinite(value.total)
-      ? value.total
-      : null;
-    total = reported;
-    if (reported === null || items.length >= reported || pageItems.length < CONFLICT_PAGE_SIZE) {
-      return { items, complete: reported !== null && items.length >= reported, total };
+    const reported = isRecord(value) ? value.total : undefined;
+    if (reported !== undefined && !(typeof reported === "number" && Number.isInteger(reported) && reported >= 0)) {
+      throw new MalformedEvidenceResponse("candidate conflicts");
     }
+    total = typeof reported === "number" ? reported : null;
+    for (const item of pageItems) {
+      byId.set(displayText((item as { conflict_id?: unknown }).conflict_id, `row-${byId.size}`), item);
+    }
+    if (total !== null && byId.size > total) throw new MalformedEvidenceResponse("candidate conflicts");
+    // Complete only when the distinct conflicts read equal the reported total.
+    if (total !== null && byId.size === total) return { items: [...byId.values()], complete: true, total };
+    if (total === null || pageItems.length < CONFLICT_PAGE_SIZE) break;
   }
-  return { items, complete: false, total };
+  return { items: [...byId.values()], complete: false, total };
 }
 
 /** Name → numeric score pairs only; anything else is not rendered as a breakdown. */
