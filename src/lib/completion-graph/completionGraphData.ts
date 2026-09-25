@@ -1195,7 +1195,7 @@ const conservatoryCollectionGate: CompletionNode = {
   parentId: 'module-conservatory-core',
   name: 'Authenticated personal conservatory collection (plants, QR passports)',
   type: 'capability',
-  status: 'OWNER_ACTION',
+  status: 'PARTIAL',
   threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'PARTIAL' },
   lane: 'PRODUCT_COMPLETION',
   gateScores: {

@@ -142,7 +142,6 @@ const JOINS: JoinSpec[] = [
     browser: 1,
     browserNote: 'Provider-free mounted production-bundle pass on 2026-09-24: a persisted reference Research project opened Matrix with the exact project id and bounded taxon, then returned to that same persisted project; a malformed project id degraded without discarding the valid subject.',
     provenanceNote: 'The taxon read fails closed rather than truncating: a shortened binomial is a different organism. An untrusted project id degrades alone without discarding the subject.',
-    remainingStatus: 'OWNER_ACTION',
     nextAction: 'Owner-gated deployed-backend confirmation remains; the provider-free reference backend proves the browser contract but not production data/service readiness.',
     lastAccomplishment: '#753 added a fixed provider-free browser acceptance lane; scheduled run 3738 proved the persisted Research Station → Matrix → same project round trip with 0 provider calls.',
   },

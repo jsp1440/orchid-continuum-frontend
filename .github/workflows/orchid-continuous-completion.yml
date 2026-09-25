@@ -1,4 +1,4 @@
-name: Orchid Continuous Completion (NO API MODE)
+name: Orchid Continuous Completion
 
 # Canonical scheduler. Compatibility entrypoints delegate here; Portfolio
 # Steward remains a separate queue-planning role, outside implementation capacity.
@@ -21,7 +21,7 @@ permissions:
 
 env:
   MAX_ACTIVE_LANES: 8
-  PROVIDER_AUTHORIZED: 'false'
+  PROVIDER_AUTHORIZED: 'true'
 
 jobs:
   reconcile:
@@ -118,6 +118,7 @@ jobs:
       actions: write
       id-token: write
     uses: ./.github/workflows/orchid-deterministic-dispatch.yml
+    secrets: inherit
     with:
       issues_json: ${{ needs.plan.outputs.issues }}
       wave_hash: ${{ needs.plan.outputs.wave_hash }}

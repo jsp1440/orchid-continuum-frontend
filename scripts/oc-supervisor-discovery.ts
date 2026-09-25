@@ -15,6 +15,11 @@ import {
   type SupervisorIssueSnapshot,
   type SupervisorPullRequestSnapshot,
   type SupervisorRepositorySnapshot,
+  // `ensureQueued` annotates its packet parameter with this. Without the import
+  // the whole-repository `npm run typecheck` fails on TS2304, which is a gate
+  // every other change has to get past, so it is repaired here rather than
+  // left for the next one to trip over.
+  type SupervisorTaskRecord,
 } from '../src/lib/control-plane/supervisorDiscovery';
 import type { OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
 

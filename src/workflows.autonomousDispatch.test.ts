@@ -6,14 +6,14 @@ type Job = { if?: string; needs?: string | string[]; uses?: string; outputs?: ob
 const read = (file: string) => readFileSync(`.github/workflows/${file}.yml`, 'utf8');
 const text = read('orchid-continuous-completion');
 const workflow = yaml.load(text) as { jobs: Record<string, Job>; env: Record<string, unknown> };
-describe('canonical provider-free autonomous dispatch', () => {
+describe('canonical governed autonomous dispatch', () => {
   it('uses graph planning, reusable fan-out and an always-run receipt audit', () => {
     expect(Object.keys(workflow.jobs)).toEqual(['reconcile', 'supervisor', 'plan', 'dispatch', 'audit']);
     expect(workflow.jobs.supervisor.needs).toBe('reconcile');
     expect(workflow.jobs.supervisor.steps?.some(step => step.run?.includes('oc-supervisor-discovery.ts'))).toBe(true);
     expect(workflow.jobs.supervisor.permissions).toEqual({ contents: 'read', issues: 'write', 'pull-requests': 'read' });
     expect(workflow.env.MAX_ACTIVE_LANES).toBe(8);
-    expect(workflow.env.PROVIDER_AUTHORIZED).toBe('false');
+    expect(workflow.env.PROVIDER_AUTHORIZED).toBe('true');
     expect(workflow.jobs.dispatch.uses).toBe('./.github/workflows/orchid-deterministic-dispatch.yml');
     expect(workflow.jobs.dispatch.if).toBe("always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'");
     expect(workflow.jobs.audit.if).toContain('always()');
@@ -33,7 +33,7 @@ describe('canonical provider-free autonomous dispatch', () => {
     const lane = yaml.load(read('orchid-completion-lane')) as { jobs: Record<string, Job> };
     expect(lane.jobs.execute.needs).toBe('budget-authorization');
     expect(lane.jobs.execute.if).toBe("inputs.provider_authorized && needs.budget-authorization.outputs.allowed == 'true'");
-    expect(read('orchid-completion-lane')).toContain("OC_PROVIDER_NO_API_MODE: 'true'");
+    expect(read('orchid-completion-lane')).toContain("OC_PROVIDER_NO_API_MODE: 'false'");
     expect(read('orchid-completion-lane')).toContain('scripts/oc-budget-governor.mjs');
   });
   it('also denies provider canaries triggered by worker edits', () => {
