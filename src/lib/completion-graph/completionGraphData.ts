@@ -35,6 +35,9 @@ const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
 /** Evidence-check date for nodes added by the #242 audit pass (Homepage, education/show-management). */
 const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
 
+/** Evidence-check date for the #774 pass (University curriculum-core render coverage + research-continuation trace). */
+const AUDIT_774_DATE = '2026-09-25T00:00:00.000Z';
+
 /**
  * The integration commit this graph's evidence was checked against.
  *
@@ -522,10 +525,26 @@ const universityCoreGate: CompletionNode = {
     { kind: 'file', ref: 'src/pages/UniversityReviewerWorkspace.tsx' },
     { kind: 'file', ref: 'src/lib/universityApi.ts' },
     { kind: 'test', ref: 'src/lib/universityApi.test.ts' },
+    {
+      kind: 'test',
+      ref: 'src/pages/OrchidUniversity.test.tsx',
+      note: '#774: new this pass. Neither top-level University page had ever been mounted as a real component tree — only sub-library functions and the reviewer/lab panels were tested. Confirms the page renders real curriculum content rather than a blank/error-boundary tree.',
+    },
+    {
+      kind: 'test',
+      ref: 'src/pages/UniversityLabPrototype.test.tsx',
+      note: '#774: new this pass. Renders the actual JSX against mocked universityApi responses across loading, backend-unavailable (fails closed, no substituted science), university-disabled (blocked with real blocker text), and read-only-enabled states, confirming the wiring between universityRelease.ts\'s pure gate functions (already unit-tested) and the rendered page, not just the functions in isolation.',
+    },
     { kind: 'file', ref: 'scripts/verify-university-production.mjs', note: 'Dedicated production-verification script exists — see Release/Acceptance domain.' },
+    {
+      kind: 'file',
+      ref: '.github/workflows/ocu-university-production-verification.yml',
+      note: 'Already wires the script to a workflow_dispatch job that accepts frontend_url/api_url inputs and uploads the resulting evidence JSON as a build artifact. Running it against the real canonical origins is the one remaining step and requires an owner who knows those URLs to dispatch it — this frontend repo has never documented a canonical production origin (README, docs/, vercel.json, package.json all checked again this pass).',
+    },
   ],
-  nextAction: 'Run `npm run verify:university-production` against a live deployment and record its result as browser/deployed evidence (not yet executed this pass).',
-  lastUpdated: CENSUS_DATE,
+  nextAction: 'This capability\'s code/integration surface (curriculum page, lab prototype release gate, reviewer workspace) now has real component-render coverage in addition to its library-level tests. The one still-unmet acceptance item — running `npm run verify:university-production` against a live deployment — remains genuinely owner-gated: the workflow to run it already exists (ocu-university-production-verification.yml) but needs an owner to dispatch it with the real frontend/API origins, which are not documented anywhere in this repository for an autonomous pass to supply. See cap-university-production-live-verification for the tracked OWNER_ACTION.',
+  lastAccomplishment: '#774: added src/pages/OrchidUniversity.test.tsx and src/pages/UniversityLabPrototype.test.tsx — the first render-level tests for either top-level University page — and re-traced the University -> Research Station handoff question (see cap-university-research-continuation, now confirmed rather than pending).',
+  lastUpdated: AUDIT_774_DATE,
   children: [],
 };
 
@@ -572,14 +591,48 @@ const universityDomain = branch({
   }, [
     universityCoreGate,
     universityAppliedAiGate,
-    censusPending({
-      idHint: 'cap-university-research-continuation',
+    {
+      id: 'cap-university-research-continuation',
       parentId: 'module-university-core',
       name: 'Research Station continuation handoff',
-      evidence: [{ kind: 'file', ref: 'src/pages/UniversityReviewerWorkspace.tsx', note: 'Not yet traced for a University -> Research Station handoff path this pass.' }],
-      nextAction: 'Confirm whether a University -> Research Station continuity handoff exists and, if so, apply the same contract-based pattern as the Atlas -> Research handoff (#278).',
+      type: 'capability',
+      status: 'MISSING',
+      threeLevels: { codeComplete: 'NOT_MET', integratedComplete: 'NOT_MET', productComplete: 'NOT_MET' },
       lane: 'INTEGRATION_COMPLETION',
-    }),
+      gateScores: {
+        architectureContracts: 0,
+        implementationPresent: 0,
+        integrationCanonicalBranch: null,
+        scientificProvenanceSecurity: null,
+        browserEndToEnd: null,
+        deployedOperational: null,
+      },
+      evidence: [
+        {
+          kind: 'file',
+          ref: 'src/lib/universityApi.ts',
+          note: '#774: traced this pass. UniversityChapter, UniversityLaboratory, UniversityLabSession and UniversitySessionSummary carry no taxon/genus/species/subject identity field at all — sessions are scoped only by laboratory_id and chapter_id.',
+        },
+        {
+          kind: 'file',
+          ref: 'src/lib/universityReviewerApi.ts',
+          note: '#774: traced this pass. UniversityReviewQueueItem and UniversityReviewerSessionDetail likewise carry no taxon identity.',
+        },
+        {
+          kind: 'file',
+          ref: 'src/features/atlas-next/researchHandoff.ts',
+          note: 'The contract-based pattern this capability would need to replicate (per the Atlas -> Research handoff, #278): a bounded builder that accepts only a canonical taxon/genus identity plus an optional project id, marks the context non-evidentiary, and fails closed (returns null) on malformed input.',
+        },
+        {
+          kind: 'file',
+          ref: 'src/lib/appliedAiDataScience.ts',
+          note: 'The sibling Applied AI & Data Science lab (cap-university-applied-ai) already has its own researchStationHref() built from a research_promotion_packet — that is a distinct, already-implemented handoff and is not this capability.',
+        },
+      ],
+      nextAction: 'A University -> Research Station handoff analogous to Atlas\'s cannot be built at the frontend layer alone: the University learning contract (chapters, laboratories, sessions, reviewer queue) has no taxon/genus/species identity field to carry across the boundary, and inventing one client-side would fabricate scientific subject identity the backend never asserted. This is a backend-contract gap, not a missing frontend wiring step — file it against the Calyx backend learning API (add a bounded, non-evidentiary subject/taxon field to the chapter or laboratory contract) before a frontend handoff following src/features/atlas-next/researchHandoff.ts\'s pattern can be implemented here.',
+      lastUpdated: AUDIT_774_DATE,
+      children: [],
+    },
   ]),
 ]);
 
@@ -704,12 +757,17 @@ const universityProductionLiveVerification: CompletionNode = {
   },
   evidence: [
     { kind: 'file', ref: 'scripts/verify-university-production.mjs', note: 'Real script: fetches a live frontend origin\'s /university/lab route, asserts an attested full Git-SHA meta tag, and cross-checks a live API origin.' },
-    { kind: 'ci', ref: 'npm run verify:university-production', note: 'Executed this pass with no arguments: "FAIL: frontend URL is required", exit code 1. The script takes the production frontend/API origins as positional CLI arguments; no canonical production URL is documented anywhere in this repository (README, docs/, vercel.json, package.json) for an autonomous run to supply.' },
+    { kind: 'ci', ref: 'npm run verify:university-production', note: 'Executed this pass with no arguments: "FAIL: frontend URL is required", exit code 1. The script takes the production frontend/API origins as positional CLI arguments; no canonical production URL is documented anywhere in this repository (README, docs/, vercel.json, package.json) for an autonomous run to supply — re-checked again in the #774 pass, still undocumented.' },
+    {
+      kind: 'file',
+      ref: '.github/workflows/ocu-university-production-verification.yml',
+      note: '#774: confirmed this pass that the "wire them as CI secrets/args in a scheduled workflow" resolution below is already implemented, not just proposed. The workflow\'s `verify-production` job is a workflow_dispatch action taking frontend_url/api_url as required inputs, runs the script against them, and uploads university-production-evidence-<run_id>.json as a 90-day retained artifact. It has not been dispatched with real production URLs (no run history for those inputs found this pass).',
+    },
   ],
-  ownerActions: ['Provide the canonical deployed production frontend_origin and api_origin (or wire them as CI secrets/args in a scheduled workflow) so verify-university-production.mjs can run to completion and this gate can move off OWNER_ACTION.'],
-  nextAction: 'Once the owner supplies (or CI is wired with) the real production origins, run `npm run verify:university-production -- <frontendUrl> <apiUrl>` and record the resulting evidence JSON.',
-  lastAccomplishment: 'Confirmed this pass that the script itself is real and executable — it fails for the correct, honest reason (no target configured), not because it is missing or broken.',
-  lastUpdated: CENSUS_DATE,
+  ownerActions: ['Dispatch the existing "OCU University Production Verification" GitHub Actions workflow (workflow_dispatch) with the real canonical frontend_url and api_url, or otherwise supply those origins, so verify-university-production.mjs can run to completion and this gate can move off OWNER_ACTION. No further frontend code change can substitute for the owner knowing and supplying the real deployed origins.'],
+  nextAction: 'Once the owner dispatches the existing workflow (or runs `npm run verify:university-production -- <frontendUrl> <apiUrl>` locally) with the real production origins, record the resulting evidence JSON here.',
+  lastAccomplishment: 'Confirmed this pass that the script itself is real and executable — it fails for the correct, honest reason (no target configured), not because it is missing or broken. Also confirmed the CI workflow_dispatch path the original nextAction called for already exists (ocu-university-production-verification.yml); the remaining gap is strictly the owner-known production origins, not any missing automation.',
+  lastUpdated: AUDIT_774_DATE,
   children: [],
 };
 
