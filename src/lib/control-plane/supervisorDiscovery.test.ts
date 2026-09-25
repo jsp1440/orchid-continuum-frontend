@@ -644,7 +644,7 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     });
     if (!run.enabled) throw new Error('expected enabled run');
     expect(run.failedClosed).toBeNull();
-    expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 0, eligibleCount: 3 });
+    expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 0, eligibleCount: 3, openReserveIssues: 0, ceiling: 9 });
     expect(run.filed).toHaveLength(3);
     expect(run.filed.every((f) => f.labels.includes('oc-prepared') && f.labels.includes('oc-discovered'))).toBe(true);
   });
@@ -658,9 +658,50 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
       fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
-    expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 3, eligibleCount: 3 });
+    expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 3, eligibleCount: 3, openReserveIssues: 0, ceiling: 9 });
     expect(run.filed).toEqual([]);
     expect(io.calls).toEqual([]);
+  });
+
+  // Held reserve issues free their depth slots, so without a ceiling a parked
+  // reserve issue would let every 5-minute pass file three more.
+  const openReserveIssue = (number: number, labels: string[]) => ({
+    number, repository: REPO, state: 'open' as const, title: `Earlier reserve mission ${number}`,
+    body: `Prepared from the canonical backend reserve planner. Material fingerprint: ${String(number).padStart(64, 'a')}`,
+    labels,
+  });
+
+  it('files nothing once open backend-reserve issues, held or not, reach the ceiling', async () => {
+    const { materializeBackendReservePlan, BACKEND_RESERVE_OPEN_CEILING } = await import('../../../scripts/oc-supervisor-discovery');
+    expect(BACKEND_RESERVE_OPEN_CEILING).toBe(9);
+    const open = Array.from({ length: 9 }, (_, i) => openReserveIssue(800 + i, ['oc-blocked', 'oc-discovered']));
+    const io = harness();
+    const run = await materializeBackendReservePlan(open, {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.reserveSlots).toEqual({ targetDepth: 3, preparedOpenCount: 0, eligibleCount: 3, openReserveIssues: 9, ceiling: 9 });
+    expect(run.filed).toEqual([]);
+    expect(run.notFiled).toHaveLength(3);
+    expect(run.notFiled.every((entry) => entry.reason === 'open backend-reserve issues 9 at ceiling 9; settle or close existing ones first')).toBe(true);
+    expect(io.calls).toEqual([]);
+  });
+
+  it('files only up to the ceiling when a pass would cross it', async () => {
+    const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    const open = Array.from({ length: 8 }, (_, i) => openReserveIssue(800 + i, ['oc-blocked', 'oc-discovered']));
+    const io = harness();
+    const run = await materializeBackendReservePlan(open, {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.filed).toHaveLength(1);
+    expect(run.notFiled.map((entry) => entry.reason)).toEqual([
+      'open backend-reserve issues 9 at ceiling 9; settle or close existing ones first',
+      'open backend-reserve issues 9 at ceiling 9; settle or close existing ones first',
+    ]);
   });
 
   it('keeps a held lineage suppressing its own source key and title', async () => {
