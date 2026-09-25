@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 10,
+  "programSpent": 10.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 8
+    "2026-09-25": 8.5
   },
   "leases": [
     {
@@ -654,6 +654,19 @@
       "runId": "36155795038",
       "runAttempt": "1",
       "expiresAt": "2026-09-25T17:13:56.590Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
+      "state": "reserved"
+    },
+    {
+      "id": "9422fee0eabebbb3e1b7d2690e28bbee3791c95150c9a9284c2c05279945b139",
+      "issue": 789,
+      "nodeId": "gate-journey-research-calyx",
+      "fingerprint": "46c909d9971060b3a678208d44a071c14fdccc54364e365eb18bb3151bf1d316",
+      "waveHash": "881f095da743cf10466d49d1a3a5a5d77596f76845d6289faeb667d3e1f154cf",
+      "runId": "36155795038",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:13:57.284Z",
       "reservedUsd": 0.5,
       "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
       "state": "reserved"
