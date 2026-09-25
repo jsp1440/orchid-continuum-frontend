@@ -160,13 +160,36 @@ export function contradictingEvidence(links: ResearchEvidenceLink[]): ResearchEv
 }
 
 /**
+ * Display text for one backend field: a string as-is, a finite number as its
+ * decimal, anything else (object, array, boolean, null) as the fallback. Every
+ * value the evidence chain renders passes through here, so an off-contract
+ * type reads as "not recorded" instead of crashing the page or printing
+ * "[object Object]".
+ */
+export function displayText(value: unknown, fallback: string): string {
+  if (typeof value === "string") return value;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+/** `SNAKE_CASE` backend vocabulary as readable lowercase words. */
+export function displayWords(value: unknown, fallback: string): string {
+  return displayText(value, fallback).replaceAll("_", " ").toLowerCase();
+}
+
+/** Only the string items of a list field. */
+export function displayList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+/**
  * The candidate's standing, stated as the backend states it. A candidate is a
  * reviewable hypothesis; nothing here can call it accepted or published.
  */
 export function candidateStanding(candidate: CandidateKnowledgeRecord): string[] {
   const review = candidate.review_state === "REQUIRED"
     ? "Human review required"
-    : `Review state: ${candidate.review_state.replaceAll("_", " ").toLowerCase()}`;
+    : `Review state: ${displayWords(candidate.review_state, "not recorded")}`;
   return [
     review,
     candidate.published === false ? "Not published" : "Publication state not confirmed",
@@ -175,13 +198,14 @@ export function candidateStanding(candidate: CandidateKnowledgeRecord): string[]
 }
 
 export function candidateStatement(candidate: CandidateKnowledgeRecord): string {
-  const value = candidate.object_value ?? (
-    typeof candidate.numeric_value === "number"
-      ? `${candidate.numeric_value}${candidate.unit ? ` ${candidate.unit}` : ""}`
-      : "value not recorded"
-  );
-  const subject = candidate.normalized_subject ?? "subject not recorded";
-  const predicate = (candidate.predicate ?? "predicate not recorded").replaceAll("_", " ");
+  const unit = displayText(candidate.unit, "");
+  const value = candidate.object_value !== undefined && candidate.object_value !== null
+    ? displayText(candidate.object_value, "value not in a displayable form")
+    : typeof candidate.numeric_value === "number" && Number.isFinite(candidate.numeric_value)
+      ? `${candidate.numeric_value}${unit ? ` ${unit}` : ""}`
+      : "value not recorded";
+  const subject = displayText(candidate.normalized_subject, "subject not recorded");
+  const predicate = displayText(candidate.predicate, "predicate not recorded").replaceAll("_", " ");
   return `${subject} · ${predicate} · ${value}`;
 }
 
@@ -194,11 +218,13 @@ export function candidateSources(candidate: CandidateKnowledgeRecord): Array<{
   return (candidate.evidence ?? []).map((link) => {
     const page = link.anchor?.page_number;
     return {
-      label: `${link.source_object_type.replaceAll("_", " ").toLowerCase()} #${link.source_object_id}` +
-        (link.revision_id != null ? ` · revision ${link.revision_id}` : "") +
+      label: `${displayWords(link.source_object_type, "source")} #${displayText(link.source_object_id, "not recorded")}` +
+        (link.revision_id != null ? ` · revision ${displayText(link.revision_id, "not recorded")}` : "") +
         (typeof page === "number" ? ` · page ${page}` : " · page not recorded"),
-      quote: link.display_policy === "FULL_TEXT_ALLOWED" && link.authorized_quote ? link.authorized_quote : null,
-      policy: (link.display_policy ?? "UNKNOWN_REQUIRES_REVIEW").replaceAll("_", " ").toLowerCase(),
+      quote: link.display_policy === "FULL_TEXT_ALLOWED" && typeof link.authorized_quote === "string" && link.authorized_quote
+        ? link.authorized_quote
+        : null,
+      policy: displayWords(link.display_policy, "UNKNOWN_REQUIRES_REVIEW"),
     };
   });
 }
@@ -212,12 +238,14 @@ export function ledgerCitations(ledgers: LedgerRevision[], candidateId: string):
   const citations: LedgerCitation[] = [];
   for (const ledger of ledgers) {
     for (const entry of ledger.entries ?? []) {
-      if (entry.provenance?.source_kind === "candidate_knowledge" && entry.provenance.source_id === candidateId) {
+      const provenance = entry.provenance;
+      const sourceId = provenance ? displayText(provenance.source_id, "") : "";
+      if (provenance?.source_kind === "candidate_knowledge" && sourceId === candidateId) {
         citations.push({
-          ledgerId: ledger.ledger_id ?? "",
-          ledgerTitle: ledger.title ?? "Untitled ledger",
+          ledgerId: displayText(ledger.ledger_id, ""),
+          ledgerTitle: displayText(ledger.title, "Untitled ledger"),
           ledgerVersion: typeof ledger.version === "number" ? ledger.version : null,
-          ledgerStatus: ledger.status ?? "status not recorded",
+          ledgerStatus: displayText(ledger.status, "status not recorded"),
           entry,
         });
       }

@@ -122,4 +122,47 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
     expect(supporting).not.toBeNull();
     expect(supporting?.textContent).toMatch(/could not be read/);
   });
+
+  it("renders off-contract field types as 'not recorded' instead of crashing or printing objects", async () => {
+    const candidate = realBackend.candidate_detail["3"] as Record<string, unknown>;
+    const evidence = (candidate.evidence as Array<Record<string, unknown>>).map((link) => ({
+      ...link,
+      display_policy: "FULL_TEXT_ALLOWED",
+      authorized_quote: { text: "not a string" },
+    }));
+    const ledgers = structuredClone(realBackend.project_reasoning_ledgers) as { items: Array<Record<string, unknown>> };
+    ledgers.items[0].title = { nested: true };
+    for (const entry of (ledgers.items[0].entries as Array<Record<string, unknown>>)) {
+      entry.text = { nested: true };
+      entry.uncertainty = { confidence: { nested: true }, unresolved_assumptions: "abc" };
+      const provenance = entry.provenance as Record<string, unknown> | undefined;
+      if (provenance?.source_id === "3") provenance.source_id = 3;
+    }
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/candidates/3")) {
+        return new Response(JSON.stringify({
+          ...candidate, predicate: 7, version: { v: 1 }, object_value: { colour: "orange" }, evidence,
+        }));
+      }
+      if (target.includes("/reasoning-ledgers")) return new Response(JSON.stringify(ledgers));
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting).not.toBeNull();
+    const text = supporting?.textContent ?? "";
+    expect(text).not.toContain("[object Object]");
+    expect(supporting?.querySelector('[data-testid="research-candidate-statement"]')?.textContent)
+      .toContain("value not in a displayable form");
+    expect(supporting?.querySelector("q")).toBeNull();
+    // A numeric provenance id still matches the candidate it cites.
+    expect(supporting?.querySelector('[data-testid="research-evidence-ledger"]')?.textContent)
+      .toContain("Cited in ledger “Untitled ledger”");
+    expect(supporting?.querySelector('[data-testid="research-evidence-ledger"]')?.textContent)
+      .toContain("no text recorded");
+  });
 });

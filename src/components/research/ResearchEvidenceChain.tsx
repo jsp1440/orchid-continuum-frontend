@@ -6,6 +6,9 @@ import {
   candidateStanding,
   candidateStatement,
   conflictsForCandidate,
+  displayList,
+  displayText,
+  displayWords,
   fetchCandidateKnowledge,
   ledgerCitations,
   listCandidateConflicts,
@@ -94,10 +97,10 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
               <div className="mt-2 space-y-1">
                 <p className="text-sm text-white/90" data-testid="research-candidate-statement">{candidateStatement(loaded.value)}</p>
                 <p className="text-white/55">
-                  {loaded.value.kind.replaceAll('_', ' ').toLowerCase()} candidate · version {loaded.value.version ?? 'not recorded'} ·
+                  {displayWords(loaded.value.kind, 'unclassified')} candidate · version {displayText(loaded.value.version, 'not recorded')} ·
                   confidence {typeof loaded.value.confidence === 'number' ? loaded.value.confidence : 'not recorded'}
                   {loaded.value.confidence_components
-                    ? ` (${Object.entries(loaded.value.confidence_components).map(([key, value]) => `${key} ${value}`).join(', ')})`
+                    ? ` (${Object.entries(loaded.value.confidence_components).map(([key, value]) => `${key} ${displayText(value, 'not recorded')}`).join(', ')})`
                     : ''}
                 </p>
                 <p data-testid="research-candidate-standing">{candidateStanding(loaded.value).join(' · ')}</p>
@@ -117,7 +120,7 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
                   <p className="text-white/55">Reading conflicts…</p>
                 ) : openConflicts.length ? (
                   <p className="text-amber-200/90" data-testid="research-candidate-conflicts">
-                    Open conflict: {openConflicts.map((item) => `candidates ${item.candidate_ids.join(' vs ')}`).join('; ')} — unresolved, awaiting review.
+                    Open conflict: {openConflicts.map((item) => `candidates ${item.candidate_ids.map((id) => displayText(id, '?')).join(' vs ')}`).join('; ')} — unresolved, awaiting review.
                   </p>
                 ) : null}
               </div>
@@ -131,14 +134,14 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
               ) : citations.length ? (
                 <ul className="space-y-1">
                   {citations.map(({ ledgerId, ledgerTitle, ledgerVersion, ledgerStatus, entry }) => (
-                    <li key={`${ledgerId}-${entry.entry_id}`}>
+                    <li key={`${ledgerId}-${displayText(entry.entry_id, '')}`}>
                       Cited in ledger “{ledgerTitle}” revision {ledgerVersion ?? 'not recorded'} ({ledgerStatus}) as{' '}
-                      {entry.kind ?? 'an entry'}: {entry.text ?? 'no text recorded'}
-                      {entry.uncertainty ? (
+                      {displayText(entry.kind, 'an entry')}: {displayText(entry.text, 'no text recorded')}
+                      {entry.uncertainty && typeof entry.uncertainty === 'object' ? (
                         <span>
-                          {' '}· confidence {entry.uncertainty.confidence ?? 'not recorded'}
-                          {entry.uncertainty.unresolved_assumptions?.length
-                            ? ` · unresolved: ${entry.uncertainty.unresolved_assumptions.join('; ')}`
+                          {' '}· confidence {displayText(entry.uncertainty.confidence, 'not recorded')}
+                          {displayList(entry.uncertainty.unresolved_assumptions).length
+                            ? ` · unresolved: ${displayList(entry.uncertainty.unresolved_assumptions).join('; ')}`
                             : ''}
                         </span>
                       ) : ' · uncertainty not recorded'}
