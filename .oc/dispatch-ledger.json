@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 11,
+  "programSpent": 11.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 9
+    "2026-09-25": 9.5
   },
   "leases": [
     {
@@ -682,6 +682,19 @@
       "expiresAt": "2026-09-25T17:14:33.033Z",
       "reservedUsd": 0.5,
       "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
+      "state": "reserved"
+    },
+    {
+      "id": "4ed987fa78bbf50a396578a1d00d16eb74dfba56ae96da765739bfe90f16c986",
+      "issue": 791,
+      "nodeId": "cap-judging-practice",
+      "fingerprint": "6c39eb011f69908496eaa51a7e4a77aa194bf1024ece7bafaac8d59b0e054511",
+      "waveHash": "537f28744a228cbdb5446cb56f575183e9db6374c40b36342255a4ba8f3415f4",
+      "runId": "36156064100",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:15:08.470Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "d69e88b35c093944d56efe23ed4b77521a227155",
       "state": "reserved"
     }
   ]
