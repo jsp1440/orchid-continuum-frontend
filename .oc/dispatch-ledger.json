@@ -765,6 +765,20 @@
       "implementationSha": "69a6364e99b236b515d50a4baf02cbc09c4fa6e0",
       "lane": "provider-free",
       "state": "provider-free-done"
+    },
+    {
+      "id": "22ccba75528e18513cf7cf4b727c0d0d18baaae61723a4b29482961ecfdb0f16",
+      "issue": 824,
+      "nodeId": "cap-kg-evidence-gap-research-missions",
+      "fingerprint": "7b23742aa123b2527b8e7f15e3386a904ecd9c4a3932823e1f535777c6078978",
+      "waveHash": "de3423d3ae814e9558404af8fafda693208efa1e0f9c372e51293c99fc50e46b",
+      "runId": "36192436354",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T23:09:00.958Z",
+      "reservedUsd": 0,
+      "implementationSha": "69a6364e99b236b515d50a4baf02cbc09c4fa6e0",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
