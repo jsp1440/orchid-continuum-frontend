@@ -51,6 +51,15 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     ).toBe(true);
   });
 
+  it('scores the Matrix comparison provenance gate from captured payload tests, not browser or deployment', () => {
+    const leaf = allNodes.find((node) => node.id === 'cap-matrix-report-lexicon');
+    expect(leaf?.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(leaf?.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaf?.gateScores?.deployedOperational).toBeNull();
+    expect(leaf?.status).toBe('PARTIAL');
+    expect(leaf?.evidence.some((e) => e.ref === 'src/lib/matrixCandidateEvidence.test.ts')).toBe(true);
+  });
+
   it('has a single root with parentId null', () => {
     expect(COMPLETION_GRAPH.parentId).toBeNull();
     const nonRootWithNullParent = allNodes.filter((n) => n.id !== COMPLETION_GRAPH.id && n.parentId === null);

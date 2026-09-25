@@ -460,7 +460,7 @@ const matrixMorphologyGate: CompletionNode = {
     { kind: 'test', ref: 'src/components/matrix/MatrixMorphologyViewer.test.tsx' },
     { kind: 'test', ref: 'src/lib/matrixIdentification.test.ts' },
   ],
-  nextAction: 'Verify scoring-vs-coverage, uncertainty, and next-best-observation logic against real specimen data with a live/browser pass (only architecture + implementation + reachability were confirmed this pass — 3 of 6 gate categories, ~60% weight coverage).',
+  nextAction: 'The morphology viewer surface itself was not changed or re-verified; its provenance gate stays unevaluated. Candidate score-vs-coverage and unknown-observation rendering on the same page are now pinned to captured backend payloads under cap-matrix-report-lexicon. Remaining: real specimen data and a browser pass (3 of 6 gate categories).',
   lastUpdated: CENSUS_DATE,
   children: [],
 };
@@ -477,7 +477,11 @@ const matrixReportLexiconGate: CompletionNode = {
     architectureContracts: 1,
     implementationPresent: 1,
     integrationCanonicalBranch: 1,
-    scientificProvenanceSecurity: null,
+    // Candidate comparison + Calyx explanation views are pinned to payloads
+    // captured from the real backend routes: per-character basis, candidate
+    // registry provenance, explanation provider/epistemic state, and a
+    // locality-key guard on rendered provenance.
+    scientificProvenanceSecurity: 1,
     browserEndToEnd: null,
     deployedOperational: null,
   },
@@ -489,9 +493,14 @@ const matrixReportLexiconGate: CompletionNode = {
     { kind: 'file', ref: 'src/lib/matrixLexicon.ts' },
     { kind: 'test', ref: 'src/lib/matrixReports.test.ts' },
     { kind: 'test', ref: 'src/lib/matrixLexicon.test.ts' },
+    { kind: 'file', ref: 'src/components/matrix/MatrixCandidateEvidence.tsx' },
+    { kind: 'file', ref: 'src/lib/matrixCandidateEvidence.ts' },
+    { kind: 'test', ref: 'src/lib/matrixCandidateEvidence.test.ts', note: 'Pinned to __fixtures__/matrixIdentification.realBackend.json, captured verbatim from backend main 73626917 via TestClient (sessions, evaluate, explain).' },
+    { kind: 'test', ref: 'src/components/matrix/MatrixCandidateEvidence.test.tsx' },
+    { kind: 'test', ref: 'src/pages/OrchidIdentificationNext.evidence.test.tsx' },
   ],
-  nextAction: 'Confirm evidence-trail/comparison views and glossary explanations use real Calyx responses, then run a browser pass (3 of 6 gate categories evaluated, ~60% weight coverage).',
-  lastUpdated: CENSUS_DATE,
+  nextAction: 'Browser pass of the guided session against a running backend (submit observations, see ranked candidates with their basis and Calyx provenance); glossary explanations were not re-verified this pass. Deployed gate is owner-governed (4 of 6 gate categories evaluated).',
+  lastUpdated: '2026-09-25T00:00:00.000Z',
   children: [],
 };
 

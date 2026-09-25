@@ -15,22 +15,38 @@ export type RegistrySummary = {
   publication_state?: string;
 };
 
+/** Per-character statuses `rank_candidates` emits (runtime/matrix_identification.py). */
+export type CharacterEvidenceStatus =
+  | "matched"
+  | "partial"
+  | "conflict"
+  | "candidate_state_missing"
+  | "ignored_unknown_observation";
+
 export type CandidateExplanation = {
   character: string;
   observation: unknown;
   candidate_state: unknown;
   certainty: Certainty;
+  /** Registry weight x certainty factor; 0 for an unknown observation. */
+  effective_weight?: number;
   similarity: number | null;
-  status: string;
+  /** effective_weight x similarity: this character's share of the score numerator. */
+  contribution?: number;
+  status: CharacterEvidenceStatus | string;
 };
 
 export type CandidateResult = {
   taxon_id: string;
   scientific_name: string;
+  /** Sum of contributions / compared_weight. Ranking evidence, not a probability. */
   score: number;
+  /** compared_weight / possible_weight. */
   coverage: number;
+  compared_weight?: number;
+  possible_weight?: number;
   explanations: CandidateExplanation[];
-  provenance?: Record<string, unknown>;
+  provenance?: Record<string, unknown> | null;
 };
 
 export type NextObservation = {
@@ -42,6 +58,10 @@ export type NextObservation = {
   distinct_state_count?: number;
   candidate_count?: number;
   reason_code?: string;
+  selection_score?: number;
+  matrix_weight?: number;
+  concept_id?: string | null;
+  explanation_boundary?: string;
 };
 
 export type SessionRecord = {
@@ -64,6 +84,9 @@ export type EvaluationReport = {
   observation_count: number;
   compared_character_count: number;
   disclaimer: string;
+  registry?: RegistrySummary;
+  session_id?: string;
+  revision?: number;
 };
 
 export type SessionEvaluation = {
@@ -72,15 +95,35 @@ export type SessionEvaluation = {
   next_observation: NextObservation | null;
 };
 
+/** One candidate as `build_explanation_evidence` summarizes it for Calyx. */
+export type ExplanationCandidateEvidence = {
+  taxon_id: string;
+  scientific_name: string;
+  score: number;
+  coverage: number;
+  supporting_characters?: string[];
+  partial_characters?: string[];
+  conflicting_characters?: string[];
+  missing_characters?: string[];
+  provenance?: Record<string, unknown> | null;
+};
+
 export type CalyxExplanation = {
   schema_version?: string;
   session_id?: string;
-  evidence?: Record<string, unknown>;
+  evidence?: {
+    candidates?: ExplanationCandidateEvidence[];
+    candidate_order?: string[];
+    authority?: Record<string, boolean>;
+    evidence_digest_sha256?: string;
+    [key: string]: unknown;
+  };
   narrative?: {
     text?: string;
     provider?: string;
     model?: string;
     epistemic_state?: string;
+    fallback_error?: string | null;
   } | string;
   invariants?: Record<string, unknown>;
   answer?: string;
