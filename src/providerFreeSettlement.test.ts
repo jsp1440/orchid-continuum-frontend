@@ -370,6 +370,22 @@ console.log('{}');
     expect(labels).not.toContain('oc-owner-gate');
   });
 
+  it('keeps both owner-gate browser contract nodes admissible in the committed graph', () => {
+    // The mapping above is keyed on the ADMITTED node. A node whose graph
+    // status is OWNER_ACTION is removed from planning outright
+    // (`oc-graph-dispatch-plan.ts`), so it is never admitted, never reaches
+    // settlement, and the mapping is dead for the very node it names. Recording
+    // these two nodes as OWNER_ACTION in the graph data did exactly that: every
+    // harness in this file admitted nothing. The issue-level `oc-owner-gate`
+    // label written by settlement is what parks the issue; the node stays
+    // PARTIAL until the owner confirms the deployed contract.
+    for (const nodeId of ['gate-journey-research-matrix', 'cap-conservatory-collection']) {
+      const plan = makePlan(snapshotFor(703, ['oc-queued', `oc-node:${nodeId}`]), [], NOW);
+      expect(plan.issues, nodeId).toEqual([703]);
+      expect(plan.leaves[0]?.nodeId, nodeId).toBe(nodeId);
+    }
+  });
+
   it('records a run that executed and failed as provider_free_failed, and returns it for repair', () => {
     const h = harness();
     h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run test', exit_code: 1 }] });
