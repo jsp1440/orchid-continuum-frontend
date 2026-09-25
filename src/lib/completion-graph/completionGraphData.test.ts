@@ -51,6 +51,20 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     ).toBe(true);
   });
 
+  it('scores the Research evidence chain and literature provenance from captured payloads, never browser or deployment', () => {
+    const leaves = getLeaves(COMPLETION_GRAPH);
+    const chain = leaves.find((node) => node.id === 'cap-research-evidence-chain')!;
+    expect(chain.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(chain.gateScores?.integrationCanonicalBranch).toBeNull();
+    expect(chain.gateScores?.browserEndToEnd).toBeNull();
+    expect(chain.gateScores?.deployedOperational).toBeNull();
+    const literature = leaves.find((node) => node.id.startsWith('cap-literature-public-browser'))!;
+    expect(literature.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(literature.gateScores?.browserEndToEnd).toBeNull();
+    const traits = leaves.find((node) => node.id === 'cap-research-trait-explorer')!;
+    expect(traits.gateScores?.integrationCanonicalBranch).toBeNull();
+  });
+
   it('has a single root with parentId null', () => {
     expect(COMPLETION_GRAPH.parentId).toBeNull();
     const nonRootWithNullParent = allNodes.filter((n) => n.id !== COMPLETION_GRAPH.id && n.parentId === null);

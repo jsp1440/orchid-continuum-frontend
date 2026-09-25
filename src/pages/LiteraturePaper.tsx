@@ -7,6 +7,7 @@ import {
   LiteraturePaperError,
   classifyClaimEvidence,
   fetchLiteraturePaper,
+  claimStanding,
   isMachineAuthored,
   isReviewed,
   type LiteraturePaperView,
@@ -107,6 +108,7 @@ function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperVi
   const machine = isMachineAuthored(claim);
   const reviewed = isReviewed(claim);
   const statement = releaseText(claim.statement, view.binding);
+  const standing = claimStanding(claim, view.paper);
 
   return (
     <li className="rounded-xl border border-white/10 bg-white/[0.03] p-4" data-testid="claim-card">
@@ -130,7 +132,21 @@ function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperVi
         >
           {reviewed ? `Reviewed · ${claim.provenance?.review_status}` : 'Not reviewed'}
         </span>
+        <span
+          className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] ${
+            standing.polarity === 'uncertain' ? 'bg-amber-300/15 text-amber-100' : 'bg-white/10 text-white/60'
+          }`}
+          data-testid="claim-polarity"
+        >
+          {standing.polarity ? `Polarity · ${standing.polarity}` : 'Polarity not recorded'}
+        </span>
       </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/50" data-testid="claim-publication">
+        Evidence record review: {standing.recordReviewStatus ?? 'no normalized record'} · Publication:{' '}
+        {standing.publicationStatus
+          ? `${standing.publicationStatus}${standing.publicationReasons.length ? ` (${standing.publicationReasons.join(', ').replaceAll('_', ' ')})` : ''}`
+          : 'no decision recorded — not published'}
+      </p>
 
       {statement.released === true ? (
         <p className="mt-3 text-sm leading-relaxed text-white/80">

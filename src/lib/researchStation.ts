@@ -161,6 +161,8 @@ export type ResearchStationDossier = {
   conflicts: ResearchDocumentLink[];
   methods: ResearchDocumentLink[];
   evidence: ResearchEvidenceLink[];
+  /** Evidence links recorded as CONTRADICTS — disagreement, never support. */
+  contradictingEvidence: ResearchEvidenceLink[];
   openQuestions: ResearchNote[];
   /** True when the workspace holds no linked evidence of any kind yet. */
   evidenceEmpty: boolean;
@@ -193,6 +195,7 @@ export function buildResearchDossier(input: {
     conflicts,
     methods,
     evidence,
+    contradictingEvidence: evidence.filter((item) => item.relationship === "CONTRADICTS"),
     openQuestions: notes.filter((item) => item.note_type === "QUESTION"),
     evidenceEmpty: supporting.length === 0 && conflicts.length === 0 && evidence.length === 0,
   };
