@@ -37,6 +37,7 @@
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { deriveReserveMissionBinding } from './oc-reserve-mission-binding.mjs';
 
 const contractPath = fileURLToPath(
   new URL('../contracts/oc-shared-capabilities.v1.json', import.meta.url),
@@ -62,6 +63,8 @@ export const SHARED_CAPABILITIES = Object.freeze(
  * frontend-local: they have no backend or Brain counterpart because no other
  * repository has a TypeScript project, a router or a Vite build to check. They
  * are deterministic by construction — each is an npm script in this repository.
+ * `nomenclature-evidence-lookup` is frontend-local because the reserve missions
+ * it serves are filed and laned here; it is a fixed script, not a model.
  */
 export const LOCAL_EXECUTORS = Object.freeze({
   'test-execution': 'npm run test',
@@ -74,6 +77,10 @@ export const LOCAL_EXECUTORS = Object.freeze({
   'build-verification': 'npm run build',
   'research-matrix-browser-validation': 'npm run verify:research-matrix-browser',
   'conservatory-browser-validation': 'npm run verify:conservatory-browser',
+  // Bounded GBIF name lookup for `nomenclature` evidence-gap reserve missions.
+  // Deterministic HTTP GETs, no model: it writes a review_required report and
+  // one issue comment, and never mutates the KG, taxonomy or any publication.
+  'nomenclature-evidence-lookup': 'npm run research:nomenclature-lookup',
 });
 
 /** Deterministic capabilities, whether or not this repository can run them. */
@@ -166,8 +173,16 @@ export function routeIssue(issue) {
   assertLocalExecutorsAreDeterministic();
 
   const body = String(issue?.body || '');
+  // A reserve mission filed before the bridge wrote explicit markers is bound
+  // from its own fixed machine lines only (see oc-reserve-mission-binding.mjs).
+  // Any explicit declaration wins, so this never adds to or overrides one.
+  const derived = deriveReserveMissionBinding(issue)?.capability;
   const declared = [
-    ...new Set([...collect(body, CAPABILITY_MARKER), ...fromLabels(issue, CAPABILITY_LABEL)]),
+    ...new Set([
+      ...collect(body, CAPABILITY_MARKER),
+      ...fromLabels(issue, CAPABILITY_LABEL),
+      ...(derived ? [derived] : []),
+    ]),
   ];
   const optional = new Set([
     ...collect(body, OPTIONAL_MARKER),

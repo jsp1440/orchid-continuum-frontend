@@ -285,6 +285,7 @@ describe('agreement with the other two repositories', () => {
       'build-verification',
       'conservatory-browser-validation',
       'featured-genus-verification',
+      'nomenclature-evidence-lookup',
       'render-route-verification',
       'research-matrix-browser-validation',
       'route-verification',

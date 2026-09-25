@@ -1200,6 +1200,42 @@ const kgMissionControlAdapterGate: CompletionNode = {
   children: [],
 };
 
+// Evidence-gap research missions (2026-09-25). The supervisor's backend reserve
+// pass files canonical bounded research missions (backendReserveQueueBridge.ts)
+// that no node named, so every one landed in `unboundQueued`. This leaf is their
+// issue-side binding target (`OC-GRAPH-NODE:` in the mission body). Only the
+// `nomenclature` domain has a provider-free executor; other domains bind here
+// but declare no capability and keep the honest undeclared refusal. A lane that
+// runs settles to `oc-validating` at most -- a machine report is evidence for
+// human review, never acceptance -- so this leaf stays PARTIAL. It has no
+// dependsOn and nothing depends on it: its exclusive lease holds only this node.
+const kgEvidenceGapResearchMissionsGate: CompletionNode = {
+  id: 'cap-kg-evidence-gap-research-missions',
+  parentId: 'module-knowledge-graph-core',
+  name: 'Evidence-gap research missions (bounded, review_required nomenclature evidence reports)',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'PARTIAL', integratedComplete: 'NOT_MET', productComplete: 'NOT_MET' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: null,
+    scientificProvenanceSecurity: null,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'file', ref: 'src/lib/control-plane/backendReserveQueueBridge.ts', note: 'sourcePayloadBody() emits OC-GRAPH-NODE for every canonical research mission and OC-SWARM-CAPABILITY: nomenclature-evidence-lookup only for domain exactly "nomenclature".' },
+    { kind: 'file', ref: 'scripts/oc-nomenclature-lookup.mjs', note: 'Provider-free executor: at most 3 GBIF species GETs (no occurrence/locality endpoint), writes oc.nomenclature-evidence-report.v1 with review_required true and every mutation/publication flag false, posts one digest-idempotent comment.' },
+    { kind: 'file', ref: 'scripts/oc-capability-router.mjs', note: 'LOCAL_EXECUTORS binds nomenclature-evidence-lookup to npm run research:nomenclature-lookup.' },
+    { kind: 'test', ref: 'src/nomenclatureLookup.test.ts', note: 'Replays GBIF responses captured from api.gbif.org; covers parsing/refusal, domain gating, match-type mapping, contradiction, transport failure, idempotent comment, routing, graph binding and settlement to oc-validating.' },
+  ],
+  nextAction: 'deliver a review_required nomenclature evidence report; no publication/KG/taxonomy mutation',
+  lastUpdated: '2026-09-25T00:00:00.000Z',
+  children: [],
+};
+
 const knowledgeGraphDomain = branch({
   id: 'domain-knowledge-graph',
   parentId: 'portfolio-orchid-continuum',
@@ -1213,7 +1249,7 @@ const knowledgeGraphDomain = branch({
     name: 'Knowledge Graph core',
     type: 'module',
     nextAction: 'See child capabilities.',
-  }, [kgGenusEvidenceGate, kgVisualizationGate, kgMissionControlAdapterGate]),
+  }, [kgGenusEvidenceGate, kgVisualizationGate, kgMissionControlAdapterGate, kgEvidenceGapResearchMissionsGate]),
 ]);
 
 // ─── Conservatory / OASIS ───────────────────────────────────────────────────
