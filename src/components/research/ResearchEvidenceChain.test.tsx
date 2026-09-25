@@ -165,4 +165,47 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
     expect(supporting?.querySelector('[data-testid="research-evidence-ledger"]')?.textContent)
       .toContain("no text recorded");
   });
+
+  it("pages through conflicts to the reported total, and says 'unknown' when the list stays incomplete", async () => {
+    const unrelated = Array.from({ length: 200 }, (_, i) => ({ conflict_id: 1000 + i, candidate_ids: [900 + i, 950 + i], state: "OPEN" }));
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/conflicts")) {
+        calls.push(target);
+        // Every page is full and the total keeps growing: never complete.
+        return new Response(JSON.stringify({ items: unrelated, total: 99999, limit: 200, offset: 0 }));
+      }
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    for (let i = 0; i < 4; i += 1) await flush();
+
+    expect(calls[0]).toContain("limit=200&offset=0");
+    expect(calls[1]).toContain("offset=200");
+    expect(calls.length).toBe(10);
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting?.querySelector('[data-testid="research-candidate-conflicts-unavailable"]')?.textContent)
+      .toContain("Whether this claim is contested is unknown.");
+  });
+
+  it("shows a confidence breakdown only for name → number pairs", async () => {
+    const candidate = realBackend.candidate_detail["3"] as Record<string, unknown>;
+    for (const components of ["high", [0.9, 0.1], 5]) {
+      vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+        const target = String(url);
+        if (target.includes("/api/candidate-knowledge/candidates/3")) {
+          return new Response(JSON.stringify({ ...candidate, confidence_components: components }));
+        }
+        return respond(target);
+      }));
+      const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+      act(() => root.render(<ResearchEvidenceChain projectId={`p-${String(components)}`} links={links} />));
+      await flush();
+      const text = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]')?.textContent ?? "";
+      expect(text).not.toMatch(/\(0 /);
+      expect(text).not.toContain("()");
+    }
+  });
 });

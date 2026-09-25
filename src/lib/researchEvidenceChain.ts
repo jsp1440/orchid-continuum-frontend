@@ -144,10 +144,49 @@ export const fetchCandidateKnowledge = (candidateId: string) =>
     `/api/candidate-knowledge/candidates/${encodeURIComponent(candidateId)}`,
   ).then(assertCandidateRecord);
 
-export const listCandidateConflicts = () =>
-  researchRequest<unknown>("/api/candidate-knowledge/conflicts?limit=200").then((value) =>
-    assertItems<CandidateConflict>(value, "candidate conflicts", isConflict),
+/** The backend serves conflicts in pages of at most 200 (`routes.py` `conflicts`). */
+const CONFLICT_PAGE_SIZE = 200;
+const MAX_CONFLICT_PAGES = 10;
+
+export type CandidateConflictList = {
+  items: CandidateConflict[];
+  /** False when the backend reports more conflicts than were read. */
+  complete: boolean;
+  total: number | null;
+};
+
+/**
+ * Every conflict, page by page. A list that could not be read to its reported
+ * `total` is marked incomplete, so a candidate missing from it is "unknown",
+ * never "uncontested".
+ */
+export async function listCandidateConflicts(): Promise<CandidateConflictList> {
+  const items: CandidateConflict[] = [];
+  let total: number | null = null;
+  for (let page = 0; page < MAX_CONFLICT_PAGES; page += 1) {
+    const value = await researchRequest<unknown>(
+      `/api/candidate-knowledge/conflicts?limit=${CONFLICT_PAGE_SIZE}&offset=${page * CONFLICT_PAGE_SIZE}`,
+    );
+    const pageItems = assertItems<CandidateConflict>(value, "candidate conflicts", isConflict);
+    items.push(...pageItems);
+    const reported = isRecord(value) && typeof value.total === "number" && Number.isFinite(value.total)
+      ? value.total
+      : null;
+    total = reported;
+    if (reported === null || items.length >= reported || pageItems.length < CONFLICT_PAGE_SIZE) {
+      return { items, complete: reported !== null && items.length >= reported, total };
+    }
+  }
+  return { items, complete: false, total };
+}
+
+/** Name → numeric score pairs only; anything else is not rendered as a breakdown. */
+export function confidenceBreakdown(value: unknown): Array<[string, number]> {
+  if (!isRecord(value)) return [];
+  return Object.entries(value).filter((entry): entry is [string, number] =>
+    typeof entry[1] === "number" && Number.isFinite(entry[1]),
   );
+}
 
 export const listProjectReasoningLedgers = (projectId: string) =>
   researchRequest<unknown>(
@@ -179,6 +218,7 @@ export function displayWords(value: unknown, fallback: string): string {
 
 /** Only the string items of a list field. */
 export function displayList(value: unknown): string[] {
+  if (typeof value === "string") return value.trim() ? [value] : [];
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 

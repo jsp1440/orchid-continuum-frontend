@@ -5,6 +5,7 @@ import {
   candidateSources,
   candidateStanding,
   candidateStatement,
+  confidenceBreakdown,
   conflictsForCandidate,
   displayList,
   displayText,
@@ -13,7 +14,7 @@ import {
   ledgerCitations,
   listCandidateConflicts,
   listProjectReasoningLedgers,
-  type CandidateConflict,
+  type CandidateConflictList,
   type CandidateKnowledgeRecord,
 } from '@/lib/researchEvidenceChain';
 import type { ResearchEvidenceLink } from '@/lib/researchStation';
@@ -39,7 +40,7 @@ const RELATIONSHIP_LABEL: Record<string, string> = {
  */
 const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEvidenceLink[] }> = ({ projectId, links }) => {
   const [candidates, setCandidates] = useState<Record<string, Loaded<CandidateKnowledgeRecord>>>({});
-  const [conflicts, setConflicts] = useState<Loaded<CandidateConflict[]>>({ status: 'loading' });
+  const [conflicts, setConflicts] = useState<Loaded<CandidateConflictList>>({ status: 'loading' });
   const [ledgers, setLedgers] = useState<Loaded<LedgerRevision[]>>({ status: 'loading' });
 
   useEffect(() => {
@@ -71,7 +72,7 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
         const contradicting = link.relationship === 'CONTRADICTS';
         const loaded = link.evidence_kind === 'CANDIDATE' ? candidates[link.evidence_id] : undefined;
         const openConflicts = conflicts.status === 'ready'
-          ? conflictsForCandidate(conflicts.value, link.evidence_id).filter((item) => item.state === 'OPEN')
+          ? conflictsForCandidate(conflicts.value.items, link.evidence_id).filter((item) => item.state === 'OPEN')
           : [];
         const citations = ledgers.status === 'ready' ? ledgerCitations(ledgers.value, link.evidence_id) : [];
         return (
@@ -99,8 +100,8 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
                 <p className="text-white/55">
                   {displayWords(loaded.value.kind, 'unclassified')} candidate · version {displayText(loaded.value.version, 'not recorded')} ·
                   confidence {typeof loaded.value.confidence === 'number' ? loaded.value.confidence : 'not recorded'}
-                  {loaded.value.confidence_components
-                    ? ` (${Object.entries(loaded.value.confidence_components).map(([key, value]) => `${key} ${displayText(value, 'not recorded')}`).join(', ')})`
+                  {confidenceBreakdown(loaded.value.confidence_components).length
+                    ? ` (${confidenceBreakdown(loaded.value.confidence_components).map(([key, value]) => `${key} ${value}`).join(', ')})`
                     : ''}
                 </p>
                 <p data-testid="research-candidate-standing">{candidateStanding(loaded.value).join(' · ')}</p>
@@ -121,6 +122,10 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
                 ) : openConflicts.length ? (
                   <p className="text-amber-200/90" data-testid="research-candidate-conflicts">
                     Open conflict: {openConflicts.map((item) => `candidates ${item.candidate_ids.map((id) => displayText(id, '?')).join(' vs ')}`).join('; ')} — unresolved, awaiting review.
+                  </p>
+                ) : conflicts.status === 'ready' && !conflicts.value.complete ? (
+                  <p className="text-amber-200/90" data-testid="research-candidate-conflicts-unavailable">
+                    Only {conflicts.value.items.length} of {conflicts.value.total ?? 'an unreported number of'} conflicts could be read. Whether this claim is contested is unknown.
                   </p>
                 ) : null}
               </div>
