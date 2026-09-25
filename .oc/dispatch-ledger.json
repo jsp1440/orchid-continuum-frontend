@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 6,
+  "programSpent": 6.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 4
+    "2026-09-25": 4.5
   },
   "leases": [
     {
@@ -538,6 +538,19 @@
       "expiresAt": "2026-09-25T17:00:24.562Z",
       "reservedUsd": 0.5,
       "implementationSha": "b53eeb66947a5d80aeb90ebfa88d398462efacd1",
+      "state": "reserved"
+    },
+    {
+      "id": "baafe06811995586657704df4191f2361dea6cb2fd818e9b27d29062e056dfbe",
+      "issue": 780,
+      "nodeId": "cap-vision-intelligence-adapter",
+      "fingerprint": "fa785ec8670256a8b6716863e73111ebacc0b21e0a8f5ed211d7964a73dc8ef0",
+      "waveHash": "8cf3970dfe717e18ac033141450e704c78f7b3789290d128593b451309a49c4d",
+      "runId": "36154442344",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:01:39.416Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "state": "reserved"
     }
   ]
