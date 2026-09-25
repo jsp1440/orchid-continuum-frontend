@@ -94,15 +94,48 @@ export function assertCandidateRecord(value: unknown): CandidateKnowledgeRecord 
     typeof value.review_state !== "string" ||
     typeof value.published !== "boolean" ||
     typeof value.active !== "boolean" ||
-    (value.evidence !== undefined && !Array.isArray(value.evidence))
+    (value.evidence !== undefined && value.evidence !== null && !(
+      Array.isArray(value.evidence) && value.evidence.every(isEvidenceLink)
+    ))
   ) {
     throw new MalformedEvidenceResponse("candidate record");
   }
   return value as CandidateKnowledgeRecord;
 }
 
-export function assertItems<T>(value: unknown, what: string): T[] {
-  if (!isRecord(value) || !Array.isArray(value.items)) throw new MalformedEvidenceResponse(what);
+function isEvidenceLink(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.source_object_type === "string" &&
+    (typeof value.source_object_id === "number" || typeof value.source_object_id === "string") &&
+    (value.anchor === undefined || value.anchor === null || isRecord(value.anchor))
+  );
+}
+
+function isConflict(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    Array.isArray(value.candidate_ids) &&
+    value.candidate_ids.every((id) => typeof id === "number" || typeof id === "string") &&
+    typeof value.state === "string"
+  );
+}
+
+function isLedgerRevision(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    (value.entries === undefined || (
+      Array.isArray(value.entries) &&
+      value.entries.every((entry) => isRecord(entry) && (entry.provenance === undefined || entry.provenance === null || isRecord(entry.provenance)))
+    ))
+  );
+}
+
+/** Every item must have the documented shape; one malformed item makes the response unreadable. */
+export function assertItems<T>(value: unknown, what: string, isItem: (item: unknown) => boolean): T[] {
+  if (!isRecord(value) || !Array.isArray(value.items) || !value.items.every(isItem)) {
+    throw new MalformedEvidenceResponse(what);
+  }
   return value.items as T[];
 }
 
@@ -113,13 +146,13 @@ export const fetchCandidateKnowledge = (candidateId: string) =>
 
 export const listCandidateConflicts = () =>
   researchRequest<unknown>("/api/candidate-knowledge/conflicts?limit=200").then((value) =>
-    assertItems<CandidateConflict>(value, "candidate conflicts"),
+    assertItems<CandidateConflict>(value, "candidate conflicts", isConflict),
   );
 
 export const listProjectReasoningLedgers = (projectId: string) =>
   researchRequest<unknown>(
     `/api/research/projects/${encodeURIComponent(projectId)}/reasoning-ledgers`,
-  ).then((value) => assertItems<LedgerRevision>(value, "reasoning ledgers"));
+  ).then((value) => assertItems<LedgerRevision>(value, "reasoning ledgers", isLedgerRevision));
 
 /** Evidence the project linked as contradicting — disagreement, not support. */
 export function contradictingEvidence(links: ResearchEvidenceLink[]): ResearchEvidenceLink[] {

@@ -102,4 +102,24 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
       .toContain("Whether this claim is contested is unknown.");
     expect(supporting?.querySelector('[data-testid="research-candidate-conflicts"]')).toBeNull();
   });
+
+  it.each([
+    ["conflicts item {}", "/api/candidate-knowledge/conflicts", { items: [{}] }],
+    ["ledgers item null", "/reasoning-ledgers", { items: [null] }],
+    ["candidate evidence [{}]", "/api/candidate-knowledge/candidates/3", { ...realBackend.candidate_detail["3"], evidence: [{}] }],
+    ["candidate evidence [null]", "/api/candidate-knowledge/candidates/3", { ...realBackend.candidate_detail["3"], evidence: [null] }],
+  ])("a malformed item (%s) is unreadable, never a crash", async (_name, route, body) => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes(route)) return new Response(JSON.stringify(body));
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting).not.toBeNull();
+    expect(supporting?.textContent).toMatch(/could not be read/);
+  });
 });
