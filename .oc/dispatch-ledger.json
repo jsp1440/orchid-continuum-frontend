@@ -551,7 +551,7 @@
       "expiresAt": "2026-09-25T17:01:39.416Z",
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
-      "state": "running"
+      "state": "runtime-backoff"
     }
   ]
 }
