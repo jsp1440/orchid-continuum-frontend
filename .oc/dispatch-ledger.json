@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 6.5,
+  "programSpent": 7,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 4.5
+    "2026-09-25": 5
   },
   "leases": [
     {
@@ -552,6 +552,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "31bb92331f71c15eedbc35010f49e24f08107aacfa7cf7bb2f5d84e8130543a9",
+      "issue": 782,
+      "nodeId": "gate-species-dossier-evidence-receipts",
+      "fingerprint": "47c86eac5c2dfd121022febd80a6fd178204fb810353c5b7bddfd172bcc22cf3",
+      "waveHash": "0f147d06200b13050dc22271c2ed861ed36013d6587087f7659cbbf93aae4d89",
+      "runId": "36154736461",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:04:20.025Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
+      "state": "reserved"
     }
   ]
 }
