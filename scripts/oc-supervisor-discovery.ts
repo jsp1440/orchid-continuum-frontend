@@ -249,7 +249,7 @@ function createIssue(title: string, body: string, labels: string[]): number {
 function openIssueRefs(issues: SupervisorIssueSnapshot[]): OpenIssueRef[] {
   return issues
     .filter((issue) => issue.state === 'open')
-    .map((issue) => ({ number: issue.number, body: issue.body }));
+    .map((issue) => ({ number: issue.number, body: issue.body, labels: issue.labels }));
 }
 
 function materializeGraph(

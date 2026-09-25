@@ -126,6 +126,17 @@ describe('graph discovery: choose the next unmet gate and file it, bounded', () 
     expect(result.skipped[0].reason).toContain('#42');
   });
 
+  it('does not file a leaf an open issue binds by its oc-node label, in any case', () => {
+    const labelled = leaf({ id: 'cap-labelled' });
+    const result = discoverGraphIssues(root([labelled]), {
+      now: NOW,
+      openIssues: [{ number: 43, body: 'no marker here', labels: ['OC-Node:cap-labelled'] }],
+      fingerprintIndex: available(),
+    });
+    expect(result.candidates).toEqual([]);
+    expect(result.skipped).toEqual([{ nodeId: 'cap-labelled', reason: 'already tracked by open issue #43' }]);
+  });
+
   it('refuses a leaf the issue decision refuses, with its reason, and keeps going', () => {
     const stale = leaf({ id: 'cap-stale', priority: 1, lastUpdated: '2025-01-01T00:00:00.000Z' });
     const fresh = leaf({ id: 'cap-fresh', priority: 2 });
