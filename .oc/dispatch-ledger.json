@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 4,
+  "programSpent": 4.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 2
+    "2026-09-25": 2.5
   },
   "leases": [
     {
@@ -484,6 +484,19 @@
       "runId": "36154233039",
       "runAttempt": "1",
       "expiresAt": "2026-09-25T16:59:42.597Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
+      "state": "reserved"
+    },
+    {
+      "id": "dd459c862b7cf72a9caa2c7f8a3845712fca429b68b45a692c44e2bbd1b35dab",
+      "issue": 774,
+      "nodeId": "cap-university-curriculum-core",
+      "fingerprint": "dfd70e40c912cb29120a624c3f32c6b6cf252e6996b4e0f64bb462cc266967d7",
+      "waveHash": "a029956f63804a0c5fd881f5013f7cf6f09d8fef303851f0a5f340d81c131e9b",
+      "runId": "36154233039",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T16:59:55.959Z",
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "state": "reserved"
