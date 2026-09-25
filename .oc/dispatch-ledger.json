@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 5.5,
+  "programSpent": 6,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 3.5
+    "2026-09-25": 4
   },
   "leases": [
     {
@@ -523,6 +523,19 @@
       "runId": "36154368582",
       "runAttempt": "1",
       "expiresAt": "2026-09-25T17:00:23.419Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "b53eeb66947a5d80aeb90ebfa88d398462efacd1",
+      "state": "reserved"
+    },
+    {
+      "id": "6c436d9c092b4a084ef39cd56bc8ba7896cbbced8f20517b65063acead7b197c",
+      "issue": 777,
+      "nodeId": "cap-calyx-science-status-dashboard",
+      "fingerprint": "c24cd80252aa1ebcfdff0713c733d08a6129aa7cdb9d62cdf7da3d9d0037060e",
+      "waveHash": "a99bb4bd1f81528c905e9be4c38d40e1514d7e4ca9fcbc86e3096cd24ec30f31",
+      "runId": "36154368582",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:00:24.562Z",
       "reservedUsd": 0.5,
       "implementationSha": "b53eeb66947a5d80aeb90ebfa88d398462efacd1",
       "state": "reserved"
