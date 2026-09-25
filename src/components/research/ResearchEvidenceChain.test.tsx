@@ -227,4 +227,27 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
     expect(supporting?.querySelector('[data-testid="research-candidate-conflicts-unavailable"]')?.textContent)
       .toMatch(/unknown/);
   });
+
+  it("treats one conflict_id carrying different content as malformed, never an overwrite", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/conflicts")) {
+        return new Response(JSON.stringify({
+          total: 1,
+          items: [
+            { conflict_id: 1, candidate_ids: [3, 8], state: "OPEN" },
+            { conflict_id: 1, candidate_ids: [9, 10], state: "OPEN" },
+          ],
+        }));
+      }
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting?.querySelector('[data-testid="research-candidate-conflicts-unavailable"]')?.textContent)
+      .toContain("Whether this claim is contested is unknown.");
+  });
 });

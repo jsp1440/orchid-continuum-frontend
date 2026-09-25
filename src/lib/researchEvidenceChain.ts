@@ -115,6 +115,7 @@ function isEvidenceLink(value: unknown): boolean {
 function isConflict(value: unknown): boolean {
   return (
     isRecord(value) &&
+    (typeof value.conflict_id === "number" || typeof value.conflict_id === "string") &&
     Array.isArray(value.candidate_ids) &&
     value.candidate_ids.every((id) => typeof id === "number" || typeof id === "string") &&
     typeof value.state === "string"
@@ -174,7 +175,15 @@ export async function listCandidateConflicts(): Promise<CandidateConflictList> {
     }
     total = typeof reported === "number" ? reported : null;
     for (const item of pageItems) {
-      byId.set(displayText((item as { conflict_id?: unknown }).conflict_id, `row-${byId.size}`), item);
+      const id = (item as { conflict_id: number | string }).conflict_id;
+      const key = `${typeof id}:${id}`;
+      const seen = byId.get(key);
+      // The same conflict repeated on a later page is one conflict; the same id
+      // carrying different content is a malformed list, never an overwrite.
+      if (seen && JSON.stringify(seen) !== JSON.stringify(item)) {
+        throw new MalformedEvidenceResponse("candidate conflicts");
+      }
+      byId.set(key, item);
     }
     if (total !== null && byId.size > total) throw new MalformedEvidenceResponse("candidate conflicts");
     // Complete only when the distinct conflicts read equal the reported total.
