@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 2.5,
+  "programSpent": 3,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 0.5
+    "2026-09-25": 1
   },
   "leases": [
     {
@@ -431,6 +431,19 @@
       "runId": "36152596962",
       "runAttempt": "1",
       "expiresAt": "2026-09-25T16:45:33.625Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
+      "state": "reserved"
+    },
+    {
+      "id": "0ece6a6f9099b10a862ce05b7a0083a27ddd429bd816a9785ee05ca194c4cfb1",
+      "issue": 771,
+      "nodeId": "cap-university-applied-ai",
+      "fingerprint": "467e00a87fac444d06026db2b57952f3952895a7e0a6fee001c4b95897aa53ca",
+      "waveHash": "c9d0dc5e05e1418bcdcf29216b9676b7648a911e4287f61df9d9ec3a266164e3",
+      "runId": "36152596962",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T16:45:35.141Z",
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "state": "reserved"
