@@ -17,7 +17,10 @@ const args = process.argv.slice(2);
 fs.appendFileSync(process.env.OC_TEST_LOG, JSON.stringify(args) + '\\n');
 if (args[args.indexOf('--method')+1] !== 'GET') throw new Error('Unexpected mutation');
 const path = args[1];
-if (path.includes('contents/.oc/dispatch-ledger.json')) { console.error('HTTP 404'); process.exit(1); }
+if (path.includes('contents/.oc/dispatch-ledger.json')) {
+  if (!process.env.OC_TEST_LEDGER) { console.error('HTTP 404'); process.exit(1); }
+  console.log(JSON.stringify({ sha: 'v1', content: Buffer.from(process.env.OC_TEST_LEDGER).toString('base64') })); process.exit(0);
+}
 if (path.includes('git/ref/heads/')) console.log(JSON.stringify({object:{sha:'a'.repeat(40)}}));
 else if (path.includes('/issues?')) {
  const page = Number(new URL('https://example.test/'+path).searchParams.get('page'));
@@ -30,9 +33,27 @@ else throw new Error('Unexpected endpoint');
       GITHUB_OUTPUT: join(dir, 'outputs'), OC_TEST_LOG: join(dir, 'requests'), OC_PLAN_DIR: join(dir, 'wave'), OC_RECEIPT_DIR: join(dir, 'receipts'), PROVIDER_AUTHORIZED: 'false' };
     const run = (command: string, extra: Record<string,string> = {}) => spawnSync(process.execPath,
       ['--import', 'tsx', resolve('scripts/oc-dispatch-runtime.ts'), command], { env: { ...env, ...extra }, encoding: 'utf8' });
-    const planned = run('plan'); expect(planned.status, planned.stderr).toBe(0);
+    // Unauthorized, and with no ledger: these undeclared issues are
+    // provider-lane work, so there is no provider slot for any of them. They
+    // stay queued and are reported, instead of taking eight lanes to write
+    // eight denial receipts.
+    const parked = run('plan'); expect(parked.status, parked.stderr).toBe(0);
+    const none = JSON.parse(readFileSync(join(env.OC_PLAN_DIR, 'plan.json'), 'utf8'));
+    expect(none.issues).toEqual([]);
+    expect(none.providerCapacity).toMatchObject({ slots: 0, reason: 'provider_not_authorized' });
+    expect(none.providerDeferred.length).toBeGreaterThan(0);
+    expect(none.providerDeferred.every((d: { reason: string }) => d.reason === 'provider_capacity: provider_not_authorized')).toBe(true);
+    expect(parked.stdout).toContain('provider_slots=0 (provider_not_authorized)');
+
+    // Planned under the lanes' own policy with budget available, the wave gets
+    // its one provider slot; the worker is then denied at its own boundary.
+    const ledger = JSON.stringify({ schema: 1, programStartedAt: new Date(Date.now() - 86400000).toISOString(), programSpent: 0, dailySpent: {}, leases: [] });
+    const planned = run('plan', { PROVIDER_AUTHORIZED: 'true', OC_PROVIDER_NO_API_MODE: 'false', OC_PROVIDER_DISABLED: '',
+      OC_PROVIDER_DAILY_MAX_CALLS: '4', OC_PROVIDER_WAVE_MAX_CALLS: '1', OC_TEST_LEDGER: ledger });
+    expect(planned.status, planned.stderr).toBe(0);
     const plan = JSON.parse(readFileSync(join(env.OC_PLAN_DIR, 'plan.json'), 'utf8'));
-    expect(plan.issues.length).toBeGreaterThan(0);
+    expect(plan.providerCapacity).toMatchObject({ slots: 1, reason: 'wave_max_calls' });
+    expect(plan.issues.length).toBe(1);
     expect(plan.issues.length).toBeLessThanOrEqual(8);
     for (const issue of plan.issues) {
       const admitted = run('admit', { ISSUE_NUMBER: String(issue), OC_WAVE_HASH: plan.wave.hash });

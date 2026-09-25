@@ -105,6 +105,14 @@ jobs:
         id: plan
         env:
           GH_TOKEN: ${{ github.token }}
+          # The provider policy each lane's budget-preflight applies, mirrored
+          # (never widened) so the plan admits provider-lane issues only up to
+          # the slots that policy and the durable ledger can actually grant.
+          # Pinned equal to orchid-budgeted-completion-lane.yml by test.
+          OC_PROVIDER_NO_API_MODE: 'false'
+          OC_PROVIDER_DISABLED: ''
+          OC_PROVIDER_DAILY_MAX_CALLS: '4'
+          OC_PROVIDER_WAVE_MAX_CALLS: '1'
         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts plan
       - name: Preserve hash-addressed shared context
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
