@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 7.5,
+  "programSpent": 8,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 5.5
+    "2026-09-25": 6
   },
   "leases": [
     {
@@ -591,6 +591,19 @@
       "reservedUsd": 0,
       "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
       "lane": "provider-free",
+      "state": "reserved"
+    },
+    {
+      "id": "f82fae2b1f90c1039026aa96ee390b32b668246c252965fe9223c9f1e136952a",
+      "issue": 783,
+      "nodeId": "cap-conservatory-readiness-gate",
+      "fingerprint": "6150f55770400a88e0515fda80b633f323f9d05414fb268f721f800428a623ff",
+      "waveHash": "b3d51f18b2e894e68fa5cd74bbe602f49971a4baa025ee3c0d1cea01d0238d5b",
+      "runId": "36155059069",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:08:28.142Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
       "state": "reserved"
     }
   ]
