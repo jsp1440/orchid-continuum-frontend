@@ -99,6 +99,27 @@ describe("captured evaluate payload after four observations", () => {
     expect(provenanceEntries({ source: "herbarium", decimal_latitude: 1, longitude: 2, locality: "x", coordinates: [1, 2] }))
       .toEqual([["source", "herbarium"]]);
   });
+
+  it("withholds camelCase, site/GPS/elevation/verbatim keys and nested locality at any depth", () => {
+    expect(
+      provenanceEntries({
+        source: "herbarium",
+        decimalLatitude: 1,
+        verbatimLocality: "x",
+        collectionSite: "y",
+        gpsFix: "z",
+        elevationM: 1200,
+        footprintWKT: "POINT(1 2)",
+        latLng: [1, 2],
+        specimen: { catalog: "c-1", origin: { geo: { decimalLongitude: 2 } } },
+        records: [{ id: "r-1" }, { locationId: "l-1" }],
+        reviewer: { name: "curator" },
+      }),
+    ).toEqual([
+      ["source", "herbarium"],
+      ["reviewer", JSON.stringify({ name: "curator" })],
+    ]);
+  });
 });
 
 describe("captured explain payload", () => {

@@ -52,7 +52,34 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 /** Keys that would disclose a locality; never rendered from provenance. */
-const LOCALITY_KEY = /(^|_)(lat|latitude|lon|lng|longitude|coordinates?|locality|geom|geometry|point|wkt)($|_)/i;
+const LOCALITY_TOKENS = new Set([
+  "lat", "latitude", "lon", "lng", "longitude", "latlng", "latlon", "coordinate", "coordinates",
+  "coord", "coords", "locality", "location", "site", "gps", "elevation", "altitude", "geom", "geometry",
+  "point", "wkt", "verbatim", "georeference", "georeferenced",
+]);
+
+/** Split snake_case, kebab-case, dotted and camelCase keys into lowercase tokens. */
+function keyTokens(key: string): string[] {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map((token) => token.toLowerCase());
+}
+
+function isLocalityKey(key: string): boolean {
+  return keyTokens(key).some((token) => LOCALITY_TOKENS.has(token));
+}
+
+/** True when a value carries a locality-shaped key at any depth. */
+function containsLocality(value: unknown, depth = 0): boolean {
+  if (depth > 8) return true; // too deep to inspect safely: withhold
+  if (Array.isArray(value)) return value.some((item) => containsLocality(item, depth + 1));
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, nested]) => isLocalityKey(key) || containsLocality(nested, depth + 1),
+  );
+}
 
 export function characterStatusLabel(status: string): string {
   return STATUS_LABELS[status] ?? status.replaceAll("_", " ");
@@ -121,7 +148,7 @@ export function scoreBasis(candidate: CandidateResult): ScoreBasis {
 export function provenanceEntries(provenance: Record<string, unknown> | null | undefined): Array<[string, string]> {
   if (!provenance || typeof provenance !== "object") return [];
   return Object.entries(provenance)
-    .filter(([key]) => !LOCALITY_KEY.test(key))
+    .filter(([key, value]) => !isLocalityKey(key) && !containsLocality(value))
     .map(([key, value]) => [key.replaceAll("_", " "), formatMatrixValue(value)]);
 }
 
