@@ -114,3 +114,12 @@ describe('resolveDossierForSubject', () => {
     });
   });
 });
+
+describe('speciesPageHref', () => {
+  it('carries the name with a public-API id and omits an empty one', async () => {
+    const { speciesPageHref } = await import('./speciesDossier');
+    expect(speciesPageHref('6056', 'Cattleya labiata')).toBe('/species/6056?name=Cattleya%20labiata');
+    expect(speciesPageHref('6056', '  ')).toBe('/species/6056');
+    expect(speciesPageHref('6056', null)).toBe('/species/6056');
+  });
+});

@@ -52,6 +52,7 @@ import {
   type SnapshotReading,
 } from '@/lib/oacs';
 import { warnApiUnconfigured } from '@/lib/apiConfigWarning';
+import { speciesPageHref } from '@/lib/speciesDossier';
 
 // ---------------------------------------------------------------------------
 // Shared shell
@@ -159,7 +160,7 @@ export const SpeciesSnapshotWidget: React.FC<
   return (
     <Shell
       title="Species Snapshot"
-      href={data ? `/species/${encodeURIComponent(data.taxonomy_id)}` : '/'}
+      href={data ? speciesPageHref(data.taxonomy_id, data.canonical_name) : '/'}
       badge="Continuum API"
       className={className}
     >
@@ -246,7 +247,7 @@ export const OrchidOfTheDayWidget: React.FC<WidgetProps> = ({ className }) => {
   return (
     <Shell
       title="Orchid of the Day"
-      href={pick ? `/species/${encodeURIComponent(pick.taxonomy_id)}` : '/'}
+      href={pick ? speciesPageHref(pick.taxonomy_id, pick.canonical_name) : '/'}
       badge="Daily rotation"
       className={className}
     >

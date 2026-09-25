@@ -4,6 +4,7 @@ import { Search, Loader2, Leaf, ShieldAlert, ArrowRight, X } from 'lucide-react'
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { searchSpecies, type SpeciesSearchResult } from '@/lib/ocBackend';
+import { speciesPageHref } from '@/lib/speciesDossier';
 import {
   resolveSpeciesGenusFilter,
   speciesQueryAfterGenusRouteChange,
@@ -202,10 +203,7 @@ const Species: React.FC = () => {
               const name = r.canonical_name || r.scientific_name || r.taxonomy_id;
               // taxonomy_id is the public API's id, not a Calyx taxon id; the name
               // lets the dossier page confirm it shows this species' evidence.
-              const scientificName = r.canonical_name || r.scientific_name;
-              const href = `/species/${encodeURIComponent(r.taxonomy_id)}${
-                scientificName ? `?name=${encodeURIComponent(scientificName)}` : ''
-              }`;
+              const href = speciesPageHref(r.taxonomy_id, r.canonical_name || r.scientific_name);
               return (
                 <Link
                   key={r.taxonomy_id}

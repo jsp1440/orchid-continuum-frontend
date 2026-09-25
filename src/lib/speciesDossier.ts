@@ -362,3 +362,14 @@ export async function resolveDossierForSubject(
     return { state: 'unavailable' };
   }
 }
+
+/**
+ * Link to /species/:id from a surface keyed by the public API's taxonomy_id.
+ * The name travels with the id so the page can confirm the dossier it shows
+ * is this species' and not another taxon's with the same number.
+ */
+export function speciesPageHref(taxonomyId: string, scientificName?: string | null): string {
+  const name = (scientificName ?? '').replace(/\s+/g, ' ').trim();
+  const base = `/species/${encodeURIComponent(taxonomyId)}`;
+  return name ? `${base}?name=${encodeURIComponent(name)}` : base;
+}
