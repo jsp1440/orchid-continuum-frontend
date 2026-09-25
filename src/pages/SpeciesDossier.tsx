@@ -588,6 +588,7 @@ function DossierSectionBlock({
             <div key={`${excerpt.label}-${i}`}>
               <dt className="font-mono text-[10px] tracking-[0.12em] uppercase text-[#cfc8b8]/60">
                 {excerpt.label}
+                {excerpt.evidenceState ? ` · ${excerpt.evidenceState}` : ''}
               </dt>
               <dd className="mt-0.5 whitespace-pre-line font-body text-[12px] text-[#cfc8b8]/85">
                 {excerpt.text}
