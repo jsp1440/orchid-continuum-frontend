@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 8,
+  "programSpent": 8.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 6
+    "2026-09-25": 6.5
   },
   "leases": [
     {
@@ -602,6 +602,19 @@
       "runId": "36155059069",
       "runAttempt": "1",
       "expiresAt": "2026-09-25T17:08:28.142Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
+      "state": "reserved"
+    },
+    {
+      "id": "21d74c9e09891942492cbd5162bc9b600a48468c46fc92e00c0dafe1ca4e29db",
+      "issue": 785,
+      "nodeId": "gate-journey-dossier-calyx",
+      "fingerprint": "7c0bc8b3918134623e26fab3ae3602ed66dd935dfce24b785eacd149d9f58618",
+      "waveHash": "b3d51f18b2e894e68fa5cd74bbe602f49971a4baa025ee3c0d1cea01d0238d5b",
+      "runId": "36155059069",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:08:57.655Z",
       "reservedUsd": 0.5,
       "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
       "state": "reserved"
