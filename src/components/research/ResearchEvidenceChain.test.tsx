@@ -65,4 +65,41 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
       .toContain("as counterevidence: A second source reports red flowers. · uncertainty not recorded");
     expect(container.textContent).not.toMatch(/accepted|verified identification/i);
   });
+
+  it("says conflicts and ledgers are unreadable when they fail or are malformed, and never crashes", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/candidates/3")) return new Response("{}");
+      if (target.includes("/api/candidate-knowledge/conflicts")) return new Response(JSON.stringify({ detail: "down" }), { status: 503 });
+      if (target.includes("/reasoning-ledgers")) return new Response("{}");
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting?.textContent).toContain("Candidate record could not be read");
+    expect(supporting?.textContent).toContain("not in the expected shape");
+    expect(supporting?.querySelector('[data-testid="research-evidence-ledger"]')?.textContent)
+      .toContain("Reasoning ledgers could not be read");
+    expect(supporting?.querySelector('[data-testid="research-evidence-ledger"]')?.textContent)
+      .not.toContain("No reasoning-ledger entry cites this evidence yet");
+  });
+
+  it("marks conflicts unknown, not absent, when the conflicts route fails", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/conflicts")) return new Response(JSON.stringify({ detail: "down" }), { status: 503 });
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    expect(supporting?.querySelector('[data-testid="research-candidate-conflicts-unavailable"]')?.textContent)
+      .toContain("Whether this claim is contested is unknown.");
+    expect(supporting?.querySelector('[data-testid="research-candidate-conflicts"]')).toBeNull();
+  });
 });

@@ -74,18 +74,52 @@ export type LedgerCitation = {
   entry: LedgerEntry;
 };
 
+/** A 200 whose body is not the documented shape is unreadable, never empty. */
+export class MalformedEvidenceResponse extends Error {
+  constructor(what: string) {
+    super(`The ${what} response was not in the expected shape.`);
+    this.name = "MalformedEvidenceResponse";
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function assertCandidateRecord(value: unknown): CandidateKnowledgeRecord {
+  if (
+    !isRecord(value) ||
+    typeof value.candidate_id !== "number" ||
+    typeof value.kind !== "string" ||
+    typeof value.review_state !== "string" ||
+    typeof value.published !== "boolean" ||
+    typeof value.active !== "boolean" ||
+    (value.evidence !== undefined && !Array.isArray(value.evidence))
+  ) {
+    throw new MalformedEvidenceResponse("candidate record");
+  }
+  return value as CandidateKnowledgeRecord;
+}
+
+export function assertItems<T>(value: unknown, what: string): T[] {
+  if (!isRecord(value) || !Array.isArray(value.items)) throw new MalformedEvidenceResponse(what);
+  return value.items as T[];
+}
+
 export const fetchCandidateKnowledge = (candidateId: string) =>
-  researchRequest<CandidateKnowledgeRecord>(
+  researchRequest<unknown>(
     `/api/candidate-knowledge/candidates/${encodeURIComponent(candidateId)}`,
-  );
+  ).then(assertCandidateRecord);
 
 export const listCandidateConflicts = () =>
-  researchRequest<{ items: CandidateConflict[] }>("/api/candidate-knowledge/conflicts?limit=200");
+  researchRequest<unknown>("/api/candidate-knowledge/conflicts?limit=200").then((value) =>
+    assertItems<CandidateConflict>(value, "candidate conflicts"),
+  );
 
 export const listProjectReasoningLedgers = (projectId: string) =>
-  researchRequest<{ items: LedgerRevision[] }>(
+  researchRequest<unknown>(
     `/api/research/projects/${encodeURIComponent(projectId)}/reasoning-ledgers`,
-  );
+  ).then((value) => assertItems<LedgerRevision>(value, "reasoning ledgers"));
 
 /** Evidence the project linked as contradicting — disagreement, not support. */
 export function contradictingEvidence(links: ResearchEvidenceLink[]): ResearchEvidenceLink[] {

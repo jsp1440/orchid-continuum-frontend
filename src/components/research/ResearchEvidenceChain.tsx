@@ -51,12 +51,12 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
     }
     if (ids.length) {
       listCandidateConflicts().then(
-        (value) => live && setConflicts({ status: 'ready', value: value.items ?? [] }),
+        (value) => live && setConflicts({ status: 'ready', value }),
         (error) => live && setConflicts({ status: 'unavailable', message: reason(error) }),
       );
     }
     listProjectReasoningLedgers(projectId).then(
-      (value) => live && setLedgers({ status: 'ready', value: value.items ?? [] }),
+      (value) => live && setLedgers({ status: 'ready', value }),
       (error) => live && setLedgers({ status: 'unavailable', message: reason(error) }),
     );
     return () => { live = false; };
@@ -109,7 +109,13 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
                     </li>
                   )) : <li>No source anchor recorded for this candidate.</li>}
                 </ul>
-                {openConflicts.length ? (
+                {conflicts.status === 'unavailable' ? (
+                  <p className="text-amber-200/90" data-testid="research-candidate-conflicts-unavailable">
+                    Conflicts could not be read: {conflicts.message} Whether this claim is contested is unknown.
+                  </p>
+                ) : conflicts.status === 'loading' ? (
+                  <p className="text-white/55">Reading conflicts…</p>
+                ) : openConflicts.length ? (
                   <p className="text-amber-200/90" data-testid="research-candidate-conflicts">
                     Open conflict: {openConflicts.map((item) => `candidates ${item.candidate_ids.join(' vs ')}`).join('; ')} — unresolved, awaiting review.
                   </p>
