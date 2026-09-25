@@ -649,6 +649,29 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     expect(run.filed.every((f) => f.labels.includes('oc-prepared') && f.labels.includes('oc-discovered'))).toBe(true);
   });
 
+  // #816-#818 settled to oc-validating (awaiting human review) on 2026-09-25 and
+  // then held the whole depth, so no further mission was ever filed.
+  it('does not let reserve missions awaiting review (oc-validating) consume the depth, but counts them at the ceiling', async () => {
+    const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    const fixture = (await import('../__fixtures__/reserve-mission-issues-816-818.json')).default as {
+      issues: Array<{ number: number; title: string; body: string }>;
+    };
+    const settled = fixture.issues.map((issue) => ({
+      number: issue.number, repository: REPO, state: 'open' as const, title: issue.title,
+      body: issue.body, labels: ['oc-validating', 'oc-p2', 'oc-discovered'],
+    }));
+    const io = harness();
+    const run = await materializeBackendReservePlan(settled, {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.failedClosed).toBeNull();
+    expect(run.reserveSlots?.preparedOpenCount).toBe(0);
+    expect(run.reserveSlots?.openReserveIssues).toBe(3);
+    expect(run.filed).toHaveLength(3);
+  });
+
   it('still counts executable open lineages against the depth and records why it filed nothing', async () => {
     const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
     const executable = heldLegacy.slice(0, 3).map((issue) => ({ ...issue, labels: ['oc-prepared', 'oc-p2'] }));
@@ -732,5 +755,43 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     }));
     expect(io.calls.filter((c) => c.startsWith('create:')).length).toBe(run.filed.length);
     expect(run.filed.length).toBeLessThan(3);
+  });
+});
+
+describe('graph discovery sees derived reserve-mission bindings', () => {
+  const REPO = 'jsp1440/orchid-continuum-frontend';
+  // #820 (2026-09-25): discovery read cap-kg-evidence-gap-research-missions as
+  // having "no live executable issue" while #816-#818 were bound to it by the
+  // derived reserve binding, and filed a duplicate provider-required issue.
+  it('treats a legacy reserve mission as the live issue of its leaf', async () => {
+    const { openIssueRefs } = await import('../../../scripts/oc-supervisor-discovery');
+    const { resolveExecutableIssue } = await import('../completion-graph/executableIssue');
+    const { COMPLETION_GRAPH } = await import('../completion-graph/completionGraphData');
+    const fixture = (await import('../__fixtures__/reserve-mission-issues-816-818.json')).default as {
+      issues: Array<{ number: number; title: string; state: string; labels: string[]; body: string }>;
+    };
+    const snapshots = fixture.issues.map((issue) => ({
+      number: issue.number, repository: REPO, state: 'open' as const,
+      title: issue.title, body: issue.body, labels: issue.labels,
+    }));
+    const find = (node: typeof COMPLETION_GRAPH, id: string): typeof COMPLETION_GRAPH | undefined =>
+      node.id === id ? node : node.children.map((child) => find(child, id)).find(Boolean);
+    const leaf = find(COMPLETION_GRAPH, 'cap-kg-evidence-gap-research-missions');
+    if (!leaf) throw new Error('reserve mission leaf missing from the completion graph');
+
+    const refs = openIssueRefs(snapshots);
+    expect(resolveExecutableIssue(leaf, refs)).toBe(816);
+    // The derived node is a planning-view annotation only.
+    expect(snapshots[0].labels).not.toContain('oc-node:cap-kg-evidence-gap-research-missions');
+    // Without the derivation the leaf looks untracked -- the #820 defect.
+    const raw = snapshots.map((issue) => ({ number: issue.number, body: issue.body, labels: issue.labels }));
+    expect(resolveExecutableIssue(leaf, raw)).toBeNull();
+  });
+
+  it('derives nothing for an issue that is not a reserve mission', async () => {
+    const { openIssueRefs } = await import('../../../scripts/oc-supervisor-discovery');
+    const refs = openIssueRefs([{ number: 5, repository: REPO, state: 'open', title: 'x',
+      body: 'OC-SUPERVISOR-SOURCE: completion-graph', labels: ['oc-queued'] }]);
+    expect(refs[0].labels).toEqual(['oc-queued']);
   });
 });
