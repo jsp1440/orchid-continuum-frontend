@@ -1,0 +1,411 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend main c37ff0ca6 via FastAPI TestClient on app.main: the repo's own literature fixture (tests/fixtures/literature/calyx_brain_001_orchid_study.txt) run through extract_and_persist into LiteratureResultRepository, auth overridden. Paper detail trimmed to the listed top-level keys (sections, entities, glossary omitted); values unmodified. GET /papers/{id}/source-binding returned 404 (no binding).",
+  "paper": {
+    "analysis_manifest": {
+      "analysis_id": "f67f7e16a082cb7b5dfc1463a0cde95426ea15e27262127bc37f011ddd8ed8ca",
+      "analysis_version": 1,
+      "completed_at": "2026-09-25T14:53:21.569463Z",
+      "configuration_fingerprint": "00c839e354c966c2a53011b6fd2fbcdb169d97161a96af172dc7601b95b807ef",
+      "created_at": "2026-09-25T14:53:21.565705Z",
+      "extractors": [
+        {
+          "completed_at": "2026-09-25T14:53:21.568030Z",
+          "error": null,
+          "name": "metadata",
+          "output_count": 5,
+          "started_at": "2026-09-25T14:53:21.565952Z",
+          "status": "completed",
+          "version": "0.1.0"
+        },
+        {
+          "completed_at": "2026-09-25T14:53:21.568467Z",
+          "error": null,
+          "name": "sections",
+          "output_count": 7,
+          "started_at": "2026-09-25T14:53:21.568064Z",
+          "status": "completed",
+          "version": "0.1.0"
+        },
+        {
+          "completed_at": "2026-09-25T14:53:21.568968Z",
+          "error": null,
+          "name": "entities",
+          "output_count": 3,
+          "started_at": "2026-09-25T14:53:21.568480Z",
+          "status": "completed",
+          "version": "0.1.0"
+        },
+        {
+          "completed_at": "2026-09-25T14:53:21.569270Z",
+          "error": null,
+          "name": "glossary",
+          "output_count": 5,
+          "started_at": "2026-09-25T14:53:21.568987Z",
+          "status": "completed",
+          "version": "0.1.0"
+        },
+        {
+          "completed_at": "2026-09-25T14:53:21.569448Z",
+          "error": null,
+          "name": "claims",
+          "output_count": 3,
+          "started_at": "2026-09-25T14:53:21.569280Z",
+          "status": "completed",
+          "version": "0.1.0"
+        }
+      ],
+      "glossary_version": null,
+      "input_fingerprint": "a600ed6fa38833d2c5ff31161482e4d8527147d011448a7ff5eaa3ad491cc6a7",
+      "model_name": null,
+      "model_provider": null,
+      "ocr_engine": null,
+      "ocr_version": null,
+      "ontology_version": null,
+      "pipeline_version": "0.2.0",
+      "previous_analysis_id": null,
+      "prompt_bundle_version": null,
+      "relationship_model_version": null,
+      "schema_version": "1.0.0",
+      "status": "completed",
+      "warnings": []
+    },
+    "claims": [
+      {
+        "claim_id": "claim-1",
+        "claim_type": "result",
+        "evidence_ids": [
+          "evidence-1"
+        ],
+        "object_ids": [],
+        "polarity": "uncertain",
+        "predicate": null,
+        "provenance": {
+          "confidence": 0.8,
+          "extractor": "claims",
+          "extractor_version": "0.1.0",
+          "method": "rule_extracted",
+          "review_status": "unreviewed",
+          "reviewer_note": null
+        },
+        "statement": "ATP increased in Escherichia coli after the orchid root treatment.",
+        "subject_ids": [
+          "entity-1",
+          "entity-3"
+        ]
+      },
+      {
+        "claim_id": "claim-2",
+        "claim_type": "interpretation",
+        "evidence_ids": [
+          "evidence-2"
+        ],
+        "object_ids": [],
+        "polarity": "uncertain",
+        "predicate": null,
+        "provenance": {
+          "confidence": 0.8,
+          "extractor": "claims",
+          "extractor_version": "0.1.0",
+          "method": "rule_extracted",
+          "review_status": "unreviewed",
+          "reviewer_note": null
+        },
+        "statement": "The ATP response may indicate altered microbial activity.",
+        "subject_ids": [
+          "entity-1"
+        ]
+      },
+      {
+        "claim_id": "claim-3",
+        "claim_type": "interpretation",
+        "evidence_ids": [
+          "evidence-3"
+        ],
+        "object_ids": [],
+        "polarity": "uncertain",
+        "predicate": null,
+        "provenance": {
+          "confidence": 0.8,
+          "extractor": "claims",
+          "extractor_version": "0.1.0",
+          "method": "rule_extracted",
+          "review_status": "unreviewed",
+          "reviewer_note": null
+        },
+        "statement": "PCR results support further investigation of orchid root microbiomes.",
+        "subject_ids": [
+          "entity-2"
+        ]
+      }
+    ],
+    "evidence": [
+      {
+        "contradicts_ids": [],
+        "evidence_id": "evidence-1",
+        "evidence_type": "text",
+        "excerpt": "ATP increased in Escherichia coli after the orchid root treatment.",
+        "span": {
+          "char_end": 521,
+          "char_start": 455,
+          "page_end": null,
+          "page_start": null,
+          "section_id": "section-4"
+        },
+        "supports_ids": [
+          "claim-1"
+        ]
+      },
+      {
+        "contradicts_ids": [],
+        "evidence_id": "evidence-2",
+        "evidence_type": "text",
+        "excerpt": "The ATP response may indicate altered microbial activity.",
+        "span": {
+          "char_end": 591,
+          "char_start": 534,
+          "page_end": null,
+          "page_start": null,
+          "section_id": "section-5"
+        },
+        "supports_ids": [
+          "claim-2"
+        ]
+      },
+      {
+        "contradicts_ids": [],
+        "evidence_id": "evidence-3",
+        "evidence_type": "text",
+        "excerpt": "PCR results support further investigation of orchid root microbiomes.",
+        "span": {
+          "char_end": 673,
+          "char_start": 604,
+          "page_end": null,
+          "page_start": null,
+          "section_id": "section-6"
+        },
+        "supports_ids": [
+          "claim-3"
+        ]
+      }
+    ],
+    "metadata": {
+      "abstract": "ATP response was measured in Escherichia coli associated with orchid roots.",
+      "authors": [],
+      "identifiers": [
+        {
+          "scheme": "doi",
+          "value": "10.5555/calyx.brain.001"
+        }
+      ],
+      "issue": null,
+      "journal": null,
+      "keywords": [
+        "orchids",
+        "ATP",
+        "roots",
+        "microbiology"
+      ],
+      "pages": null,
+      "publication_year": 2025,
+      "publisher": null,
+      "subtitle": null,
+      "title": "ATP Response in Escherichia coli on Orchid Roots",
+      "volume": null
+    },
+    "normalized_evidence_records": [
+      {
+        "canonical_entity_ids": [],
+        "domain": "other",
+        "evidence_ids": [
+          "evidence-1"
+        ],
+        "extraction_confidence": 0.8,
+        "normalization_confidence": 0.5,
+        "normalized_statement": "atp increased in escherichia coli after the orchid root treatment",
+        "polarity": "uncertain",
+        "provenance": {
+          "confidence": 0.8,
+          "extractor": "claims",
+          "extractor_version": "0.1.0",
+          "method": "rule_extracted",
+          "review_status": "unreviewed",
+          "reviewer_note": null
+        },
+        "reconciliation_group_id": "group-56a5e69701ed4262",
+        "record_id": "record-8091ee2f3049adb4",
+        "review_status": "unreviewed",
+        "source_claim_id": "claim-1",
+        "source_excerpts": [
+          "ATP increased in Escherichia coli after the orchid root treatment."
+        ],
+        "statement": "ATP increased in Escherichia coli after the orchid root treatment.",
+        "unresolved_entities": [
+          "atp",
+          "escherichia coli"
+        ],
+        "validation_notes": [
+          "no_canonical_entity_identifier"
+        ]
+      },
+      {
+        "canonical_entity_ids": [],
+        "domain": "other",
+        "evidence_ids": [
+          "evidence-2"
+        ],
+        "extraction_confidence": 0.8,
+        "normalization_confidence": 0.5,
+        "normalized_statement": "the atp response may indicate altered microbial activity",
+        "polarity": "uncertain",
+        "provenance": {
+          "confidence": 0.8,
+          "extractor": "claims",
+          "extractor_version": "0.1.0",
+          "method": "rule_extracted",
+          "review_status": "unreviewed",
+          "reviewer_note": null
+        },
+        "reconciliation_group_id": "group-3e0ecfc4bb28ef04",
+        "record_id": "record-61e017a088b30677",
+        "review_status": "unreviewed",
+        "source_claim_id": "claim-2",
+        "source_excerpts": [
+          "The ATP response may indicate altered microbial activity."
+        ],
+        "statement": "The ATP response may indicate altered microbial activity.",
+        "unresolved_entities": [
+          "atp"
+        ],
+        "validation_notes": [
+          "no_canonical_entity_identifier"
+        ]
+      },
+      {
+        "canonical_entity_ids": [],
+        "domain": "other",
+        "evidence_ids": [
+          "evidence-3"
+        ],
+        "extraction_confidence": 0.8,
+        "normalization_confidence": 0.5,
+        "normalized_statement": "pcr results support further investigation of orchid root microbiomes",
+        "polarity": "uncertain",
+        "provenance": {
+          "confidence": 0.8,
+          "extractor": "claims",
+          "extractor_version": "0.1.0",
+          "method": "rule_extracted",
+          "review_status": "unreviewed",
+          "reviewer_note": null
+        },
+        "reconciliation_group_id": "group-819691e573c0a094",
+        "record_id": "record-5aa5e34a04e3aac3",
+        "review_status": "unreviewed",
+        "source_claim_id": "claim-3",
+        "source_excerpts": [
+          "PCR results support further investigation of orchid root microbiomes."
+        ],
+        "statement": "PCR results support further investigation of orchid root microbiomes.",
+        "unresolved_entities": [
+          "pcr"
+        ],
+        "validation_notes": [
+          "no_canonical_entity_identifier"
+        ]
+      }
+    ],
+    "paper_id": "paper-a600ed6fa38833d2c5ff31161482e4d8527147d011448a7ff5eaa3ad491cc6a7",
+    "publication_decisions": [
+      {
+        "based_on_decision_id": null,
+        "publication_decision_id": "publication-ed06cdf7a5337225",
+        "reason_codes": [
+          "awaiting_review"
+        ],
+        "review_item_id": "review-4749d4e4027ea52b",
+        "source_record_id": "record-8091ee2f3049adb4",
+        "status": "blocked"
+      },
+      {
+        "based_on_decision_id": null,
+        "publication_decision_id": "publication-2ae8832751e64a7e",
+        "reason_codes": [
+          "awaiting_review"
+        ],
+        "review_item_id": "review-4e34093e8b427672",
+        "source_record_id": "record-61e017a088b30677",
+        "status": "blocked"
+      },
+      {
+        "based_on_decision_id": null,
+        "publication_decision_id": "publication-85be1d37ccdec122",
+        "reason_codes": [
+          "awaiting_review"
+        ],
+        "review_item_id": "review-8604906bd383c604",
+        "source_record_id": "record-5aa5e34a04e3aac3",
+        "status": "blocked"
+      }
+    ],
+    "reconciliation_relations": [],
+    "review_decisions": [],
+    "review_items": [
+      {
+        "priority": 160,
+        "priority_reasons": [
+          "unresolved_entities",
+          "low_normalization_confidence"
+        ],
+        "reconciliation_group_id": "group-56a5e69701ed4262",
+        "review_item_id": "review-4749d4e4027ea52b",
+        "source_record_fingerprint": "eb1301f6fdf80a2083c61365c8cd89fc444d0c30e7859c5c87047da911ef69ca",
+        "source_record_id": "record-8091ee2f3049adb4",
+        "status": "pending"
+      },
+      {
+        "priority": 160,
+        "priority_reasons": [
+          "unresolved_entities",
+          "low_normalization_confidence"
+        ],
+        "reconciliation_group_id": "group-3e0ecfc4bb28ef04",
+        "review_item_id": "review-4e34093e8b427672",
+        "source_record_fingerprint": "a60cb730dced84bceaa254b5c508ca2eb89f0e910eafe064ba3b4e16d199d569",
+        "source_record_id": "record-61e017a088b30677",
+        "status": "pending"
+      },
+      {
+        "priority": 160,
+        "priority_reasons": [
+          "unresolved_entities",
+          "low_normalization_confidence"
+        ],
+        "reconciliation_group_id": "group-819691e573c0a094",
+        "review_item_id": "review-8604906bd383c604",
+        "source_record_fingerprint": "2295cae36e7e16c041254400866f64e25de418e868e06c673b3722e7b54dc0a5",
+        "source_record_id": "record-5aa5e34a04e3aac3",
+        "status": "pending"
+      }
+    ],
+    "schema_version": "1.0.0"
+  },
+  "papers": {
+    "limit": 20,
+    "offset": 0,
+    "papers": [
+      {
+        "authors": [],
+        "claim_count": 3,
+        "evidence_count": 3,
+        "journal": null,
+        "paper_id": "paper-a600ed6fa38833d2c5ff31161482e4d8527147d011448a7ff5eaa3ad491cc6a7",
+        "publication_year": 2025,
+        "readable": true,
+        "review_decision_count": 0,
+        "title": "ATP Response in Escherichia coli on Orchid Roots"
+      }
+    ],
+    "total": 1,
+    "unreadable_count": 0
+  }
+}

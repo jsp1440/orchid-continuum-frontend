@@ -100,6 +100,20 @@ export interface LiteraturePaper {
   entities?: PaperEntity[];
   claims?: PaperClaim[];
   evidence?: PaperEvidence[];
+  /** Claim → normalized record, carrying the record's own review status. */
+  normalized_evidence_records?: Array<{
+    record_id: string;
+    source_claim_id?: string | null;
+    review_status?: string;
+    [key: string]: unknown;
+  }>;
+  /** Publication gate per normalized record; the backend emits "blocked" until review. */
+  publication_decisions?: Array<{
+    publication_decision_id: string;
+    source_record_id: string;
+    status: string;
+    reason_codes?: string[];
+  }>;
   analysis_manifest?: {
     analysis_id?: string;
     pipeline_version?: string;
@@ -362,4 +376,31 @@ export function isMachineAuthored(claim: PaperClaim): boolean {
 export function isReviewed(claim: PaperClaim): boolean {
   const status = claim.provenance?.review_status;
   return status === "accepted" || status === "corrected";
+}
+
+export interface ClaimStanding {
+  /** Extraction polarity: "supports" | "refutes" | "uncertain" | … as emitted. */
+  polarity: string | null;
+  recordReviewStatus: string | null;
+  publicationStatus: string | null;
+  publicationReasons: string[];
+}
+
+/**
+ * How far a claim is from being knowledge, as the backend records it: its
+ * extraction polarity, the review status of the normalized record built from
+ * it, and that record's publication decision. Missing links stay null — an
+ * absent decision is "not recorded", never "published".
+ */
+export function claimStanding(claim: PaperClaim, paper: LiteraturePaper): ClaimStanding {
+  const record = (paper.normalized_evidence_records ?? []).find((item) => item.source_claim_id === claim.claim_id);
+  const decision = record
+    ? (paper.publication_decisions ?? []).find((item) => item.source_record_id === record.record_id)
+    : undefined;
+  return {
+    polarity: typeof claim.polarity === "string" ? claim.polarity : null,
+    recordReviewStatus: record?.review_status ?? null,
+    publicationStatus: decision?.status ?? null,
+    publicationReasons: decision?.reason_codes ?? [],
+  };
 }

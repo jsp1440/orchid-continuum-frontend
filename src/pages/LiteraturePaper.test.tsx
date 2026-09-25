@@ -16,6 +16,8 @@ vi.mock('@/contexts/AuthContext', async () => {
   return { ...actual, useAuth: mocks.useAuth };
 });
 
+import realBackend from '@/lib/__fixtures__/literaturePaper.realBackend.json';
+
 import LiteraturePaper from './LiteraturePaper';
 
 /**
@@ -261,5 +263,24 @@ describe('failures', () => {
     expect(text()).toMatch(/literature service is unavailable/i);
     expect(text()).toMatch(/says nothing about what the extraction contains/i);
     expect([...container.querySelectorAll('button')].some((b) => /try again/i.test(b.textContent ?? ''))).toBe(true);
+  });
+});
+
+describe('the page against the captured backend paper (main c37ff0ca6)', () => {
+  it('shows each claim as uncertain, unreviewed and blocked from publication, as the backend records it', async () => {
+    route(realBackend.paper, { status: 404 });
+    await mount();
+
+    const cards = [...container.querySelectorAll('[data-testid="claim-card"]')];
+    expect(cards).toHaveLength(realBackend.paper.claims.length);
+    const polarity = cards.map((card) => card.querySelector('[data-testid="claim-polarity"]')?.textContent);
+    expect(polarity).toEqual(realBackend.paper.claims.map((claim) => `Polarity · ${claim.polarity}`));
+    for (const card of cards) {
+      expect(card.querySelector('[data-testid="claim-review"]')?.textContent).toBe('Not reviewed');
+      expect(card.querySelector('[data-testid="claim-publication"]')?.textContent).toBe(
+        'Evidence record review: unreviewed · Publication: blocked (awaiting review)',
+      );
+    }
+    expect(text()).not.toMatch(/Publication: published/i);
   });
 });

@@ -96,6 +96,8 @@ export type LedgerEntry = {
   provenance?: {
     source_kind?: string;
     source_id?: string;
+    literature_record_id?: string | null;
+    rs_project_id?: string | null;
     content_hash?: string | null;
     retrieved_at?: string | null;
     collector?: string | null;
