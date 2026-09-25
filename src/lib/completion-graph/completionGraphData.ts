@@ -986,8 +986,10 @@ const calyxVerificationWorkbenchGate: CompletionNode = {
     { kind: 'test', ref: 'src/lib/calyxVerification.test.ts' },
     { kind: 'test', ref: 'src/components/calyx/ScientificSynthesis.test.tsx' },
     { kind: 'test', ref: 'src/lib/naoccGovernedVerificationContinuity.test.ts', note: 'Cross-checks checkCalyxMissionClaim against buildCalyxTurnContext and researchStationCalyxHref together, confirming Research identity stays non-evidentiary while Calyx audits only governed evidence.' },
+    { kind: 'test', ref: 'e2e/calyx-verification-workbench.spec.ts', note: 'Playwright pass (real Chromium, not jsdom) confirmed the Workbench itself, driven through /speak-with-calyx against a running reference backend: opens "Check Calyx", computes the real verdict/tally from the mission the browser actually received (verification_failed, 5 pass / 4 review / 1 fail), renders the withheld-vs-absent excerpt distinction, retained counterevidence, the stated publication objection, and provenance fields verbatim. This is real browser-mechanics evidence for the Workbench, not deployedOperational evidence -- the reference backend is fixture material (see file header), so gateScores are left unchanged pending a pass against a real (non-fixture) mission.' },
   ],
-  nextAction: 'Run a live/browser pass auditing a real (not fixture) Calyx mission claim end to end (2 of 6 gate categories remain unevaluated: browser/e2e and deployed/operational).',
+  nextAction: 'browserEndToEnd and deployedOperational still both require a pass against a real (not fixture) Calyx mission on the actual deployed orchid-calyx-backend, which needs outbound network egress and/or owner-provided backend access this automated lane does not have -- infra/owner-gated, not implementation-gated. e2e/calyx-verification-workbench.spec.ts now proves the Workbench mechanism itself is sound in a real browser; the remaining gap is specifically running that same audit against a real deployed mission.',
+  lastAccomplishment: 'Added e2e/calyx-verification-workbench.spec.ts: real-Chromium Playwright coverage of the Workbench (previously covered only by Vitest/RTL), verified passing locally.',
   lastUpdated: CENSUS_DATE,
   children: [],
 };
