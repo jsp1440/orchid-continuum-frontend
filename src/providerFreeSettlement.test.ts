@@ -212,6 +212,10 @@ describe('the four execution states are distinct', () => {
 
 describe('settlement writes the one authoritative receipt', () => {
   const harness = (nodeId = LEAF) => {
+    // A research mission always declares its deterministic capability; its node
+    // admits nothing else (DETERMINISTIC_ONLY_NODES), so the fixture must too.
+    const issueLabels = ['oc-queued', `oc-node:${nodeId}`,
+      ...(nodeId === 'cap-kg-evidence-gap-research-missions' ? ['oc-cap:nomenclature-evidence-lookup'] : [])];
     const dir = mkdtempSync(join(tmpdir(), 'oc-settle-')); paths.push(dir);
     const bin = join(dir, 'bin'); mkdirSync(bin);
     const gh = join(bin, 'gh');
@@ -228,7 +232,7 @@ if (method === 'PATCH') {
   fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + body + '\\n');
   console.log('{}'); process.exit(0);
 }
-if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 'deterministic work', body: null, labels: [{ name: 'oc-queued' }, { name: 'oc-node:${nodeId}' }] })); process.exit(0); }
+if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 'deterministic work', body: null, labels: ${JSON.stringify(issueLabels.map(name => ({ name })))} })); process.exit(0); }
 console.log('{}');
 `);
     chmodSync(gh, 0o755);
@@ -236,7 +240,7 @@ console.log('{}');
     // The runtime re-derives the snapshot from the real checkout, so the plan
     // has to carry the shas it will actually see.
     const head = spawnSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).stdout.trim();
-    const snapshot = { ...snapshotFor(703, ['oc-queued', `oc-node:${nodeId}`]),
+    const snapshot = { ...snapshotFor(703, issueLabels),
       integrationSha: 'a'.repeat(40), implementationSha: head };
     const plan = makePlan(snapshot, [], NOW);
     writeFileSync(join(planDir, 'plan.json'), JSON.stringify(plan));
