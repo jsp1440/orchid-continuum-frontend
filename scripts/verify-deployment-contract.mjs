@@ -2,9 +2,9 @@
  * Verify the Render deployment contract.
  *
  * Render is the sole production deployment target for Orchid Continuum, so
- * `public/_redirects` is the one routing mechanism that matters. This used to
- * also validate `vercel.json`; that file has been removed along with the rest
- * of the Vercel-specific configuration.
+ * `render.yaml` is the canonical Render service declaration. The checked-in
+ * `public/_redirects` remains a static artifact and a human-readable mirror
+ * of the same route contract, but it is not enough to configure the service.
  *
  * Static-file checks only. It never probes a live deployment.
  */
@@ -17,6 +17,15 @@ const requiredRoutes = [
   '/conservatory/*',
   '/mission-control',
   '/calyx',
+];
+
+const requiredPublishCommands = [
+  'npm ci',
+  'npm run test',
+  'npm run lint',
+  'npm run typecheck',
+  'npm run validate:deployment',
+  'npm run build',
 ];
 
 /** Paths Render must serve as static documents rather than through the SPA. */
@@ -37,10 +46,28 @@ function ruleIndex(redirects, from) {
     .findIndex((line) => !line.trim().startsWith('#') && line.includes(from));
 }
 
+function getRenderBuildCommand(blueprint) {
+  const match = blueprint.match(/^\s*buildCommand:\s*(.+)$/m);
+  return match?.[1]?.trim() ?? '';
+}
+
+function validateOrderedPublishGate(command) {
+  let cursor = 0;
+  for (const required of requiredPublishCommands) {
+    const at = command.indexOf(required, cursor);
+    if (at === -1) {
+      return `Render buildCommand is missing required prepublication step: ${required}`;
+    }
+    cursor = at + required.length;
+  }
+  return null;
+}
+
 async function main() {
-  const [app, redirects] = await Promise.all([
+  const [app, redirects, blueprint] = await Promise.all([
     read('src/App.tsx'),
     read('public/_redirects'),
+    read('render.yaml'),
   ]);
 
   const failures = [];
@@ -53,6 +80,31 @@ async function main() {
 
   if (!/^\/\*\s+\/index\.html\s+200/m.test(redirects)) {
     failures.push('public/_redirects does not contain the SPA fallback');
+  }
+
+  if (!/name:\s*orchid-continuum-frontend\b/.test(blueprint)) {
+    failures.push('render.yaml does not declare the canonical frontend service');
+  }
+  if (!/runtime:\s*static\b/.test(blueprint)) {
+    failures.push('render.yaml does not declare a static-site runtime');
+  }
+  if (!/branch:\s*main\b/.test(blueprint)) {
+    failures.push('render.yaml does not pin the production branch to main');
+  }
+  if (!/staticPublishPath:\s*\.\/dist\b/.test(blueprint)) {
+    failures.push('render.yaml does not publish the Vite dist directory');
+  }
+  if (!/type:\s*rewrite[\s\S]*source:\s*\/\*[\s\S]*destination:\s*\/index\.html/.test(blueprint)) {
+    failures.push('render.yaml does not declare the Render SPA rewrite');
+  }
+
+  const renderBuildCommand = getRenderBuildCommand(blueprint);
+  const publishGateFailure = validateOrderedPublishGate(renderBuildCommand);
+  if (publishGateFailure) {
+    failures.push(publishGateFailure);
+  }
+  if (!renderBuildCommand.includes('&&')) {
+    failures.push('Render buildCommand must fail closed with && between validation steps');
   }
 
   const catchAll = ruleIndex(redirects, '/*');
@@ -80,7 +132,8 @@ async function main() {
   console.log('Render deployment contract valid.');
   console.log(
     `Verified ${requiredRoutes.length} critical client routes, ` +
-      `${requiredStaticRewrites.length} static rewrite(s), and the SPA fallback.`,
+      `${requiredStaticRewrites.length} static rewrite(s), the SPA fallback, ` +
+      'and the ordered fail-closed prepublication validation gate.',
   );
 }
 

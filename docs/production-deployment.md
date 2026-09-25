@@ -32,12 +32,13 @@ This exposes curated chapter and laboratory content while keeping learner sessio
 
 Direct navigation to routes such as `/university/lab`, `/conservatory`, and `/mission-control` must return `index.html` and allow React Router to resolve the route.
 
-The repository contains both:
+The repository contains:
 
-- `public/_redirects` for Netlify-compatible/static hosts;
-- `vercel.json` for Vercel SPA rewrites.
+- `render.yaml`, the canonical Render Static Site service declaration and
+  rewrite configuration;
+- `public/_redirects`, a checked-in mirror of the same static route contract.
 
-Other hosts must configure the equivalent fallback:
+The service must configure the equivalent fallback:
 
 ```text
 /* -> /index.html (HTTP 200 rewrite)

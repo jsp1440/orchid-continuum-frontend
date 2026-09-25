@@ -14,10 +14,12 @@ added without changing this document first.
 | Calyx backend | `https://orchid-calyx-backend.onrender.com` |
 | Public API | `https://orchid-continuum-public-api.onrender.com` |
 
-Routing on Render is defined entirely by `public/_redirects`. Order in that
-file matters: a specific rule placed after the `/*` catch-all never fires.
-`npm run validate:deployment` checks the routes, the static rewrites, and that
-ordering, as a static-file check. It does not probe a live deployment.
+Render service routing is declared in `render.yaml`; `public/_redirects` is
+kept as a checked-in mirror for static-host tooling and review. Order in both
+route lists matters: a specific rule placed after the `/*` catch-all never
+fires. `npm run validate:deployment` checks the React routes, the Render
+Blueprint, the static rewrite mirror, and ordering. It does not probe a live
+deployment.
 
 ### The SPA fallback, and why it matters to API clients
 

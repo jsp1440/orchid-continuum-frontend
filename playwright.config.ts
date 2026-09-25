@@ -47,9 +47,7 @@ export default defineConfig({
         launchOptions: {
           // The image ships Chromium at a fixed path; let Playwright use it
           // rather than downloading a second copy that would not be there.
-          executablePath:
-            process.env.PLAYWRIGHT_CHROMIUM_PATH ||
-            "/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
+          executablePath: process.env.PLAYWRIGHT_CHROMIUM_PATH || undefined,
         },
       },
     },

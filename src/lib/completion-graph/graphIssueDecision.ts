@@ -39,9 +39,199 @@ export const STALE_NODE_DATA_DAYS = 120;
 export type GraphIssueDecision =
   | { action: 'no-admissible-node'; reason: string }
   | { action: 'reuse-existing'; issueNumber: number; reason: string }
-  | { action: 'create'; title: string; body: string; labels: string[]; markerNodeId: string; reason: string }
+  | { action: 'create'; title: string; body: string; labels: string[]; markerNodeId: string; reason: string; packet?: SupervisorTaskPacket }
   | { action: 'fail-closed'; reason: string };
 
+export type SupervisorSourceKind =
+  | 'completion-graph'
+  | 'brain-backlog'
+  | 'failed-validation'
+  | 'dependency-gap'
+  | 'stale-evidence'
+  | 'integration-gap'
+  | 'deterministic-check'
+  | 'improvement-discovery'
+  | 'module-state'
+  | 'ci-evidence'
+  | 'issue';
+
+export type SupervisorLane =
+  | 'frontend'
+  | 'backend'
+  | 'brain-reasoning'
+  | 'taxonomy-data'
+  | 'scientific-validation'
+  | 'literature'
+  | 'media-vision'
+  | 'education'
+  | 'conservatory'
+  | 'research-tools'
+  | 'infrastructure'
+  | 'integration'
+  | 'testing'
+  | 'security-governance'
+  | 'documentation'
+  | 'improvement-discovery';
+
+export type SupervisorEvidenceReference = {
+  kind: 'issue' | 'completion-graph' | 'module-manifest' | 'pull-request' | 'ci';
+  repository: string;
+  reference: string;
+  detail: string;
+};
+
+export type SupervisorTaskPacket = {
+  schema: 'oc.supervisor-task.v1';
+  taskId: string;
+  source: { kind: SupervisorSourceKind; repository: string; reference: string };
+  lane: SupervisorLane;
+  sourceEvidence: SupervisorEvidenceReference[];
+  graphNodeId?: string;
+  targetRepo: string;
+  targetModule: string;
+  capability: string;
+  executionMode: 'deterministic' | 'provider';
+  dependencies: string[];
+  riskClass: 'low' | 'medium' | 'high';
+  ownerGateStatus: 'none' | 'owner-gate' | 'blocked';
+  providerRequirement: 'none' | 'optional' | 'required';
+  validationCriteria: string[];
+  completionEvidenceRequirements: string[];
+  validationContract: {
+    criteria: string[];
+    failClosed: true;
+  };
+  evidenceContract: {
+    schema: 'oc.provider-free-evidence.v1' | 'oc.task-evidence.v1';
+    requiredFields: string[];
+  };
+  deduplication: {
+    fingerprint: string;
+    semanticKey: string;
+  };
+  priority: number;
+  lifecycleState: 'discovered' | 'queued' | 'leased' | 'executing' | 'validating'
+    | 'completed' | 'blocked' | 'owner-gate' | 'parked';
+};
+
+type DeterministicGraphTaskDefinition = {
+  targetRepo: string;
+  targetModule: string;
+  capability: string;
+  lane: SupervisorLane;
+  riskClass: SupervisorTaskPacket['riskClass'];
+  ownerGateStatus: SupervisorTaskPacket['ownerGateStatus'];
+  providerRequirement: SupervisorTaskPacket['providerRequirement'];
+  validationCriteria: string[];
+  completionEvidenceRequirements: string[];
+};
+
+/**
+ * Explicit graph-to-executor bindings are the only way the supervisor may
+ * materialize provider-free work. A graph sentence is never treated as a
+ * capability by inference.
+ */
+export const DETERMINISTIC_GRAPH_TASKS: Readonly<Record<string, DeterministicGraphTaskDefinition>> = Object.freeze({
+  'cap-deployment-contract-validation': {
+    targetRepo: 'jsp1440/orchid-continuum-frontend',
+    targetModule: 'production-release-core',
+    capability: 'schema-validation',
+    lane: 'infrastructure',
+    riskClass: 'low',
+    ownerGateStatus: 'none',
+    providerRequirement: 'none',
+    validationCriteria: [
+      'Run npm run validate:deployment against the checked-out revision.',
+      'Validate only static route and SPA-fallback contract files; do not claim live deployment readiness.',
+    ],
+    completionEvidenceRequirements: [
+      'Record the exact implementation SHA, command, and exit code in an oc.provider-free-evidence.v1 receipt.',
+      'Keep the graph leaf PARTIAL until its separate live/browser gate is owner-authorized and verified.',
+    ],
+  },
+  'cap-completion-graph-engine': {
+    targetRepo: 'jsp1440/orchid-continuum-frontend',
+    targetModule: 'autonomous-control-plane-core',
+    capability: 'test-execution',
+    lane: 'integration',
+    riskClass: 'medium',
+    ownerGateStatus: 'none',
+    providerRequirement: 'none',
+    validationCriteria: [
+      'Run npm test against the current revision and preserve the graph/control-plane test results.',
+      'Treat this as stale-evidence refresh only; it does not certify the separate live-browser observatory gate.',
+    ],
+    completionEvidenceRequirements: [
+      'Record the exact implementation SHA, test result, and zero provider spend in an oc.provider-free-evidence.v1 receipt.',
+      'Keep the graph leaf PARTIAL until its live/browser acceptance action is separately verified.',
+    ],
+  },
+  'cap-homepage-featured-genus': {
+    targetRepo: 'jsp1440/orchid-continuum-frontend',
+    targetModule: 'featured-genus-release-sentinel',
+    capability: 'featured-genus-verification',
+    lane: 'testing',
+    riskClass: 'medium',
+    ownerGateStatus: 'none',
+    providerRequirement: 'none',
+    validationCriteria: [
+      'Run npm run verify:featured-genus against the exact admitted revision.',
+      'Require the sentinel report to prove deployed release identity, media provenance, browser render, and zero provider spend.',
+      'Keep the leaf in validation or repair when the sentinel is red; never infer completion from comments.',
+    ],
+    completionEvidenceRequirements: [
+      'Record the exact implementation SHA, workflow run, lease, sentinel report, exit code, and provider spend.',
+      'Settle only from the repository-owned sentinel evidence; a passing command alone is not product completion.',
+    ],
+  },
+});
+
+function fingerprintFor(parts: string[]): string {
+  let hash = 2166136261;
+  for (const character of parts.join('\\u001f')) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `ocfp1-${(hash >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+export function deterministicGraphTaskFor(node: CompletionNode): SupervisorTaskPacket | null {
+  const definition = DETERMINISTIC_GRAPH_TASKS[node.id];
+  if (!definition) return null;
+  const taskId = `graph:${node.id}:${definition.capability}`;
+  const semanticKey = `${definition.targetRepo}:${node.id}:${definition.capability}`;
+  const criteria = [...definition.validationCriteria];
+  return {
+    schema: 'oc.supervisor-task.v1',
+    taskId,
+    source: {
+      kind: 'completion-graph',
+      repository: definition.targetRepo,
+      reference: node.id,
+    },
+    sourceEvidence: [{
+      kind: 'completion-graph',
+      repository: definition.targetRepo,
+      reference: node.id,
+      detail: 'Canonical completion-graph leaf selected by the supervisor admission planner.',
+    }],
+    graphNodeId: node.id,
+    ...definition,
+    executionMode: 'deterministic',
+    dependencies: [...(node.dependsOn ?? [])],
+    validationContract: { criteria, failClosed: true },
+    evidenceContract: {
+      schema: 'oc.provider-free-evidence.v1',
+      requiredFields: ['taskId', 'implementationSha', 'runId', 'leaseId', 'results', 'providerCalls', 'providerCostUsd'],
+    },
+    deduplication: {
+      fingerprint: fingerprintFor([semanticKey, ...criteria]),
+      semanticKey,
+    },
+    priority: node.priority ?? DEFAULT_PRIORITY,
+    lifecycleState: 'discovered',
+  };
+};
 const PRIORITY_TIER_MAX = [
   { max: 9, tier: 'P0' },
   { max: 19, tier: 'P1' },
@@ -93,15 +283,16 @@ function validateNode(node: CompletionNode, now: string): string[] {
   return problems;
 }
 
-function buildIssueBody(node: CompletionNode, tier: string): string {
-  return [
+function buildIssueBody(node: CompletionNode, tier: string, packet?: SupervisorTaskPacket): string {
+  const body = [
     'This bounded work item was materialized directly from the canonical completion graph because the selected admissible leaf had no live executable issue.',
     '',
     `Graph node: \`${node.id}\` (priority tier ${tier})`,
     `Lane: \`${node.lane ?? 'UNSPECIFIED'}\``,
     '',
     '## Acceptance criteria',
-    node.nextAction,
+    ...(packet?.validationContract.criteria ?? [node.nextAction]),
+    ...(packet ? ['', 'The graph follow-up remains:', node.nextAction] : []),
     '',
     '## Completion discipline',
     '- The completion graph remains authoritative for WHAT work is selected.',
@@ -110,7 +301,21 @@ function buildIssueBody(node: CompletionNode, tier: string): string {
     '- Production deployment, production data/KG mutation, taxonomy activation, publication, credentials, spending, and destructive operations remain owner-gated.',
     '',
     graphNodeMarker(node.id),
-  ].join('\n');
+  ];
+
+  if (packet) {
+    body.push(
+      '',
+      '## Governed task packet',
+      '```json',
+      JSON.stringify(packet, null, 2),
+      '```',
+      `OC-SWARM-CAPABILITY: ${packet.capability}`,
+      'OC-SWARM-PROVIDER-REQUIRED: false',
+    );
+  }
+
+  return body.join('\n');
 }
 
 /**
@@ -156,3 +361,37 @@ export function decideGraphIssueAction(
     reason: `Node ${node.id} (${tier}) has no live tracked issue; materializing a bounded work item from its nextAction.`,
   };
 }
+
+
+/**
+ * Select the graph issue path only for a declared deterministic executor.
+ * Provider-free mode must not turn an arbitrary graph leaf into executable work.
+ */
+export function decideProviderFreeGraphIssueAction(
+  node: CompletionNode | null,
+  openIssues: OpenIssueRef[],
+  now: string,
+): GraphIssueDecision {
+  if (!node) {
+    return { action: 'no-admissible-node', reason: 'No provider-free graph leaf was selected this cycle.' };
+  }
+
+  const packet = deterministicGraphTaskFor(node);
+  if (!packet) {
+    return {
+      action: 'fail-closed',
+      reason: `Refusing to materialize graph node ${node.id}: no explicit provider-free capability binding exists.`,
+    };
+  }
+
+  const decision = decideGraphIssueAction(node, openIssues, now);
+  if (decision.action !== 'create') return decision;
+
+  const queuedPacket: SupervisorTaskPacket = { ...packet, lifecycleState: 'queued' };
+  return {
+    ...decision,
+    body: buildIssueBody(node, priorityTier(node.priority ?? DEFAULT_PRIORITY), queuedPacket),
+    labels: [...decision.labels, `oc-cap:${packet.capability}`],
+    packet: queuedPacket,
+  };
+};

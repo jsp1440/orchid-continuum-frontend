@@ -23,8 +23,13 @@ permissions:
 jobs:
   context-contract:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 20
@@ -38,8 +43,9 @@ jobs:
       matrix:
         issue: ${{ fromJSON(inputs.issues_json) }}
     uses: ./.github/workflows/orchid-budgeted-completion-lane.yml
+    secrets: inherit
     with:
       issue_number: ${{ format('{0}', matrix.issue) }}
       wave_hash: ${{ inputs.wave_hash }}
       artifact_name: ${{ inputs.artifact_name }}
-      provider_authorized: false
+      provider_authorized: true

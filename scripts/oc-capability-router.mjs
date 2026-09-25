@@ -57,7 +57,8 @@ export const SHARED_CAPABILITIES = Object.freeze(
  * repository claiming to do locally what the Continuum has agreed needs a model;
  * the test rejects that, and so does `assertLocalExecutorsAreDeterministic`.
  *
- * `typecheck-execution`, `route-verification` and `build-verification` are
+ * `typecheck-execution`, `route-verification`, `featured-genus-verification`
+ * and `build-verification` are
  * frontend-local: they have no backend or Brain counterpart because no other
  * repository has a TypeScript project, a router or a Vite build to check. They
  * are deterministic by construction — each is an npm script in this repository.
@@ -68,7 +69,11 @@ export const LOCAL_EXECUTORS = Object.freeze({
   'typecheck-execution': 'npm run typecheck',
   'schema-validation': 'npm run validate:deployment',
   'route-verification': 'npm run verify:routes',
+  'render-route-verification': 'npm run verify:render-routes',
+  'featured-genus-verification': 'npm run verify:featured-genus',
   'build-verification': 'npm run build',
+  'research-matrix-browser-validation': 'npm run verify:research-matrix-browser',
+  'conservatory-browser-validation': 'npm run verify:conservatory-browser',
 });
 
 /** Deterministic capabilities, whether or not this repository can run them. */

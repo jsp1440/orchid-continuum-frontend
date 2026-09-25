@@ -1,10 +1,11 @@
-name: Orchid Continuous Completion (NO API MODE)
+name: Orchid Continuous Completion
 
 # Canonical scheduler. Compatibility entrypoints delegate here; Portfolio
 # Steward remains a separate queue-planning role, outside implementation capacity.
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Keep the five-minute cadence off the top-of-hour Actions load spike.
+    - cron: '2/5 * * * *'
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, closed]
   issues:
@@ -20,7 +21,7 @@ permissions:
 
 env:
   MAX_ACTIVE_LANES: 8
-  PROVIDER_AUTHORIZED: 'false'
+  PROVIDER_AUTHORIZED: 'true'
 
 jobs:
   reconcile:
@@ -44,9 +45,42 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts reconcile
 
-  plan:
+  supervisor:
+    name: Discover governed work and refill the bounded reservoir
     needs: reconcile
-    if: always() && (needs.reconcile.result == 'success' || needs.reconcile.result == 'skipped')
+    if: always() && github.event_name != 'pull_request' &&
+      (needs.reconcile.result == 'success' || needs.reconcile.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+      pull-requests: read
+    concurrency:
+      group: orchid-supervisor-discovery-${{ github.repository }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - run: npm ci --ignore-scripts
+      - name: Scan Brain, backend, frontend, graph, and governed issue state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PROVIDER_AUTHORIZED: 'false'
+        run: npx --no-install tsx scripts/oc-supervisor-discovery.ts
+      - name: Preserve the durable supervisor discovery packet
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oc-supervisor-${{ github.run_attempt }}
+          path: .oc-wave/supervisor-discovery.json
+          if-no-files-found: error
+
+  plan:
+    needs: [reconcile, supervisor]
+    if: always() &&
+      (needs.reconcile.result == 'success' || needs.reconcile.result == 'skipped') &&
+      (needs.supervisor.result == 'success' || needs.supervisor.result == 'skipped')
     name: Graph admission and shared wave
     runs-on: ubuntu-latest
     concurrency:
@@ -84,6 +118,7 @@ jobs:
       actions: write
       id-token: write
     uses: ./.github/workflows/orchid-deterministic-dispatch.yml
+    secrets: inherit
     with:
       issues_json: ${{ needs.plan.outputs.issues }}
       wave_hash: ${{ needs.plan.outputs.wave_hash }}

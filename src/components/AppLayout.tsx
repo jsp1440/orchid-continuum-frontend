@@ -12,6 +12,7 @@ import HomeAtlasContinuum from './orchid/HomeAtlasContinuum';
 import PublicCalyxGuide from './orchid/PublicCalyxGuide';
 import HomepageStewardshipClose from './orchid/HomepageStewardshipClose';
 import Footer from './orchid/Footer';
+import ActiveDevelopmentBanner from './orchid/ActiveDevelopmentBanner';
 
 type SectionBoundaryProps = {
   name: string;
@@ -72,6 +73,7 @@ const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">
+      <div className="pt-16"><ActiveDevelopmentBanner /></div>
       <Navbar />
 
       <main>
