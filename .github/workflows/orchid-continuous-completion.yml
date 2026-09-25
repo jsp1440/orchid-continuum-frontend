@@ -68,6 +68,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PROVIDER_AUTHORIZED: 'false'
+          # Admit the Calyx evidence-gap reserve plan (GET
+          # /api/runner/knowledge-gaps/reserve-plan): at most 3 bounded,
+          # review-required research missions per pass, no publication, no KG or
+          # taxonomy mutation, locality-gated domains excluded. Fails closed and
+          # files nothing when the backend plan is unavailable.
+          OC_ADMIT_BACKEND_RESERVE: '1'
         run: npx --no-install tsx scripts/oc-supervisor-discovery.ts
       - name: Preserve the durable supervisor discovery packet
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
