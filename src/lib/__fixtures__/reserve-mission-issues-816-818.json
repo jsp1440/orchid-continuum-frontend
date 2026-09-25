@@ -1,0 +1,49 @@
+{
+  "_capture": {
+    "source": "GitHub REST issues API via the GitHub MCP issue_read tool (method get), jsp1440/orchid-continuum-frontend",
+    "captured_at": "2026-09-25",
+    "filed_by": "github-actions[bot], scheduled supervisor run 36174667846 (backend reserve pass)",
+    "note": "title, state, labels and body are copied verbatim; the bodies carry no OC-GRAPH-NODE or OC-SWARM-CAPABILITY line"
+  },
+  "issues": [
+    {
+      "number": 816,
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/816",
+      "created_at": "2026-09-25T18:39:18Z",
+      "title": "Research nomenclature gap for Robiquetia andamanica",
+      "state": "open",
+      "labels": [
+        "oc-p2",
+        "oc-prepared",
+        "oc-discovered"
+      ],
+      "body": "<!-- oc-queue-bridge:jsp1440/orchid-calyx-backend|brain-knowledge-gap|objective:calyx-evidence-gap:8deaf83b647b23b922fa0065 -->\n\nSource: jsp1440/orchid-calyx-backend / brain-knowledge-gap / objective:calyx-evidence-gap:8deaf83b647b23b922fa0065\n\nPrepared from the canonical backend reserve planner. Material fingerprint: 8deaf83b647b23b922fa006538df0ee21f65eacda0551968705aa92b0a68d6c1\nSemantic key: calyx-evidence-gap:100:nomenclature\nCanonical bounded research mission:\n- Taxon ID: 100\n- Taxon name: Robiquetia andamanica\n- Domain: nomenclature\n- Research question: Which published sources give nomenclatural evidence (accepted name, synonymy, protologue publication and year, common names, infrageneric placement, etymology) for Robiquetia andamanica? The Orchid Continuum knowledge graph holds no nomenclature evidence for this taxon. No federated source in the knowledge graph covers it yet. Any evidence found enters as provisional candidate evidence for human review; nothing is published and the knowledge graph is not changed.\n- Human review required: yes\n- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve"
+    },
+    {
+      "number": 817,
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/817",
+      "created_at": "2026-09-25T18:39:21Z",
+      "title": "Research nomenclature gap for Gastrochilus calceolaris",
+      "state": "open",
+      "labels": [
+        "oc-p2",
+        "oc-prepared",
+        "oc-discovered"
+      ],
+      "body": "<!-- oc-queue-bridge:jsp1440/orchid-calyx-backend|brain-knowledge-gap|objective:calyx-evidence-gap:e94120766fdf22482bb7f64d -->\n\nSource: jsp1440/orchid-calyx-backend / brain-knowledge-gap / objective:calyx-evidence-gap:e94120766fdf22482bb7f64d\n\nPrepared from the canonical backend reserve planner. Material fingerprint: e94120766fdf22482bb7f64de1a7bd601be09469cfda24a2d5639e5fae5a587f\nSemantic key: calyx-evidence-gap:1:nomenclature\nCanonical bounded research mission:\n- Taxon ID: 1\n- Taxon name: Gastrochilus calceolaris\n- Domain: nomenclature\n- Research question: Which published sources give nomenclatural evidence (accepted name, synonymy, protologue publication and year, common names, infrageneric placement, etymology) for Gastrochilus calceolaris? The Orchid Continuum knowledge graph holds no nomenclature evidence for this taxon. No federated source in the knowledge graph covers it yet. Any evidence found enters as provisional candidate evidence for human review; nothing is published and the knowledge graph is not changed.\n- Human review required: yes\n- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve"
+    },
+    {
+      "number": 818,
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/818",
+      "created_at": "2026-09-25T18:39:24Z",
+      "title": "Research nomenclature gap for Gastrochilus fargesii",
+      "state": "open",
+      "labels": [
+        "oc-p2",
+        "oc-prepared",
+        "oc-discovered"
+      ],
+      "body": "<!-- oc-queue-bridge:jsp1440/orchid-calyx-backend|brain-knowledge-gap|objective:calyx-evidence-gap:fb623bfbb52963ce8ad6a780 -->\n\nSource: jsp1440/orchid-calyx-backend / brain-knowledge-gap / objective:calyx-evidence-gap:fb623bfbb52963ce8ad6a780\n\nPrepared from the canonical backend reserve planner. Material fingerprint: fb623bfbb52963ce8ad6a780f86c1674b90570fe33c83bbb46548b1f781ebbbd\nSemantic key: calyx-evidence-gap:10:nomenclature\nCanonical bounded research mission:\n- Taxon ID: 10\n- Taxon name: Gastrochilus fargesii\n- Domain: nomenclature\n- Research question: Which published sources give nomenclatural evidence (accepted name, synonymy, protologue publication and year, common names, infrageneric placement, etymology) for Gastrochilus fargesii? The Orchid Continuum knowledge graph holds no nomenclature evidence for this taxon. No federated source in the knowledge graph covers it yet. Any evidence found enters as provisional candidate evidence for human review; nothing is published and the knowledge graph is not changed.\n- Human review required: yes\n- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve"
+    }
+  ]
+}

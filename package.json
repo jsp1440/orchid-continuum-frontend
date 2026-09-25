@@ -20,6 +20,7 @@
     "verify:featured-genus": "node scripts/featured-genus-render-sentinel.mjs",
     "verify:research-matrix-browser": "playwright test e2e/research-matrix-journey.spec.ts",
     "verify:conservatory-browser": "playwright test e2e/conservatory-journey.spec.ts",
+    "research:nomenclature-lookup": "node scripts/oc-nomenclature-lookup.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },

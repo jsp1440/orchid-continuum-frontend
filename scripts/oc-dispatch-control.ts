@@ -5,6 +5,7 @@ import type { CompletionNode } from '../src/lib/completion-graph/types';
 import { buildWaveContext } from './oc-wave-context.mjs';
 import { BLOCKED_LABELS, MAX_ACTIVE_LANES, selectLanes } from './oc-multilane-selector.mjs';
 import { decideBudget } from './oc-budget-governor.mjs';
+import { deriveReserveMissionBinding } from './oc-reserve-mission-binding.mjs';
 
 export { MAX_ACTIVE_LANES };
 export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }> };
@@ -70,6 +71,11 @@ export function declaredNodesByIssue(issues: Issue[]): Record<number, string[]> 
       ...labelsOf(issue).map(label => NODE_LABEL.exec(label)?.[1]?.toLowerCase()),
       NODE_BODY.exec(issue.body || '')?.[1]?.toLowerCase(),
     ].filter((nodeId): nodeId is string => nodeId !== undefined);
+    // Legacy reserve missions carry no marker, only the repository's fixed
+    // supervisor-source line and mission block; derive from exactly those.
+    // Derivation returns null whenever an explicit node/capability is declared.
+    const derived = deriveReserveMissionBinding(issue)?.nodeId;
+    if (nodeIds.length === 0 && derived) nodeIds.push(derived);
     if (nodeIds.length > 0) declared[issue.number] = [...new Set(nodeIds)];
   }
   return declared;

@@ -370,6 +370,36 @@ console.log('{}');
     expect(labels).not.toContain('oc-owner-gate');
   });
 
+  it('settles a passing nomenclature evidence lookup to validation, never done', () => {
+    // A machine-retrieved GBIF report is evidence for human scientific review,
+    // not acceptance. No fixed acceptance validator exists for this command, so
+    // even a report carrying an acceptance-shaped object stays validating.
+    const h = harness('cap-kg-evidence-gap-research-missions');
+    h.writeEvidence({
+      outcome: 'done',
+      results: [{ command: 'npm run research:nomenclature-lookup', exit_code: 0 }],
+      acceptance: { kind: 'featured-genus-deployed', node_id: 'cap-kg-evidence-gap-research-missions', issue: 703, passed: true, release_sha: 'a'.repeat(40) },
+    });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({ issue: 703, outcome: 'provider_free_done', providerCalls: 0 });
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-validating');
+    expect(labels).not.toContain('oc-done');
+    expect(labels).not.toContain('oc-owner-gate');
+  });
+
+  it('parks a failed nomenclature lookup for repair rather than an empty success', () => {
+    const h = harness('cap-kg-evidence-gap-research-missions');
+    h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run research:nomenclature-lookup', exit_code: 3 }] });
+    h.settle();
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-repair');
+    expect(labels).not.toContain('oc-validating');
+    expect(labels).not.toContain('oc-done');
+  });
+
   it('keeps both owner-gate browser contract nodes admissible in the committed graph', () => {
     // The mapping above is keyed on the ADMITTED node. A node whose graph
     // status is OWNER_ACTION is removed from planning outright
