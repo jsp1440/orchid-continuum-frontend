@@ -578,6 +578,20 @@
       "reservedUsd": 0.5,
       "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "85d72ddec2941883f3c77696b834d7a5d349525b5e0802cdfde31a4ce4b39527",
+      "issue": 784,
+      "nodeId": "cap-deployment-contract-validation",
+      "fingerprint": "0577ab661bd5be8c958eec9f8edf68d4059e49a06d94c60df673c0eafd80054b",
+      "waveHash": "b3d51f18b2e894e68fa5cd74bbe602f49971a4baa025ee3c0d1cea01d0238d5b",
+      "runId": "36155059069",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T17:08:18.875Z",
+      "reservedUsd": 0,
+      "implementationSha": "046b6a147955ac1652edd1c546460aa2a98167d1",
+      "lane": "provider-free",
+      "state": "reserved"
     }
   ]
 }
