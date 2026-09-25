@@ -83,10 +83,56 @@ export function lineageFor(issue: number, prs: Pull[]) {
     // work. Only affirmative declarations count, not incidental prose/titles.
     new RegExp(`^implement(?:s|ed)?\\s+(?:issue\\s+)?(?:jsp1440/orchid-continuum-frontend)?#${issue}\\b`, 'mi').test(pr.body || ''));
 }
+/**
+ * How many abandoned attempts an issue may accumulate before it stops being
+ * re-admitted on its own.
+ *
+ * Re-admission after an abandoned attempt has to be bounded or it becomes its
+ * own loop: the lane opens a PR, the PR is closed, the issue is admissible
+ * again, forever. Three is enough for a transient failure and few enough that a
+ * genuinely rejected approach stops taking lanes and becomes visible in the
+ * starvation report instead.
+ */
+export const MAX_ABANDONED_ATTEMPTS = 3;
+
+/**
+ * What a PR lineage means for admission, which is not the same as how many PRs
+ * it contains.
+ *
+ * Three states, and only two of them are durable work:
+ *
+ * - **in flight** — an open PR. A second attempt must not start.
+ * - **delivered** — a merged PR. The work is in; the issue needs settling
+ *   against current main, not redoing.
+ * - **abandoned** — closed without merging. Nothing is in flight and nothing
+ *   was delivered.
+ *
+ * The rule this replaced was `lineage.length > 0`, which counted an abandoned
+ * attempt as durable work. That is a one-way door with no label on it: the
+ * issue still reads `oc-queued` to a person and still counts in the queued
+ * inventory, while `selectLanes` can never admit it again and nothing will ever
+ * look at it. On 2026-09-24 the live plan step named #296 (lineage #303 closed)
+ * and #308 (lineage #312 closed) in its STARVED report every five minutes,
+ * alongside eight free lanes and nothing admitted.
+ */
+export function lineageDisposition(lineage: Pull[]) {
+  const inFlight = lineage.filter(pr => pr.state === 'open');
+  const delivered = lineage.filter(pr => pr.state !== 'open' && pr.merged === true);
+  const abandoned = lineage.filter(pr => pr.state !== 'open' && pr.merged !== true);
+  return {
+    inFlight, delivered, abandoned,
+    attemptsExhausted: abandoned.length >= MAX_ABANDONED_ATTEMPTS,
+    // Durable means "work is in flight or already delivered", plus the bound
+    // above so repeated abandonment stops rather than cycles.
+    durable: inFlight.length > 0 || delivered.length > 0
+      || abandoned.length >= MAX_ABANDONED_ATTEMPTS,
+  };
+}
+
 function eligibleIssues(snapshot: Snapshot) {
   return snapshot.issues.map(issue => {
     const lineage = lineageFor(issue.number, snapshot.prs);
-    return { ...issue, hasDurablePr: lineage.length > 0,
+    return { ...issue, hasDurablePr: lineageDisposition(lineage).durable,
       repairablePr: lineage.length === 1 && lineage[0].state === 'open', portfolioSteward: steward(issue) };
   });
 }
@@ -175,13 +221,20 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
     if (blocking) return `the \`${blocking}\` label`;
     if (/^OC-AUTO-HOLD:\s*true\s*$/m.test(issue.body || '')) return 'an `OC-AUTO-HOLD: true` marker in its body';
     const lineage = lineageFor(issue.number, snapshot.prs);
-    if (lineage.length > 0 && !(labels.includes('oc-repair') && lineage.length === 1 && lineage[0].state === 'open')) {
-      // Any lineage holds it, not only an open one. A single merged PR is the
-      // commonest case and the one the old text told the operator to go and
+    const disposition = lineageDisposition(lineage);
+    if (disposition.durable && !(labels.includes('oc-repair') && lineage.length === 1 && lineage[0].state === 'open')) {
+      // Durable lineage holds it, not merely any lineage. A single merged PR is
+      // the commonest case and the one the old text told the operator to go and
       // close -- there is nothing open to close, and the lane will never pick
       // the issue up again on its own.
       const state = (pr: Pull) => pr.state === 'open' ? 'open' : pr.merged ? 'merged' : 'closed';
       const named = lineage.map(pr => `#${pr.number} (${state(pr)})`).join(', ');
+      if (disposition.inFlight.length === 0 && disposition.delivered.length === 0) {
+        // Every attempt was abandoned and the bound is spent. Say the number,
+        // because "it is held" without it reads as a rule nobody can act on.
+        return `${disposition.abandoned.length} abandoned attempt(s) ${named} and no merged or open PR; ` +
+          `re-admission stops at ${MAX_ABANDONED_ATTEMPTS}, so this needs a decision rather than another lane`;
+      }
       if (lineage.length === 1 && lineage[0].merged) {
         // The operator-relevant fact, and the one the old wording hid: there is
         // no open PR to go and close, the work is already in, and the lane will

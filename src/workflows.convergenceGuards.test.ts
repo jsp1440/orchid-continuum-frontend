@@ -32,7 +32,12 @@ describe('continuous completion convergence guards', () => {
     expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
     snapshot.issues[0].labels.push({ name: 'oc-repair' });
     expect(makePlan(snapshot, [], now, root).leaves[0]).toMatchObject({ issueNumber: 11, repairPr: 90, repairBranch: 'repair-11' });
+    // Merged, not merely closed: a merged lineage is delivered work, so the
+    // repair path stops. A closed-unmerged PR is an abandoned attempt and is
+    // re-admissible up to MAX_ABANDONED_ATTEMPTS, which the dispatch-control
+    // suite covers directly.
     snapshot.prs[0].state = 'closed';
+    snapshot.prs[0].merged = true;
     expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
   });
 

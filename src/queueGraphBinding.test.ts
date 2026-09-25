@@ -663,18 +663,31 @@ describe('the reason is the rule that actually decides', () => {
     expect(reasonFor(plan, 907)).not.toContain('#908');
   });
 
-  it('holds an oc-repair issue whose single PR is closed, which is the live case', () => {
-    // #296 and #523 are both `oc-repair` with one CLOSED PR, so two of the five
-    // lines the live run printed take this branch -- and dropping the
-    // `state === 'open'` sub-condition left the suite green.
+  it('releases an oc-repair issue whose single PR was closed unmerged, which was the live starvation', () => {
+    // #296 and #308 were `oc-repair` with one CLOSED, unmerged PR, and the live
+    // run printed them as pending-and-unreachable every five minutes. One
+    // abandoned attempt is not durable work: nothing is in flight, nothing was
+    // delivered, and holding it removed the issue from the portfolio for good.
     const plan = makePlan(base(
       [{ number: 296, state: 'open', title: 't', body: null,
          labels: [{ name: 'oc-queued' }, { name: 'oc-repair' }] }],
       [{ number: 303, state: 'closed', title: 'Closes #296.', body: 'Closes #296.', head: { ref: 'f' } }],
     ));
 
-    expect(reasonFor(plan, 296)).toContain('#303 (closed)');
-    expect(reasonFor(plan, 296)).toContain('only a single OPEN PR');
+    // No lineage reason holds it any more; what it still lacks is a graph node.
+    expect(reasonFor(plan, 296)).toBeUndefined();
+    expect(plan.unboundQueued).toContain(296);
+  });
+
+  it('still names the lineage branch for an oc-repair issue whose PR is merged', () => {
+    const plan = makePlan(base(
+      [{ number: 523, state: 'open', title: 't', body: null,
+         labels: [{ name: 'oc-queued' }, { name: 'oc-repair' }] }],
+      [{ number: 531, state: 'closed', merged: true, title: 'Closes #523.', body: 'Closes #523.', head: { ref: 'f' } }],
+    ));
+
+    expect(reasonFor(plan, 523)).toContain('#531 (merged)');
+    expect(reasonFor(plan, 523)).toContain('already merged');
   });
 
   it('admits an oc-repair issue whose single PR is open', () => {
@@ -698,7 +711,7 @@ describe('the reason is the rule that actually decides', () => {
   it('reports an oc-prepared issue, not only an oc-queued one', () => {
     const plan = makePlan(base(
       [{ number: 911, state: 'open', title: 't', body: null, labels: [{ name: 'oc-prepared' }] }],
-      [{ number: 912, state: 'closed', title: 'Closes #911.', body: 'Closes #911.', head: { ref: 'f' } }],
+      [{ number: 912, state: 'closed', merged: true, title: 'Closes #911.', body: 'Closes #911.', head: { ref: 'f' } }],
     ));
 
     expect(reasonFor(plan, 911)).toContain('#912');
@@ -724,7 +737,7 @@ describe('the reason is the rule that actually decides', () => {
           labels: [{ name: 'oc-queued' }, { name: 'oc-node:gate-journey-research-matrix' }] },
         { number: 906, state: 'open', title: 't', body: null, labels: [{ name: 'oc-queued' }] },
       ],
-      [{ number: 909, state: 'closed', title: 'Closes #906.', body: 'Closes #906.', head: { ref: 'f' } }],
+      [{ number: 909, state: 'closed', merged: true, title: 'Closes #906.', body: 'Closes #906.', head: { ref: 'f' } }],
     );
 
     const narrowed = makePlan(snapshot, [], NOW, undefined, 905);
@@ -847,8 +860,8 @@ describe('the numbers the lane prints about itself come from the lane', () => {
     const snapshot = snapshotOf(
       [queued(801), queued(802), queued(803), queued(804), queued(805)],
       [
-        { number: 901, state: 'closed', title: 'Closes #804.', body: 'Closes #804.', head: { ref: 'a' } },
-        { number: 902, state: 'closed', title: 'Closes #805.', body: 'Closes #805.', head: { ref: 'b' } },
+        { number: 901, state: 'closed', merged: true, title: 'Closes #804.', body: 'Closes #804.', head: { ref: 'a' } },
+        { number: 902, state: 'closed', merged: true, title: 'Closes #805.', body: 'Closes #805.', head: { ref: 'b' } },
       ],
     );
     const plan = makePlan(snapshot, [], NOW);
