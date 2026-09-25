@@ -649,6 +649,29 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     expect(run.filed.every((f) => f.labels.includes('oc-prepared') && f.labels.includes('oc-discovered'))).toBe(true);
   });
 
+  // #816-#818 settled to oc-validating (awaiting human review) on 2026-09-25 and
+  // then held the whole depth, so no further mission was ever filed.
+  it('does not let reserve missions awaiting review (oc-validating) consume the depth, but counts them at the ceiling', async () => {
+    const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
+    const fixture = (await import('../__fixtures__/reserve-mission-issues-816-818.json')).default as {
+      issues: Array<{ number: number; title: string; body: string }>;
+    };
+    const settled = fixture.issues.map((issue) => ({
+      number: issue.number, repository: REPO, state: 'open' as const, title: issue.title,
+      body: issue.body, labels: ['oc-validating', 'oc-p2', 'oc-discovered'],
+    }));
+    const io = harness();
+    const run = await materializeBackendReservePlan(settled, {
+      enabled: true, baseUrl: 'https://calyx.test', fingerprintIndex: emptyIndex,
+      fetchImpl: (async () => json(capturedPlan)) as unknown as typeof fetch, ...io,
+    });
+    if (!run.enabled) throw new Error('expected enabled run');
+    expect(run.failedClosed).toBeNull();
+    expect(run.reserveSlots?.preparedOpenCount).toBe(0);
+    expect(run.reserveSlots?.openReserveIssues).toBe(3);
+    expect(run.filed).toHaveLength(3);
+  });
+
   it('still counts executable open lineages against the depth and records why it filed nothing', async () => {
     const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
     const executable = heldLegacy.slice(0, 3).map((issue) => ({ ...issue, labels: ['oc-prepared', 'oc-p2'] }));

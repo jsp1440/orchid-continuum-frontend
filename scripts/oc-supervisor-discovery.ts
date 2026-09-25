@@ -486,7 +486,12 @@ export function readReserveFingerprintIndex(
  * `oc-blocked`, filled the whole reserve depth of 3 and the first enabled pass
  * filed nothing from a `refill_planned` plan of 3 proposals.
  */
-const HELD_LINEAGE_LABELS = new Set(['oc-blocked', 'oc-owner-gate', 'oc-publication-hold', 'oc-done']);
+// `oc-validating`: the lane delivered its report and the issue now waits on
+// human scientific review. It is finished executable work, not prepared depth;
+// counting it froze the reserve after #816-#818 settled (2026-09-25). The open
+// ceiling (BACKEND_RESERVE_OPEN_CEILING) still counts it, so issues awaiting
+// review can never exceed that bound.
+const HELD_LINEAGE_LABELS = new Set(['oc-blocked', 'oc-owner-gate', 'oc-publication-hold', 'oc-done', 'oc-validating']);
 
 export function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] {
   return issues
