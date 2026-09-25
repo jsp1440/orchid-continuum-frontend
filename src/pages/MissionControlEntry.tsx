@@ -1,6 +1,7 @@
-import { Database, Gauge, Inbox } from 'lucide-react';
+import { Activity, Database, Gauge, Inbox } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import IntelligenceCenter from './IntelligenceCenter';
+import LiveCompletionLedger from './LiveCompletionLedger';
 import MissionControl from './MissionControl';
 import TaxonomyOperations from './TaxonomyOperations';
 import TaxonomyReleases from './TaxonomyReleases';
@@ -18,6 +19,10 @@ export default function MissionControlEntry() {
     return <IntelligenceCenter />;
   }
 
+  if (view === 'live-ledger') {
+    return <LiveCompletionLedger />;
+  }
+
   if (view === 'taxonomy-releases') {
     return <TaxonomyReleases />;
   }
@@ -30,6 +35,13 @@ export default function MissionControlEntry() {
     <>
       <MissionControl />
       <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3">
+        <Link
+          to="/mission-control?view=live-ledger"
+          className="inline-flex items-center gap-2 rounded-full border border-emerald-300/45 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-100 shadow-2xl transition hover:bg-[#173823]"
+          aria-label="Open Live Completion Ledger"
+        >
+          <Activity className="h-4 w-4" /> Live Completion Ledger
+        </Link>
         <Link
           to="/mission-control?view=taxonomy-operations"
           className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/50 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f6dc82] shadow-2xl transition hover:bg-[#173823]"
