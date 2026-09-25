@@ -439,6 +439,22 @@ async function main() {
       /^[a-f0-9]{40}$/.test(acceptance.release_sha || '') &&
       (!expectedReleaseSha || acceptance.expected_release_sha === expectedReleaseSha) &&
       (!expectedReleaseSha || acceptance.release_sha === expectedReleaseSha);
+
+    // Some fixed browser validators prove the bounded local product contract but
+    // deliberately cannot prove production deployment. Their strongest honest
+    // autonomous transition is therefore OWNER GATE, not done and not an
+    // indefinite validating loop. This mapping is repository-owned and exact:
+    // issue prose cannot select a command or invent a graph node.
+    const ownerGateBrowserContracts: Record<string, string> = {
+      'npm run verify:research-matrix-browser': 'gate-journey-research-matrix',
+      'npm run verify:conservatory-browser': 'cap-conservatory-collection',
+    };
+    const ownerGateCommand = (evidence?.results ?? []).find(result =>
+      result.exit_code === 0 &&
+      typeof result.command === 'string' &&
+      ownerGateBrowserContracts[result.command] === admitted.nodeId,
+    )?.command;
+    const ownerGateAccepted = outcome === 'provider_free_done' && Boolean(ownerGateCommand);
     const settledOutcome = accepted ? 'done' : outcome;
     // Written FIRST, before the relabel and before the ledger transition. Both
     // of those call out, and either can throw: a fencing-token mismatch, ledger
@@ -454,6 +470,16 @@ async function main() {
       evidence: evidence ?? (rejected || 'absent'),
       ...(contradicted ? { contradicted } : {}),
       ...(accepted ? { acceptance } : {}),
+      ...(ownerGateAccepted ? {
+        acceptance: {
+          kind: 'provider-free-browser-contract',
+          node_id: admitted.nodeId,
+          issue: number,
+          passed: true,
+          command: ownerGateCommand,
+          disposition: 'owner-gate',
+        },
+      } : {}),
     });
     // Reconciliation releases are deliberately idempotent. Worker settlement
     // still requires an active fenced lease at the CAS, before changing labels.
@@ -480,6 +506,7 @@ async function main() {
     // implementation changes and all owner/admission holds still permit it.
     // Same-revision failures remain parked and successful work stays deduped.
     const next = settledOutcome === 'done' ? ['oc-done']
+      : ownerGateAccepted ? ['oc-owner-gate']
       : outcome === 'provider_free_done' ? ['oc-validating']
       : outcome === 'provider_free_failed' ? ['oc-repair'] : ['oc-queued'];
     api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
