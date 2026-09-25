@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 3.5,
+  "programSpent": 4,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 1.5
+    "2026-09-25": 2
   },
   "leases": [
     {
@@ -473,6 +473,19 @@
       "reservedUsd": 0,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "lane": "provider-free",
+      "state": "reserved"
+    },
+    {
+      "id": "8b38e29ea3fb0bd772e4c653be2f189f4cf3fc6f9caf8b9f273356640db1a8a6",
+      "issue": 776,
+      "nodeId": "gate-atlas-research-handoff",
+      "fingerprint": "937bf0be92100f055fae6493aae98d3ca345553433143127ecee5ff75dfbc64a",
+      "waveHash": "a029956f63804a0c5fd881f5013f7cf6f09d8fef303851f0a5f340d81c131e9b",
+      "runId": "36154233039",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-25T16:59:42.597Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
       "state": "reserved"
     }
   ]
