@@ -116,7 +116,9 @@ export function discoverGraphIssues(
   const candidates: GraphDiscoveryCandidate[] = [];
 
   const index = options.fingerprintIndex;
-  if (!index.available) {
+  // `=== false`, not `!`: the app tsconfig does not enable strictNullChecks,
+  // and truthiness alone does not narrow a discriminated union there.
+  if (index.available === false) {
     return {
       schema: 'oc.graph-discovery.v1',
       candidates,
