@@ -167,16 +167,37 @@ export function runningCount(snapshot: Snapshot, leases: Lease[]) {
     ...runningLabelledIssues(snapshot.issues).map(i => i.number),
   ]).size;
 }
+/**
+ * Graph nodes whose work only a deterministic executor may do.
+ *
+ * `cap-kg-evidence-gap-research-missions` is scientific evidence retrieval: its
+ * one executor is the name-only GBIF lookup. The paid lane is a code-authoring
+ * worker with no retrieval tools, so a mission routed there could only write
+ * code or answer from model memory, and the second is fabricated evidence. On
+ * 2026-09-25 two issues bound to this node routed provider-lane: #825 (a
+ * morphology mission, no deterministic capability) and #820 (a duplicate
+ * `open-ended-code-authoring` issue). Budget exhaustion hid both; the next
+ * provider slot would have admitted one. An issue bound to such a node is
+ * admissible only when it routes provider-free; otherwise it stays queued and
+ * is reported, never paid for.
+ */
+export const DETERMINISTIC_ONLY_NODES = new Set(['cap-kg-evidence-gap-research-missions']);
+function requiresDeterministicExecutor(issue: Issue, declared: Record<number, string[]>) {
+  return (declared[issue.number] ?? []).some(nodeId => DETERMINISTIC_ONLY_NODES.has(nodeId));
+}
 function admission(snapshot: Snapshot, queued: number[], now: string, root: CompletionNode, running = 0, occupiedNodeIds: string[] = [],
   providerCapacity: ProviderCapacity | null = null) {
   const issues = eligibleIssues(snapshot);
+  const declared = declaredNodesByIssue(snapshot.issues);
   // Filter first, rank with the canonical #301/#313 scheduler second. Scan every
   // eligible issue (not just the first eight in GitHub's API ordering).
-  const allEligible = issues.filter(issue => selectLanes({ issues: [issue] }).selected.length > 0).map(i => i.number);
+  const allEligible = issues.filter(issue => selectLanes({ issues: [issue] }).selected.length > 0)
+    .filter(issue => !requiresDeterministicExecutor(issue, declared) || laneClassOf(issue) === 'provider-free')
+    .map(i => i.number);
   const admissible = queued.filter(i => allEligible.includes(i));
   return buildGraphDispatchPlan({ maxActiveLanes: MAX_ACTIVE_LANES, runningCount: running,
     queuedIssueNumbers: admissible, openWorkRefs: openRefs(snapshot, issues), now, occupiedNodeIds,
-    declaredNodesByIssue: declaredNodesByIssue(snapshot.issues),
+    declaredNodesByIssue: declared,
     ...(providerCapacity === null ? {} : {
       providerLaneIssues: admissible.filter(number => laneClassOf(snapshot.issues.find(i => i.number === number)!) === 'provider'),
       providerSlots: providerCapacity.slots,
@@ -399,6 +420,9 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
     const blocking = labels.find(l => BLOCKED_LABELS.has(l));
     if (blocking) return `the \`${blocking}\` label`;
     if (/^OC-AUTO-HOLD:\s*true\s*$/m.test(issue.body || '')) return 'an `OC-AUTO-HOLD: true` marker in its body';
+    if (requiresDeterministicExecutor(issue, declaredNodesByIssue(snapshot.issues)) && laneClassOf(issue) !== 'provider-free') {
+      return 'its node takes only deterministic executors and no local executor handles its declared capability; it is never sent to the paid lane';
+    }
     const lineage = lineageFor(issue.number, snapshot.prs);
     const disposition = lineageDisposition(lineage);
     if (disposition.durable && !(labels.includes('oc-repair') && lineage.length === 1 && lineage[0].state === 'open')) {

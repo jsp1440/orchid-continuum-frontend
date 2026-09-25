@@ -478,3 +478,39 @@ describe('the plan job reads the same provider policy as the lane', () => {
     expect(scheduler.env!.PROVIDER_AUTHORIZED).toBe('true');
   });
 });
+
+describe('a deterministic-only research node never reaches the paid lane', () => {
+  const RESERVE_LEAF = 'cap-kg-evidence-gap-research-missions';
+  const reserve: Issue[] = reserveIssues.issues
+    .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(name => ({ name })) }));
+  // #825 as filed on 2026-09-25: a reserve mission bound to the leaf whose domain has no local executor.
+  const morphology: Issue = {
+    number: 825, state: 'open', title: 'Research morphology gap for Gastrochilus calceolaris',
+    body: reserve[0].body.replace('- Domain: nomenclature', '- Domain: morphology') + `\nOC-GRAPH-NODE: ${RESERVE_LEAF}`,
+    labels: ['oc-p2', 'oc-prepared', 'oc-discovered'].map(name => ({ name })),
+  };
+  // #820 as filed on 2026-09-25: a provider-required duplicate bound to the same leaf.
+  const duplicate = providerIssue(820, RESERVE_LEAF);
+  const snap = (issues: Issue[]): Snapshot => ({ issues, prs: [], integrationSha: 'a'.repeat(40), implementationSha: 'b'.repeat(40), material: {} });
+  const withBudget = () => providerCapacityFromEnvironment(LANE_ENV, liveLedger({ dailySpent: { [DAY]: 0 } }), NOW);
+
+  it('both issues route provider-lane, which is what made them dangerous', () => {
+    expect(laneClassOf(morphology)).toBe('provider');
+    expect(laneClassOf(duplicate)).toBe('provider');
+  });
+
+  it('with a provider slot free and nothing else queued, neither is admitted', () => {
+    const plan = makePlan(snap([morphology, duplicate]), [], NOW, COMPLETION_GRAPH, undefined, withBudget());
+    expect(plan.issues).toEqual([]);
+    const reasons = Object.fromEntries(plan.pendingNotReachingAdmission.map(p => [p.issueNumber, p.reason]));
+    expect(reasons[825]).toMatch(/only deterministic executors/);
+    expect(reasons[820]).toMatch(/only deterministic executors/);
+  });
+
+  it('the leaf still admits its provider-free nomenclature mission', () => {
+    const s = snap([morphology, duplicate, ...reserve]);
+    const plan = makePlan(s, [], NOW, COMPLETION_GRAPH, undefined, withBudget());
+    expect(plan.issues).toEqual([816]);
+    expect(assertAdmission(plan, s, 816, NOW).nodeId).toBe(RESERVE_LEAF);
+  });
+});
