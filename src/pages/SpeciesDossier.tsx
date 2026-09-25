@@ -23,13 +23,14 @@ import {
 } from '@/lib/ocBackend';
 import {
   fetchSpeciesDossier,
+  pageSubject,
   resolveDossierForSubject,
   resolveFederatedSpecies,
   sectionExcerpts,
-  subjectNameFromSlug,
   sectionMessage,
   type DossierSubjectResolution,
   type FederationResolveResult,
+  type PageSubject,
   type SpeciesDossierEnvelope,
   type DossierSection,
   type EvidenceReceipt,
@@ -106,6 +107,9 @@ const SpeciesDossier: React.FC = () => {
   const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
   const [dossierError, setDossierError] = useState(false);
+  const [subjectConflict, setSubjectConflict] = useState<
+    Extract<PageSubject, { state: 'conflict' }> | null
+  >(null);
   const [dossierAmbiguity, setDossierAmbiguity] = useState<
     Extract<DossierSubjectResolution, { state: 'ambiguous' }> | null
   >(null);
@@ -135,6 +139,7 @@ const SpeciesDossier: React.FC = () => {
     setDossierLoading(true);
     setDossierError(false);
     setDossierAmbiguity(null);
+    setSubjectConflict(null);
     setDossier(null);
     setFederationLoading(true);
     setFederationError(false);
@@ -146,9 +151,16 @@ const SpeciesDossier: React.FC = () => {
           d?.scientific_name ||
           [d?.genus, d?.species ?? d?.specific_epithet].filter(Boolean).join(' ') ||
           null;
+        // See pageSubject: the link's name outranks the id-keyed public detail,
+        // and a disagreement between them fails closed.
+        const subject = pageSubject({ linkedName, publicName, slug: taxonomyId });
+        if (subject.state === 'conflict') {
+          if (!ctrl.signal.aborted) setSubjectConflict(subject);
+          return { state: 'unavailable' } as DossierSubjectResolution;
+        }
         return resolveDossierForSubject(
           taxonomyId,
-          publicName || linkedName || subjectNameFromSlug(taxonomyId),
+          subject.name,
           { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
           ctrl.signal,
         );
@@ -183,17 +195,21 @@ const SpeciesDossier: React.FC = () => {
     return () => ctrl.abort();
   }, [taxonomyId, linkedName]);
 
+  // On a subject conflict the id-keyed public record may be another species,
+  // so neither its name nor its fields stand for this page's subject.
+  const subjectData = subjectConflict ? null : data;
   const name =
-    data?.canonical_name ||
-    data?.scientific_name ||
-    [data?.genus, data?.species ?? data?.specific_epithet]
+    subjectConflict?.linkedName ||
+    subjectData?.canonical_name ||
+    subjectData?.scientific_name ||
+    [subjectData?.genus, subjectData?.species ?? subjectData?.specific_epithet]
       .filter(Boolean)
       .join(' ') ||
     dossier?.identity.display_name ||
     linkedName ||
     decodeURIComponent(taxonomyId);
 
-  const image = data?.hero_image_url || data?.representative_image_url || null;
+  const image = subjectData?.hero_image_url || subjectData?.representative_image_url || null;
   // Resolve one governed canonical species identity for every public
   // continuation. Atlas, Research, and Calyx therefore either receive the same
   // exact subject or all fail closed; none may widen an opaque route/taxonomy
@@ -201,8 +217,8 @@ const SpeciesDossier: React.FC = () => {
   const continuumActions = speciesDossierContinuumActions({
     acceptedName: dossier?.identity.accepted_name,
     fullScientificName: dossier?.identity.full_scientific_name,
-    canonicalName: data?.canonical_name,
-    scientificName: data?.scientific_name,
+    canonicalName: subjectData?.canonical_name,
+    scientificName: subjectData?.scientific_name,
   });
   const atlasHref = continuumActions?.atlas ?? null;
   const researchHref = continuumActions?.research ?? null;
@@ -318,32 +334,32 @@ const SpeciesDossier: React.FC = () => {
                 <h1 className="font-display italic text-3xl md:text-4xl text-[#faf7f2] leading-tight">
                   {name}
                 </h1>
-                {data?.authority && (
+                {subjectData?.authority && (
                   <div className="mt-1 font-body italic text-[13px] text-[#cfc8b8]/65">
-                    {data.authority}
-                    {data.common_name ? ` · ${data.common_name}` : ''}
+                    {subjectData.authority}
+                    {subjectData.common_name ? ` · ${subjectData.common_name}` : ''}
                   </div>
                 )}
 
                 {/* Taxonomy */}
                 <Block icon={GitBranch} title="Taxonomy">
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <Field label="Family" value={data?.family} />
-                    <Field label="Tribe" value={data?.tribe} />
-                    <Field label="Genus" value={data?.genus} />
+                    <Field label="Family" value={subjectData?.family} />
+                    <Field label="Tribe" value={subjectData?.tribe} />
+                    <Field label="Genus" value={subjectData?.genus} />
                     <Field
                       label="Species"
-                      value={data?.species ?? data?.specific_epithet}
+                      value={subjectData?.species ?? subjectData?.specific_epithet}
                     />
                   </dl>
                 </Block>
 
                 {/* Conservation */}
                 <Block icon={ShieldAlert} title="Conservation status">
-                  {data?.conservation_status ? (
+                  {subjectData?.conservation_status ? (
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[11px] tracking-[0.16em] uppercase text-[#c9a24a]">
-                      {data.conservation_status}
-                      {data.iucn_code ? ` · ${data.iucn_code}` : ''}
+                      {subjectData.conservation_status}
+                      {subjectData.iucn_code ? ` · ${subjectData.iucn_code}` : ''}
                     </span>
                   ) : (
                     <Empty>Not yet assessed in the Continuum record.</Empty>
@@ -359,25 +375,25 @@ const SpeciesDossier: React.FC = () => {
 
                 {/* Range / habitat */}
                 <Block icon={Leaf} title="Native range & habitat">
-                  {data?.region || data?.habitat || data?.description ? (
+                  {subjectData?.region || subjectData?.habitat || subjectData?.description ? (
                     <div className="space-y-2 font-body text-[14px] text-[#cfc8b8]/85 leading-relaxed">
-                      {data?.region && (
+                      {subjectData?.region && (
                         <p>
                           <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#c9a24a] mr-2">
                             Range
                           </span>
-                          {data.region}
+                          {subjectData.region}
                         </p>
                       )}
-                      {data?.habitat && (
+                      {subjectData?.habitat && (
                         <p>
                           <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#c9a24a] mr-2">
                             Habitat
                           </span>
-                          {data.habitat}
+                          {subjectData.habitat}
                         </p>
                       )}
-                      {data?.description && <p>{data.description}</p>}
+                      {subjectData?.description && <p>{subjectData.description}</p>}
                     </div>
                   ) : (
                     <Empty>Range and habitat notes not yet linked.</Empty>
@@ -398,7 +414,7 @@ const SpeciesDossier: React.FC = () => {
                       <Loader2 className="h-3 w-3 animate-spin" /> Querying fungal
                       associations…
                     </div>
-                  ) : partners.length > 0 ? (
+                  ) : !subjectConflict && partners.length > 0 ? (
                     <ul className="space-y-3">
                       {partners.map((p, i) => (
                         <li
@@ -467,6 +483,14 @@ const SpeciesDossier: React.FC = () => {
                     <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
                       <Loader2 className="h-3 w-3 animate-spin" /> Loading evidence
                       receipts…
+                    </div>
+                  ) : subjectConflict ? (
+                    <div data-testid="dossier-subject-conflict">
+                      <Empty>
+                        This link names {subjectConflict.linkedName}, but the record under this
+                        id is {subjectConflict.publicName}. The evidence dossier is withheld
+                        because the page cannot tell which species it is about.
+                      </Empty>
                     </div>
                   ) : dossierAmbiguity ? (
                     <div data-testid="dossier-ambiguous">

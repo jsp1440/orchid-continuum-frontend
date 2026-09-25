@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  pageSubject,
   resolveDossierForSubject,
   sameScientificName,
   subjectNameFromSlug,
@@ -7,13 +8,18 @@ import {
   type SpeciesDossierEnvelope,
 } from './speciesDossier';
 
-function envelope(taxonId: string, acceptedName: string): SpeciesDossierEnvelope {
+function envelope(
+  taxonId: string,
+  acceptedName: string,
+  synonyms: string[] = [],
+): SpeciesDossierEnvelope {
   return {
     identity: {
       taxon_id: taxonId,
       display_name: acceptedName,
       full_scientific_name: acceptedName,
       accepted_name: acceptedName,
+      synonyms,
     },
   } as unknown as SpeciesDossierEnvelope;
 }
@@ -121,5 +127,105 @@ describe('speciesPageHref', () => {
     expect(speciesPageHref('6056', 'Cattleya labiata')).toBe('/species/6056?name=Cattleya%20labiata');
     expect(speciesPageHref('6056', '  ')).toBe('/species/6056');
     expect(speciesPageHref('6056', null)).toBe('/species/6056');
+  });
+});
+
+describe('resolver-path dossiers are held to the subject identity', () => {
+  it('never shows the species dossier for a forma subject (checker probe)', async () => {
+    // The backend resolver normalises "Cattleya labiata fo. alba" to the
+    // species and resolves it; the species dossier is not this subject.
+    const deps = {
+      fetchDossier: vi.fn(async (id: string) =>
+        id === '7904' ? envelope('7904', 'Cattleya labiata') : envelope('6056', 'Caladenia x suffusa'),
+      ),
+      resolveSpecies: vi.fn().mockResolvedValue(
+        resolution({ status: 'resolved', taxon_id: '7904', matched_name: 'Cattleya labiata' }),
+      ),
+    };
+    expect(await resolveDossierForSubject('6056', 'Cattleya labiata fo. alba', deps)).toEqual({
+      state: 'unavailable',
+    });
+  });
+
+  it('never shows the species dossier for a cultivar subject', async () => {
+    const deps = {
+      fetchDossier: vi.fn().mockResolvedValue(envelope('7904', 'Cattleya labiata')),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'resolved', taxon_id: '7904' })),
+    };
+    expect(
+      await resolveDossierForSubject('cattleya-labiata', "Cattleya labiata 'Alba'", deps),
+    ).toEqual({ state: 'unavailable' });
+  });
+
+  it('holds the route dossier to the same check when the resolver names its taxon', async () => {
+    const deps = {
+      fetchDossier: vi.fn().mockResolvedValue(envelope('7904', 'Cattleya labiata')),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'resolved', taxon_id: '7904' })),
+    };
+    expect(await resolveDossierForSubject('7904', 'Cattleya labiata ssp. vera', deps)).toEqual({
+      state: 'unavailable',
+    });
+    expect(deps.fetchDossier).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts a resolver hit whose dossier records the subject as a synonym', async () => {
+    const deps = {
+      fetchDossier: vi.fn(async (id: string) =>
+        id === '7904'
+          ? envelope('7904', 'Cattleya labiata', ['Epidendrum labiatum'])
+          : envelope('6056', 'Caladenia x suffusa'),
+      ),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'resolved', taxon_id: '7904' })),
+    };
+    const result = await resolveDossierForSubject('6056', 'Epidendrum labiatum', deps);
+    expect(result).toMatchObject({ state: 'resolved', via: 'subject_name' });
+  });
+
+  it('keeps only candidates that carry the subject name, else fails closed', async () => {
+    const species = [
+      { taxon_id: '7904', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+      { taxon_id: '34325', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+    ];
+    const deps = {
+      fetchDossier: vi.fn().mockRejectedValue(new Error('404')),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'ambiguous', candidates: species })),
+    };
+    expect(await resolveDossierForSubject('x', 'Cattleya labiata fo. alba', deps)).toEqual({
+      state: 'unavailable',
+    });
+  });
+});
+
+describe('pageSubject', () => {
+  it('ranks the link name above the id-keyed public detail name', () => {
+    expect(
+      pageSubject({ linkedName: 'Cattleya labiata', publicName: 'cattleya  labiata', slug: '6056' }),
+    ).toEqual({ state: 'subject', name: 'Cattleya labiata' });
+    expect(pageSubject({ linkedName: null, publicName: 'Cattleya labiata', slug: '6056' })).toEqual({
+      state: 'subject',
+      name: 'Cattleya labiata',
+    });
+    expect(pageSubject({ linkedName: '', publicName: null, slug: 'cattleya-labiata' })).toEqual({
+      state: 'subject',
+      name: 'cattleya labiata',
+    });
+    expect(pageSubject({ linkedName: null, publicName: null, slug: '6056' })).toEqual({
+      state: 'subject',
+      name: null,
+    });
+  });
+
+  it('fails closed when the link and the public detail name different species', () => {
+    expect(
+      pageSubject({
+        linkedName: 'Cattleya labiata',
+        publicName: 'Cattleya percivaliana',
+        slug: '6056',
+      }),
+    ).toEqual({
+      state: 'conflict',
+      linkedName: 'Cattleya labiata',
+      publicName: 'Cattleya percivaliana',
+    });
   });
 });

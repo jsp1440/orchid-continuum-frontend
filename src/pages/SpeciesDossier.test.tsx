@@ -733,4 +733,56 @@ describe('dossier subject identity across id spaces', () => {
     expect(container.textContent).not.toContain('Caladenia');
     expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
   });
+
+  it('never shows the species dossier for an infraspecific subject the resolver normalised (checker probe)', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.fetchSpeciesDossier.mockImplementation(async (id: string) =>
+      id === '6056' ? caladenia() : labiata(),
+    );
+    mocks.resolveFederatedSpecies.mockImplementation(async (params: { name?: string }) => ({
+      status: params.name ? 'resolved' : 'unresolved',
+      incoming_name: params.name ?? null,
+      matched_name: params.name ? 'Cattleya labiata' : null,
+      match_state: params.name ? 'accepted_name' : 'none',
+      taxon_id: params.name ? '7904' : null,
+      canonical_dossier_url: null,
+      candidates: [],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: '',
+    }));
+
+    renderPage('/species/6056?name=Cattleya%20labiata%20fo.%20alba');
+    await flush();
+    await flush();
+
+    expect(container.textContent).toContain('Evidence dossier is not currently available.');
+    expect(container.textContent).not.toContain('Labiata relations.');
+    expect(container.textContent).not.toContain('Caladenia');
+    expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata fo. alba');
+  });
+
+  it('fails closed when the link names a different species than the public record under the id', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: '6056',
+      canonical_name: 'Cattleya percivaliana',
+      family: 'Orchidaceae',
+      conservation_status: 'Endangered',
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(labiata());
+
+    renderPage('/species/6056?name=Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    const conflict = container.querySelector('[data-testid="dossier-subject-conflict"]');
+    expect(conflict?.textContent).toContain('This link names Cattleya labiata');
+    expect(conflict?.textContent).toContain('Cattleya percivaliana');
+    expect(mocks.fetchSpeciesDossier).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Labiata relations.');
+    expect(container.textContent).not.toContain('Endangered');
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
+    expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
+  });
 });

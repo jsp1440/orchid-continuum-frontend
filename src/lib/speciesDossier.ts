@@ -291,9 +291,15 @@ export function sameScientificName(
 
 function dossierNames(dossier: SpeciesDossierEnvelope): string[] {
   const identity = dossier.identity;
-  return [identity?.accepted_name, identity?.display_name, identity?.full_scientific_name].filter(
-    (value): value is string => typeof value === 'string' && value.trim().length > 0,
-  );
+  // Synonyms the backend itself records for this taxon are part of its identity;
+  // nothing else is (no rank stripping, no prefix or "close enough" matching).
+  const synonyms = Array.isArray(identity?.synonyms) ? identity.synonyms : [];
+  return [
+    identity?.accepted_name,
+    identity?.display_name,
+    identity?.full_scientific_name,
+    ...synonyms,
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
 }
 
 function isSubject(dossier: SpeciesDossierEnvelope, subjectName: string): boolean {
@@ -344,23 +350,66 @@ export async function resolveDossierForSubject(
     return { state: 'unavailable' };
   }
 
+  // The resolver normalises names before matching (it drops forma, subspecies
+  // and cultivar qualifiers), so its answer is a lead, not an identity. Every
+  // dossier or candidate it leads to is held to the same exact-name check as
+  // the route dossier: a species-level record is never shown for an
+  // infraspecific or cultivar subject.
   if (resolution.status === 'ambiguous') {
-    return { state: 'ambiguous', subjectName: subject, candidates: resolution.candidates ?? [] };
+    const candidates = (resolution.candidates ?? []).filter((candidate) =>
+      sameScientificName(candidate.accepted_name, subject),
+    );
+    return candidates.length > 0
+      ? { state: 'ambiguous', subjectName: subject, candidates }
+      : { state: 'unavailable' };
   }
   if (resolution.status !== 'resolved' || !resolution.taxon_id) {
     return { state: 'unavailable' };
   }
-  if (byRoute && byRoute.identity?.taxon_id === resolution.taxon_id) {
-    // The resolver maps the subject (e.g. a synonym) to the dossier the route named.
-    return { state: 'resolved', dossier: byRoute, via: 'subject_name' };
+  let dossier: SpeciesDossierEnvelope | null =
+    byRoute && byRoute.identity?.taxon_id === resolution.taxon_id ? byRoute : null;
+  if (!dossier) {
+    try {
+      dossier = await deps.fetchDossier(resolution.taxon_id, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return { state: 'unavailable' };
+    }
   }
-  try {
-    const dossier = await deps.fetchDossier(resolution.taxon_id, signal);
-    return { state: 'resolved', dossier, via: 'subject_name' };
-  } catch (error) {
-    if (signal?.aborted) throw error;
-    return { state: 'unavailable' };
+  return isSubject(dossier, subject)
+    ? { state: 'resolved', dossier, via: 'subject_name' }
+    : { state: 'unavailable' };
+}
+
+export type PageSubject =
+  | { state: 'subject'; name: string | null }
+  | { state: 'conflict'; linkedName: string; publicName: string };
+
+/**
+ * The species a /species/:slug page is about.
+ *
+ * The link's `?name=` ranks first. It is the name on the record the visitor
+ * chose, carried together with the id from that same record. The public detail
+ * name is looked up by the route id alone, and the route id may belong to
+ * another id space (a Calyx orchid_taxonomy id names a different public-API
+ * species), so it is only a fallback. When both are present and disagree, the
+ * page cannot know which species it is about and fails closed instead of
+ * picking one. A binomial slug is the last resort.
+ */
+export function pageSubject(params: {
+  linkedName: string | null | undefined;
+  publicName: string | null | undefined;
+  slug: string | null | undefined;
+}): PageSubject {
+  const linkedName = (params.linkedName ?? '').replace(/\s+/g, ' ').trim();
+  const publicName = (params.publicName ?? '').replace(/\s+/g, ' ').trim();
+  if (linkedName && publicName && !sameScientificName(linkedName, publicName)) {
+    return { state: 'conflict', linkedName, publicName };
   }
+  return {
+    state: 'subject',
+    name: linkedName || publicName || subjectNameFromSlug(params.slug),
+  };
 }
 
 /**
