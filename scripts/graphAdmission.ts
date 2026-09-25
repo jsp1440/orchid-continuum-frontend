@@ -10,7 +10,7 @@
  */
 import { runSupervisorDiscovery } from './oc-supervisor-discovery';
 
-const result = runSupervisorDiscovery();
+const result = await runSupervisorDiscovery();
 process.stdout.write(JSON.stringify({
   admissible: result.discovery.graphSelection !== null,
   selected: result.discovery.graphSelection?.nodeId ?? null,

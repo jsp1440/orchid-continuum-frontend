@@ -30,6 +30,11 @@ import {
   type SupervisorTaskRecord,
 } from '../src/lib/control-plane/supervisorDiscovery';
 import type { OpenIssueRef } from '../src/lib/completion-graph/executableIssue';
+import {
+  admitBackendReservePlan,
+  MAX_RESERVE_PLAN_DEPTH,
+} from '../src/lib/control-plane/backendReservePlanClient';
+import type { ExistingWorkRef } from '../src/lib/control-plane/orchestratorQueueBridge';
 
 type GitHubIssue = {
   number: number;
@@ -91,8 +96,30 @@ export type SupervisorRunResult = {
   materialization: QueueAction;
   queueRefill: QueueAction[];
   graphDiscovery: GraphDiscoveryRun | { skipped: true; reason: string };
+  backendReserve: BackendReserveRun;
   errors: string[];
 };
+
+/**
+ * Outcome of the opt-in backend evidence-gap reserve pass. `failedClosed` names
+ * the exact reason nothing was filed (transport failure, blocked upstream, or an
+ * unreadable dedupe index); it is null only when admission itself succeeded.
+ */
+export type BackendReserveRun =
+  | { enabled: false; reason: string }
+  | {
+      enabled: true;
+      paidProviderCalls: 0;
+      upstreamStatus: string | null;
+      transportFailure: string | null;
+      upstreamReason: string | null;
+      failedClosed: string | null;
+      heldFingerprints: number;
+      filed: Array<{ issueNumber: number; sourceKey: string; fingerprint: string; labels: string[] }>;
+      notFiled: Array<{ sourceKey: string; fingerprint: string | null; reason: string }>;
+      suppressed: Array<{ sourceKey: string; reason: string }>;
+      rejected: Array<{ sourceRef: string | null; reason: string }>;
+    };
 
 function ghJson<T>(args: string[]): T {
   return JSON.parse(execFileSync('gh', args, {
@@ -324,6 +351,15 @@ function materializeGraph(
   };
 }
 
+function fetchDiscoveryLabelled(repo: string): DiscoveredIssueRef[] {
+  return flattenPaginated(ghJson<GitHubIssue[] | GitHubIssue[][]>([
+    'api',
+    `repos/${repo}/issues?state=all&labels=${DISCOVERY_LABEL}&per_page=100`,
+    '--paginate',
+    '--slurp',
+  ])).filter((issue) => !issue.pull_request).map((issue) => ({ number: issue.number, state: issue.state, body: issue.body }));
+}
+
 /**
  * Every fingerprint already filed, read by LABEL (state=all, so closed issues
  * count) and never by text search. A failed read is reported as unavailable so
@@ -332,12 +368,7 @@ function materializeGraph(
 export function readDiscoveryFingerprintIndex(
   repository: string,
   snapshotIssues: SupervisorIssueSnapshot[],
-  fetchLabelled: (repo: string) => DiscoveredIssueRef[] = (repo) => flattenPaginated(ghJson<GitHubIssue[] | GitHubIssue[][]>([
-    'api',
-    `repos/${repo}/issues?state=all&labels=${DISCOVERY_LABEL}&per_page=100`,
-    '--paginate',
-    '--slurp',
-  ])).filter((issue) => !issue.pull_request).map((issue) => ({ number: issue.number, state: issue.state, body: issue.body })),
+  fetchLabelled: (repo: string) => DiscoveredIssueRef[] = fetchDiscoveryLabelled,
 ): FingerprintIndex {
   try {
     const labelled = fetchLabelled(repository);
@@ -386,6 +417,141 @@ export function materializeDiscoveredGraphIssues(
     }
   }
   return { result, filed, notFiled };
+}
+
+export const BACKEND_RESERVE_FLAG = 'OC_ADMIT_BACKEND_RESERVE';
+const DEFAULT_CALYX_API_URL = 'https://orchid-calyx-backend.onrender.com';
+const MATERIAL_FINGERPRINT = /Material fingerprint:\s*([0-9a-f]{64})\b/gi;
+const QUEUE_BRIDGE_MARKER = /<!-- oc-queue-bridge:(\S+) -->/i;
+
+export function backendReserveEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env[BACKEND_RESERVE_FLAG] === '1';
+}
+
+function materialFingerprints(body: string | null | undefined): string[] {
+  return [...(body ?? '').matchAll(MATERIAL_FINGERPRINT)].map((match) => match[1].toLowerCase());
+}
+
+/**
+ * Material fingerprints of backend reserve work already filed: every
+ * `oc-discovered` issue (open or closed, read by label, as graph discovery
+ * does) plus the live snapshot. A failed read is unavailable, never empty.
+ */
+export function readReserveFingerprintIndex(
+  repository: string,
+  snapshotIssues: SupervisorIssueSnapshot[],
+  fetchLabelled: (repo: string) => DiscoveredIssueRef[] = fetchDiscoveryLabelled,
+): FingerprintIndex {
+  try {
+    const bodies = [...fetchLabelled(repository), ...snapshotIssues].map((issue) => issue.body);
+    return { available: true, fingerprints: new Set(bodies.flatMap(materialFingerprints)) };
+  } catch (error) {
+    return { available: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] {
+  return issues
+    .filter((issue) => issue.state === 'open')
+    .map((issue) => ({
+      sourceKey: QUEUE_BRIDGE_MARKER.exec(issue.body)?.[1]?.toLowerCase(),
+      title: issue.title,
+      state: 'open' as const,
+      kind: 'issue' as const,
+    }));
+}
+
+/**
+ * One bounded, opt-in pass that admits the Calyx backend evidence-gap reserve
+ * plan (`oc.reserve-refill.v1`) through the canonical bridge and files at most
+ * the bridge's `create` entries with the same label-first writer and
+ * `oc-discovered` label/dedupe graph discovery uses. Provider-free: one GET to
+ * the backend and GitHub issue writes only; no KG mutation, no publication.
+ * Any transport failure, blocked upstream, or unreadable index files nothing.
+ */
+export async function materializeBackendReservePlan(
+  frontendIssues: SupervisorIssueSnapshot[],
+  io: {
+    enabled: boolean;
+    baseUrl: string;
+    fingerprintIndex: FingerprintIndex;
+    ensureLabel: (name: string) => void;
+    createIssue: (title: string, body: string, labels: string[]) => number;
+    fetchImpl?: typeof fetch;
+  },
+): Promise<BackendReserveRun> {
+  if (!io.enabled) {
+    return { enabled: false, reason: `${BACKEND_RESERVE_FLAG} is not '1'; backend reserve admission is off (owner opt-in).` };
+  }
+  const run: Extract<BackendReserveRun, { enabled: true }> = {
+    enabled: true,
+    paidProviderCalls: 0,
+    upstreamStatus: null,
+    transportFailure: null,
+    upstreamReason: null,
+    failedClosed: null,
+    heldFingerprints: 0,
+    filed: [],
+    notFiled: [],
+    suppressed: [],
+    rejected: [],
+  };
+  const index = io.fingerprintIndex;
+  if ('reason' in index) {
+    return { ...run, failedClosed: `reserve dedupe index unavailable: ${index.reason}` };
+  }
+  const held = new Set(index.fingerprints);
+  run.heldFingerprints = held.size;
+
+  const admission = await admitBackendReservePlan(existingWorkRefs(frontendIssues), {
+    baseUrl: io.baseUrl,
+    mode: 'deterministic-no-api',
+    reserveDepth: MAX_RESERVE_PLAN_DEPTH,
+    heldFingerprints: [...held],
+    fetchImpl: io.fetchImpl,
+  });
+  run.upstreamStatus = admission.bridge.upstreamStatus;
+  run.transportFailure = admission.transportFailure;
+  run.upstreamReason = admission.upstreamReason;
+  run.rejected = admission.bridge.rejected;
+  run.suppressed = [...admission.bridge.plan.suppressed];
+  if (admission.transportFailure || admission.bridge.upstreamBlocked) {
+    run.failedClosed = admission.transportFailure
+      ? `transport: ${admission.transportFailure}`
+      : `upstream blocked: ${admission.bridge.upstreamStatus}`
+        + (admission.upstreamReason ? ` (${admission.upstreamReason})` : '');
+    return run;
+  }
+
+  // The bridge already caps creates at the upstream reserve depth; the client
+  // cap is re-applied so an oversized upstream depth can never widen a pass.
+  for (const prepared of admission.bridge.plan.create.slice(0, MAX_RESERVE_PLAN_DEPTH)) {
+    const fingerprint = materialFingerprints(prepared.body)[0] ?? null;
+    if (!fingerprint) {
+      run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint, reason: 'prepared body carries no material fingerprint' });
+      continue;
+    }
+    if (held.has(fingerprint)) {
+      run.suppressed.push({ sourceKey: prepared.sourceKey, reason: `material fingerprint ${fingerprint} already filed` });
+      continue;
+    }
+    if (prepared.protected || prepared.labels.includes('oc-owner-gate')) {
+      run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint, reason: 'protected work is never filed autonomously' });
+      continue;
+    }
+    const labels = [...new Set([...prepared.labels, DISCOVERY_LABEL])];
+    const body = `${prepared.body}\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve`;
+    try {
+      for (const label of labels) io.ensureLabel(label);
+      const issueNumber = io.createIssue(prepared.title, body, labels);
+      held.add(fingerprint);
+      run.filed.push({ issueNumber, sourceKey: prepared.sourceKey, fingerprint, labels });
+    } catch (error) {
+      run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint,
+        reason: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return run;
 }
 
 function ensureQueued(issue: SupervisorIssueSnapshot, packet?: SupervisorTaskRecord): QueueAction {
@@ -468,7 +634,7 @@ function refillEligibleIssues(
     });
 }
 
-export function runSupervisorDiscovery(): SupervisorRunResult {
+export async function runSupervisorDiscovery(): Promise<SupervisorRunResult> {
   const discoveredAt = new Date().toISOString();
   const errors: string[] = [];
   const repositories: SupervisorRepositorySnapshot[] = [];
@@ -512,6 +678,20 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
         createIssue,
       })
     : { skipped: true, reason: 'Current repository issue inventory was unavailable; no graph discovery was attempted.' };
+  // Opt-in backend evidence-gap reserve pass (OC_ADMIT_BACKEND_RESERVE=1).
+  // Off by default so activation stays an owner decision.
+  const reserveEnabled = backendReserveEnabled();
+  const backendReserve = await materializeBackendReservePlan(frontend?.issues ?? [], {
+    enabled: reserveEnabled,
+    baseUrl: process.env.VITE_CALYX_API_URL || DEFAULT_CALYX_API_URL,
+    fingerprintIndex: !reserveEnabled
+      ? { available: false, reason: 'pass disabled' }
+      : frontend && frontendAvailable
+        ? readReserveFingerprintIndex(currentRepository(), frontend.issues)
+        : { available: false, reason: 'current repository issue inventory was unavailable' },
+    ensureLabel: (name) => ensureLabel(currentRepository(), name),
+    createIssue,
+  });
 
   const result: SupervisorRunResult = {
     schema: 'oc.supervisor-discovery.v1',
@@ -520,6 +700,7 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
     materialization,
     queueRefill,
     graphDiscovery,
+    backendReserve,
     errors,
   };
   mkdirSync('.oc-wave', { recursive: true });
@@ -528,6 +709,6 @@ export function runSupervisorDiscovery(): SupervisorRunResult {
 }
 
 if (import.meta.url === 'file://' + process.argv[1]) {
-  const result = runSupervisorDiscovery();
+  const result = await runSupervisorDiscovery();
   process.stdout.write(JSON.stringify(result) + '\n');
 }
