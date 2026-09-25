@@ -115,6 +115,15 @@ export type BackendReserveRun =
       upstreamReason: string | null;
       failedClosed: string | null;
       heldFingerprints: number;
+      /** Why a green plan filed fewer than it proposed: depth minus open slot-holding lineages. */
+      reserveSlots: {
+        targetDepth: number;
+        preparedOpenCount: number;
+        eligibleCount: number;
+        /** Open issues carrying a backend-reserve material fingerprint, held or not. */
+        openReserveIssues: number;
+        ceiling: number;
+      } | null;
       filed: Array<{ issueNumber: number; sourceKey: string; fingerprint: string; labels: string[] }>;
       notFiled: Array<{ sourceKey: string; fingerprint: string | null; reason: string }>;
       suppressed: Array<{ sourceKey: string; reason: string }>;
@@ -420,6 +429,13 @@ export function materializeDiscoveredGraphIssues(
 }
 
 export const BACKEND_RESERVE_FLAG = 'OC_ADMIT_BACKEND_RESERVE';
+/**
+ * Hard ceiling on open backend-reserve issues, held or not. Held lineages do
+ * not occupy depth slots, so without this a reserve issue that is itself
+ * parked (`oc-blocked`, ...) would free its slot and let every 5-minute pass
+ * file three more. At the ceiling the pass files nothing and says so.
+ */
+export const BACKEND_RESERVE_OPEN_CEILING = 3 * MAX_RESERVE_PLAN_DEPTH;
 const DEFAULT_CALYX_API_URL = 'https://orchid-calyx-backend.onrender.com';
 const MATERIAL_FINGERPRINT = /Material fingerprint:\s*([0-9a-f]{64})\b/gi;
 const QUEUE_BRIDGE_MARKER = /<!-- oc-queue-bridge:(\S+) -->/i;
@@ -450,7 +466,16 @@ export function readReserveFingerprintIndex(
   }
 }
 
-function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] {
+/**
+ * Labels that park an open issue outside the executable queue until a person or
+ * a later settlement clears them. Such an issue is not prepared depth: on
+ * 2026-09-25 four legacy `PREPARED:` issues (#539, #567, #579, #591), all
+ * `oc-blocked`, filled the whole reserve depth of 3 and the first enabled pass
+ * filed nothing from a `refill_planned` plan of 3 proposals.
+ */
+const HELD_LINEAGE_LABELS = new Set(['oc-blocked', 'oc-owner-gate', 'oc-publication-hold', 'oc-done']);
+
+export function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] {
   return issues
     .filter((issue) => issue.state === 'open')
     .map((issue) => ({
@@ -458,6 +483,7 @@ function existingWorkRefs(issues: SupervisorIssueSnapshot[]): ExistingWorkRef[] 
       title: issue.title,
       state: 'open' as const,
       kind: 'issue' as const,
+      holdsReserveSlot: !issue.labels.some((label) => HELD_LINEAGE_LABELS.has(label)),
     }));
 }
 
@@ -491,6 +517,7 @@ export async function materializeBackendReservePlan(
     upstreamReason: null,
     failedClosed: null,
     heldFingerprints: 0,
+    reserveSlots: null,
     filed: [],
     notFiled: [],
     suppressed: [],
@@ -515,6 +542,15 @@ export async function materializeBackendReservePlan(
   run.upstreamReason = admission.upstreamReason;
   run.rejected = admission.bridge.rejected;
   run.suppressed = [...admission.bridge.plan.suppressed];
+  let openReserveIssues = frontendIssues
+    .filter((issue) => issue.state === 'open' && materialFingerprints(issue.body).length > 0).length;
+  run.reserveSlots = {
+    targetDepth: admission.bridge.plan.targetDepth,
+    preparedOpenCount: admission.bridge.plan.preparedOpenCount,
+    eligibleCount: admission.bridge.plan.eligibleCount,
+    openReserveIssues,
+    ceiling: BACKEND_RESERVE_OPEN_CEILING,
+  };
   if (admission.transportFailure || admission.bridge.upstreamBlocked) {
     run.failedClosed = admission.transportFailure
       ? `transport: ${admission.transportFailure}`
@@ -539,12 +575,18 @@ export async function materializeBackendReservePlan(
       run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint, reason: 'protected work is never filed autonomously' });
       continue;
     }
+    if (openReserveIssues >= BACKEND_RESERVE_OPEN_CEILING) {
+      run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint,
+        reason: `open backend-reserve issues ${openReserveIssues} at ceiling ${BACKEND_RESERVE_OPEN_CEILING}; settle or close existing ones first` });
+      continue;
+    }
     const labels = [...new Set([...prepared.labels, DISCOVERY_LABEL])];
     const body = `${prepared.body}\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve`;
     try {
       for (const label of labels) io.ensureLabel(label);
       const issueNumber = io.createIssue(prepared.title, body, labels);
       held.add(fingerprint);
+      openReserveIssues += 1;
       run.filed.push({ issueNumber, sourceKey: prepared.sourceKey, fingerprint, labels });
     } catch (error) {
       run.notFiled.push({ sourceKey: prepared.sourceKey, fingerprint,
