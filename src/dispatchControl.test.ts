@@ -111,11 +111,59 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     snapshot.issues[6].body += '\nOC-AUTO-HOLD: true\n';
     snapshot.prs = [{ number: 90, body: 'OC-AUTO-ISSUE: #8', state: 'closed', head: { ref: 'oc-auto-8-work', sha: 'c'.repeat(40) } },
       { number: 91, body: 'OC-AUTO-ISSUE: #9', state: 'open', head: { ref: 'repair-9', sha: 'd'.repeat(40) } }];
-    expect(makePlan(snapshot, [], now, root).issues.sort((a,b) => a-b)).toEqual([10,11,12]);
+    // #8's only PR was closed without merging: one abandoned attempt, nothing
+    // in flight and nothing delivered, so it is admissible again. #9's open PR
+    // is work in flight and still holds it until it is labelled `oc-repair`.
+    expect(makePlan(snapshot, [], now, root).issues.sort((a,b) => a-b)).toEqual([8,10,11,12]);
     snapshot.issues[8].labels.push({ name: 'oc-repair' });
     const repaired = makePlan(snapshot, [], now, root).leaves.find(l => l.issueNumber === 9);
     expect(repaired?.repairPr).toBe(91);
     expect(repaired?.repairBranch).toBe('repair-9');
+  });
+
+  it('re-admits an issue whose every attempt was abandoned, and stops at the bound', () => {
+    // The live starvation this repairs: on 2026-09-24 the plan step named #296
+    // (lineage #303 closed) and #308 (lineage #312 closed) as pending and
+    // unreachable, every five minutes, with eight free lanes and nothing
+    // admitted. A closed-unmerged PR is an abandoned attempt, not durable work,
+    // and counting it as durable removed those issues from the portfolio for
+    // good while they still read `oc-queued` to anyone looking.
+    const { root, snapshot } = fixture(1);
+    const attempt = (number: number): Snapshot['prs'][number] => ({ number, body: 'OC-AUTO-ISSUE: #1',
+      state: 'closed', head: { ref: `oc-auto/1-attempt-${number}`, sha: 'c'.repeat(40) } });
+
+    snapshot.prs = [attempt(90)];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([1]);
+
+    snapshot.prs = [attempt(90), attempt(91)];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([1]);
+
+    // MAX_ABANDONED_ATTEMPTS. Re-admission is bounded or it is its own loop.
+    snapshot.prs = [attempt(90), attempt(91), attempt(92)];
+    const exhausted = makePlan(snapshot, [], now, root);
+    expect(exhausted.issues).toEqual([]);
+    expect(exhausted.pendingNotReachingAdmission[0].reason).toContain('3 abandoned attempt(s)');
+    expect(exhausted.pendingNotReachingAdmission[0].reason).toContain('needs a decision rather than another lane');
+  });
+
+  it('keeps delivered and in-flight lineage holding the issue', () => {
+    const { root, snapshot } = fixture(1);
+    // Merged: the work is in, and settling it is not this lane's job.
+    snapshot.prs = [{ number: 90, body: 'OC-AUTO-ISSUE: #1', state: 'closed', merged: true,
+      baseRef: 'main', head: { ref: 'oc-auto/1-work', sha: 'c'.repeat(40) } }];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
+
+    // Open: a second attempt must not start alongside the first.
+    snapshot.prs = [{ number: 91, body: 'OC-AUTO-ISSUE: #1', state: 'open',
+      head: { ref: 'oc-auto/1-work', sha: 'c'.repeat(40) } }];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
+
+    // An abandoned attempt does not make a merged sibling disappear.
+    snapshot.prs = [{ number: 90, body: 'OC-AUTO-ISSUE: #1', state: 'closed', merged: true,
+      baseRef: 'main', head: { ref: 'oc-auto/1-merged', sha: 'c'.repeat(40) } },
+      { number: 92, body: 'OC-AUTO-ISSUE: #1', state: 'closed',
+        head: { ref: 'oc-auto/1-abandoned', sha: 'd'.repeat(40) } }];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
   });
   it('refuses unresolved dependencies and never unlocks same-wave dependants', () => {
     const { root, snapshot } = fixture(3);
@@ -305,7 +353,13 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     snapshot.issues[0].body = '';
     expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, implementationSha: undefined }])).toEqual([]);
     expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, id: 'active', state: 'reserved' }])).toEqual([]);
+    // A closed, unmerged attempt does not hold the repair: nothing is in
+    // flight and nothing was delivered, and the repair still needs a newer
+    // implementation revision before it fires.
     snapshot.prs.push({ number: 88, state: 'closed', body: 'OC-LINEAGE-ISSUE: #1', head: { ref: 'oc-auto/1-work', sha: 'd'.repeat(40) } });
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([1]);
+    // A merged attempt does: the work is already in.
+    snapshot.prs.push({ number: 89, state: 'closed', merged: true, body: 'OC-LINEAGE-ISSUE: #1', head: { ref: 'oc-auto/1-merged', sha: 'e'.repeat(40) } });
     expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
   });
   it('detects hash tampering, unadmitted issues, missing/duplicate/mismatched actual receipts', () => {

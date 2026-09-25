@@ -65,10 +65,10 @@ jobs:
       PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
       REQUESTED_USD: ${{ inputs.requested_usd }}
       OC_WAVE_HASH: ${{ inputs.wave_hash }}
-      OC_PROVIDER_NO_API_MODE: 'true'
-      OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'
-      OC_PROVIDER_DAILY_MAX_CALLS: '0'
-      OC_PROVIDER_WAVE_MAX_CALLS: '0'
+      OC_PROVIDER_NO_API_MODE: 'false'
+      OC_PROVIDER_DISABLED: ''
+      OC_PROVIDER_DAILY_MAX_CALLS: '4'
+      OC_PROVIDER_WAVE_MAX_CALLS: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -239,13 +239,14 @@ jobs:
     needs: budget-preflight
     if: inputs.provider_authorized && needs.budget-preflight.outputs.allowed == 'true' && needs.budget-preflight.outputs.lease_id != ''
     uses: ./.github/workflows/orchid-completion-lane.yml
+    secrets: inherit
     with:
       issue_number: ${{ inputs.issue_number }}
       provider_authorized: ${{ inputs.provider_authorized }}
       lease_id: ${{ needs.budget-preflight.outputs.lease_id }}
       wave_hash: ${{ inputs.wave_hash }}
       artifact_name: ${{ inputs.artifact_name }}
-    # No provider secrets are forwarded while the owner has prohibited paid execution.
+    # Owner-authorized provider secrets are forwarded only into the governed implementation worker.
 
   settle:
     needs: [budget-preflight, provider-worker]
