@@ -3,6 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
+import { deriveReserveMissionBinding } from './oc-reserve-mission-binding.mjs';
 import {
   decideProviderFreeGraphIssueAction,
 } from '../src/lib/completion-graph/graphIssueDecision';
@@ -282,10 +283,22 @@ function createIssue(title: string, body: string, labels: string[]): number {
   return Number(match[1]);
 }
 
-function openIssueRefs(issues: SupervisorIssueSnapshot[]): OpenIssueRef[] {
+/**
+ * Open issues as graph discovery sees them. A reserve mission filed before the
+ * explicit `OC-GRAPH-NODE:` line existed (#816-#818) is bound to its leaf only by
+ * `deriveReserveMissionBinding`, which dispatch already honours. Discovery must
+ * see the same binding, or it reads the leaf as having "no live executable issue"
+ * and files a duplicate provider-required issue for it (#820, 2026-09-25). The
+ * derived node is added to this planning view only; nothing on GitHub changes.
+ */
+export function openIssueRefs(issues: SupervisorIssueSnapshot[]): OpenIssueRef[] {
   return issues
     .filter((issue) => issue.state === 'open')
-    .map((issue) => ({ number: issue.number, body: issue.body, labels: issue.labels }));
+    .map((issue) => {
+      const derived = deriveReserveMissionBinding(issue)?.nodeId;
+      const labels = derived ? [...issue.labels, `oc-node:${derived}`] : issue.labels;
+      return { number: issue.number, body: issue.body, labels };
+    });
 }
 
 function materializeGraph(
