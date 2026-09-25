@@ -23,6 +23,16 @@ export const RESERVE_SOURCE_LINE = 'OC-SUPERVISOR-SOURCE: calyx-evidence-gap-res
 export const RESERVE_MISSION_NODE = 'cap-kg-evidence-gap-research-missions';
 export const NOMENCLATURE_CAPABILITY = 'nomenclature-evidence-lookup';
 
+/**
+ * Evidence domains a local executor can actually run. A reserve mission in any
+ * other domain is real research work, but nothing in this repository can
+ * execute it: it must not be requested from the backend reserve, filed, or
+ * counted as prepared reserve depth. On 2026-09-25 three `morphology` missions
+ * (#825-#827) filled the whole depth of 3 and every later scheduled pass filed
+ * nothing, so the nomenclature executor starved.
+ */
+export const EXECUTABLE_RESERVE_DOMAINS = Object.freeze(['nomenclature']);
+
 export const MISSION_HEADER = 'Canonical bounded research mission:';
 const MISSION_FIELDS = [
   ['taxonId', /^- Taxon ID: (.+)$/],
@@ -97,4 +107,30 @@ export function deriveReserveMissionBinding(issue) {
     capability: mission.domain === 'nomenclature' ? NOMENCLATURE_CAPABILITY : null,
     domain: mission.domain,
   };
+}
+
+/**
+ * The mission domain of a body that carries exactly one well-formed canonical
+ * mission block, or null. Unlike the derived binding this does not require the
+ * supervisor source line, so a prepared body can be checked before filing.
+ */
+export function missionDomain(body) {
+  try {
+    return parseMissionBlock(body).domain;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True for an open reserve mission that no local executor can run: the issue
+ * carries the supervisor source line and a well-formed mission block whose
+ * domain is not in EXECUTABLE_RESERVE_DOMAINS. Such an issue waits on a person
+ * (or a future executor) and is not prepared executable depth.
+ */
+export function isUnexecutableReserveMission(issue) {
+  const body = String(issue?.body ?? '');
+  if (!body.split(/\r?\n/).includes(RESERVE_SOURCE_LINE)) return false;
+  const domain = missionDomain(body);
+  return domain !== null && !EXECUTABLE_RESERVE_DOMAINS.includes(domain);
 }

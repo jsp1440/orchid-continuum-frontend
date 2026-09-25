@@ -23,6 +23,8 @@ export const BACKEND_RESERVE_PLAN_PATH = '/api/runner/knowledge-gaps/reserve-pla
 export const MAX_RESERVE_PLAN_DEPTH = 3;
 const MAX_CALLER_FINGERPRINTS = 100;
 const FINGERPRINT = /^[0-9a-f]{64}$/;
+const DOMAIN = /^[a-z][a-z0-9_-]{0,63}$/;
+const MAX_CALLER_DOMAINS = 10;
 
 export type ReservePlanFetchResult =
   | { ok: true; plan: BackendReservePlan }
@@ -35,6 +37,8 @@ export interface ReservePlanClientOptions {
   reserveDepth?: number;
   /** Material fingerprints already held, so the backend skips them. */
   heldFingerprints?: string[];
+  /** Evidence domains the caller can execute; the backend proposes only these. */
+  domains?: readonly string[];
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 }
@@ -72,6 +76,10 @@ export function reservePlanUrl(options: ReservePlanClientOptions): string {
     .sort()
     .slice(0, MAX_CALLER_FINGERPRINTS);
   for (const fingerprint of held) url.searchParams.append('fingerprint', fingerprint);
+  const domains = [...new Set((options.domains ?? []).filter((domain) => DOMAIN.test(domain)))]
+    .sort()
+    .slice(0, MAX_CALLER_DOMAINS);
+  for (const domain of domains) url.searchParams.append('domain', domain);
   return url.toString();
 }
 
