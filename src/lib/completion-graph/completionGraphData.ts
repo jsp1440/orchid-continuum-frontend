@@ -48,10 +48,10 @@ const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: '2f6f16191c376919649e02a791480064c5425517',
-  reconciledAt: '2026-09-21T00:00:00.000Z',
+  reconciledAgainstSha: '1547793ea1f60ca0a510b6d5339cc13b8652f65d',
+  reconciledAt: '2026-09-25T04:30:00.000Z',
   scope:
-    'The #167 queue reconciliation scores the existing Atlas thematic implementation against main 2f6f161. Earlier domains retain their recorded evidence dates; this is not a new portfolio-wide audit. Homepage thematic presentation and public/research separation remain partial. Browser and deployed operation remain unevaluated. Census coverage is reported alongside each percentage.',
+    'Reconciled against main 1547793: the public literature browser leaf is re-scored from confirmed-missing to PARTIAL on the real /literature route, page and client tests, and the owner-gated backend listing; the #167 Atlas thematic scoring against 2f6f161 is retained unchanged. Earlier domains retain their recorded evidence dates; this is not a new portfolio-wide audit. Browser and deployed operation remain unevaluated. Census coverage is reported alongside each percentage.',
 };
 
 let autoId = 0;
@@ -355,21 +355,38 @@ const atlasDomain = branch({
 ]);
 
 // ─── Literature / evidence ──────────────────────────────────────────────────
-// Real evidence: route /literature renders <ComingSoon/> (confirmed missing at
-// product level); src/lib/scientific-intelligence/literature/adapter.ts exists
-// and is consumed only by Mission Control's own scoring, not by any user route.
+// Real evidence, reconciled against main 1547793 on 2026-09-25: route
+// /literature renders <Literature/> (src/App.tsx), which lists the extraction
+// corpus through src/lib/literatureIndex.ts from
+// GET /api/literature-extraction/papers. The backend router mounts that
+// listing behind verify_owner_or_api_key (app/literature_extraction/routes.py),
+// so an anonymous public visitor is answered 401/403 and the page renders that
+// as "unauthorised" rather than as an empty corpus. Code and tests are real;
+// the PUBLIC browser the leaf names is not yet reachable by the public.
 
-const literaturePublicBrowser = confirmedMissing({
-  idHint: 'cap-literature-public-browser',
-  parentId: 'module-literature-core',
-  name: 'Public literature/evidence browser',
-  evidence: [
-    { kind: 'route', ref: '/literature', note: 'Routes to <ComingSoon/> in src/App.tsx — confirmed placeholder, not a real browser.' },
-    { kind: 'file', ref: 'src/pages/ComingSoon.tsx' },
-  ],
-  nextAction: 'Build the actual literature discovery/browse UI described in the mission spec (discovery, ingestion status, dedupe, bibliographic identity, full text, extraction, taxon linking, citations/source anchors, conflicts/review, corpus coverage).',
-  lane: 'PRODUCT_COMPLETION',
-});
+const literaturePublicBrowser: CompletionNode = {
+  ...censusPending({
+    idHint: 'cap-literature-public-browser',
+    parentId: 'module-literature-core',
+    name: 'Public literature/evidence browser',
+    evidence: [
+      { kind: 'route', ref: '/literature', note: 'Routes to <Literature/> in src/App.tsx; the <ComingSoon/> placeholder is gone from this route.' },
+      { kind: 'file', ref: 'src/pages/Literature.tsx', note: 'Paged corpus listing with distinct unauthorised / outage / rejected / malformed states; counts, not content.' },
+      { kind: 'file', ref: 'src/lib/literatureIndex.ts', note: 'Reads GET /api/literature-extraction/papers?limit&offset; a 200 without a papers array is malformed, never an empty corpus.' },
+      { kind: 'file', ref: 'src/pages/LiteraturePaper.tsx', note: 'Single-paper view over /api/literature-extraction/papers/{id} and its source binding.' },
+      { kind: 'test', ref: 'src/pages/Literature.test.tsx', note: '12 page tests: listing, damaged rows, paging, empty store, unauthorised, outage/retry, malformed 200.' },
+      { kind: 'test', ref: 'src/pages/LiteraturePaper.test.tsx' },
+      { kind: 'file', ref: 'src/lib/explorationContext.ts', note: 'Exploration "literature" nodes now route to /literature instead of /coming-soon/literature.' },
+    ],
+    nextAction: 'The backend listing is owner/API-key gated, so the public cannot browse it: either expose a bounded public read-only listing on the backend or scope this route to authenticated users, then evaluate the browser gate. Discovery, dedupe, taxon linking, citations/source anchors and conflict review from the mission spec remain unbuilt.',
+    lane: 'PRODUCT_COMPLETION',
+  }),
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: null, browserEndToEnd: null, deployedOperational: null },
+  lastUpdated: '2026-09-25T00:00:00.000Z',
+};
 
 const literatureIntelligenceAdapter: CompletionNode = {
   id: 'cap-literature-intelligence-adapter',
@@ -1207,14 +1224,14 @@ const conservatoryCollectionGate: CompletionNode = {
   name: 'Authenticated personal conservatory collection (plants, QR passports)',
   type: 'capability',
   status: 'PARTIAL',
-  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'PARTIAL' },
   lane: 'PRODUCT_COMPLETION',
   gateScores: {
     architectureContracts: 1,
     implementationPresent: 1,
     integrationCanonicalBranch: 1,
-    scientificProvenanceSecurity: null,
-    browserEndToEnd: null,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: 1,
     deployedOperational: null,
   },
   evidence: [
@@ -1222,8 +1239,9 @@ const conservatoryCollectionGate: CompletionNode = {
     { kind: 'file', ref: 'src/pages/MyConservatory.tsx' },
     { kind: 'file', ref: 'src/components/auth/ProtectedRoute.tsx', note: 'Confirmed by reading src/App.tsx: /conservatory/* is wrapped in ProtectedRoute, not publicly reachable without auth.' },
     { kind: 'test', ref: 'src/pages/MyConservatory.test.tsx' },
+    { kind: 'test', ref: 'e2e/conservatory-journey.spec.ts', note: 'Scheduled provider-free run 3738 passed all 14 mounted production-bundle browser checks, including CRUD/persistence, QR round trip, photo privacy, collection review, buying companion, auth persistence, iPad layout, and Calyx cultivation handoff.' },
   ],
-  nextAction: 'Confirm plant CRUD and QR-identifier flows against a live backend and authenticated session with a browser pass.',
+  nextAction: 'Owner-gated confirmation against the deployed live backend and a real authenticated session remains; the provider-free reference backend does not prove production service readiness.',
   lastUpdated: CENSUS_DATE,
   children: [],
 };

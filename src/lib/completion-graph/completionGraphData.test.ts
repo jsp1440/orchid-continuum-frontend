@@ -115,6 +115,21 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(computeGateScore(gate?.gateScores).percentage).not.toBeNull();
   });
 
+  it('scores the public literature browser on the real /literature route, without claiming the public can reach it', () => {
+    const leaf = getLeaves(COMPLETION_GRAPH).find((node) => node.id.startsWith('cap-literature-public-browser'));
+    expect(leaf?.status).toBe('PARTIAL');
+    expect(leaf?.threeLevels.codeComplete).toBe('MET');
+    // The backend listing is owner/API-key gated, so product completion is
+    // NOT_MET until the public can actually browse it; a browser gate has not
+    // been evaluated and must not be scored.
+    expect(leaf?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(leaf?.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaf?.gateScores?.deployedOperational).toBeNull();
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/Literature.tsx')).toBe(true);
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/Literature.test.tsx')).toBe(true);
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/ComingSoon.tsx')).toBe(false);
+  });
+
   it('scores the scheduler->issue-automation loop as wired but not yet proven live', () => {
     const gap = getLeaves(COMPLETION_GRAPH).find((n) => n.id.startsWith('cap-scheduler-issue-automation'));
     expect(gap?.status).toBe('PARTIAL');

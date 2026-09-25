@@ -117,7 +117,9 @@ function respond(body: unknown, status = 200): Response {
 }
 
 function stub(body: unknown, status = 200) {
-  const mock = vi.fn(async () => respond(body, status));
+  // Typed with fetch's parameters so `mock.mock.calls[0]?.[0]` is the request
+  // URL, not an index into an empty tuple (TS2493 under `npm run typecheck`).
+  const mock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => respond(body, status));
   vi.stubGlobal("fetch", mock);
   return mock;
 }
