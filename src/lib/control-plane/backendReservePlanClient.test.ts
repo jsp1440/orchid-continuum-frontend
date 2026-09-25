@@ -47,6 +47,11 @@ describe('backendReservePlanClient', () => {
       );
       expect(prepared.body).not.toMatch(/distribution/i);
     }
+    // The backend's gap priority survives admission instead of defaulting to oc-p4.
+    const priorities = admission.bridge.plan.create.map((prepared) =>
+      prepared.labels.find((label) => /^oc-p[0-5]$/.test(label)),
+    );
+    expect([...priorities].sort()).toEqual(['oc-p1', 'oc-p1', 'oc-p2']);
     expect(admission.source).toEqual({
       sourceKind: 'brain-knowledge-gap',
       state: 'connected',
