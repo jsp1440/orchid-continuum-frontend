@@ -459,7 +459,7 @@
       "expiresAt": "2026-09-25T16:45:41.285Z",
       "reservedUsd": 0.5,
       "implementationSha": "82c76b9ff18f8e6d375886642b8d3431d99e5b44",
-      "state": "reserved"
+      "state": "running"
     }
   ]
 }
