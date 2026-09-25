@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
-  providerFreeRepairsReadyForRequeue, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
+  providerCapacityFromEnvironment, providerFreeRepairsReadyForRequeue, reconcileStaleRunningLabels, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY || '';
@@ -173,8 +173,10 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
  */
 export function planSummary(plan: Plan) {
   const providerAuthorized = process.env.PROVIDER_AUTHORIZED === 'true';
+  const slots = plan.providerCapacity ? `${plan.providerCapacity.slots} (${plan.providerCapacity.reason})` : 'not evaluated';
   return `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; ` +
-    `capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=${providerAuthorized}; ` +
+    `capacity=${plan.capacity}; provider_slots=${slots}; provider_admitted=${plan.providerAdmitted ?? 0}; ` +
+    `wave=${plan.wave.hash}; provider_authorized=${providerAuthorized}; ` +
     `no execution leases acquired.\n` +
     bindingReport(plan);
 }
@@ -186,8 +188,11 @@ export function bindingReport(plan: Plan) {
   // count of pending work states a total the lines below then contradict.
   const reached = plan.queuedReachingAdmission;
   const census = plan.inventory.queued + plan.inventory.prepared;
+  // Work held only by provider capacity is named below with its reason; it
+  // is not a starved lane and must not be reported as one.
+  const deferred = plan.providerDeferred ?? [];
   const idle = plan.capacity > 0 && plan.issues.length === 0
-    && (plan.starved || (census > 0 && plan.inventory.active === 0));
+    && (plan.starved || (census - deferred.length > 0 && plan.inventory.active === 0));
   if (idle) {
     lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${reached} issue(s) reached graph admission, nothing admitted. ` +
       `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no pending issue.`);
@@ -202,6 +207,12 @@ export function bindingReport(plan: Plan) {
   const said = new Set<number>(admitted);
   const take = (issue: number) => said.has(issue) ? false : (said.add(issue), true);
 
+  const deferredLines = deferred.filter(({ issueNumber }) => take(issueNumber));
+  if (deferredLines.length > 0) {
+    const slots = plan.providerCapacity?.slots ?? 0;
+    lines.push(`- **Provider capacity**: ${slots} provider slot(s) this wave; these provider-lane issues reached admission, stay queued (not relabelled) and were not admitted: ` +
+      deferredLines.map(({ issueNumber, nodeId, reason }) => `#${issueNumber} (\`${nodeId}\`: ${reason})`).join(', ') + '.');
+  }
   for (const { issueNumber, reason } of plan.pendingNotReachingAdmission) {
     if (plan.capacity <= 0) break;
     // Through `take()` like every other line-type. The first version of this
@@ -261,10 +272,14 @@ async function main() {
   const store = new GitHubLeaseStore();
   if (command === 'plan') {
     const current = snapshot();
-    let leases: Ledger['leases'] = [];
-    try { const { ledger } = await store.read(); validateLedger(ledger); leases = ledger.leases; }
+    let durable: Ledger | null = null;
+    try { const { ledger } = await store.read(); validateLedger(ledger); durable = ledger; }
     catch (error) { if (!status(error, 404)) throw error; }
-    const plan = makePlan(current, leases);
+    const at = now();
+    // Provider slots are decided once, here, from the same policy environment
+    // and ledger the lanes' preflights read, and are hash-bound into the wave.
+    const plan = makePlan(current, durable?.leases ?? [], at, undefined, undefined,
+      providerCapacityFromEnvironment(process.env, durable, at));
     const dir = process.env.OC_PLAN_DIR || '.oc-wave';
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, 'plan.json'), JSON.stringify(plan, null, 2) + '\n');
@@ -279,16 +294,26 @@ async function main() {
   if (command === 'reconcile') {
     try { await store.read(); } catch (error) { if (status(error, 404)) return; throw error; }
     {
-      await reconcileExpired(store, now(), async run => api<{ status: string }>(`actions/runs/${run}`).status === 'completed', async () => {}, async lease => {
-        const record = api<Issue>(`issues/${lease.issue}`);
+      const runCompleted = async (run: string) => api<{ status: string }>(`actions/runs/${run}`).status === 'completed';
+      const relabel = async (issue: number, state: Ledger['leases'][number]['state']) => {
+        const record = api<Issue>(`issues/${issue}`);
         // Labels follow the final persisted outcome, never the expired snapshot.
         // Preserve independently applied owner/publication holds during recovery.
         const labels = record.labels.map(l => l.name);
         const held = labels.includes('oc-owner-gate') || /^OC-AUTO-HOLD:\s*true\s*$/m.test(record.body || '');
         const transient = ['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-blocked', 'oc-runtime-backoff', 'oc-done', 'oc-repair'];
-        api(`issues/${lease.issue}`, 'PATCH', { labels: [...new Set(labels
-          .filter(l => !transient.includes(l)).concat(held ? 'oc-owner-gate' : terminalIssueLabel(lease.state)))] });
-      });
+        api(`issues/${issue}`, 'PATCH', { labels: [...new Set(labels
+          .filter(l => !transient.includes(l)).concat(held ? 'oc-owner-gate' : terminalIssueLabel(state)))] });
+      };
+      await reconcileExpired(store, now(), runCompleted, async () => {}, async lease => relabel(lease.issue, lease.state));
+      // A terminal lease whose relabel never landed leaves `oc-running` behind,
+      // and `runningCount` counts it as an occupied lane for ever. Clear it from
+      // the ledger's terminal state plus proven run completion; keep it on any
+      // unknown.
+      const running = pages<Issue & { pull_request?: unknown }>('issues?state=open&labels=oc-running').filter(i => !i.pull_request)
+        .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })) }));
+      const outcomes = await reconcileStaleRunningLabels(store, running, runCompleted, async (issue, lease) => relabel(issue, lease.state));
+      for (const outcome of outcomes) process.stdout.write(`stale oc-running #${outcome.issue}: ${outcome.outcome} (${outcome.reason})\n`);
     }
     const { ledger } = await store.read();
     // Avoid a live GitHub snapshot unless the ledger contains a terminal

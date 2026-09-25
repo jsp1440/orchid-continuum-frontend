@@ -5,6 +5,9 @@ import type { CompletionNode } from '../src/lib/completion-graph/types';
 import { buildWaveContext } from './oc-wave-context.mjs';
 import { BLOCKED_LABELS, MAX_ACTIVE_LANES, selectLanes } from './oc-multilane-selector.mjs';
 import { decideBudget } from './oc-budget-governor.mjs';
+import { routeIssue } from './oc-capability-router.mjs';
+import { admitWorkflowProviderExecution } from '../src/lib/provider-governor/workflowGovernorAdmission';
+import type { GovernorState, Provider } from '../src/lib/provider-governor/providerGovernor';
 
 export { MAX_ACTIVE_LANES };
 export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }> };
@@ -49,6 +52,13 @@ export function terminalIssueLabel(state: Lease['state']) {
   if (state === 'owner-gate') return 'oc-owner-gate';
   if (state === 'runtime-backoff') return 'oc-runtime-backoff';
   return 'oc-blocked';
+}
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson((value as Record<string, unknown>)[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
 }
 const sha = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const labelsOf = (issue: Issue) => issue.labels.map(label => label.name);
@@ -142,29 +152,186 @@ function openRefs(snapshot: Snapshot, issues: ReturnType<typeof eligibleIssues>)
   return snapshot.prs.filter(pr => pr.state === 'open' && !repairPrs.has(pr.number))
     .flatMap(pr => [`#${pr.number}`, `jsp1440/orchid-continuum-frontend#${pr.number}`]);
 }
+/** Labels that `runningCount` treats as already released, so a label beside one of them holds nothing. */
+const RELEASED_LABELS = ['oc-done', 'oc-validating', 'oc-blocked', 'oc-owner-gate', 'oc-runtime-backoff'];
 export function runningCount(snapshot: Snapshot, leases: Lease[]) {
   // A stale label is conservatively occupied until reconciliation proves termination.
   return new Set([
     ...leases.filter(isActive).map(lease => lease.issue),
-    ...snapshot.issues.filter(i => !steward(i) && i.state !== 'closed' && labelsOf(i).includes('oc-running') &&
-      !labelsOf(i).some(l => ['oc-done', 'oc-validating', 'oc-blocked', 'oc-owner-gate', 'oc-runtime-backoff'].includes(l)))
-      .map(i => i.number),
+    ...runningLabelledIssues(snapshot.issues).map(i => i.number),
   ]).size;
 }
-function admission(snapshot: Snapshot, queued: number[], now: string, root: CompletionNode, running = 0, occupiedNodeIds: string[] = []) {
+function admission(snapshot: Snapshot, queued: number[], now: string, root: CompletionNode, running = 0, occupiedNodeIds: string[] = [],
+  providerCapacity: ProviderCapacity | null = null) {
   const issues = eligibleIssues(snapshot);
   // Filter first, rank with the canonical #301/#313 scheduler second. Scan every
   // eligible issue (not just the first eight in GitHub's API ordering).
   const allEligible = issues.filter(issue => selectLanes({ issues: [issue] }).selected.length > 0).map(i => i.number);
+  const admissible = queued.filter(i => allEligible.includes(i));
   return buildGraphDispatchPlan({ maxActiveLanes: MAX_ACTIVE_LANES, runningCount: running,
-    queuedIssueNumbers: queued.filter(i => allEligible.includes(i)), openWorkRefs: openRefs(snapshot, issues), now, occupiedNodeIds,
-    declaredNodesByIssue: declaredNodesByIssue(snapshot.issues) }, root);
+    queuedIssueNumbers: admissible, openWorkRefs: openRefs(snapshot, issues), now, occupiedNodeIds,
+    declaredNodesByIssue: declaredNodesByIssue(snapshot.issues),
+    ...(providerCapacity === null ? {} : {
+      providerLaneIssues: admissible.filter(number => laneClassOf(snapshot.issues.find(i => i.number === number)!) === 'provider'),
+      providerSlots: providerCapacity.slots,
+      providerSlotsReason: providerCapacity.reason,
+    }) }, root);
+}
+
+/**
+ * Which lane an issue's own classify job will send it to.
+ *
+ * This is the lane workflow's `oc-provider-free-route.mjs` decision, made with
+ * the same `routeIssue` over the same body and labels: `providerFree` goes to
+ * the deterministic lane, everything else to budget preflight. An issue whose
+ * declaration cannot be routed is routed `provider_free=false` by that job, so
+ * it is provider-lane here too -- it would take a provider slot, not a free one.
+ */
+export function laneClassOf(issue: Pick<Issue, 'number' | 'body' | 'labels'>): LeaseLane {
+  try {
+    return routeIssue({ number: issue.number, body: issue.body, labels: issue.labels }).providerFree ? 'provider-free' : 'provider';
+  } catch {
+    return 'provider';
+  }
+}
+
+/**
+ * How many provider-lane issues one wave may admit, and the constraint that
+ * decided it. Computed once per plan from durable, deterministic inputs and
+ * recorded in the hash-bound wave packet, so every lane's isolated re-plan
+ * reproduces the same decision instead of re-reading a ledger that its
+ * siblings have since charged.
+ *
+ * This decides ADMISSION only. It spends nothing, reserves nothing and grants
+ * nothing: every admitted provider lane still passes the provider governor and
+ * `claimLease` -> `decideBudget` at its own preflight, exactly as before.
+ */
+export type ProviderCapacity = {
+  slots: number;
+  reason: string;
+  basis: {
+    providerAuthorized: boolean;
+    noApiMode: boolean;
+    disabledProviders: string[];
+    policyReason: string | null;
+    budgetReason: string | null;
+    day: string;
+    dailySpentUsd: number | null;
+    programSpentUsd: number | null;
+    /** Ordinary tasks the remaining daily/program budget can still reserve. */
+    budgetFitTasks: number | null;
+    waveMaxCalls: number | null;
+    dailyMaxCalls: number | null;
+    /**
+     * The ledger records reservations, not provider calls, and the governor's
+     * call counters are not persisted between lanes. Remaining daily calls are
+     * therefore unknown, and are recorded as unknown rather than invented.
+     */
+    dailyCallsRemaining: null;
+    dailyCallsBasis: 'not_recorded_by_ledger';
+  };
+};
+export type ProviderCapacityInput = {
+  providerAuthorized: boolean;
+  noApiMode: boolean;
+  disabledProviders: Provider[];
+  waveMaxCalls: number;
+  dailyMaxCalls: number;
+  materialWorkThreshold?: number;
+  minimumDispatchIntervalMs?: number;
+  /** `null` when the durable ledger does not exist or could not be read. */
+  ledger: Ledger | null;
+  now: string;
+};
+const GOVERNOR_PROVIDERS: Provider[] = ['anthropic', 'gemini', 'openai'];
+export function providerCapacityFor(input: ProviderCapacityInput): ProviderCapacity {
+  const day = input.now.slice(0, 10);
+  const basis: ProviderCapacity['basis'] = {
+    providerAuthorized: input.providerAuthorized, noApiMode: input.noApiMode,
+    disabledProviders: [...input.disabledProviders].sort(), policyReason: null, budgetReason: null, day,
+    dailySpentUsd: input.ledger ? (input.ledger.dailySpent[day] ?? 0) : null,
+    programSpentUsd: input.ledger ? input.ledger.programSpent : null,
+    budgetFitTasks: null, waveMaxCalls: input.waveMaxCalls, dailyMaxCalls: input.dailyMaxCalls,
+    dailyCallsRemaining: null, dailyCallsBasis: 'not_recorded_by_ledger',
+  };
+  const none = (reason: string): ProviderCapacity => ({ slots: 0, reason, basis });
+  if (!input.providerAuthorized) return none('provider_not_authorized');
+  if (input.noApiMode) return none('no_api_mode');
+  // The provider governor the lane runs (provider-governor-workflow-gate.ts),
+  // with the state that lane always starts from: fresh, no calls, no
+  // fingerprint. With a single work unit its decision depends only on policy,
+  // not on which issue the unit names, so one probe answers for every lane.
+  const usage = () => Object.fromEntries(GOVERNOR_PROVIDERS.map(p => [p, { calls: 0, tokens: 0, costUsd: 0, lastDispatchAt: null }])) as GovernorState['daily'];
+  const policy = admitWorkflowProviderExecution({
+    now: input.now,
+    work: [{ issueNumber: 1 }],
+    state: { noApiMode: input.noApiMode, dayKey: day, daily: usage(), wave: usage(), lastFingerprint: null },
+    config: { noApiMode: input.noApiMode, materialWorkThreshold: input.materialWorkThreshold ?? 1,
+      minimumDispatchIntervalMs: input.minimumDispatchIntervalMs ?? 3_600_000,
+      dailyMaxCalls: input.dailyMaxCalls, waveMaxCalls: input.waveMaxCalls, disabledProviders: input.disabledProviders },
+  });
+  basis.policyReason = policy.reason;
+  if (!policy.allowPaidExecution) return none(`provider_policy_denied:${policy.reason}`);
+  // Missing accounting never means nothing has been spent; claimLease cannot
+  // reserve without the ledger either.
+  if (!input.ledger) return none('ledger_unavailable');
+  const budget = decideBudget({ providerAuthorized: true, difficulty: 'ordinary',
+    programSpent: input.ledger.programSpent, dailySpent: input.ledger.dailySpent[day] ?? 0,
+    programStartedAt: input.ledger.programStartedAt, now: input.now });
+  basis.budgetReason = budget.reason;
+  if (!budget.allowed) return none(budget.reason);
+  const cents = (usd: number) => Math.floor(usd * 100 + 1e-9);
+  const fit = Math.floor(Math.min(cents(budget.dailyRemainingUsd ?? 0), cents(budget.programRemainingUsd ?? 0)) /
+    Math.max(1, Math.ceil(budget.config.ordinaryTaskUsd * 100 - 1e-9)));
+  basis.budgetFitTasks = fit;
+  const bounds: Array<[number, string]> = [[input.waveMaxCalls, 'wave_max_calls'], [input.dailyMaxCalls, 'daily_max_calls'], [fit, 'budget_fit']];
+  const [slots, reason] = bounds.reduce((best, bound) => bound[0] < best[0] ? bound : best);
+  return { slots: Math.max(0, slots), reason, basis };
+}
+
+/**
+ * Read the provider policy from the environment exactly as the lane's gate
+ * does: the same variable names and the same defaults, including NO-API ON
+ * when the variable is absent. A value the gate would reject yields zero
+ * slots instead of a crashed plan.
+ */
+export function providerCapacityFromEnvironment(env: Record<string, string | undefined>, ledger: Ledger | null, now: string): ProviderCapacity {
+  const bool = (name: string, fallback: boolean) => {
+    const value = env[name];
+    if (value == null || value === '') return fallback;
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    throw new Error(name);
+  };
+  const int = (name: string, fallback: number) => {
+    const value = env[name];
+    if (value == null || value === '') return fallback;
+    const parsed = Number(value);
+    if (!Number.isInteger(parsed) || parsed < 0) throw new Error(name);
+    return parsed;
+  };
+  const providerAuthorized = env.PROVIDER_AUTHORIZED === 'true';
+  try {
+    const disabled = (env.OC_PROVIDER_DISABLED ?? '').split(',').map(v => v.trim()).filter(Boolean);
+    if (disabled.some(p => !GOVERNOR_PROVIDERS.includes(p as Provider))) throw new Error('OC_PROVIDER_DISABLED');
+    return providerCapacityFor({ providerAuthorized, noApiMode: bool('OC_PROVIDER_NO_API_MODE', true),
+      disabledProviders: disabled as Provider[],
+      waveMaxCalls: int('OC_PROVIDER_WAVE_MAX_CALLS', 1), dailyMaxCalls: int('OC_PROVIDER_DAILY_MAX_CALLS', 4),
+      materialWorkThreshold: int('OC_PROVIDER_MATERIAL_WORK_THRESHOLD', 1),
+      minimumDispatchIntervalMs: int('OC_PROVIDER_MINIMUM_DISPATCH_INTERVAL_MS', 3_600_000), ledger, now });
+  } catch (error) {
+    const capacity = providerCapacityFor({ providerAuthorized: false, noApiMode: true, disabledProviders: [],
+      waveMaxCalls: 0, dailyMaxCalls: 0, ledger, now });
+    return { ...capacity, basis: { ...capacity.basis, providerAuthorized },
+      reason: `invalid_provider_policy_env:${error instanceof Error ? error.message : 'unknown'}` };
+  }
 }
 function findNode(root: CompletionNode, id: string): CompletionNode | undefined {
   return root.id === id ? root : root.children.map(child => findNode(child, id)).find(Boolean);
 }
 const LANE_STATES = ['queued', 'prepared', 'validating', 'blocked', 'owner-gate', 'runtime-backoff'] as const;
-export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Date().toISOString(), root = COMPLETION_GRAPH, onlyIssue?: number) {
+export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Date().toISOString(), root = COMPLETION_GRAPH, onlyIssue?: number,
+  providerCapacity: ProviderCapacity | null = null) {
   if (!/^[a-f0-9]{40}$/.test(snapshot.integrationSha) || !/^[a-f0-9]{40}$/.test(snapshot.implementationSha)) throw new Error('Unknown implementation/integration revision');
   const occupied = new Set(leases.filter(isActive).map(lease => lease.issue));
   // `onlyIssue` narrows the QUEUE, never the snapshot. Removing the other issues
@@ -174,7 +341,10 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
   // reproduce one decision would be answering a different question.
   const queued = snapshot.issues.filter(i => !occupied.has(i.number)).map(i => i.number)
     .filter(number => onlyIssue === undefined || number === onlyIssue);
-  const plan = admission(snapshot, queued, now, root, runningCount(snapshot, leases), leases.filter(isActive).map(l => l.nodeId));
+  if (providerCapacity !== null && (!Number.isSafeInteger(providerCapacity.slots) || providerCapacity.slots < 0 || !providerCapacity.reason)) {
+    throw new Error('Invalid provider capacity');
+  }
+  const plan = admission(snapshot, queued, now, root, runningCount(snapshot, leases), leases.filter(isActive).map(l => l.nodeId), providerCapacity);
   const leaves = plan.leaves.map(leaf => {
     const issue = snapshot.issues.find(i => i.number === leaf.issueNumber)!;
     const lineage = lineageFor(issue.number, snapshot.prs);
@@ -199,7 +369,10 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
     architecture: snapshot.material,
     completionGraph: [...contextNodes.values()].sort((a,b) => a.id.localeCompare(b.id)),
     prLineage: snapshot.prs.filter(pr => pr.state === 'open').map(pr => ({ number: pr.number, head: pr.head })).sort((a,b) => a.number-b.number),
-    repositoryState: { implementationSha: snapshot.implementationSha, admission: leaves.map(({ issueNumber, nodeId, fingerprint }) => ({ issueNumber, nodeId, fingerprint })) },
+    repositoryState: { implementationSha: snapshot.implementationSha, admission: leaves.map(({ issueNumber, nodeId, fingerprint }) => ({ issueNumber, nodeId, fingerprint })),
+      // The provider-slot decision is part of the admission, so it is hash-bound
+      // with it: a lane re-plans with exactly this input, never a live re-read.
+      providerCapacity: providerCapacity ?? null },
   });
   const inventory = Object.fromEntries(LANE_STATES
     .map(state => [state, snapshot.issues.filter(i => i.state === 'open' && !steward(i) && labelsOf(i).includes(`oc-${state}`)).length])
@@ -253,7 +426,7 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
     .filter(i => !plan.reachedAdmission.includes(i.number))
     .map(i => ({ issueNumber: i.number, reason: reasonFor(i) }))
     .sort((a, b) => a.issueNumber - b.issueNumber);
-  return { ...plan, leaves, wave, pendingNotReachingAdmission, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
+  return { ...plan, leaves, wave, pendingNotReachingAdmission, providerCapacity, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
 }
 export type Plan = ReturnType<typeof makePlan>;
 
@@ -262,7 +435,10 @@ export function assertAdmission(plan: Plan, snapshot: Snapshot, issueNumber: num
   if (plan.implementationSha !== snapshot.implementationSha || plan.integrationSha !== snapshot.integrationSha) throw new Error('Implementation or integration revision changed; replan');
   const expected = plan.leaves.find(leaf => leaf.issueNumber === issueNumber);
   if (!expected || !plan.issues.includes(issueNumber)) throw new Error('Issue missing from admitted dispatch plan');
-  const current = makePlan(snapshot, [], now, root, issueNumber).leaves.find(leaf => leaf.issueNumber === issueNumber);
+  // The re-plan must answer the plan's question, so it takes the provider-slot
+  // input the plan recorded. Recomputing it from the live ledger would read
+  // reservations the wave's own sibling lanes have made since.
+  const current = makePlan(snapshot, [], now, root, issueNumber, plan.providerCapacity ?? null).leaves.find(leaf => leaf.issueNumber === issueNumber);
   if (!current || current.nodeId !== expected.nodeId || current.fingerprint !== expected.fingerprint) {
     // Naming the field that moved, because "graph/admission/issue/lineage" names
     // four causes and identifies none, and a lane that refuses without saying
@@ -291,21 +467,40 @@ export function validateLedger(ledger: Ledger) {
 }
 export type Claim = { issueNumber: number; runId: string; runAttempt: string; providerAuthorized: boolean; requestedUsd: number; now: string };
 export async function claimLease(store: LeaseStore, plan: Plan, snapshot: Snapshot, input: Claim, root = COMPLETION_GRAPH) {
-  const leaf = assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
   // Refused before the ledger is read at all. `decideBudget` would deny it a
   // step later anyway, so this is not the only thing between an unauthorized
   // caller and a reservation -- but "never even read" is the stated property,
   // and it needs a test that fails if the read happens. There is one now: a
   // store whose `read()` throws.
-  if (!input.providerAuthorized) return { allowed: false, reason: 'provider_not_authorized', lease: null };
+  if (!input.providerAuthorized) {
+    assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
+    return { allowed: false, reason: 'provider_not_authorized', lease: null };
+  }
+  // Immutable plan identity first; nothing live has been consulted yet.
+  validatePlan(plan);
+  if (plan.implementationSha !== snapshot.implementationSha || plan.integrationSha !== snapshot.integrationSha) throw new Error('Implementation or integration revision changed; replan');
+  const leaf = plan.leaves.find(candidate => candidate.issueNumber === input.issueNumber);
+  if (!leaf || !plan.issues.includes(input.issueNumber)) throw new Error('Issue missing from admitted dispatch plan');
   if (!/^\d+$/.test(input.runId) || !/^\d+$/.test(input.runAttempt)) throw new Error('Missing executable workflow invocation');
   for (let attempt = 0; attempt < 8; attempt++) {
     const { version, ledger } = await store.read();
     validateLedger(ledger);
+    // Durable identity BEFORE the live re-plan. Two overlapping scheduler
+    // passes can admit the same queued issue; the lane workflow's per-issue
+    // concurrency group then holds the second lane until the first has
+    // reserved, started (`oc-running`) and often settled (`oc-validating`,
+    // `oc-runtime-backoff`) it. The second lane's isolated re-plan then sees an
+    // issue that is no longer queued and admits nothing -- which is true, and
+    // was thrown as "drift" with no receipt, failing the audit (live: #792 in
+    // run 36156196749, #791 in run 36156039098). The ledger already proves the
+    // work is owned or unchanged, so that is a governed refusal, exactly as
+    // `claimDeterministicLease` has always done. Genuine drift -- no durable
+    // lease for this work -- still reaches `assertAdmission` below and throws.
     if (ledger.leases.some(l => (l.issue === input.issueNumber || l.nodeId === leaf.nodeId) && isActive(l))) return { allowed: false, reason: 'lease_owned', lease: null };
-    if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
     // Unchanged failed/completed work is never blindly paid for again.
     if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint)) return { allowed: false, reason: 'unchanged_attempt', lease: null };
+    assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
+    if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
     const day = input.now.slice(0, 10);
     const budget = decideBudget({ providerAuthorized: input.providerAuthorized, requestedUsd: input.requestedUsd,
       difficulty: labelsOf(snapshot.issues.find(i => i.number === input.issueNumber)!).includes('oc-difficult') ? 'difficult' : 'ordinary',
@@ -498,6 +693,66 @@ export async function reconcileExpired(
   }
   return report;
 }
+/** The issues whose `oc-running` label `runningCount` counts as occupied capacity. */
+export function runningLabelledIssues(issues: Issue[]) {
+  return issues.filter(i => !steward(i) && i.state !== 'closed' && labelsOf(i).includes('oc-running') &&
+    !labelsOf(i).some(l => RELEASED_LABELS.includes(l)));
+}
+export type StaleLabelOutcome = { issue: number; outcome: 'cleared' | 'kept' | 'error'; reason: string; leaseId?: string; state?: Lease['state'] };
+/**
+ * Release capacity held by an `oc-running` label its lane can no longer own.
+ *
+ * `runningCount` counts a stale label as occupied "until reconciliation proves
+ * termination", but nothing proved it for a lease that was already terminal:
+ * `reconcileExpired` only inspects ACTIVE leases, so when its relabel
+ * (`afterRelease`) failed after the ledger transition had won, or a settle job
+ * died between its ledger write and its label write, the lease was terminal,
+ * never inspected again, and the label consumed one of the eight lanes for
+ * ever.
+ *
+ * The proof required here is the same one expiry uses, and nothing weaker:
+ * the ledger's LATEST lease for the issue is terminal, no lease for it is
+ * active, and the hosted run that held that lease is proven completed. A label
+ * with no lease at all, an unknown run status, or a status API failure keeps
+ * the label -- fail closed -- and is reported. The ledger is re-read just
+ * before each relabel so a lane that claimed the issue meanwhile is never
+ * stripped of its label.
+ */
+export async function reconcileStaleRunningLabels(
+  store: LeaseStore,
+  issues: Issue[],
+  runCompleted: (runId: string) => Promise<boolean>,
+  relabel: (issue: number, lease: Lease) => Promise<void>,
+) {
+  const outcomes: StaleLabelOutcome[] = [];
+  for (const issue of runningLabelledIssues(issues).sort((a, b) => a.number - b.number)) {
+    try {
+      const { ledger } = await store.read();
+      validateLedger(ledger);
+      const leases = ledger.leases.filter(l => l.issue === issue.number);
+      if (leases.some(isActive)) { outcomes.push({ issue: issue.number, outcome: 'kept', reason: 'an active lease owns the label' }); continue; }
+      const last = leases[leases.length - 1];
+      if (!last) { outcomes.push({ issue: issue.number, outcome: 'kept', reason: 'no ledger lease proves who applied the label' }); continue; }
+      if (!(await runCompleted(last.runId))) {
+        outcomes.push({ issue: issue.number, outcome: 'kept', reason: `run ${last.runId} is not proven completed`, leaseId: last.id, state: last.state });
+        continue;
+      }
+      // Re-read: the label may now belong to a lane that claimed after the first read.
+      const { ledger: fresh } = await store.read();
+      validateLedger(fresh);
+      const now = fresh.leases.filter(l => l.issue === issue.number);
+      if (now.some(isActive) || now[now.length - 1]?.id !== last.id) {
+        outcomes.push({ issue: issue.number, outcome: 'kept', reason: 'a newer lease appeared during reconciliation' });
+        continue;
+      }
+      await relabel(issue.number, last);
+      outcomes.push({ issue: issue.number, outcome: 'cleared', reason: `terminal lease ${last.state} and run ${last.runId} completed`, leaseId: last.id, state: last.state });
+    } catch (error) {
+      outcomes.push({ issue: issue.number, outcome: 'error', reason: error instanceof Error ? error.message : 'unknown failure' });
+    }
+  }
+  return outcomes;
+}
 export function validatePlan(plan: Plan) {
   if (buildWaveContext(plan.wave.packet).hash !== plan.wave.hash) throw new Error('Wave context hash mismatch');
   const admission = plan.leaves.map(({ issueNumber, nodeId, fingerprint }) => ({ issueNumber, nodeId, fingerprint }));
@@ -505,7 +760,9 @@ export function validatePlan(plan: Plan) {
   if (!Array.isArray(bound) || bound.length !== admission.length ||
       admission.some((entry, index) => Object.entries(entry).some(([key, value]) => bound[index][key] !== value)) ||
       JSON.stringify(plan.issues) !== JSON.stringify(plan.leaves.map(l => l.issueNumber)) ||
-      plan.issues.length > MAX_ACTIVE_LANES || new Set(plan.issues).size !== plan.issues.length) {
+      plan.issues.length > MAX_ACTIVE_LANES || new Set(plan.issues).size !== plan.issues.length ||
+      canonicalJson(plan.providerCapacity ?? null) !== canonicalJson(plan.wave.packet.repositoryState.providerCapacity ?? null) ||
+      (plan.providerCapacity && (plan.providerAdmitted ?? 0) > plan.providerCapacity.slots)) {
     throw new Error('Plan differs from hash-bound admission');
   }
 }

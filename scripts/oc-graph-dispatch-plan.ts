@@ -13,6 +13,20 @@ export type GraphDispatchPlanInput = {
   /** Issue-side bindings, keyed by issue number. See `declaredNodesByIssue` in oc-dispatch-control. */
   declaredNodesByIssue?: Record<number, string[]>;
   now?: string;
+  /**
+   * Queued issues whose lane is the PROVIDER lane: the lane's own classify job
+   * (`routeIssue`) would route them `provider_free=false`, so they can only run
+   * after a budget reservation. Every other queued issue is provider-free.
+   */
+  providerLaneIssues?: number[];
+  /**
+   * How many provider-lane issues this wave may admit. `undefined` means the
+   * caller did not evaluate provider capacity, and admission is not split by
+   * lane class (the behaviour before per-lane-class admission).
+   */
+  providerSlots?: number;
+  /** The binding constraint behind `providerSlots`, e.g. `daily_hard_cap_exceeded` or `wave_max_calls`. */
+  providerSlotsReason?: string;
 };
 
 export type GraphDispatchPlan = {
@@ -44,6 +58,15 @@ export type GraphDispatchPlan = {
    * shape so that every plan has it and a report can never read `undefined`.
    */
   pendingNotReachingAdmission: Array<{ issueNumber: number; reason: string }>;
+  /** How many admitted issues are provider-lane issues. Never more than `providerSlots`. */
+  providerAdmitted: number;
+  /**
+   * Provider-lane issues the ranker DID reach this wave and that were not
+   * admitted because no provider slot was left. They keep their queue label;
+   * the reason names the exact constraint so the operator can see capacity,
+   * not a binding problem, is what holds them.
+   */
+  providerDeferred: Array<{ issueNumber: number; nodeId: string; reason: string }>;
 };
 
 function cloneGraph(root: CompletionNode): CompletionNode {
@@ -137,15 +160,17 @@ function indexNamedBy(root: CompletionNode, declared: ReadonlyMap<string, number
   return namedBy;
 }
 
-function trackedQueuedIssue(node: CompletionNode, queued: ReadonlySet<number>, declared: ReadonlyMap<string, number[]>): number | null {
+/** Every queued issue a node names, graph side first, in declaration order. */
+function trackedQueuedIssues(node: CompletionNode, queued: ReadonlySet<number>, declared: ReadonlyMap<string, number[]>): number[] {
+  const found: number[] = [];
   for (const ref of node.issues ?? []) {
     const issue = issueNumberFromRef(ref);
-    if (issue !== null && queued.has(issue)) return issue;
+    if (issue !== null && queued.has(issue) && !found.includes(issue)) found.push(issue);
   }
   for (const issue of declared.get(node.id) ?? []) {
-    if (queued.has(issue)) return issue;
+    if (queued.has(issue) && !found.includes(issue)) found.push(issue);
   }
-  return null;
+  return found;
 }
 
 /**
@@ -162,6 +187,12 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
   if (!Number.isSafeInteger(maxActiveLanes) || maxActiveLanes < 0 || maxActiveLanes > 8 ||
       !Number.isSafeInteger(runningCount) || runningCount < 0) throw new Error("Invalid graph capacity");
   const capacity = Math.max(0, maxActiveLanes - runningCount);
+  const providerSlots = input.providerSlots;
+  if (providerSlots !== undefined && (!Number.isSafeInteger(providerSlots) || providerSlots < 0)) {
+    throw new Error('Invalid provider slot count');
+  }
+  const providerLane = new Set(input.providerLaneIssues ?? []);
+  const providerReason = `provider_capacity: ${input.providerSlotsReason || 'unspecified'}`;
   const queued = new Set(input.queuedIssueNumbers ?? []);
   const openWorkRefs = new Set(input.openWorkRefs ?? []);
   const now = input.now ?? new Date().toISOString();
@@ -177,6 +208,12 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
   const leaves: GraphDispatchPlan['leaves'] = [];
   const untrackedLeaves: GraphDispatchPlan['untrackedLeaves'] = [];
   const blockerMap = new Map<string, { nodeId: string; nodeName: string; status: string }>();
+  const providerDeferred: GraphDispatchPlan['providerDeferred'] = [];
+  let providerAdmitted = 0;
+  // A provider-lane issue fits only while a provider slot is left. Provider-free
+  // work never competes for those slots, so budget the provider can never use
+  // no longer takes lane capacity from deterministic work.
+  const fits = (issue: number) => providerSlots === undefined || !providerLane.has(issue) || providerAdmitted < providerSlots;
 
   // The graph is finite; this guard is defensive against malformed future data.
   for (let examined = 0; examined < 1000 && issues.length < capacity; examined += 1) {
@@ -187,8 +224,22 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     if (!result.selected) break;
 
     const selected = result.selected;
-    const issueNumber = trackedQueuedIssue(selected.node, queued, declared);
-    if (issueNumber !== null && !issues.includes(issueNumber)) {
+    // Walk the node's queued issues in binding order. Without provider slots
+    // this is exactly the old rule: the first queued issue, or nothing if it is
+    // already admitted elsewhere. With slots, a provider-lane issue that does
+    // not fit is recorded as deferred and the next issue on the node is tried.
+    let issueNumber: number | null = null;
+    let deferredHere = false;
+    for (const candidate of trackedQueuedIssues(selected.node, queued, declared)) {
+      if (issues.includes(candidate)) break;
+      if (fits(candidate)) { issueNumber = candidate; break; }
+      deferredHere = true;
+      if (!providerDeferred.some(entry => entry.issueNumber === candidate)) {
+        providerDeferred.push({ issueNumber: candidate, nodeId: selected.node.id, reason: providerReason });
+      }
+    }
+    if (issueNumber !== null) {
+      if (providerSlots !== undefined && providerLane.has(issueNumber)) providerAdmitted += 1;
       issues.push(issueNumber);
       leaves.push({
         nodeId: selected.node.id,
@@ -196,7 +247,9 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
         issueNumber,
         reasons: selected.reasons,
       });
-    } else {
+    } else if (!deferredHere) {
+      // A leaf held only by provider capacity DOES carry pending work; calling
+      // it untracked would send the operator to bind an issue that is bound.
       untrackedLeaves.push({ nodeId: selected.node.id, nodeName: selected.node.name, reasons: selected.reasons });
     }
 
@@ -209,7 +262,8 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
   // none can fall silently between them. A declaration problem is the most
   // specific answer and takes precedence; then "no node names it"; then "a node
   // does, and the ranker did not reach it".
-  const explained = new Set([...unknown, ...unadmissible].map(entry => entry.issueNumber));
+  const deferred = new Set(providerDeferred.map(entry => entry.issueNumber).filter(issue => !issues.includes(issue)));
+  const explained = new Set([...[...unknown, ...unadmissible].map(entry => entry.issueNumber), ...deferred]);
   const unaccounted = [...queued].filter(issue => !issues.includes(issue) && !explained.has(issue)).sort((a, b) => a - b);
   const unboundQueued = unaccounted.filter(issue => (namedBy.get(issue) ?? []).length === 0);
   const unreachableQueued = unaccounted
@@ -229,8 +283,12 @@ export function buildGraphDispatchPlan(input: GraphDispatchPlanInput = {}, root:
     pendingNotReachingAdmission: [],
     unknownNodeDeclarations: unknown,
     unadmissibleNodeDeclarations: unadmissible,
+    providerAdmitted,
+    providerDeferred: providerDeferred.filter(entry => deferred.has(entry.issueNumber)),
     // Reporting this run as a healthy no-op is what let the binding gap run unseen.
-    starved: capacity > 0 && queued.size > 0 && issues.length === 0,
+    // Work held only by provider capacity is reported in `providerDeferred`,
+    // with its reason; it is not a binding gap.
+    starved: capacity > 0 && [...queued].some(issue => !deferred.has(issue)) && issues.length === 0,
   };
 }
 

@@ -993,7 +993,7 @@ describe('reconciling an expired lease does not bury the issue', () => {
    * became unselectable -- on the strength of an attempt that produced no
    * evidence either way.
    */
-  const harness = (lease: Partial<Lease>, options: { raceState?: Lease['state']; labels?: string[]; body?: string } = {}) => {
+  const harness = (lease: Partial<Lease>, options: { raceState?: Lease['state']; labels?: string[]; body?: string; runningIssues?: unknown[] } = {}) => {
     const dir = mkdtempSync(join(tmpdir(), 'oc-reconcile-')); paths.push(dir);
     const bin = join(dir, 'bin'); mkdirSync(bin);
     const ledgerFile = join(dir, 'ledger.json');
@@ -1029,6 +1029,8 @@ if (method === 'PATCH') {
   fs.appendFileSync(process.env.OC_TEST_LOG, 'PATCHBODY ' + fs.readFileSync(0, 'utf8') + '\\n');
   console.log('{}'); process.exit(0);
 }
+// The open \`oc-running\` inventory the stale-label pass reads.
+if (/\\/issues\\?/.test(path)) { console.log(process.env.OC_RUNNING_ISSUES || '[]'); process.exit(0); }
 if (/issues\\/\\d+$/.test(path)) { console.log(JSON.stringify({ number: 703, state: 'open', title: 't', body: process.env.OC_ISSUE_BODY || null, labels: JSON.parse(process.env.OC_ISSUE_LABELS) })); process.exit(0); }
 console.log('{}');
 `);
@@ -1037,6 +1039,7 @@ console.log('{}');
       GITHUB_REPOSITORY: 'jsp1440/orchid-continuum-frontend', GITHUB_OUTPUT: join(dir, 'outputs'),
       OC_TEST_LOG: join(dir, 'requests'), OC_LEDGER_FILE: ledgerFile,
       OC_RACE_STATE: options.raceState || '', OC_ISSUE_BODY: options.body || '',
+      OC_RUNNING_ISSUES: JSON.stringify(options.runningIssues ?? []),
       OC_ISSUE_LABELS: JSON.stringify((options.labels || ['oc-running', `oc-node:${LEAF}`]).map(name => ({ name }))) };
     writeFileSync(env.OC_TEST_LOG, '');
     const reconcile = () => spawnSync(process.execPath,
@@ -1087,6 +1090,33 @@ console.log('{}');
     expect(h.labels().at(-1)).not.toContain('oc-running');
     expect(h.labels().at(-1)).not.toContain('oc-queued');
     expect(h.stored().leases[0].state).toBe('not-executed');
+  });
+
+  // The release path `reconcileExpired` cannot reach: its lease is already
+  // terminal (its relabel failed after the ledger transition won), so only the
+  // stale-label pass can return the lane `runningCount` still counts.
+  it('clears an oc-running label left behind by a terminal lease whose run completed', () => {
+    const h = harness({ lane: 'provider', reservedUsd: 0.5, state: 'runtime-backoff', expiresAt: '2099-01-01T00:00:00.000Z' }, {
+      runningIssues: [{ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-running' }, { name: `oc-node:${LEAF}` }] }],
+    });
+    const run = h.reconcile();
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('stale oc-running #703: cleared');
+    expect(h.labels()).toHaveLength(1);
+    expect(h.labels()[0]).toContain('oc-runtime-backoff');
+    expect(h.labels()[0]).not.toContain('oc-running');
+    // Nothing about the reservation moves.
+    expect(h.stored().leases[0]).toMatchObject({ state: 'runtime-backoff', reservedUsd: 0.5 });
+  });
+
+  it('keeps an oc-running label that no ledger lease accounts for', () => {
+    const h = harness({ issue: 1, state: 'blocked', lane: 'provider', reservedUsd: 0.5, expiresAt: '2099-01-01T00:00:00.000Z' }, {
+      runningIssues: [{ number: 703, state: 'open', title: 't', body: null, labels: [{ name: 'oc-running' }] }],
+    });
+    const run = h.reconcile();
+    expect(run.status, run.stderr).toBe(0);
+    expect(run.stdout).toContain('stale oc-running #703: kept (no ledger lease proves who applied the label)');
+    expect(h.labels()).toEqual([]);
   });
 });
 
