@@ -200,10 +200,16 @@ const Species: React.FC = () => {
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4">
             {results.map((r) => {
               const name = r.canonical_name || r.scientific_name || r.taxonomy_id;
+              // taxonomy_id is the public API's id, not a Calyx taxon id; the name
+              // lets the dossier page confirm it shows this species' evidence.
+              const scientificName = r.canonical_name || r.scientific_name;
+              const href = `/species/${encodeURIComponent(r.taxonomy_id)}${
+                scientificName ? `?name=${encodeURIComponent(scientificName)}` : ''
+              }`;
               return (
                 <Link
                   key={r.taxonomy_id}
-                  to={`/species/${encodeURIComponent(r.taxonomy_id)}`}
+                  to={href}
                   className="group rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 hover:border-[#c9a24a]/50 transition-colors p-6 flex flex-col"
                 >
                   <div className="flex items-start justify-between gap-3">

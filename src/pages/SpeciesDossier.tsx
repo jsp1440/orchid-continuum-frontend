@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Loader2,
@@ -23,9 +23,12 @@ import {
 } from '@/lib/ocBackend';
 import {
   fetchSpeciesDossier,
+  resolveDossierForSubject,
   resolveFederatedSpecies,
   sectionExcerpts,
+  subjectNameFromSlug,
   sectionMessage,
+  type DossierSubjectResolution,
   type FederationResolveResult,
   type SpeciesDossierEnvelope,
   type DossierSection,
@@ -90,6 +93,10 @@ function formatConfidence(confidence: number | null): string {
 const SpeciesDossier: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const taxonomyId = slug ?? '';
+  // A link from a surface keyed by another id space (the public species search)
+  // names its subject, so the dossier can be checked against it.
+  const [searchParams] = useSearchParams();
+  const linkedName = (searchParams.get('name') ?? '').trim() || null;
 
   const [data, setData] = useState<SpeciesDossierData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -99,6 +106,9 @@ const SpeciesDossier: React.FC = () => {
   const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
   const [dossierError, setDossierError] = useState(false);
+  const [dossierAmbiguity, setDossierAmbiguity] = useState<
+    Extract<DossierSubjectResolution, { state: 'ambiguous' }> | null
+  >(null);
   const [federation, setFederation] = useState<FederationResolveResult | null>(null);
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
@@ -107,7 +117,8 @@ const SpeciesDossier: React.FC = () => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
     setLoading(true);
-    fetchSpeciesById(taxonomyId, ctrl.signal)
+    const speciesRequest = fetchSpeciesById(taxonomyId, ctrl.signal).catch(() => null);
+    speciesRequest
       .then((d) => setData(d))
       .finally(() => setLoading(false));
 
@@ -119,32 +130,58 @@ const SpeciesDossier: React.FC = () => {
       })
       .finally(() => setMycoLoading(false));
 
+    // The dossier is shown only when its identity is this page's subject; the
+    // route id alone may belong to another id space (see resolveDossierForSubject).
     setDossierLoading(true);
     setDossierError(false);
+    setDossierAmbiguity(null);
     setDossier(null);
-    fetchSpeciesDossier(taxonomyId, ctrl.signal)
-      .then((d) => setDossier(d))
+    setFederationLoading(true);
+    setFederationError(false);
+    setFederation(null);
+    speciesRequest
+      .then((d) => {
+        const publicName =
+          d?.canonical_name ||
+          d?.scientific_name ||
+          [d?.genus, d?.species ?? d?.specific_epithet].filter(Boolean).join(' ') ||
+          null;
+        return resolveDossierForSubject(
+          taxonomyId,
+          publicName || linkedName || subjectNameFromSlug(taxonomyId),
+          { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
+          ctrl.signal,
+        );
+      })
+      .then((resolution) => {
+        if (ctrl.signal.aborted) return undefined;
+        if (resolution.state !== 'resolved') {
+          setDossierError(true);
+          if (resolution.state === 'ambiguous') setDossierAmbiguity(resolution);
+          return undefined;
+        }
+        setDossier(resolution.dossier);
+        return resolveFederatedSpecies(
+          { taxonId: resolution.dossier.identity?.taxon_id || taxonomyId },
+          ctrl.signal,
+        )
+          .then((result) => setFederation(result))
+          .catch(() => {
+            if (!ctrl.signal.aborted) setFederationError(true);
+          });
+      })
       .catch(() => {
         if (!ctrl.signal.aborted) setDossierError(true);
       })
       .finally(() => {
-        if (!ctrl.signal.aborted) setDossierLoading(false);
-      });
-
-    setFederationLoading(true);
-    setFederationError(false);
-    setFederation(null);
-    resolveFederatedSpecies({ taxonId: taxonomyId }, ctrl.signal)
-      .then((result) => setFederation(result))
-      .catch(() => {
-        if (!ctrl.signal.aborted) setFederationError(true);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setFederationLoading(false);
+        if (!ctrl.signal.aborted) {
+          setDossierLoading(false);
+          setFederationLoading(false);
+        }
       });
 
     return () => ctrl.abort();
-  }, [taxonomyId]);
+  }, [taxonomyId, linkedName]);
 
   const name =
     data?.canonical_name ||
@@ -152,6 +189,8 @@ const SpeciesDossier: React.FC = () => {
     [data?.genus, data?.species ?? data?.specific_epithet]
       .filter(Boolean)
       .join(' ') ||
+    dossier?.identity.display_name ||
+    linkedName ||
     decodeURIComponent(taxonomyId);
 
   const image = data?.hero_image_url || data?.representative_image_url || null;
@@ -428,6 +467,23 @@ const SpeciesDossier: React.FC = () => {
                     <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
                       <Loader2 className="h-3 w-3 animate-spin" /> Loading evidence
                       receipts…
+                    </div>
+                  ) : dossierAmbiguity ? (
+                    <div data-testid="dossier-ambiguous">
+                      <Empty>
+                        More than one canonical taxon is named {dossierAmbiguity.subjectName}. The
+                        evidence dossier is withheld until a person chooses which one this page
+                        is about.
+                      </Empty>
+                      {dossierAmbiguity.candidates.length > 0 && (
+                        <ul className="mt-2 space-y-1 font-mono text-[10px] tracking-[0.1em] text-[#cfc8b8]/70">
+                          {dossierAmbiguity.candidates.map((candidate) => (
+                            <li key={candidate.taxon_id}>
+                              {candidate.accepted_name} · canonical taxon {candidate.taxon_id}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   ) : dossierError || !dossier ? (
                     <Empty>Evidence dossier is not currently available.</Empty>

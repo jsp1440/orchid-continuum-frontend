@@ -244,3 +244,121 @@ export function sectionMessage(section: DossierSection): string {
   }
   return section.summary || 'Evidence is available in the linked records.';
 }
+
+// ---------------------------------------------------------------------------
+// Which canonical dossier belongs to the species this page is about?
+// ---------------------------------------------------------------------------
+//
+// The /species/:slug route is reached with identifiers from different id
+// spaces: Calyx links carry `public.orchid_taxonomy` ids (the dossier's own
+// canonical_dossier_url), while the public species search links carry the
+// public API's taxonomy_id. The two overlap numerically and name different
+// species: public "Cattleya labiata" is 6056, while Calyx 6056 is
+// "Caladenia x suffusa". Fetching the dossier by the raw route id therefore
+// shows another species' evidence. A dossier is only shown when its identity
+// is the page's subject; otherwise the subject name is resolved through the
+// canonical federation resolver, and an ambiguous name is left for a human.
+
+export type DossierSubjectResolution =
+  | { state: 'resolved'; dossier: SpeciesDossierEnvelope; via: 'route_id' | 'subject_name' }
+  | {
+      state: 'ambiguous';
+      subjectName: string;
+      candidates: FederationResolveResult['candidates'];
+    }
+  | { state: 'unavailable' };
+
+export type DossierSubjectDeps = {
+  fetchDossier: (taxonId: string, signal?: AbortSignal) => Promise<SpeciesDossierEnvelope>;
+  resolveSpecies: (
+    params: { name?: string; taxonId?: string },
+    signal?: AbortSignal,
+  ) => Promise<FederationResolveResult>;
+};
+
+function comparableName(value: string | null | undefined): string {
+  return (value ?? '').replace(/×/g, 'x').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** Exact scientific-name equality, ignoring case, spacing and the hybrid sign. */
+export function sameScientificName(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const left = comparableName(a);
+  return left.length > 0 && left === comparableName(b);
+}
+
+function dossierNames(dossier: SpeciesDossierEnvelope): string[] {
+  const identity = dossier.identity;
+  return [identity?.accepted_name, identity?.display_name, identity?.full_scientific_name].filter(
+    (value): value is string => typeof value === 'string' && value.trim().length > 0,
+  );
+}
+
+function isSubject(dossier: SpeciesDossierEnvelope, subjectName: string): boolean {
+  return dossierNames(dossier).some((name) => sameScientificName(name, subjectName));
+}
+
+/**
+ * The name a route slug carries, when it is a name rather than an opaque id.
+ * `cattleya-labiata` and `Cattleya%20labiata` are names; `6056` is not.
+ */
+export function subjectNameFromSlug(slug: string | null | undefined): string | null {
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(slug ?? '');
+  } catch {
+    decoded = slug ?? '';
+  }
+  const name = decoded.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!name || /\d/.test(name) || !/\s/.test(name)) return null;
+  return name;
+}
+
+export async function resolveDossierForSubject(
+  routeId: string,
+  subjectName: string | null,
+  deps: DossierSubjectDeps,
+  signal?: AbortSignal,
+): Promise<DossierSubjectResolution> {
+  let byRoute: SpeciesDossierEnvelope | null = null;
+  try {
+    byRoute = await deps.fetchDossier(routeId, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    byRoute = null;
+  }
+
+  const subject = subjectName && subjectName.trim() ? subjectName.trim() : null;
+  if (byRoute && (!subject || isSubject(byRoute, subject))) {
+    return { state: 'resolved', dossier: byRoute, via: 'route_id' };
+  }
+  if (!subject) return { state: 'unavailable' };
+
+  let resolution: FederationResolveResult;
+  try {
+    resolution = await deps.resolveSpecies({ name: subject }, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { state: 'unavailable' };
+  }
+
+  if (resolution.status === 'ambiguous') {
+    return { state: 'ambiguous', subjectName: subject, candidates: resolution.candidates ?? [] };
+  }
+  if (resolution.status !== 'resolved' || !resolution.taxon_id) {
+    return { state: 'unavailable' };
+  }
+  if (byRoute && byRoute.identity?.taxon_id === resolution.taxon_id) {
+    // The resolver maps the subject (e.g. a synonym) to the dossier the route named.
+    return { state: 'resolved', dossier: byRoute, via: 'subject_name' };
+  }
+  try {
+    const dossier = await deps.fetchDossier(resolution.taxon_id, signal);
+    return { state: 'resolved', dossier, via: 'subject_name' };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { state: 'unavailable' };
+  }
+}
