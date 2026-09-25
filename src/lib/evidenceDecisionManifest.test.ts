@@ -128,6 +128,16 @@ describe("buildRunManifest", () => {
     expect(result.immutable).toBe(true);
   });
 
+  it("posts to the mounted scientific-interpretation synthesis route", async () => {
+    mockFetchOk(MANIFEST_FIXTURE);
+    await buildRunManifest(BASE_REQUEST);
+    const [url, init] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    // The backend mounts the synthesis router under /api/scientific-interpretation;
+    // a bare /synthesis/run-manifest path is not served and 404s in production.
+    expect(String(url)).toMatch(/\/api\/scientific-interpretation\/synthesis\/run-manifest$/);
+    expect(init?.method).toBe("POST");
+  });
+
   it("returns contradiction list", async () => {
     mockFetchOk(MANIFEST_FIXTURE);
     const result = await buildRunManifest(BASE_REQUEST);
