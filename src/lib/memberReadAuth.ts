@@ -9,8 +9,9 @@ import { supabase } from "@/lib/supabase";
  * sessions on the product endpoints." The backend accepts
  * `Authorization: Bearer <Supabase access token>` from a signed-in member on a
  * bounded set of GET routes, in addition to the owner session / API key.
- * Writes, Speak, Relationship Matrix build and Matrix identification sessions
- * stay owner-only.
+ * Writes, Speak, and Relationship Matrix build stay owner-only. Matrix
+ * identification has its own exact method-and-path allowlist below; its
+ * member sessions still cannot reach Vision, reports, readiness, or admin.
  *
  * This module is the ONE place the frontend decides whether a request carries
  * the member's Supabase access token. It is deliberately narrow:
@@ -99,6 +100,37 @@ async function currentMemberAccessToken(): Promise<string | null> {
  */
 export async function withMemberReadAuth(url: string, init: RequestInit = {}): Promise<RequestInit> {
   if (!isMemberReadRequest(url, init.method)) return init;
+  return withCurrentMemberBearer(init);
+}
+
+/**
+ * Exact Matrix routes opened by backend #1647 for a signed-in member's own
+ * private identification work. Method is part of the authority: no other
+ * Matrix write, and no Vision/report/readiness/admin route, may carry the
+ * member token.
+ */
+const MATRIX_MEMBER_ROUTES: readonly { method: string; path: RegExp }[] = [
+  { method: "GET", path: /^\/api\/matrix-identification\/registry$/ },
+  { method: "GET", path: /^\/api\/matrix-identification\/registry\/[^/]+\/[^/]+$/ },
+  { method: "POST", path: /^\/api\/matrix-identification\/sessions$/ },
+  { method: "GET", path: /^\/api\/matrix-identification\/sessions\/[^/]+$/ },
+  { method: "POST", path: /^\/api\/matrix-identification\/sessions\/[^/]+\/(?:observations|evaluate|explain)$/ },
+];
+
+export function isMatrixMemberRequest(
+  url: string,
+  method?: string,
+  calyxBase: string = CALYX_BACKEND_BASE_URL,
+): boolean {
+  const relative = calyxRelativePath(url, calyxBase);
+  if (relative === null) return false;
+  const normalizedMethod = requestMethod(method);
+  return MATRIX_MEMBER_ROUTES.some(
+    (route) => route.method === normalizedMethod && route.path.test(relative),
+  );
+}
+
+async function withCurrentMemberBearer(init: RequestInit): Promise<RequestInit> {
   const headers = new Headers(init.headers);
   if (headers.has("Authorization")) return init;
   if (hasOwnerBearerSession()) return init;
@@ -106,6 +138,15 @@ export async function withMemberReadAuth(url: string, init: RequestInit = {}): P
   if (!token) return init;
   headers.set("Authorization", `Bearer ${token}`);
   return { ...init, headers };
+}
+
+/**
+ * Attach the member bearer only to the exact backend #1647 Matrix contract.
+ * Owner sessions remain authoritative and explicit Authorization is preserved.
+ */
+export async function withMatrixMemberAuth(url: string, init: RequestInit = {}): Promise<RequestInit> {
+  if (!isMatrixMemberRequest(url, init.method)) return init;
+  return withCurrentMemberBearer(init);
 }
 
 /* ------------------------------------------------------------------------ */
