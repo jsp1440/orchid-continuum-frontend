@@ -38,7 +38,11 @@ import { expect, test, type Page, type Request, type Route } from "@playwright/t
  * (unknown) -> evaluate -> explain {audience: beginner, focus: summary}.
  */
 
-const REFERENCE_BACKEND = "http://127.0.0.1:8791";
+// Both origins come from playwright.config.ts, so the suite also runs on
+// remapped ports (REFERENCE_BACKEND_PORT / E2E_APP_PORT).
+const REFERENCE_BACKEND = process.env.REFERENCE_BACKEND_URL || "http://127.0.0.1:8791";
+const APP_ORIGIN = process.env.E2E_APP_URL || "http://127.0.0.1:4173";
+const CORS_HEADERS = { "access-control-allow-origin": APP_ORIGIN, "access-control-allow-credentials": "true" };
 const SESSION_PATH = /\/api\/matrix-identification\/sessions(?:\/([^/]+)(?:\/(observations|evaluate|explain))?)?$/;
 const REGISTRY_DETAIL_PATH = /\/api\/matrix-identification\/registry\/([^/]+)\/([^/]+)$/;
 const LOCALITY_TOKEN = "SYNTHETIC-LOCALITY-MUST-NOT-RENDER";
@@ -55,7 +59,7 @@ function fulfill(route: Route, captured: Captured) {
   return route.fulfill({
     status: captured.status,
     contentType: "application/json",
-    headers: { "access-control-allow-origin": "http://127.0.0.1:4173", "access-control-allow-credentials": "true" },
+    headers: CORS_HEADERS,
     body: JSON.stringify(captured.body),
   });
 }
@@ -305,7 +309,7 @@ for (const [label, body] of MALFORMED_EVALUATIONS) {
         return route.fulfill({
           status: 200,
           contentType: "application/json",
-          headers: { "access-control-allow-origin": "http://127.0.0.1:4173", "access-control-allow-credentials": "true" },
+          headers: CORS_HEADERS,
           body: body(),
         });
       }
