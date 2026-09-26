@@ -2,87 +2,85 @@
 
 Living record of the finite Release 1 acceptance matrix. Release 1 is judged on
 `oc-autonomous-integration` in both repositories. It is ready when every
-required journey below is PASS (or explicitly OWNER_GATED / DEFERRED by an
-owner decision) with no unresolved P0 or security/privacy blocker.
+required journey is **PASS**, **OWNER_GATED**, or deliberately **DEFERRED**, with
+no unresolved P0 engineering blocker or security/privacy blocker.
 
-Statuses: **PASS**, **FAIL**, **OWNER_GATED** (an owner-only decision is needed
-before the journey can pass), **DEFERRED** (not part of Release 1 and no
-Release 1 journey depends on it).
+Statuses:
 
-## Evidence method and its limits
+- **PASS** — the currently testable Release 1 contract works.
+- **OWNER_GATED** — engineering is complete to the safe boundary, but an owner
+  decision or production-only action is required.
+- **FAIL** — an engineering blocker remains.
+- **DEFERRED** — not part of Release 1 and no Release 1 journey depends on it.
 
-- **Harness:** the real backend (`jsp1440/orchid-calyx-backend`) runs
-  locally under uvicorn with no database, no provider/model keys and no owner
-  secrets. The frontend production bundle is built against it and served with
-  `vite preview`, and journeys are driven in Chromium by Playwright.
-  Supabase auth is a local stand-in with empty tables. Non-Calyx services
-  (orchid-continuum-public-api, image library, legacy search) are pointed at a
-  closed port and are therefore "unavailable".
-- **What this proves:** routing, rendering, auth gating, honest empty/unavailable
-  states, request paths and status codes against the real backend code.
-- **What it does not prove:** production data, production deployment, or the
-  external services above. Production Render hosts are not reachable from the
-  build sandbox. All evidence below is labelled "local, no data" and is never
-  production evidence.
-- **Fixture specs:** the repository's reference-backend Playwright suite
-  (fixture backend) runs in CI as a second, weaker layer of evidence.
+## Evidence method and limits
 
-## Tested heads
+- The real backend is run locally without a production database, provider/model
+  keys, owner secrets, or production mutation. The frontend production bundle
+  is driven in Chromium against it.
+- GitHub CI is required on each exact persisted PR head before integration.
+- After merge, changed blob identities are read back from
+  `oc-autonomous-integration` and compared with the verified head.
+- Fixture-backed browser tests are useful for UI contracts but are not
+  production-data evidence.
+- This report does not claim a production deployment. External services and
+  production data must be verified separately under owner authorization.
 
-| Run | Backend integration | Frontend integration | Result |
-|---|---|---|---|
-| Baseline (2026-09-26) | `1d7e35d1b95637669d69e731cc35262f551d9fc3` | `8a66ef7b26eb38db53db3061dc7d80b7dadfa68f` | 10 of 14 harness specs pass |
+## Integration identities
 
-Integration heads above include the main → integration syncs:
-backend PR #1644 (merged `1d7e35d`) and frontend PR #862 (merged `8a66ef7`),
-each checked independently on the exact head, with the factory gate at
-`AUTO_INTEGRATE` and the landed tree identical to the checked head.
+| Repository | Current tested integration identity | Evidence |
+|---|---|---|
+| Backend | `807746b9bf4c31e9a2c93097bac387e4f554269c` | PR #1646 exact head `3c12bce97ceed126375f47a192e40fcff5ca3f0e`; 2 required workflows green; 5/5 changed blobs identical after merge |
+| Frontend | `c204ec5bb92eaaeab277034a8f089a522fbf8224` | PR #866 exact head `0fb3477c21771dc389c793d505a21fad1feef163`; all applicable workflows green; 12/12 changed blobs identical after merge |
+
+The frontend identity contains PR #862 (main-to-integration convergence), PR
+#865 (J3/J4/J7/J8 honest states), and PR #866 (J1/J13/J14). The backend identity
+contains PR #1645 (member trait privacy) and PR #1646 (J12 API contract).
+
+No merge to `main` is authorized by this record.
 
 ## Matrix
 
-| # | Journey | Status | Frontend evidence | Backend evidence | PR / head / merge | Remaining blocker |
-|---|---|---|---|---|---|---|
-| 1 | Launch + primary navigation | FAIL (P1) | All 7 primary nav items reach the right page | — | fix in progress | Lexicon, Literature and Identification are not reachable from home navigation (`src/components/Navbar.tsx`) |
-| 2 | Authentication / member | PASS (local stand-in) | Sign-up, account, sign-out, gate; bad password shows an honest error | Member reads: 4 schema-defined GETs (backend #1643) | BE #1643 → main `f6f1c04`, synced by #1644; FE #858 → main `35d6df2`, synced by #862 | Owner: set Supabase URL/anon key on Render |
-| 3 | Species search + taxon pages | FAIL (P0) | Dossier and genus pages degrade honestly | Search uses orchid-continuum-public-api, not Calyx | fix in progress | A failed search request is shown as "No species matched" (`src/lib/ocBackend.ts`, `src/pages/Species.tsx`); public-api data not verifiable from the sandbox |
-| 4 | Matrix identification | OWNER_GATED + FAIL (UI) | UI shows raw `Matrix API 401: …` | Registry and session routes require owner session/API key | UI fix in progress | Owner decision: is Matrix identification public, member, or owner-only in Release 1? |
-| 5 | Image-based identification | DEFERRED | No visitor photo/upload identification UI | Matrix vision routes are owner-only | — | Not a Release 1 surface |
-| 6 | Lexicon / Illustrated Glossary | PASS (local, no data) | Home, A–Z, search, entry, not-found; honest migration fallback | `/api/lexicon` 503 without DB | — | Phone overflow tracked under 13 |
-| 7 | Literature + evidence | PASS (local, no data) | Anonymous gate; member bearer on the paper list | `GET /api/literature-extraction/papers` 200 for a member | — | Gate copy wrongly says members cannot open it (fix in progress) |
-| 8 | Research Station | OWNER_GATED (projects) + FAIL (copy) | Traits read works for a member | `/api/research/traits` 200 (member); `/api/research/projects` 401 | fix in progress | Member sees "SIGN-IN REQUIRED" and a "LIVE DATA" badge with nothing loaded |
-| 9 | Atlas / distribution | PASS (local, no data) | Honest zero counts, "NO DATA FOR THIS SCALE"; no coordinates rendered | Served by public-api / Supabase, not Calyx | — | Production data not verifiable from the sandbox |
-| 10 | Conservation information | PASS (local, no data) | "NOT YET ASSESSED IN THE CONTINUUM RECORD"; no invented category | — | — | — |
-| 11 | Calyx / Brain interactions | OWNER_GATED (Speak) | Reasoning map, homepage, capabilities render | Reasoning/capabilities 200; Speak conversations owner-only | — | Owner decision: member access to Calyx Speak |
-| 12 | Contextual feedback / correction | FAIL (P0) | Lexicon/Matrix feedback shows "not accepted (not found)" | Feedback router mounted at `/evidence-feedback`, frontend calls `/api/evidence-feedback` | fix in progress | Path mismatch; then owner decision on member submission (routes are owner-only) |
-| 13 | Mobile / tablet + accessibility | FAIL (phone) | Tablet 820 passes; skip link and Tab order work | — | fix in progress | 390px: lexicon header overflows by ~19px (`src/components/lexicon/SiteChrome.tsx`). axe-core not installed; accessibility checks are heuristic |
-| 14 | Failure states | FAIL (P2) | Backend down, unknown route, auth failure and Supabase down show honest states; 5xx bodies never echoed | — | fix in progress | Calyx workspace shows raw `TypeError: Failed to fetch` |
+| # | Journey | Status | Current evidence | Exact lineage | Remaining blocker |
+|---|---|---|---|---|---|
+| 1 | Launch + primary navigation | **PASS (local)** | Lexicon, Literature, and Orchid Identification are linked from site navigation and footer; guarded routes remain guarded | FE #866: `0fb3477c…` → `c204ec5b…` | Production deployment not claimed |
+| 2 | Authentication / member | **PASS (local stand-in)** | Sign-up/account/sign-out and guarded member reads work with the local Supabase stand-in; trait output fails closed for locality | BE #1645: `d70ea7ed…` → `a7e254de…`; FE #858/#862 | Owner must configure and verify production Supabase settings |
+| 3 | Species search + taxon pages | **OWNER_GATED (external verification)** | Search failure is no longer reported as zero matches; the UI shows an honest unavailable state and retry | FE #865: `e3315afc…` → `b092ada5…` | Verify orchid-continuum-public-api and production data |
+| 4 | Matrix identification | **OWNER_GATED** | 401/403, expired-owner-session, and outage states are distinct; raw API text is not shown | FE #865: `e3315afc…` → `b092ada5…` | Decide whether Release 1 Matrix access is public, member, or owner-only |
+| 5 | Image-based identification | **DEFERRED** | No visitor photo-identification journey is declared for Release 1 | — | Post-Release-1 unless explicitly promoted |
+| 6 | Lexicon / Illustrated Glossary | **PASS (local, no data)** | Home, A–Z, search, entry, not-found, and migration fallback render; phone header fits tested widths | FE #866: `0fb3477c…` → `c204ec5b…` | Production data not claimed |
+| 7 | Literature + evidence | **PASS (local, no data)** | Anonymous gate and member paper-list contract work; gate copy accurately distinguishes list from owner-only full-paper access | FE #865: `e3315afc…` → `b092ada5…` | Full-paper access remains intentionally limited |
+| 8 | Research Station | **OWNER_GATED** | Member traits are privacy-safe; project refusal is shown as owner-only and the page claims live data only after load | BE #1645; FE #865 | Decide whether research projects become member-readable |
+| 9 | Atlas / distribution | **OWNER_GATED (external verification)** | Empty/no-data states are honest and no protected coordinates are rendered in the local harness | Existing integration | Verify production public API/Supabase data |
+| 10 | Conservation information | **PASS (local, no data)** | Missing assessment is shown as not yet assessed; no conservation category is invented | Existing integration | Production data not claimed |
+| 11 | Calyx / Brain interactions | **OWNER_GATED (Speak)** | Homepage/capabilities/reasoning surfaces render; backend outage is named without raw browser exceptions | FE #866 | Decide member access to Calyx Speak |
+| 12 | Contextual feedback / correction | **OWNER_GATED (member submission)** | Frontend and backend now share `/api/evidence-feedback`; exact-version registration, repeat feedback, and duplicate suppression work; conflicting lineage fails closed | BE #1646: `3c12bce…` → `807746b9…`; FE #856/#861 | Decide whether signed-in members may submit; owner/API-key access remains unchanged |
+| 13 | Mobile / tablet + accessibility | **PASS (tested core routes)** | No sideways scrolling across the tested Release 1 routes at 390px; Lexicon controls fit at 320/360/390/414/820 and have accessible names | FE #866 | Broader formal accessibility audit is post-Release-1 |
+| 14 | Failure states | **PASS (local)** | Backend-down, HTTP failure, auth refusal, and missing-data states are plain-language; raw `TypeError: Failed to fetch` is suppressed | FE #865/#866 | Production outage behavior not yet observed |
 
-## Owner decisions required
+## Owner decisions remaining
 
-1. **Matrix identification access (journey 4).** Today every Matrix
-   registry/session route is owner-only, so visitors and members cannot
-   identify an orchid. Decide: public, signed-in member, or owner-only for
-   Release 1.
-2. **Feedback submission (journey 12).** After the path fix, feedback routes
-   remain owner/API-key only. Decide whether signed-in members may submit
-   corrections (this involves submitter identity handling).
-3. **Research projects and Calyx Speak (journeys 8, 11).** Both stay owner-only
-   unless you decide otherwise.
-4. **External services (journeys 3, 9).** Species search, dossier taxonomy and
-   Atlas data come from orchid-continuum-public-api and Supabase tables, which
-   cannot be exercised from the build sandbox. They need a check against the
-   deployed services.
-5. **Deployment.** Production deploy of either repository, and the Supabase
-   environment variables on the Render backend, are owner actions.
+1. Matrix access: public, signed-in member, or owner-only.
+2. Feedback submission: keep owner/API-key only or permit signed-in members.
+3. Research projects and Calyx Speak: retain owner-only or define a safe member
+   contract.
+4. External services: authorize production verification for species search and
+   Atlas data.
+5. Deployment: authorize and perform the Render/Supabase production deployment
+   and environment configuration when ready.
 
-## Post-Release-1 items (recorded, not blocking)
+An owner gate affects only its journey. It does not block continued work on
+other eligible Release 1 journeys.
 
-- Primary nav items are `<button>` elements, not links.
-- `/api/media/genus/{g}` and the genus-of-the-day widget return 500 instead of
-  503 when the database is absent.
-- A dossier for an unknown taxon renders an empty shell titled with the
-  requested name instead of an "unknown taxon" state.
-- Research Center query builder is a placeholder.
-- Local-Postgres harness mode (for richer data paths) is not provisioned.
-- Matrix fixture specs override the owner-auth check, so they cannot catch
-  access regressions; the local harness does.
+## Post-Release-1 items
+
+- Remaining noncritical navigation buttons can become semantic links in a
+  separate bounded change.
+- `/api/media/genus/{g}` should return an honest unavailable status rather than
+  500 when its database is absent.
+- Unknown dossier taxa need a dedicated unknown-taxon presentation.
+- Research Center query building remains incomplete.
+- Provision a richer local PostgreSQL harness.
+- Expand accessibility evidence beyond the tested core journeys.
+- Move the file-backed evidence-feedback store to owner-approved durable
+  storage before relying on it across ephemeral redeploys.
