@@ -15,6 +15,7 @@ import type { SpeciesDossierEnvelope, DossierSection, EvidenceReceipt } from '@/
 
 const mocks = vi.hoisted(() => ({
   fetchSpeciesById: vi.fn(),
+  lookupSpeciesById: vi.fn(),
   fetchMycorrhizal: vi.fn(),
   fetchSpeciesDossier: vi.fn(),
   resolveFederatedSpecies: vi.fn(),
@@ -36,6 +37,7 @@ vi.mock('@/lib/ocBackend', async () => {
   return {
     ...actual,
     fetchSpeciesById: mocks.fetchSpeciesById,
+    lookupSpeciesById: mocks.lookupSpeciesById,
     fetchMycorrhizal: mocks.fetchMycorrhizal,
   };
 });
@@ -143,6 +145,16 @@ beforeEach(() => {
     genus: 'Cattleya',
     species: 'labiata',
     family: 'Orchidaceae',
+  });
+  // The page reads the public record through lookupSpeciesById; the existing
+  // cases describe that record with fetchSpeciesById (null = the public detail
+  // 404s, as it does in production for search-linked ids), so the outcome is
+  // derived from it. Outage cases set lookupSpeciesById directly.
+  mocks.lookupSpeciesById.mockReset().mockImplementation(async (id: string, signal?: AbortSignal) => {
+    const data = await mocks.fetchSpeciesById(id, signal);
+    return data
+      ? { state: 'found', data }
+      : { state: 'not_found', httpStatus: 404 };
   });
   mocks.fetchMycorrhizal.mockReset().mockResolvedValue({ status: 404, partners: [] });
   mocks.fetchSpeciesDossier.mockReset();
@@ -944,11 +956,15 @@ describe('dossier subject identity across id spaces', () => {
     await flush();
     await flush();
 
-    expect(container.textContent).toContain('Evidence dossier is not currently available.');
+    // The public detail 404s and Calyx holds only the species: no source has
+    // a record for the forma, so the page says so instead of an empty dossier.
+    expect(container.querySelector('[data-testid="taxon-record-not-found"]')).not.toBeNull();
     expect(container.textContent).not.toContain('Labiata relations.');
     expect(container.textContent).not.toContain('Caladenia');
     expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
-    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata fo. alba');
+    expect(container.querySelector('[data-testid="requested-taxon-name"]')?.textContent).toBe(
+      '\u2018Cattleya labiata fo. alba\u2019',
+    );
   });
 
   it('fails closed when the link names a different species than the public record under the id', async () => {
@@ -972,5 +988,171 @@ describe('dossier subject identity across id spaces', () => {
     expect(container.textContent).not.toContain('Endangered');
     expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
     expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
+  });
+});
+
+describe('a taxon no source holds vs a source that did not answer (R1 journeys 3, 14)', () => {
+  // Synthetic error-state shapes of the Calyx dossier route's own responses.
+  const noCanonicalRecord = async () => {
+    const { CalyxRequestError } = await import('@/lib/speciesDossier');
+    return new CalyxRequestError(
+      404,
+      JSON.stringify({ detail: 'No canonical taxon record exists for this identifier.' }),
+    );
+  };
+  const serviceUnavailable = async () => {
+    const { CalyxRequestError } = await import('@/lib/speciesDossier');
+    return new CalyxRequestError(
+      503,
+      JSON.stringify({ detail: 'Species dossier service is unavailable.' }),
+    );
+  };
+  const notFoundPanel = () => container.querySelector('[data-testid="taxon-record-not-found"]');
+  const unavailablePanel = () => container.querySelector('[data-testid="taxon-record-unavailable"]');
+  const requested = () => container.querySelector('[data-testid="requested-taxon-name"]');
+
+  function expectNoDossierShell() {
+    // The site navigation links to Atlas and Matrix everywhere; only the page body counts.
+    const main = container.querySelector('main') as HTMLElement;
+    const text = main.textContent ?? '';
+    for (const block of ['Taxonomy', 'Conservation status', 'Native range', 'Mycorrhizal partners', 'Evidence dossier', 'Federated attribution']) {
+      expect(text).not.toContain(block);
+    }
+    expect(main.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+    expect(main.querySelector('[data-testid="dossier-identity"]')).toBeNull();
+    expect(main.querySelector('a[href^="/atlas"]')).toBeNull();
+    expect(main.querySelector('a[href^="/research"]')).toBeNull();
+    expect(main.querySelector('a[href^="/orchid-identification"]')).toBeNull();
+    expect(main.querySelector('img')).toBeNull();
+  }
+
+  it('says no taxon record was found for an invented name, shown as input and not as a scientific name', async () => {
+    mocks.lookupSpeciesById.mockResolvedValue({ state: 'not_found', httpStatus: 404 });
+    mocks.fetchSpeciesDossier.mockRejectedValue(await noCanonicalRecord());
+
+    renderPage('/species/Notagenus%20fakeus');
+    await flush();
+    await flush();
+
+    expect(notFoundPanel()).not.toBeNull();
+    expect(unavailablePanel()).toBeNull();
+    const heading = container.querySelector('h1');
+    expect(heading?.textContent).toBe('No taxon record found for ‘Notagenus fakeus’');
+    // Neither the heading nor the repeated name uses the italic display face
+    // an accepted scientific name gets, and no authority line is rendered.
+    expect(heading?.className).not.toMatch(/\bitalic\b|font-display/);
+    expect(requested()?.className).toContain('not-italic');
+    expect(requested()?.className).not.toMatch(/(^|\s)italic\b|font-display/);
+    expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith(
+      { name: 'Notagenus fakeus' },
+      expect.anything(),
+    );
+    const hrefs = Array.from(notFoundPanel()?.querySelectorAll('a') ?? []).map((a) => a.getAttribute('href'));
+    expect(hrefs).toEqual(['/species', '/lexicon']);
+    expectNoDossierShell();
+  });
+
+  it('says no taxon record was found for a nonexistent numeric id', async () => {
+    mocks.lookupSpeciesById.mockResolvedValue({ state: 'not_found', httpStatus: 404 });
+    mocks.fetchSpeciesDossier.mockRejectedValue(await noCanonicalRecord());
+
+    renderPage('/species/987654321');
+    await flush();
+    await flush();
+
+    expect(notFoundPanel()).not.toBeNull();
+    expect(requested()?.textContent).toBe('‘987654321’');
+    expect(mocks.resolveFederatedSpecies).not.toHaveBeenCalled();
+    expectNoDossierShell();
+  });
+
+  it('says it could not load, not "no record", when the services did not answer, and retries', async () => {
+    mocks.lookupSpeciesById.mockResolvedValue({ state: 'unavailable', httpStatus: 0 });
+    mocks.fetchSpeciesDossier.mockRejectedValue(await serviceUnavailable());
+
+    renderPage('/species/Notagenus%20fakeus');
+    await flush();
+    await flush();
+
+    expect(unavailablePanel()).not.toBeNull();
+    expect(notFoundPanel()).toBeNull();
+    expect(container.textContent).toContain('Could not load the taxon record for ‘Notagenus fakeus’');
+    expect(container.textContent).toContain('This is not a statement that no record exists.');
+    expect(container.textContent).not.toContain('No taxon record found');
+    expectNoDossierShell();
+
+    // The retry asks every source again; this time the Calyx record answers.
+    mocks.fetchSpeciesDossier.mockResolvedValue(
+      dossier({
+        identity: {
+          ...dossier().identity,
+          taxon_id: 'notagenus-fakeus',
+          display_name: 'Notagenus fakeus',
+          full_scientific_name: 'Notagenus fakeus',
+          accepted_name: 'Notagenus fakeus',
+        },
+      }),
+    );
+    const retry = Array.from(container.querySelectorAll('button')).find((b) => /try again/i.test(b.textContent ?? ''));
+    expect(retry).toBeTruthy();
+    const callsBefore = mocks.lookupSpeciesById.mock.calls.length;
+    await act(async () => {
+      retry?.click();
+    });
+    await flush();
+    await flush();
+    expect(mocks.lookupSpeciesById.mock.calls.length).toBe(callsBefore + 1);
+    expect(unavailablePanel()).toBeNull();
+    expect(container.querySelector('[data-testid="dossier-identity"]')).not.toBeNull();
+  });
+
+  it('does not claim "no record" when one source found nothing and another did not answer', async () => {
+    mocks.lookupSpeciesById.mockResolvedValue({ state: 'not_found', httpStatus: 404 });
+    mocks.fetchSpeciesDossier.mockRejectedValue(await serviceUnavailable());
+
+    renderPage('/species/Notagenus%20fakeus');
+    await flush();
+    await flush();
+
+    expect(unavailablePanel()).not.toBeNull();
+    expect(notFoundPanel()).toBeNull();
+
+    // And the other way round: the public service down, Calyx has no record.
+    mocks.lookupSpeciesById.mockResolvedValue({ state: 'unavailable', httpStatus: 503 });
+    mocks.fetchSpeciesDossier.mockRejectedValue(await noCanonicalRecord());
+    renderPage('/species/987654321');
+    await flush();
+    await flush();
+    expect(unavailablePanel()).not.toBeNull();
+    expect(notFoundPanel()).toBeNull();
+  });
+
+  it('still renders a real taxon whose only record is the Calyx dossier', async () => {
+    mocks.lookupSpeciesById.mockResolvedValue({ state: 'not_found', httpStatus: 404 });
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+
+    renderPage('/species/Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    expect(notFoundPanel()).toBeNull();
+    expect(unavailablePanel()).toBeNull();
+    const heading = container.querySelector('h1');
+    expect(heading?.textContent).toBe('Cattleya labiata');
+    expect(heading?.className).toContain('italic');
+    expect(container.querySelector('[data-testid="dossier-identity"]')?.textContent).toContain('Lindl.');
+  });
+
+  it('still renders a real taxon from the public record while Calyx is down', async () => {
+    mocks.fetchSpeciesDossier.mockRejectedValue(await serviceUnavailable());
+
+    renderPage('/species/cattleya-labiata');
+    await flush();
+    await flush();
+
+    expect(notFoundPanel()).toBeNull();
+    expect(unavailablePanel()).toBeNull();
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
+    expect(container.textContent).toContain('Evidence dossier is not currently available.');
   });
 });

@@ -145,12 +145,41 @@ export type FederationResolveResult = {
   explanation: string;
 };
 
+/** A Calyx request that returned a non-2xx status; `status` keeps "no record" apart from an outage. */
+export class CalyxRequestError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(status: number, body: string) {
+    super(body || `Calyx request failed with ${status}`);
+    this.name = 'CalyxRequestError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Calyx request failed with ${response.status}`);
+    const body = await response.text().catch(() => '');
+    throw new CalyxRequestError(response.status, body);
   }
   return (await response.json()) as T;
+}
+
+/**
+ * True only when the Calyx dossier route itself answered that no canonical
+ * taxon record exists for the identifier (a 404 from the dossier handler).
+ * A network failure, a 5xx, or a 404 from a route the server does not have
+ * at all (the framework's bare `{"detail":"Not Found"}`, e.g. a wrong base
+ * URL or an older deployment) says nothing about the taxon and is not this.
+ */
+export function isCanonicalTaxonNotFound(error: unknown): boolean {
+  if (!(error instanceof CalyxRequestError) || error.status !== 404) return false;
+  try {
+    const parsed = JSON.parse(error.body) as { detail?: unknown };
+    return parsed?.detail !== 'Not Found';
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchSpeciesDossier(
@@ -315,6 +344,9 @@ export type DossierSubjectResolution =
       subjectName: string;
       candidates: FederationResolveResult['candidates'];
     }
+  // Every Calyx identity source answered and none holds a record for this
+  // route id or subject name. Only this state may be read as "no record".
+  | { state: 'not_found' }
   | { state: 'unavailable' };
 
 export type DossierSubjectDeps = {
@@ -378,18 +410,24 @@ export async function resolveDossierForSubject(
   signal?: AbortSignal,
 ): Promise<DossierSubjectResolution> {
   let byRoute: SpeciesDossierEnvelope | null = null;
+  // Whether the route-id lookup gave a definitive answer: a dossier (for this
+  // or another taxon) or the handler's own "no canonical taxon record". An
+  // outage leaves it false, and then nothing below may conclude "not found".
+  let routeAnswered = false;
   try {
     byRoute = await deps.fetchDossier(routeId, signal);
+    routeAnswered = true;
   } catch (error) {
     if (signal?.aborted) throw error;
     byRoute = null;
+    routeAnswered = isCanonicalTaxonNotFound(error);
   }
 
   const subject = subjectName && subjectName.trim() ? subjectName.trim() : null;
   if (byRoute && (!subject || isSubject(byRoute, subject))) {
     return { state: 'resolved', dossier: byRoute, via: 'route_id' };
   }
-  if (!subject) return { state: 'unavailable' };
+  if (!subject) return routeAnswered ? { state: 'not_found' } : { state: 'unavailable' };
 
   let resolution: FederationResolveResult;
   try {
@@ -399,6 +437,11 @@ export async function resolveDossierForSubject(
     return { state: 'unavailable' };
   }
 
+  // From here on, "the subject has no record" is only definitive when the
+  // route lookup answered too (an outage there may have hidden the record).
+  const noRecord: DossierSubjectResolution = routeAnswered
+    ? { state: 'not_found' }
+    : { state: 'unavailable' };
   // The resolver normalises names before matching (it drops forma, subspecies
   // and cultivar qualifiers), so its answer is a lead, not an identity. Every
   // dossier or candidate it leads to is held to the same exact-name check as
@@ -408,9 +451,14 @@ export async function resolveDossierForSubject(
     const candidates = (resolution.candidates ?? []).filter((candidate) =>
       sameScientificName(candidate.accepted_name, subject),
     );
+    // Candidates exist, but none carries the subject name exactly.
     return candidates.length > 0
       ? { state: 'ambiguous', subjectName: subject, candidates }
-      : { state: 'unavailable' };
+      : noRecord;
+  }
+  if (resolution.status === 'unresolved') {
+    // The canonical resolver found no taxon by this name.
+    return noRecord;
   }
   if (resolution.status !== 'resolved' || !resolution.taxon_id) {
     return { state: 'unavailable' };
@@ -425,9 +473,12 @@ export async function resolveDossierForSubject(
       return { state: 'unavailable' };
     }
   }
+  // The resolver's lead is another name (a species for a forma or cultivar
+  // subject): the resolver returns an exact-name row when one exists, so the
+  // subject itself has no canonical record.
   return isSubject(dossier, subject)
     ? { state: 'resolved', dossier, via: 'subject_name' }
-    : { state: 'unavailable' };
+    : noRecord;
 }
 
 export type PageSubject =
@@ -470,4 +521,45 @@ export function speciesPageHref(taxonomyId: string, scientificName?: string | nu
   const name = (scientificName ?? '').replace(/\s+/g, ' ').trim();
   const base = `/species/${encodeURIComponent(taxonomyId)}`;
   return name ? `${base}?name=${encodeURIComponent(name)}` : base;
+}
+
+export type SpeciesRecordSourceState = 'found' | 'not_found' | 'unavailable';
+export type DossierRecordState = 'loading' | 'found' | 'not_found' | 'unavailable';
+
+/**
+ * Whether a /species/:slug page has a taxon to show.
+ *
+ * `found` as soon as any identity source holds a record (the public species
+ * record, or a Calyx dossier / ambiguous candidates / a subject conflict,
+ * which all name real records). `not_found` only when every source answered
+ * definitively that it has none. Anything else, including one source down
+ * while the others found nothing, is `unavailable`: the page cannot say
+ * whether the taxon exists and must not present the requested name as one.
+ */
+export function dossierRecordState(params: {
+  species: SpeciesRecordSourceState | null;
+  dossier: DossierSubjectResolution['state'] | 'conflict' | null;
+}): DossierRecordState {
+  const { species, dossier } = params;
+  if (species === 'found') return 'found';
+  if (dossier === 'resolved' || dossier === 'ambiguous' || dossier === 'conflict') return 'found';
+  if (species === null || dossier === null) return 'loading';
+  if (species === 'not_found' && dossier === 'not_found') return 'not_found';
+  return 'unavailable';
+}
+
+/** The route's subject exactly as the visitor asked for it: user input, never an accepted name. */
+export function requestedTaxonLabel(
+  linkedName: string | null | undefined,
+  slug: string | null | undefined,
+): string {
+  const linked = (linkedName ?? '').replace(/\s+/g, ' ').trim();
+  if (linked) return linked;
+  let decoded = slug ?? '';
+  try {
+    decoded = decodeURIComponent(decoded);
+  } catch {
+    // keep the raw slug
+  }
+  return decoded.replace(/\s+/g, ' ').trim();
 }

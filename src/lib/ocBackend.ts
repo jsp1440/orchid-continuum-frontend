@@ -115,9 +115,34 @@ export async function searchSpecies(q: string, limit = 20, signal?: AbortSignal)
 }
 
 export interface SpeciesDossierData { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; specific_epithet?: string; species?: string; family?: string; tribe?: string | null; subfamily?: string | null; authority?: string; common_name?: string | null; conservation_status?: string | null; iucn_code?: string | null; region?: string | null; habitat?: string | null; description?: string | null; representative_image_url?: string | null; hero_image_url?: string | null; }
+/**
+ * Outcome of looking a species record up by the public API's taxonomy_id,
+ * keeping "the service answered: no record under this identifier" apart from
+ * "the service did not answer". Only the first may ever be shown to a visitor
+ * as "no record found"; a network error, timeout, 5xx, auth failure or a 2xx
+ * body that is not a record is `unavailable`.
+ */
+export type SpeciesLookupOutcome =
+  | { state: 'found'; data: SpeciesDossierData }
+  | { state: 'not_found'; httpStatus: number }
+  | { state: 'unavailable'; httpStatus: number };
+// Statuses with which the species service states that no record lives under
+// the requested identifier (absent, gone, or not a valid record key).
+const SPECIES_RECORD_ABSENT_STATUSES = new Set([404, 410, 422]);
+export async function lookupSpeciesById(taxonomyId: string, signal?: AbortSignal): Promise<SpeciesLookupOutcome> {
+  const { ok, status, data } = await getJson<unknown>(`${OC_BACKEND_BASE}/api/species/${encodeURIComponent(taxonomyId)}`, signal);
+  if (ok) {
+    return data && typeof data === 'object' && !Array.isArray(data)
+      ? { state: 'found', data: data as SpeciesDossierData }
+      : { state: 'unavailable', httpStatus: status };
+  }
+  return SPECIES_RECORD_ABSENT_STATUSES.has(status)
+    ? { state: 'not_found', httpStatus: status }
+    : { state: 'unavailable', httpStatus: status };
+}
 export async function fetchSpeciesById(taxonomyId: string, signal?: AbortSignal): Promise<SpeciesDossierData | null> {
-  const { data } = await getJson<SpeciesDossierData>(`${OC_BACKEND_BASE}/api/species/${encodeURIComponent(taxonomyId)}`, signal);
-  return data;
+  const outcome = await lookupSpeciesById(taxonomyId, signal);
+  return outcome.state === 'found' ? outcome.data : null;
 }
 
 export interface MycorrhizalPartner { fungal_taxon?: string; family?: string; type?: string; note?: string; }
