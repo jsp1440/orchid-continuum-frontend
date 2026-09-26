@@ -59,7 +59,7 @@ afterEach(() => {
   container.remove();
 });
 
-function renderControl(): void {
+function renderControl(initialFeedbackClass?: 'challenge'): void {
   act(() => {
     root.render(
       <EvidenceFeedbackControl
@@ -68,6 +68,7 @@ function renderControl(): void {
         objectPayload={{ preferred_term: 'Flower', review_state: 'draft' }}
         pageContext="/lexicon/flower"
         objectLabel="Flower"
+        initialFeedbackClass={initialFeedbackClass}
       />,
     );
   });
@@ -117,6 +118,14 @@ describe('EvidenceFeedbackControl', () => {
     });
 
     expect(container.textContent).toContain('Existing feedback found');
+  });
+
+  it('can open with a surface-specific feedback class', () => {
+    renderControl('challenge');
+
+    act(() => (container.querySelector('button') as HTMLButtonElement).click());
+
+    expect((container.querySelector('select') as HTMLSelectElement).value).toBe('challenge');
   });
 
   it('merges limited status updates without losing the durable review route', async () => {
