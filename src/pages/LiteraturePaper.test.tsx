@@ -290,12 +290,13 @@ describe('the page against the captured backend paper (main c37ff0ca6)', () => {
  * A signed-in member, refused, on the paper page.
  *
  * The route is behind ProtectedRoute, so the reader is signed in. Owner
- * decision (2026-09-26): literature reads accept a member's Supabase session,
- * so a refusal means an unverifiable session (401), an account that is not
- * permitted (403), or member access not yet configured on the server (503 with
- * the member-auth-not-configured code). The 401 is the backend's own response
- * (`literatureAccessDenied.realBackend.json`); the 403 and 503 not-configured
- * bodies are clearly synthetic shapes for those branches.
+ * decision (2026-09-26) opened the literature index and source bindings to
+ * members, but backend #1643 keeps full paper text (`/papers/{id}`) owner-only
+ * for members because it can be licence-restricted. The member token is never
+ * sent there, so any 401/403 on this view is an owner-only view — said as
+ * such, never as "sign in again". The 401 is the backend's own response
+ * (`literatureAccessDenied.realBackend.json`); the 403 bodies are clearly
+ * synthetic shapes.
  */
 describe('a signed-in member who is refused', () => {
   const signedIn = () =>
@@ -318,7 +319,11 @@ describe('a signed-in member who is refused', () => {
     mocks.useAuth.mockReturnValue({ user: null, session: null, loading: false });
   });
 
-  it("is told the session could not be verified and to sign in again, on the backend's own 401", async () => {
+  const OWNER_ONLY = /this view is limited to owner access — full paper text can be restricted by its licence/i;
+
+  it("is told full text is an owner-only view, not to sign in again, on the backend's own 401", async () => {
+    // `/papers/{id}` is owner-only for members, so no member token is sent and
+    // the backend's 401 is about the view, not about the member's session.
     signedIn();
     answer(accessDenied.paper_no_credentials.status, accessDenied.paper_no_credentials.body);
     await mount();
@@ -326,8 +331,11 @@ describe('a signed-in member who is refused', () => {
     expect(accessState()).not.toBeNull();
     expect(accessState()?.getAttribute('data-access-status')).toBe('401');
     expect(accessState()?.getAttribute('data-signed-in')).toBe('true');
-    expect(accessState()?.getAttribute('data-access-reason')).toBe('session_unverified');
-    expect(text()).toMatch(/your session could not be verified — sign in again/i);
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('owner_only');
+    expect(text()).toMatch(OWNER_ONLY);
+    expect(text()).toMatch(/signing in again will not change it/i);
+    expect(text()).not.toMatch(/your session could not be verified/i);
+    expect(text()).not.toMatch(/sign in again\./i);
     expect(text()).not.toMatch(/not yet open to members/i);
     expect(text()).toMatch(/says nothing about what the extraction contains/i);
     expect(container.querySelector('[data-testid="paper-error"]')).toBeNull();
@@ -340,31 +348,27 @@ describe('a signed-in member who is refused', () => {
     );
   });
 
-  it('gets the same state on a 403 (synthetic shape)', async () => {
+  it('is told the same on a 403 OWNER_ACCESS_REQUIRED (synthetic shape of the #1643 body)', async () => {
+    signedIn();
+    answer(403, { detail: { code: 'OWNER_ACCESS_REQUIRED', message: 'synthetic' } });
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('403');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('owner_only');
+    expect(text()).toMatch(OWNER_ONLY);
+    expect(text()).not.toMatch(/your session could not be verified/i);
+    expect(text()).not.toMatch(/access is not permitted for this account/i);
+    expect(retry()).toBe(false);
+  });
+
+  it('reads a bare 403 on the full-text view as owner-only too (synthetic shape)', async () => {
     signedIn();
     answer(403, { detail: 'Forbidden' });
     await mount();
 
-    expect(accessState()?.getAttribute('data-access-status')).toBe('403');
-    expect(accessState()?.getAttribute('data-access-reason')).toBe('forbidden');
-    expect(text()).toMatch(/access is not permitted for this account/i);
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('owner_only');
+    expect(text()).toMatch(OWNER_ONLY);
     expect(retry()).toBe(false);
-  });
-
-  it('is told member access is not yet configured on the server on a 503 not-configured (synthetic shape)', async () => {
-    signedIn();
-    answer(503, { detail: 'Member authentication is not configured' });
-    await mount();
-
-    expect(accessState()?.getAttribute('data-access-status')).toBe('503');
-    expect(accessState()?.getAttribute('data-access-reason')).toBe('member_access_unconfigured');
-    expect(text()).toMatch(/member access is not yet configured on the server/i);
-    expect(container.querySelector('[data-testid="paper-error"]')).toBeNull();
-    expect(text()).not.toMatch(/literature service is unavailable/i);
-    expect(retry()).toBe(false);
-    expect(container.querySelector('[data-testid="policy-summary"]')?.textContent).toMatch(
-      /nothing is being released/i,
-    );
   });
 
   it('sees a 5xx as an outage, not as a refusal', async () => {

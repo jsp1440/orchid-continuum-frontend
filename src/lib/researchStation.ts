@@ -16,8 +16,8 @@ import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 import { CalyxApiError } from "@/lib/calyxWorkspace";
 import {
   errorCodeOf,
-  isMemberAuthNotConfigured,
-  MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  memberAuthServiceRefusal,
+  REFUSAL_MESSAGE,
   withMemberReadAuth,
 } from "@/lib/memberReadAuth";
 
@@ -108,10 +108,12 @@ export async function researchRequest<T>(path: string, init?: RequestInit): Prom
         code,
       );
     }
-    if (response.status === 503 && isMemberAuthNotConfigured(code)) {
-      // A deployment state, not an outage: the server has not been given its
-      // member-auth settings. Retrying cannot change this answer.
-      throw new CalyxApiError("server_error", MEMBER_ACCESS_UNCONFIGURED_MESSAGE, 503, code);
+    const memberAuthState = memberAuthServiceRefusal(response.status, code);
+    if (memberAuthState) {
+      // MEMBER_AUTH_NOT_CONFIGURED is a deployment state, not an outage;
+      // MEMBER_AUTH_UNAVAILABLE is a transient verification failure. Both are
+      // said as themselves rather than as a generic server error.
+      throw new CalyxApiError("server_error", REFUSAL_MESSAGE[memberAuthState], 503, code);
     }
     if (response.status === 404) {
       throw new CalyxApiError(

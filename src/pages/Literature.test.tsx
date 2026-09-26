@@ -289,9 +289,43 @@ describe('a signed-in member who is refused', () => {
     expect(retry()).toBe(false);
   });
 
-  it('is told member access is not yet configured on the server on a 503 not-configured (synthetic shape)', async () => {
+  it('is told the session could not be verified on INVALID_MEMBER_TOKEN (synthetic shape of the #1643 body)', async () => {
     signedIn();
-    respond({ detail: { code: 'member_auth_not_configured' } }, 503);
+    respond({ detail: { code: 'INVALID_MEMBER_TOKEN', message: 'Member session is invalid or expired' } }, 401);
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('session_unverified');
+    expect(text()).toMatch(/your session could not be verified — sign in again/i);
+    expect(retry()).toBe(false);
+  });
+
+  it('is told member verification is temporarily unavailable, with a retry, on MEMBER_AUTH_UNAVAILABLE (synthetic shape)', async () => {
+    signedIn();
+    respond({ detail: { code: 'MEMBER_AUTH_UNAVAILABLE', message: 'synthetic' } }, 503);
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('503');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('member_auth_unavailable');
+    expect(text()).toMatch(/member verification is temporarily unavailable — try again/i);
+    expect(container.querySelector('[data-testid="literature-error"]')).toBeNull();
+    expect(retry()).toBe(true);
+
+    // The retry re-reads the index.
+    respond({ papers: [paper('p-1')], total: 1, limit: 25, offset: 0, unreadable_count: 0 });
+    const button = [...container.querySelectorAll('button')].find((b) => /try again/i.test(b.textContent ?? ''));
+    await act(async () => {
+      button?.click();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(accessState()).toBeNull();
+    expect(rows()).toHaveLength(1);
+  });
+
+  it('is told member access is not yet configured on the server on MEMBER_AUTH_NOT_CONFIGURED (synthetic shape)', async () => {
+    signedIn();
+    respond({ detail: { code: 'MEMBER_AUTH_NOT_CONFIGURED', message: 'synthetic' } }, 503);
     await mount();
 
     expect(accessState()?.getAttribute('data-access-status')).toBe('503');

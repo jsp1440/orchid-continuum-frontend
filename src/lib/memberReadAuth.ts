@@ -34,20 +34,31 @@ import { supabase } from "@/lib/supabase";
 /**
  * Paths, relative to the Calyx base, that accept a member session on GET.
  *
- * Kept as anchored patterns so a new route under one of these prefixes that
- * the backend does not open to members is not silently widened here beyond
- * the prefixes the owner decision names.
+ * Exactly the routes the backend marks `@member_readable` (backend #1643,
+ * branch `claude/member-read-access`), enumerated rather than matched by
+ * prefix so an owner-only read under the same router never receives the
+ * member token. Deliberately NOT here, because the backend keeps them
+ * owner-only for members:
+ *
+ * - `/api/candidate-knowledge/candidates/{id}` (evidence links can carry
+ *   internal-research-only quotes) and `/runs/{id}/items` (raw submitted text);
+ * - `/api/literature-extraction/papers/{id}` (full section text, including
+ *   rights-restricted papers) and `/coverage-audit`;
+ * - every reasoning-ledger read (`/api/reasoning-ledgers/*` and
+ *   `/api/research/projects/{id}/reasoning-ledgers`).
  */
 const MEMBER_READ_PATHS: readonly RegExp[] = [
   /^\/api\/research\/traits$/,
-  /^\/api\/candidate-knowledge(?:\/[^?#]*)?$/,
-  /^\/api\/evidence-aggregation(?:\/[^?#]*)?$/,
-  /^\/api\/literature-extraction(?:\/[^?#]*)?$/,
-  // Reasoning-ledger reads. Publication routes (`eligible-for-publication`,
-  // `/{id}/publications`) belong to the governed publication lane and are not
-  // named by the decision, so they are excluded.
-  /^\/api\/reasoning-ledgers\/(?!eligible-for-publication$)[^/]+(?:\/(?:history|epistemic-memory|revisions\/[^/]+))?$/,
-  /^\/api\/research\/projects\/[^/]+\/reasoning-ledgers$/,
+  /^\/api\/candidate-knowledge\/(?:runs|candidates|reviews|duplicates|conflicts|tombstones|health)$/,
+  /^\/api\/candidate-knowledge\/runs\/[^/]+$/,
+  /^\/api\/evidence-aggregation\/(?:runs|clusters|aggregates|conflicts|reviews|export|registry|tombstones|health)$/,
+  /^\/api\/evidence-aggregation\/runs\/[^/]+(?:\/items)?$/,
+  /^\/api\/evidence-aggregation\/clusters\/[^/]+$/,
+  // `/aggregates/{id}`, and its one-segment reads: versions, summary,
+  // support-network, contradiction-network, source-independence, {dimension}.
+  /^\/api\/evidence-aggregation\/aggregates\/[^/]+(?:\/[^/]+)?$/,
+  /^\/api\/literature-extraction\/papers$/,
+  /^\/api\/literature-extraction\/papers\/[^/]+\/source-binding$/,
 ];
 
 function requestMethod(method: string | undefined): string {
@@ -116,21 +127,49 @@ export async function withMemberReadAuth(url: string, init: RequestInit = {}): P
 /* Refusal states                                                           */
 /* ------------------------------------------------------------------------ */
 
+/** Exact error codes from the backend member-read contract (backend #1643). */
+export const MEMBER_AUTH_CODES = {
+  notConfigured: "MEMBER_AUTH_NOT_CONFIGURED",
+  unavailable: "MEMBER_AUTH_UNAVAILABLE",
+  invalidToken: "INVALID_MEMBER_TOKEN",
+  ownerAccessRequired: "OWNER_ACCESS_REQUIRED",
+} as const;
+
 /**
- * Why the backend refused a member read.
+ * Why the backend refused a read.
  *
- * - `session_unverified`: 401 — the token was missing, expired or invalid.
- * - `forbidden`: 403 — the account is known and not permitted.
- * - `member_access_unconfigured`: 503 with the backend's member-auth-not-
- *   configured code — the server has not been given its member-auth settings.
- *   This is a deployment state, distinct from an outage, and saying so is the
- *   honest answer.
+ * - `session_unverified`: 401 on a member read — the token was missing,
+ *   expired or invalid (`INVALID_MEMBER_TOKEN`). Signing in again helps.
+ * - `forbidden`: 403 on a member read without a more specific code.
+ * - `owner_only`: 403 `OWNER_ACCESS_REQUIRED` — a verified member reached an
+ *   owner-only view — or any 401/403 on a read that is owner-only for members
+ *   (the member token is never sent there, so the refusal is about the view,
+ *   not the session). Signing in again does NOT help, and the copy says so.
+ * - `member_access_unconfigured`: 503 `MEMBER_AUTH_NOT_CONFIGURED` — the server
+ *   has not been given its member-auth settings. A deployment state, not an
+ *   outage; a retry cannot change it.
+ * - `member_auth_unavailable`: 503 `MEMBER_AUTH_UNAVAILABLE` — the identity
+ *   provider could not be reached to verify the session. Transient; retryable.
  */
-export type MemberReadRefusal = "session_unverified" | "forbidden" | "member_access_unconfigured";
+export type MemberReadRefusal =
+  | "session_unverified"
+  | "forbidden"
+  | "owner_only"
+  | "member_access_unconfigured"
+  | "member_auth_unavailable";
 
 export const MEMBER_SESSION_UNVERIFIED_MESSAGE = "Your session could not be verified — sign in again.";
 export const MEMBER_FORBIDDEN_MESSAGE = "Access is not permitted for this account.";
 export const MEMBER_ACCESS_UNCONFIGURED_MESSAGE = "Member access is not yet configured on the server.";
+export const MEMBER_AUTH_UNAVAILABLE_MESSAGE = "Member verification is temporarily unavailable — try again.";
+export const OWNER_ONLY_MESSAGE = "This view is limited to owner access.";
+export const OWNER_ONLY_PAPER_MESSAGE =
+  "This view is limited to owner access — full paper text can be restricted by its licence.";
+
+/** Whether a refusal can change on a retry without the reader doing anything. */
+export function isRetryableRefusal(refusal: MemberReadRefusal | null): boolean {
+  return refusal === "member_auth_unavailable";
+}
 
 /**
  * The error code carried by a FastAPI error body: `detail` when it is a
@@ -148,20 +187,42 @@ export function errorCodeOf(payload: unknown): string | null {
   return typeof code === "string" ? code : null;
 }
 
-/**
- * Whether an error code says member authentication is not configured on the
- * server — e.g. `member_auth_not_configured` or "Member authentication is not
- * configured". Owner-side configuration errors ("Owner session signing is not
- * configured") are NOT this state and stay an outage.
- */
-export function isMemberAuthNotConfigured(code: string | null | undefined): boolean {
-  if (!code) return false;
-  return /member[\s_-]*(?:auth|access|session)[\s\S]*not[\s_-]*configured/i.test(code);
-}
-
-export function memberReadRefusal(status: number | null | undefined, code?: string | null): MemberReadRefusal | null {
-  if (status === 401) return "session_unverified";
-  if (status === 403) return "forbidden";
-  if (status === 503 && isMemberAuthNotConfigured(code)) return "member_access_unconfigured";
+/** 503 codes that are member-auth states rather than outages. */
+export function memberAuthServiceRefusal(
+  status: number | null | undefined,
+  code: string | null | undefined,
+): "member_access_unconfigured" | "member_auth_unavailable" | null {
+  if (status !== 503) return null;
+  if (code === MEMBER_AUTH_CODES.notConfigured) return "member_access_unconfigured";
+  if (code === MEMBER_AUTH_CODES.unavailable) return "member_auth_unavailable";
   return null;
 }
+
+/**
+ * Classify a refusal. `memberScoped` says whether the request was a member
+ * read (see `isMemberReadRequest`); for a read that is owner-only for members
+ * any 401/403 is `owner_only`, because no member session was offered there.
+ * Returns null for anything that is not a refusal (an outage stays an outage).
+ */
+export function memberReadRefusal(
+  status: number | null | undefined,
+  code?: string | null,
+  options: { memberScoped?: boolean } = {},
+): MemberReadRefusal | null {
+  const memberScoped = options.memberScoped ?? true;
+  const service = memberAuthServiceRefusal(status, code);
+  if (service) return service;
+  if (status === 403 && code === MEMBER_AUTH_CODES.ownerAccessRequired) return "owner_only";
+  if (!memberScoped && (status === 401 || status === 403)) return "owner_only";
+  if (status === 401) return "session_unverified";
+  if (status === 403) return "forbidden";
+  return null;
+}
+
+export const REFUSAL_MESSAGE: Record<MemberReadRefusal, string> = {
+  session_unverified: MEMBER_SESSION_UNVERIFIED_MESSAGE,
+  forbidden: MEMBER_FORBIDDEN_MESSAGE,
+  owner_only: OWNER_ONLY_MESSAGE,
+  member_access_unconfigured: MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  member_auth_unavailable: MEMBER_AUTH_UNAVAILABLE_MESSAGE,
+};

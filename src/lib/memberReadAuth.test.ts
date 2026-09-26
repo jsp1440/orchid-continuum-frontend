@@ -6,9 +6,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * in-scope GETs, and nowhere else.
  *
  * Owner decision (2026-09-26): "Allow member reads: accept Supabase member
- * sessions on the product endpoints." Writes, Speak, Relationship Matrix build
- * and Matrix identification sessions stay owner-only, so the token must never
- * ride on them — nor on any other origin.
+ * sessions on the product endpoints." The scope is exactly the routes backend
+ * #1643 (branch `claude/member-read-access`) marks `@member_readable`. Writes,
+ * Speak, Relationship Matrix build, Matrix identification sessions, and the
+ * reads the backend keeps owner-only for members (candidate detail, run items,
+ * full paper text, coverage audit, every reasoning-ledger read) never carry the
+ * token — nor does any other origin.
  *
  * The session below is a synthetic test shape; no real token is used.
  */
@@ -26,8 +29,8 @@ vi.mock('@/lib/supabase', () => ({
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import {
   errorCodeOf,
-  isMemberAuthNotConfigured,
   isMemberReadRequest,
+  isRetryableRefusal,
   memberReadRefusal,
   withMemberReadAuth,
 } from '@/lib/memberReadAuth';
@@ -36,7 +39,12 @@ import { fetchLiteraturePaper } from '@/lib/literaturePaper';
 import { fetchLedgerRevision } from '@/lib/reasoningLedger';
 import { fetchResearchTraits } from '@/lib/researchTraits';
 import { listResearchProjects, researchRequest } from '@/lib/researchStation';
-import { fetchCandidateKnowledge, fetchEvidenceAggregate } from '@/lib/researchEvidenceChain';
+import {
+  fetchCandidateKnowledge,
+  fetchEvidenceAggregate,
+  listCandidateConflicts,
+  listProjectReasoningLedgers,
+} from '@/lib/researchEvidenceChain';
 
 const OWNER_BEARER_KEY = 'calyx_owner_session_bearer_v1';
 const base = CALYX_BACKEND_BASE_URL;
@@ -67,14 +75,34 @@ afterEach(() => {
 describe('isMemberReadRequest: which requests are in scope', () => {
   it.each([
     '/api/research/traits?genus=Cattleya',
-    '/api/candidate-knowledge/candidates/c-1',
+    '/api/candidate-knowledge/runs',
+    '/api/candidate-knowledge/runs/7',
+    '/api/candidate-knowledge/candidates?limit=50',
+    '/api/candidate-knowledge/reviews?state=OPEN',
+    '/api/candidate-knowledge/duplicates',
     '/api/candidate-knowledge/conflicts?limit=50&offset=0',
+    '/api/candidate-knowledge/tombstones',
+    '/api/candidate-knowledge/health',
+    '/api/evidence-aggregation/runs',
+    '/api/evidence-aggregation/runs/3',
+    '/api/evidence-aggregation/runs/3/items',
+    '/api/evidence-aggregation/clusters',
+    '/api/evidence-aggregation/clusters/4',
+    '/api/evidence-aggregation/aggregates',
     '/api/evidence-aggregation/aggregates/a-1',
+    '/api/evidence-aggregation/aggregates/a-1/versions',
+    '/api/evidence-aggregation/aggregates/a-1/summary',
+    '/api/evidence-aggregation/aggregates/a-1/support-network',
+    '/api/evidence-aggregation/aggregates/a-1/contradiction-network',
+    '/api/evidence-aggregation/aggregates/a-1/source-independence',
+    '/api/evidence-aggregation/conflicts',
+    '/api/evidence-aggregation/reviews',
+    '/api/evidence-aggregation/export',
+    '/api/evidence-aggregation/registry',
+    '/api/evidence-aggregation/tombstones',
+    '/api/evidence-aggregation/health',
     '/api/literature-extraction/papers?limit=25&offset=0',
     '/api/literature-extraction/papers/p-1/source-binding',
-    '/api/reasoning-ledgers/l-1/revisions/2',
-    '/api/reasoning-ledgers/l-1',
-    '/api/research/projects/p-1/reasoning-ledgers',
   ])('accepts GET %s on the Calyx origin', (path) => {
     expect(isMemberReadRequest(`${base}${path}`, 'GET')).toBe(true);
     // Method omitted means GET, as in fetch.
@@ -87,6 +115,20 @@ describe('isMemberReadRequest: which requests are in scope', () => {
   });
 
   it.each([
+    // Owner-only for members on backend #1643.
+    '/api/candidate-knowledge/candidates/c-1',
+    '/api/candidate-knowledge/runs/7/items',
+    '/api/literature-extraction/papers/p-1',
+    '/api/literature-extraction/coverage-audit',
+    '/api/reasoning-ledgers/l-1',
+    '/api/reasoning-ledgers/l-1/history',
+    '/api/reasoning-ledgers/l-1/epistemic-memory',
+    '/api/reasoning-ledgers/l-1/revisions/2',
+    '/api/reasoning-ledgers/eligible-for-publication',
+    '/api/reasoning-ledgers/l-1/publications',
+    '/api/research/projects/p-1/reasoning-ledgers',
+    '/api/research/projects/p-1/epistemic-memory',
+    // Other routers and owner tools.
     '/api/calyx/speak',
     '/api/research/projects',
     '/api/research/projects/p-1',
@@ -95,8 +137,9 @@ describe('isMemberReadRequest: which requests are in scope', () => {
     '/api/relationship-matrix/build',
     '/api/matrix/identification/sessions',
     '/api/mission-control/owner/session',
-    '/api/reasoning-ledgers/eligible-for-publication',
-    '/api/reasoning-ledgers/l-1/publications',
+    '/api/candidate-knowledge',
+    '/api/evidence-aggregation',
+    '/api/evidence-aggregation/aggregates/a-1/x/y',
     '/api/research/traits/../projects',
     '/api/research/traits/%2e%2e/projects',
   ])('rejects out-of-scope GET %s', (path) => {
@@ -158,6 +201,8 @@ describe('withMemberReadAuth: attaching the member token', () => {
       'https://api.inaturalist.org/v1/observations',
       `${base}/api/calyx/speak`,
       `${base}/api/research/projects?limit=25`,
+      `${base}/api/literature-extraction/papers/p-1`,
+      `${base}/api/candidate-knowledge/candidates/c-1`,
     ]) {
       expect(authorizationOf(await withMemberReadAuth(url, { method: 'GET' })), url).toBeNull();
     }
@@ -211,35 +256,53 @@ describe('the product clients send the member token only where in scope', () => 
   const callsTo = (fetchMock: ReturnType<typeof vi.fn>) =>
     fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), init: init as RequestInit }));
 
-  it('literature index and paper reads carry the member token and credentials', async () => {
+  it('the literature index and source binding carry the member token; full paper text does not', async () => {
     signedIn();
     const fetchMock = stubFetch({ papers: [], total: 0, limit: 25, offset: 0, unreadable_count: 0 });
     await fetchLiteratureIndex();
     fetchMock.mockImplementation(async () => new Response(JSON.stringify({ paper_id: 'p-1' }), { status: 200 }));
     await fetchLiteraturePaper('p-1');
-    const calls = callsTo(fetchMock);
-    expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
-      '/api/literature-extraction/papers',
-      '/api/literature-extraction/papers/p-1',
-      '/api/literature-extraction/papers/p-1/source-binding',
+    const calls = callsTo(fetchMock).map((call) => ({
+      path: new URL(call.url).pathname,
+      authorization: authorizationOf(call.init),
+      credentials: call.init.credentials,
+    }));
+    expect(calls).toEqual([
+      { path: '/api/literature-extraction/papers', authorization: `Bearer ${MEMBER_TOKEN}`, credentials: 'include' },
+      // Owner-only for members: no member token, owner cookie still offered.
+      { path: '/api/literature-extraction/papers/p-1', authorization: null, credentials: 'include' },
+      { path: '/api/literature-extraction/papers/p-1/source-binding', authorization: `Bearer ${MEMBER_TOKEN}`, credentials: 'include' },
     ]);
+  });
+
+  it('trait, conflict and aggregate reads carry the member token', async () => {
+    signedIn();
+    const fetchMock = stubFetch({ items: [] });
+    await fetchResearchTraits({ rank: 'genus', name: 'Cattleya' }).catch(() => undefined);
+    await listCandidateConflicts().catch(() => undefined);
+    await fetchEvidenceAggregate('a-1').catch(() => undefined);
+    const calls = callsTo(fetchMock);
+    expect(calls).toHaveLength(3);
     for (const call of calls) {
-      expect(authorizationOf(call.init)).toBe(`Bearer ${MEMBER_TOKEN}`);
+      expect(authorizationOf(call.init), call.url).toBe(`Bearer ${MEMBER_TOKEN}`);
       expect(call.init.credentials).toBe('include');
     }
   });
 
-  it('trait, candidate, aggregate and ledger reads carry the member token', async () => {
+  it('candidate detail and every reasoning-ledger read carry no member token', async () => {
     signedIn();
-    const fetchMock = stubFetch({});
-    await fetchResearchTraits({ rank: 'genus', name: 'Cattleya' }).catch(() => undefined);
+    const fetchMock = stubFetch({ items: [] });
     await fetchCandidateKnowledge('c-1').catch(() => undefined);
-    await fetchEvidenceAggregate('a-1').catch(() => undefined);
     await fetchLedgerRevision('l-1', 1).catch(() => undefined);
+    await listProjectReasoningLedgers('p-1').catch(() => undefined);
     const calls = callsTo(fetchMock);
-    expect(calls).toHaveLength(4);
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
+      '/api/candidate-knowledge/candidates/c-1',
+      '/api/reasoning-ledgers/l-1/revisions/1',
+      '/api/research/projects/p-1/reasoning-ledgers',
+    ]);
     for (const call of calls) {
-      expect(authorizationOf(call.init), call.url).toBe(`Bearer ${MEMBER_TOKEN}`);
+      expect(authorizationOf(call.init), call.url).toBeNull();
       expect(call.init.credentials).toBe('include');
     }
   });
@@ -264,44 +327,85 @@ describe('the product clients send the member token only where in scope', () => 
   });
 });
 
-describe('refusal classification', () => {
-  it('maps 401, 403 and a member-auth-not-configured 503 to distinct states', () => {
+describe('refusal classification against the backend #1643 codes', () => {
+  it('maps exact codes to distinct states', () => {
     expect(memberReadRefusal(401)).toBe('session_unverified');
+    expect(memberReadRefusal(401, 'INVALID_MEMBER_TOKEN')).toBe('session_unverified');
     expect(memberReadRefusal(403)).toBe('forbidden');
-    expect(memberReadRefusal(503, 'member_auth_not_configured')).toBe('member_access_unconfigured');
+    expect(memberReadRefusal(403, 'OWNER_ACCESS_REQUIRED')).toBe('owner_only');
     expect(memberReadRefusal(503, 'MEMBER_AUTH_NOT_CONFIGURED')).toBe('member_access_unconfigured');
-    expect(memberReadRefusal(503, 'Member authentication is not configured')).toBe('member_access_unconfigured');
+    expect(memberReadRefusal(503, 'MEMBER_AUTH_UNAVAILABLE')).toBe('member_auth_unavailable');
   });
 
-  it('keeps an ordinary 503, or an owner-side configuration error, an outage', () => {
+  it('reads any 401/403 on an owner-only-for-members view as owner-only, never as "sign in again"', () => {
+    expect(memberReadRefusal(401, null, { memberScoped: false })).toBe('owner_only');
+    expect(memberReadRefusal(401, 'Owner session or API key is required', { memberScoped: false })).toBe('owner_only');
+    expect(memberReadRefusal(403, 'OWNER_ACCESS_REQUIRED', { memberScoped: false })).toBe('owner_only');
+  });
+
+  it('only member verification being unavailable is retryable', () => {
+    expect(isRetryableRefusal('member_auth_unavailable')).toBe(true);
+    for (const other of ['session_unverified', 'forbidden', 'owner_only', 'member_access_unconfigured'] as const) {
+      expect(isRetryableRefusal(other)).toBe(false);
+    }
+  });
+
+  it('keeps an ordinary 503, a near-miss code, or an owner-side configuration error an outage', () => {
     expect(memberReadRefusal(503)).toBeNull();
     expect(memberReadRefusal(503, 'UNAVAILABLE')).toBeNull();
     expect(memberReadRefusal(503, 'Owner session signing is not configured')).toBeNull();
-    expect(isMemberAuthNotConfigured('Owner access is not configured')).toBe(false);
-    expect(memberReadRefusal(500, 'member_auth_not_configured')).toBeNull();
+    expect(memberReadRefusal(503, 'member_auth_not_configured')).toBeNull();
+    expect(memberReadRefusal(503, 'MEMBER_AUTH_INVALID_RESPONSE')).toBeNull();
+    expect(memberReadRefusal(500, 'MEMBER_AUTH_NOT_CONFIGURED')).toBeNull();
     expect(memberReadRefusal(200)).toBeNull();
   });
 
   it('reads the code from a string detail, an object detail, or a top-level code', () => {
     expect(errorCodeOf({ detail: 'x' })).toBe('x');
-    expect(errorCodeOf({ detail: { code: 'y' } })).toBe('y');
+    expect(errorCodeOf({ detail: { code: 'y', message: 'm' } })).toBe('y');
     expect(errorCodeOf({ code: 'z' })).toBe('z');
     expect(errorCodeOf(null)).toBeNull();
     expect(errorCodeOf('nope')).toBeNull();
   });
 
-  it('research clients surface the not-configured 503 as its own message, not an outage', async () => {
+  it('clients surface MEMBER_AUTH_NOT_CONFIGURED as its own non-retryable state', async () => {
     signedIn();
     vi.stubGlobal(
       'fetch',
-      vi.fn(async () => new Response(JSON.stringify({ detail: { code: 'member_auth_not_configured' } }), { status: 503 })),
+      vi.fn(async () => new Response(JSON.stringify({ detail: { code: 'MEMBER_AUTH_NOT_CONFIGURED', message: 'synthetic' } }), { status: 503 })),
     );
     await expect(fetchResearchTraits({ rank: 'genus', name: 'Cattleya' })).rejects.toMatchObject({
       status: 503,
-      code: 'member_auth_not_configured',
+      code: 'MEMBER_AUTH_NOT_CONFIGURED',
       message: 'Member access is not yet configured on the server.',
     });
     await expect(fetchLiteratureIndex()).rejects.toMatchObject({ kind: 'member_access_unconfigured', retryable: false });
-    await expect(fetchLiteraturePaper('p-1')).rejects.toMatchObject({ kind: 'member_access_unconfigured', retryable: false });
+  });
+
+  it('clients surface MEMBER_AUTH_UNAVAILABLE as a retryable state', async () => {
+    signedIn();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ detail: { code: 'MEMBER_AUTH_UNAVAILABLE', message: 'synthetic' } }), { status: 503 })),
+    );
+    await expect(fetchResearchTraits({ rank: 'genus', name: 'Cattleya' })).rejects.toMatchObject({
+      status: 503,
+      code: 'MEMBER_AUTH_UNAVAILABLE',
+      message: 'Member verification is temporarily unavailable — try again.',
+    });
+    await expect(fetchLiteratureIndex()).rejects.toMatchObject({ kind: 'member_auth_unavailable', retryable: true });
+  });
+
+  it('the paper client keeps the OWNER_ACCESS_REQUIRED code on a 403', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ detail: { code: 'OWNER_ACCESS_REQUIRED', message: 'synthetic' } }), { status: 403 })),
+    );
+    await expect(fetchLiteraturePaper('p-1')).rejects.toMatchObject({
+      kind: 'unauthorized',
+      status: 403,
+      code: 'OWNER_ACCESS_REQUIRED',
+      retryable: false,
+    });
   });
 });

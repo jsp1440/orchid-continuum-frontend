@@ -87,6 +87,33 @@ describe("ResearchEvidenceChain against captured backend payloads", () => {
       .not.toContain("No reasoning-ledger entry cites this evidence yet");
   });
 
+  it("says owner-only candidate detail and ledgers are owner views, never 'sign in again' (backend #1643, synthetic bodies)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      const target = String(url);
+      if (target.includes("/api/candidate-knowledge/candidates/3")) {
+        return new Response(JSON.stringify({ detail: { code: "OWNER_ACCESS_REQUIRED", message: "synthetic" } }), { status: 403 });
+      }
+      if (target.includes("/api/candidate-knowledge/candidates/8")) {
+        return new Response(JSON.stringify({ detail: "Owner session or API key is required" }), { status: 401 });
+      }
+      if (target.includes("/reasoning-ledgers")) {
+        return new Response(JSON.stringify({ detail: "Owner session or API key is required" }), { status: 401 });
+      }
+      return respond(target);
+    }));
+    const links = realBackend.project_evidence.items as unknown as ResearchEvidenceLink[];
+    act(() => root.render(<ResearchEvidenceChain projectId={realBackend.project.project_id} links={links} />));
+    await flush();
+
+    const supporting = container.querySelector('[data-testid="research-evidence-CANDIDATE-3"]');
+    const contradicting = container.querySelector('[data-testid="research-evidence-CANDIDATE-8"]');
+    expect(supporting?.textContent).toContain("Candidate record could not be read: This view is limited to owner access.");
+    expect(contradicting?.textContent).toContain("Candidate record could not be read: This view is limited to owner access.");
+    expect(supporting?.querySelector('[data-testid="research-evidence-ledger"]')?.textContent)
+      .toContain("This view is limited to owner access.");
+    expect(container.textContent).not.toContain("sign in again");
+  });
+
   it("marks conflicts unknown, not absent, when the conflicts route fails", async () => {
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       const target = String(url);

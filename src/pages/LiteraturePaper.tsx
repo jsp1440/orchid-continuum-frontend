@@ -55,7 +55,7 @@ type State =
 
 /** Refused rather than broken: rendered as the access state, never as an outage. */
 function isRefusal(kind: LiteraturePaperError['kind']): boolean {
-  return kind === 'unauthorized' || kind === 'member_access_unconfigured';
+  return kind === 'unauthorized';
 }
 
 function Withheld({ reason }: { reason: Parameters<typeof describeWithheld>[0] }) {
@@ -280,12 +280,12 @@ export default function LiteraturePaper() {
           ) : null}
 
           {state.status === 'failed' && isRefusal(state.error.kind) ? (
-            // Refused, not missing and not an outage: the session could not be
-            // verified, is not permitted, or member access is not yet
-            // configured on the server.
+            // Refused, not missing and not an outage: full paper text is an
+            // owner-only view for members (it can be licence-restricted), so
+            // this is said as such, never as "sign in again".
             <LiteratureAccessRequired
               status={state.error.status}
-              refusal={state.error.kind === 'member_access_unconfigured' ? 'member_access_unconfigured' : null}
+              code={state.error.code}
               subject="paper"
             />
           ) : null}

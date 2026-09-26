@@ -44,7 +44,7 @@ type State =
 
 /** Refused rather than broken: rendered as the access state, never as an outage. */
 function isRefusal(kind: LiteratureIndexError['kind']): boolean {
-  return kind === 'unauthorized' || kind === 'member_access_unconfigured';
+  return kind === 'unauthorized' || kind === 'member_access_unconfigured' || kind === 'member_auth_unavailable';
 }
 
 function PaperRow({ paper }: { paper: LiteratureSummary }) {
@@ -154,13 +154,14 @@ export default function Literature() {
           ) : null}
 
           {state.status === 'failed' && isRefusal(state.error.kind) ? (
-            // Refused, not broken and not empty: the session could not be
-            // verified, is not permitted, or member access is not yet
-            // configured on the server.
+            // Refused, not broken and not empty: the member session could not
+            // be verified, is not permitted, or member verification is not
+            // configured / temporarily unavailable on the server.
             <LiteratureAccessRequired
               status={state.error.status}
-              refusal={state.error.kind === 'member_access_unconfigured' ? 'member_access_unconfigured' : null}
+              code={state.error.code}
               subject="corpus"
+              onRetry={() => void load(offset)}
             />
           ) : null}
 

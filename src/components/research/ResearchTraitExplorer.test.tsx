@@ -83,9 +83,12 @@ describe('Research Trait Explorer', () => {
     [401, {}, 'Your session could not be verified — sign in again. No trait records have been loaded.'],
     [403, {}, 'Access is not permitted for this account. No trait records have been loaded.'],
     [503, {}, 'Trait data is unavailable'],
-    // Synthetic shape for the backend's member-auth-not-configured 503: a
-    // deployment state, said as such and kept apart from an outage.
-    [503, { detail: { code: 'member_auth_not_configured' } }, 'Member access is not yet configured on the server.'],
+    // Synthetic shapes of the backend #1643 member-auth bodies: each is said as
+    // itself and kept apart from an outage.
+    [401, { detail: { code: 'INVALID_MEMBER_TOKEN', message: 'synthetic' } }, 'Your session could not be verified — sign in again. No trait records have been loaded.'],
+    [403, { detail: { code: 'OWNER_ACCESS_REQUIRED', message: 'synthetic' } }, 'This view is limited to owner access. No trait records have been loaded.'],
+    [503, { detail: { code: 'MEMBER_AUTH_NOT_CONFIGURED', message: 'synthetic' } }, 'Member access is not yet configured on the server. No trait records have been loaded; this is a deployment step, not an outage.'],
+    [503, { detail: { code: 'MEMBER_AUTH_UNAVAILABLE', message: 'synthetic' } }, 'Member verification is temporarily unavailable — try again. No trait records have been loaded.'],
   ])('renders HTTP %s %j honestly', async (status, body, message) => {
     fetch.mockResolvedValue(response(body, status as number));
     await render();

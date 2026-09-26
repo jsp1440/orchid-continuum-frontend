@@ -1,5 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
-import { isMemberAuthNotConfigured, withMemberReadAuth } from "@/lib/memberReadAuth";
+import { memberAuthServiceRefusal, REFUSAL_MESSAGE, withMemberReadAuth } from "@/lib/memberReadAuth";
 
 /**
  * Client for literature-extraction discovery.
@@ -27,8 +27,10 @@ import { isMemberAuthNotConfigured, withMemberReadAuth } from "@/lib/memberReadA
 
 export type LiteratureFailureKind =
   | "unauthorized"
-  /** 503 with the backend's member-auth-not-configured code: a deployment state, not an outage. */
+  /** 503 MEMBER_AUTH_NOT_CONFIGURED: a deployment state, not an outage; not retryable. */
   | "member_access_unconfigured"
+  /** 503 MEMBER_AUTH_UNAVAILABLE: member verification failed transiently; retryable. */
+  | "member_auth_unavailable"
   | "unavailable"
   | "rejected"
   | "network"
@@ -51,7 +53,7 @@ export class LiteratureIndexError extends Error {
     this.kind = kind;
     this.status = status;
     this.code = code;
-    this.retryable = kind === "unavailable" || kind === "network";
+    this.retryable = kind === "unavailable" || kind === "network" || kind === "member_auth_unavailable";
   }
 }
 
@@ -131,13 +133,9 @@ export async function fetchLiteratureIndex(
         code,
       );
     }
-    if (response.status === 503 && isMemberAuthNotConfigured(code)) {
-      throw new LiteratureIndexError(
-        "member_access_unconfigured",
-        "Member access is not yet configured on the server.",
-        503,
-        code,
-      );
+    const memberAuthState = memberAuthServiceRefusal(response.status, code);
+    if (memberAuthState) {
+      throw new LiteratureIndexError(memberAuthState, REFUSAL_MESSAGE[memberAuthState], 503, code);
     }
     if (response.status === 422) {
       throw new LiteratureIndexError("rejected", "The literature service rejected the request.", 422, code);
