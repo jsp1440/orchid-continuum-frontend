@@ -32,8 +32,12 @@ the owner gates listed below.**
 | Backend `jsp1440/orchid-calyx-backend` | `88e579571191d8f1b6b692ac4d602a2934f1b261` | `r1-final`, 2026-09-26T23:09Z |
 | Frontend `jsp1440/orchid-continuum-frontend` | `6264d82aaf3b64b0663360aebd0a249239d9a754` | `r1-final`, 2026-09-26T23:09Z |
 
-No Release 1 integration work changed `main`. Merging
-`oc-autonomous-integration` into `main` is owner-gated.
+BE #1643 and FE #858, #859 and #860 were merged to `main` earlier on 2026-09-26, under the
+owner-authorised sprint that preceded the Release 1 directive. They reached
+integration through syncs BE #1644 and FE #862. Nothing has changed `main` since
+the directive: main tips are backend `f6f1c04` and frontend `f59493ab`, both
+ancestors of integration. Merging `oc-autonomous-integration` into `main` is
+owner-gated.
 
 ## How the evidence was produced
 
@@ -54,14 +58,20 @@ No Release 1 integration work changed `main`. Merging
     owner access with curl.
   - A member-token audit logs every Calyx request that carries a member token
     and checks it against the allowed routes.
-- **Per-PR gates.** For each change:
-  - an independent checker, a different identity from the maker, verified the
-    exact PR head;
-  - GitHub CI was green on that head;
-  - the factory gate (`factory_policy.evaluate_factory_gate`) returned
-    `AUTO_INTEGRATE` before merge;
-  - after merge, the integration tree or changed blobs were read back and
-    compared with the checked head.
+- **Per-PR gates.** Exact-head CI was green on every listed head. How each
+  merge was checked and integrated differs by PR:
+
+  | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
+  |---|---|---|---|---|
+  | BE #1644, #1647, #1649, #1650; FE #862, #868 | Yes, before merge (session checker agents; #1647, #1650 and #868 after a repair round) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head |
+  | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
+  | BE #1645; FE #856, #861, #864, #865, #866 | Owner's own lineage: exact-head CI plus the readback in the PR comments; no independent checker record from this session | Not recorded | Owner | Blobs identical (FE #865, #866 verified by this session) |
+  | BE #1643; FE #858, #859, #860 | Yes, before merge | Not applicable: these merged to `main` under the earlier owner-authorised sprint, before the Release 1 directive, and reached integration only through syncs #1644 and #862 | Coordinator | Tree/blobs identical |
+
+  Checker PASS records and gate results for the coordinator-merged PRs are held
+  in this session's scratchpad, not as GitHub comments. The factory gate takes
+  the checker verdict and heads as inputs, so it confirms policy eligibility,
+  not independent proof.
 - **Evidence strength.** Results below are local, with no production data,
   unless stated. The fixture-backed Playwright suites in CI are a second, weaker
   layer.
@@ -72,7 +82,7 @@ No Release 1 integration work changed `main`. Merging
 |---|---|---|---|---|---|---|
 | 1 | Launch + primary navigation | **PASS** | All 7 primary nav items open the right page; Lexicon, Literature and Identification are linked from nav and footer | Home widget returns 503, not 500, with no database | FE #866 `0fb3477c` → `c204ec5b`; BE #1649 `f20c4501` → `d65aa007` | Guarded routes stay guarded |
 | 2 | Authentication / member | **PASS** (local identity stand-in) | Sign-up, account, sign-out and the gate work; a wrong password gets an honest error | Members can read exactly 4 schema-defined GETs and use 7 member Matrix routes | BE #1643 (main `f6f1c04`), synced by #1644 `00e62860` → `1d7e35d1`; BE #1645 → `a7e254de`; FE #858 (main `35d6df2`), synced by #862 `03adf883` → `8a66ef7b` | Trait output fails closed on locality; the locality test was made deterministic in BE #1648 `20321ffd` → `92e381c5` |
-| 3 | Species search + taxon pages | **OWNER_GATED** (verify production data) | A search outage shows "Search unavailable", not "0 results"; the dossier degrades honestly | Search, dossier taxonomy and Atlas data come from the separate public API and Supabase, which cannot be reached from here | FE #865 `e3315afc` → `b092ada5` | No locality rendered |
+| 3 | Species search + taxon pages | **OWNER_GATED** (verify production data) | A search outage shows "Search unavailable", not "0 results"; a known taxon's dossier degrades honestly. Known non-blocking defect: an unknown taxon still renders an empty dossier shell, with nothing fabricated (FE #869 in repair) | Search, dossier taxonomy and Atlas data come from the separate public API and Supabase, which cannot be reached from here | FE #865 `e3315afc` → `b092ada5` | No locality rendered |
 | 4 | Matrix identification | **PASS** | Anonymous visitors get a sign-in prompt; a member goes registry → session → answers → ranking → explanation; member B gets 404 on member A's session; owner-only panels are shown as owner-only | Members use their own sessions on 7 routes; every other Matrix route returns 403; member responses follow a fixed schema and planted locality is withheld | BE #1647 `7613ed03` → `3fb6a92a`; FE #868 `0ba7c363` → `6264d82a` (supersedes #867) | The member-token audit found tokens only on allowed routes, none unexpected; no paid model calls for members |
 | 5 | Image-based identification | **NOT APPLICABLE** | Release 1 has no visitor photo-identification journey | Matrix vision routes return 403 to members | — | — |
 | 6 | Lexicon / Illustrated Glossary | **PASS** (local, no data) | Home, A–Z, search, entry and not-found work; the migration fallback is disclosed; the header fits at 320–414px | `/api/lexicon` returns 503 without a database | FE #866 | — |
@@ -94,8 +104,12 @@ Every run confirms that a signed-in member gets 403, and never data, on all of t
 - Matrix reports, vision, contract and persistence;
 - the literature coverage audit and paper detail.
 
-Members can read exactly the 4 declared GETs plus their own Matrix sessions. No
-coordinates appear in member API responses or on any rendered page.
+With a member token, members can call exactly the 4 declared member-readable GETs
+and the 7 member Matrix routes: 2 registry reads and 5 routes on their own
+sessions. Public endpoints stay public to everyone. No coordinates appeared in the 3
+member payloads probed (traits, papers, Matrix registry) or on any page the
+harness rendered. Matrix session, evaluate and explain responses are covered by
+the rendered-page check and by the backend's planted-locality unit tests.
 
 One known inconsistency exposes no data: `/api/research/projects*` answers a
 member token with 401 instead of 403, because `app/research_workspace/routes.py`
@@ -114,9 +128,11 @@ uses the plain owner check.
       `app/evidence_feedback/postgres_repository.py` once, with a privileged role.
    2. Grant the runtime role, on `oc_evidence_feedback`: USAGE on the schema;
       SELECT, INSERT and UPDATE on all tables; USAGE on all sequences.
-3. **Member feedback submission (J12).** You chose "members submit, owner
-   reviews", but the session's permission system refused the auth change. It
-   stays owner-only until that change is permitted.
+3. **Member feedback submission (J12): blocked engineering, needs owner permission.**
+   You chose "members submit, owner reviews". The session's permission system refused
+   the auth change, so the engineering is unfinished rather than awaiting a
+   decision. A saved, unapplied partial patch exists. It stays owner-only until
+   that change is permitted.
 4. **Production data verification (J3, J9).** Species search, dossier taxonomy
    and Atlas data come from the public API service and Supabase tables, which
    need to be checked against the deployed services.
