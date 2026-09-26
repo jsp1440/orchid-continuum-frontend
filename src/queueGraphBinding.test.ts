@@ -124,15 +124,22 @@ describe('binding a queued issue from the issue side', () => {
     };
     walk(COMPLETION_GRAPH);
 
-    // Five of 121. The issue-side binding now connects the real Featured Genus sentinel to its canonical graph leaf; cap-research-evidence-chain added the 120th node and cap-kg-evidence-gap-research-missions the 121st.
-    expect(nodes).toBe(121);
-    expect([...bound].sort((a, b) => a - b)).toEqual([47, 171, 525, 528, 660]);
+    // Six of 123. The issue-side binding now connects the real Featured Genus sentinel to its canonical graph leaf; cap-research-evidence-chain added the 120th node and cap-kg-evidence-gap-research-missions the 121st; the 2026-09-26 reconciliation added cap-relationship-interaction-discovery and cap-vision-lexicon-evidence-summary, and bound #788 to gate-journey-research-atlas.
+    expect(nodes).toBe(123);
+    expect([...bound].sort((a, b) => a - b)).toEqual([47, 171, 525, 528, 660, 788]);
   });
 
   it('admits a graph-bound issue without any declaration', () => {
+    // #525's leaf (cap-research-trait-explorer) is OWNER_ACTION since the
+    // 2026-09-26 reconciliation, so the admissible graph-bound example is #528.
+    const plan = buildGraphDispatchPlan({ maxActiveLanes: 8, runningCount: 0, queuedIssueNumbers: [528], now: NOW });
+    expect(plan.issues).toEqual([528]);
+    expect(plan.leaves[0]?.nodeId).toBe('cap-pollinator-mycorrhiza-real-data');
+  });
+
+  it('does not admit a graph-bound issue whose leaf is settled to OWNER_ACTION', () => {
     const plan = buildGraphDispatchPlan({ maxActiveLanes: 8, runningCount: 0, queuedIssueNumbers: [525], now: NOW });
-    expect(plan.issues).toEqual([525]);
-    expect(plan.leaves[0]?.nodeId).toBe('cap-research-trait-explorer');
+    expect(plan.issues).toEqual([]);
   });
 
   it('is still deterministic once declarations are in play', () => {
