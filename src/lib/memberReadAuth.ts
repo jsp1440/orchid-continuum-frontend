@@ -1,5 +1,6 @@
 import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
 import { calyxRelativePath } from "@/lib/calyxOrigin";
+import { supabase } from "@/lib/supabase";
 
 /**
  * Member read access to the Calyx product endpoints.
@@ -81,11 +82,7 @@ export function isMemberReadRequest(
 
 /** The current member access token, or null when signed out / unavailable. */
 async function currentMemberAccessToken(): Promise<string | null> {
-  // Node-side validation imports this module too; do not initialize Supabase
-  // Realtime there merely to decide that no browser member session exists.
-  if (typeof window === "undefined") return null;
   try {
-    const { supabase } = await import("@/lib/supabase");
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     return typeof token === "string" && token ? token : null;
