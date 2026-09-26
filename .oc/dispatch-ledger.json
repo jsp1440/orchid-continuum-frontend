@@ -1,10 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 12,
+  "programSpent": 12.5,
   "dailySpent": {
     "2026-09-24": 2,
-    "2026-09-25": 10
+    "2026-09-25": 10,
+    "2026-09-26": 0.5
   },
   "leases": [
     {
@@ -793,6 +794,19 @@
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "lane": "provider-free",
       "state": "provider-free-done"
+    },
+    {
+      "id": "7831e0a5cd600b400730e9bedfbe5963b70cba213f7fffb56cffaaf94c71ea75",
+      "issue": 793,
+      "nodeId": "cap-screen-orchids",
+      "fingerprint": "4e27f9958e7c68cf4e0b6df618b60755921048a7c5afc9444cd22683e773ecfe",
+      "waveHash": "37cd08318961f8f8469870d78a4f44500319071d5011f4d55960e24b730372a7",
+      "runId": "36203098805",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T01:32:01.472Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
