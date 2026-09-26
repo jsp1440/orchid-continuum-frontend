@@ -42,6 +42,11 @@ type State =
   | { status: 'loaded'; response: LiteratureIndexResponse }
   | { status: 'failed'; error: LiteratureIndexError };
 
+/** Refused rather than broken: rendered as the access state, never as an outage. */
+function isRefusal(kind: LiteratureIndexError['kind']): boolean {
+  return kind === 'unauthorized' || kind === 'member_access_unconfigured' || kind === 'member_auth_unavailable';
+}
+
 function PaperRow({ paper }: { paper: LiteratureSummary }) {
   if (!paper.readable) {
     // Reported rather than hidden: an extraction that cannot be read is part
@@ -148,13 +153,19 @@ export default function Literature() {
             <p className="text-sm text-white/60">Loading the literature index…</p>
           ) : null}
 
-          {state.status === 'failed' && state.error.kind === 'unauthorized' ? (
-            // Refused, not broken and not empty: the service answers only an
-            // owner session or API key, and no member path exists yet.
-            <LiteratureAccessRequired status={state.error.status} subject="corpus" />
+          {state.status === 'failed' && isRefusal(state.error.kind) ? (
+            // Refused, not broken and not empty: the member session could not
+            // be verified, is not permitted, or member verification is not
+            // configured / temporarily unavailable on the server.
+            <LiteratureAccessRequired
+              status={state.error.status}
+              code={state.error.code}
+              subject="corpus"
+              onRetry={() => void load(offset)}
+            />
           ) : null}
 
-          {state.status === 'failed' && state.error.kind !== 'unauthorized' ? (
+          {state.status === 'failed' && !isRefusal(state.error.kind) ? (
             <div
               className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5"
               data-testid="literature-error"

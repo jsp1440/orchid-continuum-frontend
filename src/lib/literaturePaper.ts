@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import { errorCodeOf } from "@/lib/memberReadAuth";
 import type { DisplayBinding } from "@/lib/literatureDisplayPolicy";
 
 /**
@@ -32,13 +33,20 @@ export type LiteraturePaperFailureKind =
 export class LiteraturePaperError extends Error {
   readonly kind: LiteraturePaperFailureKind;
   readonly status: number | null;
+  readonly code: string | null;
   readonly retryable: boolean;
 
-  constructor(kind: LiteraturePaperFailureKind, message: string, status: number | null = null) {
+  constructor(
+    kind: LiteraturePaperFailureKind,
+    message: string,
+    status: number | null = null,
+    code: string | null = null,
+  ) {
     super(message);
     this.name = "LiteraturePaperError";
     this.kind = kind;
     this.status = status;
+    this.code = code;
     this.retryable = kind === "unavailable" || kind === "network";
   }
 }
@@ -226,6 +234,9 @@ export function countStrippedLocality(entities: unknown): number {
 
 async function request(path: string, signal?: AbortSignal): Promise<Response> {
   try {
+    // Paper full text and its source binding are owner-only for members
+    // (backend #1643), so no member token is attached here; an owner session
+    // cookie is still offered.
     return await fetch(`${CALYX_BACKEND_BASE_URL}/api/literature-extraction${path}`, {
       method: "GET",
       credentials: "include",
@@ -257,10 +268,14 @@ export async function fetchLiteraturePaper(
   const paperResponse = await request(`/papers/${encoded}`, options.signal);
   if (!paperResponse.ok) {
     if (paperResponse.status === 401 || paperResponse.status === 403) {
+      // `/papers/{id}` (full section text) is owner-only for members, so the
+      // member token is never sent here; the page reads this refusal (a plain
+      // 401, or 403 OWNER_ACCESS_REQUIRED) as an owner-only view.
       throw new LiteraturePaperError(
         "unauthorized",
         "This session is not authorised to read this extraction.",
         paperResponse.status,
+        errorCodeOf(await parse(paperResponse)),
       );
     }
     if (paperResponse.status === 404) {

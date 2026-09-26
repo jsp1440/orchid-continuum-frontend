@@ -156,7 +156,7 @@ export type CalyxTurnResponse = {
 };
 export type CalyxApiErrorKind = "authentication_required" | "route_unavailable" | "validation_failed" | "server_error" | "network_error";
 export class CalyxApiError extends Error {
-  constructor(public readonly kind: CalyxApiErrorKind, message: string, public readonly status?: number) { super(message); this.name = "CalyxApiError"; }
+  constructor(public readonly kind: CalyxApiErrorKind, message: string, public readonly status?: number, public readonly code?: string) { super(message); this.name = "CalyxApiError"; }
 }
 export class BrainMissionApiError extends CalyxApiError {
   constructor(kind: CalyxApiErrorKind, message: string, status?: number) { super(kind, message, status); this.name = "BrainMissionApiError"; }

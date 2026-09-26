@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 
+import { CalyxApiError } from '@/lib/calyxWorkspace';
+import { memberReadRefusal, REFUSAL_MESSAGE } from '@/lib/memberReadAuth';
 import type { LedgerRevision } from '@/lib/reasoningLedger';
 import {
   aggregateCounts,
@@ -28,7 +30,20 @@ import type { ResearchEvidenceLink } from '@/lib/researchStation';
 
 type Loaded<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status: 'unavailable'; message: string };
 
+/**
+ * Why a record could not be read.
+ *
+ * Every read in this chain — candidate detail, candidate conflicts, aggregate
+ * detail and project reasoning ledgers — is owner-only for members (backend
+ * #1643 @ b0c1acbcd). No member token is sent, so a plain 401 or a 403
+ * `OWNER_ACCESS_REQUIRED` means "this view is limited to owner access", never
+ * a session problem, and is never phrased as "sign in again".
+ */
 function reason(error: unknown): string {
+  const refusal = error instanceof CalyxApiError
+    ? memberReadRefusal(error.status, error.code, { memberScoped: false })
+    : null;
+  if (refusal) return REFUSAL_MESSAGE[refusal];
   return error instanceof Error ? error.message : 'The record could not be read.';
 }
 

@@ -53,6 +53,11 @@ type State =
   | { status: 'loaded'; view: LiteraturePaperView }
   | { status: 'failed'; error: LiteraturePaperError };
 
+/** Refused rather than broken: rendered as the access state, never as an outage. */
+function isRefusal(kind: LiteraturePaperError['kind']): boolean {
+  return kind === 'unauthorized';
+}
+
 function Withheld({ reason }: { reason: Parameters<typeof describeWithheld>[0] }) {
   return (
     <div
@@ -274,13 +279,18 @@ export default function LiteraturePaper() {
             <p className="text-sm text-white/60">Loading this extraction…</p>
           ) : null}
 
-          {state.status === 'failed' && state.error.kind === 'unauthorized' ? (
-            // Refused, not missing and not an outage: the service answers only
-            // an owner session or API key, and no member path exists yet.
-            <LiteratureAccessRequired status={state.error.status} subject="paper" />
+          {state.status === 'failed' && isRefusal(state.error.kind) ? (
+            // Refused, not missing and not an outage: full paper text is an
+            // owner-only view for members (it can be licence-restricted), so
+            // this is said as such, never as "sign in again".
+            <LiteratureAccessRequired
+              status={state.error.status}
+              code={state.error.code}
+              subject="paper"
+            />
           ) : null}
 
-          {state.status === 'failed' && state.error.kind !== 'unauthorized' ? (
+          {state.status === 'failed' && !isRefusal(state.error.kind) ? (
             <div
               className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5"
               data-testid="paper-error"
