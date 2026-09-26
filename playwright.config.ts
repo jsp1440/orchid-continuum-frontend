@@ -20,9 +20,12 @@ const APP = `http://127.0.0.1:${APP_PORT}`;
 
 // Specs that talk to the reference backend directly read it from here, so a
 // run on other ports (REFERENCE_BACKEND_PORT / E2E_APP_PORT, e.g. beside
-// another suite) reaches the backend the app was built against. Workers
-// inherit this environment.
+// another suite) reaches the backend the app was built against. Specs that
+// need the app's own origin (a CORS allow-origin on a fulfilled response, a
+// base for resolving a relative href) read E2E_APP_URL for the same reason.
+// Workers inherit this environment.
 process.env.REFERENCE_BACKEND_URL = REFERENCE_BACKEND;
+process.env.E2E_APP_URL = APP;
 
 const buildEnv = {
   VITE_CALYX_API_URL: REFERENCE_BACKEND,
