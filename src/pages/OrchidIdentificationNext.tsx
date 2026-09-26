@@ -19,6 +19,7 @@ import {
   explanationText,
   listMatrixRegistries,
   matrixErrorAccess,
+  MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE,
   MATRIX_OWNER_ACCESS_MESSAGE,
   type CalyxExplanation,
   type Certainty,
@@ -39,16 +40,18 @@ function scopeLabel(scope?: Record<string, unknown>): string {
   return genus ? `Genus ${genus}` : clade ? clade : "Governed orchid matrix";
 }
 
-type PageStatus = "loading" | "ready" | "working" | "error" | "restricted";
+type PageStatus = "loading" | "ready" | "working" | "error" | "restricted" | "sign-in";
 
 /**
- * A refused Matrix request is an access state, not an error the visitor caused
- * or can fix by retrying or signing in again: the pill says "owner access" and
- * the message says Matrix identification needs owner access. Outages and every
- * other failure stay errors with a retry path.
+ * Access refusals are distinct from outages: signed-out members are asked to
+ * sign in, while capabilities outside the member contract say owner access.
  */
 function failure(error: unknown, fallback: string): { status: PageStatus; message: string } {
-  if (matrixErrorAccess(error) === "owner_access_required") {
+  const access = matrixErrorAccess(error);
+  if (access === "member_session_required") {
+    return { status: "sign-in", message: MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE };
+  }
+  if (access === "owner_access_required") {
     return { status: "restricted", message: MATRIX_OWNER_ACCESS_MESSAGE };
   }
   return { status: "error", message: error instanceof Error ? error.message : fallback };
@@ -235,7 +238,7 @@ export default function OrchidIdentificationNext() {
         </header>
 
         <div className="mt-5 flex flex-wrap items-center gap-3" aria-live="polite">
-          <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase">{status === "restricted" ? "owner access" : status}</span>
+          <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase">{status === "restricted" ? "owner access" : status === "sign-in" ? "sign in required" : status}</span>
           <span className="text-sm text-muted-foreground" data-testid="matrix-status-message">{message}</span>
           {status === "error" && !session && registries.length === 0 && (
             <button
