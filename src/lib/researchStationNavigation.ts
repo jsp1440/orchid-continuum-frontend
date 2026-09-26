@@ -16,6 +16,11 @@
  * rather than emitting such a link.
  */
 
+import {
+  ATLAS_INFRASPECIFIC_PARAM,
+  parseAtlasTaxonName,
+} from "@/features/atlas-next/incomingTaxon";
+
 export const RESEARCH_STATION_ORIGIN = "research-station";
 
 /** Query keys that would carry locality out of a protected context. */
@@ -105,10 +110,52 @@ export type ResearchStationContext = {
   conversationId?: string | null;
 };
 
-/** Into the Atlas, filtered only when the subject's name shape establishes rank. */
+/**
+ * Into the canonical `/atlas`, filtered only when the subject's name shape
+ * establishes rank.
+ *
+ * @deprecated No mounted page links through this builder any more: Research
+ * Center and the Research Station workbench use `researchStationAtlasNextHref`,
+ * which names the species in Atlas Next and emits no link for a name it
+ * rejects. This remains exported only as the pinned `/atlas` query contract
+ * (which Atlas Next shares) exercised by the existing continuity tests.
+ */
 export function researchStationAtlasHref(context: ResearchStationContext): string {
   return `/atlas${query({
     ...atlasTaxonParams(context.taxon),
+    project: context.projectId,
+    origin: RESEARCH_STATION_ORIGIN,
+  })}`;
+}
+
+/**
+ * Into Atlas Next, filtered on the subject's own rank.
+ *
+ * Atlas Next reads the same shared AtlasFilterContext contract as the canonical
+ * Atlas, so a binomial travels as `species` (the canonical-binomial filter) and
+ * a genus as `genera`. An infraspecific subject travels as its binomial in
+ * `species` plus an `infraspecific` qualifier: occurrence records carry no
+ * infraspecific rank, and Atlas Next discloses that level explicitly rather than
+ * pretending to filter on it.
+ *
+ * Unlike the canonical Atlas builder this one never emits generic `taxon`
+ * context, which Atlas Next does not read: an opaque id, hybrid formula,
+ * authority string or otherwise malformed name yields null (no link) rather
+ * than an unfiltered Atlas that looks like the subject's view.
+ */
+export function researchStationAtlasNextHref(context: ResearchStationContext): string | null {
+  const parsed = parseAtlasTaxonName(context.taxon);
+  if (!parsed) return null;
+
+  const taxonParams: Record<string, string> =
+    parsed.rank === "genus"
+      ? { genera: parsed.genus }
+      : parsed.rank === "species"
+        ? { species: parsed.binomial }
+        : { species: parsed.binomial, [ATLAS_INFRASPECIFIC_PARAM]: parsed.qualifier.label };
+
+  return `/atlas-next${query({
+    ...taxonParams,
     project: context.projectId,
     origin: RESEARCH_STATION_ORIGIN,
   })}`;

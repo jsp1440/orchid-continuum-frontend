@@ -25,6 +25,7 @@ import { atlasNextResearchHref } from '@/features/atlas-next/researchHandoff';
 import { featuredTaxonResearchHref } from '@/lib/featuredTaxonNavigation';
 import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
 import { applyAtlasFilters, type AtlasOccurrencePoint } from '@/lib/orchidContinuum';
+import { resolveAtlasNextIncomingSubject } from '@/features/atlas-next/incomingTaxon';
 
 /**
  * The subject must survive the whole journey, not just the first hop.
@@ -207,4 +208,83 @@ describe('research center attributes the subject to where it came from', () => {
     await renderAt(speciesDossierResearchHref({ genus: GENUS, taxon: SPECIES })!);
     expect(container.textContent).not.toMatch(/verified identification/i);
   });
+});
+
+/**
+ * The mounted Research → Atlas link lands in Atlas Next, where the arriving
+ * subject is named at its own rank. The href is parsed exactly as Atlas Next's
+ * shared filter context reads it and then resolved by Atlas Next's own subject
+ * resolver, so both halves of the join are the real modules.
+ */
+describe('research center hands the subject to Atlas Next at its own rank', () => {
+  function atlasNextArrival(href: string) {
+    const url = new URL(href, 'https://orchid.test');
+    const multi = (key: string) => url.searchParams.get(key)?.split('|').filter(Boolean);
+    return {
+      url,
+      subject: resolveAtlasNextIncomingSubject({
+        genera: multi('genera'),
+        species: multi('species'),
+        infraspecific: url.searchParams.get('infraspecific'),
+      }),
+    };
+  }
+
+  function atlasLinks(): HTMLAnchorElement[] {
+    return [...container.querySelectorAll('a')].filter((a) =>
+      /return to atlas/i.test(a.textContent ?? ''),
+    );
+  }
+
+  it('sends a dossier species to Atlas Next as the species subject', async () => {
+    await renderAt(speciesDossierResearchHref({ genus: GENUS, taxon: SPECIES })!);
+
+    const { url, subject } = atlasNextArrival(hrefFor(/return to atlas/i));
+    expect(url.pathname).toBe('/atlas-next');
+    expect(url.searchParams.get('species')).toBe(SPECIES);
+    expect(url.searchParams.has('genera')).toBe(false);
+    expect(subject).toEqual({
+      kind: 'species',
+      genus: GENUS,
+      binomial: SPECIES,
+      qualifier: null,
+      name: SPECIES,
+    });
+  });
+
+  it('sends a genus-only arrival to the genus-level Atlas Next view', async () => {
+    await renderAt(featuredTaxonResearchHref(GENUS));
+
+    const { url, subject } = atlasNextArrival(hrefFor(/return to atlas/i));
+    expect(url.pathname).toBe('/atlas-next');
+    expect(subject).toEqual({ kind: 'genus', genus: GENUS });
+  });
+
+  it('carries a Matrix infraspecific candidate as its binomial plus the disclosed rank', async () => {
+    await renderAt(matrixResearchHref('Cattleya walkeriana var. alba')!);
+
+    const { url, subject } = atlasNextArrival(hrefFor(/return to atlas/i));
+    expect(url.searchParams.get('species')).toBe('Cattleya walkeriana');
+    expect(url.searchParams.get('infraspecific')).toBe('var. alba');
+    expect(subject.kind === 'species' && subject.name).toBe('Cattleya walkeriana var. alba');
+  });
+
+  it.each(['Cattleya × hardyana', 'Cattleya purpurata (Lindl.) Van den Berg'])(
+    'renders no Atlas link for a Matrix name Atlas Next rejects (%s), not a genus stand-in',
+    async (name) => {
+      const href = matrixResearchHref(name);
+      expect(href).not.toBeNull();
+      await renderAt(href!);
+
+      // The subject still arrived and is named…
+      expect(container.textContent).toContain(name);
+      // …but no Atlas link claims to be its view, and no genus link replaces it.
+      expect(atlasLinks()).toHaveLength(0);
+      expect(
+        [...container.querySelectorAll('a')].some((a) =>
+          (a.getAttribute('href') ?? '').startsWith('/atlas'),
+        ),
+      ).toBe(false);
+    },
+  );
 });

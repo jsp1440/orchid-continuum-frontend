@@ -30,7 +30,7 @@ import {
   type ResearchStationDossier,
 } from '@/lib/researchStation';
 import {
-  researchStationAtlasHref,
+  researchStationAtlasNextHref,
   researchStationCalyxHref,
   researchStationLexiconHref,
   researchStationMatrixHref,
@@ -1054,6 +1054,11 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
     projectId: dossier.project.project_id,
     conversationId,
   };
+  // Atlas Next filters on a canonical genus or binomial. A subject the parser
+  // rejects (an opaque taxon id, an authority string, a hybrid formula) gets no
+  // Atlas link rather than an unfiltered or genus-widened Atlas that looks like
+  // this subject's view.
+  const atlasHref = subjectTaxon ? researchStationAtlasNextHref(navContext) : null;
 
   return (
     <div className="grid gap-5">
@@ -1249,12 +1254,23 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
       >
         {subjectTaxon ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            <ToolLink
-              to={researchStationAtlasHref(navContext)}
-              icon={<Globe2 className="h-4 w-4" />}
-              label="Atlas"
-              detail="Where this taxon has been recorded."
-            />
+            {atlasHref ? (
+              <ToolLink
+                to={atlasHref}
+                icon={<Globe2 className="h-4 w-4" />}
+                label="Atlas"
+                detail="Where this taxon has been recorded."
+              />
+            ) : (
+              <p
+                data-testid="research-station-atlas-withheld"
+                className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-white/55"
+              >
+                <span className="block text-sm font-medium text-white/75">Atlas</span>
+                The subject is not a canonical genus or binomial the Atlas can filter on, so no
+                Atlas link is offered rather than a map that is not this subject.
+              </p>
+            )}
             <ToolLink
               to={researchStationRelationshipsHref(navContext)}
               icon={<Network className="h-4 w-4" />}
