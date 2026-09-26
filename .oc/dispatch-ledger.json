@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 16.5,
+  "programSpent": 17,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 4.5
+    "2026-09-26": 5
   },
   "leases": [
     {
@@ -911,6 +911,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "validating"
+    },
+    {
+      "id": "1c7a2a8553c7a610770851b684d7e56c929a3a3c68bffb243e8daaee2a979cfc",
+      "issue": 804,
+      "nodeId": "cap-classroom-teacher-dashboard",
+      "fingerprint": "3e99a26ebf9ddb991d2c437316c1e6a8c124dabf98625c1203b7c2423c0f71ba",
+      "waveHash": "a48bbefff41dfc883bf02246e722404cf2f27a9349dd0948212a2125f644f6c0",
+      "runId": "36207248661",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T02:38:36.687Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
