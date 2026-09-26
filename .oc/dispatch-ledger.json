@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 13.5,
+  "programSpent": 14,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 1.5
+    "2026-09-26": 2
   },
   "leases": [
     {
@@ -833,6 +833,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "802328b16a6ee94daa00fa93088810b86ac937ca975e82ed588a2c788ec1f9d0",
+      "issue": 798,
+      "nodeId": "cap-kg-visualization-graph",
+      "fingerprint": "08de4f4fb214e1d04cbafbfc99cefc481b48a224bf6cba36a82631949f56f307",
+      "waveHash": "1095ca88dbb50391f47dbae332bcd3011e514a2d5a372628b56f776093c4ab1e",
+      "runId": "36204875072",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T01:59:27.798Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
