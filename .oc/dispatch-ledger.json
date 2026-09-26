@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 17.5,
+  "programSpent": 18,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 5.5
+    "2026-09-26": 6
   },
   "leases": [
     {
@@ -937,6 +937,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "validating"
+    },
+    {
+      "id": "728dd13044167e5263827ca1d9d07e4b1d72851996108ef9a5158fd89e3f158a",
+      "issue": 806,
+      "nodeId": "cap-scheduler-issue-automation-10",
+      "fingerprint": "60e1c3aee00567e0196552dd7ac0e45e4f233f53d2d6b75fbf72b8c192862439",
+      "waveHash": "efbebd380ac583a0028ceb44769aae83422cb163361d71376ea56fabe6c33e5f",
+      "runId": "36208465730",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T03:00:05.756Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
