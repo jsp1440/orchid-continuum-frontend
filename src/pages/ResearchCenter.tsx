@@ -12,7 +12,7 @@ import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
 import ResearchTraitExplorer from '@/components/research/ResearchTraitExplorer';
 import {
-  researchStationAtlasHref,
+  researchStationAtlasNextHref,
   researchStationCalyxHref,
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
@@ -96,13 +96,18 @@ const ResearchCenter: React.FC = () => {
   // precisely the identity loss these handoffs exist to prevent — and the page
   // says the subject is preserved while doing it.
   //
-  // researchStationAtlasHref/CalyxHref classify by name shape rather than
-  // assuming rank: a binomial becomes Atlas's species filter (matched against
-  // the canonical binomial) and reaches Calyx as an exact taxon alongside the
-  // derived genus; a bare genus resolves to the same genus filter as before.
+  // researchStationAtlasNextHref/CalyxHref classify by name shape rather than
+  // assuming rank: a binomial becomes Atlas Next's species filter (matched
+  // against the canonical binomial, and named there as the species) and reaches
+  // Calyx as an exact taxon alongside the derived genus; a bare genus resolves
+  // to the genus filter, which Atlas Next labels as a genus-level fallback.
   // Calyx reads that exact taxon only under the research-station origin, and
   // asserts taxon_is_evidence=false when it does.
+  //
+  // A name the Atlas Next parser rejects yields no Atlas link at all, never a
+  // genus link standing in for the species.
   const onwardContext = { taxon: subjectLabel, projectId };
+  const atlasHref = subjectLabel ? researchStationAtlasNextHref(onwardContext) : null;
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
@@ -168,12 +173,14 @@ const ResearchCenter: React.FC = () => {
                 ) : null}
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
-                <Link
-                  to={researchStationAtlasHref(onwardContext)}
-                  className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
-                >
-                  Return to Atlas
-                </Link>
+                {atlasHref ? (
+                  <Link
+                    to={atlasHref}
+                    className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
+                  >
+                    Return to Atlas
+                  </Link>
+                ) : null}
                 <Link
                   to={researchStationCalyxHref(onwardContext)}
                   className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-100 hover:bg-emerald-300/15"

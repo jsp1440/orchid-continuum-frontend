@@ -110,7 +110,16 @@ export type ResearchStationContext = {
   conversationId?: string | null;
 };
 
-/** Into the Atlas, filtered only when the subject's name shape establishes rank. */
+/**
+ * Into the canonical `/atlas`, filtered only when the subject's name shape
+ * establishes rank.
+ *
+ * @deprecated No mounted page links through this builder any more: Research
+ * Center and the Research Station workbench use `researchStationAtlasNextHref`,
+ * which names the species in Atlas Next and emits no link for a name it
+ * rejects. This remains exported only as the pinned `/atlas` query contract
+ * (which Atlas Next shares) exercised by the existing continuity tests.
+ */
 export function researchStationAtlasHref(context: ResearchStationContext): string {
   return `/atlas${query({
     ...atlasTaxonParams(context.taxon),
