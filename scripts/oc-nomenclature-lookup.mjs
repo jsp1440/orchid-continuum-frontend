@@ -103,7 +103,7 @@ export function assertNomenclatureUrl(url) {
   }
 }
 
-async function getJson(fetchImpl, url, headers = {}) {
+export async function getJson(fetchImpl, url, headers = {}) {
   let response;
   try {
     response = await fetchImpl(url, {
@@ -307,7 +307,7 @@ export function buildReport({ issue, repository, mission, lookup, generatedAt })
 }
 
 /** Neutralise GBIF-sourced text before it goes into Markdown on an issue. */
-function safe(value) {
+export function safe(value) {
   if (value === null || value === undefined || value === '') return 'n/a';
   return String(value)
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
@@ -345,11 +345,11 @@ export function renderComment(report) {
   return lines.join('\n');
 }
 
-function githubHeaders(token) {
+export function githubHeaders(token, userAgent = 'oc-nomenclature-lookup') {
   return {
     authorization: `Bearer ${token}`,
     'x-github-api-version': '2022-11-28',
-    'user-agent': 'oc-nomenclature-lookup',
+    'user-agent': userAgent,
   };
 }
 
@@ -361,7 +361,7 @@ function githubHeaders(token) {
  */
 export const REPORT_COMMENT_AUTHOR = 'github-actions[bot]';
 
-async function existingDigests(fetchImpl, api, repo, issue, token) {
+export async function existingDigests(fetchImpl, api, repo, issue, token, markerPrefix = COMMENT_MARKER_PREFIX) {
   const digests = new Set();
   for (let page = 1; page <= 10; page += 1) {
     const { json } = await getJson(fetchImpl,
@@ -370,15 +370,15 @@ async function existingDigests(fetchImpl, api, repo, issue, token) {
     for (const comment of json) {
       if (comment?.user?.login !== REPORT_COMMENT_AUTHOR) continue;
       const body = String(comment?.body ?? '');
-      const at = body.indexOf(COMMENT_MARKER_PREFIX);
-      if (at === 0) digests.add(body.slice(COMMENT_MARKER_PREFIX.length).split(' ')[0]);
+      const at = body.indexOf(markerPrefix);
+      if (at === 0) digests.add(body.slice(markerPrefix.length).split(' ')[0]);
     }
     if (json.length < 100) break;
   }
   return digests;
 }
 
-async function postComment(fetchImpl, api, repo, issue, token, body) {
+export async function postComment(fetchImpl, api, repo, issue, token, body) {
   let response;
   try {
     response = await fetchImpl(`${api}/repos/${repo}/issues/${issue}/comments`, {

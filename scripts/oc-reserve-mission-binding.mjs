@@ -11,8 +11,10 @@
  *
  *   - supervisor source line present, and exactly one well-formed mission
  *     block -> graph node `cap-kg-evidence-gap-research-missions`;
- *   - that block's domain is exactly `nomenclature` -> also capability
- *     `nomenclature-evidence-lookup`; any other domain derives no capability.
+ *   - that block's domain is exactly a key of RESERVE_DOMAIN_CAPABILITIES ->
+ *     also that capability (`nomenclature` -> `nomenclature-evidence-lookup`,
+ *     `morphology` -> `morphology-source-lookup`); any other domain derives no
+ *     capability.
  *
  * An explicit node or capability declaration (body marker or `oc-node:` /
  * `oc-cap:` label) always wins: when one is present nothing is derived. Titles,
@@ -29,6 +31,13 @@
 export const RESERVE_SOURCE_LINE = 'OC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve';
 export const RESERVE_MISSION_NODE = 'cap-kg-evidence-gap-research-missions';
 export const NOMENCLATURE_CAPABILITY = 'nomenclature-evidence-lookup';
+export const MORPHOLOGY_CAPABILITY = 'morphology-source-lookup';
+
+/** Exact mission domain -> the provider-free capability that executes it. */
+export const RESERVE_DOMAIN_CAPABILITIES = Object.freeze({
+  nomenclature: NOMENCLATURE_CAPABILITY,
+  morphology: MORPHOLOGY_CAPABILITY,
+});
 
 /**
  * Evidence domains a local executor can actually run. A reserve mission in any
@@ -36,9 +45,10 @@ export const NOMENCLATURE_CAPABILITY = 'nomenclature-evidence-lookup';
  * execute it: it must not be requested from the backend reserve, filed, or
  * counted as prepared reserve depth. On 2026-09-25 three `morphology` missions
  * (#825-#827) filled the whole depth of 3 and every later scheduled pass filed
- * nothing, so the nomenclature executor starved.
+ * nothing, so the nomenclature executor starved. `morphology` joined once
+ * `oc-morphology-source-lookup.mjs` existed to execute it.
  */
-export const EXECUTABLE_RESERVE_DOMAINS = Object.freeze(['nomenclature']);
+export const EXECUTABLE_RESERVE_DOMAINS = Object.freeze(Object.keys(RESERVE_DOMAIN_CAPABILITIES));
 
 /**
  * The GitHub identity that files reserve missions (the supervisor workflow's
@@ -143,7 +153,8 @@ export function deriveReserveMissionBinding(issue) {
   }
   return {
     nodeId: RESERVE_MISSION_NODE,
-    capability: mission.domain === 'nomenclature' ? NOMENCLATURE_CAPABILITY : null,
+    capability: Object.hasOwn(RESERVE_DOMAIN_CAPABILITIES, mission.domain)
+      ? RESERVE_DOMAIN_CAPABILITIES[mission.domain] : null,
     domain: mission.domain,
   };
 }

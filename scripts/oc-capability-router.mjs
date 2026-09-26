@@ -63,8 +63,9 @@ export const SHARED_CAPABILITIES = Object.freeze(
  * frontend-local: they have no backend or Brain counterpart because no other
  * repository has a TypeScript project, a router or a Vite build to check. They
  * are deterministic by construction — each is an npm script in this repository.
- * `nomenclature-evidence-lookup` is frontend-local because the reserve missions
- * it serves are filed and laned here; it is a fixed script, not a model.
+ * `nomenclature-evidence-lookup` and `morphology-source-lookup` are frontend-local
+ * because the reserve missions they serve are filed and laned here; each is a
+ * fixed script, not a model.
  */
 export const LOCAL_EXECUTORS = Object.freeze({
   'test-execution': 'npm run test',
@@ -81,6 +82,10 @@ export const LOCAL_EXECUTORS = Object.freeze({
   // Deterministic HTTP GETs, no model: it writes a review_required report and
   // one issue comment, and never mutates the KG, taxonomy or any publication.
   'nomenclature-evidence-lookup': 'npm run research:nomenclature-lookup',
+  // Bounded GBIF description-metadata lookup for `morphology` reserve missions.
+  // Lists which sources hold morphology descriptions; never reproduces their
+  // text, never reads a locality-bearing type or endpoint, never mutates.
+  'morphology-source-lookup': 'npm run research:morphology-source-lookup',
 });
 
 /** Deterministic capabilities, whether or not this repository can run them. */

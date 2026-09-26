@@ -211,11 +211,11 @@ describe('the four execution states are distinct', () => {
 });
 
 describe('settlement writes the one authoritative receipt', () => {
-  const harness = (nodeId = LEAF) => {
+  const harness = (nodeId = LEAF, researchCapability = 'nomenclature-evidence-lookup') => {
     // A research mission always declares its deterministic capability; its node
     // admits nothing else (DETERMINISTIC_ONLY_NODES), so the fixture must too.
     const issueLabels = ['oc-queued', `oc-node:${nodeId}`,
-      ...(nodeId === 'cap-kg-evidence-gap-research-missions' ? ['oc-cap:nomenclature-evidence-lookup'] : [])];
+      ...(nodeId === 'cap-kg-evidence-gap-research-missions' ? [`oc-cap:${researchCapability}`] : [])];
     const dir = mkdtempSync(join(tmpdir(), 'oc-settle-')); paths.push(dir);
     const bin = join(dir, 'bin'); mkdirSync(bin);
     const gh = join(bin, 'gh');
@@ -397,6 +397,29 @@ console.log('{}');
   it('parks a failed nomenclature lookup for repair rather than an empty success', () => {
     const h = harness('cap-kg-evidence-gap-research-missions');
     h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run research:nomenclature-lookup', exit_code: 3 }] });
+    h.settle();
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-repair');
+    expect(labels).not.toContain('oc-validating');
+    expect(labels).not.toContain('oc-done');
+  });
+
+  it('settles a passing morphology source lookup to validation, never done', () => {
+    const h = harness('cap-kg-evidence-gap-research-missions', 'morphology-source-lookup');
+    h.writeEvidence({ outcome: 'done', results: [{ command: 'npm run research:morphology-source-lookup', exit_code: 0 }] });
+    const run = h.settle();
+
+    expect(run.status, run.stderr).toBe(0);
+    expect(h.receipt()).toMatchObject({ issue: 703, outcome: 'provider_free_done', providerCalls: 0 });
+    const labels = h.patched().at(-1)!.labels;
+    expect(labels).toContain('oc-validating');
+    expect(labels).not.toContain('oc-done');
+    expect(labels).not.toContain('oc-owner-gate');
+  });
+
+  it('parks a failed morphology source lookup for repair', () => {
+    const h = harness('cap-kg-evidence-gap-research-missions', 'morphology-source-lookup');
+    h.writeEvidence({ outcome: 'failed', results: [{ command: 'npm run research:morphology-source-lookup', exit_code: 3 }] });
     h.settle();
     const labels = h.patched().at(-1)!.labels;
     expect(labels).toContain('oc-repair');

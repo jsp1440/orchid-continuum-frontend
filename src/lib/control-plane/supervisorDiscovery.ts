@@ -211,6 +211,8 @@ const PROVIDER_FREE_CAPABILITIES = new Set([
   // Bound in LOCAL_EXECUTORS to a fixed GBIF name-lookup script. Without it a
   // nomenclature reserve mission would be reported as needing a provider.
   'nomenclature-evidence-lookup',
+  // Bound to a fixed GBIF description-metadata script for morphology missions.
+  'morphology-source-lookup',
 ]);
 
 const SOURCE_KINDS = new Set<SupervisorSourceKind>([

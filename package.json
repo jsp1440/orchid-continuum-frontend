@@ -21,6 +21,7 @@
     "verify:research-matrix-browser": "playwright test e2e/research-matrix-journey.spec.ts",
     "verify:conservatory-browser": "playwright test e2e/conservatory-journey.spec.ts",
     "research:nomenclature-lookup": "node scripts/oc-nomenclature-lookup.mjs",
+    "research:morphology-source-lookup": "node scripts/oc-morphology-source-lookup.mjs",
     "test:e2e": "playwright test",
     "test:e2e:report": "playwright show-report"
   },
