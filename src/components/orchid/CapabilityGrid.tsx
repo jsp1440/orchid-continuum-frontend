@@ -89,20 +89,36 @@ const CAPABILITIES: Capability[] = [
   },
 ];
 
-const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
+const CapabilityCard: React.FC<{ cap: Capability; index: number }> = ({ cap, index }) => {
   const navigate = useNavigate();
   const Icon = cap.icon;
+  const titleId = `capability-${index}-title`;
+  const descriptionId = `capability-${index}-description`;
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+
+    // Keep activation deterministic for keyboard-only users. Preventing the
+    // browser default avoids a second click when Space is released.
+    event.preventDefault();
+    navigate(cap.href);
+  };
+
   return (
     <button
       type="button"
       onClick={() => navigate(cap.href)}
+      onKeyDown={handleKeyDown}
+      aria-labelledby={titleId}
+      aria-describedby={descriptionId}
       className="group text-left rounded-2xl border border-[#d4b34a]/20 bg-[#13241a] p-7 lg:p-8 transition-all hover:border-[#d4b34a]/55 hover:bg-[#16291c]"
     >
       <span className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-[#d4b34a]/12 text-[#e6c563]">
-        <Icon className="h-6 w-6" strokeWidth={1.6} />
+        <Icon className="h-6 w-6" strokeWidth={1.6} aria-hidden="true" />
       </span>
       <h3
         className="mt-5"
+        id={titleId}
         style={{
           fontFamily: '"Playfair Display",Georgia,serif',
           fontSize: 'clamp(1.25rem, 1.7vw, 1.45rem)',
@@ -115,6 +131,7 @@ const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
       </h3>
       <p
         className="mt-3"
+        id={descriptionId}
         style={{
           color: '#dfe4d6',
           fontSize: 16,
@@ -126,7 +143,7 @@ const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
       </p>
       <span className="mt-5 inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.18em] uppercase text-[#e6c563] group-hover:text-[#f4d97a]">
         {cap.link}
-        <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+        <ArrowRight aria-hidden="true" className="h-4 w-4 transition-transform group-hover:translate-x-1" />
       </span>
     </button>
   );
@@ -136,6 +153,7 @@ const CapabilityGrid: React.FC = () => {
   return (
     <section
       id="what-the-graph-makes-possible"
+      aria-labelledby="capability-grid-heading"
       className="border-b border-black/20"
       style={{ background: '#1a2e1a' }}
     >
@@ -152,6 +170,7 @@ const CapabilityGrid: React.FC = () => {
           </div>
           <h2
             className="mt-6"
+            id="capability-grid-heading"
             style={{
               fontFamily: '"Playfair Display",Georgia,serif',
               fontSize: 'clamp(2rem, 3.6vw, 2.75rem)',
@@ -164,9 +183,15 @@ const CapabilityGrid: React.FC = () => {
           </h2>
         </div>
 
-        <div className="mt-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
-          {CAPABILITIES.map((cap) => (
-            <CapabilityCard key={cap.title} cap={cap} />
+        <div
+          className="mt-12 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6"
+          role="list"
+          aria-label="Orchid Continuum capabilities"
+        >
+          {CAPABILITIES.map((cap, index) => (
+            <div key={cap.title} role="listitem">
+              <CapabilityCard cap={cap} index={index} />
+            </div>
           ))}
         </div>
       </div>
