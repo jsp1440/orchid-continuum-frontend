@@ -3,6 +3,8 @@
  * origin the frontend talks to.
  */
 
+import { calyxRelativePath, requestUrlOf } from './calyxOrigin';
+
 const env = import.meta.env as Record<string, string | undefined>;
 
 export const BACKEND_BASE_URL = (
@@ -45,6 +47,14 @@ function readOwnerBearerToken(): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Whether this tab holds an owner bearer session. Exposes presence only, never
+ * the token, so the member-read helper can defer to the owner identity.
+ */
+export function hasOwnerBearerSession(): boolean {
+  return Boolean(readOwnerBearerToken());
 }
 
 function storeOwnerBearerToken(token: string): void {
@@ -139,16 +149,27 @@ function installOwnerSessionTransport(): void {
   let ownerLoginAttemptInProgress = false;
 
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
-    const originalUrl = input instanceof Request ? input.url : String(input);
+    const originalUrl = requestUrlOf(input);
     const originalMethod = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
-    const isCalyxRequest = originalUrl.startsWith(CALYX_BACKEND_BASE_URL);
-    const originalPath = isCalyxRequest ? originalUrl.slice(CALYX_BACKEND_BASE_URL.length).split('?')[0] : '';
+    // Exact parsed-origin match, never a string prefix: `startsWith` would hand
+    // the owner bearer (and the cookie-recovery retry) to lookalikes such as
+    // `https://<calyx-host>.attacker.test/...` or `https://<calyx-host>@attacker.test/...`.
+    // Every credential decision below derives from this one gate.
+    const calyxPath = calyxRelativePath(originalUrl, CALYX_BACKEND_BASE_URL);
+    const isCalyxRequest = calyxPath !== null;
+    const originalPath = calyxPath ?? '';
     const isOwnerLogin = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'POST';
     const isOwnerSessionInspection = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'GET';
     const isOwnerLogout = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'DELETE';
     const isTokenRefresh = isCalyxRequest && originalPath === OWNER_TOKEN_REFRESH_PATH;
 
-    let requestInput: RequestInfo | URL = input;
+    // Send exactly what was checked. For a string/URL/stringifiable input the
+    // validated URL string is sent, never the original object: an object whose
+    // toString changes, or a URL mutated during the recovery await below,
+    // would otherwise be checked as Calyx and sent elsewhere with the bearer.
+    // A Request is sent as-is: its URL is immutable and was read from the
+    // native getter.
+    let requestInput: RequestInfo | URL = input instanceof Request ? input : originalUrl;
     if (isOwnerLogin) {
       ownerLoginAttemptInProgress = true;
       requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;

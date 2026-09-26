@@ -1,5 +1,6 @@
 import React from 'react';
 import {
+  AlertTriangle,
   Users,
   CalendarHeart,
   Mail,
@@ -8,52 +9,19 @@ import {
   Sparkles,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
-import OrganizationCard from '@/components/orchid/OrganizationCard';
 import RoleBadge from '@/components/orchid/RoleBadge';
 
 /**
  * Societies
  * ---------
  * The hub for orchid societies: local chapters, regional federations,
- * and judging communities. Conceptual UI only — society profiles,
- * events, and member rosters wait on `/api/societies/*`.
+ * and judging communities. Society profiles, events, and member rosters
+ * wait on `/api/societies/*`; until that exists this page shows an explicit
+ * empty state rather than invented chapters, because a fabricated society
+ * with a fabricated member count is exactly what OrganizationProfile
+ * already refuses to render.
  */
 
-const demoSocieties = [
-  {
-    slug: 'pacific-rim-orchid-society',
-    name: 'Pacific Rim Orchid Society',
-    kind: 'Orchid Society',
-    region: 'Pacific Northwest, USA',
-    description:
-      'Monthly meetings, a juried spring show, and a culture group focused on cool-growing Pleurothallidinae. Welcomes hobbyists and community-college botany students.',
-    memberCount: 412,
-    projectCount: 3,
-    focus: ['Show judging', 'Pleurothallid culture', 'Education'],
-  },
-  {
-    slug: 'east-anglia-orchid-circle',
-    name: 'East Anglia Orchid Circle',
-    kind: 'Orchid Society',
-    region: 'United Kingdom',
-    description:
-      'A 60-year-old society with a long history of native British orchid conservation walks and a quarterly print bulletin. Newsletter goes to 800 members.',
-    memberCount: 812,
-    projectCount: 2,
-    focus: ['Native species walks', 'Newsletter', 'Conservation outreach'],
-  },
-  {
-    slug: 'sociedad-orquidologica-andina',
-    name: 'Sociedad Orquidológica Andina',
-    kind: 'Orchid Society',
-    region: 'Bogotá, Colombia',
-    description:
-      'Members from Colombia and Ecuador meet bilingually, host an annual exhibition, and partner with the Andean Orchid Trust for community nursery training.',
-    memberCount: 268,
-    projectCount: 4,
-    focus: ['Exhibition', 'Bilingual education', 'Community nurseries'],
-  },
-];
 
 const tools = [
   {
@@ -120,10 +88,26 @@ const Societies: React.FC = () => {
         <h2 className="font-serif text-3xl md:text-4xl text-white mb-8">
           Chapters and communities
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {demoSocieties.map(s => (
-            <OrganizationCard key={s.slug} {...s} demo />
-          ))}
+        <div className="rounded-xl border border-amber-300/30 bg-amber-300/[0.05] p-6">
+          <div className="flex items-center gap-2 text-[10px] tracking-[0.22em] uppercase text-amber-200/90 mb-2">
+            <AlertTriangle className="h-4 w-4" /> No verified society records yet
+          </div>
+          <p className="text-sm text-white/85 leading-relaxed max-w-3xl">
+            Orchid Continuum will not invent a society, its membership, or its
+            projects. Chapters will appear here once governed records are
+            available from <code className="text-emerald-200/90">/api/societies</code>,
+            each one carrying its own verified profile.
+          </p>
+          <p className="text-sm text-white/70 leading-relaxed max-w-3xl mt-3">
+            If your society would like to be listed, write to{' '}
+            <a
+              className="text-emerald-200 underline underline-offset-4"
+              href="mailto:info@orchidcontinuum.org?subject=Orchid%20Continuum%20%E2%80%94%20society%20listing"
+            >
+              info@orchidcontinuum.org
+            </a>
+            .
+          </p>
         </div>
       </section>
 

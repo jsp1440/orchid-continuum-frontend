@@ -24,6 +24,17 @@ const SAFE_CANONICAL_GENUS = /^[A-Z][A-Za-z-]+$/;
 const MAX_CANONICAL_GENUS_LENGTH = 120;
 
 /**
+ * The snapshot table is an optional operational input, not the homepage's
+ * identity authority. It is explicitly opt-in because an unprovisioned table
+ * returns a browser-visible 4xx response; the deterministic UTC rotation below
+ * is the safe production default until a deployment advertises this adapter.
+ */
+export const DAILY_SNAPSHOT_ENABLED =
+  String((import.meta.env as Record<string, string | undefined>).VITE_ENABLE_DAILY_GENUS_SNAPSHOT || '')
+    .trim()
+    .toLowerCase() === 'true';
+
+/**
  * Daily snapshot rows are operational input, not trusted scientific identity.
  * Keep them behind the same bounded single-genus contract used by public
  * navigation so a malformed snapshot cannot crash Homepage/Atlas/Matrix/Calyx
@@ -88,6 +99,13 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const validateSnapshot = useCallback(async () => {
     const local = featuredGenusName();
     const today = new Date().toISOString().slice(0, 10);
+    if (!DAILY_SNAPSHOT_ENABLED) {
+      await hydrateContinuum(
+        local,
+        `[Genus of the Day] Snapshot adapter is disabled for this deployment; using deterministic identity ${local}.`,
+      );
+      return;
+    }
     try {
       const { data, error } = await supabase
         .from('daily_genus_snapshot')

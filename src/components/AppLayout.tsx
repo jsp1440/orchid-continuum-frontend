@@ -73,7 +73,7 @@ const AppLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">
-      <ActiveDevelopmentBanner />
+      <div className="pt-16"><ActiveDevelopmentBanner /></div>
       <Navbar />
 
       <main>

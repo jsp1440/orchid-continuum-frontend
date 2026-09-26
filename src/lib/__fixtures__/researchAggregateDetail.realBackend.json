@@ -1,0 +1,173 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend main c346a7219 via FastAPI TestClient against app.main: owner auth overridden, evidence-aggregation routes bound to the repo's MemoryAggregateRepository. Two synthetic TRAIT candidate inputs (ids 3 and 8, conflicting flower colours, no geographic context) were previewed and executed through POST /preview and /runs/{id}/execute; aggregate_detail is GET /aggregates/{id}; aggregate_not_found is GET /aggregates/999999; aggregate_after_supersede is GET /aggregates/{id} after POST /aggregates/{id}/supersede. A controlled test corpus, not a scientific claim.",
+  "aggregate_after_supersede": {
+    "body": {
+      "detail": {
+        "code": "AGGREGATE_NOT_FOUND"
+      }
+    },
+    "status": 404
+  },
+  "aggregate_detail": {
+    "active": true,
+    "aggregate_id": 3,
+    "aggregate_status": "MIXED_EVIDENCE",
+    "aggregate_type": "TRAIT_AGGREGATE",
+    "aggregate_version_id": 7,
+    "aggregation_ruleset_version": "086b-rules-1",
+    "candidate_type": "TRAIT",
+    "cluster_id": 3,
+    "confidence_dimensions": {
+      "ai_syntheses": 0,
+      "anchor_completeness": 1.0,
+      "contradicting_assertions": 0,
+      "derivative_sources": 0,
+      "direct_observations": 0,
+      "duplicate_assertions": 0,
+      "evidence_directness_distribution": {
+        "INDIRECT": 2
+      },
+      "experiments": 0,
+      "geographic_compatibility": 1.0,
+      "independent_sources": 2,
+      "method_compatibility": 1.0,
+      "primary_sources": 2,
+      "prioritization_score": 0.6667,
+      "prioritization_score_formula": "086b-priority-1",
+      "review_completeness": 0.0,
+      "reviews": 0,
+      "score_is_truth_probability": false,
+      "source_candidates": 2,
+      "source_reliability_distribution": {
+        "MEDIUM": 2
+      },
+      "statistical_results": 0,
+      "supporting_assertions": 0,
+      "taxon_link_certainty": 0.0,
+      "temporal_compatibility": 1.0,
+      "unresolved_assertions": 1
+    },
+    "contradictory_evidence_count": 0,
+    "contributing_candidate_ids": [
+      3,
+      8
+    ],
+    "contributing_candidate_version_ids": [
+      "3:1",
+      "8:1"
+    ],
+    "copyright_safe_display_state": "FULL_TEXT_ALLOWED",
+    "created_at": "2026-09-26T08:38:16.320185+00:00",
+    "document_count": 2,
+    "duplicate_evidence_count": 0,
+    "evidence_type_distribution": {
+      "LITERATURE": 2
+    },
+    "geographic_context": {
+      "contexts": [
+        {},
+        {}
+      ],
+      "scopes": [
+        "UNRESOLVED"
+      ],
+      "universalized": false
+    },
+    "identity_hash": "d32667321c2c708c14fec7ed2a32183c9d0c5093f9a503d74e6131a51ff8a5a8",
+    "measurement_summary": {
+      "compatible": false,
+      "independent_sample_size_total": null,
+      "measurements": [],
+      "observed_max": null,
+      "observed_min": null,
+      "pooled_estimate": null,
+      "pooled_estimate_prohibited": true,
+      "unweighted_mean": null
+    },
+    "normalized_object": "MULTIPLE_VALUES",
+    "normalized_predicate": "flower_color",
+    "normalized_subject": "masdevallia veitchiana",
+    "provenance_chain": {
+      "candidate_versions": [
+        "3:1",
+        "8:1"
+      ],
+      "model": "086b-local-1",
+      "ruleset": "086b-rules-1"
+    },
+    "published": false,
+    "reconciliation_model_version": "086b-local-1",
+    "review_state": "REQUIRED",
+    "source_anchor_links": [
+      {
+        "anchor_ids": [
+          11
+        ],
+        "candidate_id": 3,
+        "revision_id": 1
+      },
+      {
+        "anchor_ids": [
+          12
+        ],
+        "candidate_id": 8,
+        "revision_id": 2
+      }
+    ],
+    "source_count": 2,
+    "source_revisions": [
+      1,
+      2
+    ],
+    "supersession_state": "CURRENT",
+    "supporting_evidence_count": 0,
+    "taxonomic_context": {
+      "ambiguous_candidate_ids": [],
+      "canonical_rewrite_performed": false,
+      "match_candidates": {
+        "3": [
+          {
+            "source_name": "Masdevallia veitchiana"
+          }
+        ],
+        "8": [
+          {
+            "source_name": "Masdevallia veitchiana"
+          }
+        ]
+      },
+      "source_names": [
+        "masdevallia veitchiana",
+        "masdevallia veitchiana"
+      ]
+    },
+    "temporal_context": {
+      "contexts": [
+        {},
+        {}
+      ],
+      "earliest_evidence_date": null,
+      "latest_evidence_date": null,
+      "superseded_candidate_ids": [],
+      "trend_conclusion": null
+    },
+    "uncertainty_dimensions": {
+      "conflicts": 0,
+      "independence_uncertain": 0,
+      "taxon_ambiguity": 0
+    },
+    "unresolved_evidence_count": 1,
+    "updated_at": "2026-09-26T08:38:16.320189+00:00",
+    "verification_state": "UNVERIFIED",
+    "version": 1
+  },
+  "aggregate_id": 3,
+  "aggregate_not_found": {
+    "body": {
+      "detail": {
+        "code": "AGGREGATE_NOT_FOUND"
+      }
+    },
+    "status": 404
+  }
+}

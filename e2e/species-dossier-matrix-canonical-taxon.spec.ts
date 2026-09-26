@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const CANONICAL_TAXON_ID = "taxon:world-plants:phalaenopsis-amabilis";
 const CANONICAL_NAME = "Phalaenopsis amabilis";
+// The app origin playwright.config.ts serves on (E2E_APP_PORT may remap it).
+const APP_ORIGIN = process.env.E2E_APP_URL || "http://127.0.0.1:4173";
 
 test("Species Dossier carries the exact canonical taxon into Matrix as non-evidence", async ({ page }) => {
   const offHostDataRequests: string[] = [];
@@ -26,7 +28,7 @@ test("Species Dossier carries the exact canonical taxon into Matrix as non-evide
 
   const href = await matrixLink.getAttribute("href");
   expect(href).not.toBeNull();
-  const destination = new URL(href!, "http://127.0.0.1:4173");
+  const destination = new URL(href!, APP_ORIGIN);
   expect(destination.pathname).toBe("/orchid-identification");
   expect(Object.fromEntries(destination.searchParams)).toEqual({
     origin: "species-dossier",

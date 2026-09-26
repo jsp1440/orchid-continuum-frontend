@@ -1,0 +1,1448 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend main c346a7219 via FastAPI TestClient on app.main: GET /api/science/{summary,status,departments,gaps,datasets,missions,harvesters,dossiers}, all HTTP 200, no auth required, default environment. Bodies unmodified; keyed by section.",
+  "summary": {
+    "status": "ok",
+    "mode": "BUILD-048 scientific integration coordinator",
+    "department_count": 14,
+    "mission_type_count": 39,
+    "dataset_count": 9,
+    "top_priorities": [
+      {
+        "department_id": "taxonomy",
+        "display_name": "Taxonomy",
+        "priority": 100,
+        "enabled": true,
+        "cadence_hint": "weekly_or_on_dataset_update",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "accepted_names",
+          "synonyms",
+          "taxon_resolution_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "pollination",
+        "display_name": "Pollination",
+        "priority": 99,
+        "enabled": true,
+        "cadence_hint": "daily_or_on_new_literature",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "pollinator_relationship_gaps",
+          "pollinator_dossier_candidates"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "mycorrhiza",
+        "display_name": "Mycorrhiza and fungi",
+        "priority": 98,
+        "enabled": true,
+        "cadence_hint": "daily_or_on_new_literature",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "fungal_relationship_gaps",
+          "fungal_dossier_candidates"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "literature",
+        "display_name": "Literature extraction",
+        "priority": 97,
+        "enabled": true,
+        "cadence_hint": "every_few_hours_or_on_new_documents",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "claim_gaps",
+          "citation_gaps",
+          "papers_needing_extraction"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "traits",
+        "display_name": "Traits and TraitBank",
+        "priority": 96,
+        "enabled": true,
+        "cadence_hint": "weekly_or_on_dataset_update",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "trait_coverage_gaps",
+          "glossary_normalization_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "geography_atlas",
+        "display_name": "Geography and Atlas",
+        "priority": 95,
+        "enabled": true,
+        "cadence_hint": "after_occurrence_imports",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "range_gaps",
+          "thematic_map_readiness",
+          "atlas_cache_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "climate",
+        "display_name": "Climate and elevation",
+        "priority": 94,
+        "enabled": true,
+        "cadence_hint": "monthly_or_after_new_occurrences",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "missing_elevation",
+          "missing_climate_context",
+          "phenology_climate_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "conservation",
+        "display_name": "Conservation and habitat",
+        "priority": 93,
+        "enabled": true,
+        "cadence_hint": "weekly_or_on_status_update",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "conservation_status_gaps",
+          "habitat_gaps",
+          "threat_context_gaps"
+        ],
+        "provenance_required": true
+      }
+    ],
+    "low_priority_support": [
+      {
+        "department_id": "judging",
+        "display_name": "Judging",
+        "priority": 25,
+        "enabled": true,
+        "cadence_hint": "only_when_requested_or_no_scientific_work_pending",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "replace_scientific_priorities"
+        ],
+        "primary_outputs": [
+          "judging_readiness"
+        ],
+        "provenance_required": false
+      },
+      {
+        "department_id": "awards",
+        "display_name": "Awards",
+        "priority": 20,
+        "enabled": true,
+        "cadence_hint": "only_when_requested_or_no_scientific_work_pending",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "replace_scientific_priorities"
+        ],
+        "primary_outputs": [
+          "awards_readiness"
+        ],
+        "provenance_required": false
+      }
+    ],
+    "highest_priority_gaps": [
+      {
+        "gap_id": "gap_taxonomy",
+        "department_id": "taxonomy",
+        "priority": 100,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Taxonomy needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_taxonomy",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_pollination",
+        "department_id": "pollination",
+        "priority": 99,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Pollination needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_pollinator_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_mycorrhiza",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Mycorrhiza and fungi needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_mycorrhiza_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_literature",
+        "department_id": "literature",
+        "priority": 97,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Literature extraction needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_literature_extraction_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_traits",
+        "department_id": "traits",
+        "priority": 96,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Traits and TraitBank needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_traitbank_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      }
+    ],
+    "safety": {
+      "destructive_actions": false,
+      "external_mutations": false,
+      "unsupported_claims_promoted": false,
+      "provenance_required_for_scientific_claims": true
+    }
+  },
+  "status": {
+    "status": "ok",
+    "mode": "BUILD-048 scientific integration coordinator",
+    "science_departments_enabled": 12,
+    "dataset_count": 9,
+    "known_gap_count": 12,
+    "highest_priority_work": [
+      {
+        "gap_id": "gap_taxonomy",
+        "department_id": "taxonomy",
+        "priority": 100,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Taxonomy needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_taxonomy",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_pollination",
+        "department_id": "pollination",
+        "priority": 99,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Pollination needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_pollinator_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_mycorrhiza",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Mycorrhiza and fungi needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_mycorrhiza_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_literature",
+        "department_id": "literature",
+        "priority": 97,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Literature extraction needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_literature_extraction_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_traits",
+        "department_id": "traits",
+        "priority": 96,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Traits and TraitBank needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_traitbank_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      }
+    ],
+    "next_recommended_actions": [
+      "Run safe pollinator and mycorrhiza audits.",
+      "Inspect live database schemas for relationship/evidence tables.",
+      "Wire read-only coverage queries after schema verification.",
+      "Keep judging and awards low priority unless explicitly requested."
+    ],
+    "safety": {
+      "destructive_actions": false,
+      "external_mutations": false,
+      "unsupported_claims_promoted": false,
+      "provenance_required_for_scientific_claims": true
+    }
+  },
+  "departments": {
+    "departments": [
+      {
+        "department_id": "taxonomy",
+        "display_name": "Taxonomy",
+        "priority": 100,
+        "enabled": true,
+        "cadence_hint": "weekly_or_on_dataset_update",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "accepted_names",
+          "synonyms",
+          "taxon_resolution_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "pollination",
+        "display_name": "Pollination",
+        "priority": 99,
+        "enabled": true,
+        "cadence_hint": "daily_or_on_new_literature",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "pollinator_relationship_gaps",
+          "pollinator_dossier_candidates"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "mycorrhiza",
+        "display_name": "Mycorrhiza and fungi",
+        "priority": 98,
+        "enabled": true,
+        "cadence_hint": "daily_or_on_new_literature",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "fungal_relationship_gaps",
+          "fungal_dossier_candidates"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "literature",
+        "display_name": "Literature extraction",
+        "priority": 97,
+        "enabled": true,
+        "cadence_hint": "every_few_hours_or_on_new_documents",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "claim_gaps",
+          "citation_gaps",
+          "papers_needing_extraction"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "traits",
+        "display_name": "Traits and TraitBank",
+        "priority": 96,
+        "enabled": true,
+        "cadence_hint": "weekly_or_on_dataset_update",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "trait_coverage_gaps",
+          "glossary_normalization_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "geography_atlas",
+        "display_name": "Geography and Atlas",
+        "priority": 95,
+        "enabled": true,
+        "cadence_hint": "after_occurrence_imports",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "range_gaps",
+          "thematic_map_readiness",
+          "atlas_cache_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "climate",
+        "display_name": "Climate and elevation",
+        "priority": 94,
+        "enabled": true,
+        "cadence_hint": "monthly_or_after_new_occurrences",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "missing_elevation",
+          "missing_climate_context",
+          "phenology_climate_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "conservation",
+        "display_name": "Conservation and habitat",
+        "priority": 93,
+        "enabled": true,
+        "cadence_hint": "weekly_or_on_status_update",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "conservation_status_gaps",
+          "habitat_gaps",
+          "threat_context_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "images",
+        "display_name": "Images and species evidence",
+        "priority": 92,
+        "enabled": true,
+        "cadence_hint": "daily_or_after_image_harvest",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "image_coverage_gaps",
+          "image_quality_gaps",
+          "source_license_gaps"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "dossiers",
+        "display_name": "Species, pollinator, and fungal dossiers",
+        "priority": 91,
+        "enabled": true,
+        "cadence_hint": "daily_candidate_queue_review",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "species_dossier_candidates",
+          "pollinator_dossier_candidates",
+          "fungal_dossier_candidates"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "harvester_operations",
+        "display_name": "Harvester operations",
+        "priority": 90,
+        "enabled": true,
+        "cadence_hint": "daily",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "stale_harvesters",
+          "low_yield_harvesters",
+          "cadence_recommendations"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "frontend_integration",
+        "display_name": "Frontend integration",
+        "priority": 88,
+        "enabled": true,
+        "cadence_hint": "after_backend_schema_or_endpoint_changes",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "destructive_mutation",
+          "external_send",
+          "promote_unreviewed_claim"
+        ],
+        "primary_outputs": [
+          "relationship_card_contract",
+          "atlas_contract",
+          "dossier_contract"
+        ],
+        "provenance_required": true
+      },
+      {
+        "department_id": "judging",
+        "display_name": "Judging",
+        "priority": 25,
+        "enabled": true,
+        "cadence_hint": "only_when_requested_or_no_scientific_work_pending",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "replace_scientific_priorities"
+        ],
+        "primary_outputs": [
+          "judging_readiness"
+        ],
+        "provenance_required": false
+      },
+      {
+        "department_id": "awards",
+        "display_name": "Awards",
+        "priority": 20,
+        "enabled": true,
+        "cadence_hint": "only_when_requested_or_no_scientific_work_pending",
+        "safe_task_types": [
+          "coverage_audit",
+          "source_audit",
+          "readiness_audit"
+        ],
+        "blocked_task_types": [
+          "replace_scientific_priorities"
+        ],
+        "primary_outputs": [
+          "awards_readiness"
+        ],
+        "provenance_required": false
+      }
+    ]
+  },
+  "gaps": {
+    "status": "ok",
+    "gap_count": 12,
+    "gaps": [
+      {
+        "gap_id": "gap_taxonomy",
+        "department_id": "taxonomy",
+        "priority": 100,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Taxonomy needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_taxonomy",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_pollination",
+        "department_id": "pollination",
+        "priority": 99,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Pollination needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_pollinator_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_mycorrhiza",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Mycorrhiza and fungi needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_mycorrhiza_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_literature",
+        "department_id": "literature",
+        "priority": 97,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Literature extraction needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_literature_extraction_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_traits",
+        "department_id": "traits",
+        "priority": 96,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Traits and TraitBank needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_traitbank_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_geography_atlas",
+        "department_id": "geography_atlas",
+        "priority": 95,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Geography and Atlas needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_occurrence_elevation_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_climate",
+        "department_id": "climate",
+        "priority": 94,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Climate and elevation needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_climate_layer_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_conservation",
+        "department_id": "conservation",
+        "priority": 93,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Conservation and habitat needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_conservation",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_images",
+        "department_id": "images",
+        "priority": 92,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Images and species evidence needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_species_image_coverage",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_dossiers",
+        "department_id": "dossiers",
+        "priority": 91,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Species, pollinator, and fungal dossiers needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_species_dossier_readiness",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_harvester_operations",
+        "department_id": "harvester_operations",
+        "priority": 90,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Harvester operations needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_harvester_health",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      },
+      {
+        "gap_id": "gap_frontend_integration",
+        "department_id": "frontend_integration",
+        "priority": 88,
+        "gap_type": "data_readiness_unknown",
+        "summary": "Frontend integration needs live schema/table coverage verification before enrichment.",
+        "recommended_mission": "audit_frontend_relationship_card_data",
+        "risk_level": "safe_audit_only",
+        "claim_type": "coverage_gap_audit",
+        "confidence": "audit_only",
+        "review_status": "needs_review",
+        "source": "BUILD-048 scientific integration coordinator",
+        "promoted_claims": false
+      }
+    ],
+    "blocked_actions": [
+      "promote_unreviewed_claim",
+      "external_mutation",
+      "destructive_mutation"
+    ]
+  },
+  "datasets": {
+    "status": "ok",
+    "dataset_count": 9,
+    "datasets": [
+      {
+        "dataset_id": "world_plants_orchids",
+        "display_name": "World Plants orchid taxonomy",
+        "department_id": "taxonomy",
+        "source_type": "external_dataset",
+        "integration_state": "configured_or_expected",
+        "freshness_cadence": "monthly_or_on_release",
+        "primary_entities": [
+          "accepted orchid names",
+          "synonyms",
+          "distribution text",
+          "conservation status text"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_taxonomy_source_mapping"
+      },
+      {
+        "dataset_id": "zenodo_pollination",
+        "display_name": "Zenodo orchid pollination dataset",
+        "department_id": "pollination",
+        "source_type": "external_dataset",
+        "integration_state": "needs_runtime_audit",
+        "freshness_cadence": "monthly_or_on_release",
+        "primary_entities": [
+          "orchid-pollinator interactions",
+          "pollinator guilds",
+          "rewards",
+          "references"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_pollinator_coverage"
+      },
+      {
+        "dataset_id": "globi_interactions",
+        "display_name": "GloBI interaction graph",
+        "department_id": "pollination",
+        "source_type": "external_dataset",
+        "integration_state": "needs_runtime_audit",
+        "freshness_cadence": "monthly_or_on_release",
+        "primary_entities": [
+          "species interactions",
+          "interaction evidence",
+          "interaction source citations"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_pollinator_sources"
+      },
+      {
+        "dataset_id": "mycorrhiza_relationships",
+        "display_name": "Orchid mycorrhizal relationship data",
+        "department_id": "mycorrhiza",
+        "source_type": "internal_or_external_dataset",
+        "integration_state": "needs_runtime_audit",
+        "freshness_cadence": "daily_or_on_new_literature",
+        "primary_entities": [
+          "orchid-fungus relationships",
+          "fungal taxa",
+          "germination evidence",
+          "citations"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_mycorrhiza_coverage"
+      },
+      {
+        "dataset_id": "literature_claims",
+        "display_name": "Orchid literature extraction tables",
+        "department_id": "literature",
+        "source_type": "internal_tables",
+        "integration_state": "needs_runtime_audit",
+        "freshness_cadence": "every_few_hours_or_on_new_documents",
+        "primary_entities": [
+          "claims",
+          "citations",
+          "evidence summaries",
+          "review state"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_literature_extraction_coverage"
+      },
+      {
+        "dataset_id": "eol_traitbank",
+        "display_name": "EOL TraitBank",
+        "department_id": "traits",
+        "source_type": "external_dataset",
+        "integration_state": "needs_runtime_audit",
+        "freshness_cadence": "weekly_or_on_dataset_update",
+        "primary_entities": [
+          "traits",
+          "glossary terms",
+          "trait sources"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_traitbank_coverage"
+      },
+      {
+        "dataset_id": "gbif_occurrences",
+        "display_name": "GBIF occurrence records",
+        "department_id": "geography_atlas",
+        "source_type": "external_dataset_or_harvester",
+        "integration_state": "configured_or_expected",
+        "freshness_cadence": "after_occurrence_imports",
+        "primary_entities": [
+          "occurrences",
+          "coordinates",
+          "event dates",
+          "basis of record"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_occurrence_elevation_coverage"
+      },
+      {
+        "dataset_id": "climate_elevation_layers",
+        "display_name": "Climate and elevation layers",
+        "department_id": "climate",
+        "source_type": "derived_or_external_layers",
+        "integration_state": "needs_runtime_audit",
+        "freshness_cadence": "monthly_or_after_new_occurrences",
+        "primary_entities": [
+          "elevation",
+          "temperature normals",
+          "precipitation",
+          "seasonality"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_climate_layer_coverage"
+      },
+      {
+        "dataset_id": "inat_observations",
+        "display_name": "iNaturalist observations and living images",
+        "department_id": "images",
+        "source_type": "harvester",
+        "integration_state": "configured_or_expected",
+        "freshness_cadence": "daily",
+        "primary_entities": [
+          "living images",
+          "observations",
+          "phenology signals"
+        ],
+        "provenance_required": true,
+        "next_safe_action": "audit_species_image_coverage"
+      }
+    ],
+    "safety": {
+      "external_fetches_performed": false,
+      "database_mutations_performed": false,
+      "purpose": "registry_and_readiness_tracking_only"
+    }
+  },
+  "missions": {
+    "missions": [
+      {
+        "mission_type": "audit_pollinator_coverage",
+        "department_id": "pollination",
+        "priority": 99,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_orchids_missing_pollinator_data",
+        "department_id": "pollination",
+        "priority": 99,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_pollinator_taxa_missing_dossiers",
+        "department_id": "pollination",
+        "priority": 99,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_pollinator_sources",
+        "department_id": "pollination",
+        "priority": 99,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_pollinator_relationship_confidence",
+        "department_id": "pollination",
+        "priority": 99,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_mycorrhiza_coverage",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_orchids_missing_fungal_data",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_fungal_taxa_missing_dossiers",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_mycorrhiza_sources",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_fungal_relationship_confidence",
+        "department_id": "mycorrhiza",
+        "priority": 98,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_literature_extraction_coverage",
+        "department_id": "literature",
+        "priority": 97,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_species_missing_literature_claims",
+        "department_id": "literature",
+        "priority": 97,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_unreviewed_literature_claims",
+        "department_id": "literature",
+        "priority": 97,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_citation_provenance",
+        "department_id": "literature",
+        "priority": 97,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_traitbank_coverage",
+        "department_id": "traits",
+        "priority": 96,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_species_missing_trait_data",
+        "department_id": "traits",
+        "priority": 96,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_trait_source_mapping",
+        "department_id": "traits",
+        "priority": 96,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_occurrence_elevation_coverage",
+        "department_id": "geography_atlas",
+        "priority": 95,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_occurrences_missing_elevation",
+        "department_id": "geography_atlas",
+        "priority": 95,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_geographic_range_coverage",
+        "department_id": "geography_atlas",
+        "priority": 95,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_thematic_map_readiness",
+        "department_id": "geography_atlas",
+        "priority": 95,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_climate_layer_coverage",
+        "department_id": "climate",
+        "priority": 94,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_occurrences_missing_climate_context",
+        "department_id": "climate",
+        "priority": 94,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_phenology_climate_linkage",
+        "department_id": "climate",
+        "priority": 94,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_species_image_coverage",
+        "department_id": "images",
+        "priority": 92,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_species_missing_living_images",
+        "department_id": "images",
+        "priority": 92,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_image_quality_and_source",
+        "department_id": "images",
+        "priority": 92,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_herbarium_vs_living_image_balance",
+        "department_id": "images",
+        "priority": 92,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_species_dossier_readiness",
+        "department_id": "dossiers",
+        "priority": 91,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_pollinator_dossier_readiness",
+        "department_id": "dossiers",
+        "priority": 91,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_fungus_dossier_readiness",
+        "department_id": "dossiers",
+        "priority": 91,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_harvester_health",
+        "department_id": "harvester_operations",
+        "priority": 90,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_stale_harvesters",
+        "department_id": "harvester_operations",
+        "priority": 90,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "identify_low_yield_harvesters",
+        "department_id": "harvester_operations",
+        "priority": 90,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "recommend_harvester_cadence_changes",
+        "department_id": "harvester_operations",
+        "priority": 90,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_frontend_relationship_card_data",
+        "department_id": "frontend_integration",
+        "priority": 88,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_frontend_genus_of_day_data",
+        "department_id": "frontend_integration",
+        "priority": 88,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_frontend_atlas_data",
+        "department_id": "frontend_integration",
+        "priority": 88,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      },
+      {
+        "mission_type": "audit_frontend_dossier_data",
+        "department_id": "frontend_integration",
+        "priority": 88,
+        "status": "available",
+        "risk_level": "safe_audit_only",
+        "provenance_required": true
+      }
+    ]
+  },
+  "harvesters": {
+    "status": "ok",
+    "harvester_count": 3,
+    "harvesters": [
+      {
+        "harvester_id": "inat_observations",
+        "department_id": "images",
+        "expected_output": "living orchid observations and images",
+        "status": "needs_live_runtime_audit",
+        "recommended_action": "verify last cursor, inserted record count, failure count, and image quality yield"
+      },
+      {
+        "harvester_id": "gbif_occurrences",
+        "department_id": "geography_atlas",
+        "expected_output": "occurrence records for Atlas and elevation/climate enrichment",
+        "status": "needs_live_runtime_audit",
+        "recommended_action": "verify last import date, new records, duplicate rate, and missing elevation rate"
+      },
+      {
+        "harvester_id": "literature_ingestion",
+        "department_id": "literature",
+        "expected_output": "papers, citations, extracted claims, and review queues",
+        "status": "needs_live_runtime_audit",
+        "recommended_action": "verify pending documents, extraction failures, and uncited claims"
+      }
+    ],
+    "recommendations": [
+      "Do not run every harvester continuously without yield checks.",
+      "Prefer cadences based on data-change frequency and recent useful inserts.",
+      "Queue schedule changes as needs_review until live metrics are available."
+    ],
+    "destructive_actions": false
+  },
+  "dossiers": {
+    "status": "ok",
+    "candidate_queue_count": 3,
+    "candidates": [
+      {
+        "entity_type": "orchid_species",
+        "queue_name": "species_dossiers",
+        "priority_reason": "front-end species pages need evidence-backed dossiers",
+        "required_sections": [
+          "taxonomy",
+          "images",
+          "occurrences",
+          "habitat",
+          "pollinators",
+          "mycorrhiza",
+          "literature",
+          "conservation"
+        ],
+        "status": "candidate_queue_ready"
+      },
+      {
+        "entity_type": "pollinator",
+        "queue_name": "pollinator_dossiers",
+        "priority_reason": "pollinator cards and ecological stories require provenance-first evidence",
+        "required_sections": [
+          "taxonomy",
+          "associated orchids",
+          "life history",
+          "evidence",
+          "conservation relevance",
+          "citations"
+        ],
+        "status": "candidate_queue_ready"
+      },
+      {
+        "entity_type": "fungus",
+        "queue_name": "fungal_dossiers",
+        "priority_reason": "mycorrhizal relationships need fungal partner context and review status",
+        "required_sections": [
+          "taxonomy",
+          "associated orchids",
+          "germination evidence",
+          "habitat",
+          "sequence/literature evidence",
+          "citations"
+        ],
+        "status": "candidate_queue_ready"
+      }
+    ],
+    "promoted_claims": false
+  }
+}

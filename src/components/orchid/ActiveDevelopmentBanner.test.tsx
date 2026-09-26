@@ -46,16 +46,24 @@ describe('ActiveDevelopmentBanner — PUBLIC-LAUNCH-001 (#679)', () => {
 
   it('renders the support CTA linking to /get-involved', () => {
     renderBanner();
-    const cta = container.querySelector('[data-testid="dev-banner-donate-cta"]') as HTMLAnchorElement;
+    const cta = container.querySelector('[data-testid="dev-banner-support-cta"]') as HTMLAnchorElement;
     expect(cta).toBeTruthy();
     expect(cta.getAttribute('href')).toBe('/get-involved');
   });
 
   it('does not use a bare external donation URL (owner-gated)', () => {
     renderBanner();
-    const cta = container.querySelector('[data-testid="dev-banner-donate-cta"]') as HTMLAnchorElement;
+    const cta = container.querySelector('[data-testid="dev-banner-support-cta"]') as HTMLAnchorElement;
     // href must be an internal route, not an absolute URL to an external service
     expect(cta.getAttribute('href')).not.toMatch(/^https?:\/\//);
+  });
+
+  it('disables only the unconfigured donation destination', () => {
+    renderBanner();
+    const donate = container.querySelector('[data-testid="dev-banner-donate-cta"]') as HTMLButtonElement;
+    expect(donate.disabled).toBe(true);
+    expect(donate.textContent).toContain('coming soon');
+    expect(container.querySelector('[data-testid="dev-banner-support-cta"]')?.getAttribute('href')).toBe('/get-involved');
   });
 
   it('dismisses the banner on dismiss-button click', () => {
@@ -80,9 +88,9 @@ describe('ActiveDevelopmentBanner — PUBLIC-LAUNCH-001 (#679)', () => {
     expect(container.querySelector('[data-testid="dev-banner"]')).toBeNull();
   });
 
-  it('exposes role="banner" for accessibility', () => {
+  it('exposes a named region without adding a duplicate banner landmark', () => {
     renderBanner();
-    expect(container.querySelector('[role="banner"]')).toBeTruthy();
+    expect(container.querySelector('[role="region"][aria-label="Active development notice"]')).toBeTruthy();
   });
 
   it('dismiss button has an accessible label', () => {

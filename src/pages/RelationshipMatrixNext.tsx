@@ -163,7 +163,7 @@ export default function RelationshipMatrixNext() {
   const [loading, setLoading] = useState(false);
 
   const cells = useMemo(
-    () => new Map(result?.cells.map((cell) => [`${cell.subject_id}:${cell.object_id}`, cell]) || []),
+    () => new Map(result?.cells?.map((cell) => [`${cell.subject_id}:${cell.object_id}`, cell]) ?? []),
     [result],
   );
 

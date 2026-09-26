@@ -1,0 +1,32 @@
+{
+  "schema": "oc.cognitive-integration-capabilities.v1",
+  "description": "What the Continuum can do, and which of it needs an external provider. Provider requirement is a property of the capability, never of how hard a task is. This registry is the Brain-side counterpart of app/provider_reservoir/capabilities.py in orchid-calyx-backend; the two must agree, and a deterministic test on each side checks that they do.",
+  "capabilities": [
+    { "name": "taxonomy-resolution", "provider_required": false, "summary": "Resolve a name against the canonical taxonomy tables." },
+    { "name": "literature-evidence-lookup", "provider_required": false, "summary": "Retrieve stored literature records and their provenance." },
+    { "name": "interaction-kg-lookup", "provider_required": false, "summary": "Retrieve stored interaction and knowledge-graph edges." },
+    { "name": "geospatial-context", "provider_required": false, "summary": "Assemble bounded environmental and geographic context." },
+    { "name": "reasoning-map-assembly", "provider_required": false, "summary": "Assemble an inspectable reasoning map from retrieved evidence." },
+    { "name": "contradiction-detection", "provider_required": false, "summary": "Compare retrieved claims and mark those that conflict." },
+    { "name": "evidence-gap-detection", "provider_required": false, "summary": "Mark what the retrieved evidence does not cover." },
+    { "name": "provenance-assembly", "provider_required": false, "summary": "Attach source and provenance to every retrieved claim." },
+    { "name": "schema-validation", "provider_required": false, "summary": "Validate an artifact against its declared schema." },
+    { "name": "fixture-execution", "provider_required": false, "summary": "Run a stored deterministic fixture and compare it to expectations." },
+    { "name": "reconcile", "provider_required": false, "summary": "Reconcile queue, lease and label state against durable receipts." },
+    { "name": "test-execution", "provider_required": false, "summary": "Run the repository's own test suites." },
+    { "name": "lint-execution", "provider_required": false, "summary": "Run the repository's own linters and formatters." },
+    { "name": "locality-redaction", "provider_required": false, "summary": "Withhold or generalise protected locality before anything leaves." },
+
+    { "name": "natural-language-explanation", "provider_required": true, "summary": "Render an assembled reasoning map into prose a non-specialist can follow.", "deterministic_alternative": "The map, its evidence states and its gaps are assembled deterministically and can be presented as structured fields; only the connecting prose needs generation." },
+    { "name": "free-text-intent-parsing", "provider_required": true, "summary": "Interpret an arbitrary typed or spoken question into a structured intent.", "deterministic_alternative": "A stored fixture covers the known question forms deterministically; only an unseen free-text phrasing needs generation." },
+    { "name": "open-ended-code-authoring", "provider_required": true, "summary": "Author a non-trivial implementation from a prose specification.", "deterministic_alternative": "Templated and fixture-driven generation covers the repetitive cases; only genuinely novel implementation needs a model." },
+    { "name": "literature-summarisation", "provider_required": true, "summary": "Summarise a paper whose text is stored but whose summary is not.", "deterministic_alternative": "Stored abstracts and extracted fields are served directly where present; only a paper with neither needs generation." }
+  ],
+  "governance": {
+    "scientific_review_required": true,
+    "automatic_publication": false,
+    "automatic_candidate_knowledge": false,
+    "automatic_knowledge_promotion": false,
+    "production_runtime_enabled": false
+  }
+}

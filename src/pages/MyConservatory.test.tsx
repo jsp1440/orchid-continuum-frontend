@@ -172,8 +172,9 @@ describe("MyConservatory Add Plant — readiness gate", () => {
     await flush();
 
     expect(container.textContent).toContain("Plant entry is locked");
-    // PR #677: bounded UI shows instruction, not raw blocking_reason
-    expect(container.textContent).toContain("Restart survival has not been verified yet.");
+    // Neither backend instructions nor raw blocking details are public copy.
+    expect(container.textContent).toContain("Required readiness checks are not yet verified.");
+    expect(container.textContent).not.toContain("Restart survival has not been verified yet.");
     expect(container.textContent).not.toContain("Deploy and confirm data survives a restart.");
     // The safety-critical assertion: no submittable form exists while blocked.
     expect(container.querySelector("form")).toBeNull();

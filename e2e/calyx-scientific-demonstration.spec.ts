@@ -49,14 +49,19 @@ test.afterAll(async () => {
 });
 
 async function ask(question: string, options: { freshThread?: boolean } = {}) {
-  await page.goto("/speak-with-calyx", { waitUntil: "domcontentloaded" });
   if (options.freshThread) {
     // The workspace resumes its last thread from storage. For the abstention
     // case that would leave the previous mission on the page, and the
     // assertions that nothing leaked between them would be meaningless.
+    //
+    // Storage is cleared from a static same-origin file, not from the
+    // workspace: a workspace still restoring its thread writes the thread id
+    // back once the restore resolves, which intermittently undid the clear
+    // and put both missions in one thread.
+    await page.goto("/robots.txt", { waitUntil: "domcontentloaded" });
     await page.evaluate(() => window.localStorage.clear());
-    await page.reload({ waitUntil: "domcontentloaded" });
   }
+  await page.goto("/speak-with-calyx", { waitUntil: "domcontentloaded" });
   const input = page.locator("#calyx-message");
   await expect(input).toBeVisible({ timeout: 20_000 });
   await input.fill(question);

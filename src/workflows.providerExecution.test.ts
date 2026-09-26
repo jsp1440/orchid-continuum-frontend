@@ -20,7 +20,7 @@ describe('autonomous provider execution truthfulness', () => {
     expect(lane).toContain('scripts/oc-dispatch-runtime.ts start');
     const runtime = readFileSync('scripts/oc-dispatch-runtime.ts', 'utf8');
     const admission = runtime.indexOf('assertAdmission(plan, current, issue, now())');
-    const running = runtime.indexOf("transitionLease(store, lease.id, runId, runAttempt, 'running')");
+    const running = runtime.indexOf("transitionLease(store, lease.id, runId, runAttempt, 'running', { requireActive: true })");
     expect(admission).toBeGreaterThan(-1);
     expect(running).toBeGreaterThan(admission);
     expect(lane).toContain("if: steps.lease.outputs.execute == 'true'");

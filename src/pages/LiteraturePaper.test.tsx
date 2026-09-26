@@ -16,6 +16,9 @@ vi.mock('@/contexts/AuthContext', async () => {
   return { ...actual, useAuth: mocks.useAuth };
 });
 
+import accessDenied from '@/lib/__fixtures__/literatureAccessDenied.realBackend.json';
+import realBackend from '@/lib/__fixtures__/literaturePaper.realBackend.json';
+
 import LiteraturePaper from './LiteraturePaper';
 
 /**
@@ -261,5 +264,153 @@ describe('failures', () => {
     expect(text()).toMatch(/literature service is unavailable/i);
     expect(text()).toMatch(/says nothing about what the extraction contains/i);
     expect([...container.querySelectorAll('button')].some((b) => /try again/i.test(b.textContent ?? ''))).toBe(true);
+  });
+});
+
+describe('the page against the captured backend paper (main c37ff0ca6)', () => {
+  it('shows each claim as uncertain, unreviewed and blocked from publication, as the backend records it', async () => {
+    route(realBackend.paper, { status: 404 });
+    await mount();
+
+    const cards = [...container.querySelectorAll('[data-testid="claim-card"]')];
+    expect(cards).toHaveLength(realBackend.paper.claims.length);
+    const polarity = cards.map((card) => card.querySelector('[data-testid="claim-polarity"]')?.textContent);
+    expect(polarity).toEqual(realBackend.paper.claims.map((claim) => `Polarity · ${claim.polarity}`));
+    for (const card of cards) {
+      expect(card.querySelector('[data-testid="claim-review"]')?.textContent).toBe('Not reviewed');
+      expect(card.querySelector('[data-testid="claim-publication"]')?.textContent).toBe(
+        'Evidence record review: unreviewed · Publication: blocked (awaiting review)',
+      );
+    }
+    expect(text()).not.toMatch(/Publication: published/i);
+  });
+});
+
+/**
+ * A signed-in member, refused, on the paper page.
+ *
+ * The route is behind ProtectedRoute, so the reader is signed in. Owner
+ * decision (2026-09-26) opened the literature index and source bindings to
+ * members, but backend #1643 keeps full paper text (`/papers/{id}`) owner-only
+ * for members because it can be licence-restricted. The member token is never
+ * sent there, so any 401/403 on this view is an owner-only view — said as
+ * such, never as "sign in again". The 401 is the backend's own response
+ * (`literatureAccessDenied.realBackend.json`); the 403 bodies are clearly
+ * synthetic shapes.
+ */
+describe('a signed-in member who is refused', () => {
+  const signedIn = () =>
+    mocks.useAuth.mockReturnValue({
+      user: { id: 'member-1' },
+      session: { access_token: 'member-session' },
+      loading: false,
+    } as never);
+
+  const answer = (status: number, body: unknown) => {
+    globalThis.fetch = vi.fn(
+      async () => new Response(body === undefined ? '' : JSON.stringify(body), { status }),
+    ) as typeof globalThis.fetch;
+  };
+  const accessState = () => container.querySelector('[data-testid="literature-access-required"]');
+  const retry = () =>
+    [...container.querySelectorAll('button')].some((b) => /try again/i.test(b.textContent ?? ''));
+
+  afterEach(() => {
+    mocks.useAuth.mockReturnValue({ user: null, session: null, loading: false });
+  });
+
+  const OWNER_ONLY = /this view is limited to owner access — full paper text can be restricted by its licence/i;
+
+  it("is told full text is an owner-only view, not to sign in again, on the backend's own 401", async () => {
+    // `/papers/{id}` is owner-only for members, so no member token is sent and
+    // the backend's 401 is about the view, not about the member's session.
+    signedIn();
+    answer(accessDenied.paper_no_credentials.status, accessDenied.paper_no_credentials.body);
+    await mount();
+
+    expect(accessState()).not.toBeNull();
+    expect(accessState()?.getAttribute('data-access-status')).toBe('401');
+    expect(accessState()?.getAttribute('data-signed-in')).toBe('true');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('owner_only');
+    expect(text()).toMatch(OWNER_ONLY);
+    expect(text()).toMatch(/signing in again will not change it/i);
+    expect(text()).not.toMatch(/your session could not be verified/i);
+    expect(text()).not.toMatch(/sign in again\./i);
+    expect(text()).not.toMatch(/not yet open to members/i);
+    expect(text()).toMatch(/says nothing about what the extraction contains/i);
+    expect(container.querySelector('[data-testid="paper-error"]')).toBeNull();
+    expect(text()).not.toMatch(/not authorised to read/i);
+    expect(text()).not.toMatch(/No extraction is stored under this identifier/i);
+    expect(retry()).toBe(false);
+    // Nothing is released from a paper the page was not allowed to read.
+    expect(container.querySelector('[data-testid="policy-summary"]')?.textContent).toMatch(
+      /nothing is being released/i,
+    );
+  });
+
+  it('is told the same on a 403 OWNER_ACCESS_REQUIRED (synthetic shape of the #1643 body)', async () => {
+    signedIn();
+    answer(403, { detail: { code: 'OWNER_ACCESS_REQUIRED', message: 'synthetic' } });
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('403');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('owner_only');
+    expect(text()).toMatch(OWNER_ONLY);
+    expect(text()).not.toMatch(/your session could not be verified/i);
+    expect(text()).not.toMatch(/access is not permitted for this account/i);
+    expect(retry()).toBe(false);
+  });
+
+  it('reads a bare 403 on the full-text view as owner-only too (synthetic shape)', async () => {
+    signedIn();
+    answer(403, { detail: 'Forbidden' });
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('owner_only');
+    expect(text()).toMatch(OWNER_ONLY);
+    expect(retry()).toBe(false);
+  });
+
+  it('sees a 5xx as an outage, not as a refusal', async () => {
+    signedIn();
+    answer(503, { detail: 'Owner session signing is not configured' });
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(container.querySelector('[data-testid="paper-error"]')).not.toBeNull();
+    expect(text()).toMatch(/literature service is unavailable/i);
+    expect(retry()).toBe(true);
+  });
+
+  it('sees an unreachable service as unreachable, not as a refusal', async () => {
+    signedIn();
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof globalThis.fetch;
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(text()).toMatch(/could not be reached/i);
+    expect(retry()).toBe(true);
+  });
+
+  it('sees an extraction with no claims as empty, not as a refusal', async () => {
+    signedIn();
+    route(paperBody({ claims: [], evidence: [], sections: [] }), { status: 404 });
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(container.querySelector('[data-testid="no-claims"]')).not.toBeNull();
+  });
+
+  it('sees the extraction when the service answers', async () => {
+    signedIn();
+    route(realBackend.paper, { status: 404 });
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(container.querySelectorAll('[data-testid="claim-card"]')).toHaveLength(
+      realBackend.paper.claims.length,
+    );
   });
 });
