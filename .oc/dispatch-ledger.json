@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 13,
+  "programSpent": 13.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 1
+    "2026-09-26": 1.5
   },
   "leases": [
     {
@@ -820,6 +820,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "cc75d0f190b97e387e28d5d174f5ff5ef66c7a00563f5b43db3064dd696a3dc5",
+      "issue": 797,
+      "nodeId": "cap-matrix-report-lexicon",
+      "fingerprint": "5224f0a24667f0c3647dd5237f72fd18f767c397a54d3037ea0977b9ae0e90f8",
+      "waveHash": "27f9033f35a3b5a6fe284f21fae4e9c5a1873ca5176fccdd64053dbc6413c573",
+      "runId": "36204522114",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T01:54:17.099Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
