@@ -22,6 +22,8 @@ import { CAPTURE_DAY, geotaggedJpeg } from "./support/geotagged-jpeg";
 
 test.describe.configure({ mode: "serial" });
 
+const REFERENCE_BACKEND = process.env.REFERENCE_BACKEND_URL || "http://127.0.0.1:8791";
+
 const ACCOUNT = {
   email: `journey-${Date.now()}@conservatory.test`,
   password: "a-throwaway-password-1",
@@ -352,8 +354,9 @@ test("8. a photograph uploads, loses its location data, and keeps its two clocks
   // The status and the JPEG marker are asserted first on purpose: an error
   // body contains no GPS either, so a "no GPS found" check that ran on a 401
   // would pass while proving nothing.
-  const stored = await page.evaluate(async () => {
-    const api = location.origin.replace(/:\d+$/, ":8791");
+  // The backend origin comes from the Playwright config, which built the app
+  // against it, so the read-back reaches the same backend on any port.
+  const stored = await page.evaluate(async (api) => {
     const token = JSON.parse(
       Object.entries(localStorage).find(([key]) => key.startsWith("sb-"))?.[1] as string,
     ).access_token as string;
@@ -369,7 +372,7 @@ test("8. a photograph uploads, loses its location data, and keeps its two clocks
       size: bytes.length,
       hex: Array.from(bytes).map((byte) => byte.toString(16).padStart(2, "0")).join(""),
     };
-  });
+  }, REFERENCE_BACKEND);
   expect(stored.status).toBe(200);
   expect(stored.contentType).toContain("image/jpeg");
   expect(stored.hex.startsWith("ffd8ff")).toBe(true);        // still a JPEG

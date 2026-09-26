@@ -1,0 +1,90 @@
+name: Frontend E2E (reference backend)
+
+# Runs the Playwright browser journeys in e2e/ against the local reference
+# backend (e2e/support/reference-backend.mjs) and a production build of the
+# app served by `vite preview`, exactly as playwright.config.ts starts them.
+#
+# Nothing ran these journeys on a pull request before this workflow: #814
+# merged while breaking research-station-evidence-decision.spec.ts, and the
+# break surfaced only when someone ran the suite by hand (fixed in #849).
+#
+# This is reference-backend evidence, not live or production evidence. The
+# specs route every non-localhost request to abort, no secret or provider
+# credential is used, and the token is read-only.
+#
+# Whether this becomes a required check is a branch-protection decision for
+# the repository owner; this file only makes the run exist.
+
+on:
+  pull_request:
+    branches:
+      - main
+      - oc-autonomous-integration
+    paths:
+      - 'src/**'
+      - 'e2e/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/frontend-e2e-reference.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'e2e/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/frontend-e2e-reference.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frontend-e2e-reference-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright journeys against the reference backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # playwright.config.ts: html reporter, and never reuse a stray server.
+      CI: 'true'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      # The browser comes from the lockfile's @playwright/test install, so the
+      # CLI that downloads it and the runtime that launches it are the same
+      # release (see featured-genus-render-sentinel run 36013583507).
+      - name: Install Playwright Chromium
+        run: npx --no-install playwright install --with-deps chromium
+
+      - name: Run browser journeys
+        run: npx --no-install playwright test
+
+      - name: Upload Playwright report and traces
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: frontend-e2e-reference-report
+          path: |
+            playwright-report/
+            e2e/.artifacts/
+          if-no-files-found: warn
+          retention-days: 14

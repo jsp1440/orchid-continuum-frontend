@@ -1,10 +1,27 @@
+# Render Blueprint for the canonical Orchid Continuum frontend.
+#
+# Render is the sole production target. The build command is intentionally a
+# fail-closed publication gate: Render must not publish a candidate unless the
+# repository test, lint, typecheck, deployment-contract validation, and build
+# all succeed on the exact revision being deployed.
 services:
   - type: web
     name: orchid-continuum-frontend
     runtime: static
-    buildCommand: npm ci && npm run build
+    repo: https://github.com/jsp1440/orchid-continuum-frontend.git
+    branch: main
+    buildCommand: npm ci && npm run test && npm run lint && npm run typecheck && npm run validate:deployment && npm run build
     staticPublishPath: ./dist
     routes:
+      - type: rewrite
+        source: /research-station/researchers/jeffery-scott-parham
+        destination: /researcher-jeffery-scott-parham.html
+      - type: rewrite
+        source: /admin
+        destination: /index.html
+      - type: rewrite
+        source: /control-center
+        destination: /index.html
       - type: rewrite
         source: /*
         destination: /index.html

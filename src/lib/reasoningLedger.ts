@@ -67,15 +67,37 @@ export class ReasoningLedgerError extends Error {
   }
 }
 
-/** One entry in the persisted ledger. Shapes mirror serialization.py. */
+/**
+ * One entry in the persisted ledger. Shapes mirror
+ * `app/reasoning_ledger/serialization.py::entry_to_dict`, field for field.
+ *
+ * Two keys this type used to declare — `statement` and `contradicts` — are
+ * not emitted by that serializer and never were. Reading them produced a
+ * panel that rendered "No statement recorded" over every entry that had one,
+ * and a contradiction notice that could not fire. Both are corrected below.
+ */
 export type LedgerEntry = {
   entry_id?: string;
+  /** Entry kind: "support" | "conflict" | "conclusion" | "assumption" | … */
   kind?: string;
-  statement?: string | null;
+  /** The recorded reasoning. The backend calls this `text`. */
+  text?: string | null;
+  version?: number;
   sequence?: number;
+  author?: string | null;
+  /**
+   * Conflict resolution state, present on EVERY entry and defaulting to
+   * "unresolved". On its own it says nothing: only a CONFLICT entry's state
+   * is meaningful. See {@link contradictingEntries}.
+   */
+  conflict_state?: string;
+  references_entry_ids?: string[];
+  tags?: string[];
   provenance?: {
     source_kind?: string;
     source_id?: string;
+    literature_record_id?: string | null;
+    rs_project_id?: string | null;
     content_hash?: string | null;
     retrieved_at?: string | null;
     collector?: string | null;
@@ -85,8 +107,8 @@ export type LedgerEntry = {
     rationale?: string;
     unresolved_assumptions?: string[];
   } | null;
-  supports?: string[];
-  contradicts?: string[];
+  created_at?: string | null;
+  fingerprint?: string | null;
   [key: string]: unknown;
 };
 
@@ -256,10 +278,29 @@ export function hasRecordedReview(revision: LedgerRevision): boolean {
   return Array.isArray(revision.review_decisions) && revision.review_decisions.length > 0;
 }
 
-/** Entries the ledger itself records as counterevidence or conflict. */
+/** Conflict states the backend still counts as open. Mirrors models.py. */
+const OPEN_CONFLICT_STATES = new Set(["unresolved", "deferred"]);
+
+/**
+ * Conflicts the ledger records as still open.
+ *
+ * This mirrors `ReasoningLedger.unresolved_conflicts` on the backend exactly,
+ * because a reader must not be shown a different set of open conflicts than
+ * the publication gate is enforcing against.
+ *
+ * All three conditions are load-bearing. `conflict_state` alone over-reports:
+ * every entry carries it and it defaults to "unresolved", so filtering on it
+ * would mark ordinary support entries as contradictions. `resolved_conflict_ids`
+ * is how a conflict is superseded without deleting it, so an entry listed
+ * there is closed however its own state reads.
+ */
 export function contradictingEntries(revision: LedgerRevision): LedgerEntry[] {
+  const superseded = new Set(revision.resolved_conflict_ids ?? []);
   return (revision.entries ?? []).filter(
-    (entry) => Array.isArray(entry.contradicts) && entry.contradicts.length > 0,
+    (entry) =>
+      entry.kind === "conflict" &&
+      OPEN_CONFLICT_STATES.has(String(entry.conflict_state ?? "unresolved")) &&
+      (entry.entry_id === undefined || !superseded.has(entry.entry_id)),
   );
 }
 

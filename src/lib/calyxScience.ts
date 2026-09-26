@@ -94,16 +94,33 @@ export type ScienceStatus = {
   safety?: ScienceSafety;
 };
 
+export type ScienceSectionKey =
+  | 'summary'
+  | 'status'
+  | 'departments'
+  | 'gaps'
+  | 'datasets'
+  | 'missions'
+  | 'harvesters'
+  | 'dossiers';
+
 export type CalyxScienceDashboard = {
   fetchedAt: string;
-  summary: ScienceSummary;
-  status: ScienceStatus;
+  summary: ScienceSummary | null;
+  status: ScienceStatus | null;
   departments: ScienceDepartment[];
   gaps: ScienceGap[];
   datasets: ScienceDataset[];
   missions: ScienceMission[];
   harvesters: ScienceHarvester[];
   dossiers: DossierCandidate[];
+  /**
+   * Sections whose backend call failed. A section absent from this map and
+   * returning an empty array means the backend reported zero records; a
+   * section present here means that data point is UNAVAILABLE, not zero --
+   * callers must not collapse the two (see docs/AGENT-OPERATING-MEMORY.md).
+   */
+  sectionErrors: Partial<Record<ScienceSectionKey, string>>;
 };
 
 async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
@@ -119,8 +136,12 @@ async function readJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function sectionErrorMessage(reason: unknown): string {
+  return reason instanceof Error ? reason.message : 'Unknown Calyx science telemetry error';
+}
+
 export async function fetchCalyxScienceDashboard(signal?: AbortSignal): Promise<CalyxScienceDashboard> {
-  const [summary, status, departments, gaps, datasets, missions, harvesters, dossiers] = await Promise.all([
+  const [summary, status, departments, gaps, datasets, missions, harvesters, dossiers] = await Promise.allSettled([
     readJson<ScienceSummary>('/api/science/summary', signal),
     readJson<ScienceStatus>('/api/science/status', signal),
     readJson<{ departments?: ScienceDepartment[] }>('/api/science/departments', signal),
@@ -131,15 +152,30 @@ export async function fetchCalyxScienceDashboard(signal?: AbortSignal): Promise<
     readJson<{ candidates?: DossierCandidate[] }>('/api/science/dossiers', signal),
   ]);
 
+  const settled = { summary, status, departments, gaps, datasets, missions, harvesters, dossiers };
+  if (Object.values(settled).every((result) => result.status === 'rejected')) {
+    const firstRejection = Object.values(settled).find(
+      (result): result is PromiseRejectedResult => result.status === 'rejected',
+    );
+    throw new Error(sectionErrorMessage(firstRejection?.reason) || 'Calyx science telemetry is unavailable');
+  }
+
+  const sectionErrors: Partial<Record<ScienceSectionKey, string>> = {};
+  (Object.keys(settled) as ScienceSectionKey[]).forEach((key) => {
+    const result = settled[key];
+    if (result.status === 'rejected') sectionErrors[key] = sectionErrorMessage(result.reason);
+  });
+
   return {
     fetchedAt: new Date().toISOString(),
-    summary,
-    status,
-    departments: departments.departments ?? [],
-    gaps: gaps.gaps ?? [],
-    datasets: datasets.datasets ?? [],
-    missions: missions.missions ?? [],
-    harvesters: harvesters.harvesters ?? [],
-    dossiers: dossiers.candidates ?? [],
+    summary: summary.status === 'fulfilled' ? summary.value : null,
+    status: status.status === 'fulfilled' ? status.value : null,
+    departments: departments.status === 'fulfilled' ? departments.value.departments ?? [] : [],
+    gaps: gaps.status === 'fulfilled' ? gaps.value.gaps ?? [] : [],
+    datasets: datasets.status === 'fulfilled' ? datasets.value.datasets ?? [] : [],
+    missions: missions.status === 'fulfilled' ? missions.value.missions ?? [] : [],
+    harvesters: harvesters.status === 'fulfilled' ? harvesters.value.harvesters ?? [] : [],
+    dossiers: dossiers.status === 'fulfilled' ? dossiers.value.candidates ?? [] : [],
+    sectionErrors,
   };
 }

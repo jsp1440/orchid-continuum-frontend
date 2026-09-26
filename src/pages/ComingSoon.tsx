@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { submitMissionListSignup } from '@/lib/missionListSignup';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
@@ -85,17 +86,16 @@ const ComingSoon: React.FC = () => {
     }
     setLoading(true);
     setError(null);
+    // Best effort: this page always follows up with the mailto below, so a
+    // failed delivery here still reaches the team. It must still not be a
+    // relative path, which resolves to the SPA shell and never the backend.
     try {
-      await fetch('/api/crm/69fa6c8ae577acf1894f7208/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          source: `orchid-continuum-coming-soon:${copy.name}`,
-        }),
+      await submitMissionListSignup({
+        email,
+        source: `orchid-continuum-coming-soon:${copy.name}`,
       });
     } catch {
-      /* non-blocking — still confirm + open mailto below */
+      /* non-blocking — the mailto below is the guaranteed path */
     }
 
     // Notify the team via the canonical Orchid Continuum inbox.
@@ -145,6 +145,8 @@ const ComingSoon: React.FC = () => {
             >
               Orchid Continuum
             </div>
+
+            <p className="mt-5 inline-flex rounded-full border border-[#C9A84C]/40 px-3 py-1 text-xs text-[#C9A84C]">In development</p>
 
             <h1
               className="cs-serif mt-5"

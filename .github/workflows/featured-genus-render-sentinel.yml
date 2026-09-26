@@ -17,13 +17,22 @@ jobs:
       FRONTEND_URL: https://orchid-continuum-frontend-vof6.onrender.com/
       CALYX_URL: https://orchid-calyx-backend.onrender.com
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 22
-      - run: |
-          npm install --no-save --no-package-lock playwright@1.55.0
-          npx playwright install --with-deps chromium
+          cache: npm
+      # The runtime the script imports ('playwright') and the CLI that downloads
+      # the browser must be the same version. An ad hoc `npm install --no-save
+      # playwright@1.55.0` next to the lockfile's @playwright/test left the CLI
+      # at a newer release than the runtime, so the CLI fetched one browser build
+      # and the runtime looked for another (run 36013583507:
+      # "Executable doesn't exist at .../chromium_headless_shell-1187"). Install
+      # from the lockfile and drive the CLI from that same install.
+      - run: npm ci
+      - run: npx --no-install playwright install --with-deps chromium
       - name: Run deployed browser audit
         run: node scripts/featured-genus-render-sentinel.mjs
       - name: Preserve audit evidence

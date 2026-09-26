@@ -16,6 +16,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
+const REFERENCE_BACKEND = process.env.REFERENCE_BACKEND_URL || "http://127.0.0.1:8791";
 const STAMP = Date.now();
 const SPECIES = `Fixture species ${STAMP}`;
 const LOCALITY = `Napo Province test locality ${STAMP}`;
@@ -72,9 +73,9 @@ test("an anonymous submission enters moderation and stays out of the public feed
 });
 
 test("the moderation view is refused anonymously", async () => {
-  const detail = await page.request.get(`http://127.0.0.1:8791/api/community/observations/${observationId}`);
+  const detail = await page.request.get(`${REFERENCE_BACKEND}/api/community/observations/${observationId}`);
   expect(detail.status()).toBe(401);
-  const moderate = await page.request.patch(`http://127.0.0.1:8791/api/community/observations/${observationId}/moderate`, { data: { new_state: "APPROVED" } });
+  const moderate = await page.request.patch(`${REFERENCE_BACKEND}/api/community/observations/${observationId}/moderate`, { data: { new_state: "APPROVED" } });
   expect(moderate.status()).toBe(401);
 });
 

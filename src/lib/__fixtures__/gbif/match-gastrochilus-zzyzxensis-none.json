@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/match?name=Gastrochilus%20zzyzxensis&strict=true",
+    "captured_at": "2026-09-25",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0da3d-d7bf-753a-a5c9-e3925305f12e",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"confidence\":100,\"matchType\":\"NONE\",\"synonym\":false}"
+}

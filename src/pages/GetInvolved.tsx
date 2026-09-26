@@ -25,6 +25,7 @@ interface Way {
   onClick: () => void | string;
   href?: string;
   external?: boolean;
+  disabled?: boolean;
 }
 
 const GetInvolvedPage: React.FC = () => {
@@ -41,11 +42,9 @@ const GetInvolvedPage: React.FC = () => {
     {
       icon: HandCoins,
       title: 'Donate',
-      body: 'Open biodiversity infrastructure runs on grants and gifts. Donations are tax-deductible through our fiscal sponsor, Ecologistics, a 501(c)(3) non-profit corporation.',
-      cta: 'Donate via Ecologistics',
-      href: 'https://www.ecologistics.org',
-      external: true,
-
+      body: 'Open biodiversity infrastructure depends on grants and gifts. A verified donation destination is not yet available; other ways to participate remain open.',
+      cta: 'Donations coming soon',
+      disabled: true,
       onClick: () => undefined,
     },
     {
@@ -103,8 +102,9 @@ const GetInvolvedPage: React.FC = () => {
                   ) : (
                     <button
                       type="button"
+                      disabled={w.disabled}
                       onClick={() => w.onClick()}
-                      className="inline-flex items-center gap-2 text-sm text-emerald-200 hover:text-emerald-100 transition-colors mt-auto"
+                      className="inline-flex items-center gap-2 text-sm text-emerald-200 hover:text-emerald-100 transition-colors mt-auto disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       {w.cta} <ArrowRight className="h-4 w-4" />
                     </button>

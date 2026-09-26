@@ -21,6 +21,7 @@ import { expect, test, type Page, type Request } from "@playwright/test";
 
 test.describe.configure({ mode: "serial" });
 
+const REFERENCE_BACKEND = process.env.REFERENCE_BACKEND_URL || "http://127.0.0.1:8791";
 const STAMP = Date.now();
 const READER = `reader-${STAMP}@acceptance.test`;
 const LOCALITY_KEYS = /"(lat|latitude|lng|lon|longitude|coordinates?|coords?|locality|verbatim_locality|location|site|place|grid|gps|elevation_m)"\s*:/i;
@@ -120,8 +121,8 @@ test("unsubscribe succeeds for the reader and would answer the same for an unkno
   await page.getByTestId("unsubscribe-submit").click();
   await expect(page.getByTestId("unsubscribe-success")).toBeVisible({ timeout: 20_000 });
 
-  const known = await page.request.post("http://127.0.0.1:8791/api/constituent/unsubscribe", { data: { email: READER } });
-  const unknown = await page.request.post("http://127.0.0.1:8791/api/constituent/unsubscribe", { data: { email: `nobody-${STAMP}@acceptance.test` } });
+  const known = await page.request.post(`${REFERENCE_BACKEND}/api/constituent/unsubscribe`, { data: { email: READER } });
+  const unknown = await page.request.post(`${REFERENCE_BACKEND}/api/constituent/unsubscribe`, { data: { email: `nobody-${STAMP}@acceptance.test` } });
   expect(known.status()).toBe(200);
   expect(unknown.status()).toBe(200);
   const strip = (payload: Record<string, unknown>) => ({ ...payload, normalized_email: undefined });
@@ -184,8 +185,8 @@ test("a community observation is accepted into moderation and an anonymous brows
   expect(listing!.body).not.toContain("submitter_auth_subject");
 
   // The full record (with verbatim locality) is a moderation view: anonymous read is refused.
-  const newId = (JSON.parse(await (await page.request.get(`http://127.0.0.1:8791/api/community/observations?limit=1`)).text()) as { items: Array<{ id: string }> }).items[0]?.id;
+  const newId = (JSON.parse(await (await page.request.get(`${REFERENCE_BACKEND}/api/community/observations?limit=1`)).text()) as { items: Array<{ id: string }> }).items[0]?.id;
   expect(newId).toBeTruthy();
-  const detail = await page.request.get(`http://127.0.0.1:8791/api/community/observations/${newId}`);
+  const detail = await page.request.get(`${REFERENCE_BACKEND}/api/community/observations/${newId}`);
   expect(detail.status()).toBe(401);
 });

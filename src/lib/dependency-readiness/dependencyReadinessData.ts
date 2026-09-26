@@ -505,18 +505,18 @@ export const DEPENDENCY_READINESS_CENSUS: DependencyRecord[] = [
     ),
   },
   {
-    id: 'render-vercel-deploy-credentials',
-    provider: 'Render / Vercel deployment API',
+    id: 'render-deploy-credentials',
+    provider: 'Render deployment API',
     owningCapability: 'Deployment automation (none active)',
     classification: 'PARTNER_CREDENTIAL',
     requirements: (['BACKEND_GITHUB_ACTIONS', 'FRONTEND_GITHUB_ACTIONS'] as const).map((environment) => ({
       environment,
       required: false,
       source:
-        '.github/workflows/render-release-probe.yml only curls public HTTP endpoints (frontend_url, calyx_url inputs) with no auth header; grep -rn "RENDER_API_KEY|VERCEL_TOKEN|RENDER_DEPLOY" across .github/workflows/*.yml found no reference.',
+        '.github/workflows/render-release-probe.yml only curls public HTTP endpoints (frontend_url, calyx_url inputs) with no auth header; grep -rn "RENDER_API_KEY|RENDER_DEPLOY" across .github/workflows/*.yml found no reference.',
       readiness: 'NOT_REQUIRED' as const,
       validationMethod: 'N/A — no workflow triggers a deploy via API.',
-      blockerOrNextAction: 'Add only if a workflow is introduced that actually triggers a Render/Vercel deploy via API rather than probing public HTTP endpoints.',
+      blockerOrNextAction: 'Add only if a workflow is introduced that actually triggers a Render deploy via API rather than probing public HTTP endpoints.',
     })),
   },
 ];

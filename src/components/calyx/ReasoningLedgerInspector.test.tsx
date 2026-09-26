@@ -40,20 +40,27 @@ function revisionBody(overrides: Record<string, unknown> = {}) {
     revision: {
       ledger_id: LEDGER,
       version: VERSION,
-      status: "DRAFT",
+      // Field names and enum casing follow serialization.py exactly. This
+      // fixture previously used `statement`, `contradicts` and upper-case
+      // enums, none of which the backend emits, and so agreed with a shape
+      // nobody serves while the real panel rendered blank.
+      status: "draft",
       ledger_fingerprint: "f".repeat(64),
       entries: [
         {
           entry_id: "entry-1",
-          kind: "CLAIM",
+          kind: "support",
           sequence: 1,
-          statement: "Seasonal dormancy tracks cooler thermal niches.",
+          text: "Seasonal dormancy tracks cooler thermal niches.",
           provenance: { source_kind: "literature", source_id: "lit-9", content_hash: "a".repeat(64) },
           uncertainty: { confidence: 0.6, rationale: "single study", unresolved_assumptions: ["Sampling was seasonal only"] },
-          contradicts: [],
+          conflict_state: "unresolved",
+          references_entry_ids: [],
         },
       ],
       review_decisions: [],
+      conflict_dispositions: [],
+      resolved_conflict_ids: [],
       ...(overrides.revision as Record<string, unknown> | undefined),
     },
     ...overrides,
@@ -219,6 +226,73 @@ describe("what a retrieved revision shows", () => {
 
     expect(text()).toContain("literature");
     expect(text()).toContain("a".repeat(64));
+  });
+
+  it("renders the reasoning each entry actually records", async () => {
+    // The regression this guards: the panel read `entry.statement`, a key
+    // the backend does not emit, so every entry rendered "No statement
+    // recorded" and the reasoning itself was invisible.
+    respond(revisionBody());
+    await mount();
+    await inspect();
+
+    expect(text()).toContain("Seasonal dormancy tracks cooler thermal niches.");
+    expect(text()).not.toMatch(/no statement recorded on this entry/i);
+  });
+
+  it("does not report ordinary entries as contradictions", async () => {
+    // Every entry carries conflict_state "unresolved" by default, so reading
+    // it without checking the kind would accuse a support entry of conflict.
+    respond(revisionBody());
+    await mount();
+    await inspect();
+    expect(text()).not.toMatch(/records a contradiction within this revision/i);
+  });
+
+  it("surfaces a conflict entry the ledger left open", async () => {
+    respond(
+      revisionBody({
+        revision: {
+          entries: [
+            {
+              entry_id: "entry-2",
+              kind: "conflict",
+              sequence: 2,
+              text: "A second population shows the opposite trend.",
+              conflict_state: "unresolved",
+              references_entry_ids: [],
+            },
+          ],
+          resolved_conflict_ids: [],
+        },
+      }),
+    );
+    await mount();
+    await inspect();
+    expect(text()).toMatch(/records a contradiction within this revision/i);
+  });
+
+  it("treats a superseded conflict as closed", async () => {
+    respond(
+      revisionBody({
+        revision: {
+          entries: [
+            {
+              entry_id: "entry-2",
+              kind: "conflict",
+              sequence: 2,
+              text: "Superseded by a later reading.",
+              conflict_state: "unresolved",
+              references_entry_ids: [],
+            },
+          ],
+          resolved_conflict_ids: ["entry-2"],
+        },
+      }),
+    );
+    await mount();
+    await inspect();
+    expect(text()).not.toMatch(/records a contradiction within this revision/i);
   });
 
   it("surfaces the assumptions the ledger recorded as unresolved", async () => {

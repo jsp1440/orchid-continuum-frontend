@@ -1,0 +1,11 @@
+{
+  "_capture": {
+    "url": null,
+    "captured_at": null,
+    "method": "NOT CAPTURED. Fixture-only: api.gbif.org, rs.gbif.org and techdocs.gbif.org are denied by the capture sandbox's egress policy (CONNECT 403, 2026-09-26), so no live descriptions body could be recorded.",
+    "note": "GBIF species/{usageKey}/descriptions paged response shape (offset, limit, endOfRecords, results[] with key, taxonKey, type, language, description, source, sourceTaxonKey, creator, contributor, license) as documented at https://techdocs.gbif.org/en/openapi/v1/species. Every description text, citation and dataset key is deliberately fictional ('FIXTURE-') and is not taxonomic content. Used to pin that a taxon whose only GBIF description is locality-bearing yields no morphology source and an explicit absence statement."
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"offset\": 0, \"limit\": 50, \"endOfRecords\": true, \"results\": [{\"key\": 9000011, \"taxonKey\": 5310649, \"type\": \"distribution\", \"language\": \"eng\", \"description\": \"FIXTURE-LOCALITY-ONLY Fixture Island.\", \"source\": \"FIXTURE-SOURCE Distribution Only\", \"sourceTaxonKey\": 900000111, \"creator\": \"FIXTURE-CREATOR\", \"contributor\": null, \"license\": \"http://creativecommons.org/licenses/by/4.0/legalcode\"}]}"
+}

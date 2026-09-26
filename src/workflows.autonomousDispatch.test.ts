@@ -2,18 +2,35 @@ import { readFileSync } from 'node:fs';
 import yaml from 'js-yaml';
 import { describe, expect, it } from 'vitest';
 type Job = { if?: string; needs?: string | string[]; uses?: string; outputs?: object; permissions?: object;
-  steps?: Array<{ uses?: string; run?: string; with?: Record<string, unknown> }> };
+  steps?: Array<{ uses?: string; run?: string; if?: string; with?: Record<string, unknown> }> };
 const read = (file: string) => readFileSync(`.github/workflows/${file}.yml`, 'utf8');
 const text = read('orchid-continuous-completion');
 const workflow = yaml.load(text) as { jobs: Record<string, Job>; env: Record<string, unknown> };
-describe('canonical provider-free autonomous dispatch', () => {
+describe('canonical governed autonomous dispatch', () => {
   it('uses graph planning, reusable fan-out and an always-run receipt audit', () => {
-    expect(Object.keys(workflow.jobs)).toEqual(['reconcile', 'plan', 'dispatch', 'audit']);
+    expect(Object.keys(workflow.jobs)).toEqual(['reconcile', 'supervisor', 'plan', 'dispatch', 'audit']);
+    expect(workflow.jobs.supervisor.needs).toBe('reconcile');
+    expect(workflow.jobs.supervisor.steps?.some(step => step.run?.includes('oc-supervisor-discovery.ts'))).toBe(true);
+    expect(workflow.jobs.supervisor.permissions).toEqual({ contents: 'read', issues: 'write', 'pull-requests': 'read' });
     expect(workflow.env.MAX_ACTIVE_LANES).toBe(8);
-    expect(workflow.env.PROVIDER_AUTHORIZED).toBe('false');
+    expect(workflow.env.PROVIDER_AUTHORIZED).toBe('true');
     expect(workflow.jobs.dispatch.uses).toBe('./.github/workflows/orchid-deterministic-dispatch.yml');
-    expect(workflow.jobs.dispatch.if).toBe("always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'");
+    expect(workflow.jobs.dispatch.if).toBe(
+      "always() && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'",
+    );
     expect(workflow.jobs.audit.if).toContain('always()');
+  });
+  // PR #821's pull_request run executed issue #816 from unmerged code on
+  // 2026-09-25. A PR run may plan on its head; it must never touch the live queue.
+  it('keeps pull_request runs plan-only: no reconcile, discovery, dispatch or audit', () => {
+    for (const name of ['reconcile', 'supervisor', 'dispatch', 'audit']) {
+      expect(workflow.jobs[name].if).toContain("github.event_name != 'pull_request'");
+    }
+    expect(workflow.jobs.plan.if ?? '').not.toContain('github.event_name');
+    expect(workflow.jobs.plan.permissions).toBeUndefined();
+    expect((yaml.load(text) as { permissions: object }).permissions).toEqual({
+      contents: 'read', issues: 'read', 'pull-requests': 'read', actions: 'read',
+    });
   });
   it('converges the old scheduler onto the canonical entrypoint without another timer', () => {
     const alias = read('orchid-no-api-scheduler');
@@ -30,13 +47,24 @@ describe('canonical provider-free autonomous dispatch', () => {
     const lane = yaml.load(read('orchid-completion-lane')) as { jobs: Record<string, Job> };
     expect(lane.jobs.execute.needs).toBe('budget-authorization');
     expect(lane.jobs.execute.if).toBe("inputs.provider_authorized && needs.budget-authorization.outputs.allowed == 'true'");
-    expect(read('orchid-completion-lane')).toContain("OC_PROVIDER_NO_API_MODE: 'true'");
+    expect(read('orchid-completion-lane')).toContain("OC_PROVIDER_NO_API_MODE: 'false'");
     expect(read('orchid-completion-lane')).toContain('scripts/oc-budget-governor.mjs');
   });
   it('also denies provider canaries triggered by worker edits', () => {
     const canary = yaml.load(read('frontend-openai-runtime-canary')) as { jobs: Record<string, Job> };
     expect(canary.jobs.canary.if).toContain("needs.budget-preflight.outputs.allowed == 'true'");
     expect(read('frontend-openai-runtime-canary')).toContain("PROVIDER_AUTHORIZED: 'false'");
+  });
+  it('installs the browser only for the deterministic browser route capability', () => {
+    const lane = yaml.load(read('orchid-budgeted-completion-lane')) as { jobs: Record<string, Job> };
+    const worker = lane.jobs['provider-free-worker'];
+    const install = worker.steps?.find(step => step.run?.includes('playwright install'));
+    expect(install?.if).toContain("contains(needs.classify.outputs.commands, 'npm run verify:routes')");
+    expect(install?.run).toContain('playwright install --with-deps chromium');
+    const preview = worker.steps?.find(step => step.run?.includes('vite preview'));
+    expect(preview?.if).toContain("contains(needs.classify.outputs.commands, 'npm run verify:routes')");
+    expect(preview?.run).toContain('npm run build');
+    expect(preview?.run).toContain('127.0.0.1:4173');
   });
   it('preserves the suspended Anthropic recovery circuit breaker with no executable canary', () => {
     const recovery = yaml.load(read('orchid-claude-runtime-recovery')) as { jobs: Record<string, Job>; permissions: Record<string, string> };

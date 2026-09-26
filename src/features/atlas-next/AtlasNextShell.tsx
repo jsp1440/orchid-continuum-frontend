@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
 import { atlasNextContinuumActions } from './researchHandoff';
 import { resolveAtlasNextIncomingGenus } from './incomingGenus';
+import { ATLAS_INFRASPECIFIC_PARAM, resolveAtlasNextIncomingSubject } from './incomingTaxon';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import AtlasGlobe, { type GlobeMark } from './AtlasGlobe';
 import OccurrenceCard from './OccurrenceCard';
@@ -79,12 +80,36 @@ const zoomForScale = (level: ScaleLevel): number =>
 
 const AtlasNextShell: React.FC = () => {
   const { filters, setFilters } = useAtlasFilters();
+  const [searchParams] = useSearchParams();
+  const infraspecificParam = searchParams.get(ATLAS_INFRASPECIFIC_PARAM);
+  // The arriving taxon subject, resolved at its own rank. A species filter is
+  // named as the species; a genus-only filter is named as a genus-level
+  // fallback; a malformed or contradictory species filter is rejected and
+  // nothing is drawn rather than showing a widened or empty-looking view.
+  const subject = useMemo(
+    () =>
+      resolveAtlasNextIncomingSubject({
+        genera: filters.genera as string[] | undefined,
+        species: filters.species as string[] | undefined,
+        infraspecific: infraspecificParam,
+      }),
+    [filters.genera, filters.species, infraspecificParam],
+  );
+  const subjectRejected = subject.kind === 'rejected';
   const incomingGenus = useMemo(
-    () => resolveAtlasNextIncomingGenus(filters.genera as string[] | undefined),
-    [filters.genera],
+    () =>
+      subject.kind === 'species'
+        ? subject.genus
+        : subjectRejected
+          ? null
+          : resolveAtlasNextIncomingGenus(filters.genera as string[] | undefined),
+    [subject, subjectRejected, filters.genera],
   );
   const data = useAtlasData();
-  const points = useMemo(() => (data.kind === 'ready' ? data.points : []), [data]);
+  const points = useMemo(
+    () => (data.kind === 'ready' && !subjectRejected ? data.points : []),
+    [data, subjectRejected],
+  );
 
   const [scale, setScale] = useState<ScaleLevel>('earth');
   const [question, setQuestion] = useState<QuestionId>('where-it-lives');
@@ -159,8 +184,16 @@ const AtlasNextShell: React.FC = () => {
   ).length;
 
   const investigation = useMemo(
-    () => buildInvestigation(selection, genus ? `${genus} — all records` : 'All genera in the Atlas'),
-    [selection, genus],
+    () =>
+      buildInvestigation(
+        selection,
+        subject.kind === 'species'
+          ? `${subject.binomial} — all records`
+          : genus
+            ? `${genus} — all records`
+            : 'All genera in the Atlas',
+      ),
+    [selection, genus, subject],
   );
 
   const cells = useMemo(
@@ -311,9 +344,15 @@ const AtlasNextShell: React.FC = () => {
     setView(v);
   }, []);
 
+  // The downstream handoffs carry a genus only. Offering them while a species
+  // is the subject would silently widen it to every congener, so they are
+  // withheld for a species (and for a rejected) subject.
   const continuumActions = useMemo(
-    () => (genus ? atlasNextContinuumActions({ genus }) : []),
-    [genus],
+    () =>
+      genus && subject.kind !== 'species' && !subjectRejected
+        ? atlasNextContinuumActions({ genus })
+        : [],
+    [genus, subject.kind, subjectRejected],
   );
 
   const protectedCount = context.visible.protectedRecords;
@@ -354,6 +393,52 @@ const AtlasNextShell: React.FC = () => {
           >
             {QUESTIONS[question].question}
           </h1>
+          {subject.kind === 'species' && (
+            <p
+              data-testid="atlas-next-subject"
+              data-subject-rank="species"
+              className="mt-2 max-w-[46ch] text-[12px] leading-[1.5] text-[#a9e0c0]"
+            >
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.16em]">
+                Species filter
+              </span>{' '}
+              · <span className="italic">{subject.binomial}</span>
+              {subject.qualifier && (
+                <span className="block text-[11.5px] text-[#d8b24c]">
+                  Arrived as <span className="italic">{subject.name}</span>. Occurrence records
+                  carry no infraspecific rank, so {subject.qualifier.label} cannot be isolated:
+                  every record of <span className="italic">{subject.binomial}</span> is shown.
+                </span>
+              )}
+            </p>
+          )}
+          {subject.kind === 'genus' && (
+            <p
+              data-testid="atlas-next-subject"
+              data-subject-rank="genus"
+              className="mt-2 max-w-[46ch] text-[12px] leading-[1.5] text-[#d8b24c]"
+            >
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.16em]">
+                Genus-level fallback
+              </span>{' '}
+              · <span className="italic">{subject.genus}</span>. No species identity is in this
+              view, so every record of the genus is shown.
+            </p>
+          )}
+          {subjectRejected && (
+            <p
+              data-testid="atlas-next-subject"
+              data-subject-rank="rejected"
+              role="alert"
+              className="mt-2 max-w-[46ch] text-[12px] leading-[1.5] text-[#d87a4c]"
+            >
+              <span className="font-mono text-[9.5px] uppercase tracking-[0.16em]">
+                Taxon filter rejected
+              </span>{' '}
+              · The requested taxon is not a single well-formed canonical name, so no filter was
+              applied and nothing is drawn. This says nothing about where any orchid grows.
+            </p>
+          )}
           <p className="mt-1 max-w-[46ch] text-[12.5px] leading-[1.5] text-white/55">
             {gapMode
               ? 'Every mark is an occurrence record, coloured by how much is recorded about it — not by anything about the orchid.'
@@ -478,9 +563,13 @@ const AtlasNextShell: React.FC = () => {
                 value={genus ?? ''}
                 onChange={(e) => {
                   const v = e.target.value || null;
+                  // Choosing a genus is an explicit widening by the visitor, so
+                  // any arriving species subject is cleared with it rather than
+                  // left to contradict the new genus.
                   setFilters((previous) => ({
                     ...previous,
                     genera: v ? [v] : undefined,
+                    species: undefined,
                   }));
                   setGenus(v);
                   setCountry(null);
@@ -595,18 +684,27 @@ const AtlasNextShell: React.FC = () => {
         </div>
       </div>
 
-      {data.kind !== 'ready' && (
+      {data.kind !== 'ready' && !subjectRejected && (
         <div className="pointer-events-none absolute inset-x-0 top-1/2 z-30 flex -translate-y-1/2 justify-center px-6">
           <div className="max-w-md rounded-xl border border-white/12 bg-black/75 px-5 py-4 text-center backdrop-blur">
             {data.kind === 'loading' && (
               <p className="text-[13.5px] text-white/75">Reading the occurrence store…</p>
             )}
-            {data.kind === 'empty' && (
+            {data.kind === 'empty' && subject.kind === 'species' && data.matched === 0 ? (
+              <p
+                data-testid="atlas-next-species-no-records"
+                className="text-[13.5px] leading-[1.6] text-white/75"
+              >
+                No records for this species in the occurrence store: none of the records it
+                returned is <span className="italic">{subject.binomial}</span>. Nothing is drawn.
+                An absence of records here is not evidence that the orchid is absent anywhere.
+              </p>
+            ) : data.kind === 'empty' ? (
               <p className="text-[13.5px] leading-[1.6] text-white/75">
                 The occurrence store returned no usable coordinates. Nothing is drawn, because
                 drawing something here would be an invention.
               </p>
-            )}
+            ) : null}
             {data.kind === 'unavailable' && (
               <>
                 <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-[#8b9487]">

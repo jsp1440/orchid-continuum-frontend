@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/match?name=Gastrochilus%20calceolaris&strict=true",
+    "captured_at": "2026-09-25",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0da12-fd91-7509-bf6e-3290ba674ede",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"usageKey\":5310649,\"scientificName\":\"Gastrochilus calceolaris (Buch.-Ham. ex Sm.) D.Don\",\"canonicalName\":\"Gastrochilus calceolaris\",\"rank\":\"SPECIES\",\"status\":\"ACCEPTED\",\"confidence\":99,\"matchType\":\"EXACT\",\"kingdom\":\"Plantae\",\"phylum\":\"Tracheophyta\",\"order\":\"Asparagales\",\"family\":\"Orchidaceae\",\"genus\":\"Gastrochilus\",\"species\":\"Gastrochilus calceolaris\",\"kingdomKey\":6,\"phylumKey\":7707728,\"classKey\":196,\"orderKey\":1169,\"familyKey\":7689,\"genusKey\":2804118,\"speciesKey\":5310649,\"class\":\"Liliopsida\"}"
+}

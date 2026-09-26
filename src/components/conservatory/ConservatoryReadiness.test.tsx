@@ -159,9 +159,45 @@ describe("ConservatoryReadinessBanner", () => {
     await flush();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    { ...readyReport, gates: [] },
+    { ...readyReport, gates: [null] },
+    { ...readyReport, gates: [{ name: "restart_survival", passed: "true" }] },
+    { ...readyReport, gates: [{ name: "restart_survival", passed: false }] },
+    null,
+  ])("keeps collection entry blocked for missing, malformed or contradictory gates: %j", async report => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => report })));
+    renderBanner();
+    await flush();
+    expect(container.textContent).toContain("Collection entry remains blocked");
+    expect(container.textContent).not.toContain("Ready for three test plants");
+  });
+
+  it("revokes the previous ready state while a new check is pending", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: async () => readyReport })
+      .mockImplementationOnce(() => new Promise(() => {})));
+    renderBanner();
+    await flush();
+    act(() => container.querySelector("button")!.click());
+    expect(container.textContent).not.toContain("Required readiness checks are verified");
+    expect(container.querySelector("section")?.className).toContain("border-amber-500/40");
+  });
 });
 
 describe("ConservatoryReadinessPage", () => {
+  it("does not echo an internal probe identifier through a gate heading", async () => {
+    const name = "probe-123 /data/private https://internal.test CONSERVATORY_VOLUME_PATH";
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({
+      ...blockedReport, gates: [{ name, passed: false, evidence: name, blocking_reason: name }],
+    }) })));
+    act(() => root.render(<MemoryRouter><ConservatoryReadinessPage /></MemoryRouter>));
+    await flush();
+    expect(container.textContent).toContain("Readiness check 1");
+    expect(container.textContent).toContain("Blocked");
+    expect(container.innerHTML).not.toMatch(/probe-123|\/data\/private|internal\.test|CONSERVATORY_VOLUME_PATH/);
+  });
+
   it("lists gate status without exposing raw evidence, paths, URLs, or operator instructions", async () => {
     vi.stubGlobal(
       "fetch",

@@ -45,12 +45,16 @@ type JoinSpec = {
   files: string[];
   tests: string[];
   prs: string[];
+  /** Explicit canonical issue bindings. These are graph metadata, not title/body inference. */
+  issues?: string[];
   /** 1 when a browser pass was run, 0 when attempted and blocked, null when not attempted. */
   browser: 0 | 1 | null;
   browserNote: string;
   provenanceNote: string;
   /** Remaining scheduler disposition after the evidenced acceptance work. */
   remainingStatus?: 'PARTIAL' | 'OWNER_ACTION';
+  /** When this join's evidence was last reconciled; defaults to RECONCILED_AT. */
+  reconciledAt?: string;
   nextAction: string;
   lastAccomplishment: string;
 };
@@ -65,7 +69,7 @@ const JOINS: JoinSpec[] = [
     browser: 0,
     browserNote: 'Attempted and blocked: /research sits behind ProtectedRoute and this environment has no Supabase session. The URL was confirmed preserved across the gate.',
     provenanceNote: 'context_is_evidence=false asserted outbound and required inbound; parser fails closed on a malformed genus.',
-    nextAction: 'Sign in as a real member and confirm the Research banner names the arriving species end to end.',
+    nextAction: 'Extend e2e/research-station-atlas-next-species.spec.ts (#844, reference backend, which already signs in and reaches the "Continuing from the Species Dossier" banner) to assert that the banner names Phalaenopsis amabilis, then score this leg\'s browser gate.',
     lastAccomplishment: '#328 stopped the onward links widening the species to its genus while the banner claimed the subject was preserved.',
   },
   {
@@ -96,14 +100,32 @@ const JOINS: JoinSpec[] = [
   {
     id: 'research-atlas',
     name: 'Research Station -> Atlas filters on the species, not the genus',
-    files: ['src/lib/researchStationNavigation.ts', 'src/pages/ResearchCenter.tsx', 'src/lib/orchidContinuum.ts'],
-    tests: ['src/lib/continuumJourney.test.ts', 'src/pages/ResearchCenter.subjectHandoff.test.tsx'],
-    prs: ['#328'],
-    browser: 0,
-    browserNote: 'Attempted and blocked by the same auth gate as the dossier->research leg.',
-    provenanceNote: 'assertNoLocalityLeak fails closed rather than emitting a link; every emitted key is asserted by enumeration.',
-    nextAction: 'Signed-in browser pass confirming the Atlas species filter narrows to the arriving binomial.',
-    lastAccomplishment: 'applyAtlasFilters matches the canonical binomial, so the congener actually drops out rather than the filter being nominal.',
+    files: [
+      'src/lib/researchStationNavigation.ts',
+      'src/pages/ResearchCenter.tsx',
+      'src/components/research/ResearchStationWorkbench.tsx',
+      'src/features/atlas-next/incomingTaxon.ts',
+      'src/features/atlas-next/AtlasNextShell.tsx',
+      'src/lib/orchidContinuum.ts',
+    ],
+    tests: [
+      'src/lib/continuumJourney.test.ts',
+      'src/pages/ResearchCenter.subjectHandoff.test.tsx',
+      'src/lib/researchStationAtlasNextHref.test.ts',
+      'src/features/atlas-next/incomingTaxon.test.ts',
+      'src/features/atlas-next/AtlasNextShell.subjectRank.test.tsx',
+      'src/components/research/ResearchStationWorkbench.atlasLink.test.tsx',
+      'e2e/research-station-atlas-next-species.spec.ts',
+    ],
+    prs: ['#328', '#844'],
+    issues: ['#788'],
+    browser: 1,
+    browserNote: 'e2e/research-station-atlas-next-species.spec.ts executed green (3/3) at main 56bd85a on 2026-09-26 against the provider-free reference backend: a signed-in reader went Species Dossier -> Research Center -> "Return to Atlas" and landed on /atlas-next with species=Phalaenopsis amabilis (no genera key, no locality keys), named there as the species filter; a genus-only arrival is labelled "Genus-level fallback"; the workbench offers no Atlas link for an opaque taxon id. The reference backend serves no Atlas occurrences, so this proves filter identity, NOT narrowed records. Reference-backend evidence only, never deployed evidence.',
+    provenanceNote: 'assertNoLocalityLeak fails closed rather than emitting a link; every emitted key is asserted by enumeration. researchStationAtlasNextHref emits no link for malformed or opaque names, with no genus link standing in for the species.',
+    remainingStatus: 'OWNER_ACTION',
+    reconciledAt: '2026-09-26T00:00:00.000Z',
+    nextAction: 'Owner-gated: #788 acceptance ("the Atlas species filter narrows to the arriving binomial") is not met in a browser. Narrowing is proven only by unit tests (applyAtlasFilters); showing it in a browser needs real occurrence records, i.e. a signed-in pass on the deployed release, or an owner-approved locality-safe occurrence fixture for the reference backend. The owner decides which, and whether #788 is accepted.',
+    lastAccomplishment: '#844 routed Research Station Atlas links into Atlas Next at species rank and proved the species filter identity in a reference-backend browser journey.',
   },
   {
     id: 'research-calyx',
@@ -136,11 +158,12 @@ const JOINS: JoinSpec[] = [
     files: ['src/lib/researchStationNavigation.ts', 'src/features/calyx-workspace/identificationContext.ts', 'src/pages/OrchidIdentificationContinuum.tsx'],
     tests: ['src/features/calyx-workspace/identificationResearchHandoff.test.ts', 'src/lib/continuumJourney.test.ts'],
     prs: ['#330'],
+    issues: ['#660'],
     browser: 1,
-    browserNote: 'Browser pass run against /orchid-identification with a research-station origin.',
+    browserNote: 'Provider-free mounted production-bundle pass on 2026-09-24: a persisted reference Research project opened Matrix with the exact project id and bounded taxon, then returned to that same persisted project; a malformed project id degraded without discarding the valid subject.',
     provenanceNote: 'The taxon read fails closed rather than truncating: a shortened binomial is a different organism. An untrusted project id degrades alone without discarding the subject.',
-    nextAction: 'Confirm the return link resolves to a real persisted project.',
-    lastAccomplishment: '#330 replaced an empty parse result — no subject, no acknowledgement, no route back.',
+    nextAction: 'Owner-gated deployed-backend confirmation remains; the provider-free reference backend proves the browser contract but not production data/service readiness.',
+    lastAccomplishment: '#753 added a fixed provider-free browser acceptance lane; scheduled run 3738 proved the persisted Research Station → Matrix → same project round trip with 0 provider calls.',
   },
   {
     id: 'classroom-calyx',
@@ -210,9 +233,10 @@ function joinGate(join: JoinSpec): CompletionNode {
       { kind: 'note', ref: 'browser', note: join.browserNote },
     ],
     prs: join.prs,
+    issues: join.issues,
     nextAction: join.nextAction,
     lastAccomplishment: join.lastAccomplishment,
-    lastUpdated: RECONCILED_AT,
+    lastUpdated: join.reconciledAt ?? RECONCILED_AT,
     children: [],
   };
 }
@@ -239,7 +263,7 @@ export function buildJourneyContinuityDomain(
       type: 'domain',
       lane: 'INTEGRATION_COMPLETION',
       nextAction:
-        'Obtain signed-in browser evidence for the four legs behind the Research auth gate; they are the only ones still without a traversal.',
+        'Research -> Matrix and Research -> Atlas now have reference-backend traversals; obtain signed-in browser evidence for Dossier -> Research and Research -> Calyx, and a first pass for Dossier -> Calyx and the Genus Profile fan-out.',
     },
     JOINS.map((join) =>
       branch(

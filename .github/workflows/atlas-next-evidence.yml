@@ -24,10 +24,12 @@ jobs:
           node-version: '20'
       - run: npm ci
       - run: npm run build
-      # The repo does not ship playwright; the script needs it resolvable as a
-      # module, which `playwright install` alone does not provide.
-      - run: npm i --no-save playwright@1.56.1
-      - run: npx playwright install --with-deps chromium
+      # `playwright` is installed by the lockfile (a dependency of
+      # @playwright/test). Installing another release next to it leaves the
+      # runtime the script imports and the CLI that downloads the browser at
+      # different versions, which is how featured-genus-render-sentinel failed
+      # (run 36013583507). Drive the CLI from the lockfile install only.
+      - run: npx --no-install playwright install --with-deps chromium
       - name: Serve and capture
         timeout-minutes: 60
         run: |

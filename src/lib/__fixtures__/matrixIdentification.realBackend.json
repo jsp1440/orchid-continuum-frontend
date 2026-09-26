@@ -1,0 +1,462 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend main 73626917 via FastAPI TestClient against app.main (owner auth overridden, file-backed session/registry stores, no provider key so the deterministic governed narrative is used). Session objects are trimmed to the keys the frontend reads; every value is unmodified.",
+  "evaluate_empty": {
+    "next_observation": {
+      "candidate_count": 2,
+      "candidate_coverage": 1.0,
+      "character": "spur_length_mm",
+      "concept_id": null,
+      "description": "Measure the nectar spur from its base to its tip.",
+      "distinct_state_count": 2,
+      "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference.",
+      "label": "Spur length",
+      "matrix_weight": 3.0,
+      "reason_code": "highest_deterministic_discrimination",
+      "selection_score": 3.0,
+      "value_type": "numeric_range"
+    },
+    "report": {
+      "candidates": [
+        {
+          "compared_weight": 0.0,
+          "coverage": 0.0,
+          "explanations": [],
+          "possible_weight": 0,
+          "provenance": {
+            "source": "governed fixture"
+          },
+          "scientific_name": "Angraecum eburneum",
+          "score": 0.0,
+          "taxon_id": "world-plants:angraecum-eburneum"
+        },
+        {
+          "compared_weight": 0.0,
+          "coverage": 0.0,
+          "explanations": [],
+          "possible_weight": 0,
+          "provenance": {
+            "source": "governed fixture"
+          },
+          "scientific_name": "Angraecum sesquipedale",
+          "score": 0.0,
+          "taxon_id": "world-plants:angraecum-sesquipedale"
+        }
+      ],
+      "compared_character_count": 0,
+      "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+      "observation_count": 0,
+      "registry": {
+        "checksum_sha256": "24355b5eaf31ab6b8479b7ef3f7a7a12b5c2e3c0723cd70f0088f47866edbbf2",
+        "publication_state": "review_required",
+        "registry_id": "angraecum-demo",
+        "scope": {
+          "genus": "Angraecum"
+        },
+        "version": "1"
+      },
+      "revision": 0,
+      "session_id": "074841e9-f87c-42a2-943f-293968714dbf"
+    },
+    "session": {
+      "next_observation": {
+        "candidate_count": 2,
+        "candidate_coverage": 1.0,
+        "character": "spur_length_mm",
+        "concept_id": null,
+        "description": "Measure the nectar spur from its base to its tip.",
+        "distinct_state_count": 2,
+        "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference.",
+        "label": "Spur length",
+        "matrix_weight": 3.0,
+        "reason_code": "highest_deterministic_discrimination",
+        "selection_score": 3.0,
+        "value_type": "numeric_range"
+      },
+      "observations": [],
+      "registry": {
+        "checksum_sha256": "24355b5eaf31ab6b8479b7ef3f7a7a12b5c2e3c0723cd70f0088f47866edbbf2",
+        "publication_state": "review_required",
+        "registry_id": "angraecum-demo",
+        "scope": {
+          "genus": "Angraecum"
+        },
+        "version": "1"
+      },
+      "revision": 0,
+      "session_id": "074841e9-f87c-42a2-943f-293968714dbf",
+      "status": "active"
+    }
+  },
+  "evaluate_observed": {
+    "next_observation": null,
+    "report": {
+      "candidates": [
+        {
+          "compared_weight": 3.65,
+          "coverage": 1.0,
+          "explanations": [
+            {
+              "candidate_state": "white",
+              "certainty": "certain",
+              "character": "flower_color",
+              "contribution": 0.5,
+              "effective_weight": 1.0,
+              "observation": [
+                "white",
+                "green"
+              ],
+              "similarity": 0.5,
+              "status": "partial"
+            },
+            {
+              "candidate_state": {
+                "max": 350,
+                "min": 250
+              },
+              "certainty": "probable",
+              "character": "spur_length_mm",
+              "contribution": 2.25,
+              "effective_weight": 2.25,
+              "observation": 300,
+              "similarity": 1.0,
+              "status": "matched"
+            },
+            {
+              "candidate_state": "star-shaped",
+              "certainty": "uncertain",
+              "character": "flower_shape",
+              "contribution": 0.4,
+              "effective_weight": 0.4,
+              "observation": "star-shaped",
+              "similarity": 1.0,
+              "status": "matched"
+            },
+            {
+              "candidate_state": "white",
+              "certainty": "unknown",
+              "character": "labellum_color",
+              "contribution": 0.0,
+              "effective_weight": 0.0,
+              "observation": "white",
+              "similarity": null,
+              "status": "ignored_unknown_observation"
+            }
+          ],
+          "possible_weight": 3.65,
+          "provenance": {
+            "source": "governed fixture"
+          },
+          "scientific_name": "Angraecum sesquipedale",
+          "score": 0.863014,
+          "taxon_id": "world-plants:angraecum-sesquipedale"
+        },
+        {
+          "compared_weight": 3.25,
+          "coverage": 0.890411,
+          "explanations": [
+            {
+              "candidate_state": "white",
+              "certainty": "certain",
+              "character": "flower_color",
+              "contribution": 0.5,
+              "effective_weight": 1.0,
+              "observation": [
+                "white",
+                "green"
+              ],
+              "similarity": 0.5,
+              "status": "partial"
+            },
+            {
+              "candidate_state": {
+                "max": 150,
+                "min": 80
+              },
+              "certainty": "probable",
+              "character": "spur_length_mm",
+              "contribution": 0.0,
+              "effective_weight": 2.25,
+              "observation": 300,
+              "similarity": 0.0,
+              "status": "conflict"
+            },
+            {
+              "candidate_state": null,
+              "certainty": "uncertain",
+              "character": "flower_shape",
+              "contribution": 0.0,
+              "effective_weight": 0.4,
+              "observation": "star-shaped",
+              "similarity": null,
+              "status": "candidate_state_missing"
+            },
+            {
+              "candidate_state": null,
+              "certainty": "unknown",
+              "character": "labellum_color",
+              "contribution": 0.0,
+              "effective_weight": 0.0,
+              "observation": "white",
+              "similarity": null,
+              "status": "ignored_unknown_observation"
+            }
+          ],
+          "possible_weight": 3.65,
+          "provenance": {
+            "source": "governed fixture"
+          },
+          "scientific_name": "Angraecum eburneum",
+          "score": 0.153846,
+          "taxon_id": "world-plants:angraecum-eburneum"
+        }
+      ],
+      "compared_character_count": 3,
+      "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+      "observation_count": 4,
+      "registry": {
+        "checksum_sha256": "24355b5eaf31ab6b8479b7ef3f7a7a12b5c2e3c0723cd70f0088f47866edbbf2",
+        "publication_state": "review_required",
+        "registry_id": "angraecum-demo",
+        "scope": {
+          "genus": "Angraecum"
+        },
+        "version": "1"
+      },
+      "revision": 4,
+      "session_id": "074841e9-f87c-42a2-943f-293968714dbf"
+    },
+    "session": {
+      "next_observation": null,
+      "observations": [
+        {
+          "certainty": "certain",
+          "character": "flower_color",
+          "created_at": "2026-09-25T14:39:54.660774+00:00",
+          "observation_id": "ca0e4916-cb4e-40b0-bb4e-29c07dca2147",
+          "recorded_by": "owner",
+          "review_state": "observed",
+          "revision": 1,
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": [
+            "white",
+            "green"
+          ],
+          "weight": null
+        },
+        {
+          "certainty": "probable",
+          "character": "spur_length_mm",
+          "created_at": "2026-09-25T14:39:54.668123+00:00",
+          "observation_id": "14b241ca-615f-4b89-a9f9-157ffcc4dc04",
+          "recorded_by": "owner",
+          "review_state": "observed",
+          "revision": 2,
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": 300,
+          "weight": null
+        },
+        {
+          "certainty": "uncertain",
+          "character": "flower_shape",
+          "created_at": "2026-09-25T14:39:54.675316+00:00",
+          "observation_id": "b4e1f3d1-fa3b-4273-9747-17cb2eea0fde",
+          "recorded_by": "owner",
+          "review_state": "observed",
+          "revision": 3,
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": "star-shaped",
+          "weight": null
+        },
+        {
+          "certainty": "unknown",
+          "character": "labellum_color",
+          "created_at": "2026-09-25T14:39:54.682344+00:00",
+          "observation_id": "cd92ba94-7705-4814-a67f-0c9af4060ce4",
+          "recorded_by": "owner",
+          "review_state": "observed",
+          "revision": 4,
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": "white",
+          "weight": null
+        }
+      ],
+      "registry": {
+        "checksum_sha256": "24355b5eaf31ab6b8479b7ef3f7a7a12b5c2e3c0723cd70f0088f47866edbbf2",
+        "publication_state": "review_required",
+        "registry_id": "angraecum-demo",
+        "scope": {
+          "genus": "Angraecum"
+        },
+        "version": "1"
+      },
+      "revision": 4,
+      "session_id": "074841e9-f87c-42a2-943f-293968714dbf",
+      "status": "active"
+    }
+  },
+  "explain_comparison": {
+    "evidence": {
+      "audience": "expert",
+      "authority": {
+        "automatic_identification_publication": false,
+        "calyx_may_change_candidate_order": false,
+        "calyx_may_change_next_observation": false,
+        "calyx_may_change_scores_or_coverage": false,
+        "calyx_text_is_scientific_evidence": false,
+        "canonical_taxonomy_mutation": false,
+        "matrix_scores_are_authoritative_for_this_packet": true
+      },
+      "candidate_order": [
+        "world-plants:angraecum-sesquipedale",
+        "world-plants:angraecum-eburneum"
+      ],
+      "candidates": [
+        {
+          "conflicting_characters": [],
+          "coverage": 1.0,
+          "missing_characters": [],
+          "partial_characters": [
+            "flower_color"
+          ],
+          "provenance": {
+            "source": "governed fixture"
+          },
+          "scientific_name": "Angraecum sesquipedale",
+          "score": 0.863014,
+          "supporting_characters": [
+            "spur_length_mm",
+            "flower_shape"
+          ],
+          "taxon_id": "world-plants:angraecum-sesquipedale"
+        },
+        {
+          "conflicting_characters": [
+            "spur_length_mm"
+          ],
+          "coverage": 0.890411,
+          "missing_characters": [
+            "flower_shape"
+          ],
+          "partial_characters": [
+            "flower_color"
+          ],
+          "provenance": {
+            "source": "governed fixture"
+          },
+          "scientific_name": "Angraecum eburneum",
+          "score": 0.153846,
+          "supporting_characters": [],
+          "taxon_id": "world-plants:angraecum-eburneum"
+        }
+      ],
+      "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+      "evidence_digest_sha256": "010142c93bb45ae993061099051c3506cd407b8a30fad771dd34c419f47f4f5d",
+      "focus": "candidate_comparison",
+      "next_observation": null,
+      "observations": [
+        {
+          "certainty": "certain",
+          "character": "flower_color",
+          "review_state": "observed",
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": [
+            "white",
+            "green"
+          ]
+        },
+        {
+          "certainty": "probable",
+          "character": "spur_length_mm",
+          "review_state": "observed",
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": 300
+        },
+        {
+          "certainty": "uncertain",
+          "character": "flower_shape",
+          "review_state": "observed",
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": "star-shaped"
+        },
+        {
+          "certainty": "unknown",
+          "character": "labellum_color",
+          "review_state": "observed",
+          "source": {
+            "interface": "guided-identification",
+            "kind": "user_observation"
+          },
+          "value": "white"
+        }
+      ],
+      "registry": {
+        "checksum_sha256": "24355b5eaf31ab6b8479b7ef3f7a7a12b5c2e3c0723cd70f0088f47866edbbf2",
+        "publication_state": "review_required",
+        "registry_id": "angraecum-demo",
+        "scope": {
+          "genus": "Angraecum"
+        },
+        "version": "1"
+      },
+      "schema_version": "matrix-identification-explanation/v1",
+      "session_id": "074841e9-f87c-42a2-943f-293968714dbf",
+      "session_revision": 4
+    },
+    "invariants": {
+      "candidate_order_digest": "e105a6d6c55a0e031d4aed82007f91c641ca6d32a21a44c71e6f7b6d846f7cfa",
+      "next_observation_digest": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "provider_output_mutates_matrix_state": false
+    },
+    "narrative": {
+      "epistemic_state": "explanation_not_evidence",
+      "fallback_error": null,
+      "model": "calyx-matrix-explanation-v1",
+      "provider": "matrix-deterministic-governed",
+      "provider_response_id": null,
+      "request_hash": "05089e71c86652d933c35d0a3ea032d91d14478c301972329d4e1a197d44ba6e",
+      "text": "The current leading candidate is Angraecum sesquipedale based on the supplied Matrix evidence. Its match score is 0.863014 with coverage 1.0.\n\nThe strongest alternative is Angraecum eburneum with score 0.153846 and coverage 0.890411.\n\nThe Matrix does not currently recommend another discriminating observation.\n\nThis is an explanation of candidate-ranking evidence, not a verified taxonomic identification."
+    },
+    "schema_version": "matrix-identification-explanation/v1",
+    "session_id": "074841e9-f87c-42a2-943f-293968714dbf"
+  },
+  "registry_list": {
+    "read_only_listing": true,
+    "versions": [
+      {
+        "candidate_count": 2,
+        "character_count": 4,
+        "checksum_sha256": "24355b5eaf31ab6b8479b7ef3f7a7a12b5c2e3c0723cd70f0088f47866edbbf2",
+        "created_at": "2026-09-25T14:39:54.614365+00:00",
+        "created_by": "test",
+        "publication_state": "review_required",
+        "registry_id": "angraecum-demo",
+        "scope": {
+          "genus": "Angraecum"
+        },
+        "title": "Angraecum bounded diagnostic matrix",
+        "version": "1"
+      }
+    ]
+  }
+}

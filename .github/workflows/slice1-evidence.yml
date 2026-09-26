@@ -29,7 +29,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npm install --no-save playwright@1.55.0 && npx playwright install --with-deps chromium
+      # `playwright` comes from the lockfile (@playwright/test); an ad hoc
+      # second release next to it splits runtime and CLI versions (see
+      # featured-genus-render-sentinel run 36013583507).
+      - run: npx --no-install playwright install --with-deps chromium
       - name: Serve and capture
         run: |
           npx vite preview --port 4174 --host > /tmp/preview.log 2>&1 &

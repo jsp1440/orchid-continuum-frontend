@@ -42,6 +42,22 @@ describe('Orchestrator Queue Bridge', () => {
     expect(refill.create.map((item) => item.sourceKey)).toEqual([sourceKey(b)]);
   });
 
+  it('does not count a held open lineage toward prepared depth, but still suppresses it', () => {
+    const held = candidate('held');
+    const fresh = candidate('fresh');
+    const existing = [{ sourceKey: sourceKey(held), title: held.title, state: 'open' as const,
+      kind: 'issue' as const, holdsReserveSlot: false }];
+    const plan = planQueueBridge([held, fresh], existing, 1);
+    expect(plan.preparedOpenCount).toBe(0);
+    expect(plan.create.map((item) => item.sourceKey)).toEqual([sourceKey(fresh)]);
+    expect(plan.suppressed).toEqual([{ sourceKey: sourceKey(held), reason: 'existing-open-lineage' }]);
+
+    // Without the flag the same lineage keeps its slot, as before.
+    const unflagged = planQueueBridge([held, fresh], existing.map(({ holdsReserveSlot: _, ...ref }) => ref), 1);
+    expect(unflagged.preparedOpenCount).toBe(1);
+    expect(unflagged.create).toEqual([]);
+  });
+
   it('refills highest-priority safe work first with stable source-key tie breaking', () => {
     const p4 = candidate('a-low', { priority: 'oc-p4' });
     const p0z = candidate('z-high', { priority: 'oc-p0' });

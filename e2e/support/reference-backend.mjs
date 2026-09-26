@@ -17,6 +17,7 @@
  */
 import { createServer } from "node:http";
 import { randomUUID, createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { speciesOfStoredIdentity } from "./species-of-stored-identity.mjs";
 
 const store = {
@@ -1208,8 +1209,116 @@ const researchProject = {
   link_counts: { taxa: 1, documents: 2, evidence: 2, notes: 1 },
 };
 
+/* ---------------------------------------- Research Trait Explorer ------ */
+
+/**
+ * `GET /api/research/traits`, answered only with payloads the real backend
+ * returned.
+ *
+ * PROVENANCE. `src/lib/__fixtures__/researchTraits.pr1611.json` holds the
+ * AVAILABLE / UNAVAILABLE / ABSENT bodies captured through FastAPI TestClient
+ * from `app/research_traits/routes.py` (backend #1611), using that suite's
+ * `FakeService` (the real `ResearchTraitsService.get()` pipeline with only the
+ * database boundary replaced) and its `ROWS`. The file's note says the capture
+ * predates the merge; re-capturing from backend `main` 615af698b with the same
+ * harness produced bodies identical to it in every field except
+ * `generated_at`, which is a capture timestamp. They are served verbatim, so
+ * `generated_at` is the capture instant, not the time of this request.
+ *
+ * The rows behind them are the backend test suite's own fixture rows, not
+ * botanical records. A passing browser run proves the frontend renders what
+ * the backend emits; it says nothing about any orchid.
+ *
+ * Only the two subjects the capture covers are answered. Any other valid
+ * subject gets a 503 instead of a borrowed payload, because re-labelling a
+ * captured body with a different name would invent a result for that name.
+ *
+ * Authentication: the real route depends on `verify_owner_or_api_key`, an
+ * owner cookie or API key this stand-in has no equivalent of, so — like the
+ * `/api/research/projects` fixtures above — it does not check one. The
+ * captured 401 is served on request so the signed-out rendering is covered.
+ */
+const CAPTURED_TRAITS = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/researchTraits.pr1611.json", import.meta.url), "utf8"),
+);
+
+/** Both captured genus bodies are for `Cattleya`, so the journey picks one. */
+const TRAIT_GENUS_CAPTURES = new Set(["unavailable_genus", "absent_genus"]);
+
+/**
+ * Failure bodies. `unauthenticated` and `server_error` are what backend `main`
+ * returned through TestClient (the route with no credentials, and an unhandled
+ * service exception). `malformed` is SYNTHETIC — a contract-version the
+ * client must refuse — and exists only to exercise the fail-closed parse.
+ */
+const TRAIT_FAILURES = new Set(["unauthenticated", "server_error", "malformed"]);
+
+const traitsControl = { genus: "unavailable_genus", failure: null };
+
+// Mirrors `_subject` in app/research_traits/routes.py, including its details.
+const TRAIT_GENUS_RE = /^[A-Z][A-Za-z-]{1,79}$/;
+const TRAIT_SPECIES_RE = /^[A-Z][A-Za-z-]{1,79} [a-z][A-Za-z-]{1,79}$/;
+
+function traitSubject(url) {
+  const genus = url.searchParams.get("genus");
+  const species = url.searchParams.get("species");
+  if (Boolean(genus) + Boolean(species) !== 1) return { error: "Supply exactly one of genus or species" };
+  if (genus !== null && genus !== "") {
+    const name = genus.trim();
+    return TRAIT_GENUS_RE.test(name) ? { rank: "genus", name } : { error: "Invalid genus" };
+  }
+  const name = (species || "").trim();
+  return TRAIT_SPECIES_RE.test(name) ? { rank: "species", name } : { error: "Invalid species binomial" };
+}
+
+function researchTraitsRoute(req, res, url) {
+  if (req.method !== "GET") return fail(res, 405, "method_not_allowed", "GET only.");
+  const failure = traitsControl.failure;
+  if (failure === "unauthenticated") return json(res, 401, { detail: "Owner session or API key is required" });
+  if (failure === "server_error") {
+    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", ...cors() });
+    return res.end("Internal Server Error");
+  }
+  const subject = traitSubject(url);
+  if (subject.error) return json(res, 422, { detail: subject.error });
+  if (failure === "malformed") {
+    const body = { ...CAPTURED_TRAITS.absent_genus, subject: { rank: subject.rank, name: subject.name } };
+    return json(res, 200, { ...body, contract_version: "oc-research-traits-v0" });
+  }
+  let capture = null;
+  if (subject.rank === "species" && subject.name === CAPTURED_TRAITS.available_species.subject.name) {
+    capture = CAPTURED_TRAITS.available_species;
+  } else if (subject.rank === "genus" && subject.name === CAPTURED_TRAITS[traitsControl.genus].subject.name) {
+    capture = CAPTURED_TRAITS[traitsControl.genus];
+  }
+  if (!capture) {
+    return json(res, 503, {
+      detail: `The reference backend holds no captured trait payload for ${subject.rank} ${subject.name}.`,
+    });
+  }
+  return json(res, 200, capture);
+}
+
+/**
+ * Test-only switch, reachable only from the Playwright runner. It selects
+ * which captured genus body is served and whether a failure replaces it.
+ */
+async function researchTraitsControlRoute(req, res) {
+  if (req.method !== "PUT") return fail(res, 405, "method_not_allowed", "PUT only.");
+  const body = safeJson(await readBody(req)) || {};
+  const genus = body.genus ?? traitsControl.genus;
+  const failure = body.failure ?? null;
+  if (!TRAIT_GENUS_CAPTURES.has(genus) || (failure !== null && !TRAIT_FAILURES.has(failure))) {
+    return fail(res, 400, "invalid_scenario", "Unknown trait scenario.");
+  }
+  traitsControl.genus = genus;
+  traitsControl.failure = failure;
+  return json(res, 200, { ...traitsControl });
+}
+
 async function researchRoute(req, res, url) {
   const path = url.pathname;
+  if (path === "/api/research/traits") return researchTraitsRoute(req, res, url);
   if (path === "/api/research/projects" && req.method === "GET") {
     return json(res, 200, { items: [researchProject] });
   }
@@ -1419,6 +1528,264 @@ const calyxStore = { conversations: new Map(), missions: new Map() };
 /** Module-level, because the fixtures below are built outside any request. */
 const isoNow = () => new Date().toISOString();
 
+/* ------------------------------------------------ scientific synthesis ----- */
+
+/**
+ * Where the backend mounts the scientific-synthesis router: app/scientific_
+ * synthesis/routes.py declares prefix "/synthesis", and app/scientific_
+ * interpretation/routes.py includes it in a router with prefix
+ * "/api/scientific-interpretation" guarded by verify_owner_or_api_key. The
+ * Research Station calls these mounted paths (frontend #814).
+ *
+ * The two handlers below mirror the backend's deterministic derivations
+ * (run_manifest.build_run_evidence_manifest, candidate_proposal.build_
+ * candidate_knowledge_proposal, reasoning_contract_bridge.verification_
+ * packet_to_handoff_request). For the request the browser journey sends, the
+ * responses were compared field by field with FastAPI TestClient output from
+ * backend main and are identical apart from created_at_utc, which is pinned
+ * here so the journey is reproducible.
+ *
+ * Owner authentication is NOT modelled: the deployed routes answer 401 without
+ * an owner session or API key. A passing browser run here says nothing about
+ * whether a given deployed account is authorised.
+ */
+const SYNTHESIS_PREFIX = "/api/scientific-interpretation/synthesis";
+
+const CANDIDATE_DOMAINS = new Set([
+  "taxonomy", "trait", "morphology", "ecology", "geography",
+  "phenology", "conservation", "measurement", "molecular", "cultivation",
+]);
+
+/** Python json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True). */
+function canonicalJson(value) {
+  const sorted = (v) => {
+    if (Array.isArray(v)) return v.map(sorted);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(Object.keys(v).sort().map((key) => [key, sorted(v[key])]));
+    }
+    return v;
+  };
+  return JSON.stringify(sorted(value)).replace(
+    /[\u007f-￿]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
+const sha256Hex = (value) => createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
+const trimmed = (value) => String(value ?? "").trim();
+const positiveInt = (value) => Number.isInteger(value) && value > 0;
+
+function runEvidenceManifest(input) {
+  const runId = trimmed(input.run_id);
+  const taxonId = trimmed(input.taxon_id);
+  const snapshot = trimmed(input.taxonomy_snapshot_id);
+  if (!runId) return { code: "RUN_ID_REQUIRED" };
+  if (!trimmed(input.research_question)) return { code: "RESEARCH_QUESTION_REQUIRED" };
+  if (!taxonId) return { code: "TAXON_ID_REQUIRED" };
+  if (!snapshot) return { code: "TAXONOMY_SNAPSHOT_REQUIRED" };
+  const packets = Array.isArray(input.verification_packets) ? input.verification_packets : [];
+  if (packets.length === 0) return { code: "VERIFICATION_PACKET_REQUIRED" };
+  const reviewRecords = Array.isArray(input.review_records) ? input.review_records : [];
+  const memoryEntries = Array.isArray(input.epistemic_memory_entries) ? input.epistemic_memory_entries : [];
+
+  let resolved = 0;
+  let missing = 0;
+  let gaps = 0;
+  const contradictions = [];
+  let verificationState = "ready_for_review";
+  for (const packet of packets) {
+    if (packet?.contract_version !== "oc-verification-handoff-v1") return { code: "UNSUPPORTED_VERIFICATION_PACKET" };
+    if (packet.human_review_required !== true || packet.automatic_scientific_publication_allowed !== false) {
+      return { code: "PACKET_GOVERNANCE_INVALID" };
+    }
+    resolved += (packet.resolved_evidence ?? []).length;
+    missing += (packet.missing_evidence ?? []).length;
+    gaps += (packet.knowledge_gaps ?? []).length;
+    contradictions.push(...(packet.contradictions ?? []));
+    const state = packet.verification_state ?? "ready_for_review";
+    if (state === "evidence_incomplete") verificationState = "evidence_incomplete";
+    else if (state === "validation_required" && verificationState !== "evidence_incomplete") {
+      verificationState = "validation_required";
+    }
+  }
+
+  // Only a recorded review decision or reviewed epistemic memory sets these;
+  // nothing is invented for a run that has neither.
+  let reviewDecision = null;
+  for (const record of reviewRecords) {
+    if (record?.contract_version === "oc-review-decision-record-v1") {
+      reviewDecision = trimmed(record.review_decision) || null;
+    }
+  }
+  let epistemicState = null;
+  for (const entry of memoryEntries) {
+    if (entry?.contract_version === "oc-reviewed-epistemic-memory-v1") {
+      epistemicState = trimmed(entry.epistemic_state) || null;
+    }
+  }
+
+  return {
+    manifest: {
+      contract_version: "oc-run-evidence-manifest-v1",
+      run_id: runId,
+      research_question: input.research_question,
+      taxon_id: taxonId,
+      taxonomy_snapshot_id: snapshot,
+      run_fingerprint: sha256Hex({
+        run_id: runId,
+        research_question: input.research_question,
+        taxon_id: taxonId,
+        taxonomy_snapshot_id: snapshot,
+        verification_packets: packets,
+        review_records: reviewRecords,
+        epistemic_memory_entries: memoryEntries,
+      }),
+      created_at_utc: "2026-01-01T00:00:00+00:00",
+      verification_state: verificationState,
+      resolved_evidence_count: resolved,
+      missing_evidence_count: missing,
+      knowledge_gap_count: gaps,
+      contradictions: [...new Set(contradictions)].sort(),
+      review_decision: reviewDecision,
+      epistemic_state: epistemicState,
+      human_review_required: true,
+      automatic_scientific_publication_allowed: false,
+      canonical_knowledge_mutation_allowed: false,
+      canonical_activation_requires_human_authority: true,
+      immutable: true,
+    },
+  };
+}
+
+function candidateKnowledgeProposal(input) {
+  const { manifest, verification_packet: packet, domain } = input;
+  if (!manifest || !packet) return { code: "PROPOSAL_CONTRACT_INCOMPLETE" };
+  if (!CANDIDATE_DOMAINS.has(domain)) return { code: "DOMAIN_INVALID" };
+  if (
+    !trimmed(input.source_object_type) ||
+    !positiveInt(input.source_object_id) ||
+    !positiveInt(input.revision_id) ||
+    !positiveInt(input.extraction_run_id)
+  ) {
+    return { code: "SOURCE_BINDING_INVALID" };
+  }
+  if (
+    manifest.contract_version !== "oc-run-evidence-manifest-v1" ||
+    !/^[0-9a-f]{64}$/.test(String(manifest.run_fingerprint ?? ""))
+  ) {
+    return { code: "MANIFEST_CONTRACT_INVALID" };
+  }
+  if (
+    manifest.human_review_required !== true ||
+    manifest.automatic_scientific_publication_allowed !== false ||
+    manifest.canonical_knowledge_mutation_allowed !== false ||
+    manifest.canonical_activation_requires_human_authority !== true ||
+    manifest.immutable !== true
+  ) {
+    return { code: "MANIFEST_GOVERNANCE_INVALID" };
+  }
+  if (manifest.verification_state !== "ready_for_review") return { code: "MANIFEST_NOT_READY_FOR_REVIEW" };
+
+  const candidate = packet.reasoning?.candidate_knowledge ?? {};
+  const taxonId = trimmed(manifest.taxon_id);
+  if (!taxonId || trimmed(candidate.subject_id) !== taxonId) return { code: "CANDIDATE_SUBJECT_MANIFEST_MISMATCH" };
+
+  if (packet.contract_version !== "oc-verification-handoff-v1") return { code: "UNSUPPORTED_VERIFICATION_PACKET" };
+  if (
+    packet.human_review_required !== true ||
+    packet.automatic_scientific_publication_allowed !== false ||
+    packet.canonical_knowledge_mutation_allowed !== false
+  ) {
+    return { code: "PACKET_GOVERNANCE_INVALID" };
+  }
+  if (packet.verification_state !== "ready_for_review") return { code: "PACKET_NOT_READY_FOR_REVIEW" };
+
+  const candidateId = trimmed(candidate.candidate_id);
+  const subjectId = trimmed(candidate.subject_id);
+  const predicate = trimmed(candidate.predicate);
+  const objectId = trimmed(candidate.object_id);
+  if (!candidateId) return { code: "CANDIDATE_ID_REQUIRED" };
+  if (!predicate) return { code: "PREDICATE_REQUIRED" };
+  if (!objectId) return { code: "OBJECT_ID_REQUIRED" };
+  const resolved = Array.isArray(packet.resolved_evidence) ? packet.resolved_evidence : [];
+  if (resolved.length === 0) return { code: "RESOLVED_EVIDENCE_REQUIRED" };
+  const confidence = Number(candidate.confidence || 0);
+  if (!(confidence >= 0 && confidence <= 1)) return { code: "CONFIDENCE_INVALID" };
+
+  const anchor = (anchor_id, logical_unit, locator) => ({
+    anchor_id, ordered_span: 0, page_number: null, char_start: null, char_end: null,
+    block_id: null, logical_unit, locator,
+  });
+  const statements = [];
+  const anchors = [];
+  for (const evidence of resolved) {
+    const statement = trimmed(evidence?.statement);
+    if (statement) statements.push(statement);
+    for (const item of evidence?.provenance ?? []) {
+      anchors.push(anchor(anchors.length + 1, String(item), {
+        evidence_id: String(evidence?.evidence_id ?? ""),
+        provenance_item: String(item),
+      }));
+    }
+  }
+  if (anchors.length === 0) anchors.push(anchor(1, candidateId, { candidate_id: candidateId }));
+
+  const binding = {
+    source_object_type: input.source_object_type,
+    source_object_id: input.source_object_id,
+    revision_id: input.revision_id,
+    extraction_run_id: input.extraction_run_id,
+  };
+  return {
+    proposal: {
+      contract_version: "oc-candidate-knowledge-proposal-v1",
+      proposal_id: `candidate-proposal:${sha256Hex({
+        run_fingerprint: manifest.run_fingerprint,
+        candidate_id: candidateId,
+        domain,
+        ...binding,
+      })}`,
+      run_id: manifest.run_id ?? null,
+      run_fingerprint: manifest.run_fingerprint,
+      candidate_handoff_request: {
+        reasoning_id: candidateId,
+        domain,
+        subject: subjectId,
+        predicate,
+        object_value: objectId,
+        numeric_value: null,
+        unit: null,
+        confidence,
+        evidence_text: statements.join("\n\n") || objectId,
+        ...binding,
+        source_anchors: anchors,
+        provenance: {
+          contract_version: "oc-verification-handoff-v1",
+          candidate_id: candidateId,
+          contradictions: [...(packet.contradictions ?? [])],
+          knowledge_gap_count: (packet.knowledge_gaps ?? []).length,
+          missing_evidence_count: (packet.missing_evidence ?? []).length,
+        },
+        qualifiers: {
+          human_review_required: true,
+          automatic_scientific_publication_allowed: false,
+          canonical_knowledge_mutation_allowed: false,
+        },
+        display_policy: "UNKNOWN_REQUIRES_REVIEW",
+        internal_use_permission: false,
+        language: "en",
+      },
+      review_required: true,
+      owner_submission_required: true,
+      candidate_persistence_performed: false,
+      automatic_approval: false,
+      automatic_scientific_publication: false,
+      canonical_knowledge_mutation: false,
+      knowledge_graph_mutation: false,
+    },
+  };
+}
+
 async function calyxRoute(req, res, url) {
   const path = url.pathname;
   const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : Buffer.alloc(0);
@@ -1544,70 +1911,22 @@ async function calyxRoute(req, res, url) {
   }
 
 
-  if (path === "/synthesis/run-manifest" && req.method === "POST") {
-    const input = asJson();
-    const packet = Array.isArray(input.verification_packets) ? input.verification_packets[0] : null;
-    if (
-      !input.run_id ||
-      !input.research_question ||
-      !input.taxon_id ||
-      !input.taxonomy_snapshot_id ||
-      !packet ||
-      packet.human_review_required !== true ||
-      packet.automatic_scientific_publication_allowed !== false ||
-      packet.canonical_knowledge_mutation_allowed !== false
-    ) {
-      return fail(res, 422, "manifest_contract_rejected", "The immutable review manifest contract was incomplete.");
-    }
-    const fingerprint = createHash("sha256")
-      .update(JSON.stringify(input))
-      .digest("hex");
-    return json(res, 200, {
-      contract_version: "oc-run-evidence-manifest-v1",
-      run_id: input.run_id,
-      research_question: input.research_question,
-      taxon_id: input.taxon_id,
-      taxonomy_snapshot_id: input.taxonomy_snapshot_id,
-      run_fingerprint: fingerprint,
-      created_at_utc: "2026-01-01T00:00:00.000Z",
-      verification_state: packet.verification_state,
-      resolved_evidence_count: packet.resolved_evidence.length,
-      missing_evidence_count: packet.missing_evidence.length,
-      knowledge_gap_count: packet.knowledge_gaps.length,
-      contradictions: packet.contradictions,
-      review_decision: null,
-      epistemic_state: "fixture_review_pending",
-      human_review_required: true,
-      automatic_scientific_publication_allowed: false,
-      canonical_knowledge_mutation_allowed: false,
-      canonical_activation_requires_human_authority: true,
-      immutable: true,
-    });
+  // The synthesis router is mounted inside the owner-gated scientific
+  // interpretation router, so the real paths carry both prefixes. A bare
+  // /synthesis/... path is not served by the deployed app (404), and this
+  // stand-in does not answer it either. See SYNTHESIS_PREFIX.
+  if (path === `${SYNTHESIS_PREFIX}/run-manifest` && req.method === "POST") {
+    const result = runEvidenceManifest(asJson());
+    return result.code
+      ? fail(res, 422, result.code, "The immutable review manifest contract was incomplete.")
+      : json(res, 200, result.manifest);
   }
 
-  if (path === "/synthesis/candidate-proposal" && req.method === "POST") {
-    const input = asJson();
-    if (
-      input.manifest?.verification_state !== "ready_for_review" ||
-      input.verification_packet?.verification_state !== "ready_for_review" ||
-      input.verification_packet?.human_review_required !== true
-    ) {
-      return fail(res, 422, "proposal_contract_rejected", "Only a review-ready, human-gated packet may become a proposal.");
-    }
-    return json(res, 200, {
-      contract_version: "oc-candidate-knowledge-proposal-v1",
-      proposal_id: `fixture-proposal-${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}`,
-      run_id: input.manifest.run_id,
-      run_fingerprint: input.manifest.run_fingerprint,
-      candidate_handoff_request: input.verification_packet.reasoning?.candidate_knowledge ?? {},
-      review_required: true,
-      owner_submission_required: true,
-      candidate_persistence_performed: false,
-      automatic_approval: false,
-      automatic_scientific_publication: false,
-      canonical_knowledge_mutation: false,
-      knowledge_graph_mutation: false,
-    });
+  if (path === `${SYNTHESIS_PREFIX}/candidate-proposal` && req.method === "POST") {
+    const result = candidateKnowledgeProposal(asJson());
+    return result.code
+      ? fail(res, 422, result.code, "Only a review-ready, human-gated packet may become a proposal.")
+      : json(res, 200, result.proposal);
   }
 
   match = /^\/brain\/missions\/([^/]+)$/.exec(path);
@@ -2033,11 +2352,12 @@ const server = createServer(async (req, res) => {
       url.pathname.startsWith("/api/matrix-identification/") ||
       url.pathname.startsWith("/brain/") ||
       url.pathname.startsWith("/api/evidence-retrieval/") ||
-      url.pathname.startsWith("/synthesis/")
+      url.pathname.startsWith(`${SYNTHESIS_PREFIX}/`)
     ) {
       return await calyxRoute(req, res, url);
     }
     if (url.pathname === "/__reference/health") return json(res, 200, { ok: true });
+    if (url.pathname === "/__reference/research-traits") return await researchTraitsControlRoute(req, res);
     // The rest of the app reads a handful of tables through PostgREST. None of
     // them belong to the Conservatory journey, but leaving them to 404 fills
     // the console with failures that would mask a real one.

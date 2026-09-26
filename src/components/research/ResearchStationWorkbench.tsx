@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import ScientificSynthesis from '@/components/calyx/ScientificSynthesis';
 import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
+import ResearchEvidenceChain from '@/components/research/ResearchEvidenceChain';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
 import {
   buildResearchDossier,
@@ -29,7 +30,7 @@ import {
   type ResearchStationDossier,
 } from '@/lib/researchStation';
 import {
-  researchStationAtlasHref,
+  researchStationAtlasNextLink,
   researchStationCalyxHref,
   researchStationLexiconHref,
   researchStationMatrixHref,
@@ -1053,6 +1054,12 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
     projectId: dossier.project.project_id,
     conversationId,
   };
+  // Atlas Next filters on a canonical genus or binomial. A nothospecies gets a
+  // genus-level link that is labelled as the fallback it is; a subject the
+  // parser rejects (an opaque taxon id, an authority string, an intergeneric
+  // hybrid) gets no Atlas link rather than an unfiltered or genus-widened Atlas
+  // that looks like this subject's view.
+  const atlasLink = subjectTaxon ? researchStationAtlasNextLink(navContext) : null;
 
   return (
     <div className="grid gap-5">
@@ -1128,19 +1135,11 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
                 </span>
               </li>
             ))}
-            {dossier.evidence.map((item) => (
-              <li
-                key={`${item.evidence_kind}-${item.evidence_id}`}
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5"
-              >
-                <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-white/70">
-                  {item.evidence_kind.toLowerCase()}
-                </span>
-                <span className="min-w-0 break-words text-xs leading-5 text-white/75">
-                  {item.evidence_id}
-                </span>
+            {dossier.evidence.length ? (
+              <li className="list-none">
+                <ResearchEvidenceChain projectId={dossier.project.project_id} links={dossier.evidence} />
               </li>
-            ))}
+            ) : null}
           </ul>
         )}
       </SectionShell>
@@ -1188,8 +1187,17 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
         eyebrow="Conflicts"
         title="Where the evidence disagrees"
       >
-        {dossier.conflicts.length ? (
+        {dossier.conflicts.length || dossier.contradictingEvidence.length ? (
           <ul className="grid gap-2">
+            {dossier.contradictingEvidence.map((item) => (
+              <li
+                key={`${item.evidence_kind}-${item.evidence_id}`}
+                data-testid="research-conflict-evidence"
+                className="rounded-xl border border-amber-300/30 bg-amber-300/[0.06] px-4 py-2.5 text-xs leading-5 text-amber-100/90"
+              >
+                {item.evidence_kind.toLowerCase()} #{item.evidence_id} is linked as contradicting — its claim and review standing are shown under Known.
+              </li>
+            ))}
             {dossier.conflicts.map((item) => (
               <li
                 key={item.document_id}
@@ -1247,12 +1255,27 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
       >
         {subjectTaxon ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            <ToolLink
-              to={researchStationAtlasHref(navContext)}
-              icon={<Globe2 className="h-4 w-4" />}
-              label="Atlas"
-              detail="Where this taxon has been recorded."
-            />
+            {atlasLink ? (
+              <ToolLink
+                to={atlasLink.href}
+                icon={<Globe2 className="h-4 w-4" />}
+                label="Atlas"
+                detail={
+                  atlasLink.fallback
+                    ? `${atlasLink.fallback.label}. Every record of the genus is shown, not only ${atlasLink.fallback.hybridName}.`
+                    : 'Where this taxon has been recorded.'
+                }
+              />
+            ) : (
+              <p
+                data-testid="research-station-atlas-withheld"
+                className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-white/55"
+              >
+                <span className="block text-sm font-medium text-white/75">Atlas</span>
+                The subject is not a canonical genus or binomial the Atlas can filter on, so no
+                Atlas link is offered rather than a map that is not this subject.
+              </p>
+            )}
             <ToolLink
               to={researchStationRelationshipsHref(navContext)}
               icon={<Network className="h-4 w-4" />}

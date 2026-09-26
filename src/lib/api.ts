@@ -38,12 +38,59 @@ const errorMessage = (error: unknown, fallback: string): string =>
 const errorName = (error: unknown): string | undefined =>
   error instanceof Error ? error.name : undefined;
 
-export const API_BASE_URL: string =
-  env.VITE_API_BASE_URL ||
-  env.NEXT_PUBLIC_API_BASE_URL ||
-  '';
+/**
+ * Is this a usable absolute API origin?
+ *
+ * A relative or malformed value is worse than an absent one. Orchid Continuum
+ * is served from Render as a static SPA whose `public/_redirects` rewrites
+ * every unmatched path to `/index.html` with status 200. So a relative base
+ * makes each API call return the app shell: a 200 carrying HTML, which reads
+ * as success to anything that does not look closely. Treating such a value as
+ * unconfigured fails closed instead.
+ */
+export function isUsableApiOrigin(value: string | undefined): boolean {
+  if (!value || !value.trim()) return false;
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    return false;
+  }
+  return parsed.protocol === 'https:' || parsed.protocol === 'http:';
+}
+
+/**
+ * Is this response body actually JSON?
+ *
+ * A 200 is not an answer unless it is JSON. Render answers any path the API
+ * does not serve with the SPA shell at status 200, so accepting a non-JSON
+ * 200 would report HTML as data. This is the second half of the same
+ * protection as isUsableApiOrigin: one stops a bad origin being used, this
+ * stops a wrong one being believed.
+ */
+export function isJsonContentType(contentType: string | null | undefined): boolean {
+  if (!contentType) return false;
+  return contentType.toLowerCase().includes('application/json');
+}
+
+const RAW_API_BASE_URL =
+  env.VITE_API_BASE_URL || env.NEXT_PUBLIC_API_BASE_URL || '';
+
+export const API_BASE_URL: string = isUsableApiOrigin(RAW_API_BASE_URL)
+  ? RAW_API_BASE_URL.trim()
+  : '';
 
 export const API_CONFIGURED = Boolean(API_BASE_URL);
+
+if (RAW_API_BASE_URL && !API_CONFIGURED) {
+  console.warn(
+    '[orchid-continuum] VITE_API_BASE_URL is set but is not an absolute ' +
+      `http(s) origin (${RAW_API_BASE_URL}). Treating the API as ` +
+      'unconfigured so requests cannot resolve to the SPA shell. ' +
+      'On Render it must be the full public API origin, e.g. ' +
+      'https://orchid-continuum-public-api.onrender.com',
+  );
+}
 
 const DEFAULT_TIMEOUT_MS = 12_000;
 
@@ -196,7 +243,25 @@ export async function apiRequest<T>(
     options.signal.addEventListener('abort', () => controller.abort());
   }
 
-  const url = buildUrl(path, options.query);
+  let url: string;
+  try {
+    url = buildUrl(path, options.query);
+  } catch (e: unknown) {
+    // buildUrl uses `new URL`, which throws on a base this guard did not
+    // catch. That threw straight out of apiRequest and rejected the caller's
+    // promise; a configuration mistake must not surface as an unhandled
+    // rejection in a component.
+    clearTimeout(timeout);
+    return {
+      data: null,
+      error: new ApiError(
+        errorMessage(e, `Invalid API URL for ${path}`),
+        0,
+        path,
+      ),
+      unconfigured: false,
+    };
+  }
 
   try {
     const res = await fetch(url, {
@@ -208,6 +273,19 @@ export async function apiRequest<T>(
       return {
         data: null,
         error: new ApiError(message, res.status, path),
+        unconfigured: false,
+      };
+    }
+    const contentType = res.headers.get('content-type');
+    if (!isJsonContentType(contentType)) {
+      return {
+        data: null,
+        error: new ApiError(
+          `Expected JSON from ${path} but received "${contentType || 'no content-type'}". ` +
+            'This usually means the API origin is wrong and the request reached the app shell.',
+          res.status,
+          path,
+        ),
         unconfigured: false,
       };
     }

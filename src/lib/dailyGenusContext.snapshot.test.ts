@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { canonicalDailySnapshotGenus } from '@/lib/dailyGenusContext';
+import { canonicalDailySnapshotGenus, DAILY_SNAPSHOT_ENABLED } from '@/lib/dailyGenusContext';
 
 describe('canonicalDailySnapshotGenus', () => {
+  it('keeps the optional snapshot adapter disabled unless explicitly configured', () => {
+    expect(DAILY_SNAPSHOT_ENABLED).toBe(false);
+  });
+
   it('accepts one bounded canonical genus', () => {
     expect(canonicalDailySnapshotGenus('Phalaenopsis')).toBe('Phalaenopsis');
     expect(canonicalDailySnapshotGenus('  Paphiopedilum  ')).toBe('Paphiopedilum');

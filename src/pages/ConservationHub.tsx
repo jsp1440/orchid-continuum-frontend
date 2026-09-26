@@ -1,10 +1,11 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Trees, ScrollText, HandHeart, Network, Workflow } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import PageShell from '@/components/orchid/PageShell';
 import EducationalOverlay from '@/components/orchid/EducationalOverlay';
 import GlossaryTerm from '@/components/orchid/GlossaryTerm';
 import RoleBadge from '@/components/orchid/RoleBadge';
+import { fetchFeaturedTaxonContinuum, normalizeFeaturedTaxonGenus, type FeaturedTaxonConservationEvidence } from '@/lib/featuredTaxonContinuum';
 
 /**
  * ConservationHub
@@ -49,9 +50,42 @@ const protocols = [
 
 const boundedGenus = (value: string | null): string | null => {
   const genus = value?.trim() ?? '';
-  if (!genus || genus.length > 80) return null;
-  return /^[A-Za-z][A-Za-z .'-]*$/.test(genus) ? genus : null;
+  if (genus.length > 80) return null;
+  try { return normalizeFeaturedTaxonGenus(genus); }
+  catch { return null; }
 };
+
+function ConservationEvidence({ genus }: { genus: string }) {
+  const [evidence, setEvidence] = useState<FeaturedTaxonConservationEvidence | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setEvidence(null);
+    fetchFeaturedTaxonContinuum(genus, controller.signal)
+      .then(result => { if (!controller.signal.aborted) setEvidence(result.conservation); })
+      .catch(() => { if (!controller.signal.aborted) setEvidence(null); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [genus]);
+  return (
+    <div data-testid="conservation-graph-coverage" className="mt-4 border-t border-emerald-300/15 pt-4" aria-live="polite">
+      <div className="mb-1 text-[10px] uppercase tracking-[0.22em] text-emerald-200/70">Conservation graph coverage</div>
+      {loading ? <p className="text-sm text-white/55">Loading documented conservation evidence…</p> : <>
+        {evidence?.state === 'known' ? <p className="text-sm text-white/55">
+          {evidence.nodes} linked nodes · {evidence.edges} relationships. These describe documented graph coverage, not a conservation assessment or threat category.
+        </p> : <p data-testid="conservation-status-unavailable" className="text-sm leading-relaxed text-white/55">
+          {evidence?.state === 'unknown'
+            ? `No conservation graph links were returned for ${genus}. This is a knowledge gap, not evidence that threats are absent.`
+            : 'Conservation graph coverage is currently unavailable. No conservation assessment has been inferred.'}
+        </p>}
+        {evidence?.relationship?.hasData && evidence.relationship.summary && <p className="mt-2 text-sm text-white/70">
+          {evidence.relationship.summary}
+        </p>}
+      </>}
+    </div>
+  );
+}
 
 const ConservationHub: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -96,20 +130,7 @@ const ConservationHub: React.FC = () => {
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-white/60">
               Use the organization, project, and protocol surfaces below to continue the conservation investigation without treating an incomplete record as evidence of absence.
             </p>
-            <div
-              data-testid="conservation-graph-coverage"
-              className="mt-4 pt-4 border-t border-emerald-300/15"
-            >
-              <div className="text-[10px] tracking-[0.22em] uppercase text-emerald-200/70 mb-1">
-                Conservation graph coverage
-              </div>
-              <p
-                data-testid="conservation-status-unavailable"
-                className="text-sm text-white/55 leading-relaxed"
-              >
-                No conservation assessment for <em>{genus}</em> is yet documented in the Orchid Continuum Knowledge Graph. Conservation status is shown only when a verified, human-reviewed record explicitly authorizes public display — absence here is not evidence of absence in the scientific literature.
-              </p>
-            </div>
+            <ConservationEvidence key={genus} genus={genus} />
           </div>
         </section>
       )}

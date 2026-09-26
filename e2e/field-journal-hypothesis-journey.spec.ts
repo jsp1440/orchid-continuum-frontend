@@ -126,7 +126,7 @@ test("the Deception Lab handoff carries only the durable observation id and taxo
   const card = page.locator("article").filter({ hasText: OBSERVATION.taxon });
   const href = await card.getByTestId("field-draft-hypotheses-link").getAttribute("href");
   expect(href).toBeTruthy();
-  const url = new URL(href!, "http://127.0.0.1:4173");
+  const url = new URL(href!, process.env.E2E_APP_URL || "http://127.0.0.1:4173");
   expect(url.pathname).toBe("/deception-lab");
   expect(Array.from(url.searchParams.keys()).sort()).toEqual(["observation", "tab", "taxon"]);
   expect(url.searchParams.get("observation")).toMatch(/^fo-[0-9a-f]{24}$/);

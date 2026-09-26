@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Leaf, Loader2, Image as ImageIcon } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { speciesPageHref } from '@/lib/speciesDossier';
 import {
   fetchFeaturedSpecies,
   searchSpecies,
@@ -121,7 +122,7 @@ const SpeciesGrid: React.FC = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {filtered.map(s => (
               <Link
-                to={`/species/${encodeURIComponent(s.taxonomy_id)}`}
+                to={speciesPageHref(s.taxonomy_id, [s.genus, s.epithet].filter(Boolean).join(' '))}
                 key={s.id}
                 className="group relative rounded-2xl overflow-hidden bg-[#142a1f] border border-white/5 hover:border-emerald-300/40 transition-all"
               >

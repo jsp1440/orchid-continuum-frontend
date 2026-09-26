@@ -39,8 +39,6 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/climate',
   '/intelligence-graph',
   '/knowledge',
-  '/literature',
-  '/literature/:paperId',
   '/relationship-explorer',
   '/relationship-explorer/:species',
   '/research-station/researchers/jeffery-scott-parham',
@@ -69,10 +67,13 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/community',
   '/newsletter',
   '/contact',
+  '/privacy',
   '*',
 ] as const;
 
 export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
+  '/literature',
+  '/literature/:paperId',
   '/mission-control/calyx',
   '/mission-control',
   '/orchid-continuum-mission-control',
