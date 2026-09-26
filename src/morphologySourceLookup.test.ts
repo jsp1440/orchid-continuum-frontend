@@ -163,7 +163,23 @@ describe('description type classification', () => {
       'Fixture Bull. 1999, type locality: Fixture Hill',
       'Fixture Bull. 1999, 3000 ft',
       'Fixture Bull. 1999, holotype K',
+      'lat 12.34 lon -77.12 (2001)',
+      '15 mi E of Chiang Mai (1968)',
+      'S of Ban Mae Sa, trail side 1980',
+      'Ridge above Kampong X, 1998',
+      // One marker each, so no marker is covered only by another.
+      'Fixture Bull. 1999, 15 miles out',
+      'Fixture Bull. 1999, S of Fixture Town',
+      // A DOI is set aside, but locality prose next to it is still screened.
+      'Fixture, A. (2001). doi:10.1234/fixture.2001 near Fixture Falls',
     ]) expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+    // DOI-shaped (synthetic) citation with a year: kept, although "10.1007"
+    // alone would read as a decimal coordinate.
+    const doi = 'Fixture, A. (2012). A fixture revision of Gastrochilus. Fixture Bull. 67: 1-10. https://doi.org/10.1007/s12225-012-9345-6';
+    expect(citationFor(doi)).toEqual({ citation: doi, citation_withheld_reason: null });
+    // The year must appear outside the DOI token.
+    expect(citationFor('Fixture Bull. doi:10.1111/j.1756-1051.2009.00001.x'))
+      .toEqual({ citation: null, citation_withheld_reason: 'no_publication_year' });
     expect(citationFor('Flora Fixturica 1: 12.')).toEqual({ citation: null, citation_withheld_reason: 'no_publication_year' });
     expect(citationFor(`Fixture ${'x'.repeat(300)} 1999`)).toEqual({ citation: null, citation_withheld_reason: 'longer_than_300_chars' });
     expect(citationFor(null)).toEqual({ citation: null, citation_withheld_reason: 'no_citation_supplied' });
@@ -231,6 +247,20 @@ describe('a real mission against GBIF description records', () => {
     expect(Object.keys(JSON.parse(lines[0])).sort())
       .toEqual(['comment', 'digest', 'issue', 'kept', 'outcome', 'provider_calls', 'report']);
     expect(lines[0]).not.toMatch(/FIXTURE-|Flora Fixturica|Fixture Monograph|1200 m|25\.12345|citation|description/i);
+  });
+
+  it.each([
+    ['a transport failure', { gbifOverride: (url: string) => (url === descriptionsUrl(5310649)
+      ? new Response('boom', { status: 500, headers: { 'content-type': 'text/plain' } }) : undefined) }, 'transport_failure'],
+    ['a refused mission', { issueBody: nomenclatureIssues.issues[1].body }, 'mission_refused'],
+  ])('writes only the fixed blocker keys to stdout on %s', async (_label, opts, blocker) => {
+    const lines: string[] = [];
+    await run(network({ issueBody: issue825.body, ...opts }), envFor(), line => lines.push(line));
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]);
+    expect(Object.keys(parsed).sort()).toEqual(['blocker', 'detail', 'issue', 'provider_calls']);
+    expect(parsed).toMatchObject({ issue: 825, blocker, provider_calls: 0 });
+    expect(lines[0]).not.toMatch(/FIXTURE-|Flora Fixturica|Fixture Monograph|1200 m|25\.12345/);
   });
 
   it('bounds publisher-supplied language and licence strings', async () => {

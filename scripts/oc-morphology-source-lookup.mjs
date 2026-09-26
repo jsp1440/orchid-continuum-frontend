@@ -26,7 +26,8 @@
  *      compute those, then discarded. The publisher-supplied source citation is
  *      never put in the issue comment; the report keeps it only when it passes a
  *      conservative bibliographic screen (a 4-digit year, no elevation,
- *      distance, collecting, locality or coordinate marker, <= 300 chars).
+ *      distance, collecting, site-word, locality or coordinate marker,
+ *      <= 300 chars; a DOI token is set aside as bibliographic).
  *   5. Writes `.oc-evidence/morphology-source-report-<issue>.json`
  *      (`oc.morphology-source-report.v1`) and posts one idempotent,
  *      digest-marked issue comment.
@@ -116,7 +117,17 @@ export const CITATION_LOCALITY_MARKERS = Object.freeze([
   /\d\s*['′’"″]/,                    // minutes / seconds
   /\b\d{1,3}(?:[\s.:]\d{1,2}){0,2}\s*[NSEW]\b/, // 12 30 N, 77.15 W
   /-?\b\d{1,3}\.\d{3,}\b/,             // decimal coordinates
+  /\bmi(?:les?)?\b/i,                  // distance in miles
+  /\b[NSEW]\s+of\b/,                   // "15 mi E of ...", "S of ..."
+  /\blat\b|\blong?\b/i,                // lat / lon / long
+  /\b(?:ridges?|trails?|roads?|villages?|summits?|streams?|rivers?|valleys?|mountains?|hills?)\b/i,
 ]);
+/**
+ * A DOI is bibliographic, and its digits ("10.1007/...") would otherwise trip
+ * the decimal-coordinate marker. Only the DOI token itself is set aside; the
+ * rest of the citation is still screened, and the year must appear outside it.
+ */
+const DOI = /\b10\.\d{4,9}\/\S+/g;
 
 export function descriptionsUrl(key) {
   return `${GBIF_BASE}/${key}/descriptions?limit=${DESCRIPTION_LIMIT}`;
@@ -167,10 +178,11 @@ export function citationFor(source) {
   const text = str(source);
   if (!text) return { citation: null, citation_withheld_reason: 'no_citation_supplied' };
   if (text.length > MAX_CITATION_CHARS) return { citation: null, citation_withheld_reason: 'longer_than_300_chars' };
-  if (CITATION_LOCALITY_MARKERS.some(re => re.test(text))) {
+  const screened = text.replace(DOI, ' ');
+  if (CITATION_LOCALITY_MARKERS.some(re => re.test(screened))) {
     return { citation: null, citation_withheld_reason: 'possible_locality_or_collecting_marker' };
   }
-  if (!CITATION_YEAR.test(text)) return { citation: null, citation_withheld_reason: 'no_publication_year' };
+  if (!CITATION_YEAR.test(screened)) return { citation: null, citation_withheld_reason: 'no_publication_year' };
   return { citation: text, citation_withheld_reason: null };
 }
 
