@@ -29,6 +29,7 @@ vi.mock("@/components/orchid/EcologicalNeighborhood", () => ({ default: () => nu
 
 type Captured = { status_code: number; body: unknown };
 const fixture = realBackend as unknown as Record<string, Captured>;
+const legacy = (realBackend as unknown as { legacy_c346a7219: Record<string, Captured> }).legacy_c346a7219;
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -120,12 +121,74 @@ describe("InteractionDiscoveryPanel", () => {
     expect(container.textContent).toContain("More candidates exist than this panel requested.");
   });
 
-  it("renders the real empty payload as an ingestion gap, not an ecological finding", async () => {
-    stubFetch(fixture.empty.body);
+  it("renders the real durable empty payload (test double) as an ingestion gap, not an ecological finding", async () => {
+    stubFetch(fixture.empty_durable_test_double.body);
     await renderPanel();
     const empty = container.querySelector('[data-testid="interaction-discovery-empty"]');
     expect(empty?.textContent).toContain("not an ecological finding");
     expect(container.querySelectorAll('[data-testid="interaction-discovery-record"]')).toHaveLength(0);
+    expect(container.querySelector('[data-testid="interaction-discovery-unprovisioned"]')).toBeNull();
+    expect(container.querySelector('[data-testid="interaction-discovery-index-unknown"]')).toBeNull();
+  });
+
+  it("renders the real unprovisioned empty payload as its own state, never the plain empty state", async () => {
+    for (const key of ["empty", "default_runtime_no_database_url"]) {
+      stubFetch(fixture[key].body);
+      await renderPanel();
+      const box = container.querySelector('[data-testid="interaction-discovery-unprovisioned"]');
+      expect(box?.textContent).toContain(
+        "No durable interaction index is configured — an empty result here is not evidence that no interactions are known",
+      );
+      // Backend index_note verbatim.
+      expect(box?.querySelector('[data-testid="interaction-discovery-index-note"]')?.textContent).toBe(
+        (fixture[key].body as Record<string, unknown>).index_note,
+      );
+      expect(container.querySelector('[data-testid="interaction-discovery-empty"]')).toBeNull();
+      expect(container.textContent).not.toContain("not an ecological finding");
+    }
+  });
+
+  it("labels records served from an unprovisioned index, and not records from a durable one", async () => {
+    stubFetch(fixture.ok.body);
+    await renderPanel();
+    const notice = container.querySelector('[data-testid="interaction-discovery-index-unprovisioned"]');
+    expect(notice?.textContent).toContain("No durable interaction index is configured");
+    expect(notice?.querySelector('[data-testid="interaction-discovery-index-note"]')?.textContent).toBe(
+      (fixture.ok.body as Record<string, unknown>).index_note,
+    );
+    expect(container.querySelectorAll('[data-testid="interaction-discovery-record"]')).toHaveLength(2);
+
+    stubFetch(fixture.ok_durable_test_double.body);
+    await renderPanel("Orchis mascula ");
+    expect(container.querySelector('[data-testid="interaction-discovery-index-unprovisioned"]')).toBeNull();
+    expect(container.querySelectorAll('[data-testid="interaction-discovery-record"]')).toHaveLength(2);
+  });
+
+  it("keeps the older backend's plain empty state when index_state is absent (real pre-#1639 capture)", async () => {
+    stubFetch(legacy.default_runtime_no_database_url.body);
+    await renderPanel();
+    expect(container.querySelector('[data-testid="interaction-discovery-empty"]')?.textContent).toContain(
+      "not an ecological finding",
+    );
+    expect(container.querySelector('[data-testid="interaction-discovery-unprovisioned"]')).toBeNull();
+    expect(container.querySelector('[data-testid="interaction-discovery-index-unknown"]')).toBeNull();
+  });
+
+  it("shows a neutral unknown-index note for an unrecognised index_state and never claims durable", async () => {
+    const emptyBody = fixture.empty.body as Record<string, unknown>;
+    stubFetch({ ...emptyBody, index_state: "something_new", index_note: null });
+    await renderPanel();
+    expect(container.querySelector('[data-testid="interaction-discovery-index-unknown"]')?.textContent).toContain(
+      "Index state unknown",
+    );
+    expect(container.textContent).not.toMatch(/\bdurable index is configured\b/);
+    expect(container.querySelector('[data-testid="interaction-discovery-unprovisioned"]')).toBeNull();
+  });
+
+  it("states records the backend excluded as unreadable", async () => {
+    stubFetch({ ...(fixture.ok_durable_test_double.body as Record<string, unknown>), unreadable_count: 1 });
+    await renderPanel();
+    expect(container.textContent).toContain("1 record could not be read and is not shown.");
   });
 
   it("fails closed and visibly when the backend is unavailable", async () => {

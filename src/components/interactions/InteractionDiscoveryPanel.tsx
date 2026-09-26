@@ -3,6 +3,7 @@ import {
   fetchInteractionDiscovery,
   type DiscoveredInteraction,
   type InteractionCategory,
+  type InteractionDiscoveryResult,
   type InteractionDiscoveryState,
 } from "@/lib/interactionDiscovery";
 
@@ -15,7 +16,20 @@ import {
  * dataset version, study citation and verification state. Nothing here is
  * presented as a verified relationship, and no locality is rendered -- the
  * client allow-lists record fields, and none of them is a place.
+ *
+ * When the backend reports that no durable interaction index is configured
+ * (`index_state: "memory_unprovisioned"`), an empty result is shown as that --
+ * never as the plain empty state -- with the backend's `index_note` verbatim.
+ * An index state this page does not recognise is shown as unknown, never as
+ * durable. An older backend that omits the field keeps the plain behaviour.
  */
+
+export const UNPROVISIONED_EMPTY_HEADLINE =
+  "No durable interaction index is configured — an empty result here is not evidence that no interactions are known.";
+export const UNPROVISIONED_RECORDS_HEADLINE =
+  "No durable interaction index is configured — these candidates were served from a non-durable index and may not be complete.";
+export const INDEX_STATE_UNKNOWN_NOTE =
+  "Index state unknown: the backend reported an index state this page does not recognise, so this result is not confirmed to come from a durable index.";
 
 type GroupKey = "pollinator" | "mycorrhizal" | "pollinator+mycorrhizal" | "other";
 
@@ -120,6 +134,43 @@ function InteractionRow({ record }: { record: DiscoveredInteraction }) {
   );
 }
 
+function BackendIndexNote({ result }: { result: InteractionDiscoveryResult }) {
+  return result.index_note ? (
+    <div className="mt-1" data-testid="interaction-discovery-index-note">
+      {result.index_note}
+    </div>
+  ) : null;
+}
+
+/** Index-availability notice for a readable result; nothing for durable or unreported. */
+function IndexStateNotice({ result }: { result: InteractionDiscoveryResult }) {
+  if (result.index_state === "memory_unprovisioned") {
+    return (
+      <div
+        role="status"
+        data-testid="interaction-discovery-index-unprovisioned"
+        className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+      >
+        <div className="font-semibold">{UNPROVISIONED_RECORDS_HEADLINE}</div>
+        <BackendIndexNote result={result} />
+      </div>
+    );
+  }
+  if (result.index_state === "unrecognized") {
+    return (
+      <div
+        role="status"
+        data-testid="interaction-discovery-index-unknown"
+        className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-700"
+      >
+        {INDEX_STATE_UNKNOWN_NOTE}
+        <BackendIndexNote result={result} />
+      </div>
+    );
+  }
+  return null;
+}
+
 export function InteractionDiscoveryView({
   species,
   discovery,
@@ -146,14 +197,28 @@ export function InteractionDiscoveryView({
         <div className="mt-1">This is not evidence that no interactions are known for {species}.</div>
       </div>
     );
-  } else if (discovery.state === "empty") {
+  } else if (discovery.state === "unprovisioned") {
     body = (
       <div
-        data-testid="interaction-discovery-empty"
-        className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600"
+        role="status"
+        data-testid="interaction-discovery-unprovisioned"
+        className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
       >
-        The discovery index holds no candidate interactions matching {species}. Absence here reflects what has been
-        ingested so far, not an ecological finding.
+        <div className="font-semibold">{UNPROVISIONED_EMPTY_HEADLINE}</div>
+        <BackendIndexNote result={discovery.result} />
+      </div>
+    );
+  } else if (discovery.state === "empty") {
+    body = (
+      <div className="space-y-3">
+        <IndexStateNotice result={discovery.result} />
+        <div
+          data-testid="interaction-discovery-empty"
+          className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600"
+        >
+          The discovery index holds no candidate interactions matching {species}. Absence here reflects what has been
+          ingested so far, not an ecological finding.
+        </div>
       </div>
     );
   } else {
@@ -165,6 +230,7 @@ export function InteractionDiscoveryView({
     }
     body = (
       <div className="space-y-5" data-testid="interaction-discovery-ok">
+        <IndexStateNotice result={result} />
         <p className="text-sm text-slate-600">
           Showing {result.records.length} of {result.total_matched} matched candidate
           {result.total_matched === 1 ? "" : "s"}.
@@ -195,7 +261,10 @@ export function InteractionDiscoveryView({
     );
   }
 
-  const note = discovery && (discovery.state === "ok" || discovery.state === "empty") ? discovery.result.note : null;
+  const note =
+    discovery && (discovery.state === "ok" || discovery.state === "empty" || discovery.state === "unprovisioned")
+      ? discovery.result.note
+      : null;
 
   return (
     <section

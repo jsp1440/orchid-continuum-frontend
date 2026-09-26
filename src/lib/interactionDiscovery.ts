@@ -10,7 +10,20 @@ import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
  *            limit (1..500, default 100)
  *   app/interaction_discovery/service.py::discover_interactions
  *     -> { status, count, total_matched, truncated, category, taxon_filter,
- *          review_bound, knowledge_graph_mutation, note, interactions[] }
+ *          index_state, index_note, review_bound, knowledge_graph_mutation,
+ *          note, interactions[] }
+ *     plus, from a backend follow-up, an optional `unreadable_count`.
+ *
+ * INDEX STATE
+ *
+ * Since backend #1639 the response says which index served the read:
+ *   "durable"              -- the durable interaction index
+ *   "memory_unprovisioned" -- no durable index is configured; the backend
+ *                             served an empty-by-default in-process index, so
+ *                             an empty result is NOT evidence of absence
+ * An older backend omits the field (`index_state: null` here, current
+ * behaviour). Any other value is kept as "unrecognized" and never read as
+ * durable.
  *
  * WHAT THESE RECORDS ARE
  *
@@ -24,6 +37,8 @@ import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
  *
  *   ok          -- a readable response with at least one readable record
  *   empty       -- a readable response that matched nothing
+ *   unprovisioned -- matched nothing, but no durable index is configured, so
+ *                  the emptiness says nothing about what is known
  *   unavailable -- network failure or a non-2xx response (including 422)
  *   malformed   -- a 2xx body this client cannot read, or one that does not
  *                  carry the review-bound / no-graph-mutation guarantees
@@ -42,6 +57,8 @@ import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
 export type InteractionCategory = "pollinator" | "mycorrhizal";
 export type InteractionCategoryFilter = InteractionCategory | "all";
+/** Backend-reported index; null when an older backend does not report it. */
+export type InteractionIndexState = "durable" | "memory_unprovisioned" | "unrecognized";
 
 export interface DiscoveredInteraction {
   /** GloBI records direction; either side may be the orchid. Rendered verbatim. */
@@ -70,8 +87,17 @@ export interface InteractionDiscoveryResult {
   /** Records the backend matched before applying `limit`. */
   total_matched: number;
   truncated: boolean;
-  /** Records present in the response that this client could not read. */
+  /**
+   * Records that could not be read: those in the response this client could
+   * not parse, plus those the backend reports it excluded (`unreadable_count`).
+   */
   unreadable_count: number;
+  /** The backend's own `unreadable_count`; 0 when the backend does not report one. */
+  backend_unreadable_count: number;
+  /** Which index served the read; null when the backend does not say. */
+  index_state: InteractionIndexState | null;
+  /** Backend's index note, verbatim. */
+  index_note: string | null;
   category: InteractionCategoryFilter;
   taxon_filter: string | null;
   /** Backend's own disclaimer, verbatim. */
@@ -81,6 +107,7 @@ export interface InteractionDiscoveryResult {
 export type InteractionDiscoveryState =
   | { state: "ok"; result: InteractionDiscoveryResult }
   | { state: "empty"; result: InteractionDiscoveryResult }
+  | { state: "unprovisioned"; result: InteractionDiscoveryResult }
   | { state: "unavailable"; reason: string; httpStatus: number | null }
   | { state: "malformed"; reason: string };
 
@@ -111,6 +138,18 @@ function parseCategories(value: unknown): InteractionCategory[] {
     if ((item === "pollinator" || item === "mycorrhizal") && !out.includes(item)) out.push(item);
   }
   return out;
+}
+
+function parseIndexState(payload: Record<string, unknown>): InteractionIndexState | null {
+  if (!("index_state" in payload) || payload.index_state === undefined) return null;
+  const value = payload.index_state;
+  return value === "durable" || value === "memory_unprovisioned" ? value : "unrecognized";
+}
+
+function parseBackendUnreadableCount(value: unknown): number | "invalid" {
+  if (value === undefined) return 0;
+  if (typeof value === "number" && Number.isInteger(value) && value >= 0) return value;
+  return "invalid";
 }
 
 /** Parse one record, allow-listing fields. Returns null when unreadable. */
@@ -163,6 +202,13 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
     };
   }
 
+  const backendUnreadable = parseBackendUnreadableCount(payload.unreadable_count);
+  if (backendUnreadable === "invalid") {
+    // A count of excluded records we cannot read would make any total shown
+    // here unverifiable, so the body is not presented as complete or empty.
+    return { state: "malformed", reason: "The interaction discovery response carried an invalid unreadable_count." };
+  }
+
   const records: DiscoveredInteraction[] = [];
   let unreadable = 0;
   for (const item of payload.interactions) {
@@ -183,7 +229,10 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
     count: payload.interactions.length,
     total_matched: totalMatched,
     truncated: payload.truncated === true || totalMatched > payload.interactions.length,
-    unreadable_count: unreadable,
+    unreadable_count: unreadable + backendUnreadable,
+    backend_unreadable_count: backendUnreadable,
+    index_state: parseIndexState(payload),
+    index_note: optionalString(payload.index_note),
     category,
     taxon_filter: optionalString(payload.taxon_filter),
     note: optionalString(payload.note),
@@ -194,6 +243,17 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
     // Records came back and none were readable: that is not "no interactions".
     return { state: "malformed", reason: "No interaction record in the response could be read." };
   }
+  if (backendUnreadable > 0) {
+    // The backend matched records it could not read and returned none: that
+    // is not "no interactions" either.
+    return {
+      state: "malformed",
+      reason: `The backend matched ${backendUnreadable} interaction record${
+        backendUnreadable === 1 ? "" : "s"
+      } it could not read, and returned none.`,
+    };
+  }
+  if (result.index_state === "memory_unprovisioned") return { state: "unprovisioned", result };
   return { state: "empty", result };
 }
 
