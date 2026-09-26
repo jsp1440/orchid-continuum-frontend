@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 19,
+  "programSpent": 19.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 7
+    "2026-09-26": 7.5
   },
   "leases": [
     {
@@ -1018,6 +1018,19 @@
       "implementationSha": "bb5393294e40d06e060b2b9a3e8ad709f1992e15",
       "lane": "provider-free",
       "state": "provider-free-done"
+    },
+    {
+      "id": "e2cfd22d3375b1d6b38a7aa2c63618dff1fa25b849505c89b40c448edf5d552e",
+      "issue": 850,
+      "nodeId": "cap-relationship-interaction-discovery",
+      "fingerprint": "995577f57127e1c2581b5fa74d46eca20fd4a95242eaa810015e659a2ecb6dc4",
+      "waveHash": "c8972a37e21232aa24a8d5fda942911f5477d345420829473736597709535dfe",
+      "runId": "36230339660",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T10:10:19.226Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "413dbd1fdbd85729272a18453663726d43bda7e8",
+      "state": "reserved"
     }
   ]
 }
