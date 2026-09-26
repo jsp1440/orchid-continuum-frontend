@@ -28,6 +28,7 @@ vi.mock("@/features/calyx-workspace/sessionContext", () => ({ recordCalyxSurface
 
 import {
   MatrixApiError,
+  MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE,
   MATRIX_OWNER_ACCESS_MESSAGE,
   MATRIX_UNAVAILABLE_MESSAGE,
 } from "@/lib/matrixIdentification";
@@ -61,19 +62,18 @@ function buttons(label: string): HTMLButtonElement[] {
 const statusMessage = () => container.querySelector('[data-testid="matrix-status-message"]')?.textContent ?? "";
 
 describe("guided Matrix access states", () => {
-  it("says Matrix needs owner access when the registry is refused, with no raw status and no sign-in loop", async () => {
+  it("asks a signed-out visitor to sign in when the member registry is refused", async () => {
     mocks.listMatrixRegistries.mockRejectedValue(
-      new MatrixApiError(MATRIX_OWNER_ACCESS_MESSAGE, 401, "owner_access_required"),
+      new MatrixApiError(MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE, 401, "member_session_required"),
     );
     act(() => root.render(<MemoryRouter><OrchidIdentificationNext /></MemoryRouter>));
     await flush();
 
-    expect(statusMessage()).toBe("Matrix identification currently requires owner access.");
-    expect(container.textContent).toContain("owner access");
+    expect(statusMessage()).toBe("Sign in to use Matrix identification.");
+    expect(container.textContent).toContain("sign in required");
     expect(container.textContent).not.toMatch(/Matrix API \d{3}/);
     expect(container.textContent).not.toContain("Owner session or API key is required");
-    expect(statusMessage()).not.toMatch(/sign in/i);
-    // Retrying cannot change an access rule, so none is offered.
+    // Retrying cannot create a member session, so none is offered.
     expect(buttons("Try again")).toHaveLength(0);
     expect(buttons("Begin guided identification")[0].disabled).toBe(true);
   });
