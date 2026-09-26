@@ -13,6 +13,15 @@ interface ImportMetaEnv {
   readonly VITE_CALYX_BACKEND_BASE_URL?: string;
   readonly VITE_MISSION_CONTROL_BACKEND_URL?: string;
   readonly VITE_BACKEND_BASE_URL?: string;
+  /**
+   * Origin of the public API, distinct from the Calyx origin above.
+   * src/lib/api.ts fails closed when this is unset.
+   */
+  readonly VITE_API_BASE_URL?: string;
+  /** Next.js-style alias for VITE_API_BASE_URL. */
+  readonly NEXT_PUBLIC_API_BASE_URL?: string;
+  /** Overrides where mission-list signups are delivered. */
+  readonly VITE_CRM_SUBSCRIBE_URL?: string;
   readonly VITE_RELEASE_SHA?: string;
   /** Mapbox PUBLIC access token (pk.*). Never a secret sk.* token. */
   readonly VITE_MAPBOX_TOKEN?: string;

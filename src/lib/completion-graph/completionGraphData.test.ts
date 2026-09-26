@@ -6,14 +6,30 @@ import { computeGateScore } from './scoring';
 describe('COMPLETION_GRAPH structural integrity', () => {
   const allNodes = flattenGraph(COMPLETION_GRAPH);
 
-  it('#525 scores only the trait consumer without claiming a live backend or completing the remaining station', () => {
+  it('#167 reconciles the stale thematic census without changing bindings or claiming product acceptance', () => {
+    const thematic = allNodes.find(node => node.id === 'cap-atlas-next-thematic-5')!;
+    expect(thematic.status).toBe('PARTIAL');
+    expect(thematic.threeLevels.productComplete).toBe('NOT_MET');
+    expect(thematic.gateScores?.browserEndToEnd).toBeNull();
+    expect(thematic.gateScores?.deployedOperational).toBeNull();
+    expect(thematic.evidence.some(e => e.ref === 'src/features/atlas-next/useAtlasData.ts')).toBe(true);
+    expect(thematic.evidence.some(e => e.ref === 'src/components/orchid/HomeAtlasContinuum.tsx')).toBe(true);
+    expect(allNodes.some(node => node.id === 'cap-atlas-guided-tours-6')).toBe(true);
+  });
+
+  it('#525/#843 scores the trait consumer from a reference-backend browser pass without claiming a live backend or completing the remaining station', () => {
     const station = allNodes.find((node) => node.id === 'domain-research-station')!;
     const leaves = getLeaves(station);
     const traits = leaves.find((node) => node.id === 'cap-research-trait-explorer')!;
     expect(traits.issues).toContain('#525');
-    expect(traits.threeLevels.productComplete).toBe('NOT_MET');
+    expect(traits.threeLevels.productComplete).not.toBe('MET');
     expect(traits.gateScores?.deployedOperational).toBeNull();
-    expect(traits.gateScores?.browserEndToEnd).toBeNull();
+    expect(traits.gateScores?.browserEndToEnd).toBe(1);
+    expect(traits.evidence.some((e) => e.ref === 'e2e/research-trait-explorer.spec.ts' && /REFERENCE BACKEND/.test(e.note ?? ''))).toBe(true);
+    // The backend gates /api/research/traits to owner/API key; that and the
+    // deployed pass are named owner actions, not silent gaps.
+    expect(traits.status).toBe('OWNER_ACTION');
+    expect(traits.ownerActions?.some((a) => a.includes('verify_owner_or_api_key'))).toBe(true);
     expect(leaves.some((node) => node.status === 'UNKNOWN' && !node.gateScores)).toBe(true);
   });
 
@@ -21,9 +37,12 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     const domain = allNodes.find((node) => node.id === 'domain-pollinator-mycorrhiza')!;
     const leaves = getLeaves(domain);
 
-    expect(leaves).toHaveLength(1);
+    // #841 added the interaction-discovery leaf beside the profile leaf.
+    expect(leaves.map((leaf) => leaf.id)).toEqual([
+      'cap-pollinator-mycorrhiza-real-data',
+      'cap-relationship-interaction-discovery',
+    ]);
     const relationship = leaves[0];
-    expect(relationship.id).toBe('cap-pollinator-mycorrhiza-real-data');
     expect(relationship.status).toBe('PARTIAL');
     expect(relationship.threeLevels).toEqual({
       codeComplete: 'MET',
@@ -38,6 +57,65 @@ describe('COMPLETION_GRAPH structural integrity', () => {
         e.ref.includes('ecologicalRelationshipData.sourceIntegrity.test.ts'),
       ),
     ).toBe(true);
+  });
+
+  it('scores the Research evidence chain and literature provenance from captured payloads, never browser or deployment', () => {
+    const leaves = getLeaves(COMPLETION_GRAPH);
+    const chain = leaves.find((node) => node.id === 'cap-research-evidence-chain')!;
+    expect(chain.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(chain.gateScores?.integrationCanonicalBranch).toBeNull();
+    expect(chain.gateScores?.browserEndToEnd).toBeNull();
+    expect(chain.gateScores?.deployedOperational).toBeNull();
+    const literature = leaves.find((node) => node.id.startsWith('cap-literature-public-browser'))!;
+    expect(literature.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(literature.gateScores?.browserEndToEnd).toBeNull();
+    const traits = leaves.find((node) => node.id === 'cap-research-trait-explorer')!;
+    // Backend #1611 is on backend main and the consumer on frontend main.
+    expect(traits.gateScores?.integrationCanonicalBranch).toBe(1);
+  });
+
+  it('scores the Matrix comparison provenance gate from captured payload tests and the guided-session browser gate from the reference backend, never deployment', () => {
+    const leaf = allNodes.find((node) => node.id === 'cap-matrix-report-lexicon');
+    expect(leaf?.gateScores?.scientificProvenanceSecurity).toBe(1);
+    expect(leaf?.gateScores?.browserEndToEnd).toBe(1);
+    expect(leaf?.evidence.some((e) => e.ref === 'e2e/matrix-guided-session.spec.ts')).toBe(true);
+    expect(leaf?.gateScores?.deployedOperational).toBeNull();
+    expect(leaf?.status).toBe('PARTIAL');
+    expect(leaf?.evidence.some((e) => e.ref === 'src/lib/matrixCandidateEvidence.test.ts')).toBe(true);
+  });
+
+  it('2026-09-26 reconciliation: reference-backend browser evidence never scores a deployed gate, and owner-gated leaves name the owner action', () => {
+    const leaves = getLeaves(COMPLETION_GRAPH);
+    const referenceBacked = leaves.filter((leaf) =>
+      leaf.evidence.some((e) => /REFERENCE BACKEND/.test(e.note ?? '')),
+    );
+    expect(referenceBacked.map((leaf) => leaf.id).sort()).toEqual([
+      'cap-calyx-verification-workbench',
+      'cap-judging-practice',
+      'cap-matrix-report-lexicon',
+      'cap-research-trait-explorer',
+    ]);
+    for (const leaf of referenceBacked) {
+      expect(leaf.gateScores?.browserEndToEnd, leaf.id).toBe(1);
+      expect(leaf.gateScores?.deployedOperational, leaf.id).toBeNull();
+      expect(leaf.status, leaf.id).not.toBe('DONE');
+      expect(leaf.threeLevels.productComplete, leaf.id).not.toBe('MET');
+    }
+    for (const id of ['cap-calyx-verification-workbench', 'cap-judging-practice', 'cap-research-trait-explorer']) {
+      const leaf = leaves.find((node) => node.id === id)!;
+      expect(leaf.status, id).toBe('OWNER_ACTION');
+      expect(leaf.ownerActions?.length, id).toBeGreaterThan(0);
+    }
+    // Unit/render tests alone never score a browser gate.
+    for (const id of ['cap-vision-lexicon-evidence-summary', 'cap-relationship-interaction-discovery', 'cap-calyx-science-status-dashboard', 'cap-university-curriculum-core']) {
+      expect(leaves.find((node) => node.id === id)?.gateScores?.browserEndToEnd, id).toBeNull();
+    }
+    // #788's acceptance (narrowed records) is not met by the filter-identity pass.
+    const researchAtlas = leaves.find((node) => node.id === 'gate-journey-research-atlas')!;
+    expect(researchAtlas.status).toBe('OWNER_ACTION');
+    expect(researchAtlas.issues).toContain('#788');
+    expect(researchAtlas.nextAction).toContain('#788');
+    expect(researchAtlas.gateScores?.deployedOperational).toBeNull();
   });
 
   it('has a single root with parentId null', () => {
@@ -104,9 +182,31 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(computeGateScore(gate?.gateScores).percentage).not.toBeNull();
   });
 
-  it('records the scheduler->issue-automation gap as confirmed missing, not census-pending', () => {
-    const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
-    expect(gap?.status).toBe('MISSING');
+  it('scores the public literature browser on the real /literature route, without claiming the public can reach it', () => {
+    const leaf = getLeaves(COMPLETION_GRAPH).find((node) => node.id.startsWith('cap-literature-public-browser'));
+    expect(leaf?.status).toBe('PARTIAL');
+    expect(leaf?.threeLevels.codeComplete).toBe('MET');
+    // The backend listing is owner/API-key gated, so product completion is
+    // NOT_MET until the public can actually browse it; a browser gate has not
+    // been evaluated and must not be scored.
+    expect(leaf?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(leaf?.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaf?.gateScores?.deployedOperational).toBeNull();
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/Literature.tsx')).toBe(true);
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/Literature.test.tsx')).toBe(true);
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/ComingSoon.tsx')).toBe(false);
+  });
+
+  it('scores the scheduler->issue-automation loop as wired but not yet proven live', () => {
+    const gap = getLeaves(COMPLETION_GRAPH).find((n) => n.id.startsWith('cap-scheduler-issue-automation'));
+    expect(gap?.status).toBe('PARTIAL');
+    expect(gap?.threeLevels.codeComplete).toBe('MET');
+    // No scheduled run has been observed filing a discovered issue yet, so
+    // integration on the canonical branch scores 0 and product stays NOT_MET.
+    expect(gap?.gateScores?.integrationCanonicalBranch).toBe(0);
+    expect(gap?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(gap?.evidence.some((e) => e.ref === 'src/lib/completion-graph/graphDiscovery.ts')).toBe(true);
+    expect(gap?.evidence.some((e) => e.ref === 'src/lib/completion-graph/graphDiscovery.test.ts')).toBe(true);
   });
 
   it('#281 round 2: Buying Companion, Vision, and Security/governance are no longer single generic census-pending stubs', () => {
@@ -140,7 +240,8 @@ describe('COMPLETION_GRAPH structural integrity', () => {
       'domain-vision': getLeaves(allNodes.find((n) => n.id === 'domain-vision')!).length,
       'domain-security-governance': getLeaves(allNodes.find((n) => n.id === 'domain-security-governance')!).length,
     };
-    expect(domainLeafCounts['domain-vision']).toBe(2);
+    // #842 added the Lexicon vision-evidence summary leaf.
+    expect(domainLeafCounts['domain-vision']).toBe(3);
     expect(domainLeafCounts['domain-security-governance']).toBe(3);
     expect(domainLeafCounts['domain-buying-companion']).toBe(1);
   });
@@ -170,7 +271,7 @@ describe('COMPLETION_GRAPH structural integrity', () => {
       'domain-conservatory': getLeaves(allNodes.find((n) => n.id === 'domain-conservatory')!).length,
     };
     expect(domainLeafCounts['domain-calyx-verification']).toBe(3);
-    expect(domainLeafCounts['domain-knowledge-graph']).toBe(3);
+    expect(domainLeafCounts['domain-knowledge-graph']).toBe(4);
     expect(domainLeafCounts['domain-conservatory']).toBe(3);
 
     // #522: the naming conflict between the two "Knowledge Graph" routes is
@@ -200,6 +301,13 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     // #171 (HOMEPAGE-RECOVERY-008) is cited rather than duplicated by a new issue.
     const heroGate = allNodes.find((n) => n.id === 'cap-homepage-hero-continuum');
     expect(heroGate?.issues).toContain('#171');
+  });
+
+  it('#166 keeps the remaining Featured Genus gate provider-free and explicit', () => {
+    const gate = allNodes.find((n) => n.id === 'cap-homepage-featured-genus');
+    expect(gate?.nextAction).toContain('npm run verify:featured-genus');
+    expect(gate?.evidence.some((e) => e.ref === 'scripts/featured-genus-render-sentinel.mjs')).toBe(true);
+    expect(gate?.nextAction).not.toContain('AI narrative');
   });
 
   it('#242: Calyx education & show-management surfaces are a real, newly-censused domain', () => {

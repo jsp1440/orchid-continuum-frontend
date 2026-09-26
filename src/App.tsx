@@ -55,6 +55,7 @@ import Climate from "./pages/Climate";
 import EcuadorExpedition from "./pages/EcuadorExpedition";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
+import Privacy from "./pages/Privacy";
 import Literature from "./pages/Literature";
 import LiteraturePaper from "./pages/LiteraturePaper";
 import SavedOrchids from "./pages/SavedOrchids";
@@ -141,8 +142,8 @@ const App = () => (
                   <Route path="/climate" element={<Climate />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
-                  <Route path="/literature" element={<Literature />} />
-                  <Route path="/literature/:paperId" element={<LiteraturePaper />} />
+                  <Route path="/literature" element={<ProtectedRoute title="Literature corpus · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty corpus."><Literature /></ProtectedRoute>} />
+                  <Route path="/literature/:paperId" element={<ProtectedRoute title="Literature extraction · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty extraction."><LiteraturePaper /></ProtectedRoute>} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
@@ -177,6 +178,7 @@ const App = () => (
                   <Route path="/deception-lab" element={<DeceptionLab />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />
                   <Route path="/coming-soon" element={<ComingSoon />} />
+                  <Route path="/privacy" element={<Privacy />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AtlasFilterProvider>

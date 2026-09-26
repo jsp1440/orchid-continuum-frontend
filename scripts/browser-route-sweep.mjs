@@ -61,7 +61,10 @@ const ROUTES = [
   { path: '/atlas' },
   { path: '/atlas-next' },
   { path: '/calyx' },
-  { path: '/calyx-science', gate: 'owner' },
+  // These routes are member-authenticated entry points. Owner-authorized
+  // actions inside them remain separately gated, but the route itself renders
+  // ProtectedRoute's member gate to an unauthenticated browser.
+  { path: '/calyx-science', gate: 'member' },
   { path: '/classroom' },
   { path: '/climate' },
   { path: '/collection', gate: 'member' },
@@ -75,7 +78,9 @@ const ROUTES = [
   { path: '/habitats' },
   { path: '/intelligence-graph' },
   { path: '/knowledge' },
-  { path: '/literature' },
+  // The literature-extraction service is owner/API-key gated; the route is
+  // wrapped in ProtectedRoute so an anonymous browser sees the member gate.
+  { path: '/literature', gate: 'member' },
   { path: '/mycorrhizae' },
   { path: '/oacs' },
   { path: '/orchid-identification' },
@@ -91,7 +96,7 @@ const ROUTES = [
   { path: '/university/lab' },
   { path: '/widgets' },
   { path: '/zoo' },
-  { path: '/mission-control', gate: 'owner' },
+  { path: '/mission-control', gate: 'member' },
 ];
 
 /** Shorter than this, with no gate wording, is a page that failed silently. */

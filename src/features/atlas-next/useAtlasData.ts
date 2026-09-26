@@ -25,7 +25,13 @@ import {
 export type AtlasDataState =
   | { kind: 'loading' }
   | { kind: 'ready'; points: AtlasOccurrencePoint[]; complete: boolean }
-  | { kind: 'empty' }
+  /**
+   * Nothing drawable. `matched` is how many records the current filter context
+   * matched BEFORE the coordinate check, so a filter that matched nothing
+   * (`matched === 0`) can be told apart from records that exist but carry no
+   * usable coordinates.
+   */
+  | { kind: 'empty'; matched: number }
   /** Transport failure. The map is blank because we could not read, which is
    *  not a statement about where orchids are. */
   | { kind: 'unavailable'; detail: string };
@@ -61,7 +67,8 @@ export function useAtlasData(): AtlasDataState {
           setState({ kind: 'ready', points: firstBatch, complete: false });
         }
 
-        const everything = usablePoints(applyTo(await full));
+        const matched = applyTo(await full);
+        const everything = usablePoints(matched);
         if (cancelled) return;
 
         if (!everything.length) {
@@ -73,7 +80,7 @@ export function useAtlasData(): AtlasDataState {
                   kind: 'unavailable',
                   detail: 'The occurrence store did not respond after retrying.',
                 }
-              : { kind: 'empty' },
+              : { kind: 'empty', matched: matched.length },
           );
           return;
         }

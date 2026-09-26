@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimLease, isActive, makePlan, reconcileExpired, runningCount, transitionLease, validateLedger,
-  type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
+  providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
 const now = '2026-09-14T04:00:00.000Z';
@@ -70,6 +70,65 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(() => validateLedger({ ...base, leases: [{ ...lease, reservedUsd: 0, state: 'unknown' }] as unknown as Ledger['leases'] }))
       .toThrow('Malformed lease');
   });
+  it('preserves explicit implementation lineage even when its PR merged only into integration', () => {
+    const { root, snapshot } = fixture(1);
+    snapshot.prs = [{ number: 677, state: 'closed', merged: true, baseRef: 'oc-autonomous-integration',
+      body: 'Implements #1 against current main.', head: { ref: 'reviewed-readiness', sha: 'c'.repeat(40) } }];
+    const plan = makePlan(snapshot, [], now, root);
+    expect(plan.issues).toEqual([]);
+    expect(plan.pendingNotReachingAdmission[0].reason).toContain('oc-autonomous-integration');
+    expect(plan.pendingNotReachingAdmission[0].reason).toContain('reconcile current main and issue acceptance');
+  });
+
+  it.each(['Implements #676', 'Implemented issue #676', 'implements jsp1440/orchid-continuum-frontend#676'])('recognizes an affirmative implementation declaration: %s', body => {
+    expect(lineageFor(676, [{ number: 677, body, state: 'closed', merged: true,
+      head: { ref: 'reviewed-readiness', sha: 'c'.repeat(40) } }])).toHaveLength(1);
+  });
+
+  it.each(['Does not implement #676', 'Implements jsp1440/orchid-calyx-backend#676', 'Implements #6760', 'See #676'])('does not invent lineage from a different scope: %s', body => {
+    expect(lineageFor(676, [{ number: 677, body, state: 'open', head: { ref: 'unrelated', sha: 'c'.repeat(40) } }])).toEqual([]);
+  });
+
+  it('accepts the historical zero-cost deterministic terminal lease, but rejects ambiguous zero-cost leases', () => {
+    const legacy: Ledger['leases'][number] = {
+      id: 'legacy-deterministic',
+      issue: 243,
+      nodeId: 'cap-conservatory-collection',
+      fingerprint: 'f'.repeat(64),
+      waveHash: 'w'.repeat(64),
+      runId: '35469789739',
+      runAttempt: '1',
+      expiresAt: '2026-09-19T22:45:21.726Z',
+      reservedUsd: 0,
+      state: 'provider-free-done',
+    };
+    const ledger: Ledger = {
+      schema: 1,
+      programStartedAt: '2026-09-19T21:15:22.086Z',
+      programSpent: 0,
+      dailySpent: {},
+      leases: [legacy],
+    };
+    expect(laneOf(legacy)).toBe('provider-free');
+    expect(() => validateLedger(ledger)).not.toThrow();
+    expect(() => validateLedger({ ...ledger, leases: [{ ...legacy, state: 'running' }] })).toThrow('Malformed lease');
+  });
+
+  it('turns a stale deterministic plan into a deduplicated refusal after settlement', async () => {
+    const { root, snapshot } = fixture(1); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const first = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 1, runId: '100', runAttempt: '1', now }, root);
+    expect(first.allowed).toBe(true);
+    await transitionLease(store, first.lease!.id, '100', '1', 'provider-free-done');
+
+    // The first run has settled the exact fingerprint and moved the issue out
+    // of the queue before this run reaches its live admission check.
+    snapshot.issues[0] = issue(1, ['oc-validating']);
+    const stale = await claimDeterministicLease(store, plan, snapshot, { issueNumber: 1, runId: '101', runAttempt: '1', now }, root);
+    expect(stale).toMatchObject({ allowed: false, reason: 'unchanged_attempt', lease: null });
+    expect(store.ledger.leases).toHaveLength(1);
+  });
+
   it('selects eight independent queued/prepared issues, with deterministic graph priority', () => {
     const { root, snapshot } = fixture();
     root.children.forEach((node, i) => { node.priority = i; });
@@ -95,11 +154,59 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     snapshot.issues[6].body += '\nOC-AUTO-HOLD: true\n';
     snapshot.prs = [{ number: 90, body: 'OC-AUTO-ISSUE: #8', state: 'closed', head: { ref: 'oc-auto-8-work', sha: 'c'.repeat(40) } },
       { number: 91, body: 'OC-AUTO-ISSUE: #9', state: 'open', head: { ref: 'repair-9', sha: 'd'.repeat(40) } }];
-    expect(makePlan(snapshot, [], now, root).issues.sort((a,b) => a-b)).toEqual([10,11,12]);
+    // #8's only PR was closed without merging: one abandoned attempt, nothing
+    // in flight and nothing delivered, so it is admissible again. #9's open PR
+    // is work in flight and still holds it until it is labelled `oc-repair`.
+    expect(makePlan(snapshot, [], now, root).issues.sort((a,b) => a-b)).toEqual([8,10,11,12]);
     snapshot.issues[8].labels.push({ name: 'oc-repair' });
     const repaired = makePlan(snapshot, [], now, root).leaves.find(l => l.issueNumber === 9);
     expect(repaired?.repairPr).toBe(91);
     expect(repaired?.repairBranch).toBe('repair-9');
+  });
+
+  it('re-admits an issue whose every attempt was abandoned, and stops at the bound', () => {
+    // The live starvation this repairs: on 2026-09-24 the plan step named #296
+    // (lineage #303 closed) and #308 (lineage #312 closed) as pending and
+    // unreachable, every five minutes, with eight free lanes and nothing
+    // admitted. A closed-unmerged PR is an abandoned attempt, not durable work,
+    // and counting it as durable removed those issues from the portfolio for
+    // good while they still read `oc-queued` to anyone looking.
+    const { root, snapshot } = fixture(1);
+    const attempt = (number: number): Snapshot['prs'][number] => ({ number, body: 'OC-AUTO-ISSUE: #1',
+      state: 'closed', head: { ref: `oc-auto/1-attempt-${number}`, sha: 'c'.repeat(40) } });
+
+    snapshot.prs = [attempt(90)];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([1]);
+
+    snapshot.prs = [attempt(90), attempt(91)];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([1]);
+
+    // MAX_ABANDONED_ATTEMPTS. Re-admission is bounded or it is its own loop.
+    snapshot.prs = [attempt(90), attempt(91), attempt(92)];
+    const exhausted = makePlan(snapshot, [], now, root);
+    expect(exhausted.issues).toEqual([]);
+    expect(exhausted.pendingNotReachingAdmission[0].reason).toContain('3 abandoned attempt(s)');
+    expect(exhausted.pendingNotReachingAdmission[0].reason).toContain('needs a decision rather than another lane');
+  });
+
+  it('keeps delivered and in-flight lineage holding the issue', () => {
+    const { root, snapshot } = fixture(1);
+    // Merged: the work is in, and settling it is not this lane's job.
+    snapshot.prs = [{ number: 90, body: 'OC-AUTO-ISSUE: #1', state: 'closed', merged: true,
+      baseRef: 'main', head: { ref: 'oc-auto/1-work', sha: 'c'.repeat(40) } }];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
+
+    // Open: a second attempt must not start alongside the first.
+    snapshot.prs = [{ number: 91, body: 'OC-AUTO-ISSUE: #1', state: 'open',
+      head: { ref: 'oc-auto/1-work', sha: 'c'.repeat(40) } }];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
+
+    // An abandoned attempt does not make a merged sibling disappear.
+    snapshot.prs = [{ number: 90, body: 'OC-AUTO-ISSUE: #1', state: 'closed', merged: true,
+      baseRef: 'main', head: { ref: 'oc-auto/1-merged', sha: 'c'.repeat(40) } },
+      { number: 92, body: 'OC-AUTO-ISSUE: #1', state: 'closed',
+        head: { ref: 'oc-auto/1-abandoned', sha: 'd'.repeat(40) } }];
+    expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
   });
   it('refuses unresolved dependencies and never unlocks same-wave dependants', () => {
     const { root, snapshot } = fixture(3);
@@ -146,9 +253,98 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     await claim(store, plan, snapshot, root, plan.issues[0]);
     await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => false);
     expect(store.ledger.leases[0].state).toBe('reserved');
-    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => { throw new Error('API unavailable'); })).rejects.toThrow();
+    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => { throw new Error('API unavailable'); }))
+      .resolves.toMatchObject({ inspected: 1, recovered: 0, errors: 1 });
     await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true);
     expect(store.ledger.leases[0].state).toBe('blocked');
+  });
+  it('accepts legacy terminal provider-free records without treating them as active leases', async () => {
+    const { root, snapshot } = fixture(8); const store = new MemoryStore();
+    store.ledger.leases.push({
+      id: 'legacy', issue: 1, nodeId: 'leaf-1', fingerprint: 'legacy-fingerprint',
+      waveHash: 'legacy-wave', runId: '100', runAttempt: '1', expiresAt: now,
+      reservedUsd: 0, state: 'provider-free-done',
+    });
+    expect(() => validateLedger(store.ledger)).not.toThrow();
+    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true)).resolves.toMatchObject({ inspected: 0 });
+    expect(makePlan(snapshot, store.ledger.leases, now, root).issues).toEqual([1,2,3,4,5,6,7,8]);
+  });
+  it('treats a lease removed by a concurrent release as an idempotent no-op', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    await expect(reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      store.ledger.leases = [];
+    })).resolves.toMatchObject({ recovered: 1, errors: 0 });
+    expect(store.ledger.leases).toEqual([]);
+    expect(await transitionLease(store, lease.id, '100', '1', 'blocked')).toBeNull();
+  });
+  it('continues reconciling other leases when one stale run has unavailable evidence', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    await claim(store, plan, snapshot, root, plan.issues[0]);
+    await claim(store, plan, snapshot, root, plan.issues[1], '101');
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async runId => {
+      if (runId === '100') throw new Error('hosted evidence unavailable');
+      return true;
+    });
+    expect(report).toMatchObject({ inspected: 2, recovered: 1, errors: 1 });
+    expect(store.ledger.leases.find(lease => lease.runId === '100')?.state).toBe('reserved');
+    expect(store.ledger.leases.find(lease => lease.runId === '101')?.state).toBe('blocked');
+  });
+  it('does not revive a lease already released during reconciliation', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      await transitionLease(store, lease.id, '100', '1', 'done');
+    });
+    expect(report).toMatchObject({ recovered: 1, errors: 0 });
+    expect(store.ledger.leases[0].state).toBe('done');
+  });
+  it('preserves the concurrent terminal outcome for the issue label side effect', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    const terminalStates: string[] = [];
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true, async () => {
+      await transitionLease(store, lease.id, '100', '1', 'done');
+    }, async finalLease => {
+      terminalStates.push(finalLease.state);
+    });
+    expect(report).toMatchObject({ recovered: 1, errors: 0 });
+    expect(terminalStates).toEqual(['done']);
+    expect(terminalIssueLabel(store.ledger.leases[0].state)).toBe('oc-done');
+    expect(terminalIssueLabel('blocked')).toBe('oc-blocked');
+  });
+  it.each([
+    ['provider-free-done', 'oc-validating'],
+    ['provider-free-failed', 'oc-repair'],
+    ['not-executed', 'oc-queued'],
+  ] as const)('preserves concurrent deterministic %s without promoting acceptance', async (state, label) => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const result = await claimDeterministicLease(store, plan, snapshot,
+      { issueNumber: plan.issues[0], runId: '100', runAttempt: '1', now }, root);
+    const labels: string[] = [];
+    const report = await reconcileExpired(store, '2026-09-15T00:00:00.000Z', async () => true,
+      async () => { await transitionLease(store, result.lease!.id, '100', '1', state); },
+      async finalLease => { labels.push(terminalIssueLabel(finalLease.state)); });
+    expect(report).toEqual({ inspected: 1, recovered: 1, kept: 0, errors: 0 });
+    expect(store.ledger.leases[0].state).toBe(state);
+    expect(labels).toEqual([label]);
+    expect(runningCount(snapshot, store.ledger.leases)).toBe(0);
+    expect(store.ledger.programSpent).toBe(0);
+  });
+  it('keeps executable transitions strict while reconciliation release is idempotent', async () => {
+    const { root, snapshot } = fixture(); const store = new MemoryStore();
+    const plan = makePlan(snapshot, [], now, root);
+    const lease = (await claim(store, plan, snapshot, root, plan.issues[0])).lease!;
+    await transitionLease(store, lease.id, '100', '1', 'done');
+    await expect(transitionLease(store, lease.id, 'other-run', '1', 'blocked')).rejects.toThrow('fencing');
+    await expect(transitionLease(store, lease.id, '100', '1', 'running', { requireActive: true })).rejects.toThrow('Terminal');
+    await expect(transitionLease(store, 'removed', '100', '1', 'running', { requireActive: true })).rejects.toThrow('fencing');
+    expect(store.ledger.leases[0].state).toBe('done');
   });
   it('authorization=false makes zero reservations even with the full budget remaining', async () => {
     const { root, snapshot } = fixture(); const store = new MemoryStore(); const plan = makePlan(snapshot, [], now, root);
@@ -167,6 +363,47 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(makePlan(structuredClone(snapshot), [], now, root).wave.hash).toBe(plan.wave.hash);
     snapshot.issues.find(i => i.number === number)!.labels.push({ name: 'oc-blocked' });
     expect(() => assertAdmission(plan, snapshot, number, now, root)).toThrow('drift');
+  });
+  it('requeues a deterministic repair only after a new implementation revision', () => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair']);
+    const oldSha = snapshot.implementationSha;
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: oldSha,
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+    snapshot.implementationSha = 'c'.repeat(40);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([1]);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [{ ...failed, implementationSha: snapshot.implementationSha }])).toEqual([]);
+  });
+  it.each(['oc-owner-gate', 'oc-publication-hold', 'oc-running', 'oc-blocked', 'oc-runtime-backoff',
+    'oc-validating', 'oc-done', 'oc-portfolio-steward'])('keeps a repaired issue parked behind %s', (hold) => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair', hold]);
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: 'c'.repeat(40),
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+  });
+  it('preserves body holds, unknown revision evidence, and active leases when repairing', () => {
+    const { snapshot } = fixture(1);
+    snapshot.issues[0] = issue(1, ['oc-repair']);
+    const failed = { id: 'failed', issue: 1, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+      runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, implementationSha: 'c'.repeat(40),
+      lane: 'provider-free' as const, state: 'provider-free-failed' as const };
+    snapshot.issues[0].body = 'OC-AUTO-HOLD: true';
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
+    snapshot.issues[0].body = '';
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, implementationSha: undefined }])).toEqual([]);
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed, { ...failed, id: 'active', state: 'reserved' }])).toEqual([]);
+    // A closed, unmerged attempt does not hold the repair: nothing is in
+    // flight and nothing was delivered, and the repair still needs a newer
+    // implementation revision before it fires.
+    snapshot.prs.push({ number: 88, state: 'closed', body: 'OC-LINEAGE-ISSUE: #1', head: { ref: 'oc-auto/1-work', sha: 'd'.repeat(40) } });
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([1]);
+    // A merged attempt does: the work is already in.
+    snapshot.prs.push({ number: 89, state: 'closed', merged: true, body: 'OC-LINEAGE-ISSUE: #1', head: { ref: 'oc-auto/1-merged', sha: 'e'.repeat(40) } });
+    expect(providerFreeRepairsReadyForRequeue(snapshot, [failed])).toEqual([]);
   });
   it('detects hash tampering, unadmitted issues, missing/duplicate/mismatched actual receipts', () => {
     const { root, snapshot } = fixture(); const plan = makePlan(snapshot, [], now, root);

@@ -15,22 +15,38 @@ export type RegistrySummary = {
   publication_state?: string;
 };
 
+/** Per-character statuses `rank_candidates` emits (runtime/matrix_identification.py). */
+export type CharacterEvidenceStatus =
+  | "matched"
+  | "partial"
+  | "conflict"
+  | "candidate_state_missing"
+  | "ignored_unknown_observation";
+
 export type CandidateExplanation = {
   character: string;
   observation: unknown;
   candidate_state: unknown;
   certainty: Certainty;
+  /** Registry weight x certainty factor; 0 for an unknown observation. */
+  effective_weight?: number;
   similarity: number | null;
-  status: string;
+  /** effective_weight x similarity: this character's share of the score numerator. */
+  contribution?: number;
+  status: CharacterEvidenceStatus | string;
 };
 
 export type CandidateResult = {
   taxon_id: string;
   scientific_name: string;
+  /** Sum of contributions / compared_weight. Ranking evidence, not a probability. */
   score: number;
+  /** compared_weight / possible_weight. */
   coverage: number;
+  compared_weight?: number;
+  possible_weight?: number;
   explanations: CandidateExplanation[];
-  provenance?: Record<string, unknown>;
+  provenance?: Record<string, unknown> | null;
 };
 
 export type NextObservation = {
@@ -42,6 +58,10 @@ export type NextObservation = {
   distinct_state_count?: number;
   candidate_count?: number;
   reason_code?: string;
+  selection_score?: number;
+  matrix_weight?: number;
+  concept_id?: string | null;
+  explanation_boundary?: string;
 };
 
 export type SessionRecord = {
@@ -64,6 +84,9 @@ export type EvaluationReport = {
   observation_count: number;
   compared_character_count: number;
   disclaimer: string;
+  registry?: RegistrySummary;
+  session_id?: string;
+  revision?: number;
 };
 
 export type SessionEvaluation = {
@@ -72,15 +95,35 @@ export type SessionEvaluation = {
   next_observation: NextObservation | null;
 };
 
+/** One candidate as `build_explanation_evidence` summarizes it for Calyx. */
+export type ExplanationCandidateEvidence = {
+  taxon_id: string;
+  scientific_name: string;
+  score: number;
+  coverage: number;
+  supporting_characters?: string[];
+  partial_characters?: string[];
+  conflicting_characters?: string[];
+  missing_characters?: string[];
+  provenance?: Record<string, unknown> | null;
+};
+
 export type CalyxExplanation = {
   schema_version?: string;
   session_id?: string;
-  evidence?: Record<string, unknown>;
+  evidence?: {
+    candidates?: ExplanationCandidateEvidence[];
+    candidate_order?: string[];
+    authority?: Record<string, boolean>;
+    evidence_digest_sha256?: string;
+    [key: string]: unknown;
+  };
   narrative?: {
     text?: string;
     provider?: string;
     model?: string;
     epistemic_state?: string;
+    fallback_error?: string | null;
   } | string;
   invariants?: Record<string, unknown>;
   answer?: string;
@@ -170,7 +213,46 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       : response.statusText;
     throw new Error(`Matrix API ${response.status}: ${detail}`);
   }
+  // A 2xx whose body is not JSON (a proxy page, a truncated response) is not
+  // an answer. Returning null here let the guided page report "Session ready"
+  // with no session behind it.
+  if (payload === null) throw new Error(`Matrix API ${response.status}: response was not JSON`);
   return payload as T;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isCandidateResult(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.taxon_id === "string"
+    && typeof value.scientific_name === "string"
+    && typeof value.score === "number"
+    && typeof value.coverage === "number"
+    && Array.isArray(value.explanations);
+}
+
+/**
+ * Fail closed on an evaluation the page cannot render truthfully. A body
+ * without a report or candidate list previously crashed the whole route into
+ * the global error screen; it is now a Matrix error, and no ranking is shown.
+ */
+export function assertSessionEvaluation(payload: unknown): SessionEvaluation {
+  const session = isRecord(payload) ? payload.session : null;
+  const report = isRecord(payload) ? payload.report : null;
+  const valid = isRecord(session)
+    && typeof session.session_id === "string"
+    && typeof session.revision === "number"
+    && isRecord(session.registry)
+    && Array.isArray(session.observations)
+    && isRecord(report)
+    && typeof report.observation_count === "number"
+    && typeof report.compared_character_count === "number"
+    && Array.isArray(report.candidates)
+    && report.candidates.every(isCandidateResult);
+  if (!valid) throw new Error("Matrix API returned a malformed evaluation; no ranking is shown.");
+  return payload as SessionEvaluation;
 }
 
 export async function listMatrixRegistries(): Promise<RegistrySummary[]> {
@@ -179,7 +261,7 @@ export async function listMatrixRegistries(): Promise<RegistrySummary[]> {
 }
 
 export async function createIdentificationSession(registry: RegistrySummary): Promise<SessionRecord> {
-  return request<SessionRecord>("/api/matrix-identification/sessions", {
+  const session = await request<SessionRecord>("/api/matrix-identification/sessions", {
     method: "POST",
     body: JSON.stringify({
       registry_id: registry.registry_id,
@@ -187,6 +269,10 @@ export async function createIdentificationSession(registry: RegistrySummary): Pr
       metadata: { input_mode: "guided", client: "orchid-continuum-frontend" },
     }),
   });
+  if (!isRecord(session) || typeof session.session_id !== "string" || !session.session_id) {
+    throw new Error("Matrix API returned a session without an identifier.");
+  }
+  return session;
 }
 
 export async function addSessionObservation(
@@ -207,10 +293,10 @@ export async function addSessionObservation(
 }
 
 export async function evaluateIdentificationSession(sessionId: string): Promise<SessionEvaluation> {
-  return request<SessionEvaluation>(`/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/evaluate`, {
+  return assertSessionEvaluation(await request<unknown>(`/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/evaluate`, {
     method: "POST",
     body: JSON.stringify({ limit: 20 }),
-  });
+  }));
 }
 
 export async function explainIdentificationSession(

@@ -1,0 +1,399 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend main c37ff0ca6 via FastAPI TestClient against app.main: owner auth overridden, research_station/reasoning_ledger tables on in-memory SQLite, the canonical-reference validator stubbed (as tests/test_build_rs_001_research_workspace.py does), and the candidate-knowledge routes bound to the repo's MemoryCandidateRepository. Two literature evidence inputs asserting conflicting flower colours were previewed and executed through the API; the first candidate was linked SUPPORTS before it was superseded, the second CONTRADICTS; a ledger cites both by candidate id.",
+  "candidate_conflicts": {
+    "items": [
+      {
+        "candidate_ids": [
+          3,
+          8
+        ],
+        "conflict_id": 11,
+        "created_at": "2026-09-25T14:49:49.033032+00:00",
+        "state": "OPEN"
+      }
+    ],
+    "limit": 50,
+    "offset": 0,
+    "total": 1
+  },
+  "candidate_detail": {
+    "3": {
+      "active": false,
+      "candidate_hash": "d7ba11c52d45e3bfb9224ea571e9a33f6bcaf1fb5ca934540c02ae9dbf6a490d",
+      "candidate_id": 3,
+      "candidate_run_id": 1,
+      "confidence": 0.7,
+      "confidence_components": {
+        "anchor": 1.0,
+        "extraction": 0.7,
+        "source": 0.8
+      },
+      "created_at": "2026-09-25T14:49:49.012157+00:00",
+      "evidence": [
+        {
+          "anchor": {
+            "anchor_id": 11,
+            "block_id": null,
+            "bounding_region": null,
+            "char_end": 45,
+            "char_start": 0,
+            "locator": {
+              "page": 3
+            },
+            "logical_unit": null,
+            "ordered_span": 0,
+            "page_number": 3
+          },
+          "authorized_quote": "Flowers of Masdevallia veitchiana are orange.",
+          "candidate_id": 3,
+          "created_at": "2026-09-25T14:49:49.012223+00:00",
+          "display_policy": "FULL_TEXT_ALLOWED",
+          "evidence_link_id": 4,
+          "extraction_run_id": 1,
+          "revision_id": 1,
+          "source_object_id": 1,
+          "source_object_type": "LITERATURE_PAPER"
+        }
+      ],
+      "evidence_fingerprint": "e3418072177a40734ac0355f029f2d0d769ec1d135fb8e969833b28c38875863",
+      "extraction_method": "STRUCTURED_SOURCE_FIELD",
+      "extractor_version": "086a-1",
+      "kind": "TRAIT",
+      "normalized_subject": "masdevallia veitchiana",
+      "numeric_value": null,
+      "object_value": "orange",
+      "predicate": "flower_color",
+      "published": false,
+      "qualifiers": {},
+      "review_state": "REQUIRED",
+      "ruleset_version": "086a-rules-1",
+      "superseded_by_candidate_id": 8,
+      "unit": null,
+      "version": 1
+    },
+    "8": {
+      "active": true,
+      "candidate_hash": "0ad154aca87a2b4d2f1236e3a39ffaade1cb9db9a3c4521affb9d232ae5286f7",
+      "candidate_id": 8,
+      "candidate_run_id": 6,
+      "confidence": 0.7,
+      "confidence_components": {
+        "anchor": 1.0,
+        "extraction": 0.7,
+        "source": 0.8
+      },
+      "created_at": "2026-09-25T14:49:49.032879+00:00",
+      "evidence": [
+        {
+          "anchor": {
+            "anchor_id": 12,
+            "block_id": null,
+            "bounding_region": null,
+            "char_end": 39,
+            "char_start": 0,
+            "locator": {
+              "page": 3
+            },
+            "logical_unit": null,
+            "ordered_span": 0,
+            "page_number": 3
+          },
+          "authorized_quote": "Masdevallia veitchiana has red flowers.",
+          "candidate_id": 8,
+          "created_at": "2026-09-25T14:49:49.033001+00:00",
+          "display_policy": "FULL_TEXT_ALLOWED",
+          "evidence_link_id": 9,
+          "extraction_run_id": 2,
+          "revision_id": 2,
+          "source_object_id": 2,
+          "source_object_type": "LITERATURE_PAPER"
+        }
+      ],
+      "evidence_fingerprint": "8286a4da1cef8343050e546cc4dd5968926e8521e15189ff1a03f48d372241b7",
+      "extraction_method": "STRUCTURED_SOURCE_FIELD",
+      "extractor_version": "086a-1",
+      "kind": "TRAIT",
+      "normalized_subject": "masdevallia veitchiana",
+      "numeric_value": null,
+      "object_value": "red",
+      "predicate": "flower_color",
+      "published": false,
+      "qualifiers": {},
+      "review_state": "REQUIRED",
+      "ruleset_version": "086a-rules-1",
+      "unit": null,
+      "version": 2
+    }
+  },
+  "ledger_revision": {
+    "inspectable": true,
+    "ledger_id": "34182ba0-aff3-5da3-97b1-04beda8825a2",
+    "reasoning_certified": false,
+    "requested_version": 3,
+    "revision": {
+      "conflict_dispositions": [],
+      "created_at": "2026-09-25T14:49:49.265685+00:00",
+      "created_by": "owner-a",
+      "description": "",
+      "entries": [
+        {
+          "attributes": {},
+          "author": "owner-a",
+          "conflict_state": "unresolved",
+          "created_at": "2026-09-25T14:49:49.296342+00:00",
+          "entry_id": "34ea8a97-fe0e-423e-b7c3-102d82346b69",
+          "fingerprint": "174a8e999fbab4943690b7ad62803f7cd343fb96e3ba8cb1fd6f5debee427a6d",
+          "kind": "support",
+          "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+          "provenance": {
+            "collector": null,
+            "concept_id": null,
+            "content_hash": null,
+            "dataset_id": null,
+            "execution_id": null,
+            "extra": {},
+            "literature_record_id": "1",
+            "method_id": null,
+            "retrieved_at": "2026-09-25T14:49:49.296275+00:00",
+            "rs_project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+            "source_id": "3",
+            "source_kind": "candidate_knowledge",
+            "tool_id": null
+          },
+          "references_entry_ids": [],
+          "sequence": 0,
+          "tags": [],
+          "tenant_id": "owner-a",
+          "text": "Candidate reports orange flowers.",
+          "uncertainty": {
+            "confidence": 0.6,
+            "rationale": "Single source",
+            "unresolved_assumptions": [
+              "Colour not photographically calibrated"
+            ]
+          },
+          "version": 1
+        },
+        {
+          "attributes": {},
+          "author": "owner-a",
+          "conflict_state": "unresolved",
+          "created_at": "2026-09-25T14:49:49.311447+00:00",
+          "entry_id": "56f720db-1dd5-4eaa-a662-c569feaa29b2",
+          "fingerprint": "87eddeb6132766f7f34ca312b67472b403e2722d6bf415720e0ae343dd13cfc1",
+          "kind": "counterevidence",
+          "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+          "provenance": {
+            "collector": null,
+            "concept_id": null,
+            "content_hash": null,
+            "dataset_id": null,
+            "execution_id": null,
+            "extra": {},
+            "literature_record_id": "2",
+            "method_id": null,
+            "retrieved_at": "2026-09-25T14:49:49.311414+00:00",
+            "rs_project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+            "source_id": "8",
+            "source_kind": "candidate_knowledge",
+            "tool_id": null
+          },
+          "references_entry_ids": [],
+          "sequence": 1,
+          "tags": [],
+          "tenant_id": "owner-a",
+          "text": "A second source reports red flowers.",
+          "uncertainty": null,
+          "version": 1
+        }
+      ],
+      "ledger_fingerprint": "8c440e453737f164ea955d0c59f98aff9ae0d9584c90f5db5d2c10906698abfd",
+      "ledger_id": "34182ba0-aff3-5da3-97b1-04beda8825a2",
+      "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+      "resolved_conflict_ids": [],
+      "review_content_hash": "f065d518c87c34826d4824aeef83f691ae1351596234db84c91c9b5074a879ee",
+      "review_decisions": [],
+      "status": "draft",
+      "tenant_id": "owner-a",
+      "title": "Flower colour reasoning",
+      "updated_at": "2026-09-25T14:49:49.312998+00:00",
+      "version": 3
+    }
+  },
+  "project": {
+    "archived_at": null,
+    "created_at": "2026-09-25T14:49:49.112490",
+    "description": "Reconcile literature on flower colour.",
+    "hypothesis": null,
+    "link_counts": {
+      "documents": 1,
+      "evidence": 2,
+      "notes": 1,
+      "saved_searches": 0,
+      "taxa": 1
+    },
+    "owner_subject": "owner-a",
+    "permissions": {
+      "can_archive": true,
+      "can_read": true,
+      "can_update": true
+    },
+    "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+    "research_question": "What flower colour does the literature record?",
+    "status": "ACTIVE",
+    "title": "Masdevallia flower colour",
+    "updated_at": "2026-09-25T14:49:49.112498",
+    "version": 1
+  },
+  "project_documents": {
+    "items": [
+      {
+        "created_at": "2026-09-25T14:49:49.155309",
+        "created_by_subject": "owner-a",
+        "document_id": "document-7",
+        "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+        "relationship": "SOURCE",
+        "revision_id": null
+      }
+    ]
+  },
+  "project_evidence": {
+    "items": [
+      {
+        "created_at": "2026-09-25T14:49:49.182486",
+        "created_by_subject": "owner-a",
+        "evidence_id": "8",
+        "evidence_kind": "CANDIDATE",
+        "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+        "relationship": "CONTRADICTS"
+      },
+      {
+        "created_at": "2026-09-25T14:49:49.169345",
+        "created_by_subject": "owner-a",
+        "evidence_id": "3",
+        "evidence_kind": "CANDIDATE",
+        "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+        "relationship": "SUPPORTS"
+      }
+    ]
+  },
+  "project_notes": {
+    "items": [
+      {
+        "body": "Is colour variation photographic?",
+        "created_at": "2026-09-25T14:49:49.197091",
+        "data_status": "USER_ANNOTATION",
+        "note_id": "9ca55ad2-01a5-4b34-a860-6e89b95823e1",
+        "note_type": "QUESTION",
+        "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+        "title": "Open",
+        "updated_at": "2026-09-25T14:49:49.197097",
+        "version": 1
+      }
+    ]
+  },
+  "project_reasoning_ledgers": {
+    "items": [
+      {
+        "conflict_dispositions": [],
+        "created_at": "2026-09-25T14:49:49.265685+00:00",
+        "created_by": "owner-a",
+        "description": "",
+        "entries": [
+          {
+            "attributes": {},
+            "author": "owner-a",
+            "conflict_state": "unresolved",
+            "created_at": "2026-09-25T14:49:49.296342+00:00",
+            "entry_id": "34ea8a97-fe0e-423e-b7c3-102d82346b69",
+            "fingerprint": "174a8e999fbab4943690b7ad62803f7cd343fb96e3ba8cb1fd6f5debee427a6d",
+            "kind": "support",
+            "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+            "provenance": {
+              "collector": null,
+              "concept_id": null,
+              "content_hash": null,
+              "dataset_id": null,
+              "execution_id": null,
+              "extra": {},
+              "literature_record_id": "1",
+              "method_id": null,
+              "retrieved_at": "2026-09-25T14:49:49.296275+00:00",
+              "rs_project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+              "source_id": "3",
+              "source_kind": "candidate_knowledge",
+              "tool_id": null
+            },
+            "references_entry_ids": [],
+            "sequence": 0,
+            "tags": [],
+            "tenant_id": "owner-a",
+            "text": "Candidate reports orange flowers.",
+            "uncertainty": {
+              "confidence": 0.6,
+              "rationale": "Single source",
+              "unresolved_assumptions": [
+                "Colour not photographically calibrated"
+              ]
+            },
+            "version": 1
+          },
+          {
+            "attributes": {},
+            "author": "owner-a",
+            "conflict_state": "unresolved",
+            "created_at": "2026-09-25T14:49:49.311447+00:00",
+            "entry_id": "56f720db-1dd5-4eaa-a662-c569feaa29b2",
+            "fingerprint": "87eddeb6132766f7f34ca312b67472b403e2722d6bf415720e0ae343dd13cfc1",
+            "kind": "counterevidence",
+            "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+            "provenance": {
+              "collector": null,
+              "concept_id": null,
+              "content_hash": null,
+              "dataset_id": null,
+              "execution_id": null,
+              "extra": {},
+              "literature_record_id": "2",
+              "method_id": null,
+              "retrieved_at": "2026-09-25T14:49:49.311414+00:00",
+              "rs_project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+              "source_id": "8",
+              "source_kind": "candidate_knowledge",
+              "tool_id": null
+            },
+            "references_entry_ids": [],
+            "sequence": 1,
+            "tags": [],
+            "tenant_id": "owner-a",
+            "text": "A second source reports red flowers.",
+            "uncertainty": null,
+            "version": 1
+          }
+        ],
+        "ledger_fingerprint": "8c440e453737f164ea955d0c59f98aff9ae0d9584c90f5db5d2c10906698abfd",
+        "ledger_id": "34182ba0-aff3-5da3-97b1-04beda8825a2",
+        "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+        "resolved_conflict_ids": [],
+        "review_content_hash": "f065d518c87c34826d4824aeef83f691ae1351596234db84c91c9b5074a879ee",
+        "review_decisions": [],
+        "status": "draft",
+        "tenant_id": "owner-a",
+        "title": "Flower colour reasoning",
+        "updated_at": "2026-09-25T14:49:49.312998+00:00",
+        "version": 3
+      }
+    ]
+  },
+  "project_taxa": {
+    "items": [
+      {
+        "created_at": "2026-09-25T14:49:49.137772",
+        "created_by_subject": "owner-a",
+        "project_id": "bd19fcff-a858-4801-9f0a-2d22ec4510d6",
+        "relationship": "SUBJECT",
+        "taxon_id": "taxon:masdevallia-veitchiana"
+      }
+    ]
+  }
+}

@@ -14,6 +14,12 @@
 
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 import { CalyxApiError } from "@/lib/calyxWorkspace";
+import {
+  errorCodeOf,
+  memberAuthServiceRefusal,
+  REFUSAL_MESSAGE,
+  withMemberReadAuth,
+} from "@/lib/memberReadAuth";
 
 export type ResearchProjectStatus = "ACTIVE" | "PAUSED" | "COMPLETED";
 
@@ -73,12 +79,16 @@ export type ResearchNote = {
 
 export async function researchRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
+  const url = `${CALYX_BACKEND_BASE_URL}${path}`;
   try {
-    response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
+    // Only GET /api/research/traits carries a signed-in member's session
+    // (see memberReadAuth). Research projects, candidate knowledge, evidence
+    // aggregation, reasoning ledgers and every write stay owner-only.
+    response = await fetch(url, await withMemberReadAuth(url, {
       ...init,
       credentials: "include",
       headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-    });
+    }));
   } catch (error) {
     if (init?.signal?.aborted) throw error;
     throw new CalyxApiError(
@@ -89,12 +99,21 @@ export async function researchRequest<T>(path: string, init?: RequestInit): Prom
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
     const detail = typeof body?.detail === "string" ? body.detail : null;
+    const code = errorCodeOf(body) ?? undefined;
     if (response.status === 401 || response.status === 403) {
       throw new CalyxApiError(
         "authentication_required",
         detail ?? "Sign in to open your research projects.",
         response.status,
+        code,
       );
+    }
+    const memberAuthState = memberAuthServiceRefusal(response.status, code);
+    if (memberAuthState) {
+      // MEMBER_AUTH_NOT_CONFIGURED is a deployment state, not an outage;
+      // MEMBER_AUTH_UNAVAILABLE is a transient verification failure. Both are
+      // said as themselves rather than as a generic server error.
+      throw new CalyxApiError("server_error", REFUSAL_MESSAGE[memberAuthState], 503, code);
     }
     if (response.status === 404) {
       throw new CalyxApiError(
@@ -161,6 +180,8 @@ export type ResearchStationDossier = {
   conflicts: ResearchDocumentLink[];
   methods: ResearchDocumentLink[];
   evidence: ResearchEvidenceLink[];
+  /** Evidence links recorded as CONTRADICTS — disagreement, never support. */
+  contradictingEvidence: ResearchEvidenceLink[];
   openQuestions: ResearchNote[];
   /** True when the workspace holds no linked evidence of any kind yet. */
   evidenceEmpty: boolean;
@@ -193,6 +214,7 @@ export function buildResearchDossier(input: {
     conflicts,
     methods,
     evidence,
+    contradictingEvidence: evidence.filter((item) => item.relationship === "CONTRADICTS"),
     openQuestions: notes.filter((item) => item.note_type === "QUESTION"),
     evidenceEmpty: supporting.length === 0 && conflicts.length === 0 && evidence.length === 0,
   };

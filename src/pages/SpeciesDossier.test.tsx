@@ -173,10 +173,10 @@ async function flush() {
   });
 }
 
-function renderPage() {
+function renderPage(path = '/species/cattleya-labiata') {
   act(() => {
     root.render(
-      <MemoryRouter initialEntries={['/species/cattleya-labiata']}>
+      <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route path="/species/:slug" element={<SpeciesDossier />} />
         </Routes>
@@ -578,26 +578,25 @@ describe('Species Dossier → Atlas mounted continuity', () => {
     expect(link?.textContent).toContain('View on Atlas');
   });
 
-  it('prefers the dossier accepted name over the ocBackend canonical name for the Atlas subject', async () => {
+  it('never adopts a dossier for another species: a name mismatch re-resolves the subject', async () => {
+    // The route id names a different taxon in the Calyx id space than in the
+    // ocBackend one. The labiata dossier must not be shown on a percivaliana page.
     mocks.fetchSpeciesById.mockResolvedValue({
       taxonomy_id: 'cattleya-labiata',
       canonical_name: 'Cattleya percivaliana',
     });
-    mocks.fetchSpeciesDossier.mockResolvedValue(
-      dossier({
-        identity: {
-          ...dossier().identity,
-          accepted_name: 'Cattleya labiata',
-        },
-      }),
-    );
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
 
     renderPage();
     await flush();
 
-    expect(atlasLink()?.getAttribute('href')).toBe('/atlas?species=Cattleya+labiata');
+    expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith(
+      { name: 'Cattleya percivaliana' },
+      expect.anything(),
+    );
+    expect(container.textContent).toContain('Evidence dossier is not currently available.');
+    expect(atlasLink()?.getAttribute('href')).toBe('/atlas?species=Cattleya+percivaliana');
   });
-
   it('fails closed: hides the Atlas action when only an opaque route id is available', async () => {
     // No canonical_name / scientific_name from ocBackend, and the dossier fetch
     // fails, so the only thing identifying the record is the opaque route slug.
@@ -784,6 +783,15 @@ describe('governed identity from the dossier (journeys 2, 18)', () => {
   });
 
   it('shows a variety with its rank and an honest dash when authorship is not stated', async () => {
+    // The page only shows a dossier whose identity is the page's subject
+    // (#815), so the public record under this id names the same variety.
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: '104',
+      canonical_name: 'Dendrobium nobile var. alba',
+      genus: 'Dendrobium',
+      species: 'nobile',
+      family: 'Orchidaceae',
+    });
     mocks.fetchSpeciesDossier.mockResolvedValue(
       dossier({
         identity: {
@@ -800,7 +808,7 @@ describe('governed identity from the dossier (journeys 2, 18)', () => {
         },
       }),
     );
-    renderPage();
+    renderPage('/species/104');
     await flush();
     const text = identityRow()?.textContent ?? '';
     expect(text).toContain('Dendrobium nobile var. alba');
@@ -815,5 +823,154 @@ describe('governed identity from the dossier (journeys 2, 18)', () => {
     await flush();
     expect(identityRow()).toBeNull();
     expect(container.textContent).toContain('Orchidaceae'); // the public taxonomy fields still render
+  });
+});
+
+describe('dossier subject identity across id spaces', () => {
+  const caladenia = () =>
+    dossier({
+      identity: {
+        ...dossier().identity,
+        taxon_id: '6056',
+        display_name: 'Caladenia x suffusa',
+        full_scientific_name: 'Caladenia x suffusa Hopper & A. P. Br.',
+        accepted_name: 'Caladenia x suffusa',
+        genus: 'Caladenia',
+        specific_epithet: 'x',
+      },
+      knowledge_graph: emptySection({ state: 'available', summary: 'Caladenia relations.' }),
+    });
+  const labiata = () =>
+    dossier({
+      identity: { ...dossier().identity, taxon_id: '7904' },
+      knowledge_graph: emptySection({ state: 'available', summary: 'Labiata relations.' }),
+    });
+
+  it('shows the dossier of the linked species, not of the colliding route id', async () => {
+    // Production: public search "Cattleya labiata" is 6056 and links here with
+    // its name; Calyx 6056 is Caladenia x suffusa; public detail 404s.
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.fetchSpeciesDossier.mockImplementation(async (id: string) =>
+      id === '6056' ? caladenia() : labiata(),
+    );
+    mocks.resolveFederatedSpecies.mockImplementation(async (params: { name?: string }) => ({
+      status: params.name ? 'resolved' : 'unresolved',
+      incoming_name: params.name ?? null,
+      matched_name: params.name ? 'Cattleya labiata' : null,
+      match_state: params.name ? 'accepted_name' : 'none',
+      taxon_id: params.name ? '7904' : null,
+      canonical_dossier_url: null,
+      candidates: [],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: '',
+    }));
+
+    renderPage('/species/6056?name=Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    expect(mocks.fetchSpeciesDossier).toHaveBeenCalledWith('7904', expect.anything());
+    expect(container.textContent).toContain('Labiata relations.');
+    expect(container.textContent).not.toContain('Caladenia');
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
+  });
+
+  it('keeps the route dossier when it is the linked species', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.fetchSpeciesDossier.mockResolvedValue(labiata());
+
+    renderPage('/species/7904?name=Cattleya%20labiata');
+    await flush();
+
+    expect(mocks.fetchSpeciesDossier).toHaveBeenCalledTimes(1);
+    expect(container.textContent).toContain('Labiata relations.');
+    expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith(
+      { taxonId: '7904' },
+      expect.anything(),
+    );
+  });
+
+  it('withholds the dossier and lists the candidates when the name is ambiguous', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.fetchSpeciesDossier.mockResolvedValue(caladenia());
+    mocks.resolveFederatedSpecies.mockResolvedValue({
+      status: 'ambiguous',
+      incoming_name: 'Cattleya labiata',
+      matched_name: null,
+      match_state: 'none',
+      taxon_id: null,
+      canonical_dossier_url: null,
+      candidates: [
+        { taxon_id: '7904', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+        { taxon_id: '34325', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+      ],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: 'Multiple canonical taxa match the supplied identifier; human selection is required.',
+    });
+
+    renderPage('/species/6056?name=Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    const ambiguous = container.querySelector('[data-testid="dossier-ambiguous"]');
+    expect(ambiguous?.textContent).toContain('More than one canonical taxon is named Cattleya labiata');
+    expect(ambiguous?.textContent).toContain('canonical taxon 7904');
+    expect(ambiguous?.textContent).toContain('canonical taxon 34325');
+    expect(container.textContent).not.toContain('Caladenia');
+    expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+  });
+
+  it('never shows the species dossier for an infraspecific subject the resolver normalised (checker probe)', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.fetchSpeciesDossier.mockImplementation(async (id: string) =>
+      id === '6056' ? caladenia() : labiata(),
+    );
+    mocks.resolveFederatedSpecies.mockImplementation(async (params: { name?: string }) => ({
+      status: params.name ? 'resolved' : 'unresolved',
+      incoming_name: params.name ?? null,
+      matched_name: params.name ? 'Cattleya labiata' : null,
+      match_state: params.name ? 'accepted_name' : 'none',
+      taxon_id: params.name ? '7904' : null,
+      canonical_dossier_url: null,
+      candidates: [],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: '',
+    }));
+
+    renderPage('/species/6056?name=Cattleya%20labiata%20fo.%20alba');
+    await flush();
+    await flush();
+
+    expect(container.textContent).toContain('Evidence dossier is not currently available.');
+    expect(container.textContent).not.toContain('Labiata relations.');
+    expect(container.textContent).not.toContain('Caladenia');
+    expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata fo. alba');
+  });
+
+  it('fails closed when the link names a different species than the public record under the id', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: '6056',
+      canonical_name: 'Cattleya percivaliana',
+      family: 'Orchidaceae',
+      conservation_status: 'Endangered',
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(labiata());
+
+    renderPage('/species/6056?name=Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    const conflict = container.querySelector('[data-testid="dossier-subject-conflict"]');
+    expect(conflict?.textContent).toContain('This link names Cattleya labiata');
+    expect(conflict?.textContent).toContain('Cattleya percivaliana');
+    expect(mocks.fetchSpeciesDossier).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain('Labiata relations.');
+    expect(container.textContent).not.toContain('Endangered');
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
+    expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
   });
 });

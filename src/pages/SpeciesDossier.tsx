@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Loader2,
@@ -26,10 +26,15 @@ import {
   atlasLayerLabel,
   atlasLayerMessage,
   fetchSpeciesDossier,
+  pageSubject,
+  resolveDossierForSubject,
   resolveFederatedSpecies,
+  sectionExcerpts,
   sectionMessage,
   type AtlasLayer,
+  type DossierSubjectResolution,
   type FederationResolveResult,
+  type PageSubject,
   type SpeciesAtlasEnvelope,
   type SpeciesDossierEnvelope,
   type DossierSection,
@@ -94,6 +99,10 @@ function formatConfidence(confidence: number | null): string {
 const SpeciesDossier: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const taxonomyId = slug ?? '';
+  // A link from a surface keyed by another id space (the public species search)
+  // names its subject, so the dossier can be checked against it.
+  const [searchParams] = useSearchParams();
+  const linkedName = (searchParams.get('name') ?? '').trim() || null;
 
   const [data, setData] = useState<SpeciesDossierData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -103,6 +112,12 @@ const SpeciesDossier: React.FC = () => {
   const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
   const [dossierError, setDossierError] = useState(false);
+  const [subjectConflict, setSubjectConflict] = useState<
+    Extract<PageSubject, { state: 'conflict' }> | null
+  >(null);
+  const [dossierAmbiguity, setDossierAmbiguity] = useState<
+    Extract<DossierSubjectResolution, { state: 'ambiguous' }> | null
+  >(null);
   const [federation, setFederation] = useState<FederationResolveResult | null>(null);
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
@@ -111,7 +126,8 @@ const SpeciesDossier: React.FC = () => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
     setLoading(true);
-    fetchSpeciesById(taxonomyId, ctrl.signal)
+    const speciesRequest = fetchSpeciesById(taxonomyId, ctrl.signal).catch(() => null);
+    speciesRequest
       .then((d) => setData(d))
       .finally(() => setLoading(false));
 
@@ -123,42 +139,82 @@ const SpeciesDossier: React.FC = () => {
       })
       .finally(() => setMycoLoading(false));
 
+    // The dossier is shown only when its identity is this page's subject; the
+    // route id alone may belong to another id space (see resolveDossierForSubject).
     setDossierLoading(true);
     setDossierError(false);
+    setDossierAmbiguity(null);
+    setSubjectConflict(null);
     setDossier(null);
-    fetchSpeciesDossier(taxonomyId, ctrl.signal)
-      .then((d) => setDossier(d))
+    setFederationLoading(true);
+    setFederationError(false);
+    setFederation(null);
+    speciesRequest
+      .then((d) => {
+        const publicName =
+          d?.canonical_name ||
+          d?.scientific_name ||
+          [d?.genus, d?.species ?? d?.specific_epithet].filter(Boolean).join(' ') ||
+          null;
+        // See pageSubject: the link's name outranks the id-keyed public detail,
+        // and a disagreement between them fails closed.
+        const subject = pageSubject({ linkedName, publicName, slug: taxonomyId });
+        if (subject.state === 'conflict') {
+          if (!ctrl.signal.aborted) setSubjectConflict(subject);
+          return { state: 'unavailable' } as DossierSubjectResolution;
+        }
+        return resolveDossierForSubject(
+          taxonomyId,
+          subject.name,
+          { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
+          ctrl.signal,
+        );
+      })
+      .then((resolution) => {
+        if (ctrl.signal.aborted) return undefined;
+        if (resolution.state !== 'resolved') {
+          setDossierError(true);
+          if (resolution.state === 'ambiguous') setDossierAmbiguity(resolution);
+          return undefined;
+        }
+        setDossier(resolution.dossier);
+        return resolveFederatedSpecies(
+          { taxonId: resolution.dossier.identity?.taxon_id || taxonomyId },
+          ctrl.signal,
+        )
+          .then((result) => setFederation(result))
+          .catch(() => {
+            if (!ctrl.signal.aborted) setFederationError(true);
+          });
+      })
       .catch(() => {
         if (!ctrl.signal.aborted) setDossierError(true);
       })
       .finally(() => {
-        if (!ctrl.signal.aborted) setDossierLoading(false);
-      });
-
-    setFederationLoading(true);
-    setFederationError(false);
-    setFederation(null);
-    resolveFederatedSpecies({ taxonId: taxonomyId }, ctrl.signal)
-      .then((result) => setFederation(result))
-      .catch(() => {
-        if (!ctrl.signal.aborted) setFederationError(true);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setFederationLoading(false);
+        if (!ctrl.signal.aborted) {
+          setDossierLoading(false);
+          setFederationLoading(false);
+        }
       });
 
     return () => ctrl.abort();
-  }, [taxonomyId]);
+  }, [taxonomyId, linkedName]);
 
+  // On a subject conflict the id-keyed public record may be another species,
+  // so neither its name nor its fields stand for this page's subject.
+  const subjectData = subjectConflict ? null : data;
   const name =
-    data?.canonical_name ||
-    data?.scientific_name ||
-    [data?.genus, data?.species ?? data?.specific_epithet]
+    subjectConflict?.linkedName ||
+    subjectData?.canonical_name ||
+    subjectData?.scientific_name ||
+    [subjectData?.genus, subjectData?.species ?? subjectData?.specific_epithet]
       .filter(Boolean)
       .join(' ') ||
+    dossier?.identity.display_name ||
+    linkedName ||
     decodeURIComponent(taxonomyId);
 
-  const image = data?.hero_image_url || data?.representative_image_url || null;
+  const image = subjectData?.hero_image_url || subjectData?.representative_image_url || null;
   // Resolve one governed canonical species identity for every public
   // continuation. Atlas, Research, and Calyx therefore either receive the same
   // exact subject or all fail closed; none may widen an opaque route/taxonomy
@@ -166,8 +222,8 @@ const SpeciesDossier: React.FC = () => {
   const continuumActions = speciesDossierContinuumActions({
     acceptedName: dossier?.identity.accepted_name,
     fullScientificName: dossier?.identity.full_scientific_name,
-    canonicalName: data?.canonical_name,
-    scientificName: data?.scientific_name,
+    canonicalName: subjectData?.canonical_name,
+    scientificName: subjectData?.scientific_name,
   });
   const atlasHref = continuumActions?.atlas ?? null;
   const researchHref = continuumActions?.research ?? null;
@@ -283,22 +339,22 @@ const SpeciesDossier: React.FC = () => {
                 <h1 className="font-display italic text-3xl md:text-4xl text-[#faf7f2] leading-tight">
                   {name}
                 </h1>
-                {data?.authority && (
+                {subjectData?.authority && (
                   <div className="mt-1 font-body italic text-[13px] text-[#cfc8b8]/65">
-                    {data.authority}
-                    {data.common_name ? ` · ${data.common_name}` : ''}
+                    {subjectData.authority}
+                    {subjectData.common_name ? ` · ${subjectData.common_name}` : ''}
                   </div>
                 )}
 
                 {/* Taxonomy */}
                 <Block icon={GitBranch} title="Taxonomy">
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <Field label="Family" value={data?.family} />
-                    <Field label="Tribe" value={data?.tribe} />
-                    <Field label="Genus" value={data?.genus} />
+                    <Field label="Family" value={subjectData?.family} />
+                    <Field label="Tribe" value={subjectData?.tribe} />
+                    <Field label="Genus" value={subjectData?.genus} />
                     <Field
                       label="Species"
-                      value={data?.species ?? data?.specific_epithet}
+                      value={subjectData?.species ?? subjectData?.specific_epithet}
                     />
                   </dl>
                   {!dossierLoading && !dossierError && dossier && (
@@ -316,10 +372,10 @@ const SpeciesDossier: React.FC = () => {
 
                 {/* Conservation */}
                 <Block icon={ShieldAlert} title="Conservation status">
-                  {data?.conservation_status ? (
+                  {subjectData?.conservation_status ? (
                     <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[11px] tracking-[0.16em] uppercase text-[#c9a24a]">
-                      {data.conservation_status}
-                      {data.iucn_code ? ` · ${data.iucn_code}` : ''}
+                      {subjectData.conservation_status}
+                      {subjectData.iucn_code ? ` · ${subjectData.iucn_code}` : ''}
                     </span>
                   ) : (
                     <Empty>Not yet assessed in the Continuum record.</Empty>
@@ -335,25 +391,25 @@ const SpeciesDossier: React.FC = () => {
 
                 {/* Range / habitat */}
                 <Block icon={Leaf} title="Native range & habitat">
-                  {data?.region || data?.habitat || data?.description ? (
+                  {subjectData?.region || subjectData?.habitat || subjectData?.description ? (
                     <div className="space-y-2 font-body text-[14px] text-[#cfc8b8]/85 leading-relaxed">
-                      {data?.region && (
+                      {subjectData?.region && (
                         <p>
                           <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#c9a24a] mr-2">
                             Range
                           </span>
-                          {data.region}
+                          {subjectData.region}
                         </p>
                       )}
-                      {data?.habitat && (
+                      {subjectData?.habitat && (
                         <p>
                           <span className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#c9a24a] mr-2">
                             Habitat
                           </span>
-                          {data.habitat}
+                          {subjectData.habitat}
                         </p>
                       )}
-                      {data?.description && <p>{data.description}</p>}
+                      {subjectData?.description && <p>{subjectData.description}</p>}
                     </div>
                   ) : (
                     <Empty>Range and habitat notes not yet linked.</Empty>
@@ -374,7 +430,7 @@ const SpeciesDossier: React.FC = () => {
                       <Loader2 className="h-3 w-3 animate-spin" /> Querying fungal
                       associations…
                     </div>
-                  ) : partners.length > 0 ? (
+                  ) : !subjectConflict && partners.length > 0 ? (
                     <ul className="space-y-3">
                       {partners.map((p, i) => (
                         <li
@@ -443,6 +499,31 @@ const SpeciesDossier: React.FC = () => {
                     <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
                       <Loader2 className="h-3 w-3 animate-spin" /> Loading evidence
                       receipts…
+                    </div>
+                  ) : subjectConflict ? (
+                    <div data-testid="dossier-subject-conflict">
+                      <Empty>
+                        This link names {subjectConflict.linkedName}, but the record under this
+                        id is {subjectConflict.publicName}. The evidence dossier is withheld
+                        because the page cannot tell which species it is about.
+                      </Empty>
+                    </div>
+                  ) : dossierAmbiguity ? (
+                    <div data-testid="dossier-ambiguous">
+                      <Empty>
+                        More than one canonical taxon is named {dossierAmbiguity.subjectName}. The
+                        evidence dossier is withheld until a person chooses which one this page
+                        is about.
+                      </Empty>
+                      {dossierAmbiguity.candidates.length > 0 && (
+                        <ul className="mt-2 space-y-1 font-mono text-[10px] tracking-[0.1em] text-[#cfc8b8]/70">
+                          {dossierAmbiguity.candidates.map((candidate) => (
+                            <li key={candidate.taxon_id}>
+                              {candidate.accepted_name} · canonical taxon {candidate.taxon_id}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                   ) : dossierError || !dossier ? (
                     <Empty>Evidence dossier is not currently available.</Empty>
@@ -603,6 +684,22 @@ function DossierSectionBlock({
       >
         {sectionMessage(section)}
       </p>
+      {sectionExcerpts(section).length > 0 && (
+        <dl data-testid="dossier-section-excerpts" className="mt-3 space-y-2">
+          {sectionExcerpts(section).map((excerpt, i) => (
+            <div key={`${excerpt.label}-${i}`}>
+              <dt className="font-mono text-[10px] tracking-[0.12em] uppercase text-[#cfc8b8]/60">
+                {excerpt.label}
+                {excerpt.evidenceState ? ` · ${excerpt.evidenceState}` : ''}
+              </dt>
+              <dd className="mt-0.5 whitespace-pre-line font-body text-[12px] text-[#cfc8b8]/85">
+                {excerpt.text}
+                {excerpt.truncated ? ' [excerpt shortened]' : ''}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
       {section.receipts.length > 0 && (
         <ul className="mt-3 space-y-2">
           {section.receipts.map((receipt, i) => (

@@ -1,0 +1,11 @@
+{
+  "_capture": {
+    "url": null,
+    "captured_at": null,
+    "method": "NOT CAPTURED. Fixture-only: the one live capture attempted for a FUZZY response was declined in the capture session, so no real FUZZY body is available.",
+    "note": "Minimal GBIF species/match response shape (usageKey, scientificName, canonicalName, rank, status, confidence, matchType) as documented at https://techdocs.gbif.org/en/openapi/v1/species. The names are deliberately fictional ('Fixturea') and are not taxonomic content. Used only to pin that FUZZY maps to unresolved and is never adopted."
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"usageKey\":999999901,\"scientificName\":\"Fixturea exemplarum Fixture\",\"canonicalName\":\"Fixturea exemplarum\",\"rank\":\"SPECIES\",\"status\":\"ACCEPTED\",\"confidence\":91,\"matchType\":\"FUZZY\"}"
+}

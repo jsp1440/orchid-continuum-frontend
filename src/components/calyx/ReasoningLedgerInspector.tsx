@@ -49,8 +49,11 @@ function EntryRow({ entry }: { entry: LedgerEntry }) {
           <span className="text-[10px] text-muted-foreground">#{entry.sequence}</span>
         ) : null}
       </div>
-      {entry.statement ? (
-        <p className="mt-1 text-xs leading-5">{entry.statement}</p>
+      {/* The backend calls this `text`. Reading `statement` — a key it never
+          emits — rendered "No statement recorded" over every entry that had
+          one, hiding the reasoning this panel exists to show. */}
+      {entry.text ? (
+        <p className="mt-1 text-xs leading-5">{entry.text}</p>
       ) : (
         <p className="mt-1 text-xs text-muted-foreground">No statement recorded on this entry.</p>
       )}

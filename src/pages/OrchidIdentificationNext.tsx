@@ -5,6 +5,7 @@ import { ArrowRight, CheckCircle2, ChevronDown, CircleHelp, FlaskConical, Rotate
 import { readIdentificationSourceContext } from "@/features/calyx-workspace/identificationContext";
 import { recordCalyxSurfaceContext } from "@/features/calyx-workspace/sessionContext";
 
+import MatrixCandidateEvidence from "@/components/matrix/MatrixCandidateEvidence";
 import MatrixLexiconGuide from "@/components/matrix/MatrixLexiconGuide";
 import MatrixVisionReviewPanel from "@/components/matrix/MatrixVisionReviewPanel";
 import { EvidenceFeedbackControl } from "@/components/evidence-feedback/EvidenceFeedbackControl";
@@ -17,11 +18,13 @@ import {
   explainIdentificationSession,
   explanationText,
   listMatrixRegistries,
+  type CalyxExplanation,
   type Certainty,
   type ExplanationAudience,
   type RegistrySummary,
   type SessionEvaluation,
 } from "@/lib/matrixIdentification";
+import { explanationCandidates, explanationProvenance } from "@/lib/matrixCandidateEvidence";
 
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
@@ -68,6 +71,7 @@ export default function OrchidIdentificationNext() {
   const [certainty, setCertainty] = useState<Certainty>("certain");
   const [audience, setAudience] = useState<ExplanationAudience>("beginner");
   const [calyxText, setCalyxText] = useState("");
+  const [calyxPacket, setCalyxPacket] = useState<CalyxExplanation | null>(null);
   const requestId = useRef(0);
 
   const selectedRegistry = useMemo(
@@ -104,7 +108,7 @@ export default function OrchidIdentificationNext() {
     const id = ++requestId.current;
     setStatus("working");
     setMessage("Starting an evidence-bound identification session…");
-    setCalyxText("");
+    setCalyxText(""); setCalyxPacket(null);
     setAnswer("");
     try {
       const created = await createIdentificationSession(selectedRegistry);
@@ -136,7 +140,7 @@ export default function OrchidIdentificationNext() {
       if (id !== requestId.current) return;
       setEvaluation(result);
       setAnswer("");
-      setCalyxText("");
+      setCalyxText(""); setCalyxPacket(null);
       setStatus("ready");
       setMessage(result.next_observation ? "Evidence updated. The Matrix selected the next most discriminating observation." : "No further discriminating Matrix character is available in this registry.");
     } catch (error) {
@@ -150,7 +154,7 @@ export default function OrchidIdentificationNext() {
     if (!session) return;
     const result = await evaluateIdentificationSession(session.session_id);
     setEvaluation(result);
-    setCalyxText("");
+    setCalyxText(""); setCalyxPacket(null);
     setStatus("ready");
     setMessage("Reviewed Vision evidence was incorporated and the Matrix ranking was recalculated.");
   }
@@ -164,6 +168,7 @@ export default function OrchidIdentificationNext() {
       const explanation = await explainIdentificationSession(session.session_id, audience, focus);
       if (id !== requestId.current) return;
       setCalyxText(explanationText(explanation) || "Calyx returned a governed explanation packet without narrative text.");
+      setCalyxPacket(explanation);
       setStatus("ready");
       setMessage("Calyx explanation loaded. The Matrix ranking itself is unchanged.");
     } catch (error) {
@@ -177,7 +182,7 @@ export default function OrchidIdentificationNext() {
     requestId.current += 1;
     setEvaluation(null);
     setAnswer("");
-    setCalyxText("");
+    setCalyxText(""); setCalyxPacket(null);
     setCertainty("certain");
     setStatus("ready");
     setMessage("Choose a governed matrix and begin.");
@@ -280,6 +285,7 @@ export default function OrchidIdentificationNext() {
                         <span>{next.candidate_coverage == null ? "—" : percent(next.candidate_coverage)} candidate coverage</span>
                         <span>{next.reason_code?.replaceAll("_", " ")}</span>
                       </div>
+                      {next.explanation_boundary ? <p className="mt-2 text-xs text-muted-foreground">{next.explanation_boundary}</p> : null}
                     </div>
                     <label className="mt-6 block text-sm font-medium" htmlFor="observation-answer">Your observation</label>
                     <input
@@ -315,14 +321,14 @@ export default function OrchidIdentificationNext() {
                   <button type="button" onClick={() => void askCalyx("candidate_comparison")} disabled={status === "working"} className="inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"><Sparkles className="h-4 w-4" /> Ask Calyx to compare</button>
                 </div>
                 <div className="mt-6 space-y-3">
+                  {evaluation ? (
+                    <p className="text-xs text-muted-foreground" data-testid="matrix-ranking-basis">
+                      {evaluation.report.observation_count} observation{evaluation.report.observation_count === 1 ? "" : "s"} recorded · {evaluation.report.compared_character_count} used for ranking
+                      {evaluation.report.observation_count > evaluation.report.compared_character_count ? " (observations marked unknown are ignored, not counted against any candidate)" : ""}
+                    </p>
+                  ) : null}
                   {(evaluation?.report.candidates ?? []).slice(0, 8).map((candidate, index) => (
-                    <article key={candidate.taxon_id} className="rounded-2xl border p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div><p className="text-xs uppercase text-muted-foreground">Candidate {index + 1}</p><h3 className="mt-1 text-lg font-semibold italic">{candidate.scientific_name}</h3></div>
-                        <div className="grid grid-cols-2 gap-4 text-right"><div><p className="text-xs text-muted-foreground">Match</p><p className="font-semibold">{percent(candidate.score)}</p></div><div><p className="text-xs text-muted-foreground">Coverage</p><p className="font-semibold">{percent(candidate.coverage)}</p></div></div>
-                      </div>
-                      <details className="mt-3 text-sm"><summary className="cursor-pointer text-muted-foreground">Character evidence</summary><div className="mt-3 grid gap-2 sm:grid-cols-2">{candidate.explanations.map((item) => <div key={`${candidate.taxon_id}:${item.character}`} className="rounded-lg bg-muted/40 p-2"><span className="font-medium">{item.character.replaceAll("_", " ")}</span><span className="ml-2 text-xs text-muted-foreground">{item.status.replaceAll("_", " ")}</span></div>)}</div></details>
-                    </article>
+                    <MatrixCandidateEvidence key={candidate.taxon_id} candidate={candidate} rank={index + 1} />
                   ))}
                 </div>
                 <p className="mt-5 text-xs leading-5 text-muted-foreground">{evaluation?.report.disclaimer}</p>
@@ -356,7 +362,9 @@ export default function OrchidIdentificationNext() {
                 <div><p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Calyx · explanation layer</p><h2 className="mt-2 text-2xl font-semibold">Understand the evidence</h2></div>
                 <div className="flex items-center gap-2"><label htmlFor="audience" className="text-sm text-muted-foreground">Level</label><select id="audience" value={audience} onChange={(event) => setAudience(event.target.value as ExplanationAudience)} className="rounded-xl border bg-background px-3 py-2 text-sm"><option value="beginner">Beginner</option><option value="intermediate">Intermediate</option><option value="expert">Expert</option></select></div>
               </div>
-              {calyxText ? <div className="mt-5 whitespace-pre-wrap rounded-2xl border bg-background p-5 text-sm leading-7">{calyxText}</div> : <p className="mt-4 text-sm text-muted-foreground">Ask Calyx why the Matrix selected a character or how the leading candidates differ. Calyx receives the structured evidence but cannot rewrite it.</p>}
+              {calyxText ? <div className="mt-5 whitespace-pre-wrap rounded-2xl border bg-background p-5 text-sm leading-7">{calyxText}</div> : null}
+              {calyxText && calyxPacket ? <CalyxPacketProvenance packet={calyxPacket} /> : null}
+              {calyxText ? null : <p className="mt-4 text-sm text-muted-foreground">Ask Calyx why the Matrix selected a character or how the leading candidates differ. Calyx receives the structured evidence but cannot rewrite it.</p>}
               <button type="button" onClick={() => void askCalyx("summary")} disabled={status === "working"} className="mt-5 inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-medium"><Sparkles className="h-4 w-4" /> Explain the identification so far</button>
             </section>
 
@@ -364,13 +372,42 @@ export default function OrchidIdentificationNext() {
               <summary className="cursor-pointer text-sm font-semibold">Expert provenance trail</summary>
               <div className="mt-4 grid gap-4 text-xs text-muted-foreground sm:grid-cols-3">
                 <div><p className="font-semibold text-foreground">Session</p><p className="mt-1 break-all">{session.session_id}</p></div>
-                <div><p className="font-semibold text-foreground">Registry</p><p className="mt-1">{session.registry.registry_id} · {session.registry.version}</p></div>
-                <div><p className="font-semibold text-foreground">Observations</p><p className="mt-1">{session.observations.length} recorded · revision {session.revision}</p></div>
+                <div><p className="font-semibold text-foreground">Registry</p><p className="mt-1">{session.registry.registry_id} · {session.registry.version}</p><p className="mt-1" data-testid="matrix-registry-publication-state">Publication state: {(evaluation?.report.registry?.publication_state ?? session.registry.publication_state ?? "not recorded").replaceAll("_", " ")}</p>{session.registry.checksum_sha256 ? <p className="mt-1 break-all">Checksum {session.registry.checksum_sha256}</p> : null}</div>
+                <div><p className="font-semibold text-foreground">Observations</p><p className="mt-1">{session.observations.length} recorded · revision {session.revision}</p><ul className="mt-1 space-y-1">{session.observations.map((item) => <li key={item.observation_id}>{item.character.replaceAll("_", " ")} · {item.certainty} · {String(item.source?.kind ?? "source not recorded").replaceAll("_", " ")}{item.review_state ? ` · ${item.review_state.replaceAll("_", " ")}` : ""}</li>)}</ul></div>
               </div>
             </details>
           </>
         )}
       </div>
     </main>
+  );
+}
+
+/** What produced the Calyx text and what it is allowed to be: explanation, never evidence. */
+function CalyxPacketProvenance({ packet }: { packet: CalyxExplanation }) {
+  const provenance = explanationProvenance(packet);
+  const candidates = explanationCandidates(packet);
+  return (
+    <div className="mt-3 space-y-2 text-xs text-muted-foreground" data-testid="calyx-explanation-provenance">
+      {provenance ? (
+        <p>
+          Produced by {provenance.provider ?? "an unrecorded provider"}{provenance.model ? ` (${provenance.model})` : ""} ·{" "}
+          {(provenance.epistemicState ?? "epistemic state not recorded").replaceAll("_", " ")}
+          {provenance.fallbackError ? ` · provider unavailable, deterministic fallback used: ${provenance.fallbackError}` : ""}
+        </p>
+      ) : null}
+      {candidates.length ? (
+        <ul className="space-y-1">
+          {candidates.map((item) => (
+            <li key={item.taxon_id}>
+              <i>{item.scientific_name}</i>: supported by {item.supporting_characters?.length ? item.supporting_characters.join(", ") : "none"}
+              {item.partial_characters?.length ? `; partial ${item.partial_characters.join(", ")}` : ""}
+              {item.conflicting_characters?.length ? `; conflicts ${item.conflicting_characters.join(", ")}` : ""}
+              {item.missing_characters?.length ? `; not recorded ${item.missing_characters.join(", ")}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, BookOpen, FileWarning } from 'lucide-react';
 
+import LiteratureAccessRequired from '@/components/literature/LiteratureAccessRequired';
 import PageShell from '@/components/orchid/PageShell';
 import {
   LITERATURE_PAGE_SIZE,
@@ -29,12 +30,22 @@ import {
  * unreachable service, and a session without permission look identical if you
  * render them all as "nothing here", and only one of those means the Continuum
  * holds no literature.
+ *
+ * A refusal (401/403) gets its own state rather than a generic "unauthorised":
+ * the backend answers only an owner session or API key, so a signed-in member
+ * is refused by design, and the page says that instead of implying a broken
+ * login or an outage.
  */
 
 type State =
   | { status: 'loading' }
   | { status: 'loaded'; response: LiteratureIndexResponse }
   | { status: 'failed'; error: LiteratureIndexError };
+
+/** Refused rather than broken: rendered as the access state, never as an outage. */
+function isRefusal(kind: LiteratureIndexError['kind']): boolean {
+  return kind === 'unauthorized' || kind === 'member_access_unconfigured' || kind === 'member_auth_unavailable';
+}
 
 function PaperRow({ paper }: { paper: LiteratureSummary }) {
   if (!paper.readable) {
@@ -142,16 +153,26 @@ export default function Literature() {
             <p className="text-sm text-white/60">Loading the literature index…</p>
           ) : null}
 
-          {state.status === 'failed' ? (
+          {state.status === 'failed' && isRefusal(state.error.kind) ? (
+            // Refused, not broken and not empty: the member session could not
+            // be verified, is not permitted, or member verification is not
+            // configured / temporarily unavailable on the server.
+            <LiteratureAccessRequired
+              status={state.error.status}
+              code={state.error.code}
+              subject="corpus"
+              onRetry={() => void load(offset)}
+            />
+          ) : null}
+
+          {state.status === 'failed' && !isRefusal(state.error.kind) ? (
             <div
               className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5"
               data-testid="literature-error"
             >
               <div className="flex items-center gap-2 text-sm text-amber-100">
                 <AlertTriangle className="h-4 w-4" />
-                {state.error.kind === 'unauthorized'
-                  ? 'Not authorised to browse the literature corpus'
-                  : state.error.kind === 'unavailable'
+                {state.error.kind === 'unavailable'
                     ? 'The literature corpus is unavailable'
                     : state.error.kind === 'rejected'
                       ? 'The literature service rejected the request'
