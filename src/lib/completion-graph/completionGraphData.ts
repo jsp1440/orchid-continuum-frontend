@@ -842,14 +842,22 @@ const visionDomain = branch({
 // Real evidence: sensitive-locality redaction was traced this pass beyond
 // Atlas alone — atlasLocalitySafety.ts is also consumed by atlas-next's own
 // sensitivity.ts/atlasContext.ts and by researchStationNavigation.ts (the
-// already-scored Atlas -> Research handoff), and the three domains that
-// receive genus-level handoffs from Atlas (Species Dossier, Conservation,
-// Research Station) were directly grepped this pass and confirmed to carry
-// no raw latitude/longitude/locality fields into their own rendering — so
-// this is a traced finding, not an assumption that silence means safety.
+// already-scored Atlas -> Research handoff). Every domain named by this
+// gate's acceptance criteria has now been directly grepped for raw
+// latitude/longitude/locality/coordinate fields (Species Dossier,
+// Conservation, Research Station in an earlier pass; Matrix,
+// Conservatory/OASIS and University this pass) and confirmed clean — so this
+// is a traced finding, not an assumption that silence means safety. The check
+// itself is now a running regression test
+// (src/lib/localitySafetyCrossCutting.test.ts) rather than a one-off grep, so
+// a future consumer that starts rendering raw coordinates on any of these
+// pages fails CI instead of silently reintroducing the leak.
 // Auth gating (ProtectedRoute) and partner-data disclosure (partners.ts,
 // all "pending"/"proposed" placeholders, no real partner records) were
-// spot-checked but not exhaustively audited this pass.
+// spot-checked but not exhaustively audited this pass. Other consumers of
+// Atlas/occurrence data outside this gate's named scope (e.g. Home, Calyx,
+// Lexicon, DeceptionLab, CommunityObservation, LiteraturePaper) have not been
+// traced and are not claimed clean here.
 
 const localitySafetyCrossCuttingGate: CompletionNode = {
   id: 'cap-locality-safety-cross-cutting',
@@ -857,7 +865,7 @@ const localitySafetyCrossCuttingGate: CompletionNode = {
   name: 'Sensitive-locality redaction as a cross-cutting policy',
   type: 'acceptance_gate',
   status: 'PARTIAL',
-  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'UNKNOWN' },
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
   lane: 'RELEASE_ACCEPTANCE',
   gateScores: {
     architectureContracts: 1,
@@ -876,9 +884,17 @@ const localitySafetyCrossCuttingGate: CompletionNode = {
     { kind: 'file', ref: 'src/features/atlas-next/atlasContext.ts' },
     { kind: 'file', ref: 'src/pages/ConservationHub.tsx', note: 'Grepped for latitude/longitude/locality/coordinates: none found; the page explicitly states coordinates and locality "remain in Atlas".' },
     { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx', note: 'AtlasPoint/AtlasLayer types declare lat/lng in src/lib/speciesDossier.ts, but grepping the dossier page itself for latitude/longitude/locality returns no matches — those types are consumed only by Atlas map components, not rendered on the dossier.' },
+    { kind: 'file', ref: 'src/pages/RelationshipMatrixNext.tsx', note: 'Matrix, this pass: grepped for latitude/longitude/locality/coordinates; the only match is prose stating "precise locality and coordinates are not requested or rendered here" — no raw field.' },
+    { kind: 'file', ref: 'src/components/atlas/AtlasMatrixContinuation.tsx', note: 'Matrix, this pass: the Atlas -> Matrix handoff carries only a genus string; a code comment documents that locality/coordinates never cross this boundary.' },
+    { kind: 'file', ref: 'src/pages/MyConservatory.tsx', note: 'Conservatory/OASIS, this pass: grepped, no matches.' },
+    { kind: 'file', ref: 'src/components/conservatory/ConservatoryReadiness.tsx', note: 'Conservatory/OASIS, this pass: grepped, no matches.' },
+    { kind: 'file', ref: 'src/lib/conservatoryCultivationCalyx.ts', note: 'Conservatory/OASIS, this pass: only match is a doc comment ("Absence of a locality is not enough to say so") about occurrence-record semantics, not a rendered field.' },
+    { kind: 'file', ref: 'src/pages/OrchidUniversity.tsx', note: 'University, this pass: only match is prose stating exact locality "is excluded from the learning table" — no raw field.' },
+    { kind: 'file', ref: 'src/lib/universityApi.ts', note: 'University, this pass: grepped, no matches.' },
+    { kind: 'test', ref: 'src/lib/localitySafetyCrossCutting.test.ts', note: "Encodes this pass and the prior pass's grep findings as a running test across all eight traced surfaces, so the finding is enforced rather than only recorded as evidence prose." },
   ],
-  nextAction: 'Extend the same direct grep-for-raw-coordinates check to Matrix, Conservatory/OASIS, and University before calling this policy fully cross-cutting; only Atlas, Atlas Next, Research Station, Conservation, and Species Dossier were traced this pass.',
-  lastAccomplishment: 'Traced locality-safety consumption beyond the original Atlas-only assumption and confirmed three downstream consumers (Conservation, Species Dossier, Research handoff) do not leak raw coordinates.',
+  nextAction: 'All domains named by this gate\'s original acceptance criteria (Atlas, Atlas Next, Research Station, Conservation, Species Dossier, Matrix, Conservatory/OASIS, University) are now traced and pinned by localitySafetyCrossCutting.test.ts. Remaining work to broaden this further: audit ProtectedRoute/auth-gating coverage and partner-data disclosure as their own capabilities (already tracked separately below), and decide whether other Atlas/occurrence consumers outside this gate\'s named scope (Home, Calyx, Lexicon, DeceptionLab, CommunityObservation, LiteraturePaper) should be added to the traced surface list.',
+  lastAccomplishment: 'Extended the direct grep-for-raw-coordinates check to Matrix, Conservatory/OASIS and University (RelationshipMatrixNext.tsx, AtlasMatrixContinuation.tsx, MyConservatory.tsx, ConservatoryReadiness.tsx, conservatoryCultivationCalyx.ts, OrchidUniversity.tsx, universityApi.ts and all sibling files in those three domains); confirmed none leak raw coordinates, and pinned every traced surface (this pass plus the prior Conservation/Species Dossier/Research Station pass) as a running Vitest suite.',
   lastUpdated: CENSUS_DATE,
   children: [],
 };
@@ -888,7 +904,7 @@ const securityGovernanceDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Security / partner-data governance',
   type: 'domain',
-  nextAction: 'Complete the locality-safety cross-cutting trace for Matrix/Conservatory/University; audit ProtectedRoute coverage and partner-data disclosure as separate capabilities.',
+  nextAction: 'Locality-safety cross-cutting trace now covers Matrix/Conservatory-OASIS/University; audit ProtectedRoute coverage and partner-data disclosure as separate capabilities.',
 }, [
   branch({
     id: 'module-security-governance-core',
