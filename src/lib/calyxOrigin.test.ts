@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { calyxRelativePath, isCalyxOriginUrl, requestUrlOf } from './calyxOrigin';
 
@@ -86,5 +86,66 @@ describe('requestUrlOf', () => {
     expect(requestUrlOf(new URL(`${BASE}/api/x`))).toBe(`${BASE}/api/x`);
     expect(requestUrlOf(new Request(`${BASE}/api/x?y=1`))).toBe(`${BASE}/api/x?y=1`);
     expect(requestUrlOf(new Request(`https://${HOST}.evil.test/api/x`))).toBe(`https://${HOST}.evil.test/api/x`);
+  });
+});
+
+describe('calyxRelativePath resolves the URL the way fetch does (against the page base)', () => {
+  // fetch resolves its input against the page's base URL. `https:<host>/p`
+  // parses stand-alone as `https://<host>/p`, but against an https page it is
+  // relative and goes to `https://<frontend>/<host>/p`.
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const HTTPS_PAGE = 'https://frontend.example.test/app/';
+
+  it.each([
+    ['https:<host>/p', `https:${HOST}/api/mission-control/some-owner-tool`],
+    ['https:/<host>/p', `https:/${HOST}/api/mission-control/some-owner-tool`],
+    ['https:<host>/p with query', `https:${HOST}/api/research/traits?genus=Cattleya`],
+  ])('rejects %s on an https page (fetch sends it to the frontend origin)', (_label, url) => {
+    vi.stubGlobal('document', { baseURI: HTTPS_PAGE });
+    expect(calyxRelativePath(url, BASE)).toBeNull();
+    expect(isCalyxOriginUrl(url, BASE)).toBe(false);
+  });
+
+  it('rejects http:<host>:port/p on an http page against an http Calyx base', () => {
+    vi.stubGlobal('document', { baseURI: 'http://127.0.0.1:4293/' });
+    expect(calyxRelativePath('http:127.0.0.1:8893/zzprobe/nosl', 'http://127.0.0.1:8893')).toBeNull();
+    expect(calyxRelativePath('http:/127.0.0.1:8893/zzprobe/nosl', 'http://127.0.0.1:8893')).toBeNull();
+    // Control: the absolute form is still Calyx on the same page.
+    expect(calyxRelativePath('http://127.0.0.1:8893/zzprobe/nosl', 'http://127.0.0.1:8893')).toBe('/zzprobe/nosl');
+  });
+
+  it('still accepts absolute Calyx URLs and URL objects on an https page', () => {
+    vi.stubGlobal('document', { baseURI: HTTPS_PAGE });
+    expect(calyxRelativePath(`${BASE}/api/x?y=1#z`, BASE)).toBe('/api/x');
+    expect(calyxRelativePath(new URL(`${BASE}/api/x`), BASE)).toBe('/api/x');
+  });
+
+  it('accepts https:<host>/p on an http page, where fetch also treats it as absolute', () => {
+    // Different scheme from the page base: the WHATWG parser (and so fetch)
+    // resolves it to https://<host>/p, which really is the Calyx origin.
+    vi.stubGlobal('document', { baseURI: 'http://frontend.example.test/' });
+    expect(calyxRelativePath(`https:${HOST}/api/x`, BASE)).toBe('/api/x');
+  });
+
+  it('uses a worker location when there is no document', () => {
+    vi.stubGlobal('document', undefined);
+    vi.stubGlobal('location', { href: HTTPS_PAGE });
+    expect(calyxRelativePath(`https:${HOST}/api/x`, BASE)).toBeNull();
+    expect(calyxRelativePath(`${BASE}/api/x`, BASE)).toBe('/api/x');
+  });
+
+  it('fails closed when a document exposes no usable base URL', () => {
+    vi.stubGlobal('document', { baseURI: '' });
+    expect(calyxRelativePath(`${BASE}/api/x`, BASE)).toBeNull();
+    vi.stubGlobal('document', { baseURI: 'not a url' });
+    expect(calyxRelativePath(`${BASE}/api/x`, BASE)).toBeNull();
+  });
+
+  it('keeps the stand-alone parse outside a browsing context (Node fetch has no page base)', () => {
+    expect(typeof (globalThis as { document?: unknown }).document).toBe('undefined');
+    expect(calyxRelativePath(`https:${HOST}/api/x`, BASE)).toBe('/api/x');
   });
 });

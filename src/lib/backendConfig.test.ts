@@ -298,7 +298,23 @@ describe('owner bearer is attached only to the exact Calyx origin (backendConfig
     expect(String(native.mock.calls[0][0])).not.toContain(OWNER_TOKEN_REFRESH_PATH);
   });
 
-  it('does not treat a lookalike owner-login POST as a login (no rewrite, no token stored)', async () => {
+  it('sends a lookalike owner-session POST without the stored owner bearer', async () => {
+    // Fails on the pre-fix prefix check: the lookalike counted as Calyx, and a
+    // non-login Calyx request carries the stored bearer.
+    const native = vi.fn().mockResolvedValue(jsonResponse({ token: 'attacker-token' }));
+    await withStoredBearer(native);
+
+    const url = `https://${HOST}.evil.test${OWNER_SESSION_PATH}`;
+    await window.fetch(url, { method: 'POST' });
+
+    expect(native).toHaveBeenCalledTimes(1);
+    expect(authorizationOf(native.mock.calls[0][1])).toBeNull();
+    expect(native.mock.calls[0][1]?.credentials).toBe('same-origin');
+  });
+
+  it('regression guard: a lookalike owner-login POST is not rewritten and its token is not stored', async () => {
+    // The pre-fix code also got this right (the path slice never matched), so
+    // this guards against a future regression rather than the original defect.
     const native = vi.fn().mockResolvedValue(jsonResponse({ token: 'attacker-token' }));
     await freshModule(native);
 
@@ -364,5 +380,117 @@ describe('owner bearer is attached only to the exact Calyx origin (backendConfig
 
     expect(authorizationOf(native.mock.calls[0][1])).toBeNull();
     expect(native.mock.calls[0][1]?.credentials).toBe('same-origin');
+  });
+
+  describe('inputs fetch resolves against the page base', () => {
+    let baseElement: HTMLBaseElement | null = null;
+
+    function setPageBase(href: string) {
+      baseElement = document.createElement('base');
+      baseElement.href = href;
+      document.head.appendChild(baseElement);
+    }
+
+    afterEach(() => {
+      baseElement?.remove();
+      baseElement = null;
+    });
+
+    it.each([
+      ['https:<host>/p', `https:${HOST}/api/mission-control/some-owner-tool`],
+      ['https:/<host>/p', `https:/${HOST}/api/mission-control/some-owner-tool`],
+    ])('an https page sends %s to its own origin, so no bearer, credentials or retry', async (_label, url) => {
+      setPageBase('https://frontend.example.test/app/');
+      expect(document.baseURI).toBe('https://frontend.example.test/app/');
+      const native = vi.fn().mockResolvedValue(jsonResponse({}, 401));
+      await withStoredBearer(native);
+
+      const response = await window.fetch(url);
+
+      expect(response.status).toBe(401);
+      expect(native).toHaveBeenCalledTimes(1); // no cookie-recovery refresh/retry
+      expect(authorizationOf(native.mock.calls[0][1])).toBeNull();
+      expect(native.mock.calls[0][1]?.credentials).toBe('same-origin');
+    });
+
+    it('an http page sends http:<host>:port/p to its own origin, so no bearer', async () => {
+      // jsdom's default page is http://localhost:3000/, the same scheme as this
+      // Calyx base, which is the checker's Chromium reproduction.
+      expect(new URL(document.baseURI).protocol).toBe('http:');
+      vi.stubEnv('VITE_CALYX_API_URL', 'http://127.0.0.1:8893');
+      const native = vi.fn().mockResolvedValue(jsonResponse({}, 401));
+      await withStoredBearer(native);
+
+      await window.fetch('http:127.0.0.1:8893/zzprobe/nosl');
+
+      expect(native).toHaveBeenCalledTimes(1);
+      expect(authorizationOf(native.mock.calls[0][1])).toBeNull();
+      expect(native.mock.calls[0][1]?.credentials).toBe('same-origin');
+    });
+
+    it('control: the absolute Calyx URL on the same https page still gets the bearer', async () => {
+      setPageBase('https://frontend.example.test/app/');
+      const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+      await withStoredBearer(native);
+
+      await window.fetch(`${CALYX_BASE}/api/mission-control/some-owner-tool`);
+
+      expect(authorizationOf(native.mock.calls[0][1])).toBe(`Bearer ${OWNER_BEARER}`);
+    });
+  });
+
+  describe('the checked URL is the sent URL', () => {
+    it('sends the validated string, not an object whose toString changes after the check', async () => {
+      const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+      await withStoredBearer(native);
+      let reads = 0;
+      const shifty = {
+        toString() {
+          reads += 1;
+          return reads === 1 ? `${CALYX_BASE}/api/mission-control/some-owner-tool` : 'https://evil.test/steal';
+        },
+      };
+
+      await window.fetch(shifty as unknown as string);
+
+      expect(native).toHaveBeenCalledTimes(1);
+      const [sent, init] = native.mock.calls[0];
+      expect(typeof sent).toBe('string');
+      expect(String(sent)).toBe(`${CALYX_BASE}/api/mission-control/some-owner-tool`);
+      expect(authorizationOf(init)).toBe(`Bearer ${OWNER_BEARER}`);
+    });
+
+    it('retries the validated string when a URL object is mutated during the recovery await', async () => {
+      const target = new URL(`${CALYX_BASE}/api/mission-control/some-owner-tool`);
+      const native = vi
+        .fn()
+        .mockResolvedValueOnce(jsonResponse({}, 401)) // cookie dropped
+        .mockImplementationOnce(async () => {
+          target.host = 'evil.test'; // mutated while the refresh is awaited
+          return jsonResponse({ token: 'bearer-refreshed' });
+        })
+        .mockResolvedValueOnce(jsonResponse({ ok: true })); // retry
+      await freshModule(native);
+
+      await window.fetch(target);
+
+      expect(native).toHaveBeenCalledTimes(3);
+      expect(String(native.mock.calls[0][0])).toBe(`${CALYX_BASE}/api/mission-control/some-owner-tool`);
+      expect(String(native.mock.calls[1][0])).toBe(`${CALYX_BASE}${OWNER_TOKEN_REFRESH_PATH}`);
+      expect(String(native.mock.calls[2][0])).toBe(`${CALYX_BASE}/api/mission-control/some-owner-tool`);
+      expect(authorizationOf(native.mock.calls[2][1])).toBe('Bearer bearer-refreshed');
+      for (const [sent] of native.mock.calls) expect(String(sent)).not.toContain('evil.test');
+    });
+
+    it('checks a Request by its immutable URL and sends the Request itself', async () => {
+      const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+      await withStoredBearer(native);
+      const request = new Request(`${CALYX_BASE}/api/mission-control/some-owner-tool`);
+
+      await window.fetch(request);
+
+      expect(native.mock.calls[0][0]).toBe(request);
+      expect(authorizationOf(native.mock.calls[0][1])).toBe(`Bearer ${OWNER_BEARER}`);
+    });
   });
 });

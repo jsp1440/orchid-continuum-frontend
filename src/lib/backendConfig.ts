@@ -163,7 +163,13 @@ function installOwnerSessionTransport(): void {
     const isOwnerLogout = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'DELETE';
     const isTokenRefresh = isCalyxRequest && originalPath === OWNER_TOKEN_REFRESH_PATH;
 
-    let requestInput: RequestInfo | URL = input;
+    // Send exactly what was checked. For a string/URL/stringifiable input the
+    // validated URL string is sent, never the original object: an object whose
+    // toString changes, or a URL mutated during the recovery await below,
+    // would otherwise be checked as Calyx and sent elsewhere with the bearer.
+    // A Request is sent as-is: its URL is immutable and was read from the
+    // native getter.
+    let requestInput: RequestInfo | URL = input instanceof Request ? input : originalUrl;
     if (isOwnerLogin) {
       ownerLoginAttemptInProgress = true;
       requestInput = `${CALYX_BACKEND_BASE_URL}${OWNER_TOKEN_SESSION_PATH}`;
