@@ -13,10 +13,11 @@ import {
 /**
  * The literature-extraction service refused this session.
  *
- * Owner decision (2026-09-26): signed-in members may read the literature
- * index (`GET /papers`) and source bindings with their Supabase session. Full
- * paper text (`GET /papers/{id}`) stays owner-only for members, because it can
- * be restricted by the paper's licence; the member token is never sent there.
+ * Owner decision (2026-09-26, narrowed in backend #1643 @ b0c1acbcd): signed-in
+ * members may read the literature index (`GET /papers`) with their Supabase
+ * session. Full paper text (`GET /papers/{id}`) and source bindings stay
+ * owner-only for members — full text can be restricted by the paper's
+ * licence — and the member token is never sent there.
  * A refusal therefore means one of several different things, each said as
  * what it is (backend #1643 codes):
  *
@@ -68,7 +69,7 @@ export default function LiteratureAccessRequired({
       'The literature service recognised this session and declined to open this workspace to it. Signing in again with the same account will not change this answer.',
     owner_only:
       subject === 'paper'
-        ? 'Members can browse the literature index and each paper’s source binding. The full extracted text is kept to owner access because a paper’s licence may not permit showing it; this is not a problem with your session, and signing in again will not change it.'
+        ? 'Members can browse the literature index. The full extracted text is kept to owner access because a paper’s licence may not permit showing it; this is not a problem with your session, and signing in again will not change it.'
         : 'This part of the literature workspace is kept to owner access. It is not a problem with your session, and signing in again will not change it.',
     member_access_unconfigured:
       'The literature service is reachable, but the server has not yet been given the settings it needs to verify member sessions. This is a deployment step, not an outage, and signing in again will not change it.',

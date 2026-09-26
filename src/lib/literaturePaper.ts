@@ -1,5 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
-import { errorCodeOf, withMemberReadAuth } from "@/lib/memberReadAuth";
+import { errorCodeOf } from "@/lib/memberReadAuth";
 import type { DisplayBinding } from "@/lib/literatureDisplayPolicy";
 
 /**
@@ -234,16 +234,15 @@ export function countStrippedLocality(entities: unknown): number {
 
 async function request(path: string, signal?: AbortSignal): Promise<Response> {
   try {
-    const url = `${CALYX_BACKEND_BASE_URL}/api/literature-extraction${path}`;
-    return await fetch(
-      url,
-      await withMemberReadAuth(url, {
-        method: "GET",
-        credentials: "include",
-        headers: { Accept: "application/json" },
-        signal,
-      }),
-    );
+    // Paper full text and its source binding are owner-only for members
+    // (backend #1643), so no member token is attached here; an owner session
+    // cookie is still offered.
+    return await fetch(`${CALYX_BACKEND_BASE_URL}/api/literature-extraction${path}`, {
+      method: "GET",
+      credentials: "include",
+      headers: { Accept: "application/json" },
+      signal,
+    });
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     throw new LiteraturePaperError("network", "The literature service could not be reached.");
@@ -270,9 +269,8 @@ export async function fetchLiteraturePaper(
   if (!paperResponse.ok) {
     if (paperResponse.status === 401 || paperResponse.status === 403) {
       // `/papers/{id}` (full section text) is owner-only for members, so the
-      // member token is never sent here; the page reads this refusal as an
-      // owner-only view, and keeps the code so a 403 OWNER_ACCESS_REQUIRED is
-      // recognised as such.
+      // member token is never sent here; the page reads this refusal (a plain
+      // 401, or 403 OWNER_ACCESS_REQUIRED) as an owner-only view.
       throw new LiteraturePaperError(
         "unauthorized",
         "This session is not authorised to read this extraction.",

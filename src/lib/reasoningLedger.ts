@@ -1,5 +1,4 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
-import { withMemberReadAuth } from "@/lib/memberReadAuth";
 
 /**
  * Client for governed reasoning-ledger revision retrieval.
@@ -182,15 +181,14 @@ export async function fetchLedgerRevision(
 
   let response: Response;
   try {
-    const url = `${CALYX_BACKEND_BASE_URL}/api/reasoning-ledgers/${encodeURIComponent(id)}/revisions/${version}`;
     response = await fetch(
-      url,
-      await withMemberReadAuth(url, {
+      `${CALYX_BACKEND_BASE_URL}/api/reasoning-ledgers/${encodeURIComponent(id)}/revisions/${version}`,
+      {
         method: "GET",
         credentials: "include",
         headers: { Accept: "application/json" },
         signal: init?.signal,
-      }),
+      },
     );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;

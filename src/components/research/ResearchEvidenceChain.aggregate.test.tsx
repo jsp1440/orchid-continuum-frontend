@@ -103,16 +103,18 @@ describe("ResearchEvidenceChain aggregate links against a captured evidence-aggr
 
   it.each([
     ["503 database unavailable", () => new Response(JSON.stringify({ detail: { code: "AGGREGATION_DATABASE_UNAVAILABLE" } }), { status: 503 }), /could not be read/],
-    ["401 session not verified", () => new Response(JSON.stringify({ detail: "Not authenticated" }), { status: 401 }), /could not be read: Your session could not be verified — sign in again\./],
-    // Synthetic shapes for the member-read refusals (owner decision 2026-09-26).
-    ["403 not permitted", () => new Response(JSON.stringify({ detail: "Forbidden" }), { status: 403 }), /could not be read: Access is not permitted for this account\./],
-    ["503 MEMBER_AUTH_NOT_CONFIGURED", () => new Response(JSON.stringify({ detail: { code: "MEMBER_AUTH_NOT_CONFIGURED", message: "synthetic" } }), { status: 503 }), /could not be read: Member access is not yet configured on the server\./],
-    ["503 MEMBER_AUTH_UNAVAILABLE", () => new Response(JSON.stringify({ detail: { code: "MEMBER_AUTH_UNAVAILABLE", message: "synthetic" } }), { status: 503 }), /could not be read: Member verification is temporarily unavailable — try again\./],
+    // Aggregate detail is owner-only for members (backend #1643 @ b0c1acbcd):
+    // no member token is sent, so a plain 401 (the captured-shape body) and a
+    // 403 OWNER_ACCESS_REQUIRED (synthetic shape of the #1643 body) are both
+    // an owner-only view — never "sign in again".
+    ["401 with no token sent", () => new Response(JSON.stringify({ detail: "Not authenticated" }), { status: 401 }), /could not be read: This view is limited to owner access\./],
+    ["403 OWNER_ACCESS_REQUIRED", () => new Response(JSON.stringify({ detail: { code: "OWNER_ACCESS_REQUIRED", message: "This view is limited to owner access" } }), { status: 403 }), /could not be read: This view is limited to owner access\./],
     ["malformed 200", () => new Response(JSON.stringify({ aggregate_id: "3" })), /not in the expected shape/],
   ])("fails closed on %s", async (_name, response, message) => {
     aggregateResponse = response;
     const item = await renderAggregate();
     expect(item?.querySelector('[data-testid="research-aggregate-unavailable"]')?.textContent).toMatch(message);
+    expect(item?.textContent).not.toMatch(/sign in again/i);
     expect(item?.querySelector('[data-testid="research-aggregate-counts"]')).toBeNull();
   });
 

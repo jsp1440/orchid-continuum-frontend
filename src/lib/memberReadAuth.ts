@@ -34,31 +34,26 @@ import { supabase } from "@/lib/supabase";
 /**
  * Paths, relative to the Calyx base, that accept a member session on GET.
  *
- * Exactly the routes the backend marks `@member_readable` (backend #1643,
- * branch `claude/member-read-access`), enumerated rather than matched by
- * prefix so an owner-only read under the same router never receives the
- * member token. Deliberately NOT here, because the backend keeps them
- * owner-only for members:
+ * The owner narrowed member reads (backend #1643 @ b0c1acbcd, "narrow member
+ * scope to fully schema-defined endpoints"). The backend marks exactly four
+ * routes `@member_readable`:
  *
- * - `/api/candidate-knowledge/candidates/{id}` (evidence links can carry
- *   internal-research-only quotes) and `/runs/{id}/items` (raw submitted text);
- * - `/api/literature-extraction/papers/{id}` (full section text, including
- *   rights-restricted papers) and `/coverage-audit`;
- * - every reasoning-ledger read (`/api/reasoning-ledgers/*` and
- *   `/api/research/projects/{id}/reasoning-ledgers`).
+ *   GET /api/research/traits
+ *   GET /api/literature-extraction/papers        (the list only)
+ *   GET /api/evidence-aggregation/health
+ *   GET /api/evidence-aggregation/registry
+ *
+ * This frontend calls only the first two, so only those two are listed here:
+ * a path the frontend never requests has no business in the token scope.
+ * Everything else — all of candidate-knowledge, every other
+ * evidence-aggregation route (aggregates, aggregate detail, conflicts),
+ * literature source-binding, paper full text, coverage-audit and every
+ * reasoning-ledger read — is owner-only for members and never receives the
+ * member token. A refusal there is shown as an owner-only view.
  */
 const MEMBER_READ_PATHS: readonly RegExp[] = [
   /^\/api\/research\/traits$/,
-  /^\/api\/candidate-knowledge\/(?:runs|candidates|reviews|duplicates|conflicts|tombstones|health)$/,
-  /^\/api\/candidate-knowledge\/runs\/[^/]+$/,
-  /^\/api\/evidence-aggregation\/(?:runs|clusters|aggregates|conflicts|reviews|export|registry|tombstones|health)$/,
-  /^\/api\/evidence-aggregation\/runs\/[^/]+(?:\/items)?$/,
-  /^\/api\/evidence-aggregation\/clusters\/[^/]+$/,
-  // `/aggregates/{id}`, and its one-segment reads: versions, summary,
-  // support-network, contradiction-network, source-independence, {dimension}.
-  /^\/api\/evidence-aggregation\/aggregates\/[^/]+(?:\/[^/]+)?$/,
   /^\/api\/literature-extraction\/papers$/,
-  /^\/api\/literature-extraction\/papers\/[^/]+\/source-binding$/,
 ];
 
 function requestMethod(method: string | undefined): string {
@@ -143,7 +138,7 @@ export const MEMBER_AUTH_CODES = {
  * - `forbidden`: 403 on a member read without a more specific code.
  * - `owner_only`: 403 `OWNER_ACCESS_REQUIRED` — a verified member reached an
  *   owner-only view — or any 401/403 on a read that is owner-only for members
- *   (the member token is never sent there, so the refusal is about the view,
+ *   (the member token is never sent there, so a plain 401 is about the view,
  *   not the session). Signing in again does NOT help, and the copy says so.
  * - `member_access_unconfigured`: 503 `MEMBER_AUTH_NOT_CONFIGURED` — the server
  *   has not been given its member-auth settings. A deployment state, not an

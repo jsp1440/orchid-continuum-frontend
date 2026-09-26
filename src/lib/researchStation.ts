@@ -81,9 +81,9 @@ export async function researchRequest<T>(path: string, init?: RequestInit): Prom
   let response: Response;
   const url = `${CALYX_BACKEND_BASE_URL}${path}`;
   try {
-    // In-scope GETs (e.g. /api/research/traits, candidate-knowledge, evidence
-    // aggregation, reasoning ledgers) carry a signed-in member's session;
-    // research projects and every write stay owner-session / API-key only.
+    // Only GET /api/research/traits carries a signed-in member's session
+    // (see memberReadAuth). Research projects, candidate knowledge, evidence
+    // aggregation, reasoning ledgers and every write stay owner-only.
     response = await fetch(url, await withMemberReadAuth(url, {
       ...init,
       credentials: "include",

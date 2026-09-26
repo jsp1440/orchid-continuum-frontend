@@ -5,13 +5,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * Member read access: the Supabase access token goes to the Calyx origin, on
  * in-scope GETs, and nowhere else.
  *
- * Owner decision (2026-09-26): "Allow member reads: accept Supabase member
- * sessions on the product endpoints." The scope is exactly the routes backend
- * #1643 (branch `claude/member-read-access`) marks `@member_readable`. Writes,
- * Speak, Relationship Matrix build, Matrix identification sessions, and the
- * reads the backend keeps owner-only for members (candidate detail, run items,
- * full paper text, coverage audit, every reasoning-ledger read) never carry the
- * token — nor does any other origin.
+ * Owner decision (2026-09-26), narrowed by the owner in backend #1643 @
+ * b0c1acbcd: only four GETs are member-readable — /api/research/traits,
+ * /api/literature-extraction/papers (the list), /api/evidence-aggregation/health
+ * and /api/evidence-aggregation/registry. The frontend calls only the first
+ * two, so only those two may carry the member token. Every other path —
+ * candidate knowledge, all other evidence aggregation, source bindings, paper
+ * full text, coverage audit, reasoning ledgers, writes, Speak, Matrix — and
+ * every other origin, never does.
  *
  * The session below is a synthetic test shape; no real token is used.
  */
@@ -72,78 +73,86 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
+/** The only member-readable paths this frontend calls. */
+const MEMBER_READABLE_CALLED = ['/api/research/traits', '/api/literature-extraction/papers'];
+
+/**
+ * Paths the frontend reads, or that exist on the Calyx routers, which must NOT
+ * carry the member token. Not exhaustive of the backend, but it covers every
+ * route family the frontend calls plus the two member-readable routes it does
+ * not call.
+ */
+const NEVER_MEMBER_TOKEN = [
+  // Member-readable on the backend but never called by this frontend.
+  '/api/evidence-aggregation/health',
+  '/api/evidence-aggregation/registry',
+  // Owner-only for members on backend #1643 @ b0c1acbcd.
+  '/api/candidate-knowledge/runs',
+  '/api/candidate-knowledge/runs/7',
+  '/api/candidate-knowledge/runs/7/items',
+  '/api/candidate-knowledge/candidates',
+  '/api/candidate-knowledge/candidates/c-1',
+  '/api/candidate-knowledge/reviews',
+  '/api/candidate-knowledge/duplicates',
+  '/api/candidate-knowledge/conflicts',
+  '/api/candidate-knowledge/tombstones',
+  '/api/candidate-knowledge/health',
+  '/api/evidence-aggregation/runs',
+  '/api/evidence-aggregation/runs/3/items',
+  '/api/evidence-aggregation/clusters/4',
+  '/api/evidence-aggregation/aggregates',
+  '/api/evidence-aggregation/aggregates/a-1',
+  '/api/evidence-aggregation/aggregates/a-1/summary',
+  '/api/evidence-aggregation/conflicts',
+  '/api/evidence-aggregation/reviews',
+  '/api/evidence-aggregation/export',
+  '/api/evidence-aggregation/tombstones',
+  '/api/literature-extraction/papers/p-1',
+  '/api/literature-extraction/papers/p-1/source-binding',
+  '/api/literature-extraction/coverage-audit',
+  '/api/reasoning-ledgers/l-1',
+  '/api/reasoning-ledgers/l-1/history',
+  '/api/reasoning-ledgers/l-1/revisions/2',
+  '/api/reasoning-ledgers/eligible-for-publication',
+  '/api/research/projects',
+  '/api/research/projects/p-1',
+  '/api/research/projects/p-1/evidence',
+  '/api/research/projects/p-1/reasoning-ledgers',
+  '/api/research/projects/p-1/epistemic-memory',
+  // Other routers and owner tools.
+  '/api/calyx/speak',
+  '/api/relationship-matrix/build',
+  '/api/matrix/identification/sessions',
+  '/api/mission-control/owner/session',
+  // Near misses and traversal.
+  '/api/research/traitsx',
+  '/api/research/traits/x',
+  '/api/literature-extraction/papers/',
+  '/api/literature-extraction',
+  '/api/research/traits/../projects',
+  '/api/research/traits/%2e%2e/projects',
+];
+
 describe('isMemberReadRequest: which requests are in scope', () => {
   it.each([
     '/api/research/traits?genus=Cattleya',
-    '/api/candidate-knowledge/runs',
-    '/api/candidate-knowledge/runs/7',
-    '/api/candidate-knowledge/candidates?limit=50',
-    '/api/candidate-knowledge/reviews?state=OPEN',
-    '/api/candidate-knowledge/duplicates',
-    '/api/candidate-knowledge/conflicts?limit=50&offset=0',
-    '/api/candidate-knowledge/tombstones',
-    '/api/candidate-knowledge/health',
-    '/api/evidence-aggregation/runs',
-    '/api/evidence-aggregation/runs/3',
-    '/api/evidence-aggregation/runs/3/items',
-    '/api/evidence-aggregation/clusters',
-    '/api/evidence-aggregation/clusters/4',
-    '/api/evidence-aggregation/aggregates',
-    '/api/evidence-aggregation/aggregates/a-1',
-    '/api/evidence-aggregation/aggregates/a-1/versions',
-    '/api/evidence-aggregation/aggregates/a-1/summary',
-    '/api/evidence-aggregation/aggregates/a-1/support-network',
-    '/api/evidence-aggregation/aggregates/a-1/contradiction-network',
-    '/api/evidence-aggregation/aggregates/a-1/source-independence',
-    '/api/evidence-aggregation/conflicts',
-    '/api/evidence-aggregation/reviews',
-    '/api/evidence-aggregation/export',
-    '/api/evidence-aggregation/registry',
-    '/api/evidence-aggregation/tombstones',
-    '/api/evidence-aggregation/health',
+    '/api/research/traits?species=Cattleya+purpurata',
     '/api/literature-extraction/papers?limit=25&offset=0',
-    '/api/literature-extraction/papers/p-1/source-binding',
+    '/api/literature-extraction/papers',
   ])('accepts GET %s on the Calyx origin', (path) => {
     expect(isMemberReadRequest(`${base}${path}`, 'GET')).toBe(true);
     // Method omitted means GET, as in fetch.
     expect(isMemberReadRequest(`${base}${path}`)).toBe(true);
   });
 
-  it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'post'])('never accepts a %s, even on an in-scope path', (method) => {
-    expect(isMemberReadRequest(`${base}/api/candidate-knowledge/candidates/c-1`, method)).toBe(false);
-    expect(isMemberReadRequest(`${base}/api/literature-extraction/papers`, method)).toBe(false);
+  it.each(NEVER_MEMBER_TOKEN)('rejects GET %s', (path) => {
+    expect(isMemberReadRequest(`${base}${path}`, 'GET')).toBe(false);
   });
 
-  it.each([
-    // Owner-only for members on backend #1643.
-    '/api/candidate-knowledge/candidates/c-1',
-    '/api/candidate-knowledge/runs/7/items',
-    '/api/literature-extraction/papers/p-1',
-    '/api/literature-extraction/coverage-audit',
-    '/api/reasoning-ledgers/l-1',
-    '/api/reasoning-ledgers/l-1/history',
-    '/api/reasoning-ledgers/l-1/epistemic-memory',
-    '/api/reasoning-ledgers/l-1/revisions/2',
-    '/api/reasoning-ledgers/eligible-for-publication',
-    '/api/reasoning-ledgers/l-1/publications',
-    '/api/research/projects/p-1/reasoning-ledgers',
-    '/api/research/projects/p-1/epistemic-memory',
-    // Other routers and owner tools.
-    '/api/calyx/speak',
-    '/api/research/projects',
-    '/api/research/projects/p-1',
-    '/api/research/projects/p-1/evidence',
-    '/api/research/traitsx',
-    '/api/relationship-matrix/build',
-    '/api/matrix/identification/sessions',
-    '/api/mission-control/owner/session',
-    '/api/candidate-knowledge',
-    '/api/evidence-aggregation',
-    '/api/evidence-aggregation/aggregates/a-1/x/y',
-    '/api/research/traits/../projects',
-    '/api/research/traits/%2e%2e/projects',
-  ])('rejects out-of-scope GET %s', (path) => {
-    expect(isMemberReadRequest(`${base}${path}`, 'GET')).toBe(false);
+  it.each(['POST', 'PUT', 'PATCH', 'DELETE', 'post'])('never accepts a %s, even on an in-scope path', (method) => {
+    for (const path of MEMBER_READABLE_CALLED) {
+      expect(isMemberReadRequest(`${base}${path}`, method)).toBe(false);
+    }
   });
 
   it('rejects every other origin, including lookalikes and scheme changes', () => {
@@ -195,14 +204,11 @@ describe('withMemberReadAuth: attaching the member token', () => {
     expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
-  it('attaches nothing to another origin or to an out-of-scope Calyx path', async () => {
+  it('attaches nothing to another origin or to any Calyx path outside the two member reads', async () => {
     signedIn();
     for (const url of [
       'https://api.inaturalist.org/v1/observations',
-      `${base}/api/calyx/speak`,
-      `${base}/api/research/projects?limit=25`,
-      `${base}/api/literature-extraction/papers/p-1`,
-      `${base}/api/candidate-knowledge/candidates/c-1`,
+      ...NEVER_MEMBER_TOKEN.map((path) => `${base}${path}`),
     ]) {
       expect(authorizationOf(await withMemberReadAuth(url, { method: 'GET' })), url).toBeNull();
     }
@@ -256,7 +262,7 @@ describe('the product clients send the member token only where in scope', () => 
   const callsTo = (fetchMock: ReturnType<typeof vi.fn>) =>
     fetchMock.mock.calls.map(([url, init]) => ({ url: String(url), init: init as RequestInit }));
 
-  it('the literature index and source binding carry the member token; full paper text does not', async () => {
+  it('the literature index carries the member token; full paper text and its source binding do not', async () => {
     signedIn();
     const fetchMock = stubFetch({ papers: [], total: 0, limit: 25, offset: 0, unreadable_count: 0 });
     await fetchLiteratureIndex();
@@ -271,33 +277,34 @@ describe('the product clients send the member token only where in scope', () => 
       { path: '/api/literature-extraction/papers', authorization: `Bearer ${MEMBER_TOKEN}`, credentials: 'include' },
       // Owner-only for members: no member token, owner cookie still offered.
       { path: '/api/literature-extraction/papers/p-1', authorization: null, credentials: 'include' },
-      { path: '/api/literature-extraction/papers/p-1/source-binding', authorization: `Bearer ${MEMBER_TOKEN}`, credentials: 'include' },
+      { path: '/api/literature-extraction/papers/p-1/source-binding', authorization: null, credentials: 'include' },
     ]);
   });
 
-  it('trait, conflict and aggregate reads carry the member token', async () => {
+  it('the trait read carries the member token', async () => {
     signedIn();
-    const fetchMock = stubFetch({ items: [] });
+    const fetchMock = stubFetch({});
     await fetchResearchTraits({ rank: 'genus', name: 'Cattleya' }).catch(() => undefined);
-    await listCandidateConflicts().catch(() => undefined);
-    await fetchEvidenceAggregate('a-1').catch(() => undefined);
     const calls = callsTo(fetchMock);
-    expect(calls).toHaveLength(3);
-    for (const call of calls) {
-      expect(authorizationOf(call.init), call.url).toBe(`Bearer ${MEMBER_TOKEN}`);
-      expect(call.init.credentials).toBe('include');
-    }
+    expect(calls).toHaveLength(1);
+    expect(new URL(calls[0].url).pathname).toBe('/api/research/traits');
+    expect(authorizationOf(calls[0].init)).toBe(`Bearer ${MEMBER_TOKEN}`);
+    expect(calls[0].init.credentials).toBe('include');
   });
 
-  it('candidate detail and every reasoning-ledger read carry no member token', async () => {
+  it('evidence-chain reads (candidate detail, conflicts, aggregate detail, ledgers) carry no member token', async () => {
     signedIn();
     const fetchMock = stubFetch({ items: [] });
     await fetchCandidateKnowledge('c-1').catch(() => undefined);
+    await listCandidateConflicts().catch(() => undefined);
+    await fetchEvidenceAggregate('a-1').catch(() => undefined);
     await fetchLedgerRevision('l-1', 1).catch(() => undefined);
     await listProjectReasoningLedgers('p-1').catch(() => undefined);
     const calls = callsTo(fetchMock);
     expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
       '/api/candidate-knowledge/candidates/c-1',
+      '/api/candidate-knowledge/conflicts',
+      '/api/evidence-aggregation/aggregates/a-1',
       '/api/reasoning-ledgers/l-1/revisions/1',
       '/api/research/projects/p-1/reasoning-ledgers',
     ]);

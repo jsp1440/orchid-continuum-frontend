@@ -31,14 +31,17 @@ import type { ResearchEvidenceLink } from '@/lib/researchStation';
 type Loaded<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status: 'unavailable'; message: string };
 
 /**
- * Why a record could not be read. Aggregate and conflict reads are member
- * reads; candidate detail and project reasoning ledgers are owner-only for
- * members (backend #1643), so a refusal there is an owner-only view, not a
- * session problem — and is never phrased as "sign in again".
+ * Why a record could not be read.
+ *
+ * Every read in this chain — candidate detail, candidate conflicts, aggregate
+ * detail and project reasoning ledgers — is owner-only for members (backend
+ * #1643 @ b0c1acbcd). No member token is sent, so a plain 401 or a 403
+ * `OWNER_ACCESS_REQUIRED` means "this view is limited to owner access", never
+ * a session problem, and is never phrased as "sign in again".
  */
-function reason(error: unknown, memberScoped = true): string {
+function reason(error: unknown): string {
   const refusal = error instanceof CalyxApiError
-    ? memberReadRefusal(error.status, error.code, { memberScoped })
+    ? memberReadRefusal(error.status, error.code, { memberScoped: false })
     : null;
   if (refusal) return REFUSAL_MESSAGE[refusal];
   return error instanceof Error ? error.message : 'The record could not be read.';
@@ -72,7 +75,7 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
     for (const id of ids) {
       fetchCandidateKnowledge(id).then(
         (value) => live && setCandidates((current) => ({ ...current, [id]: { status: 'ready', value } })),
-        (error) => live && setCandidates((current) => ({ ...current, [id]: { status: 'unavailable', message: reason(error, false) } })),
+        (error) => live && setCandidates((current) => ({ ...current, [id]: { status: 'unavailable', message: reason(error) } })),
       );
     }
     const aggregateIds = links.filter((item) => item.evidence_kind === 'AGGREGATE').map((item) => item.evidence_id);
@@ -91,7 +94,7 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
     }
     listProjectReasoningLedgers(projectId).then(
       (value) => live && setLedgers({ status: 'ready', value }),
-      (error) => live && setLedgers({ status: 'unavailable', message: reason(error, false) }),
+      (error) => live && setLedgers({ status: 'unavailable', message: reason(error) }),
     );
     return () => { live = false; };
   }, [projectId, links]);
