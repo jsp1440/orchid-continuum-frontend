@@ -244,6 +244,19 @@ describe('citation screen follow-ups: DOI suffixes and author surnames', () => {
     'Fixture Bull. 1999, Chindwin River basin',
     'Fixture Bull. 1999, Near Fixture Town',
     'Long D.G. (1984). No comma after the surname, so it is not the author shape.',
+    // Independent check of #857: a compass letter is not an author initial.
+    'Kandy-Nuwara Eliya Road, N. of Hakgala, 1920',
+    '3 Mile, E. of Kandy (1920)',
+    'Smith 1984, 5 Miles, N. of Kandy',
+    'Smith (1984) Road, S. of Bangkok',
+    'Smith (1984) Road, W. side of Doi Pui',
+    'Smith 1920, Long, E. 98.5',
+    'Smith (1984) Lat, N. 18',
+    'Smith 1984 S. of Chiang Mai',
+    // A number after the initial is not the author shape either.
+    'Smith 1984, Long, D. 98',
+    // Over-withholding accepted: an author initialled N/S/E/W is not exempt.
+    'Long, N. (1984). Fixture notes. Fixture Bull. 3: 1-2.',
   ])('still withholds a marker word used as locality: %s', text => {
     expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
   });

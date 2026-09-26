@@ -52,7 +52,7 @@ export const SYNONYM_LIMIT = 20;
 export const COMMENT_SYNONYM_LIMIT = 50;
 /** Candidate names kept from the non-strict follow-up for a NONE match. */
 export const NONSTRICT_CANDIDATE_LIMIT = 3;
-export const NONSTRICT_LABEL = 'candidate names from fuzzy matching — not accepted, not evidence';
+export const NONSTRICT_LABEL = 'candidate names from non-strict matching — not accepted, not evidence';
 export const SYNONYM_FLAG_NOTE = 'flag for reviewer: attention only; no synonym was removed or corrected';
 /** GitHub rejects a comment over 65,536 characters; stay clear of it. */
 export const MAX_COMMENT_CHARS = 65000;

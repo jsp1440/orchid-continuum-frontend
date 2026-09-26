@@ -507,7 +507,7 @@ describe('an unresolved name gets labelled non-strict candidates, and stays unre
     expect(report.gbif).toMatchObject({ match_type: 'NONE', accepted_name: null, accepted_usage_key: null, usage_key: null });
     expect(report.contradiction).toBeNull();
     expect(report.nonstrict_candidates).toEqual({
-      label: 'candidate names from fuzzy matching — not accepted, not evidence',
+      label: 'candidate names from non-strict matching — not accepted, not evidence',
       query: { name: 'Thrixspermum arunachalensis', strict: false },
       source_url: nonstrictMatchUrl('Thrixspermum arunachalensis'),
       accepted: false,

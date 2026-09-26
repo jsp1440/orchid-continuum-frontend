@@ -112,9 +112,12 @@ const CITATION_YEAR = /\b(?:1[5-9]|20)\d{2}\b/;
  * Roads). Lower-case and all-caps forms always count as a marker. The
  * capitalised form counts too, except in the one shape that is an author
  * citation: "Surname, I." (comma, capital initial, full stop), e.g.
- * "Long, D.G. (1984)" or "Miles, R.". So "Mae Sa Road, 1980", "Long. 77" or
- * "Long D.G." stay withheld: over-withholding is acceptable, a leaked
- * locality is not. Other capitalised site words ("Near", "River",
+ * "Long, D.G. (1984)" or "Miles, R.". The exemption is refused when the
+ * "initial" is a compass letter (N., S., E., W.: "Road, N. of Hakgala",
+ * "Lat, N. 18"), so an author initialled N/S/E/W is withheld too, and when a
+ * number follows the initial ("Long, D. 98"). So "Mae Sa Road, 1980",
+ * "Long. 77" or "Long D.G." stay withheld: over-withholding is acceptable, a
+ * leaked locality is not. Other capitalised site words ("Near", "River",
  * "Ridge", "Hill") stay case-insensitive markers on purpose, although some
  * are surnames too, because they name sites far more often in locality prose.
  */
@@ -122,7 +125,8 @@ const surnameSafeMarker = words => {
   const lower = words.join('|');
   const title = words.map(w => w[0].toUpperCase() + w.slice(1)).join('|');
   const upper = words.map(w => w.toUpperCase()).join('|');
-  return new RegExp(`\\b(?:${lower}|${upper})\\b|\\b(?:${title})\\b(?!,\\s?[A-Z]\\.)`);
+  const authorInitial = ',\\s?(?![NSEW]\\.)[A-Z]\\.(?!\\s*\\d)';
+  return new RegExp(`\\b(?:${lower}|${upper})\\b|\\b(?:${title})\\b(?!${authorInitial})`);
 };
 
 export const CITATION_LOCALITY_MARKERS = Object.freeze([
@@ -138,7 +142,7 @@ export const CITATION_LOCALITY_MARKERS = Object.freeze([
   /\b\d{1,3}(?:[\s.:]\d{1,2}){0,2}\s*[NSEW]\b/, // 12 30 N, 77.15 W
   /-?\b\d{1,3}\.\d{3,}(?:[NSEW]\b|\b)/, // decimal coordinates, also "12.3456N"
   surnameSafeMarker(['mi', 'mile', 'miles']), // distance in miles (not "Miles, R.")
-  /\b[NSEW]\s+of\b/,                   // "15 mi E of ...", "S of ..."
+  /\b[NSEW]\.?\s+(?:side\s+)?of\b/,     // "15 mi E of ...", "S. of ...", "W. side of ..."
   surnameSafeMarker(['lat', 'lon', 'long']),  // lat / lon / long (not "Long, D.G.")
   surnameSafeMarker(['road', 'roads']),       // not "Roads, K."
   /\b(?:ridges?|trails?|villages?|summits?|streams?|rivers?|valleys?|mountains?|hills?)\b/i,
