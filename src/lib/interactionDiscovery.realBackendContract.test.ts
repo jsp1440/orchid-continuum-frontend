@@ -17,12 +17,16 @@ import realBackend from "./__fixtures__/interactionDiscovery.realBackend.json";
  * fixture (tests/test_interaction_discovery_routes.py::_ingest_sample) run
  * through the real GloBI ingest path -- they pin the SHAPE, not science.
  * Without a database the backend serves an empty in-memory index as a normal
- * `status: ok, count: 0` response; it has no "unavailable" body of its own, so
- * unavailable here means a network failure or non-2xx status.
+ * `status: ok, count: 0` response, labelled `index_state:
+ * "memory_unprovisioned"` since backend #1639; it has no "unavailable" body of
+ * its own, so unavailable here means a network failure or non-2xx status.
+ * `*_durable_test_double` bodies come from the backend test's fake durable
+ * repository (shape only); `legacy_c346a7219` holds the pre-#1639 capture.
  */
 
 type Captured = { status_code: number; body: unknown };
 const fixture = realBackend as unknown as Record<string, Captured>;
+const legacy = (realBackend as unknown as { legacy_c346a7219: Record<string, Captured> }).legacy_c346a7219;
 
 function stubFetch(body: unknown, status = 200) {
   const fn = vi.fn(async () =>
@@ -101,12 +105,54 @@ describe("interaction discovery: real backend payload -> frontend contract", () 
     expect(result.result.truncated).toBe(true);
   });
 
-  it("maps the real empty payload, and the real no-database payload, to empty", async () => {
+  it("maps the real unprovisioned empty payloads to unprovisioned, never to plain empty", async () => {
     for (const key of ["empty", "default_runtime_no_database_url"]) {
+      expect((fixture[key].body as Record<string, unknown>).index_state).toBe("memory_unprovisioned");
       stubFetch(fixture[key].body);
       const result = await fetchInteractionDiscovery("Orchis mascula");
-      expect(result.state).toBe("empty");
+      expect(result.state).toBe("unprovisioned");
+      if (result.state !== "unprovisioned") return;
+      expect(result.result.index_state).toBe("memory_unprovisioned");
+      expect(result.result.index_note).toBe((fixture[key].body as Record<string, unknown>).index_note);
+      expect(result.result.index_note).toMatch(/not evidence that no interactions are known/);
     }
+  });
+
+  it("maps the real durable empty payload (test double) to plain empty", async () => {
+    stubFetch(fixture.empty_durable_test_double.body);
+    const result = await fetchInteractionDiscovery("Orchis mascula");
+    expect(result.state).toBe("empty");
+    if (result.state !== "empty") return;
+    expect(result.result.index_state).toBe("durable");
+    expect(result.result.index_note).toBeNull();
+  });
+
+  it("keeps records from an unprovisioned index as ok, labelled with its index state", async () => {
+    stubFetch(fixture.ok.body);
+    const result = await fetchInteractionDiscovery("Orchis mascula");
+    if (result.state !== "ok") throw new Error("expected ok");
+    expect(result.result.index_state).toBe("memory_unprovisioned");
+    stubFetch(fixture.ok_durable_test_double.body);
+    const durable = await fetchInteractionDiscovery("Orchis mascula");
+    if (durable.state !== "ok") throw new Error("expected ok");
+    expect(durable.result.index_state).toBe("durable");
+    expect(durable.result.records).toHaveLength(2);
+  });
+
+  it("keeps the older backend's behaviour when index_state is absent (real pre-#1639 capture)", async () => {
+    for (const key of ["empty", "default_runtime_no_database_url"]) {
+      expect(legacy[key].body as Record<string, unknown>).not.toHaveProperty("index_state");
+      stubFetch(legacy[key].body);
+      const result = await fetchInteractionDiscovery("Orchis mascula");
+      expect(result.state).toBe("empty");
+      if (result.state !== "empty") return;
+      expect(result.result.index_state).toBeNull();
+    }
+    stubFetch(legacy.ok.body);
+    const ok = await fetchInteractionDiscovery("Orchis mascula");
+    if (ok.state !== "ok") throw new Error("expected ok");
+    expect(ok.result.index_state).toBeNull();
+    expect(ok.result.records).toHaveLength(2);
   });
 
   it("maps the real 422 validation response to unavailable, never to empty", async () => {
@@ -178,6 +224,48 @@ describe("interaction discovery: fail-closed parsing of mutated bodies", () => {
     expect(
       parseInteractionDiscoveryBody({ ...okBody, interactions: [{ ...first, target_taxon_name: "" }] }).state,
     ).toBe("malformed");
+  });
+
+  it("treats an unrecognised index_state as unknown, never as durable or unprovisioned", () => {
+    const emptyBody = fixture.empty.body as Record<string, unknown>;
+    for (const value of ["durable_v2", null, 1, ""]) {
+      const empty = parseInteractionDiscoveryBody({ ...emptyBody, index_state: value });
+      expect(empty.state).toBe("empty");
+      if (empty.state !== "empty") return;
+      expect(empty.result.index_state).toBe("unrecognized");
+      const ok = parseInteractionDiscoveryBody({ ...okBody, index_state: value });
+      if (ok.state !== "ok") throw new Error("expected ok");
+      expect(ok.result.index_state).toBe("unrecognized");
+    }
+  });
+
+  it("adds the backend's unreadable_count to the records it could not read", () => {
+    const [first, second] = okBody.interactions as Record<string, unknown>[];
+    const state = parseInteractionDiscoveryBody({
+      ...okBody,
+      unreadable_count: 3,
+      interactions: [first, { ...second, verification_state: null }],
+    });
+    if (state.state !== "ok") throw new Error("expected ok");
+    expect(state.result.backend_unreadable_count).toBe(3);
+    expect(state.result.unreadable_count).toBe(4);
+    const absent = parseInteractionDiscoveryBody(okBody);
+    if (absent.state !== "ok") throw new Error("expected ok");
+    expect(absent.result.backend_unreadable_count).toBe(0);
+  });
+
+  it("never reports empty when the backend excluded every matched record as unreadable", () => {
+    const durableEmpty = fixture.empty_durable_test_double.body as Record<string, unknown>;
+    expect(parseInteractionDiscoveryBody({ ...durableEmpty, unreadable_count: 2 }).state).toBe("malformed");
+    const unprovisionedEmpty = fixture.empty.body as Record<string, unknown>;
+    expect(parseInteractionDiscoveryBody({ ...unprovisionedEmpty, unreadable_count: 1 }).state).toBe("malformed");
+    expect(parseInteractionDiscoveryBody({ ...durableEmpty, unreadable_count: 0 }).state).toBe("empty");
+  });
+
+  it("treats an invalid unreadable_count as malformed", () => {
+    for (const value of [-1, 1.5, "2", null]) {
+      expect(parseInteractionDiscoveryBody({ ...okBody, unreadable_count: value }).state).toBe("malformed");
+    }
   });
 
   it("never carries locality fields a record might attach", () => {
