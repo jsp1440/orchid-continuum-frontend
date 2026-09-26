@@ -63,15 +63,15 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650; FE #862, #868 | Yes, before merge (session checker agents; #1647, #1650 and #868 after a repair round) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head |
+  | BE #1644, #1647, #1649, #1650; FE #862, #868 | Yes, before merge (session checker agents; #1647 and #868 after a repair round; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
   | BE #1645; FE #856, #861, #864, #865, #866 | Owner's own lineage: exact-head CI plus the readback in the PR comments; no independent checker record from this session | Not recorded | Owner | Blobs identical (FE #865, #866 verified by this session) |
   | BE #1643; FE #858, #859, #860 | Yes, before merge | Not applicable: these merged to `main` under the earlier owner-authorised sprint, before the Release 1 directive, and reached integration only through syncs #1644 and #862 | Coordinator | Tree/blobs identical |
 
-  Checker PASS records and gate results for the coordinator-merged PRs are held
-  in this session's scratchpad, not as GitHub comments. The factory gate takes
-  the checker verdict and heads as inputs, so it confirms policy eligibility,
-  not independent proof.
+  Checker PASS records and gate results for the coordinator-merged PRs live
+  in this session's transcript, as checker subagent reports and gate tool
+  output, not in GitHub comments. The factory gate takes the checker verdict
+  and heads as inputs, so it confirms policy eligibility, not independent proof.
 - **Evidence strength.** Results below are local, with no production data,
   unless stated. The fixture-backed Playwright suites in CI are a second, weaker
   layer.
