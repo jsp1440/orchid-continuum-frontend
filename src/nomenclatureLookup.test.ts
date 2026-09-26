@@ -7,7 +7,12 @@
  * from api.gbif.org on 2026-09-25 (capture URL and date in its `_capture`
  * header). The one exception is `match-fuzzy-fixture-only.json`, which is
  * labelled as a documented-shape fixture with fictional names. The three issue
- * bodies are the real reserve missions #816-#818, copied verbatim.
+ * bodies are the real reserve missions #816-#818, copied verbatim. The
+ * Gastrochilus fargesii (#818), Thrixspermum arunachalensis (#823) and
+ * non-strict follow-up bodies were captured the same way on 2026-09-26.
+ * Report/comment bounds that no real GBIF answer reaches (60+ synonyms, an
+ * oversized report, a backtick in a name) use synthetic shapes, labelled where
+ * they are built.
  */
 
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
@@ -16,14 +21,27 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   COMMENT_MARKER_PREFIX,
+  COMMENT_SYNONYM_LIMIT,
+  EMBEDDED_JSON_TRUNCATED_MARKER,
   EXIT,
+  MAX_COMMENT_CHARS,
   MAX_GBIF_GETS,
   MissionRefused,
+  NONSTRICT_LABEL,
   REVIEW_BANNER,
+  SYNONYM_LIMIT,
+  TransportFailure,
   assertNomenclatureUrl,
+  buildReport,
+  embeddedReportBlock,
+  flagSynonyms,
   lookupGbif,
+  malformedNameFlags,
   matchUrl,
+  nonstrictCandidates,
+  nonstrictMatchUrl,
   parseMission,
+  renderComment,
   resolutionFor,
   runNomenclatureLookup,
   speciesUrl,
@@ -61,8 +79,14 @@ const REAL: Record<string, string> = {
   [matchUrl('Aerides leopardorum')]: 'match-aerides-leopardorum-synonym',
   [matchUrl('Oncidium flexuosum')]: 'match-oncidium-flexuosum-higherrank',
   [matchUrl('Gastrochilus zzyzxensis')]: 'match-gastrochilus-zzyzxensis-none',
+  [nonstrictMatchUrl('Gastrochilus zzyzxensis')]: 'match-gastrochilus-zzyzxensis-nonstrict',
   [speciesUrl(5310649)]: 'species-5310649',
   [synonymsUrl(5310649)]: 'synonyms-5310649',
+  [matchUrl('Gastrochilus fargesii')]: 'match-gastrochilus-fargesii',
+  [speciesUrl(5310679)]: 'species-5310679',
+  [synonymsUrl(5310679)]: 'synonyms-5310679',
+  [matchUrl('Thrixspermum arunachalensis')]: 'match-thrixspermum-arunachalensis-none',
+  [nonstrictMatchUrl('Thrixspermum arunachalensis')]: 'match-thrixspermum-arunachalensis-nonstrict',
 };
 
 const NOW = '2026-09-25T20:00:00.000Z';
@@ -203,15 +227,18 @@ describe('match-type mapping never coerces a near match', () => {
     ]);
   });
 
+  // NONE alone makes one non-strict follow-up GET (candidate names only); the
+  // other unresolved match types stay at a single GET.
   it.each([
-    ['HIGHERRANK', 'Oncidium flexuosum', {}],
-    ['NONE', 'Gastrochilus zzyzxensis', {}],
-    ['FUZZY (fixture-only shape)', 'Fixturea exemplaris', { [matchUrl('Fixturea exemplaris')]: 'match-fuzzy-fixture-only' }],
-  ])('keeps %s unresolved after a single GET and adopts nothing', async (_label, name, extraGbif) => {
+    ['HIGHERRANK', 'Oncidium flexuosum', {}, 1],
+    ['NONE', 'Gastrochilus zzyzxensis', {}, 2],
+    ['FUZZY (fixture-only shape)', 'Fixturea exemplaris', { [matchUrl('Fixturea exemplaris')]: 'match-fuzzy-fixture-only' }, 1],
+  ])('keeps %s unresolved and adopts nothing', async (_label, name, extraGbif, gets) => {
     const net = network({ issueBody: issue817.body, extraGbif });
     const lookup = await lookupGbif(name, net.fetchImpl, () => NOW);
     expect(lookup.resolution).toBe('unresolved');
-    expect(lookup.gets).toBe(1);
+    expect(lookup.gets).toBe(gets);
+    expect(lookup.nonstrict_candidates === null).toBe(gets === 1);
     expect(lookup.gbif.accepted_name).toBeNull();
     expect(lookup.gbif.accepted_usage_key).toBeNull();
     expect(lookup.synonyms.items).toEqual([]);
@@ -352,6 +379,269 @@ describe('the executor end to end', () => {
     }
     expect(() => assertNomenclatureUrl('https://api.gbif.org/v1/occurrence/search?taxonKey=5310649')).toThrow();
     expect(() => assertNomenclatureUrl('https://api.gbif.org/v1/species/5310649/occurrence')).toThrow();
+  });
+});
+
+describe('every synonym is listed and suspect entries are flagged, never removed', () => {
+  it('lists all 13 real #817 synonyms in the comment, not the first 8', async () => {
+    const env = envFor();
+    const net = network({ issueBody: issue817.body });
+    const result = await runNomenclatureLookup({ env, fetchImpl: net.fetchImpl, now: () => NOW, log: quiet });
+    const comment = net.comments[0].body.split('<details>')[0];
+    expect(result.report.synonyms.items).toHaveLength(13);
+    for (const s of result.report.synonyms.items) {
+      expect(comment).toContain(`usage key ${s.key})`);
+    }
+    // The last two in GBIF order were beyond the old 8-name cut.
+    expect(comment).toContain('Saccolabium calceolare (Buch.-Ham. ex Sm.) Lindl. ex Wall.');
+    expect(comment).toContain('Sarcochilus nepalensis Spreng.');
+    expect(comment).not.toMatch(/more in the report/);
+    expect(COMMENT_SYNONYM_LIMIT).toBeGreaterThanOrEqual(SYNONYM_LIMIT);
+  });
+
+  it('flags the real #817 authorship-variant duplicates and nothing else', async () => {
+    const net = network({ issueBody: issue817.body });
+    const lookup = await lookupGbif('Gastrochilus calceolaris', net.fetchImpl, () => NOW);
+    const flagged = lookup.synonyms.items.filter((s: { review_flags: string[] }) => s.review_flags.length);
+    expect(flagged.map((s: { key: number }) => s.key)).toEqual([8536230, 2797637, 8664498, 2804159, 8213645, 8035017]);
+    expect(flagged.every((s: { review_flags: string[] }) => s.review_flags.join() === 'authorship_variant_duplicate')).toBe(true);
+    // Orthographic variants (philippinense / philippinensis) are different canonical names: not flagged.
+    expect(lookup.synonyms.items.find((s: { key: number }) => s.key === 5543018).review_flags).toEqual([]);
+    expect(lookup.synonyms).toMatchObject({ returned: 13, flagged: 6 });
+    expect(lookup.synonyms.flag_note).toMatch(/^flag for reviewer: .*no synonym was removed or corrected/);
+  });
+
+  it('flags the real #818 run-on entry as a duplicate of the accepted name and malformed, and keeps it verbatim', async () => {
+    const env = envFor();
+    const net = network({ issueBody: missionBody('Gastrochilus fargesii') });
+    const result = await runNomenclatureLookup({ env, fetchImpl: net.fetchImpl, now: () => NOW, log: quiet });
+    expect(result.exitCode).toBe(EXIT.OK);
+    const { synonyms, resolution } = result.report;
+    expect(resolution).toBe('accepted_match');
+    expect(synonyms.items).toHaveLength(2);
+    expect(synonyms.items[0]).toMatchObject({
+      key: 12380926,
+      scientific_name: 'Gastrochilus fargesii (Kraenzlin, 1903) Schlechter.A.Plants, 1919',
+      canonical_name: 'Gastrochilus fargesii',
+      review_flags: [
+        'duplicates_accepted_name',
+        'malformed_scientific_name:run_on_author_token',
+        'malformed_scientific_name:year_in_author_citation',
+      ],
+    });
+    expect(synonyms.items[1]).toMatchObject({ scientific_name: 'Saccolabium fargesii Kraenzl.', review_flags: [] });
+    const comment = net.comments[0].body.split('<details>')[0];
+    expect(comment).toContain('Gastrochilus fargesii (Kraenzlin, 1903) Schlechter.A.Plants, 1919 (SYNONYM, usage key 12380926) — flag for reviewer: ' +
+      'same canonical name as the accepted taxon; malformed name (run-on author token); malformed name (year in author citation)');
+    expect(comment).toContain('- Saccolabium fargesii Kraenzl. (SYNONYM, usage key 2804202)\n');
+    expect(comment).not.toMatch(/correct(?:ed|ion) to|replaced by/i);
+    expect(result.report.uncertainty.join(' ')).toContain('none was removed or corrected');
+  });
+
+  it('never flags a well-formed real name as malformed', async () => {
+    const net = network({ issueBody: issue817.body });
+    const lookup = await lookupGbif('Gastrochilus calceolaris', net.fetchImpl, () => NOW);
+    for (const s of lookup.synonyms.items) expect(malformedNameFlags(s.scientific_name)).toEqual([]);
+    for (const name of ['Gastrochilus calceolaris (Buch.-Ham. ex Sm.) D.Don', 'Gastrochilus fargesii (Kraenzl.) Schltr.',
+      'Dendrobium roylei A.D.Hawkes & A.H.Heller', 'Aerides leopardorum Wall. ex Hook.f.']) {
+      expect(malformedNameFlags(name)).toEqual([]);
+    }
+  });
+
+  it.each([
+    // Synthetic strings, one check each.
+    ['Fixturea alba (Fixt. Fixt.', ['unbalanced_parentheses']],
+    ['Fixturea alba Fixt.) Fixt.', ['unbalanced_parentheses']],
+    ['Fixturea alba )Fixt.( Fixt.', ['unbalanced_parentheses']],
+    ['Fixturea alba Fixtureson.B.Other', ['run_on_author_token']],
+    ['Fixturea alba Fixt., 1901', ['year_in_author_citation']],
+    ['Fixturea alba Fixt.; see note', ['unexpected_characters']],
+    ['Fixturea alba Fixt. [ined.]', ['unexpected_characters']],
+  ])('flags %s as %j', (name, flags) => {
+    expect(malformedNameFlags(name)).toEqual(flags);
+  });
+
+  it('flags without dropping, reordering or rewriting any entry', () => {
+    // Synthetic items.
+    const items = [
+      { key: 1, scientific_name: 'Fixturea alba Fixt.', canonical_name: 'Fixturea alba', authorship: 'Fixt.' },
+      { key: 2, scientific_name: 'Fixturea alba Other', canonical_name: 'Fixturea alba', authorship: 'Other' },
+      { key: 3, scientific_name: 'Fixturea rosea Fixt.', canonical_name: 'Fixturea rosea', authorship: 'Fixt.' },
+      { key: 4, scientific_name: 'Fixturea rosea Fixt.', canonical_name: 'Fixturea rosea', authorship: 'Fixt.' },
+    ];
+    const flagged = flagSynonyms(items, 'Fixturea accepta');
+    expect(flagged.map((s: { key: number }) => s.key)).toEqual([1, 2, 3, 4]);
+    expect(flagged.map((s: { review_flags: string[] }) => s.review_flags)).toEqual([
+      ['authorship_variant_duplicate'], ['authorship_variant_duplicate'], [], [],
+    ]);
+    flagged.forEach((s: Record<string, unknown>, i: number) => expect({ ...s, review_flags: undefined }).toEqual({ ...items[i], review_flags: undefined }));
+    expect(flagSynonyms(items, 'Fixturea rosea').map((s: { review_flags: string[] }) => s.review_flags[0] ?? null))
+      .toEqual(['authorship_variant_duplicate', 'authorship_variant_duplicate', 'duplicates_accepted_name', 'duplicates_accepted_name']);
+    // No accepted taxon (unresolved): no accepted-name flag is invented.
+    expect(flagSynonyms([items[2]], null)[0].review_flags).toEqual([]);
+  });
+
+  it('names at most COMMENT_SYNONYM_LIMIT synonyms and says how many more are in the report', async () => {
+    const net = network({ issueBody: issue817.body });
+    const lookup = await lookupGbif('Gastrochilus calceolaris', net.fetchImpl, () => NOW);
+    const report = buildReport({ issue: 817, repository: REPO, mission: parseMission(issue817.body), lookup, generatedAt: NOW });
+    // Synthetic: 60 distinct synonym rows, beyond any real SYNONYM_LIMIT page.
+    const many = Array.from({ length: 60 }, (_, i) => ({
+      key: 900000000 + i, scientific_name: `Fixturea n${'a'.repeat(i % 5)}${i} Fixt.`, canonical_name: `Fixturea n${i}`,
+      authorship: 'Fixt.', taxonomic_status: 'SYNONYM', rank: 'SPECIES', review_flags: [],
+    }));
+    const comment = renderComment({ ...report, synonyms: { ...report.synonyms, returned: 60, items: many } }).split('<details>')[0];
+    expect(comment.match(/^ {2}- Fixturea n/gm)).toHaveLength(COMMENT_SYNONYM_LIMIT);
+    expect(comment).toContain(`  - ${60 - COMMENT_SYNONYM_LIMIT} more in the report`);
+  });
+});
+
+describe('an unresolved name gets labelled non-strict candidates, and stays unresolved', () => {
+  it('records the real #823 Thrixspermum arunachalensis candidate under nonstrict_candidates', async () => {
+    const env = envFor();
+    const net = network({ issueBody: missionBody('Thrixspermum arunachalensis') });
+    const result = await runNomenclatureLookup({ env, fetchImpl: net.fetchImpl, now: () => NOW, log: quiet });
+    expect(result.exitCode).toBe(EXIT.OK);
+    const report = JSON.parse(readFileSync(join(env.OC_EVIDENCE_DIR, 'nomenclature-report-817.json'), 'utf8'));
+    expect(report.resolution).toBe('unresolved');
+    expect(report.gbif).toMatchObject({ match_type: 'NONE', accepted_name: null, accepted_usage_key: null, usage_key: null });
+    expect(report.contradiction).toBeNull();
+    expect(report.nonstrict_candidates).toEqual({
+      label: 'candidate names from fuzzy matching — not accepted, not evidence',
+      query: { name: 'Thrixspermum arunachalensis', strict: false },
+      source_url: nonstrictMatchUrl('Thrixspermum arunachalensis'),
+      accepted: false,
+      evidence: false,
+      items: [{ canonical_name: 'Thrixspermum', scientific_name: 'Thrixspermum Lour.', match_type: 'HIGHERRANK',
+        confidence: 94, usage_key: 2846663, status: 'ACCEPTED', rank: 'GENUS' }],
+    });
+    expect(net.gbifCalls().map(c => c.url)).toEqual([
+      matchUrl('Thrixspermum arunachalensis'), nonstrictMatchUrl('Thrixspermum arunachalensis'),
+    ]);
+    expect(report.sources.map((s: { url: string }) => s.url)).toEqual(net.gbifCalls().map(c => c.url));
+    expect(report.uncertainty.join(' ')).toContain(`they are ${NONSTRICT_LABEL}, and the name stays unresolved`);
+    const comment = net.comments[0].body.split('<details>')[0];
+    expect(comment).toContain('resolution **unresolved**');
+    expect(comment).toContain(`- Non-strict follow-up, ${NONSTRICT_LABEL}:\n  - Thrixspermum (HIGHERRANK, rank GENUS, confidence 94, usage key 2846663, GBIF status ACCEPTED)`);
+  });
+
+  it('keeps at most three real candidates from GBIF alternatives, best first', () => {
+    const body = JSON.parse(fixture('match-dendrobium-nobilis-nonstrict').body);
+    expect(body.alternatives.length).toBeGreaterThan(3);
+    const items = nonstrictCandidates(body);
+    expect(items.map((c: { usage_key: number }) => c.usage_key)).toEqual([5317489, 10795343, 5317367]);
+    expect(items[0]).toEqual({ canonical_name: 'Dendrobium nobile', scientific_name: 'Dendrobium nobile Lindl.',
+      match_type: 'FUZZY', confidence: 96, usage_key: 5317489, status: 'ACCEPTED', rank: 'SPECIES' });
+  });
+
+  it('skips NONE rows and repeated keys, and refuses a body with no matchType', () => {
+    // Synthetic shapes.
+    expect(nonstrictCandidates({ matchType: 'NONE', confidence: 100 })).toEqual([]);
+    expect(nonstrictCandidates({ matchType: 'FUZZY', usageKey: 1, alternatives: [{ matchType: 'FUZZY', usageKey: 1 }, { matchType: 'NONE', usageKey: 2 }, null] })
+      .map((c: { usage_key: number }) => c.usage_key)).toEqual([1]);
+    expect(() => nonstrictCandidates({ usageKey: 1 })).toThrow(TransportFailure);
+    expect(() => nonstrictCandidates([])).toThrow(TransportFailure);
+  });
+
+  it('fails closed when the non-strict follow-up fails: non-zero exit, no report, no comment', async () => {
+    for (const reply of [
+      () => new Response('{"error":"x"}', { status: 503, headers: { 'content-type': 'application/json' } }),
+      () => new Response('{"usageKey":1}', { status: 200, headers: { 'content-type': 'application/json' } }),
+    ]) {
+      const env = envFor();
+      const net = network({ issueBody: missionBody('Thrixspermum arunachalensis'),
+        gbifOverride: url => (url.includes('strict=false') ? reply() : undefined) });
+      const result = await runNomenclatureLookup({ env, fetchImpl: net.fetchImpl, now: () => NOW, log: quiet });
+      expect(result.exitCode).toBe(EXIT.TRANSPORT);
+      expect(existsSync(join(env.OC_EVIDENCE_DIR, 'nomenclature-report-817.json'))).toBe(false);
+      expect(net.calls.filter(c => c.method === 'POST')).toHaveLength(0);
+    }
+  });
+
+  it('never makes the follow-up for a match that is not NONE', async () => {
+    for (const [name, extraGbif] of [
+      ['Gastrochilus calceolaris', {}], ['Aerides leopardorum', {}], ['Oncidium flexuosum', {}],
+      ['Fixturea exemplaris', { [matchUrl('Fixturea exemplaris')]: 'match-fuzzy-fixture-only' }],
+    ] as Array<[string, Record<string, string>]>) {
+      const net = network({ issueBody: issue817.body, extraGbif });
+      const lookup = await lookupGbif(name, net.fetchImpl, () => NOW);
+      expect(lookup.nonstrict_candidates).toBeNull();
+      expect(net.gbifCalls().some(c => c.url.includes('strict=false'))).toBe(false);
+    }
+  });
+
+  it('anchors the allowlist: only strict=true, or exactly strict=false&verbose=true, on species/match', () => {
+    expect(nonstrictMatchUrl('Thrixspermum arunachalensis'))
+      .toBe('https://api.gbif.org/v1/species/match?name=Thrixspermum%20arunachalensis&strict=false&verbose=true');
+    expect(() => assertNomenclatureUrl(nonstrictMatchUrl('Thrixspermum arunachalensis'))).not.toThrow();
+    expect(() => assertNomenclatureUrl(matchUrl('Thrixspermum arunachalensis'))).not.toThrow();
+    for (const url of [
+      'https://api.gbif.org/v1/species/match?name=X%20y&strict=false',
+      'https://api.gbif.org/v1/species/match?name=X%20y&verbose=true',
+      'https://api.gbif.org/v1/species/match?name=X%20y&strict=false&verbose=true&kingdom=Plantae',
+      'https://api.gbif.org/v1/species/match?name=X%20y&strict=false&verbose=true#x',
+      'https://api.gbif.org/v1/species/match?name=X%20y&strict=false&verbose=truex',
+      'https://api.gbif.org/v1/species/search?name=X%20y&strict=false&verbose=true',
+      'https://api.gbif.org/v1/occurrence/match?name=X%20y&strict=false&verbose=true',
+      'https://api.gbif.org.evil/v1/species/match?name=X%20y&strict=false&verbose=true',
+      'http://api.gbif.org/v1/species/match?name=X%20y&strict=false&verbose=true',
+    ]) expect(() => assertNomenclatureUrl(url)).toThrow();
+  });
+
+  it('keeps the NONE path within the three-GET budget', async () => {
+    for (const body of [missionBody('Thrixspermum arunachalensis'), missionBody('Gastrochilus zzyzxensis')]) {
+      const net = network({ issueBody: body });
+      await runNomenclatureLookup({ env: envFor(), fetchImpl: net.fetchImpl, now: () => NOW, log: quiet });
+      expect(net.gbifCalls()).toHaveLength(2);
+      expect(net.gbifCalls().length).toBeLessThanOrEqual(MAX_GBIF_GETS);
+    }
+  });
+});
+
+describe('the full machine report is embedded in the same comment', () => {
+  const extract = (comment: string) => {
+    const m = /<details><summary>Full machine report \(JSON\)<\/summary>\n\n```json\n([\s\S]*)\n```\n\n<\/details>$/.exec(comment);
+    return m ? m[1] : null;
+  };
+
+  it('embeds the exact report JSON, collapsed, in the one digest-marked comment', async () => {
+    const env = envFor();
+    const net = network({ issueBody: missionBody('Gastrochilus fargesii') });
+    const result = await runNomenclatureLookup({ env, fetchImpl: net.fetchImpl, now: () => NOW, log: quiet });
+    expect(net.comments).toHaveLength(1);
+    const comment = net.comments[0].body;
+    expect(comment.startsWith(`${COMMENT_MARKER_PREFIX}${result.report.digest} -->`)).toBe(true);
+    const json = extract(comment);
+    expect(json).not.toBeNull();
+    const onDisk = JSON.parse(readFileSync(join(env.OC_EVIDENCE_DIR, 'nomenclature-report-817.json'), 'utf8'));
+    expect(JSON.parse(json!)).toEqual(onDisk);
+    expect(comment.length).toBeLessThanOrEqual(MAX_COMMENT_CHARS);
+    expect(onDisk.sensitive_locality_disclosure).toBe(false);
+  });
+
+  it('escapes backticks and angle brackets so GBIF text cannot break out of the block', () => {
+    // Synthetic hostile name.
+    const report = { schema: 'x', name: 'Fixturea ```</details><img src=x>` alba' };
+    const block = embeddedReportBlock(report);
+    const json = extract(block)!;
+    expect(json).not.toMatch(/[`<>]/);
+    expect(JSON.parse(json)).toEqual(report);
+    expect(block.match(/```/g)).toHaveLength(2);
+    expect(block.match(/<\/details>/g)).toHaveLength(1);
+  });
+
+  it('truncates an oversized report with an explicit marker and keeps the comment under the GitHub limit', async () => {
+    const net = network({ issueBody: issue817.body });
+    const lookup = await lookupGbif('Gastrochilus calceolaris', net.fetchImpl, () => NOW);
+    const report = buildReport({ issue: 817, repository: REPO, mission: parseMission(issue817.body), lookup, generatedAt: NOW });
+    // Synthetic: padding far beyond any real report.
+    const huge = { ...report, uncertainty: [...report.uncertainty, 'x'.repeat(200000)] };
+    const comment = renderComment(huge);
+    expect(comment.length).toBeLessThanOrEqual(MAX_COMMENT_CHARS);
+    expect(comment).toContain(EMBEDDED_JSON_TRUNCATED_MARKER);
+    expect(comment.endsWith('```\n\n</details>')).toBe(true);
+    // A report that fits is not marked.
+    expect(renderComment(report)).not.toContain(EMBEDDED_JSON_TRUNCATED_MARKER);
   });
 });
 

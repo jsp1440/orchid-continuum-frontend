@@ -13,11 +13,18 @@
  *      taxon name and domain from the exact mission-block lines. Anything
  *      malformed is refused (non-zero exit), never guessed.
  *   2. Makes at most three GBIF GETs: species/match (strict), then, only for an
- *      EXACT match, the taxon record and its synonyms. Never an occurrence or
- *      any other locality endpoint.
- *   3. Writes `.oc-evidence/nomenclature-report-<issue>.json`
+ *      EXACT match, the taxon record and its synonyms; or, only when the strict
+ *      match is NONE, one non-strict species/match whose best names are kept
+ *      as labelled `nonstrict_candidates` (never accepted, never evidence).
+ *      Never an occurrence or any other locality endpoint.
+ *   3. Lists every synonym GBIF returned and flags suspect entries for a
+ *      reviewer (a duplicate of the accepted name, authorship-variant
+ *      duplicates, a malformed scientific name). A flag is attention only:
+ *      nothing is removed or corrected.
+ *   4. Writes `.oc-evidence/nomenclature-report-<issue>.json`
  *      (`oc.nomenclature-evidence-report.v1`) and posts one idempotent,
- *      digest-marked issue comment.
+ *      digest-marked issue comment that also embeds the full report JSON (it
+ *      holds no locality), so the evidence outlives the expiring artifact.
  *
  * It never writes to the knowledge graph, taxonomy, a database, or any
  * publication surface. FUZZY, HIGHERRANK and NONE matches are always
@@ -38,6 +45,19 @@ export const REVIEW_BANNER = 'Machine-retrieved evidence — requires human scie
 export const GBIF_BASE = 'https://api.gbif.org/v1/species';
 export const MAX_GBIF_GETS = 3;
 export const SYNONYM_LIMIT = 20;
+/**
+ * Synonyms named in the comment. At least SYNONYM_LIMIT, so every synonym GBIF
+ * returned is listed; the bound only guards a future larger request limit.
+ */
+export const COMMENT_SYNONYM_LIMIT = 50;
+/** Candidate names kept from the non-strict follow-up for a NONE match. */
+export const NONSTRICT_CANDIDATE_LIMIT = 3;
+export const NONSTRICT_LABEL = 'candidate names from fuzzy matching — not accepted, not evidence';
+export const SYNONYM_FLAG_NOTE = 'flag for reviewer: attention only; no synonym was removed or corrected';
+/** GitHub rejects a comment over 65,536 characters; stay clear of it. */
+export const MAX_COMMENT_CHARS = 65000;
+export const MAX_EMBEDDED_JSON_CHARS = 60000;
+export const EMBEDDED_JSON_TRUNCATED_MARKER = '… [truncated: the full report is in the lane evidence artifact]';
 export const MAX_NAME_LENGTH = 120;
 const TIMEOUT_MS = 10000;
 
@@ -88,6 +108,13 @@ export function validateTaxonName(name) {
 export function matchUrl(name) {
   return `${GBIF_BASE}/match?name=${encodeURIComponent(name)}&strict=true`;
 }
+/**
+ * The one follow-up for a strict NONE match. `verbose=true` makes GBIF include
+ * its `alternatives`; the result is only ever recorded as candidate names.
+ */
+export function nonstrictMatchUrl(name) {
+  return `${GBIF_BASE}/match?name=${encodeURIComponent(name)}&strict=false&verbose=true`;
+}
 export function speciesUrl(key) {
   return `${GBIF_BASE}/${key}`;
 }
@@ -97,7 +124,7 @@ export function synonymsUrl(key) {
 
 /** Defence in depth: the only GBIF URLs this executor can ever request. */
 export function assertNomenclatureUrl(url) {
-  const allowed = /^https:\/\/api\.gbif\.org\/v1\/species\/(?:match\?name=[^&#]+&strict=true|\d+|\d+\/synonyms\?limit=\d+)$/;
+  const allowed = /^https:\/\/api\.gbif\.org\/v1\/species\/(?:match\?name=[^&#]+&strict=(?:true|false&verbose=true)|\d+|\d+\/synonyms\?limit=\d+)$/;
   if (!allowed.test(url) || /occurrence|locality|coordinate/i.test(url)) {
     throw new Error(`refusing non-nomenclature GBIF URL ${url}`);
   }
@@ -145,6 +172,91 @@ const int = value => (Number.isSafeInteger(value) ? value : null);
 const normalizeName = value => String(value ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
 
 /**
+ * Reviewer flags for one GBIF scientific name that looks malformed. Each check
+ * names a pattern a well-formed botanical (ICN) name does not show; none of
+ * them decides the name is wrong, and the name is kept exactly as GBIF gave it.
+ *   - run_on_author_token: a word glued to an initial, e.g. "Schlechter.A.Plants"
+ *     (legitimate abbreviations such as "D.Don", "Hook.f." or "L.R.Shakya" do
+ *     not match: the glued initial must follow a lowercase word of 3+ letters).
+ *   - unbalanced_parentheses.
+ *   - year_in_author_citation: botanical author citations carry no year
+ *     ("(Kraenzlin, 1903) ..., 1919" is zoological style or a parse artefact).
+ *   - unexpected_characters: anything outside letters, marks, digits, spaces
+ *     and the punctuation author citations use.
+ */
+export function malformedNameFlags(scientificName) {
+  const name = String(scientificName ?? '');
+  const flags = [];
+  if (/[a-z]{3,}\.[A-Z]\./.test(name)) flags.push('run_on_author_token');
+  let depth = 0;
+  for (const ch of name) {
+    if (ch === '(') depth += 1;
+    else if (ch === ')' && (depth -= 1) < 0) break;
+  }
+  if (depth !== 0) flags.push('unbalanced_parentheses');
+  if (/\b(?:1[5-9]|20)\d{2}\b/.test(name)) flags.push('year_in_author_citation');
+  if (/[^\p{L}\p{M}\d .,'’()&×-]/u.test(name)) flags.push('unexpected_characters');
+  return flags;
+}
+
+/**
+ * Add `review_flags` to each synonym without removing or rewriting any:
+ *   - duplicates_accepted_name: same canonical name as the accepted taxon.
+ *   - authorship_variant_duplicate: two or more synonyms share a canonical name
+ *     but differ in authorship (the same name recorded more than once).
+ *   - malformed_scientific_name:<check>: see malformedNameFlags.
+ */
+export function flagSynonyms(items, acceptedCanonical) {
+  const accepted = acceptedCanonical ? normalizeName(acceptedCanonical) : null;
+  const authorshipsByName = new Map();
+  for (const item of items) {
+    const canonical = normalizeName(item.canonical_name);
+    if (!canonical) continue;
+    if (!authorshipsByName.has(canonical)) authorshipsByName.set(canonical, new Set());
+    authorshipsByName.get(canonical).add(normalizeName(item.authorship));
+  }
+  return items.map(item => {
+    const canonical = normalizeName(item.canonical_name);
+    const flags = [];
+    if (accepted && canonical && canonical === accepted) flags.push('duplicates_accepted_name');
+    if (canonical && authorshipsByName.get(canonical).size > 1) flags.push('authorship_variant_duplicate');
+    for (const check of malformedNameFlags(item.scientific_name)) flags.push(`malformed_scientific_name:${check}`);
+    return { ...item, review_flags: flags };
+  });
+}
+
+/**
+ * Up to NONSTRICT_CANDIDATE_LIMIT candidate names from a non-strict match body:
+ * the best match, then GBIF's `alternatives`, skipping NONE and repeated keys.
+ * These are recorded for a reviewer only; nothing here is adopted.
+ */
+export function nonstrictCandidates(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body) || typeof body.matchType !== 'string') {
+    throw new TransportFailure('GBIF non-strict match response has no matchType');
+  }
+  const rows = [body, ...(Array.isArray(body.alternatives) ? body.alternatives : [])];
+  const seen = new Set();
+  const items = [];
+  for (const row of rows) {
+    if (items.length >= NONSTRICT_CANDIDATE_LIMIT) break;
+    if (!row || typeof row !== 'object' || row.matchType === 'NONE') continue;
+    const key = int(row.usageKey);
+    if (key === null || seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      canonical_name: str(row.canonicalName),
+      scientific_name: str(row.scientificName),
+      match_type: str(row.matchType),
+      confidence: typeof row.confidence === 'number' ? row.confidence : null,
+      usage_key: key,
+      status: str(row.status),
+      rank: str(row.rank),
+    });
+  }
+  return items;
+}
+
+/**
  * Perform the bounded lookup. Returns the GBIF-derived portion of the report.
  * At most MAX_GBIF_GETS requests; detail requests only for an EXACT match.
  */
@@ -169,6 +281,20 @@ export async function lookupGbif(name, fetchImpl, now = () => new Date().toISOSt
   const uncertainty = [];
   let detail = null;
   let synonyms = null;
+  let nonstrict = null;
+  if (match.matchType === 'NONE') {
+    // One extra GET, still inside MAX_GBIF_GETS: a NONE match never reads detail.
+    const url = nonstrictMatchUrl(name);
+    const items = nonstrictCandidates(await get(url));
+    nonstrict = {
+      label: NONSTRICT_LABEL,
+      query: { name, strict: false },
+      source_url: url,
+      accepted: false,
+      evidence: false,
+      items,
+    };
+  }
   if (resolution !== 'unresolved') {
     const detailKey = resolution === 'synonym_of' ? match.acceptedUsageKey : match.usageKey;
     detail = await get(speciesUrl(detailKey));
@@ -183,7 +309,7 @@ export async function lookupGbif(name, fetchImpl, now = () => new Date().toISOSt
     }
   }
 
-  const synonymItems = (synonyms?.results ?? [])
+  const synonymItems = flagSynonyms((synonyms?.results ?? [])
     .filter(row => row && (detail ? row.acceptedKey === detail.key : true))
     .map(row => ({
       key: int(row.key),
@@ -192,7 +318,8 @@ export async function lookupGbif(name, fetchImpl, now = () => new Date().toISOSt
       authorship: str(row.authorship),
       taxonomic_status: str(row.taxonomicStatus),
       rank: str(row.rank),
-    }));
+    })), detail ? str(detail.canonicalName) : null);
+  const keptSynonyms = synonymItems.slice(0, SYNONYM_LIMIT);
   const matchedSynonym = synonymItems.find(row => row.key === match.usageKey) ?? null;
   const accepted = detail && resolution !== 'unresolved' ? {
     usage_key: int(detail.key),
@@ -229,8 +356,11 @@ export async function lookupGbif(name, fetchImpl, now = () => new Date().toISOSt
       requested_limit: SYNONYM_LIMIT,
       returned: synonymItems.length,
       truncated: synonyms ? synonyms.endOfRecords === false || synonymItems.length > SYNONYM_LIMIT : false,
-      items: synonymItems.slice(0, SYNONYM_LIMIT),
+      flagged: keptSynonyms.filter(row => row.review_flags.length > 0).length,
+      flag_note: SYNONYM_FLAG_NOTE,
+      items: keptSynonyms,
     },
+    nonstrict_candidates: nonstrict,
   };
 }
 
@@ -258,8 +388,15 @@ function uncertaintyFor(lookup, contradiction) {
     lines.push(`GBIF matched only a higher rank${returned ? ` (${returned})` : ''}; the name itself was not found.`);
   } else if (matchType === 'NONE') {
     lines.push('GBIF Backbone returned no match for this name.');
+    const candidates = lookup.nonstrict_candidates?.items ?? [];
+    lines.push(candidates.length
+      ? `A non-strict follow-up returned ${candidates.length} candidate name(s); they are ${NONSTRICT_LABEL}, and the name stays unresolved.`
+      : 'A non-strict follow-up returned no candidate name either.');
   } else if (lookup.resolution === 'unresolved') {
     lines.push(`GBIF returned match type ${matchType} with status ${lookup.gbif.status ?? 'missing'}; no resolution is asserted.`);
+  }
+  if (lookup.synonyms.flagged > 0) {
+    lines.push(`${lookup.synonyms.flagged} GBIF synonym entr${lookup.synonyms.flagged === 1 ? 'y is' : 'ies are'} flagged for reviewer attention (duplicate of the accepted name, authorship-variant duplicate, or malformed name); none was removed or corrected.`);
   }
   if (contradiction) lines.push('The knowledge-graph name and the GBIF accepted name disagree; a human must decide which treatment the Continuum follows.');
   lines.push(
@@ -291,6 +428,7 @@ export function buildReport({ issue, repository, mission, lookup, generatedAt })
     sources: lookup.sources,
     gbif: lookup.gbif,
     synonyms: lookup.synonyms,
+    nonstrict_candidates: lookup.nonstrict_candidates,
     resolution: lookup.resolution,
     contradiction,
     uncertainty: uncertaintyFor(lookup, contradiction),
@@ -316,6 +454,51 @@ export function safe(value) {
     .slice(0, 300);
 }
 
+const FLAG_TEXT = Object.freeze({
+  duplicates_accepted_name: 'same canonical name as the accepted taxon',
+  authorship_variant_duplicate: 'authorship-variant duplicate',
+  'malformed_scientific_name:run_on_author_token': 'malformed name (run-on author token)',
+  'malformed_scientific_name:unbalanced_parentheses': 'malformed name (unbalanced parentheses)',
+  'malformed_scientific_name:year_in_author_citation': 'malformed name (year in author citation)',
+  'malformed_scientific_name:unexpected_characters': 'malformed name (unexpected characters)',
+});
+
+function synonymLines(synonyms) {
+  const shown = synonyms.items.slice(0, COMMENT_SYNONYM_LIMIT);
+  const head = `- Synonyms listed: ${synonyms.returned}${synonyms.truncated ? ' (truncated)' : ''}` +
+    (synonyms.flagged ? `; ${synonyms.flagged} flagged for reviewer (attention only; nothing removed or corrected)` : '');
+  return [
+    head,
+    ...shown.map(s => `  - ${safe(s.scientific_name)} (${safe(s.taxonomic_status)}, usage key ${safe(s.key)})` +
+      (s.review_flags?.length ? ` — flag for reviewer: ${s.review_flags.map(f => FLAG_TEXT[f] ?? safe(f)).join('; ')}` : '')),
+    ...(synonyms.items.length > shown.length ? [`  - ${synonyms.items.length - shown.length} more in the report`] : []),
+  ];
+}
+
+function candidateLines(nonstrict) {
+  if (!nonstrict) return [];
+  return [
+    `- Non-strict follow-up, ${NONSTRICT_LABEL}: ${nonstrict.items.length ? '' : 'none returned'}`.trimEnd(),
+    ...nonstrict.items.map(c => `  - ${safe(c.canonical_name)} (${safe(c.match_type)}, rank ${safe(c.rank)}, confidence ${safe(c.confidence)}, ` +
+      `usage key ${safe(c.usage_key)}, GBIF status ${safe(c.status)})`),
+  ];
+}
+
+/**
+ * The full report as JSON inside a collapsed block. Backticks and angle
+ * brackets are written as JSON \\u escapes (still valid JSON, same values), so
+ * GBIF-sourced text cannot close the code fence or the details element. The
+ * block is bounded by `budget` characters and says so when it is cut.
+ */
+export function embeddedReportBlock(report, budget = MAX_EMBEDDED_JSON_CHARS) {
+  const encode = value => value.replace(/[`<>]/g, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`);
+  const limit = Math.min(budget, MAX_EMBEDDED_JSON_CHARS);
+  let json = encode(JSON.stringify(report, null, 2));
+  if (json.length > limit) json = encode(JSON.stringify(report));
+  if (json.length > limit) json = `${json.slice(0, Math.max(0, limit - EMBEDDED_JSON_TRUNCATED_MARKER.length - 1))}\n${EMBEDDED_JSON_TRUNCATED_MARKER}`;
+  return ['<details><summary>Full machine report (JSON)</summary>', '', '```json', json, '```', '', '</details>'].join('\n');
+}
+
 export function renderComment(report) {
   const g = report.gbif;
   const lines = [
@@ -327,8 +510,8 @@ export function renderComment(report) {
     `- GBIF match: ${safe(g.match_type)}, confidence ${safe(g.confidence)}, status ${safe(g.status)}, rank ${safe(g.rank)}`,
     `- Matched name: ${safe(g.scientific_name)} (usage key ${safe(g.usage_key)}; authorship ${safe(g.authorship)})`,
     `- Accepted name: ${safe(g.accepted_name)} (usage key ${safe(g.accepted_usage_key)})`,
-    `- Synonyms listed: ${report.synonyms.returned}${report.synonyms.truncated ? ' (truncated)' : ''}` +
-      (report.synonyms.items.length ? `: ${report.synonyms.items.slice(0, 8).map(s => safe(s.scientific_name)).join('; ')}` : ''),
+    ...synonymLines(report.synonyms),
+    ...candidateLines(report.nonstrict_candidates),
     `- Contradiction with the knowledge-graph name: ${report.contradiction
       ? `${report.contradiction.kind}: KG ${safe(report.contradiction.kg_name)} vs GBIF accepted ${safe(report.contradiction.gbif_accepted_name)}`
       : 'none detected'}`,
@@ -340,9 +523,11 @@ export function renderComment(report) {
     ...report.sources.map(s => `- ${s.url} (retrieved ${s.retrieved_at}, HTTP ${s.http_status})`),
     '',
     'No knowledge-graph, taxonomy, database, or publication change was made. Provider calls: 0. ' +
-      `Full report: \`nomenclature-report-${report.issue}.json\` in the lane evidence artifact.`,
+      `Full report: \`nomenclature-report-${report.issue}.json\` in the lane evidence artifact, and embedded below (it holds no locality).`,
   ];
-  return lines.join('\n');
+  const head = lines.join('\n');
+  const wrapper = 200; // the details/summary/fence lines around the JSON, generously
+  return `${head}\n\n${embeddedReportBlock(report, MAX_COMMENT_CHARS - head.length - wrapper)}`;
 }
 
 export function githubHeaders(token, userAgent = 'oc-nomenclature-lookup') {

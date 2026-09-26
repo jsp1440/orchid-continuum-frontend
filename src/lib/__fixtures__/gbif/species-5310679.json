@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/5310679",
+    "captured_at": "2026-09-26",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0dd8b-5c4c-7574-89e0-f5f861041724",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"key\":5310679,\"nubKey\":5310679,\"nameKey\":4610102,\"taxonID\":\"gbif:5310679\",\"kingdom\":\"Plantae\",\"phylum\":\"Tracheophyta\",\"order\":\"Asparagales\",\"family\":\"Orchidaceae\",\"genus\":\"Gastrochilus\",\"species\":\"Gastrochilus fargesii\",\"kingdomKey\":6,\"phylumKey\":7707728,\"classKey\":196,\"orderKey\":1169,\"familyKey\":7689,\"genusKey\":2804118,\"speciesKey\":5310679,\"datasetKey\":\"d7dddbf4-2cf0-4f39-9b2a-bb099caae36c\",\"constituentKey\":\"7ddf754f-d193-4cc9-b351-99906754a03b\",\"parentKey\":2804118,\"parent\":\"Gastrochilus\",\"basionymKey\":2804202,\"basionym\":\"Saccolabium fargesii Kraenzl.\",\"scientificName\":\"Gastrochilus fargesii (Kraenzl.) Schltr.\",\"canonicalName\":\"Gastrochilus fargesii\",\"authorship\":\"(Kraenzl.) Schltr.\",\"nameType\":\"SCIENTIFIC\",\"rank\":\"SPECIES\",\"origin\":\"SOURCE\",\"taxonomicStatus\":\"ACCEPTED\",\"nomenclaturalStatus\":[],\"remarks\":\"\",\"publishedIn\":\"Repert. Spec. Nov. Regni Veg. Beih. 4: 288 (1919)\",\"numDescendants\":0,\"lastCrawled\":\"2023-08-22T23:20:59.545+00:00\",\"lastInterpreted\":\"2023-08-22T23:17:14.363+00:00\",\"issues\":[],\"class\":\"Liliopsida\"}"
+}

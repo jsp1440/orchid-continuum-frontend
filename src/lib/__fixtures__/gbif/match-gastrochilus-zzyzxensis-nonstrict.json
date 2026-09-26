@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/match?name=Gastrochilus%20zzyzxensis&strict=false&verbose=true",
+    "captured_at": "2026-09-26",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0ddc9-c2dc-70d9-ba8c-8614aebdcf64",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"usageKey\":2804118,\"scientificName\":\"Gastrochilus D.Don\",\"canonicalName\":\"Gastrochilus\",\"rank\":\"GENUS\",\"status\":\"ACCEPTED\",\"confidence\":92,\"note\":\"Similarity: name=100; classification=-2; rank=0; status=1; score=99; nextMatch=0\",\"matchType\":\"HIGHERRANK\",\"kingdom\":\"Plantae\",\"phylum\":\"Tracheophyta\",\"order\":\"Asparagales\",\"family\":\"Orchidaceae\",\"genus\":\"Gastrochilus\",\"kingdomKey\":6,\"phylumKey\":7707728,\"classKey\":196,\"orderKey\":1169,\"familyKey\":7689,\"genusKey\":2804118,\"class\":\"Liliopsida\"}"
+}
