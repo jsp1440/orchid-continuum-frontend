@@ -13,8 +13,16 @@ import { defineConfig, devices } from "@playwright/test";
  * journey signs a throwaway account in without touching the hosted identity
  * project. That override is the reason this suite can exist at all.
  */
-const REFERENCE_BACKEND = "http://127.0.0.1:8791";
-const APP = "http://127.0.0.1:4173";
+const REFERENCE_BACKEND_PORT = Number(process.env.REFERENCE_BACKEND_PORT || 8791);
+const APP_PORT = Number(process.env.E2E_APP_PORT || 4173);
+const REFERENCE_BACKEND = `http://127.0.0.1:${REFERENCE_BACKEND_PORT}`;
+const APP = `http://127.0.0.1:${APP_PORT}`;
+
+// Specs that talk to the reference backend directly read it from here, so a
+// run on other ports (REFERENCE_BACKEND_PORT / E2E_APP_PORT, e.g. beside
+// another suite) reaches the backend the app was built against. Workers
+// inherit this environment.
+process.env.REFERENCE_BACKEND_URL = REFERENCE_BACKEND;
 
 const buildEnv = {
   VITE_CALYX_API_URL: REFERENCE_BACKEND,
@@ -56,12 +64,13 @@ export default defineConfig({
     {
       command: "node e2e/support/reference-backend.mjs",
       url: `${REFERENCE_BACKEND}/__reference/health`,
+      env: { REFERENCE_BACKEND_PORT: String(REFERENCE_BACKEND_PORT) },
       reuseExistingServer: !process.env.CI,
       stdout: "pipe",
       stderr: "pipe",
     },
     {
-      command: "npm run build && npx vite preview --port 4173 --host 127.0.0.1 --strictPort",
+      command: `npm run build && npx vite preview --port ${APP_PORT} --host 127.0.0.1 --strictPort`,
       url: APP,
       timeout: 240_000,
       reuseExistingServer: !process.env.CI,
