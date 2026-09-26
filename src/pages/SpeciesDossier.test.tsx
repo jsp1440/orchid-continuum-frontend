@@ -1058,14 +1058,39 @@ describe('a taxon with no record vs one the page cannot confirm (R1 journeys 3, 
     expectNoDossierShell();
   });
 
-  it('says no record for an invented name even while the public directory is unreachable (its 404 is never evidence either way)', async () => {
-    mocks.lookupSpeciesById.mockResolvedValue({ state: 'unavailable', httpStatus: 0 });
-    mocks.fetchSpeciesDossier.mockRejectedValue(await noCanonicalRecord());
+  it('says it could not confirm, never "no record", while the public directory is down (it may hold the taxon)', async () => {
+    // Calyx gives its exact no-record 404 and the resolver answers unresolved,
+    // but the public source did not answer and could still have found it.
+    for (const outage of [
+      { state: 'unavailable', httpStatus: 503 },
+      { state: 'unavailable', httpStatus: 0 },
+    ]) {
+      mocks.lookupSpeciesById.mockResolvedValue(outage);
+      mocks.fetchSpeciesDossier.mockRejectedValue(await noCanonicalRecord());
 
-    renderPage('/species/Notagenus%20fakeus');
+      renderPage('/species/555?name=Probeia%20publica');
+      await flush();
+      await flush();
+      expect(notFoundPanel()).toBeNull();
+      expect(unavailablePanel()).not.toBeNull();
+      expect(container.textContent).toContain('Could not confirm a taxon record for \u2018Probeia publica\u2019');
+      expect(container.textContent).not.toContain('no dossier exists');
+      expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith({ name: 'Probeia publica' }, expect.anything());
+    }
+  });
+
+  it('renders the dossier when the public directory does answer with the record', async () => {
+    mocks.lookupSpeciesById.mockResolvedValue({
+      state: 'found',
+      data: { taxonomy_id: '555', canonical_name: 'Probeia publica', family: 'Orchidaceae' },
+    });
+    mocks.fetchSpeciesDossier.mockRejectedValue(await noCanonicalRecord());
+    renderPage('/species/555?name=Probeia%20publica');
     await flush();
     await flush();
-    expect(notFoundPanel()).not.toBeNull();
+    expect(notFoundPanel()).toBeNull();
+    expect(unavailablePanel()).toBeNull();
+    expect(container.querySelector('h1')?.textContent).toBe('Probeia publica');
   });
 
   it('never says "no record" for a bare numeric id: it cannot confirm one', async () => {

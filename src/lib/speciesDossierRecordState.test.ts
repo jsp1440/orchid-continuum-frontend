@@ -176,9 +176,32 @@ describe('dossierRecordState', () => {
 
   it('is not found only on the Calyx sources’ positive evidence; the public 404 is never evidence', () => {
     expect(dossierRecordState({ species: 'reported_absent', dossier: 'not_found' })).toBe('not_found');
-    expect(dossierRecordState({ species: 'unavailable', dossier: 'not_found' })).toBe('not_found');
     expect(dossierRecordState({ species: 'reported_absent', dossier: 'unavailable' })).toBe('unavailable');
     expect(dossierRecordState({ species: 'unavailable', dossier: 'unavailable' })).toBe('unavailable');
+  });
+
+  it('never concludes not found while a source that could still find the taxon did not answer', () => {
+    // A public source that is down may hold the record; the Calyx evidence
+    // alone must not turn a real taxon into "no record" during an outage.
+    expect(dossierRecordState({ species: 'unavailable', dossier: 'not_found' })).toBe('unavailable');
+  });
+
+  it('matches the documented truth table for every combination', () => {
+    const species = [null, 'found', 'reported_absent', 'unavailable'] as const;
+    const dossier = [null, 'resolved', 'ambiguous', 'conflict', 'not_found', 'unavailable'] as const;
+    for (const s of species) {
+      for (const d of dossier) {
+        const expected =
+          s === 'found' || d === 'resolved' || d === 'ambiguous' || d === 'conflict'
+            ? 'found'
+            : s === null || d === null
+              ? 'loading'
+              : s === 'reported_absent' && d === 'not_found'
+                ? 'not_found'
+                : 'unavailable';
+        expect(dossierRecordState({ species: s, dossier: d }), `${s} × ${d}`).toBe(expected);
+      }
+    }
   });
 
   it('waits while a source that could still find the taxon is pending', () => {

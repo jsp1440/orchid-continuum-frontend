@@ -72,6 +72,30 @@ test("an outage says it could not confirm the record and retries, never 'no reco
   await expect(page.getByText(/No taxon record found/)).toHaveCount(0);
 });
 
+test("with the public directory down, Calyx's no-record answer alone is 'could not confirm', never 'no record'", async ({ page }) => {
+  const answers: string[] = [];
+  page.on("response", (response) => {
+    const url = response.url();
+    if (/\/api\/(species|platform\/species)\/Publicdown%20fakeus|resolve-species/.test(url)) {
+      answers.push(`${new URL(url).pathname} ${response.status()}`);
+    }
+  });
+  await page.goto("/species/Publicdown%20fakeus");
+  const panel = page.getByTestId("taxon-record-unavailable");
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Could not confirm a taxon record for \u2018Publicdown fakeus\u2019");
+  await expect(page.getByText(/No taxon record found/)).toHaveCount(0);
+  await expectNoDossierShell(page);
+  // The fixture really did give Calyx's exact no-record answer and the public outage.
+  expect(answers).toEqual(
+    expect.arrayContaining([
+      "/api/species/Publicdown%20fakeus 503",
+      "/api/platform/species/Publicdown%20fakeus/dossier 404",
+      "/api/platform/federation/resolve-species 200",
+    ]),
+  );
+});
+
 test("a real taxon still renders its dossier", async ({ page }) => {
   await page.goto(REAL);
   await expect(page.getByRole("heading", { level: 1, name: REAL_NAME })).toBeVisible();
@@ -120,4 +144,13 @@ test("history navigation between an unknown and a real taxon never shows one's a
   expect(states.filter((s) => s.path === realPath).length).toBeGreaterThan(0);
   expect(states.filter((s) => s.path === realPath && s.noRecord)).toEqual([]);
   expect(states.filter((s) => s.path === unknownPath && s.heading === REAL_NAME)).toEqual([]);
+});
+
+test("a long requested name wraps inside the panel at phone width (390px), with no sideways scroll", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const longName = `Notagenus${"x".repeat(80)} fakeus`;
+  await page.goto(`/species/${encodeURIComponent(longName)}`);
+  await expect(page.getByTestId("taxon-record-not-found")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
 });

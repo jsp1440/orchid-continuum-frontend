@@ -633,7 +633,7 @@ function RequestedName({ value }: { value: string }) {
   return (
     <span
       data-testid="requested-taxon-name"
-      className="font-mono not-italic text-[#faf7f2] break-all"
+      className="font-mono not-italic text-[#faf7f2] [overflow-wrap:anywhere]"
     >
       &lsquo;{value}&rsquo;
     </span>

@@ -546,11 +546,22 @@ export type DossierRecordState = 'loading' | 'found' | 'not_found' | 'unavailabl
  *
  * `found` as soon as any identity source holds a record (the public species
  * record, or a Calyx dossier / ambiguous candidates / a subject conflict,
- * which all name real records). `not_found` only on positive evidence of
- * absence, which only the Calyx sources can give (see resolveDossierForSubject);
- * the public detail endpoint's 404 is never evidence of absence. Everything
- * else is `unavailable`: the page cannot confirm whether the taxon exists and
- * must not present the requested name as one.
+ * which all name real records).
+ *
+ * `not_found` needs two things together. First, positive evidence of absence,
+ * which only the Calyx sources can give (`dossier === 'not_found'`, see
+ * resolveDossierForSubject); the public detail endpoint's 404 is never that
+ * evidence on its own. Second, every source that could still turn the page
+ * into `found` must have answered without a record: a public source that did
+ * not answer (`unavailable`) may be hiding a real taxon, so it blocks
+ * `not_found` (a transient outage never turns a real taxon into "no record").
+ *
+ * Truth table (species × dossier; first matching row wins):
+ *   species found                         → found
+ *   dossier resolved | ambiguous | conflict → found
+ *   species pending or dossier pending    → loading
+ *   species reported_absent, dossier not_found → not_found
+ *   anything else                         → unavailable
  */
 export function dossierRecordState(params: {
   species: SpeciesRecordSourceState | null;
@@ -561,7 +572,7 @@ export function dossierRecordState(params: {
   if (dossier === 'resolved' || dossier === 'ambiguous' || dossier === 'conflict') return 'found';
   // The public record could still turn out to be found; wait for it.
   if (species === null || dossier === null) return 'loading';
-  return dossier === 'not_found' ? 'not_found' : 'unavailable';
+  return species === 'reported_absent' && dossier === 'not_found' ? 'not_found' : 'unavailable';
 }
 
 /** The route's subject exactly as the visitor asked for it: user input, never an accepted name. */
