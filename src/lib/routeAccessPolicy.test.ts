@@ -52,6 +52,17 @@ describe('route access policy', () => {
     }
   });
 
+  it('gates the literature browser because its backend is owner/API-key only', () => {
+    // GET /api/literature-extraction/* is mounted behind
+    // verify_owner_or_api_key, so an anonymous visitor was always refused while
+    // the route claimed to be public. The routes are signed-in entry points;
+    // the pages themselves render the owner-or-API refusal a member still gets.
+    for (const path of ['/literature', '/literature/:paperId']) {
+      expect(ROUTE_ACCESS_POLICY.get(path)).toBe('router-authenticated');
+      expect(PUBLIC_ROUTE_PATTERNS as readonly string[]).not.toContain(path);
+    }
+  });
+
   it('records intentional internal authorization boundaries', () => {
     expect(ROUTE_ACCESS_POLICY.get('/account')).toBe('component-authorized');
     expect(ROUTE_ACCESS_POLICY.get('/university/review')).toBe(
