@@ -29,6 +29,8 @@ vi.mock('@/contexts/AuthContext', async () => {
   return { ...actual, useAuth: mocks.useAuth };
 });
 
+import accessDenied from '@/lib/__fixtures__/literatureAccessDenied.realBackend.json';
+
 import Literature from './Literature';
 
 function paper(id: string, overrides: Record<string, unknown> = {}) {
@@ -136,13 +138,15 @@ describe('an empty corpus is not a failure', () => {
 });
 
 describe('failures never read as an empty corpus', () => {
-  it('renders unauthorised as unauthorised', async () => {
+  it('renders a refusal as owner-or-API access required, not a generic error', async () => {
     respond({ detail: { code: 'NOT_AUTHORIZED' } }, 403);
     await mount();
 
-    expect(text()).toMatch(/not authorised to browse/i);
+    expect(container.querySelector('[data-testid="literature-access-required"]')).not.toBeNull();
+    expect(text()).toMatch(/owner or API access required/i);
     expect(text()).toMatch(/says nothing about how much literature the Continuum holds/i);
     expect(container.querySelector('[data-testid="literature-empty"]')).toBeNull();
+    expect(container.querySelector('[data-testid="literature-error"]')).toBeNull();
   });
 
   it('renders an outage as an outage, and offers a retry', async () => {
@@ -211,5 +215,126 @@ describe('the list carries no paper bodies', () => {
 
     expect(text()).toMatch(/9 claims · 4 evidence/);
     expect(text()).not.toMatch(/abstract/i);
+  });
+});
+
+/**
+ * A signed-in member, refused.
+ *
+ * `/literature` sits behind ProtectedRoute, so the reader here is signed in.
+ * The backend still answers only an owner session or API key
+ * (`verify_owner_or_api_key`), so a member is refused by design. That refusal
+ * must read as exactly that — not as a broken login, not as an outage, and
+ * never as an empty corpus. The 401 bodies are the backend's own responses,
+ * captured in `literatureAccessDenied.realBackend.json`; the backend gate never
+ * emits 403, so the 403 case below is a synthetic shape for the client's
+ * 401/403 branch.
+ */
+describe('a signed-in member without owner or API access', () => {
+  const signedIn = () =>
+    mocks.useAuth.mockReturnValue({
+      user: { id: 'member-1' },
+      session: { access_token: 'member-session' },
+      loading: false,
+    } as never);
+
+  const accessState = () => container.querySelector('[data-testid="literature-access-required"]');
+  const retry = () =>
+    [...container.querySelectorAll('button')].some((b) => /try again/i.test(b.textContent ?? ''));
+
+  afterEach(() => {
+    mocks.useAuth.mockReturnValue({ user: null, session: null, loading: false });
+  });
+
+  it('is told the workspace is not yet open to members, on the backend\'s own 401', async () => {
+    signedIn();
+    respond(accessDenied.list_no_credentials.body, accessDenied.list_no_credentials.status);
+    await mount();
+
+    expect(accessState()).not.toBeNull();
+    expect(accessState()?.getAttribute('data-access-status')).toBe('401');
+    expect(accessState()?.getAttribute('data-signed-in')).toBe('true');
+    expect(text()).toMatch(/owner or API access required/i);
+    expect(text()).toMatch(/not yet open to members/i);
+    expect(text()).toMatch(/you are signed in/i);
+    expect(text()).toMatch(/signing in again will not change this answer/i);
+    // Not the generic error, not the empty corpus, and no retry that cannot help.
+    expect(container.querySelector('[data-testid="literature-error"]')).toBeNull();
+    expect(container.querySelector('[data-testid="literature-empty"]')).toBeNull();
+    expect(text()).not.toMatch(/not authorised to browse/i);
+    expect(retry()).toBe(false);
+  });
+
+  it('gets the same state when a non-owner bearer is rejected', async () => {
+    signedIn();
+    respond(accessDenied.list_non_owner_bearer.body, accessDenied.list_non_owner_bearer.status);
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('401');
+    expect(text()).toMatch(/not yet open to members/i);
+  });
+
+  it('gets the same state on a 403 (synthetic shape)', async () => {
+    signedIn();
+    respond({ detail: 'Forbidden' }, 403);
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('403');
+    expect(text()).toMatch(/owner or API access required/i);
+    expect(retry()).toBe(false);
+  });
+
+  it('sees an outage as an outage, not as a refusal', async () => {
+    signedIn();
+    respond({ detail: 'Owner session signing is not configured' }, 503);
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(container.querySelector('[data-testid="literature-error"]')).not.toBeNull();
+    expect(text()).toMatch(/literature corpus is unavailable/i);
+    expect(text()).not.toMatch(/owner or API access required/i);
+    expect(retry()).toBe(true);
+  });
+
+  it('sees an unreachable service as unreachable, not as a refusal', async () => {
+    signedIn();
+    globalThis.fetch = vi.fn(async () => {
+      throw new TypeError('Failed to fetch');
+    }) as typeof globalThis.fetch;
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(text()).toMatch(/could not be reached/i);
+    expect(retry()).toBe(true);
+  });
+
+  it('sees an empty corpus as empty, not as a refusal', async () => {
+    signedIn();
+    respond({ papers: [], total: 0, limit: 25, offset: 0, unreadable_count: 0 });
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(container.querySelector('[data-testid="literature-empty"]')).not.toBeNull();
+  });
+
+  it('sees the corpus when the service answers', async () => {
+    signedIn();
+    respond({ papers: [paper('p-1')], total: 1, limit: 25, offset: 0, unreadable_count: 0 });
+    await mount();
+
+    expect(accessState()).toBeNull();
+    expect(rows()).toHaveLength(1);
+  });
+});
+
+describe('an anonymous refusal', () => {
+  it('does not promise that a member sign-in would open the workspace', async () => {
+    respond(accessDenied.list_no_credentials.body, accessDenied.list_no_credentials.status);
+    await mount();
+
+    const state = container.querySelector('[data-testid="literature-access-required"]');
+    expect(state?.getAttribute('data-signed-in')).toBe('false');
+    expect(text()).toMatch(/a member sign-in will not change this answer either/i);
+    expect(text()).not.toMatch(/you are signed in/i);
   });
 });

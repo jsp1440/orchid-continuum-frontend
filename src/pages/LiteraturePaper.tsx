@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, EyeOff, Lock, ShieldCheck } from 'lucide-react';
 
+import LiteratureAccessRequired from '@/components/literature/LiteratureAccessRequired';
 import PageShell from '@/components/orchid/PageShell';
 import {
   LiteraturePaperError,
@@ -273,16 +274,20 @@ export default function LiteraturePaper() {
             <p className="text-sm text-white/60">Loading this extraction…</p>
           ) : null}
 
-          {state.status === 'failed' ? (
+          {state.status === 'failed' && state.error.kind === 'unauthorized' ? (
+            // Refused, not missing and not an outage: the service answers only
+            // an owner session or API key, and no member path exists yet.
+            <LiteratureAccessRequired status={state.error.status} subject="paper" />
+          ) : null}
+
+          {state.status === 'failed' && state.error.kind !== 'unauthorized' ? (
             <div
               className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5"
               data-testid="paper-error"
             >
               <div className="flex items-center gap-2 text-sm text-amber-100">
                 <AlertTriangle className="h-4 w-4" />
-                {state.error.kind === 'unauthorized'
-                  ? 'Not authorised to read this extraction'
-                  : state.error.kind === 'not_found'
+                {state.error.kind === 'not_found'
                     ? 'No extraction is stored under this identifier'
                     : state.error.kind === 'unavailable'
                       ? 'The literature service is unavailable'

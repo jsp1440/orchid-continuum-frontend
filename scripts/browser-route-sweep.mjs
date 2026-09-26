@@ -78,7 +78,9 @@ const ROUTES = [
   { path: '/habitats' },
   { path: '/intelligence-graph' },
   { path: '/knowledge' },
-  { path: '/literature' },
+  // The literature-extraction service is owner/API-key gated; the route is
+  // wrapped in ProtectedRoute so an anonymous browser sees the member gate.
+  { path: '/literature', gate: 'member' },
   { path: '/mycorrhizae' },
   { path: '/oacs' },
   { path: '/orchid-identification' },
