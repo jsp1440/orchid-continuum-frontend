@@ -14,6 +14,7 @@ interface Props {
   objectPayload: Record<string, unknown>;
   pageContext: string;
   objectLabel: string;
+  initialFeedbackClass?: FeedbackClass;
 }
 
 const FEEDBACK_OPTIONS: Array<{ value: FeedbackClass; label: string }> = [
@@ -44,9 +45,16 @@ function statusText(feedbackCase: EvidenceFeedbackCase): string {
   return 'Feedback submitted. The displayed scientific content remains unchanged while triage begins.';
 }
 
-export function EvidenceFeedbackControl({ objectId, objectType, objectPayload, pageContext, objectLabel }: Props) {
+export function EvidenceFeedbackControl({
+  objectId,
+  objectType,
+  objectPayload,
+  pageContext,
+  objectLabel,
+  initialFeedbackClass = 'report_problem',
+}: Props) {
   const [open, setOpen] = useState(false);
-  const [feedbackClass, setFeedbackClass] = useState<FeedbackClass>('report_problem');
+  const [feedbackClass, setFeedbackClass] = useState<FeedbackClass>(initialFeedbackClass);
   const [statement, setStatement] = useState('');
   const [proposedReplacement, setProposedReplacement] = useState('');
   const [citation, setCitation] = useState('');

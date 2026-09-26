@@ -7,6 +7,8 @@ import { recordCalyxSurfaceContext } from "@/features/calyx-workspace/sessionCon
 
 import MatrixLexiconGuide from "@/components/matrix/MatrixLexiconGuide";
 import MatrixVisionReviewPanel from "@/components/matrix/MatrixVisionReviewPanel";
+import { EvidenceFeedbackControl } from "@/components/evidence-feedback/EvidenceFeedbackControl";
+import { matrixEvidenceFeedbackPayload } from "@/lib/matrixEvidenceFeedback";
 import {
   addSessionObservation,
   coerceObservationValue,
@@ -74,6 +76,10 @@ export default function OrchidIdentificationNext() {
   );
   const session = evaluation?.session ?? null;
   const next = evaluation?.next_observation ?? null;
+  const feedbackPayload = useMemo(
+    () => evaluation ? matrixEvidenceFeedbackPayload(evaluation) : null,
+    [evaluation],
+  );
 
   useEffect(() => {
     const id = ++requestId.current;
@@ -322,6 +328,20 @@ export default function OrchidIdentificationNext() {
                 <p className="mt-5 text-xs leading-5 text-muted-foreground">{evaluation?.report.disclaimer}</p>
               </div>
             </section>
+
+            {feedbackPayload ? (
+              <div className="mt-6">
+                <EvidenceFeedbackControl
+                  key={`${session.session_id}:${session.revision}`}
+                  objectId={`matrix-identification:${session.session_id}`}
+                  objectType="matrix_identification"
+                  objectPayload={feedbackPayload}
+                  pageContext="/orchid-identification"
+                  objectLabel={`Matrix session ${session.session_id}, revision ${session.revision}`}
+                  initialFeedbackClass="challenge"
+                />
+              </div>
+            ) : null}
 
             <div className="mt-6">
               <MatrixVisionReviewPanel
