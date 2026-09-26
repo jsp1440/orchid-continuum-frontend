@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 17,
+  "programSpent": 17.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 5
+    "2026-09-26": 5.5
   },
   "leases": [
     {
@@ -924,6 +924,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "610468bbbd217c4cb5621d6b9a069966547d20cec0fdc06afdce19d337719781",
+      "issue": 805,
+      "nodeId": "cap-literature-public-browser-7",
+      "fingerprint": "1d1609d20a956e380f1cd93a3c48c4595e1f624d707979f1c790b81be71d40b2",
+      "waveHash": "f766e26889b486f2702dbe7abac7307016685b242d4276d7ff0b6761c81c360f",
+      "runId": "36207600684",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T02:44:17.563Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
