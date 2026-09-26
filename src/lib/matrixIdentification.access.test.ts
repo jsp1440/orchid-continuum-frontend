@@ -14,12 +14,16 @@ vi.mock("@/lib/backendConfig", async () => {
   const actual = await vi.importActual<typeof import("@/lib/backendConfig")>("@/lib/backendConfig");
   return { ...actual, hasOwnerBearerSession: () => owner.session };
 });
+vi.mock("@/lib/memberReadAuth", () => ({
+  withMatrixMemberAuth: async (_url: string, init: RequestInit) => init,
+}));
 
 import {
   createIdentificationSession,
   listMatrixRegistries,
   MatrixApiError,
   matrixAccessState,
+  MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE,
   MATRIX_OWNER_ACCESS_MESSAGE,
   MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE,
   MATRIX_UNAVAILABLE_MESSAGE,
@@ -46,10 +50,11 @@ afterEach(() => {
 });
 
 describe("matrixAccessState", () => {
-  it("treats 403, and 401 without an owner session, as owner access required", () => {
+  it("separates member sign-in from owner-only refusals", () => {
     expect(matrixAccessState(403, false)).toBe("owner_access_required");
     expect(matrixAccessState(403, true)).toBe("owner_access_required");
-    expect(matrixAccessState(401, false)).toBe("owner_access_required");
+    expect(matrixAccessState(401, false, true)).toBe("member_session_required");
+    expect(matrixAccessState(401, false, false)).toBe("owner_access_required");
   });
 
   it("treats 401 while an owner session is held as an unverified owner session", () => {
@@ -67,14 +72,14 @@ describe("matrixAccessState", () => {
 });
 
 describe("Matrix requests never surface the raw refusal", () => {
-  it("a member or visitor refused with 401 is told Matrix needs owner access", async () => {
+  it("a signed-out visitor refused with 401 is asked to sign in", async () => {
     respond(401, OWNER_REQUIRED_BODY);
     const error = await rejection(listMatrixRegistries());
-    expect(error.message).toBe(MATRIX_OWNER_ACCESS_MESSAGE);
-    expect(error.message).toBe("Matrix identification currently requires owner access.");
-    expect(error.access).toBe("owner_access_required");
+    expect(error.message).toBe(MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE);
+    expect(error.message).toBe("Sign in to use Matrix identification.");
+    expect(error.access).toBe("member_session_required");
     expect(error.status).toBe(401);
-    expect(error.message).not.toMatch(/Matrix API|401|Owner session or API key|sign in/i);
+    expect(error.message).not.toMatch(/Matrix API|401|Owner session or API key/i);
   });
 
   it("a 403 is owner access required as well", async () => {
