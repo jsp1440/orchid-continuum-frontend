@@ -11,7 +11,13 @@ import { admitWorkflowProviderExecution } from '../src/lib/provider-governor/wor
 import type { GovernorState, Provider } from '../src/lib/provider-governor/providerGovernor';
 
 export { MAX_ACTIVE_LANES };
-export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }> };
+/**
+ * `author` is the issue's `user.login`. Only `deriveReserveMissionBinding`
+ * reads it (a legacy reserve mission binds only when the reserve bot filed it);
+ * when it is absent nothing is derived. It is immutable per issue, so it is left
+ * out of the admission fingerprint to keep existing ledger fingerprints stable.
+ */
+export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }>; author?: string | null };
 export type Pull = { number: number; state: string; merged?: boolean; baseRef?: string; body: string | null; head: { ref: string; sha: string } };
 export type Snapshot = { issues: Issue[]; prs: Pull[]; integrationSha: string; implementationSha: string; material: Record<string, string> };
 export type LeaseLane = 'provider' | 'provider-free';
@@ -214,9 +220,9 @@ function admission(snapshot: Snapshot, queued: number[], now: string, root: Comp
  * declaration cannot be routed is routed `provider_free=false` by that job, so
  * it is provider-lane here too -- it would take a provider slot, not a free one.
  */
-export function laneClassOf(issue: Pick<Issue, 'number' | 'body' | 'labels'>): LeaseLane {
+export function laneClassOf(issue: Pick<Issue, 'number' | 'body' | 'labels' | 'author'>): LeaseLane {
   try {
-    return routeIssue({ number: issue.number, body: issue.body, labels: issue.labels }).providerFree ? 'provider-free' : 'provider';
+    return routeIssue({ number: issue.number, body: issue.body, labels: issue.labels, author: issue.author }).providerFree ? 'provider-free' : 'provider';
   } catch {
     return 'provider';
   }
@@ -373,7 +379,7 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
   }
   const plan = admission(snapshot, queued, now, root, runningCount(snapshot, leases), leases.filter(isActive).map(l => l.nodeId), providerCapacity);
   const leaves = plan.leaves.map(leaf => {
-    const issue = snapshot.issues.find(i => i.number === leaf.issueNumber)!;
+    const { author: _author, ...issue } = snapshot.issues.find(i => i.number === leaf.issueNumber)!;
     const lineage = lineageFor(issue.number, snapshot.prs);
     const node = findNode(root, leaf.nodeId)!;
     return { ...leaf, fingerprint: sha({ issue, lineage, node, integrationSha: snapshot.integrationSha }),

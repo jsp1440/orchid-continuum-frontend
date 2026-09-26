@@ -17,6 +17,11 @@ export type SupervisorIssueSnapshot = {
   body: string;
   labels: string[];
   updatedAt?: string;
+  /**
+   * The issue's `user.login`. A legacy reserve mission derives its graph node
+   * only when the reserve bot filed it; with no author nothing is derived.
+   */
+  author?: string | null;
 };
 
 export type SupervisorPullRequestSnapshot = {

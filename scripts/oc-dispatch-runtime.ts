@@ -97,8 +97,11 @@ export class DeterministicLeaseStore extends GitHubLeaseStore {
 }
 
 function snapshot(): Snapshot {
-  const issues = pages<Issue & { pull_request?: unknown }>('issues?state=all').filter(i => !i.pull_request)
-    .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })).sort((a,b) => a.name.localeCompare(b.name)) }));
+  // `author` feeds only the legacy reserve-mission derivation, which binds an
+  // issue only when the reserve bot filed it; a missing login derives nothing.
+  const issues = pages<Issue & { pull_request?: unknown; user?: { login?: string } | null }>('issues?state=all').filter(i => !i.pull_request)
+    .map(({ number, state, title, body, labels, user }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })).sort((a,b) => a.name.localeCompare(b.name)),
+      author: user?.login ?? null }));
   // `merged_at` is what distinguishes a merged PR from a closed one, and the
   // report needs it: "closed" tells the operator to go and look at something
   // that is already in. It is not on `Pull` because nothing else consumes it.
