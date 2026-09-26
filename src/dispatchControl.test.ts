@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimLease, makePlan, reconcileExpired, runningCount, transitionLease,
+import { assertAdmission, assertReceipts, claimLease, isActive, makePlan, reconcileExpired, runningCount, transitionLease, validateLedger,
   type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -27,6 +27,49 @@ function claim(store: LeaseStore, plan: ReturnType<typeof makePlan>, snapshot: S
   return claimLease(store, plan, snapshot, { issueNumber: number, runId, runAttempt: '1', providerAuthorized: true, requestedUsd: 0.5, now }, root);
 }
 describe('canonical graph → durable lease → independent dispatch → refill', () => {
+  it('reconstructs historical provider-free receipts without reviving or charging them', () => {
+    const ledger: Ledger = {
+      schema: 1,
+      programStartedAt: '2026-09-14T00:00:00.000Z',
+      programSpent: 0,
+      dailySpent: {},
+      leases: [
+        {
+          id: 'receipt-done', issue: 1, nodeId: 'leaf-1', fingerprint: 'fingerprint-1', waveHash: 'wave-1',
+          runId: '100', runAttempt: '1', expiresAt: now, reservedUsd: 0, state: 'provider-free-done',
+        },
+        {
+          id: 'receipt-failed', issue: 2, nodeId: 'leaf-2', fingerprint: 'fingerprint-2', waveHash: 'wave-2',
+          runId: '101', runAttempt: '1', expiresAt: now, reservedUsd: 0, state: 'provider-free-failed',
+        },
+      ],
+    };
+
+    expect(() => validateLedger(ledger)).not.toThrow();
+    expect(ledger.leases.every(lease => !isActive(lease))).toBe(true);
+    expect(runningCount(fixture(2).snapshot, ledger.leases)).toBe(0);
+    expect(ledger.programSpent).toBe(0);
+  });
+  it('keeps zero-cost receipts and paid execution leases mutually exclusive', () => {
+    const base: Ledger = {
+      schema: 1,
+      programStartedAt: '2026-09-14T00:00:00.000Z',
+      programSpent: 0,
+      dailySpent: {},
+      leases: [],
+    };
+    const lease = {
+      id: 'receipt', issue: 1, nodeId: 'leaf-1', fingerprint: 'fingerprint', waveHash: 'wave',
+      runId: '100', runAttempt: '1', expiresAt: now,
+    };
+
+    expect(() => validateLedger({ ...base, leases: [{ ...lease, reservedUsd: 0.5, state: 'provider-free-done' }] as Ledger['leases'] }))
+      .toThrow('Malformed lease');
+    expect(() => validateLedger({ ...base, leases: [{ ...lease, reservedUsd: 0, state: 'blocked' }] as Ledger['leases'] }))
+      .toThrow('Malformed lease');
+    expect(() => validateLedger({ ...base, leases: [{ ...lease, reservedUsd: 0, state: 'unknown' }] as unknown as Ledger['leases'] }))
+      .toThrow('Malformed lease');
+  });
   it('selects eight independent queued/prepared issues, with deterministic graph priority', () => {
     const { root, snapshot } = fixture();
     root.children.forEach((node, i) => { node.priority = i; });
