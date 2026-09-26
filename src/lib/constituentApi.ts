@@ -3,7 +3,7 @@
  * reach the Calyx constituent platform (`/api/constituent/*`).
  *
  * Honesty contract (COMMS-001): the public site is a static host that rewrites
- * every unknown path to index.html with HTTP 200, so a bare `fetch('/api/…')`
+ * every unknown path to index.html with HTTP 200, so a bare relative `/api/…` fetch
  * against a route that is not live "succeeds" with an HTML body. This client
  * therefore
  *   - always targets the canonical backend origin (CALYX_BACKEND_BASE_URL),

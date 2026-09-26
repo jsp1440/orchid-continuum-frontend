@@ -2,7 +2,7 @@
  * backendJson — honest JSON transport for public intake surfaces.
  *
  * The public site is a static host that rewrites every unknown path to
- * index.html with HTTP 200, so a bare `fetch('/api/…')` against a route that is
+ * index.html with HTTP 200, so a bare relative `/api/…` fetch against a route that is
  * not live "succeeds" with an HTML body. Every request here targets the
  * canonical Calyx backend origin, and success requires a parsed JSON object:
  *   - 401/403/404/405/501–503, or any non-JSON body  → `unavailable`
