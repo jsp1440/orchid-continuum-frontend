@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 19.5,
+  "programSpent": 20,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 7.5
+    "2026-09-26": 8
   },
   "leases": [
     {
@@ -1031,6 +1031,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "413dbd1fdbd85729272a18453663726d43bda7e8",
       "state": "running"
+    },
+    {
+      "id": "5beb77944e40e9fc5cf449ad366a702de2eb7b915b74b448a6575a4bbff5f2f3",
+      "issue": 851,
+      "nodeId": "cap-vision-lexicon-evidence-summary",
+      "fingerprint": "5734ec67191fc0dc4a62a68dee209aabde0e300462d3d22e91cc797d8c661a22",
+      "waveHash": "65aa6a07d0d04f570aa1e67f5c6ce7fc70fcb4b7027a621721526e4dad7471e6",
+      "runId": "36230834756",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T10:20:03.505Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "413dbd1fdbd85729272a18453663726d43bda7e8",
+      "state": "reserved"
     }
   ]
 }
