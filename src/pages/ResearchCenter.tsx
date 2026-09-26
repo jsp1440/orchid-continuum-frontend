@@ -12,7 +12,7 @@ import PageShell from '@/components/orchid/PageShell';
 import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
 import ResearchTraitExplorer from '@/components/research/ResearchTraitExplorer';
 import {
-  researchStationAtlasNextHref,
+  researchStationAtlasNextLink,
   researchStationCalyxHref,
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
@@ -104,10 +104,13 @@ const ResearchCenter: React.FC = () => {
   // Calyx reads that exact taxon only under the research-station origin, and
   // asserts taxon_is_evidence=false when it does.
   //
-  // A name the Atlas Next parser rejects yields no Atlas link at all, never a
-  // genus link standing in for the species.
+  // A nothospecies (`Cattleya × hardyana`) has no filterable hybrid identity, so
+  // its link opens the parent genus and is labelled on its face as that
+  // genus-level fallback. Any other name the Atlas Next parser rejects
+  // (including an intergeneric `× Genus` name) yields no Atlas link at all,
+  // never an unlabelled genus link standing in for the subject.
   const onwardContext = { taxon: subjectLabel, projectId };
-  const atlasHref = subjectLabel ? researchStationAtlasNextHref(onwardContext) : null;
+  const atlasLink = subjectLabel ? researchStationAtlasNextLink(onwardContext) : null;
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
@@ -173,12 +176,18 @@ const ResearchCenter: React.FC = () => {
                 ) : null}
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
-                {atlasHref ? (
+                {atlasLink ? (
                   <Link
-                    to={atlasHref}
+                    to={atlasLink.href}
+                    data-atlas-fallback={atlasLink.fallback ? atlasLink.fallback.rank : undefined}
                     className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
                   >
                     Return to Atlas
+                    {atlasLink.fallback ? (
+                      <span className="ml-1 normal-case tracking-normal text-[#d8b24c]">
+                        · {atlasLink.fallback.label}
+                      </span>
+                    ) : null}
                   </Link>
                 ) : null}
                 <Link

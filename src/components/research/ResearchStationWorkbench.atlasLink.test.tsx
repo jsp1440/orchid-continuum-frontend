@@ -123,7 +123,24 @@ describe('Research Station workbench → Atlas Next', () => {
     expect(subject).toEqual({ kind: 'genus', genus: 'Phalaenopsis' });
   });
 
-  it.each(['taxon:phalaenopsis', 'Phalaenopsis amabilis (L.) Blume', 'Phalaenopsis × intermedia'])(
+  it('links a nothospecies subject to a labelled genus-level fallback', async () => {
+    await renderWithSubject('Phalaenopsis × intermedia');
+
+    const { url, subject } = arrive(atlasLinkHref()!);
+    expect(url.pathname).toBe('/atlas-next');
+    expect(url.searchParams.get('genera')).toBe('Phalaenopsis');
+    expect(url.searchParams.has('species')).toBe(false);
+    expect(subject).toEqual({ kind: 'genus', genus: 'Phalaenopsis' });
+    const anchor = Array.from(container.querySelectorAll('a')).find(
+      (a) => a.getAttribute('href') === atlasLinkHref(),
+    );
+    expect(anchor?.textContent).toContain(
+      'Genus-level fallback · Phalaenopsis (hybrid name not filterable)',
+    );
+    expect(container.querySelector('[data-testid="research-station-atlas-withheld"]')).toBeNull();
+  });
+
+  it.each(['taxon:phalaenopsis', 'Phalaenopsis amabilis (L.) Blume', '× Brassolaeliocattleya'])(
     'renders no Atlas link for a subject Atlas Next rejects (%s)',
     async (taxonId) => {
       await renderWithSubject(taxonId);

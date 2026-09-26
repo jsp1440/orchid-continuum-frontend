@@ -269,7 +269,29 @@ describe('research center hands the subject to Atlas Next at its own rank', () =
     expect(subject.kind === 'species' && subject.name).toBe('Cattleya walkeriana var. alba');
   });
 
-  it.each(['Cattleya × hardyana', 'Cattleya purpurata (Lindl.) Van den Berg'])(
+  it('labels a Matrix nothospecies link as the genus-level fallback it is', async () => {
+    await renderAt(matrixResearchHref('Cattleya × hardyana')!);
+
+    const links = atlasLinks();
+    expect(links).toHaveLength(1);
+    expect(links[0].textContent).toContain(
+      'Genus-level fallback · Cattleya (hybrid name not filterable)',
+    );
+    expect(links[0].dataset.atlasFallback).toBe('genus');
+    const { url, subject } = atlasNextArrival(links[0].getAttribute('href')!);
+    expect(url.searchParams.get('genera')).toBe('Cattleya');
+    expect(url.searchParams.has('species')).toBe(false);
+    expect(subject).toEqual({ kind: 'genus', genus: 'Cattleya' });
+  });
+
+  it('labels no fallback on a species link that is the subject\'s own view', async () => {
+    await renderAt(speciesDossierResearchHref({ genus: GENUS, taxon: SPECIES })!);
+
+    expect(atlasLinks()[0].textContent).not.toContain('Genus-level fallback');
+    expect(atlasLinks()[0].dataset.atlasFallback).toBeUndefined();
+  });
+
+  it.each(['Cattleya × hardyana Rchb.f.', 'Cattleya purpurata (Lindl.) Van den Berg'])(
     'renders no Atlas link for a Matrix name Atlas Next rejects (%s), not a genus stand-in',
     async (name) => {
       const href = matrixResearchHref(name);

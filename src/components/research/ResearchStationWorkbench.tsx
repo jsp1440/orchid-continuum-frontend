@@ -30,7 +30,7 @@ import {
   type ResearchStationDossier,
 } from '@/lib/researchStation';
 import {
-  researchStationAtlasNextHref,
+  researchStationAtlasNextLink,
   researchStationCalyxHref,
   researchStationLexiconHref,
   researchStationMatrixHref,
@@ -1054,11 +1054,12 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
     projectId: dossier.project.project_id,
     conversationId,
   };
-  // Atlas Next filters on a canonical genus or binomial. A subject the parser
-  // rejects (an opaque taxon id, an authority string, a hybrid formula) gets no
-  // Atlas link rather than an unfiltered or genus-widened Atlas that looks like
-  // this subject's view.
-  const atlasHref = subjectTaxon ? researchStationAtlasNextHref(navContext) : null;
+  // Atlas Next filters on a canonical genus or binomial. A nothospecies gets a
+  // genus-level link that is labelled as the fallback it is; a subject the
+  // parser rejects (an opaque taxon id, an authority string, an intergeneric
+  // hybrid) gets no Atlas link rather than an unfiltered or genus-widened Atlas
+  // that looks like this subject's view.
+  const atlasLink = subjectTaxon ? researchStationAtlasNextLink(navContext) : null;
 
   return (
     <div className="grid gap-5">
@@ -1254,12 +1255,16 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
       >
         {subjectTaxon ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            {atlasHref ? (
+            {atlasLink ? (
               <ToolLink
-                to={atlasHref}
+                to={atlasLink.href}
                 icon={<Globe2 className="h-4 w-4" />}
                 label="Atlas"
-                detail="Where this taxon has been recorded."
+                detail={
+                  atlasLink.fallback
+                    ? `${atlasLink.fallback.label}. Every record of the genus is shown, not only ${atlasLink.fallback.hybridName}.`
+                    : 'Where this taxon has been recorded.'
+                }
               />
             ) : (
               <p

@@ -17,8 +17,17 @@
 export const ATLAS_INFRASPECIFIC_PARAM = 'infraspecific';
 
 const MAX_TAXON_NAME_LENGTH = 180;
-const GENUS_TOKEN = /^[A-Z][A-Za-z-]+$/;
-const EPITHET_TOKEN = /^[a-z][A-Za-z-]+$/;
+/**
+ * A genus is one capital followed by lower-case letters, optionally with one
+ * hyphenated lower-case part. Mixed or upper case (`CATTLEYA`, `CattLeya`) is
+ * rejected rather than re-cased: a name that is not written canonically is not
+ * the canonical name.
+ */
+const GENUS_TOKEN = /^[A-Z][a-z]+(?:-[a-z]+)?$/;
+/** An epithet is entirely lower case (`purpurata`, `nidus-avis`); `pUrpurata` is rejected. */
+const EPITHET_TOKEN = /^[a-z][a-z]+(?:-[a-z]+)?$/;
+/** The multiplication sign (ICN H.1) or its permitted lower-case `x` substitute (H.3A). */
+const HYBRID_SIGNS = ['×', 'x'] as const;
 /** Botanical infraspecific rank markers accepted verbatim (ICN abbreviations). */
 const INFRASPECIFIC_MARKERS = ['subsp.', 'var.', 'subvar.', 'f.'] as const;
 
@@ -100,6 +109,43 @@ export function parseAtlasTaxonName(value: unknown): AtlasTaxonName | null {
     qualifier,
     name: `${binomial} ${qualifier.label}`,
   };
+}
+
+/** A nothospecies such as `Cattleya × hardyana`: a named hybrid within one genus. */
+export type AtlasNothospeciesName = {
+  genus: string;
+  epithet: string;
+  /** Normalised to the multiplication sign, e.g. `Cattleya × hardyana`. */
+  name: string;
+};
+
+/**
+ * Parse a nothospecies written `Genus × epithet` (or `Genus ×epithet`, or with
+ * the ICN-permitted `x` as a separate token). Occurrence records carry no hybrid
+ * identity Atlas Next can filter on, so this never becomes a species filter:
+ * callers may only offer an explicitly labelled genus-level fallback.
+ *
+ * Intergeneric (nothogeneric) names such as `× Brassolaeliocattleya` or
+ * `×Brassolaeliocattleya ...` start with the hybrid sign, have no single parent
+ * genus, and return null; so does anything with an authority, a rank marker, or
+ * a malformed genus or epithet.
+ */
+export function parseAtlasNothospeciesName(value: unknown): AtlasNothospeciesName | null {
+  const parts = tokens(value);
+  if (!parts) return null;
+
+  let genus: string;
+  let epithet: string;
+  if (parts.length === 3 && (HYBRID_SIGNS as readonly string[]).includes(parts[1])) {
+    [genus, , epithet] = parts;
+  } else if (parts.length === 2 && parts[1].startsWith('×')) {
+    genus = parts[0];
+    epithet = parts[1].slice(1);
+  } else {
+    return null;
+  }
+  if (!GENUS_TOKEN.test(genus) || !EPITHET_TOKEN.test(epithet)) return null;
+  return { genus, epithet, name: `${genus} × ${epithet}` };
 }
 
 export type AtlasNextIncomingSubject =
