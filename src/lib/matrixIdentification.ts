@@ -1,4 +1,13 @@
 import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
+import {
+  errorCodeOf,
+  isMemberMatrixRequest,
+  MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  MEMBER_AUTH_CODES,
+  MEMBER_AUTH_UNAVAILABLE_MESSAGE,
+  memberAuthServiceRefusal,
+  withMemberAuth,
+} from "@/lib/memberReadAuth";
 
 export type Certainty = "certain" | "probable" | "uncertain" | "unknown";
 export type ExplanationAudience = "beginner" | "intermediate" | "expert";
@@ -13,6 +22,27 @@ export type RegistrySummary = {
   character_count?: number;
   checksum_sha256?: string;
   publication_state?: string;
+  created_at?: string;
+};
+
+/**
+ * One character definition from `GET /registry/{id}/{version}`. A member
+ * receives the definitions only (`member_view: true`): no candidate states,
+ * no provenance.
+ */
+export type RegistryCharacter = {
+  character: string;
+  label?: string | null;
+  description?: string | null;
+  value_type?: string | null;
+  weight?: number | null;
+  concept_id?: string | null;
+};
+
+export type RegistryVersionDetail = RegistrySummary & {
+  schema_version?: string;
+  characters: RegistryCharacter[];
+  member_view?: boolean;
 };
 
 /** Per-character statuses `rank_candidates` emits (runtime/matrix_identification.py). */
@@ -67,6 +97,13 @@ export type NextObservation = {
 export type SessionRecord = {
   session_id: string;
   revision: number;
+  /**
+   * `true` on the member-shaped session (backend app/matrix_member_views.py):
+   * the backend verified a member principal and returned the member view.
+   * Owner and API-key payloads never carry it.
+   */
+  mine?: boolean;
+  status?: string;
   registry: RegistrySummary;
   observations: Array<{
     observation_id: string;
@@ -203,36 +240,92 @@ export type VisionSuggestionList = {
 /**
  * Why a Matrix request could not be answered, in terms a visitor can act on.
  *
- * Matrix identification is owner-only on the backend today (an owner decision
- * on member/public access is pending), and the frontend never sends a member
- * token there. So a 403, or a 401 without an owner session, means "this needs
- * owner access" — not a broken login, and never a "sign in again" prompt that
- * a member could loop on. Only a 401 while an owner session is held means the
- * owner session itself was not accepted. A 5xx or a request that never got an
- * answer is an outage the visitor can retry.
+ * Owner decision (Release 1 journey 4): Matrix identification is available to
+ * signed-in members, with sessions private to their creator (backend #1647).
+ * The member Supabase token is sent on exactly the member Matrix routes (see
+ * memberReadAuth). So:
+ *
+ * - On a member route, a 401 without an owner session means "sign in"
+ *   (`sign_in_required`) when no member session was offered, or "sign in
+ *   again" (`member_session_unverified`) when one was offered and refused.
+ * - A 401 while an owner bearer session is held means the owner session itself
+ *   was not accepted (`owner_session_unverified`).
+ * - A 403, or any 401 on a route that is owner-only for members (Vision,
+ *   reports, persistence), means "this is limited to owner access"
+ *   (`owner_access_required`) — never a sign-in loop.
+ * - 503 `MEMBER_AUTH_NOT_CONFIGURED` / `MEMBER_AUTH_UNAVAILABLE` are member-auth
+ *   states, not outages; any other 5xx, or no answer at all, is an outage the
+ *   visitor can retry (`unavailable`).
  */
-export type MatrixAccessState = "owner_access_required" | "owner_session_unverified" | "unavailable";
+export type MatrixAccessState =
+  | "owner_access_required"
+  | "owner_session_unverified"
+  | "sign_in_required"
+  | "member_session_unverified"
+  | "member_access_unconfigured"
+  | "member_auth_unavailable"
+  | "unavailable";
 
 export const MATRIX_OWNER_ACCESS_MESSAGE = "Matrix identification currently requires owner access.";
+export const MATRIX_OWNER_ONLY_PANEL_MESSAGE = "This view is limited to owner access.";
 export const MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE =
   "Your owner session could not be verified. Sign in again as the owner to use Matrix identification.";
+export const MATRIX_SIGN_IN_MESSAGE = "Sign in to use Matrix identification. It is available to signed-in members.";
+export const MATRIX_MEMBER_SESSION_UNVERIFIED_MESSAGE =
+  "Your session could not be verified — sign in again to use Matrix identification.";
 export const MATRIX_UNAVAILABLE_MESSAGE = "Matrix identification is temporarily unavailable. Try again.";
+export const MATRIX_SESSION_NOT_FOUND_MESSAGE =
+  "This identification session was not found for your account. Sessions are private to the account that started them.";
+export const MATRIX_RATE_LIMITED_MESSAGE =
+  "Too many Matrix identification requests for this account. Wait a little and try again.";
+export const MATRIX_OBSERVATION_LIMIT_MESSAGE =
+  "This identification session has reached its observation limit. Start a new session.";
 
 const MATRIX_ACCESS_MESSAGE: Record<MatrixAccessState, string> = {
   owner_access_required: MATRIX_OWNER_ACCESS_MESSAGE,
   owner_session_unverified: MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE,
+  sign_in_required: MATRIX_SIGN_IN_MESSAGE,
+  member_session_unverified: MATRIX_MEMBER_SESSION_UNVERIFIED_MESSAGE,
+  member_access_unconfigured: MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  member_auth_unavailable: MEMBER_AUTH_UNAVAILABLE_MESSAGE,
   unavailable: MATRIX_UNAVAILABLE_MESSAGE,
+};
+
+/** What was known about the request when it was refused. */
+export type MatrixRequestContext = {
+  /** The method+path is one of the member Matrix routes. */
+  memberRoute?: boolean;
+  /** This request carried the member's Supabase token. */
+  memberTokenSent?: boolean;
+  /** The backend's error code, when it sent one. */
+  code?: string | null;
 };
 
 /** Classify a failed Matrix response; null for statuses with their own meaning (400/404/409/422…). */
 export function matrixAccessState(
   status: number | null,
   ownerSession: boolean = hasOwnerBearerSession(),
+  context: MatrixRequestContext = {},
 ): MatrixAccessState | null {
-  if (status === null || status === 0 || status >= 500) return "unavailable";
+  if (status === null || status === 0) return "unavailable";
+  const service = memberAuthServiceRefusal(status, context.code);
+  if (service) return service;
+  if (status >= 500) return "unavailable";
   if (status === 403) return "owner_access_required";
-  if (status === 401) return ownerSession ? "owner_session_unverified" : "owner_access_required";
+  if (status === 401) {
+    if (ownerSession) return "owner_session_unverified";
+    if (!context.memberRoute) return "owner_access_required";
+    if (context.memberTokenSent || context.code === MEMBER_AUTH_CODES.invalidToken) {
+      return "member_session_unverified";
+    }
+    return "sign_in_required";
+  }
   return null;
+}
+
+/** Whether a retry, without the visitor doing anything else, could change the answer. */
+export function isRetryableMatrixAccess(access: MatrixAccessState | null): boolean {
+  return access === "unavailable" || access === "member_auth_unavailable";
 }
 
 export class MatrixApiError extends Error {
@@ -240,6 +333,7 @@ export class MatrixApiError extends Error {
     message: string,
     public readonly status: number | null,
     public readonly access: MatrixAccessState | null,
+    public readonly code: string | null = null,
   ) {
     super(message);
     this.name = "MatrixApiError";
@@ -251,33 +345,86 @@ export function matrixErrorAccess(error: unknown): MatrixAccessState | null {
   return error instanceof MatrixApiError ? error.access : null;
 }
 
+/** Plain words for refusals that are not access states (the backend's member codes). */
+function nonAccessMessage(status: number, code: string | null, payload: unknown, path: string): string {
+  if (status === 404 && path.startsWith("/api/matrix-identification/sessions/")) return MATRIX_SESSION_NOT_FOUND_MESSAGE;
+  if (status === 429 || code === "MATRIX_MEMBER_RATE_LIMITED") return MATRIX_RATE_LIMITED_MESSAGE;
+  if (code === "MATRIX_MEMBER_SESSION_OBSERVATION_LIMIT") return MATRIX_OBSERVATION_LIMIT_MESSAGE;
+  const detail = payload && typeof payload === "object" && "detail" in payload
+    ? JSON.stringify((payload as { detail?: unknown }).detail)
+    : String(status);
+  return `Matrix API ${status}: ${detail}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const url = `${CALYX_BACKEND_BASE_URL}${path}`;
+  const baseInit: RequestInit = {
+    credentials: "include",
+    headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    ...init,
+  };
+  const memberRoute = isMemberMatrixRequest(url, baseInit.method);
   let response: Response;
+  let memberTokenSent = false;
   try {
-    response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
-      credentials: "include",
-      headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers ?? {}) },
-      ...init,
-    });
+    // The member Supabase token rides ONLY on the member Matrix routes (the
+    // one decision lives in memberReadAuth); owner-only routes keep the owner
+    // cookie / bearer transport exactly as before.
+    const sent = await withMemberAuth(url, baseInit);
+    memberTokenSent = sent !== baseInit;
+    response = await fetch(url, sent);
   } catch {
     throw new MatrixApiError(MATRIX_UNAVAILABLE_MESSAGE, null, "unavailable");
   }
   const payload = await response.json().catch(() => null) as T | { detail?: unknown } | null;
   if (!response.ok) {
-    const access = matrixAccessState(response.status);
+    const code = errorCodeOf(payload);
+    const access = matrixAccessState(response.status, hasOwnerBearerSession(), { memberRoute, memberTokenSent, code });
     // Refusals and outages are said in plain words; the raw status and body
     // are not shown to the visitor.
-    if (access) throw new MatrixApiError(MATRIX_ACCESS_MESSAGE[access], response.status, access);
-    const detail = payload && typeof payload === "object" && "detail" in payload
-      ? JSON.stringify(payload.detail)
-      : response.statusText;
-    throw new MatrixApiError(`Matrix API ${response.status}: ${detail}`, response.status, null);
+    if (access) throw new MatrixApiError(MATRIX_ACCESS_MESSAGE[access], response.status, access, code);
+    throw new MatrixApiError(nonAccessMessage(response.status, code, payload, path), response.status, null, code);
   }
   // A 2xx whose body is not JSON (a proxy page, a truncated response) is not
   // an answer. Returning null here let the guided page report "Session ready"
   // with no session behind it.
   if (payload === null) throw new Error(`Matrix API ${response.status}: response was not JSON`);
   return payload as T;
+}
+
+/* ------------------------------------------------------------------------ */
+/* "withheld": the member view's privacy marker                             */
+/* ------------------------------------------------------------------------ */
+
+/**
+ * The literal the backend's member view substitutes for any string or state
+ * that fails its privacy screen (protected place, specimen or submitter material) —
+ * app/matrix_member_views.py `WITHHELD`. It is a marker, never a value: it is
+ * shown as "withheld" and is never submitted back as an observation.
+ */
+export const MATRIX_WITHHELD = "withheld";
+export const MATRIX_WITHHELD_LABEL = "withheld (not shown in the member view)";
+
+export function isWithheld(value: unknown): boolean {
+  return value === MATRIX_WITHHELD;
+}
+
+/** A character a member can actually answer: a real id and label, not the marker. */
+export function isAnswerableCharacter(
+  item: { character?: unknown; label?: unknown } | null | undefined,
+): boolean {
+  return Boolean(item)
+    && typeof item?.character === "string"
+    && item.character.length > 0
+    && !isWithheld(item.character)
+    && !isWithheld(item.label);
+}
+
+/** Whether an observation value would submit the withheld marker. */
+export function containsWithheld(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().toLowerCase() === MATRIX_WITHHELD;
+  if (Array.isArray(value)) return value.some(containsWithheld);
+  return false;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -320,6 +467,17 @@ export async function listMatrixRegistries(): Promise<RegistrySummary[]> {
   return Array.isArray(payload.versions) ? payload.versions : [];
 }
 
+/** One registry version's character definitions (member view: definitions only). */
+export async function getRegistryVersion(registryId: string, version: string): Promise<RegistryVersionDetail> {
+  const detail = await request<RegistryVersionDetail>(
+    `/api/matrix-identification/registry/${encodeURIComponent(registryId)}/${encodeURIComponent(version)}`,
+  );
+  if (!isRecord(detail) || !Array.isArray(detail.characters)) {
+    throw new Error("Matrix API returned a registry version without character definitions.");
+  }
+  return detail;
+}
+
 export async function createIdentificationSession(registry: RegistrySummary): Promise<SessionRecord> {
   const session = await request<SessionRecord>("/api/matrix-identification/sessions", {
     method: "POST",
@@ -341,6 +499,11 @@ export async function addSessionObservation(
   value: unknown,
   certainty: Certainty,
 ): Promise<SessionRecord> {
+  // The member view's privacy marker is never evidence: refuse to send it as
+  // a character or a value rather than record "withheld" as an observation.
+  if (isWithheld(character) || containsWithheld(value)) {
+    throw new Error("A withheld character or value cannot be recorded as an observation.");
+  }
   return request<SessionRecord>(`/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/observations`, {
     method: "POST",
     body: JSON.stringify({
@@ -461,6 +624,12 @@ export function coerceObservationValue(raw: string, valueType?: string): unknown
 
 export function explanationText(payload: CalyxExplanation | null): string {
   if (!payload) return "";
+  const text = rawExplanationText(payload);
+  // A screened narrative arrives as the bare marker; say so rather than show it as prose.
+  return isWithheld(text) ? `Explanation ${MATRIX_WITHHELD_LABEL}.` : text;
+}
+
+function rawExplanationText(payload: CalyxExplanation): string {
   if (typeof payload.narrative === "object" && payload.narrative?.text) {
     return payload.narrative.text.trim();
   }

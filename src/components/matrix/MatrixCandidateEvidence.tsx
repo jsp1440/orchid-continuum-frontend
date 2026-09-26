@@ -1,12 +1,13 @@
 import {
   candidateRankState,
+  characterName,
   characterStatusLabel,
   formatMatrixValue,
   groupCharacterEvidence,
   provenanceEntries,
   scoreBasis,
 } from "@/lib/matrixCandidateEvidence";
-import type { CandidateExplanation, CandidateResult } from "@/lib/matrixIdentification";
+import { isWithheld, MATRIX_WITHHELD_LABEL, type CandidateExplanation, type CandidateResult } from "@/lib/matrixIdentification";
 
 function percent(value: number): string {
   return `${Math.round(value * 100)}%`;
@@ -28,7 +29,7 @@ function CharacterRow({ item }: { item: CandidateExplanation }) {
   return (
     <li className="rounded-lg bg-muted/40 p-2" data-testid={`matrix-character-${item.character}`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-medium">{item.character.replaceAll("_", " ")}</span>
+        <span className="font-medium">{characterName(item.character)}</span>
         <span className="text-xs text-muted-foreground">{characterStatusLabel(item.status)}</span>
       </div>
       <dl className="mt-1 grid grid-cols-[auto_1fr] gap-x-3 text-xs text-muted-foreground">
@@ -57,7 +58,9 @@ export default function MatrixCandidateEvidence({ candidate, rank }: { candidate
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs uppercase text-muted-foreground">Candidate {rank} · ranked hypothesis</p>
-          <h3 className="mt-1 text-lg font-semibold italic">{candidate.scientific_name}</h3>
+          <h3 className={`mt-1 text-lg font-semibold ${isWithheld(candidate.scientific_name) ? "" : "italic"}`}>
+            {isWithheld(candidate.scientific_name) ? `Name ${MATRIX_WITHHELD_LABEL}` : candidate.scientific_name}
+          </h3>
         </div>
         <div className="grid grid-cols-2 gap-4 text-right">
           <div>
@@ -83,7 +86,7 @@ export default function MatrixCandidateEvidence({ candidate, rank }: { candidate
               <section key={key}>
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h4>
                 <ul className="mt-1 grid gap-2 sm:grid-cols-2">
-                  {groups[key].map((item) => <CharacterRow key={`${candidate.taxon_id}:${item.character}`} item={item} />)}
+                  {groups[key].map((item, index) => <CharacterRow key={`${candidate.taxon_id}:${item.character}:${index}`} item={item} />)}
                 </ul>
               </section>
             ) : null)}
@@ -93,7 +96,7 @@ export default function MatrixCandidateEvidence({ candidate, rank }: { candidate
       <p className="mt-3 text-xs text-muted-foreground" data-testid="matrix-candidate-provenance">
         <span className="font-medium text-foreground">Registry evidence source:</span>{" "}
         {provenance.length ? provenance.map(([key, value]) => `${key}: ${value}`).join(" · ") : "not recorded"}
-        {" · "}<span className="break-all">{candidate.taxon_id}</span>
+        {" · "}<span className="break-all">{isWithheld(candidate.taxon_id) ? `taxon id ${MATRIX_WITHHELD_LABEL}` : candidate.taxon_id}</span>
       </p>
     </article>
   );

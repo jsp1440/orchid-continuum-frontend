@@ -14,6 +14,7 @@ import {
   type MatrixRegistryPersistenceStatus,
   type MatrixReportSummary,
 } from "@/lib/matrixReports";
+import { matrixErrorAccess, MATRIX_OWNER_ONLY_PANEL_MESSAGE } from "@/lib/matrixIdentification";
 
 type Props = {
   sessionId: string;
@@ -176,8 +177,18 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
     setRegistryPreflight(registryPreflightState);
   }
 
+  const [restricted, setRestricted] = useState(false);
+
   useEffect(() => {
+    setRestricted(false);
     void refresh().catch((error) => {
+      // Owner-only for members: an access state, not an error.
+      if (matrixErrorAccess(error) === "owner_access_required") {
+        setRestricted(true);
+        setStatus("idle");
+        setMessage(MATRIX_OWNER_ONLY_PANEL_MESSAGE);
+        return;
+      }
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to verify Matrix persistence state.");
     });
@@ -196,6 +207,12 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
           : "This exact evidence revision already has the same reproducible report.",
       );
     } catch (error) {
+      if (matrixErrorAccess(error) === "owner_access_required") {
+        setRestricted(true);
+        setStatus("idle");
+        setMessage(MATRIX_OWNER_ONLY_PANEL_MESSAGE);
+        return;
+      }
       setStatus("error");
       setMessage(error instanceof Error ? error.message : "Unable to finalize Matrix report.");
     }
@@ -270,7 +287,7 @@ export default function MatrixReportPanel({ sessionId, disabled }: Props) {
         <button
           type="button"
           onClick={() => void finalize()}
-          disabled={disabled || status === "working"}
+          disabled={disabled || restricted || status === "working"}
           className="rounded-xl bg-emerald-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
         >
           {status === "working" ? "Freezing report…" : "Freeze evidence report"}

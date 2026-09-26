@@ -1,4 +1,5 @@
-import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
+import { MATRIX_OWNER_ONLY_PANEL_MESSAGE, MatrixApiError } from "@/lib/matrixIdentification";
 
 export type MatrixPersistenceStatus = {
   mode: string;
@@ -116,6 +117,11 @@ export type MatrixReportRecord = {
   };
 };
 
+/**
+ * Reports and persistence status are owner-only for members (backend #1647):
+ * a 403, or a 401 without an owner bearer session, is "limited to owner
+ * access" — never a raw status string and never a sign-in prompt.
+ */
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
     credentials: "include",
@@ -124,6 +130,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
   const payload = await response.json().catch(() => null) as T | { detail?: unknown } | null;
   if (!response.ok) {
+    if (response.status === 403 || (response.status === 401 && !hasOwnerBearerSession())) {
+      throw new MatrixApiError(MATRIX_OWNER_ONLY_PANEL_MESSAGE, response.status, "owner_access_required");
+    }
     const detail = payload && typeof payload === "object" && "detail" in payload
       ? JSON.stringify(payload.detail)
       : response.statusText;
