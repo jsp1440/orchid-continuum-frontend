@@ -1,0 +1,84 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend origin/main c346a7219d6fc92e48b2e6d1232ee8d3c9dc4adb via FastAPI TestClient against app.main, GET /api/vision-lexicon/lexicon/concepts/{concept_id}/vision-evidence. 'empty' and 'invalid_concept_id' are unauthenticated public reads against a fresh process-local memory repository. 'populated' was produced by first calling the real POST /reference-sets and POST /analyses routes in the same process with owner auth overridden in-process only (no durable persistence, no production DB); its reference set, image id and analysis are capture-harness records, NOT scientific evidence. Bodies are unmodified.",
+  "empty": {
+    "body": {
+      "aggregate_summary": null,
+      "concept_id": "3f6d2a8e-9c1b-4e57-8a2d-5b7c0e1f4a96",
+      "concept_label": null,
+      "figure_specifications": [],
+      "limitations": [],
+      "morphometrics": [],
+      "provenance": {
+        "concept_id": "3f6d2a8e-9c1b-4e57-8a2d-5b7c0e1f4a96"
+      },
+      "reference_images": [],
+      "reference_sets": [],
+      "review_state": "MACHINE_GENERATED",
+      "validation_runs": [],
+      "vision_observations": [],
+      "visual_assets": []
+    },
+    "concept_id": "3f6d2a8e-9c1b-4e57-8a2d-5b7c0e1f4a96",
+    "status": 200
+  },
+  "invalid_concept_id": {
+    "body": {
+      "detail": [
+        {
+          "ctx": {
+            "error": "invalid character: found `n` at 1"
+          },
+          "input": "not-a-uuid",
+          "loc": [
+            "path",
+            "concept_id"
+          ],
+          "msg": "Input should be a valid UUID, invalid character: found `n` at 1",
+          "type": "uuid_parsing"
+        }
+      ]
+    },
+    "status": 422
+  },
+  "populated": {
+    "body": {
+      "aggregate_summary": {
+        "analysis_count": 1,
+        "character_summaries": [],
+        "numeric_summaries": [],
+        "reference_set_id": "5b18e854-52f5-4b9b-87a4-a187440e13eb",
+        "unresolved_count": 0
+      },
+      "concept_id": "00000000-0000-0000-0000-000000000001",
+      "concept_label": null,
+      "figure_specifications": [],
+      "limitations": [
+        "Uncalibrated image"
+      ],
+      "morphometrics": [],
+      "provenance": {
+        "concept_id": "00000000-0000-0000-0000-000000000001"
+      },
+      "reference_images": [
+        {
+          "calibration_status": "UNCALIBRATED",
+          "image_id": "img-capture-001",
+          "image_quality_state": "ACCEPTABLE",
+          "review_state": "MACHINE_GENERATED"
+        }
+      ],
+      "reference_sets": [
+        {
+          "reference_set_id": "5b18e854-52f5-4b9b-87a4-a187440e13eb",
+          "title": "Capture harness reference set"
+        }
+      ],
+      "review_state": "MACHINE_GENERATED",
+      "validation_runs": [],
+      "vision_observations": [],
+      "visual_assets": []
+    },
+    "concept_id": "00000000-0000-0000-0000-000000000001",
+    "status": 200
+  }
+}
