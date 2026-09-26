@@ -35,6 +35,25 @@ const CENSUS_DATE = '2026-08-22T00:00:00.000Z';
 /** Evidence-check date for nodes added by the #242 audit pass (Homepage, education/show-management). */
 const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
 
+/** Evidence-check date for the 2026-09-26 reconciliation against main 56bd85a. */
+const RECON_0926_DATE = '2026-09-26T00:00:00.000Z';
+
+/** The main commit the 2026-09-26 browser specs were executed against. */
+const RECON_0926_SHA = '56bd85a50141ea1529e19da255208c07cca3bd24';
+
+/**
+ * Evidence note for a Playwright spec executed green at RECON_0926_SHA.
+ * Reference-backend browser evidence proves the mounted production bundle
+ * against fixture data; it is never deployed or production evidence.
+ */
+function referenceBackendRun(spec: string, passed: number, proves: string): Evidence {
+  return {
+    kind: 'test',
+    ref: spec,
+    note: `Executed green at main ${RECON_0926_SHA.slice(0, 8)} on 2026-09-26 (${passed}/${passed} passed, desktop-chromium, production bundle via vite preview) against the provider-free REFERENCE BACKEND (e2e/support/reference-backend.mjs). ${proves} Reference-backend evidence only: it is not deployed, live or production evidence.`,
+  };
+}
+
 /**
  * The integration commit this graph's evidence was checked against.
  *
@@ -48,10 +67,10 @@ const AUDIT_242_DATE = '2026-09-05T00:00:00.000Z';
  * makes the dashboard report drift, which is the correct and safe failure.
  */
 export const COMPLETION_GRAPH_SNAPSHOT: EvidenceSnapshot = {
-  reconciledAgainstSha: '1547793ea1f60ca0a510b6d5339cc13b8652f65d',
-  reconciledAt: '2026-09-25T04:30:00.000Z',
+  reconciledAgainstSha: '56bd85a50141ea1529e19da255208c07cca3bd24',
+  reconciledAt: '2026-09-26T08:15:00.000Z',
   scope:
-    'Reconciled against main 1547793: the public literature browser leaf is re-scored from confirmed-missing to PARTIAL on the real /literature route, page and client tests, and the owner-gated backend listing; the #167 Atlas thematic scoring against 2f6f161 is retained unchanged. Earlier domains retain their recorded evidence dates; this is not a new portfolio-wide audit. Browser and deployed operation remain unevaluated. Census coverage is reported alongside each percentage.',
+    'Reconciled against main 56bd85a against the work merged on 2026-09-26 (#837, #838, #840-#846; #828/#829/#833; backend #1636-#1638). Browser gates are scored only where a Playwright spec was executed green at 56bd85a against the provider-free reference backend (e2e/support/reference-backend.mjs): that is fixture-backed browser evidence, never deployed or production evidence, and every deployed gate stays unevaluated. Leaves whose only remaining gates are owner-governed (deployed passes, auth policy, #788 acceptance, scientific review/publication) are OWNER_ACTION with the action named. Earlier domains retain their recorded evidence dates; this is not a new portfolio-wide audit. Census coverage is reported alongside each percentage.',
 };
 
 let autoId = 0;
@@ -355,14 +374,18 @@ const atlasDomain = branch({
 ]);
 
 // ─── Literature / evidence ──────────────────────────────────────────────────
-// Real evidence, reconciled against main 1547793 on 2026-09-25: route
-// /literature renders <Literature/> (src/App.tsx), which lists the extraction
-// corpus through src/lib/literatureIndex.ts from
-// GET /api/literature-extraction/papers. The backend router mounts that
-// listing behind verify_owner_or_api_key (app/literature_extraction/routes.py),
-// so an anonymous public visitor is answered 401/403 and the page renders that
-// as "unauthorised" rather than as an empty corpus. Code and tests are real;
-// the PUBLIC browser the leaf names is not yet reachable by the public.
+// Real evidence, reconciled against main 56bd85a on 2026-09-26 (#840, which
+// supersedes #832): route /literature renders <Literature/> (src/App.tsx),
+// which lists the extraction corpus through src/lib/literatureIndex.ts from
+// GET /api/literature-extraction/papers. The backend router mounts every
+// /api/literature-extraction/* route behind verify_owner_or_api_key
+// (app/literature_extraction/routes.py). #840 wrapped /literature and
+// /literature/:paperId in ProtectedRoute and classified them
+// router-authenticated; a signed-in member is still refused (the backend has
+// no member path) and now sees a distinct owner-access state rather than a
+// generic "unauthorised". Code and tests are real; the PUBLIC browser the
+// leaf names is reachable by neither the public nor members, which is an
+// owner access-policy decision, not a frontend gap.
 
 const literaturePublicBrowser: CompletionNode = {
   ...censusPending({
@@ -370,15 +393,18 @@ const literaturePublicBrowser: CompletionNode = {
     parentId: 'module-literature-core',
     name: 'Public literature/evidence browser',
     evidence: [
-      { kind: 'route', ref: '/literature', note: 'Routes to <Literature/> in src/App.tsx; the <ComingSoon/> placeholder is gone from this route.' },
+      { kind: 'route', ref: '/literature', note: 'Routes to <Literature/> in src/App.tsx inside <ProtectedRoute/> since #840 (and /literature/:paperId likewise); the <ComingSoon/> placeholder is gone from this route.' },
+      { kind: 'file', ref: 'src/lib/routeAccessPolicy.ts', note: '#840: /literature and /literature/:paperId are classified router-authenticated, matching the backend verify_owner_or_api_key gate instead of presenting a public page that refuses every visitor.' },
+      { kind: 'test', ref: 'src/lib/routeAccessPolicy.test.ts', note: '#840: fails if the literature routes lose their ProtectedRoute wrapper or access classification.' },
+      { kind: 'file', ref: 'src/components/literature/LiteratureAccessRequired.tsx', note: '#840: distinct 401/403 state ("Owner or API access required — this literature workspace is not yet open to members"), no retry, kept apart from outage (5xx/network), missing (404), malformed and empty states.' },
       { kind: 'file', ref: 'src/pages/Literature.tsx', note: 'Paged corpus listing with distinct unauthorised / outage / rejected / malformed states; counts, not content.' },
       { kind: 'file', ref: 'src/lib/literatureIndex.ts', note: 'Reads GET /api/literature-extraction/papers?limit&offset; a 200 without a papers array is malformed, never an empty corpus.' },
       { kind: 'file', ref: 'src/pages/LiteraturePaper.tsx', note: 'Single-paper view over /api/literature-extraction/papers/{id} and its source binding.' },
-      { kind: 'test', ref: 'src/pages/Literature.test.tsx', note: '12 page tests: listing, damaged rows, paging, empty store, unauthorised, outage/retry, malformed 200.' },
+      { kind: 'test', ref: 'src/pages/Literature.test.tsx', note: 'Page tests: listing, damaged rows, paging, empty store, outage/retry, malformed 200, and (#840) the owner-access state mounted over the backend\'s own 401 bodies in __fixtures__/literatureAccessDenied.realBackend.json, captured with FastAPI TestClient from backend main c346a7219; 403 is a labelled synthetic shape because this gate never emits one.' },
       { kind: 'test', ref: 'src/pages/LiteraturePaper.test.tsx', note: 'Includes a mount over __fixtures__/literaturePaper.realBackend.json, captured from GET /api/literature-extraction/papers/{id} on backend main c37ff0ca6: every claim renders uncertain polarity, unreviewed, and publication blocked (awaiting review).' },
       { kind: 'file', ref: 'src/lib/explorationContext.ts', note: 'Exploration "literature" nodes now route to /literature instead of /coming-soon/literature.' },
     ],
-    nextAction: 'The backend listing is owner/API-key gated, so the public cannot browse it: either expose a bounded public read-only listing on the backend or scope this route to authenticated users, then evaluate the browser gate. Discovery, dedupe, taxon linking, citations/source anchors and conflict review from the mission spec remain unbuilt.',
+    nextAction: 'Owner-gated first: the backend serves /api/literature-extraction/* only to an owner session or API key, so neither the public nor members can browse it (see ownerActions). Executable meanwhile, without changing auth: a reference-backend Playwright spec for /literature that signs in and asserts the owner-access state on the captured 401 and the listing/paging states on captured payloads. Discovery, dedupe, taxon linking, citations/source anchors and corpus-wide conflict review from the mission spec remain unbuilt.',
     lane: 'PRODUCT_COMPLETION',
   }),
   status: 'PARTIAL',
@@ -387,7 +413,9 @@ const literaturePublicBrowser: CompletionNode = {
   // from a paper captured through the real backend route (main c37ff0ca6).
   gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1,
     scientificProvenanceSecurity: 1, browserEndToEnd: null, deployedOperational: null },
-  lastUpdated: '2026-09-25T00:00:00.000Z',
+  prs: ['#840'],
+  ownerActions: ['Access-policy decision (owner): either add a bounded member or public read-only listing to the backend literature-extraction router, or accept owner/API-key-only access as the final shape and rename this leaf accordingly. The frontend must not weaken or work around verify_owner_or_api_key.'],
+  lastUpdated: RECON_0926_DATE,
 };
 
 const literatureIntelligenceAdapter: CompletionNode = {
@@ -421,7 +449,7 @@ const literatureDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Literature / evidence',
   type: 'domain',
-  nextAction: 'Build the public browser (confirmed missing) and decide the adapter\'s downstream integration.',
+  nextAction: 'The literature browser exists behind sign-in; the backend serves it to owner/API-key sessions only (owner access-policy decision recorded on the leaf). Decide the intelligence adapter\'s downstream integration.',
 }, [
   branch({
     id: 'module-literature-core',
@@ -473,7 +501,7 @@ const matrixReportLexiconGate: CompletionNode = {
   name: 'Vision review, report generation & Lexicon/Calyx glossary explanation',
   type: 'capability',
   status: 'PARTIAL',
-  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'PARTIAL' },
   lane: 'PRODUCT_COMPLETION',
   gateScores: {
     architectureContracts: 1,
@@ -484,7 +512,9 @@ const matrixReportLexiconGate: CompletionNode = {
     // registry provenance, explanation provider/epistemic state, and a
     // locality-key guard on rendered provenance.
     scientificProvenanceSecurity: 1,
-    browserEndToEnd: null,
+    // #846: the guided session was driven in a real browser against the
+    // reference backend. Fixture-backed browser evidence, not deployment.
+    browserEndToEnd: 1,
     deployedOperational: null,
   },
   evidence: [
@@ -500,9 +530,14 @@ const matrixReportLexiconGate: CompletionNode = {
     { kind: 'test', ref: 'src/lib/matrixCandidateEvidence.test.ts', note: 'Pinned to __fixtures__/matrixIdentification.realBackend.json, captured verbatim from backend main 73626917 via TestClient (sessions, evaluate, explain).' },
     { kind: 'test', ref: 'src/components/matrix/MatrixCandidateEvidence.test.tsx' },
     { kind: 'test', ref: 'src/pages/OrchidIdentificationNext.evidence.test.tsx' },
+    referenceBackendRun('e2e/matrix-guided-session.spec.ts', 5, 'Drives /orchid-identification through one session (registry from the reference backend; create, two observations with one explicitly unknown, evaluate after each, Calyx explanation replayed from payloads captured from the backend Matrix routers via FastAPI TestClient over a SYNTHETIC registry): rank order, per-candidate basis, score vs coverage, the unknown observation recorded but ignored, registry and Calyx provenance, a synthetic locality token withheld, and exactly what the browser sent; fails closed on the backend\'s real 503, an unreachable service and two synthetic malformed 2xx evaluate bodies.'),
+    { kind: 'file', ref: 'src/lib/matrixIdentification.ts', note: '#846: the client rejects non-JSON 2xx bodies, sessions without an id and evaluations it cannot render (previously a non-JSON evaluate body reported "Session ready" and a report-less evaluation crashed the route).' },
+    { kind: 'test', ref: 'src/lib/matrixIdentification.test.ts' },
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#846', prState: 'merged', note: 'Corroboration only; merged as 56bd85a.' },
   ],
-  nextAction: 'Browser pass of the guided session against a running backend (submit observations, see ranked candidates with their basis and Calyx provenance); glossary explanations were not re-verified this pass. Deployed gate is owner-governed (4 of 6 gate categories evaluated).',
-  lastUpdated: '2026-09-25T00:00:00.000Z',
+  prs: ['#846'],
+  nextAction: 'Executable: extend e2e/matrix-guided-session.spec.ts (reference backend) to the vision review panel, report generation (MatrixReportPanel) and the Lexicon glossary guide, none of which the guided-session spec asserts. Owner-gated: a deployed pass on real specimen data (deployedOperational unevaluated; 5 of 6 gate categories evaluated).',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -511,7 +546,7 @@ const matrixDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Matrix Identification',
   type: 'domain',
-  nextAction: 'Complete scientific/provenance and browser/e2e gates for the two scored capabilities; audit registry review and registry readiness separately.',
+  nextAction: 'Guided-session browser pass is in (#846, reference backend). Remaining: provenance and browser gates for the morphology viewer, browser coverage for vision review/report/glossary, and an audit of registry review and readiness.',
 }, [
   branch({
     id: 'module-matrix-core',
@@ -554,7 +589,10 @@ const universityCoreGate: CompletionNode = {
     architectureContracts: 1,
     implementationPresent: 1,
     integrationCanonicalBranch: 1,
-    scientificProvenanceSecurity: null,
+    // #845 (supersedes #796): the lab prototype's release gate is mounted over
+    // payloads captured from the backend learning API and fails closed when it
+    // is unavailable or disabled. Unit/render tests: not browser evidence.
+    scientificProvenanceSecurity: 1,
     browserEndToEnd: null,
     deployedOperational: null,
   },
@@ -567,10 +605,14 @@ const universityCoreGate: CompletionNode = {
     { kind: 'file', ref: 'src/pages/UniversityReviewerWorkspace.tsx' },
     { kind: 'file', ref: 'src/lib/universityApi.ts' },
     { kind: 'test', ref: 'src/lib/universityApi.test.ts' },
+    { kind: 'test', ref: 'src/pages/OrchidUniversity.test.tsx', note: '#845: first page-level mount of /university; renders the guided-inquiry curriculum rather than an empty or error tree, and keeps the reviewer-boundary text honest.' },
+    { kind: 'test', ref: 'src/pages/UniversityLabPrototype.test.tsx', note: '#845: mounts the lab prototype over __fixtures__/universityReadOnly.realBackend.json, captured verbatim from backend main c346a7219 via FastAPI TestClient (/api/learning/release-readiness, /capabilities, /catalog, /chapters/{id}, /laboratories/{id}); backend-unavailable fails closed with no substituted science (synthetic rejected-promise error state), university-disabled stays closed and lists the captured blockers, read-only renders the captured chapter and laboratory.' },
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#845', prState: 'merged', note: 'Corroboration only; merged as 464af79.' },
     { kind: 'file', ref: 'scripts/verify-university-production.mjs', note: 'Dedicated production-verification script exists — see Release/Acceptance domain.' },
   ],
-  nextAction: 'Run `npm run verify:university-production` against a live deployment and record its result as browser/deployed evidence (not yet executed this pass).',
-  lastUpdated: CENSUS_DATE,
+  prs: ['#845'],
+  nextAction: 'Executable: a reference-backend Playwright spec for /university and /university/lab asserting the captured read-only and disabled release states in a real browser (no browser pass exists yet). Owner-gated: the deployed run of `npm run verify:university-production`, tracked as OWNER_ACTION on cap-university-production-live-verification.',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -878,6 +920,40 @@ const visionIntelligenceAdapterGate: CompletionNode = {
   children: [],
 };
 
+// #842 (2026-09-26): the Lexicon entry view reads the public Vision-Lexicon
+// concept evidence summary. A new leaf rather than evidence on the Matrix
+// preflight: it is a separate route, consumer and backend contract.
+const visionLexiconEvidenceSummaryGate: CompletionNode = {
+  id: 'cap-vision-lexicon-evidence-summary',
+  parentId: 'module-vision-core',
+  name: 'Public vision-evidence summary on Lexicon entries',
+  type: 'capability',
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'NOT_MET' },
+  lane: 'SCIENTIFIC_DATA_COMPLETION',
+  gateScores: {
+    architectureContracts: 1,
+    implementationPresent: 1,
+    integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1,
+    browserEndToEnd: null,
+    deployedOperational: null,
+  },
+  evidence: [
+    { kind: 'route', ref: '/lexicon/*' },
+    { kind: 'file', ref: 'src/components/lexicon/EntryView.tsx', note: 'Mounts VisionEvidenceSummary for the entry\'s concept_id; entries without a UUID concept id keep the static Vision Lab note and make no request.' },
+    { kind: 'file', ref: 'src/components/lexicon/VisionEvidenceSummary.tsx', note: 'Renders counts, review state, reference-set titles and backend limitations as returned; outage and malformed bodies are never shown as "no evidence"; no image is rendered.' },
+    { kind: 'file', ref: 'src/lib/visionEvidence.ts', note: 'Fail-closed client for the public GET /api/vision-lexicon/lexicon/concepts/{concept_id}/vision-evidence (backend app/vision_lexicon/routes.py, mounted on backend main): not_applicable / unavailable / malformed / empty / ready; credentials omitted; no image URL constructed.' },
+    { kind: 'test', ref: 'src/lib/visionEvidence.test.ts', note: 'Pinned to __fixtures__/visionEvidence.realBackend.json, captured via FastAPI TestClient from backend main c346a7219 (the populated case was built in-process through the real reference-set and analysis routes; no durable persistence).' },
+    { kind: 'test', ref: 'src/components/lexicon/VisionEvidenceSummary.test.tsx' },
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#842', prState: 'merged', note: 'Corroboration only; merged as 9192a69.' },
+  ],
+  prs: ['#842'],
+  nextAction: 'Executable: a reference-backend Playwright spec that opens a Lexicon entry with a UUID concept id and asserts the ready, empty, unavailable and malformed states from the captured payloads. Owner-gated: a deployed pass against canonical Vision-Lexicon evidence (no production evidence exists).',
+  lastUpdated: RECON_0926_DATE,
+  children: [],
+};
+
 const visionDomain = branch({
   id: 'domain-vision',
   parentId: 'portfolio-orchid-continuum',
@@ -891,7 +967,7 @@ const visionDomain = branch({
     name: 'Vision / image intelligence core',
     type: 'module',
     nextAction: 'See child capabilities.',
-  }, [visionMatrixReviewGate, visionIntelligenceAdapterGate]),
+  }, [visionMatrixReviewGate, visionIntelligenceAdapterGate, visionLexiconEvidenceSummaryGate]),
 ]);
 
 // ─── Security / partner-data governance ────────────────────────────────────
@@ -913,12 +989,13 @@ const localitySafetyCrossCuttingGate: CompletionNode = {
   name: 'Sensitive-locality redaction as a cross-cutting policy',
   type: 'acceptance_gate',
   status: 'PARTIAL',
-  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'UNKNOWN' },
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
   lane: 'RELEASE_ACCEPTANCE',
   gateScores: {
     architectureContracts: 1,
     implementationPresent: 1,
-    integrationCanonicalBranch: null,
+    // #838: the trace is a running test on main, not a one-off grep.
+    integrationCanonicalBranch: 1,
     scientificProvenanceSecurity: 1,
     browserEndToEnd: null,
     deployedOperational: null,
@@ -932,10 +1009,13 @@ const localitySafetyCrossCuttingGate: CompletionNode = {
     { kind: 'file', ref: 'src/features/atlas-next/atlasContext.ts' },
     { kind: 'file', ref: 'src/pages/ConservationHub.tsx', note: 'Grepped for latitude/longitude/locality/coordinates: none found; the page explicitly states coordinates and locality "remain in Atlas".' },
     { kind: 'file', ref: 'src/pages/SpeciesDossier.tsx', note: 'AtlasPoint/AtlasLayer types declare lat/lng in src/lib/speciesDossier.ts, but grepping the dossier page itself for latitude/longitude/locality returns no matches — those types are consumed only by Atlas map components, not rendered on the dossier.' },
+    { kind: 'test', ref: 'src/lib/localitySafetyCrossCutting.test.ts', note: '#838 (supersedes #831): fails CI when any traced source file of Conservation, Species Dossier, Matrix (14 files incl. RelationshipMatrixNext, AtlasMatrixContinuation and the matrix components/libs), Conservatory/OASIS (MyConservatory, ConservatoryReadiness, OasisConnective, conservatoryCultivationCalyx) or University (OrchidUniversity, lab prototype, reviewer workspace/panel, notebook, investigations, universityApi/ReviewerApi/Release) gains an unreviewed latitude/longitude/lat/lng/lon/locality/coordinate line; only policy prose stating that locality is withheld is allow-listed. A static source check: it does not observe runtime payloads.' },
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#838', prState: 'merged', note: 'Corroboration only; merged as 6992e31.' },
   ],
-  nextAction: 'Extend the same direct grep-for-raw-coordinates check to Matrix, Conservatory/OASIS, and University before calling this policy fully cross-cutting; only Atlas, Atlas Next, Research Station, Conservation, and Species Dossier were traced this pass.',
-  lastAccomplishment: 'Traced locality-safety consumption beyond the original Atlas-only assumption and confirmed three downstream consumers (Conservation, Species Dossier, Research handoff) do not leak raw coordinates.',
-  lastUpdated: CENSUS_DATE,
+  prs: ['#838'],
+  nextAction: 'Add the surfaces merged on 2026-09-26 and still outside the pinned list to TRACED_SURFACES in src/lib/localitySafetyCrossCutting.test.ts: src/lib/interactionDiscovery.ts and src/components/interactions/InteractionDiscoveryPanel.tsx (#841), src/lib/visionEvidence.ts and src/components/lexicon/VisionEvidenceSummary.tsx (#842), src/features/atlas-next/incomingTaxon.ts (#844); then decide whether Home, Calyx, Lexicon, LiteraturePaper, DeceptionLab and CommunityObservation join the traced scope. A browser-level check that no rendered page shows coordinates outside Atlas remains unevaluated.',
+  lastAccomplishment: '#838 pinned the locality trace for Conservation, Species Dossier, Matrix, Conservatory/OASIS and University as a running Vitest suite on main.',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -944,7 +1024,7 @@ const securityGovernanceDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Security / partner-data governance',
   type: 'domain',
-  nextAction: 'Complete the locality-safety cross-cutting trace for Matrix/Conservatory/University; audit ProtectedRoute coverage and partner-data disclosure as separate capabilities.',
+  nextAction: 'Locality trace now pinned for Matrix/Conservatory-OASIS/University (#838); add the 2026-09-26 surfaces to it, and audit ProtectedRoute coverage and partner-data disclosure as separate capabilities.',
 }, [
   branch({
     id: 'module-security-governance-core',
@@ -1024,15 +1104,17 @@ const calyxVerificationWorkbenchGate: CompletionNode = {
   parentId: 'module-calyx-verification-core',
   name: 'Verification Workbench (checkCalyxMissionClaim)',
   type: 'capability',
-  status: 'PARTIAL',
-  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  // Only the deployed gate remains, and it is owner-governed.
+  status: 'OWNER_ACTION',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'PARTIAL' },
   lane: 'SCIENTIFIC_DATA_COMPLETION',
   gateScores: {
     architectureContracts: 1,
     implementationPresent: 1,
     integrationCanonicalBranch: 1,
     scientificProvenanceSecurity: 1,
-    browserEndToEnd: null,
+    // #845 (supersedes #808): reference-backend browser pass, not deployment.
+    browserEndToEnd: 1,
     deployedOperational: null,
   },
   evidence: [
@@ -1042,9 +1124,13 @@ const calyxVerificationWorkbenchGate: CompletionNode = {
     { kind: 'test', ref: 'src/lib/calyxVerification.test.ts' },
     { kind: 'test', ref: 'src/components/calyx/ScientificSynthesis.test.tsx' },
     { kind: 'test', ref: 'src/lib/naoccGovernedVerificationContinuity.test.ts', note: 'Cross-checks checkCalyxMissionClaim against buildCalyxTurnContext and researchStationCalyxHref together, confirming Research identity stays non-evidentiary while Calyx audits only governed evidence.' },
+    referenceBackendRun('e2e/calyx-verification-workbench.spec.ts', 1, 'Drives /speak-with-calyx, opens "Check Calyx" and asserts the audit the reference mission\'s own evidence earns: a failing exact-source-anchors check (the fixture source has no locator), the withheld-vs-absent excerpt distinction, retained counterevidence and the stated publication objection, with provenance verbatim. The mission is invented fixture material.'),
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#845', prState: 'merged', note: 'Corroboration only; merged as 464af79 (ports #808 verbatim).' },
   ],
-  nextAction: 'Run a live/browser pass auditing a real (not fixture) Calyx mission claim end to end (2 of 6 gate categories remain unevaluated: browser/e2e and deployed/operational).',
-  lastUpdated: CENSUS_DATE,
+  prs: ['#845'],
+  ownerActions: ['Run (or authorise a run of) the Workbench against a real, non-fixture Calyx mission on the deployed orchid-calyx-backend and record the audit it renders; automation must not infer deployed readiness from the reference backend.'],
+  nextAction: 'Owner-gated: deployed pass auditing a real (non-fixture) Calyx mission claim (deployedOperational unevaluated; the reference-backend browser pass is in).',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -1068,13 +1154,19 @@ const calyxScienceStatusGate: CompletionNode = {
     { kind: 'route', ref: '/calyx-science' },
     { kind: 'route', ref: '/mission-control/science' },
     { kind: 'file', ref: 'src/pages/CalyxScienceStatus.tsx' },
-    { kind: 'file', ref: 'src/lib/calyxScience.ts', note: 'fetchCalyxScienceDashboard() throws on any non-OK response across all eight /api/science/* calls -- fails closed, no fabricated department/gap/mission data on backend failure.' },
+    { kind: 'file', ref: 'src/lib/calyxScience.ts', note: '#845 (supersedes #795): fetchCalyxScienceDashboard() settles the eight /api/science/* calls independently (Promise.allSettled); a failed section is recorded in sectionErrors and its data stays empty/null, and the call throws only when every endpoint is unreachable -- no fabricated department/gap/mission data.' },
+    { kind: 'file', ref: 'src/pages/CalyxScienceStatus.tsx', note: '#845: stat tiles read "-"/"unavailable" rather than a fabricated zero when their section failed or no dashboard exists; runtime mode reads "unavailable" when summary and status both failed; failed department/dataset/dossier sections say the telemetry is unavailable, not confirmed zero.' },
+    { kind: 'test', ref: 'src/lib/calyxScience.test.ts', note: 'Healthy responses are /api/science/* payloads captured verbatim from backend main c346a7219 (__fixtures__/calyxScienceDashboard.realBackend.json); failing endpoints are synthetic HTTP 5xx error states.' },
+    { kind: 'test', ref: 'src/pages/CalyxScienceStatus.test.tsx', note: '#845: page mounted over the same captured payloads with a synthetic HTTP 503 for failing sections; only the owner-session check is mocked to reach the dashboard, the owner gate itself is unchanged. Unit/render evidence, not browser evidence.' },
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#845', prState: 'merged', note: 'Corroboration only; merged as 464af79.' },
     { kind: 'file', ref: 'src/lib/ownerOperationsConsole.ts', note: 'createOwnerSession/validateOwnerSession gate the dashboard; validateOwnerSession rejects sessions with authenticated:true but a missing/whitespace owner field.' },
     { kind: 'test', ref: 'src/lib/ownerSessionVerification.test.ts' },
     { kind: 'test', ref: 'src/lib/ownerControlVerification.test.ts' },
   ],
-  nextAction: 'Run this dashboard against a live Calyx backend with a real owner session and record the science departments/gaps actually returned (3 of 6 gate categories remain unevaluated).',
-  lastUpdated: CENSUS_DATE,
+  prs: ['#845'],
+  ownerActions: ['Run /calyx-science against the deployed Calyx backend with a real owner session (an owner-held credential no agent can create) and record the departments/gaps actually returned.'],
+  nextAction: 'Executable: serve the captured /api/science/* payloads and a reference owner-session stand-in from e2e/support/reference-backend.mjs (it has neither today; the app\'s owner gate is not changed), then a Playwright spec for /calyx-science asserting the per-section unavailable states in a real browser (browserEndToEnd unevaluated). Owner-gated: the deployed run in ownerActions.',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -1083,7 +1175,7 @@ const calyxVerificationDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Calyx reasoning + Verification Workbench',
   type: 'domain',
-  nextAction: 'Execute the three live/browser passes noted on each capability; audit the Calyx voice/speech pipeline as a separate capability next pass.',
+  nextAction: 'Workbench browser pass is in (#845, reference backend; deployed pass owner-gated). Remaining: browser passes for conversational reasoning and Science Status, and an audit of the Calyx voice/speech pipeline as a separate capability.',
 }, [
   branch({
     id: 'module-calyx-verification-core',
@@ -1215,12 +1307,15 @@ const kgEvidenceGapResearchMissionsGate: CompletionNode = {
   name: 'Evidence-gap research missions (bounded, review_required nomenclature evidence reports)',
   type: 'capability',
   status: 'PARTIAL',
-  threeLevels: { codeComplete: 'PARTIAL', integratedComplete: 'NOT_MET', productComplete: 'NOT_MET' },
+  threeLevels: { codeComplete: 'PARTIAL', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
   lane: 'SCIENTIFIC_DATA_COMPLETION',
   gateScores: {
     architectureContracts: 1,
     implementationPresent: 1,
-    integrationCanonicalBranch: null,
+    // Scheduled run 36226111465 on main executed a reserve mission to
+    // oc-validating. Execution on main is not acceptance: reports await
+    // human scientific review, so product stays NOT_MET.
+    integrationCanonicalBranch: 1,
     scientificProvenanceSecurity: null,
     browserEndToEnd: null,
     deployedOperational: null,
@@ -1229,10 +1324,22 @@ const kgEvidenceGapResearchMissionsGate: CompletionNode = {
     { kind: 'file', ref: 'src/lib/control-plane/backendReserveQueueBridge.ts', note: 'sourcePayloadBody() emits OC-GRAPH-NODE for every canonical research mission and OC-SWARM-CAPABILITY: nomenclature-evidence-lookup only for domain exactly "nomenclature".' },
     { kind: 'file', ref: 'scripts/oc-nomenclature-lookup.mjs', note: 'Provider-free executor: at most 3 GBIF species GETs (no occurrence/locality endpoint), writes oc.nomenclature-evidence-report.v1 with review_required true and every mutation/publication flag false, posts one digest-idempotent comment.' },
     { kind: 'file', ref: 'scripts/oc-capability-router.mjs', note: 'LOCAL_EXECUTORS binds nomenclature-evidence-lookup to npm run research:nomenclature-lookup.' },
-    { kind: 'test', ref: 'src/nomenclatureLookup.test.ts', note: 'Replays GBIF responses captured from api.gbif.org; covers parsing/refusal, domain gating, match-type mapping, contradiction, transport failure, idempotent comment, routing, graph binding and settlement to oc-validating.' },
+    { kind: 'test', ref: 'src/nomenclatureLookup.test.ts', note: 'Replays GBIF responses captured from api.gbif.org; covers parsing/refusal, domain gating, match-type mapping, contradiction, transport failure, idempotent comment, routing, graph binding and settlement to oc-validating; since #837 also that a binding is derived only from an issue authored by the reserve bot with the oc-discovered label, and that only report markers authored by github-actions[bot] suppress a report.' },
+    { kind: 'file', ref: 'scripts/oc-reserve-mission-binding.mjs', note: '#837: deriveReserveMissionBinding() requires the reserve-bot author and oc-discovered label (a snapshot with no author derives nothing); #829: EXECUTABLE_RESERVE_DOMAINS ([\'nomenclature\']) — an open reserve mission in a domain no local executor runs no longer holds reserve depth (the open-issue ceiling still counts it).' },
+    { kind: 'file', ref: 'scripts/oc-dispatch-control.ts', note: '#828: DETERMINISTIC_ONLY_NODES makes this node admissible only for issues that route provider-free; provider-lane issues bound here stay queued with the reason.' },
+    { kind: 'file', ref: 'src/lib/control-plane/backendReservePlanClient.ts', note: '#829: the reserve-plan request sends domain=<executable domains>; a prepared mission in a non-executable domain is still refused before filing if a backend ignores the filter.' },
+    { kind: 'test', ref: 'src/providerCapacityAdmission.test.ts', note: '#828: without the guard a provider-lane issue on this node is admitted with a free provider slot.' },
+    { kind: 'test', ref: 'src/lib/control-plane/supervisorDiscovery.test.ts', note: '#829: the captured backend plan (morphology, phenology, nomenclature) files only the nomenclature mission; the verbatim #825-#827 bodies release depth but count at the ceiling.' },
+    { kind: 'file', ref: '.github/workflows/orchid-continuous-completion.yml', note: '#833: dispatch and audit jobs are skipped on pull_request, so unmerged code can no longer execute a reserve mission against the live queue (PR #821 run 36188258778 had executed #816).' },
+    { kind: 'commit', ref: 'jsp1440/orchid-calyx-backend@a102e9fb8', note: 'Backend #1636: evidence_gap_candidates skips caller-held missions before the per-pass cap of 3.' },
+    { kind: 'commit', ref: 'jsp1440/orchid-calyx-backend@24252d2a9', note: 'Backend #1637: GET /api/runner/knowledge-gaps/reserve-plan accepts a repeatable domain filter applied before the cap (422 on unknown domains).' },
+    { kind: 'commit', ref: 'jsp1440/orchid-calyx-backend@c346a7219', note: 'Backend #1638: pages past held example taxa via a read-only keyset query (locality-gated domains return nothing) so nomenclature gaps keep yielding missions.' },
+    { kind: 'ci', ref: 'jsp1440/orchid-continuum-frontend/actions/runs/36226111465', note: 'Scheduled "Orchid Continuous Completion" run on main (head bb53932, #833), 2026-09-26T07:13Z, conclusion success: executed reserve mission #836 (Acianthera esmeraldae) with npm run research:nomenclature-lookup, exit 0, provider_calls 0, posted a review_required report; #836 carries oc-validating (as do #834 and #835, filed the same morning; their run ids were not checked in this pass).' },
   ],
+  prs: ['#819', '#828', '#829', '#833', '#837'],
+  ownerActions: ['Human scientific review of the machine-retrieved nomenclature reports on #816-#818, #823, #824, #830 and #834-#836 (all oc-validating). Accepting any of them, and any KG, taxonomy or publication change, is owner-governed; automation settles a report to oc-validating at most.'],
   nextAction: 'deliver a review_required nomenclature evidence report; no publication/KG/taxonomy mutation',
-  lastUpdated: '2026-09-25T00:00:00.000Z',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -1447,7 +1554,7 @@ const researchStationDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Research Station',
   type: 'domain',
-  nextAction: 'Supply the read-only trait endpoint from canonical persisted evidence; continue the remaining workbench census without duplicating existing project or literature implementations.',
+  nextAction: 'Trait Explorer awaits owner access-policy and deployed passes (see its ownerActions); continue the remaining workbench census without duplicating existing project or literature implementations.',
 }, [branch({
   id: 'domain-research-station-module',
   parentId: 'domain-research-station',
@@ -1472,15 +1579,21 @@ const researchStationDomain = branch({
     parentId: 'domain-research-station-module',
     name: 'Trait Explorer: subject-bound read-only retrieval with provenance',
     type: 'capability',
-    status: 'PARTIAL',
-    threeLevels: { codeComplete: 'MET', integratedComplete: 'UNKNOWN', productComplete: 'NOT_MET' },
+    // Only owner-governed gates remain: the backend's access policy and a
+    // deployed pass.
+    status: 'OWNER_ACTION',
+    threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'PARTIAL' },
     lane: 'PRODUCT_COMPLETION',
     gateScores: {
       architectureContracts: 1,
       implementationPresent: 1,
-      integrationCanonicalBranch: null,
+      // Consumer on frontend main; GET /api/research/traits (backend #1611)
+      // is on backend main (app/research_traits/routes.py, re-captured at
+      // 615af698b with identical bodies apart from generated_at).
+      integrationCanonicalBranch: 1,
       scientificProvenanceSecurity: 1,
-      browserEndToEnd: null,
+      // #843: reference-backend browser pass, not deployment.
+      browserEndToEnd: 1,
       deployedOperational: null,
     },
     evidence: [
@@ -1491,12 +1604,20 @@ const researchStationDomain = branch({
       { kind: 'file', ref: 'src/lib/researchTraits.ts' },
       { kind: 'test', ref: 'src/lib/researchTraits.test.ts' },
       { kind: 'test', ref: 'src/components/research/ResearchTraitExplorer.test.tsx' },
-      { kind: 'test', ref: 'src/lib/researchTraits.pr1611Payload.test.ts', note: 'Client accepts AVAILABLE/UNAVAILABLE/ABSENT bodies captured from backend PR #1611 (head d68d9a9e), not main; integration gate stays unscored until #1611 merges.' },
+      { kind: 'test', ref: 'src/lib/researchTraits.pr1611Payload.test.ts', note: 'Client accepts AVAILABLE/UNAVAILABLE/ABSENT bodies captured from backend PR #1611 (head d68d9a9e); #843 re-captured from backend main 615af698b with the same harness and found identical bodies apart from generated_at.' },
+      { kind: 'file', ref: 'e2e/support/reference-backend.mjs', note: '#843: answers GET /api/research/traits only for the two captured subjects, verbatim from src/lib/__fixtures__/researchTraits.pr1611.json; any other subject gets a 503. Failure modes: the captured 401 and FastAPI 500, and a clearly synthetic off-contract body.' },
+      referenceBackendRun('e2e/research-trait-explorer.spec.ts', 7, 'Signs in through ProtectedRoute on /research: AVAILABLE values render with provenance while null counts and sample sizes stay UNKNOWN, a WITHHELD trait discloses nothing, UNAVAILABLE and ABSENT render as distinct non-findings with no records, and a 500, a 401 and an off-contract body fail closed and clear prior records.'),
+      { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#843', prState: 'merged', note: 'Corroboration only; merged as 350cc39.' },
     ],
     issues: ['#525'],
-    nextAction: 'Merge backend #1611 (GET /api/research/traits; client contract proven against its captured payloads), then verify real browser retrieval. The frontend reports missing/unavailable contracts without fabricated data.',
-    lastAccomplishment: 'Replaced the static Trait Explorer card with explicit genus/species retrieval, source receipts, distinct missing-data states and stale-response isolation.',
-    lastUpdated: '2026-09-06T00:00:00.000Z',
+    prs: ['#843'],
+    ownerActions: [
+      'Access-policy decision (owner): the backend mounts /api/research/traits behind verify_owner_or_api_key, so a signed-in member is answered 401 (the state the #843 spec asserts). Decide whether members get a bounded read path; the frontend must not work around the gate.',
+      'Deployed pass: open /research on the deployed release against the deployed backend with canonical persisted trait evidence and record what renders (deployedOperational unevaluated).',
+    ],
+    nextAction: 'Owner-gated: the access-policy decision and deployed pass named in ownerActions. The reference-backend browser pass is in (#843); the frontend reports missing/unavailable contracts without fabricated data.',
+    lastAccomplishment: '#843 drove the Trait Explorer in a real browser against captured backend bodies on the reference backend, including every fail-closed state.',
+    lastUpdated: RECON_0926_DATE,
     children: [],
   },
   {
@@ -1533,7 +1654,7 @@ const ecologicalRelationshipsDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Pollinator / mycorrhiza / ecological relationships',
   type: 'domain',
-  nextAction: 'Run a browser pass against deployed canonical records; retain explicit unavailable states when relationship tables are empty.',
+  nextAction: 'Run a browser pass against deployed canonical records for both relationship leaves; retain explicit unavailable states when relationship tables are empty or discovery is unavailable.',
 }, [
   branch({
     id: 'module-pollinator-mycorrhiza',
@@ -1572,6 +1693,38 @@ const ecologicalRelationshipsDomain = branch({
     nextAction: 'Verify both profiles in a deployed browser against canonical populated and empty relationship states; code, integration, and anti-fabrication sourcing are proven, but browser/deployment gates remain unevaluated.',
     lastAccomplishment: 'Verified canonical Supabase-backed relationship reads and added regression guards against fixture fallback while preserving honest empty states.',
     lastUpdated: '2026-09-08T00:00:00.000Z',
+      children: [],
+    },
+    // #841 (2026-09-26): a separate backend contract and consumer from the
+    // Supabase-backed profiles above, so it is its own leaf.
+    {
+      id: 'cap-relationship-interaction-discovery',
+      parentId: 'module-pollinator-mycorrhiza',
+      name: 'Relationship Explorer: review-bound GloBI interaction discovery with provenance',
+      type: 'capability',
+      status: 'PARTIAL',
+      threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'NOT_MET' },
+      lane: 'SCIENTIFIC_DATA_COMPLETION',
+      gateScores: {
+        architectureContracts: 1,
+        implementationPresent: 1,
+        integrationCanonicalBranch: 1,
+        scientificProvenanceSecurity: 1,
+        browserEndToEnd: null,
+        deployedOperational: null,
+      },
+      evidence: [
+        { kind: 'route', ref: '/relationship-explorer/:species' },
+        { kind: 'file', ref: 'src/pages/RelationshipExplorer.tsx', note: 'Mounts InteractionDiscoveryPanel for the routed species.' },
+        { kind: 'file', ref: 'src/components/interactions/InteractionDiscoveryPanel.tsx', note: 'Renders each GloBI candidate verbatim with provider, dataset version, study citation and UNVERIFIED evidence state; truncation is stated; an empty result reads as an ingestion gap, not an ecological finding.' },
+        { kind: 'file', ref: 'src/lib/interactionDiscovery.ts', note: 'Fail-closed client for the public GET /api/interactions/discovery (backend app/interaction_discovery/routes.py, mounted on backend main): ok / empty / unavailable / malformed; field allow-list drops locator, revision_id and any locality field; refuses an empty taxon; a body without review_bound / knowledge_graph_mutation guarantees is malformed, not empty.' },
+        { kind: 'test', ref: 'src/lib/interactionDiscovery.realBackendContract.test.ts', note: 'Pinned to __fixtures__/interactionDiscovery.realBackend.json, captured via FastAPI TestClient on app.main from backend main c346a7219; the ok shape is the backend\'s own test fixture records ingested through the real GloBI ingest path.' },
+        { kind: 'test', ref: 'src/components/interactions/InteractionDiscoveryPanel.test.tsx' },
+        { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#841', prState: 'merged', note: 'Corroboration only; merged as bec8b2e.' },
+      ],
+      prs: ['#841'],
+      nextAction: 'Executable: a reference-backend Playwright spec on /relationship-explorer/:species asserting the ok (with provenance and UNVERIFIED state), empty, unavailable and malformed panel states from the captured payloads. Owner-gated: a deployed pass against ingested GloBI records; promoting any candidate to a verified KG edge is human-review work, never automatic.',
+      lastUpdated: RECON_0926_DATE,
       children: [],
     },
   ]),
@@ -1829,15 +1982,17 @@ const judgingPracticeGate: CompletionNode = {
   parentId: 'module-education-show-core',
   name: 'Judging practice sheet (recovered from the retired FCOS judging app)',
   type: 'capability',
-  status: 'PARTIAL',
-  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'UNKNOWN' },
+  // Only the deployed gate remains, and it is owner-governed.
+  status: 'OWNER_ACTION',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'MET', productComplete: 'PARTIAL' },
   lane: 'PRODUCT_COMPLETION',
   gateScores: {
     architectureContracts: 1,
     implementationPresent: 1,
     integrationCanonicalBranch: 1,
     scientificProvenanceSecurity: 1,
-    browserEndToEnd: null,
+    // #845 (supersedes #810): production-bundle browser pass, not deployment.
+    browserEndToEnd: 1,
     deployedOperational: null,
   },
   evidence: [
@@ -1846,9 +2001,13 @@ const judgingPracticeGate: CompletionNode = {
     { kind: 'file', ref: 'src/lib/judgingPractice.ts' },
     { kind: 'test', ref: 'src/lib/judgingPractice.test.ts' },
     { kind: 'test', ref: 'src/pages/JudgingPractice.test.tsx' },
+    referenceBackendRun('e2e/judging-practice-journey.spec.ts', 5, 'Rubric provenance disclosed on the page as an unverified historical snapshot, all six AOS criteria rendered, the band withheld on an incomplete sheet, a complete sheet scored deterministically with the not-an-award statement, and switching organisation resets entries. The page is client-only; no backend datum is involved.'),
+    { kind: 'pr', ref: 'jsp1440/orchid-continuum-frontend#845', prState: 'merged', note: 'Corroboration only; merged as 464af79.' },
   ],
-  nextAction: 'Run a live browser pass confirming the rubric provenance disclosure and deterministic scoring render correctly end to end (4 of 6 gate categories confirmed this pass by reading source and tests).',
-  lastUpdated: AUDIT_242_DATE,
+  prs: ['#845'],
+  ownerActions: ['Deployed pass: open /education/judging-practice on the current Render release and confirm the rubric provenance disclosure and deterministic scoring render (deployedOperational unevaluated).'],
+  nextAction: 'Owner-gated: the deployed pass named in ownerActions. The production-bundle browser pass is in (#845).',
+  lastUpdated: RECON_0926_DATE,
   children: [],
 };
 
@@ -1938,7 +2097,7 @@ const educationShowManagementDomain = branch({
   parentId: 'portfolio-orchid-continuum',
   name: 'Calyx education & show-management surfaces',
   type: 'domain',
-  nextAction: 'Run the outstanding browser/e2e passes on the four real capabilities; the teacher dashboard remains owner/backend-blocked, not a frontend gap.',
+  nextAction: 'Judging practice has its browser pass (#845; deployed pass owner-gated). Run browser passes for the glossary hub, Orchids on Screen and the Scientific Method Lab; the teacher dashboard remains owner/backend-blocked, not a frontend gap.',
 }, [
   branch({
     id: 'module-education-show-core',
