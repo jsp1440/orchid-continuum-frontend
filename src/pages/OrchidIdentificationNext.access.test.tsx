@@ -2,8 +2,11 @@
 
 /**
  * J4 (Release 1): what the guided Matrix page shows when Matrix is refused or
- * unavailable. Matrix is owner-only on the backend today; this pins the copy,
- * not the access rule. Errors are produced by the real MatrixApiError class.
+ * unavailable. Owner decision (R1 J4): Matrix is open to signed-in members, so
+ * an anonymous refusal asks the visitor to sign in (without an AuthProvider the
+ * page offers no modal button), while owner-only refusals stay "owner access".
+ * This pins the copy, not the access rule. Errors are produced by the real
+ * MatrixApiError class.
  */
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -29,6 +32,7 @@ vi.mock("@/features/calyx-workspace/sessionContext", () => ({ recordCalyxSurface
 import {
   MatrixApiError,
   MATRIX_OWNER_ACCESS_MESSAGE,
+  MATRIX_SIGN_IN_MESSAGE,
   MATRIX_UNAVAILABLE_MESSAGE,
 } from "@/lib/matrixIdentification";
 import OrchidIdentificationNext from "./OrchidIdentificationNext";
@@ -61,6 +65,23 @@ function buttons(label: string): HTMLButtonElement[] {
 const statusMessage = () => container.querySelector('[data-testid="matrix-status-message"]')?.textContent ?? "";
 
 describe("guided Matrix access states", () => {
+  // Ported from #867 (34ad99ba "render member sign-in separately").
+  it("asks a signed-out visitor to sign in, separately from owner access, with no retry loop", async () => {
+    mocks.listMatrixRegistries.mockRejectedValue(
+      new MatrixApiError(MATRIX_SIGN_IN_MESSAGE, 401, "sign_in_required"),
+    );
+    act(() => root.render(<MemoryRouter><OrchidIdentificationNext /></MemoryRouter>));
+    await flush();
+
+    expect(statusMessage()).toBe("Sign in to use Matrix identification. It is available to signed-in members.");
+    expect(container.textContent).toContain("sign in");
+    expect(container.textContent).not.toMatch(/owner access/i);
+    expect(container.textContent).not.toMatch(/Matrix API \d{3}/);
+    // Retrying cannot create a member session, so none is offered.
+    expect(buttons("Try again")).toHaveLength(0);
+    expect(buttons("Begin guided identification")[0].disabled).toBe(true);
+  });
+
   it("says Matrix needs owner access when the registry is refused, with no raw status and no sign-in loop", async () => {
     mocks.listMatrixRegistries.mockRejectedValue(
       new MatrixApiError(MATRIX_OWNER_ACCESS_MESSAGE, 401, "owner_access_required"),

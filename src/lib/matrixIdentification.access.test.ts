@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// jsdom: a member session (and so a member token) only exists in a browser;
+// memberReadAuth returns no token when there is no window.
 /**
  * J4 (Release 1): a refused or failed Matrix request is said in plain words.
  *

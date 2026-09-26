@@ -1,6 +1,5 @@
 import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
 import { calyxRelativePath } from "@/lib/calyxOrigin";
-import { supabase } from "@/lib/supabase";
 
 /**
  * Member access to the Calyx product endpoints: which requests may carry a
@@ -162,9 +161,38 @@ export function isMemberScopedRequest(
   return memberScopeOf(url, method, calyxBase) !== null;
 }
 
+type SupabaseModule = typeof import("@/lib/supabase");
+let supabaseLoaded: SupabaseModule | null = null;
+let supabaseLoading: Promise<SupabaseModule> | null = null;
+function loadSupabase(): Promise<SupabaseModule> {
+  // One import per page; a failed import is retried on the next request.
+  supabaseLoading ??= import("@/lib/supabase").then(
+    (module) => (supabaseLoaded = module),
+    (error) => {
+      supabaseLoading = null;
+      throw error;
+    },
+  );
+  return supabaseLoading;
+}
+// In a browser, start loading at module load exactly as the former static
+// import did (AuthContext imports the same module statically, so this adds no
+// chunk or request), so the first member request keeps its timing. Node never
+// starts it.
+if (typeof window !== "undefined") void loadSupabase().catch(() => undefined);
+
 /** The current member access token, or null when signed out / unavailable. */
 async function currentMemberAccessToken(): Promise<string | null> {
+  // A member session only exists in a browser (supabase-js keeps it in
+  // localStorage). Node-side validation imports this module through the
+  // Matrix / Research clients; it must not construct the Supabase client
+  // (whose Realtime transport needs a native WebSocket) just by importing
+  // them, nor when it decides there is no member session. Hence the browser
+  // check and the lazy import — adopted from #867 (cfe2a7bf / ad63bb78),
+  // moved here so every importer of this helper is covered, not only Matrix.
+  if (typeof window === "undefined") return null;
   try {
+    const { supabase } = supabaseLoaded ?? await loadSupabase();
     const { data } = await supabase.auth.getSession();
     const token = data.session?.access_token;
     return typeof token === "string" && token ? token : null;

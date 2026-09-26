@@ -1,3 +1,6 @@
+// @vitest-environment jsdom
+// jsdom: a member session (and so a member token) only exists in a browser;
+// memberReadAuth returns no token when there is no window.
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const identity = vi.hoisted(() => ({ token: null as string | null }));
