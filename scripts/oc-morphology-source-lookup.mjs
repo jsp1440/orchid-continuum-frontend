@@ -27,7 +27,8 @@
  *      never put in the issue comment; the report keeps it only when it passes a
  *      conservative bibliographic screen (a 4-digit year, no elevation,
  *      distance, collecting, site-word, locality or coordinate marker,
- *      <= 300 chars; a DOI token is set aside as bibliographic).
+ *      <= 300 chars; only a DOI's `10.NNNN/` prefix is set aside, its suffix
+ *      is still screened).
  *   5. Writes `.oc-evidence/morphology-source-report-<issue>.json`
  *      (`oc.morphology-source-report.v1`) and posts one idempotent,
  *      digest-marked issue comment.
@@ -105,6 +106,29 @@ const TERM_SIGNALS = Object.freeze({
 // over-inclusive: a withheld citation costs a reviewer one click on the GBIF
 // URL; a published locality cannot be taken back.
 const CITATION_YEAR = /\b(?:1[5-9]|20)\d{2}\b/;
+
+/**
+ * A marker word that is also a common author surname (Long, Lat, Miles,
+ * Roads). Lower-case and all-caps forms always count as a marker. The
+ * capitalised form counts too, except in the one shape that is an author
+ * citation: "Surname, I." (comma, capital initial, full stop), e.g.
+ * "Long, D.G. (1984)" or "Miles, R.". The exemption is refused when the
+ * "initial" is a compass letter (N., S., E., W.: "Road, N. of Hakgala",
+ * "Lat, N. 18"), so an author initialled N/S/E/W is withheld too, and when a
+ * number follows the initial ("Long, D. 98"). So "Mae Sa Road, 1980",
+ * "Long. 77" or "Long D.G." stay withheld: over-withholding is acceptable, a
+ * leaked locality is not. Other capitalised site words ("Near", "River",
+ * "Ridge", "Hill") stay case-insensitive markers on purpose, although some
+ * are surnames too, because they name sites far more often in locality prose.
+ */
+const surnameSafeMarker = words => {
+  const lower = words.join('|');
+  const title = words.map(w => w[0].toUpperCase() + w.slice(1)).join('|');
+  const upper = words.map(w => w.toUpperCase()).join('|');
+  const authorInitial = ',\\s?(?![NSEW]\\.)[A-Z]\\.(?!\\s*\\d)';
+  return new RegExp(`\\b(?:${lower}|${upper})\\b|\\b(?:${title})\\b(?!${authorInitial})`);
+};
+
 export const CITATION_LOCALITY_MARKERS = Object.freeze([
   /\d+\s?m\b/i,                     // elevation / distance in metres
   /\d+\s?(?:ft|feet)\b/i,
@@ -116,18 +140,25 @@ export const CITATION_LOCALITY_MARKERS = Object.freeze([
   /[°º]|\bdeg(?:rees?)?\b/i,          // degrees
   /\d\s*['′’"″]/,                    // minutes / seconds
   /\b\d{1,3}(?:[\s.:]\d{1,2}){0,2}\s*[NSEW]\b/, // 12 30 N, 77.15 W
-  /-?\b\d{1,3}\.\d{3,}\b/,             // decimal coordinates
-  /\bmi(?:les?)?\b/i,                  // distance in miles
-  /\b[NSEW]\s+of\b/,                   // "15 mi E of ...", "S of ..."
-  /\blat\b|\blong?\b/i,                // lat / lon / long
-  /\b(?:ridges?|trails?|roads?|villages?|summits?|streams?|rivers?|valleys?|mountains?|hills?)\b/i,
+  /-?\b\d{1,3}\.\d{3,}(?:[NSEW]\b|\b)/, // decimal coordinates, also "12.3456N"
+  surnameSafeMarker(['mi', 'mile', 'miles']), // distance in miles (not "Miles, R.")
+  /\b[NSEW]\.?\s+(?:side\s+)?of\b/,     // "15 mi E of ...", "S. of ...", "W. side of ..."
+  surnameSafeMarker(['lat', 'lon', 'long']),  // lat / lon / long (not "Long, D.G.")
+  surnameSafeMarker(['road', 'roads']),       // not "Roads, K."
+  /\b(?:ridges?|trails?|villages?|summits?|streams?|rivers?|valleys?|mountains?|hills?)\b/i,
 ]);
 /**
- * A DOI is bibliographic, and its digits ("10.1007/...") would otherwise trip
- * the decimal-coordinate marker. Only the DOI token itself is set aside; the
- * rest of the citation is still screened, and the year must appear outside it.
+ * A DOI is bibliographic, and its registrant prefix ("10.1007/") would
+ * otherwise trip the decimal-coordinate marker. Only that prefix is set aside
+ * for the locality screen: the suffix is screened like any other text, so
+ * coordinates or site words glued onto a DOI ("10.1007/abc,12.3456,-77.1234")
+ * are still caught. Real suffixes (s12225-011-9281-2, zenodo.123456,
+ * phytotaxa.100.1.1) carry no marker. Underscores are read as spaces, so
+ * "near_the_river" is screened as words. The year check, in contrast, drops
+ * the whole DOI token: a year must appear outside it.
  */
-const DOI = /\b10\.\d{4,9}\/\S+/g;
+const DOI_PREFIX = /\b10\.\d{4,9}\//g;
+const DOI_TOKEN = /\b10\.\d{4,9}\/\S+/g;
 
 export function descriptionsUrl(key) {
   return `${GBIF_BASE}/${key}/descriptions?limit=${DESCRIPTION_LIMIT}`;
@@ -178,11 +209,11 @@ export function citationFor(source) {
   const text = str(source);
   if (!text) return { citation: null, citation_withheld_reason: 'no_citation_supplied' };
   if (text.length > MAX_CITATION_CHARS) return { citation: null, citation_withheld_reason: 'longer_than_300_chars' };
-  const screened = text.replace(DOI, ' ');
+  const screened = text.replace(DOI_PREFIX, ' ').replace(/_/g, ' ');
   if (CITATION_LOCALITY_MARKERS.some(re => re.test(screened))) {
     return { citation: null, citation_withheld_reason: 'possible_locality_or_collecting_marker' };
   }
-  if (!CITATION_YEAR.test(screened)) return { citation: null, citation_withheld_reason: 'no_publication_year' };
+  if (!CITATION_YEAR.test(text.replace(DOI_TOKEN, ' '))) return { citation: null, citation_withheld_reason: 'no_publication_year' };
   return { citation: text, citation_withheld_reason: null };
 }
 

@@ -186,6 +186,82 @@ describe('description type classification', () => {
   });
 });
 
+describe('citation screen follow-ups: DOI suffixes and author surnames', () => {
+  const LOCALITY = 'possible_locality_or_collecting_marker';
+  // Synthetic citation strings; the DOI suffix shapes are real publisher patterns.
+  it.each([
+    'Fixture, A. (2011). A fixture revision. Kew Bull. 66: 1-10. https://doi.org/10.1007/s12225-011-9281-2',
+    'Fixture, A. (2015). Fixture dataset. doi:10.5281/zenodo.123456',
+    'Fixture, A. (2013). A fixture species. Phytotaxa 100: 1-5. doi:10.11646/phytotaxa.100.1.1',
+  ])('keeps a real-shaped DOI suffix: %s', text => {
+    expect(citationFor(text)).toEqual({ citation: text, citation_withheld_reason: null });
+  });
+
+  it.each([
+    // Coordinates glued onto a DOI used to be swallowed by the \S+ token.
+    'Fixture, A. (2012). doi:10.1007/abc,12.3456,-77.1234',
+    'Fixture, A. (2012). doi:10.1234/near_the_river_1200m',
+    // Underscores are read as spaces, so a site word inside a suffix is seen.
+    'Fixture, A. (2012). doi:10.1234/fixture_near_site',
+    'Fixture, A. (2012). doi:10.1234/12.3456N',
+    // Found while adding the case above: a hemisphere letter glued to decimal
+    // degrees was missed everywhere, not only inside a DOI.
+    'Fixture Bull. 1999, 12.3456N 77.1234E',
+  ])('screens the DOI suffix and withholds: %s', text => {
+    expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+
+  it('never embeds the report JSON in the morphology comment (citations stay out of comments)', () => {
+    const source = readFileSync(new URL('../scripts/oc-morphology-source-lookup.mjs', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/embeddedReportBlock|<details>/);
+  });
+
+  it('still requires the year outside the whole DOI token', () => {
+    expect(citationFor('Fixture Bull. doi:10.1111/j.1756-1051.2009.00001.x'))
+      .toEqual({ citation: null, citation_withheld_reason: 'no_publication_year' });
+  });
+
+  it.each([
+    'Long, D.G. (1984). Fixture orchids. Fixture Bull. 3: 1-456.',
+    'Lat, A. (2001). Fixture revision. Fixture Bull. 5: 1-9.',
+    'Miles, R. (1999). Fixture notes. Fixture Bull. 54: 1-2.',
+    'Roads, K. (1999). Fixture notes. Fixture Bull. 54: 1-2.',
+    'Fixture, A., Miles, R. & Roads, K. (1999). Fixture notes. Fixture Bull. 54: 1-2.',
+  ])('keeps an author surname that is also a marker word: %s', text => {
+    expect(citationFor(text)).toEqual({ citation: text, citation_withheld_reason: null });
+  });
+
+  it.each([
+    'Fixture Bull. 1999, lat 12 lon 77',
+    'Fixture Bull. 1999, long 77 E',
+    'Fixture Bull. 1999, LAT 12',
+    'Fixture Bull. 1999, Long. 77',
+    'Fixture Bull. 1999, 15 miles out',
+    'Fixture Bull. 1999, 15 Miles out',
+    'Fixture Bull. 1999, along the road',
+    'Fixture Bull. 1999, Mae Sa Road, 1980',
+    // Over-withholding is accepted: a capitalised site word stays a marker.
+    'Fixture Bull. 1999, Chindwin River basin',
+    'Fixture Bull. 1999, Near Fixture Town',
+    'Long D.G. (1984). No comma after the surname, so it is not the author shape.',
+    // Independent check of #857: a compass letter is not an author initial.
+    'Kandy-Nuwara Eliya Road, N. of Hakgala, 1920',
+    '3 Mile, E. of Kandy (1920)',
+    'Smith 1984, 5 Miles, N. of Kandy',
+    'Smith (1984) Road, S. of Bangkok',
+    'Smith (1984) Road, W. side of Doi Pui',
+    'Smith 1920, Long, E. 98.5',
+    'Smith (1984) Lat, N. 18',
+    'Smith 1984 S. of Chiang Mai',
+    // A number after the initial is not the author shape either.
+    'Smith 1984, Long, D. 98',
+    // Over-withholding accepted: an author initialled N/S/E/W is not exempt.
+    'Long, N. (1984). Fixture notes. Fixture Bull. 3: 1-2.',
+  ])('still withholds a marker word used as locality: %s', text => {
+    expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+});
+
 describe('a real mission against GBIF description records', () => {
   it('lists only morphology sources, as metadata, and never reproduces text or locality', async () => {
     const net = network({ issueBody: issue825.body });

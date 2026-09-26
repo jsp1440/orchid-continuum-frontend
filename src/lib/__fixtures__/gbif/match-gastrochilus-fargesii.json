@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/match?name=Gastrochilus%20fargesii&strict=true",
+    "captured_at": "2026-09-26",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0dd8b-489f-75ec-adb9-db8132368235",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"usageKey\":5310679,\"scientificName\":\"Gastrochilus fargesii (Kraenzl.) Schltr.\",\"canonicalName\":\"Gastrochilus fargesii\",\"rank\":\"SPECIES\",\"status\":\"ACCEPTED\",\"confidence\":98,\"matchType\":\"EXACT\",\"kingdom\":\"Plantae\",\"phylum\":\"Tracheophyta\",\"order\":\"Asparagales\",\"family\":\"Orchidaceae\",\"genus\":\"Gastrochilus\",\"species\":\"Gastrochilus fargesii\",\"kingdomKey\":6,\"phylumKey\":7707728,\"classKey\":196,\"orderKey\":1169,\"familyKey\":7689,\"genusKey\":2804118,\"speciesKey\":5310679,\"class\":\"Liliopsida\"}"
+}
