@@ -1,5 +1,4 @@
 import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
-import { withMatrixMemberAuth } from "@/lib/memberReadAuth";
 
 export type Certainty = "certain" | "probable" | "uncertain" | "unknown";
 export type ExplanationAudience = "beginner" | "intermediate" | "expert";
@@ -267,7 +266,12 @@ async function request<T>(
   if (!headers.has("Accept")) headers.set("Accept", "application/json");
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   let requestInit: RequestInit = { ...init, credentials: "include", headers };
-  if (memberScoped) requestInit = await withMatrixMemberAuth(url, requestInit);
+  if (memberScoped && typeof window !== "undefined") {
+    // Browser-only lazy boundary: Node validation must not initialize the
+    // Supabase realtime client merely by importing the Matrix model.
+    const { withMatrixMemberAuth } = await import("@/lib/memberReadAuth");
+    requestInit = await withMatrixMemberAuth(url, requestInit);
+  }
 
   let response: Response;
   try {
