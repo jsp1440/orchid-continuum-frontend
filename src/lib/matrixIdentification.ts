@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
+import { withMatrixMemberAuth } from "@/lib/memberReadAuth";
 
 export type Certainty = "certain" | "probable" | "uncertain" | "unknown";
 export type ExplanationAudience = "beginner" | "intermediate" | "expert";
@@ -202,36 +203,40 @@ export type VisionSuggestionList = {
 
 /**
  * Why a Matrix request could not be answered, in terms a visitor can act on.
- *
- * Matrix identification is owner-only on the backend today (an owner decision
- * on member/public access is pending), and the frontend never sends a member
- * token there. So a 403, or a 401 without an owner session, means "this needs
- * owner access" — not a broken login, and never a "sign in again" prompt that
- * a member could loop on. Only a 401 while an owner session is held means the
- * owner session itself was not accepted. A 5xx or a request that never got an
- * answer is an outage the visitor can retry.
+ * The core registry/session routes accept a signed-in member bearer; Vision
+ * and administrative routes remain owner-only.
  */
-export type MatrixAccessState = "owner_access_required" | "owner_session_unverified" | "unavailable";
+export type MatrixAccessState =
+  | "member_session_required"
+  | "owner_access_required"
+  | "owner_session_unverified"
+  | "unavailable";
 
-export const MATRIX_OWNER_ACCESS_MESSAGE = "Matrix identification currently requires owner access.";
+export const MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE = "Sign in to use Matrix identification.";
+export const MATRIX_OWNER_ACCESS_MESSAGE = "This Matrix capability requires owner access.";
 export const MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE =
   "Your owner session could not be verified. Sign in again as the owner to use Matrix identification.";
 export const MATRIX_UNAVAILABLE_MESSAGE = "Matrix identification is temporarily unavailable. Try again.";
 
 const MATRIX_ACCESS_MESSAGE: Record<MatrixAccessState, string> = {
+  member_session_required: MATRIX_MEMBER_SESSION_REQUIRED_MESSAGE,
   owner_access_required: MATRIX_OWNER_ACCESS_MESSAGE,
   owner_session_unverified: MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE,
   unavailable: MATRIX_UNAVAILABLE_MESSAGE,
 };
 
-/** Classify a failed Matrix response; null for statuses with their own meaning (400/404/409/422…). */
+/** Classify a failed Matrix response; owner-only routes never create a member sign-in loop. */
 export function matrixAccessState(
   status: number | null,
   ownerSession: boolean = hasOwnerBearerSession(),
+  memberScoped: boolean = true,
 ): MatrixAccessState | null {
   if (status === null || status === 0 || status >= 500) return "unavailable";
   if (status === 403) return "owner_access_required";
-  if (status === 401) return ownerSession ? "owner_session_unverified" : "owner_access_required";
+  if (status === 401) {
+    if (ownerSession) return "owner_session_unverified";
+    return memberScoped ? "member_session_required" : "owner_access_required";
+  }
   return null;
 }
 
@@ -251,31 +256,34 @@ export function matrixErrorAccess(error: unknown): MatrixAccessState | null {
   return error instanceof MatrixApiError ? error.access : null;
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  options: { memberScoped?: boolean } = {},
+): Promise<T> {
+  const memberScoped = options.memberScoped ?? true;
+  const url = `${CALYX_BACKEND_BASE_URL}${path}`;
+  const headers = new Headers(init.headers);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json");
+  if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  let requestInit: RequestInit = { ...init, credentials: "include", headers };
+  if (memberScoped) requestInit = await withMatrixMemberAuth(url, requestInit);
+
   let response: Response;
   try {
-    response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
-      credentials: "include",
-      headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers ?? {}) },
-      ...init,
-    });
+    response = await fetch(url, requestInit);
   } catch {
     throw new MatrixApiError(MATRIX_UNAVAILABLE_MESSAGE, null, "unavailable");
   }
   const payload = await response.json().catch(() => null) as T | { detail?: unknown } | null;
   if (!response.ok) {
-    const access = matrixAccessState(response.status);
-    // Refusals and outages are said in plain words; the raw status and body
-    // are not shown to the visitor.
+    const access = matrixAccessState(response.status, hasOwnerBearerSession(), memberScoped);
     if (access) throw new MatrixApiError(MATRIX_ACCESS_MESSAGE[access], response.status, access);
     const detail = payload && typeof payload === "object" && "detail" in payload
       ? JSON.stringify(payload.detail)
       : response.statusText;
     throw new MatrixApiError(`Matrix API ${response.status}: ${detail}`, response.status, null);
   }
-  // A 2xx whose body is not JSON (a proxy page, a truncated response) is not
-  // an answer. Returning null here let the guided page report "Session ready"
-  // with no session behind it.
   if (payload === null) throw new Error(`Matrix API ${response.status}: response was not JSON`);
   return payload as T;
 }
@@ -371,7 +379,7 @@ export async function explainIdentificationSession(
 }
 
 export async function getVisionCapabilityStatus(): Promise<VisionCapabilityStatus> {
-  return request<VisionCapabilityStatus>("/api/vision-lexicon/status");
+  return request<VisionCapabilityStatus>("/api/vision-lexicon/status", {}, { memberScoped: false });
 }
 
 export async function discoverVisionAnalysesForImage(
@@ -380,6 +388,8 @@ export async function discoverVisionAnalysesForImage(
 ): Promise<VisionAnalysisDiscovery> {
   return request<VisionAnalysisDiscovery>(
     `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/images/${encodeURIComponent(imageId)}/analyses`,
+    {},
+    { memberScoped: false },
   );
 }
 
@@ -390,12 +400,15 @@ export async function attachVisionAnalysis(
   return request<VisionSuggestionList & { added: number; analysis_id: string; rule?: string }>(
     `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/analyses/${encodeURIComponent(analysisId)}/suggestions`,
     { method: "POST", body: JSON.stringify({}) },
+    { memberScoped: false },
   );
 }
 
 export async function listVisionSuggestions(sessionId: string): Promise<VisionSuggestionList> {
   return request<VisionSuggestionList>(
     `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions`,
+    {},
+    { memberScoped: false },
   );
 }
 
@@ -423,6 +436,8 @@ export async function fetchVisionSuggestionRegion(
 ): Promise<VisionSuggestionRegion> {
   return request<VisionSuggestionRegion>(
     `/api/matrix-identification/sessions/${encodeURIComponent(sessionId)}/vision/suggestions/${encodeURIComponent(suggestionId)}/region`,
+    {},
+    { memberScoped: false },
   );
 }
 
@@ -443,6 +458,7 @@ export async function reviewVisionSuggestion(
         comments: options.comments,
       }),
     },
+    { memberScoped: false },
   );
 }
 
