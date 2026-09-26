@@ -10,10 +10,12 @@ export { MAX_ACTIVE_LANES };
 export type Issue = { number: number; state: string; title: string; body: string | null; labels: Array<{ name: string }> };
 export type Pull = { number: number; state: string; body: string | null; head: { ref: string; sha: string } };
 export type Snapshot = { issues: Issue[]; prs: Pull[]; integrationSha: string; implementationSha: string; material: Record<string, string> };
+export type ExecutionLeaseState = 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done';
+export type HistoricalProviderFreeState = 'provider-free-done' | 'provider-free-failed';
 export type Lease = {
   id: string; issue: number; nodeId: string; fingerprint: string; waveHash: string;
   runId: string; runAttempt: string; expiresAt: string; reservedUsd: number;
-  state: 'reserved' | 'running' | 'validating' | 'blocked' | 'owner-gate' | 'runtime-backoff' | 'done';
+  state: ExecutionLeaseState | HistoricalProviderFreeState;
 };
 export type Ledger = { schema: 1; programStartedAt: string; programSpent: number; dailySpent: Record<string, number>; leases: Lease[] };
 export interface LeaseStore {
@@ -115,9 +117,17 @@ export function validateLedger(ledger: Ledger) {
   if (ledger.schema !== 1 || !Number.isFinite(Date.parse(ledger.programStartedAt)) ||
       !Number.isFinite(ledger.programSpent) || ledger.programSpent < 0 || !Array.isArray(ledger.leases) ||
       !ledger.dailySpent || Object.values(ledger.dailySpent).some(n => !Number.isFinite(n) || n < 0)) throw new Error('Invalid durable ledger');
-  if (ledger.leases.some(l => !Number.isSafeInteger(l.issue) || l.issue <= 0 || !Number.isFinite(Date.parse(l.expiresAt)) ||
-      !Number.isFinite(l.reservedUsd) || l.reservedUsd <= 0 ||
-      !['reserved','running','validating','blocked','owner-gate','runtime-backoff','done'].includes(l.state))) throw new Error('Malformed lease');
+  const historicalProviderFree = new Set<Lease['state']>(['provider-free-done', 'provider-free-failed']);
+  const validStates = new Set<Lease['state']>([
+    'reserved', 'running', 'validating', 'blocked', 'owner-gate', 'runtime-backoff', 'done',
+    ...historicalProviderFree,
+  ]);
+  if (ledger.leases.some(l => {
+    const providerFree = historicalProviderFree.has(l.state);
+    return !Number.isSafeInteger(l.issue) || l.issue <= 0 || !Number.isFinite(Date.parse(l.expiresAt)) ||
+      !Number.isFinite(l.reservedUsd) || !validStates.has(l.state) ||
+      (providerFree ? l.reservedUsd !== 0 : l.reservedUsd <= 0);
+  })) throw new Error('Malformed lease');
   const active = ledger.leases.filter(isActive);
   if (new Set(active.map(l => l.issue)).size !== active.length || new Set(active.map(l => l.nodeId)).size !== active.length) throw new Error('Duplicate active leases in ledger');
 }
@@ -154,7 +164,7 @@ export async function claimLease(store: LeaseStore, plan: Plan, snapshot: Snapsh
   }
   throw new Error('Ledger contention; dispatch refused');
 }
-export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state']) {
+export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: ExecutionLeaseState) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const { version, ledger } = await store.read();
     validateLedger(ledger);
