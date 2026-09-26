@@ -21,9 +21,12 @@
  *      fixed morphology allowlist. Every other record (distribution, habitat,
  *      ecology, materials examined, ...) is counted, never described.
  *   4. Never reproduces description text. For a kept record it records the
- *      type, language, licence, text length, the source citation (withheld if
- *      it looks like a coordinate) and three keyword-presence booleans. The
- *      text itself is read in memory only to compute those, then discarded.
+ *      type, language, licence, text length, dataset key and three
+ *      keyword-presence booleans. The text itself is read in memory only to
+ *      compute those, then discarded. The publisher-supplied source citation is
+ *      never put in the issue comment; the report keeps it only when it passes a
+ *      conservative bibliographic screen (a 4-digit year, no elevation,
+ *      distance, collecting, locality or coordinate marker, <= 300 chars).
  *   5. Writes `.oc-evidence/morphology-source-report-<issue>.json`
  *      (`oc.morphology-source-report.v1`) and posts one idempotent,
  *      digest-marked issue comment.
@@ -66,6 +69,9 @@ export const MAX_SOURCE_USAGES = 5;
 /** match + descriptions + source usages. */
 export const MAX_GBIF_GETS = 2 + MAX_SOURCE_USAGES;
 export const MAX_CITATION_CHARS = 300;
+export const MAX_LICENSE_CHARS = 200;
+/** ISO 639 / BCP 47-ish language code, bounded. Anything else is dropped. */
+const LANGUAGE = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})?$/;
 
 /**
  * Publisher-assigned description types (GBIF Description extension, lower-cased,
@@ -93,9 +99,24 @@ const TERM_SIGNALS = Object.freeze({
   diagnostic_comparison: /\b(?:similar to|differs? from|distinguished (?:from|by)|resembl(?:es?|ing)|allied to|close to)\b/i,
 });
 
-// Same screen as the backend dossier (app/species_dossier/repository.py): a
-// citation that contains coordinate-looking text is withheld.
-const COORDINATE = /-?\b\d{1,3}\.\d{3,}\b|\d{1,3}\s*°\s*\d{0,2}\s*['′]?\s*\d{0,2}(?:\.\d+)?\s*["″]?\s*[NSEW]\b/;
+// A citation is published to the report only when it looks bibliographic and
+// carries no marker that could place a collecting site. Deliberately
+// over-inclusive: a withheld citation costs a reviewer one click on the GBIF
+// URL; a published locality cannot be taken back.
+const CITATION_YEAR = /\b(?:1[5-9]|20)\d{2}\b/;
+export const CITATION_LOCALITY_MARKERS = Object.freeze([
+  /\d+\s?m\b/i,                     // elevation / distance in metres
+  /\d+\s?(?:ft|feet)\b/i,
+  /\balt\.|\baltitude\b|\belev/i,
+  /\bkm\b/i,
+  /\bnear\b/i,
+  /\bcoll\.|\bleg\.|\bcollect(?:ed|or|ing)\b|\bholotype\b|\bspecimens?\b/i,
+  /\btype locality\b|\blocality\b|\blocalities\b/i,
+  /[°º]|\bdeg(?:rees?)?\b/i,          // degrees
+  /\d\s*['′’"″]/,                    // minutes / seconds
+  /\b\d{1,3}(?:[\s.:]\d{1,2}){0,2}\s*[NSEW]\b/, // 12 30 N, 77.15 W
+  /-?\b\d{1,3}\.\d{3,}\b/,             // decimal coordinates
+]);
 
 export function descriptionsUrl(key) {
   return `${GBIF_BASE}/${key}/descriptions?limit=${DESCRIPTION_LIMIT}`;
@@ -141,15 +162,26 @@ const str = value => (typeof value === 'string' && value.trim() ? value.trim() :
 const int = value => (Number.isSafeInteger(value) ? value : null);
 const plain = html => String(html ?? '').replace(/<[^>]*>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
 
+/** { citation, citation_withheld_reason }: a citation only if it passes the screen. */
 export function citationFor(source) {
   const text = str(source);
-  if (!text) return { citation: null, citation_withheld: null };
-  if (COORDINATE.test(text)) return { citation: null, citation_withheld: 'coordinate_like_text' };
-  return {
-    citation: text.length > MAX_CITATION_CHARS ? `${text.slice(0, MAX_CITATION_CHARS)} [...]` : text,
-    citation_withheld: null,
-  };
+  if (!text) return { citation: null, citation_withheld_reason: 'no_citation_supplied' };
+  if (text.length > MAX_CITATION_CHARS) return { citation: null, citation_withheld_reason: 'longer_than_300_chars' };
+  if (CITATION_LOCALITY_MARKERS.some(re => re.test(text))) {
+    return { citation: null, citation_withheld_reason: 'possible_locality_or_collecting_marker' };
+  }
+  if (!CITATION_YEAR.test(text)) return { citation: null, citation_withheld_reason: 'no_publication_year' };
+  return { citation: text, citation_withheld_reason: null };
 }
+
+const languageOf = value => {
+  const text = str(value);
+  return text && LANGUAGE.test(text) ? text : null;
+};
+const licenseOf = value => {
+  const text = str(value);
+  return text && text.length <= MAX_LICENSE_CHARS && !/[\u0000-\u001f\u007f]/.test(text) ? text : null;
+};
 
 /** Reduce one kept description record to metadata. The text is not returned. */
 export function sourceRecord(row) {
@@ -159,8 +191,8 @@ export function sourceRecord(row) {
     description_key: int(row.key),
     type: str(row.type),
     scope: classifyType(row.type),
-    language: str(row.language),
-    license: str(row.license),
+    language: languageOf(row.language),
+    license: licenseOf(row.license),
     ...citationFor(row.source),
     source_taxon_key: int(row.sourceTaxonKey),
     dataset_key: null,
@@ -260,7 +292,10 @@ function uncertaintyFor(lookup, outcome) {
   if (lookup.records.some(r => r.scope === 'general_mixed_possible')) {
     lines.push('A "general" description may mix morphology with distribution or habitat content; its text was not reproduced.');
   }
-  if (lookup.records.some(r => !r.license)) lines.push('At least one source record states no licence; any reuse of its text needs a rights review.');
+  if (lookup.records.some(r => !r.license)) lines.push('At least one source record states no usable licence; any reuse of its text needs a rights review.');
+  if (lookup.records.some(r => r.citation_withheld_reason)) {
+    lines.push('At least one publisher-supplied citation was withheld by the conservative bibliographic screen; the GBIF URL identifies the source.');
+  }
   lines.push(
     'Description types are assigned by each publishing checklist, not verified by Orchid Continuum.',
     'Term signals record only that a word appears in the source text (capsule/fruit, scent/fragrance, a comparison phrase); they are not verified morphological statements.',
@@ -324,10 +359,10 @@ export function renderComment(report) {
     ...(report.morphology_sources.length ? ['**Sources holding morphology descriptions** (text not reproduced)'] : []),
     ...report.morphology_sources.slice(0, 10).map(r =>
       `- ${safe(r.type)} (${safe(r.scope)}), ${safe(r.language)}, licence ${safe(r.license ?? 'unspecified')}, ${r.text_length} chars; ` +
-      `source ${r.citation_withheld ? `withheld (${safe(r.citation_withheld)})` : safe(r.citation)}; ` +
       `dataset ${safe(r.dataset_key)}, ${safe(r.gbif_url)}; ` +
       `mentions capsule/fruit ${yesNo(r.term_signals.fruit_capsule)}, scent ${yesNo(r.term_signals.scent)}, comparison ${yesNo(r.term_signals.diagnostic_comparison)}`),
     ...(report.morphology_sources.length > 10 ? [`- ${report.morphology_sources.length - 10} more in the full report`] : []),
+    ...(report.morphology_sources.length ? ['- citation text is in the report artifact for reviewers'] : []),
     '',
     '**Uncertainty**',
     ...report.uncertainty.map(line => `- ${safe(line)}`),
@@ -335,7 +370,8 @@ export function renderComment(report) {
     '**Sources**',
     ...report.sources.map(s => `- ${s.url} (retrieved ${s.retrieved_at}, HTTP ${s.http_status})`),
     '',
-    'No knowledge-graph, taxonomy, database, or publication change was made. No description text or locality was reproduced. ' +
+    'No knowledge-graph, taxonomy, database, or publication change was made. ' +
+      'No description text was reproduced; source citations are publisher-supplied, withheld from this comment, and screened conservatively in the report. ' +
       `Provider calls: 0. Full report: \`morphology-source-report-${report.issue}.json\` in the lane evidence artifact.`,
   ];
   return lines.join('\n');

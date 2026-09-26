@@ -65,12 +65,17 @@ const NOW = '2026-09-26T08:00:00.000Z';
 const REPO = 'jsp1440/orchid-continuum-frontend';
 const API = 'https://api.github.com';
 const issue825 = morphologyIssues.issues.find(i => i.number === 825)!;
+const BOT = 'github-actions[bot]';
+/** The reserve bot's authorship and label, as the dispatch snapshot records them. */
+const bot = { author: BOT, labels: [{ name: 'oc-discovered' }] };
+const botIssue = (i: { number: number; body: string; labels: string[] }) =>
+  ({ ...i, author: BOT, labels: i.labels.map(name => ({ name })) });
 const withName = (name: string) => issue825.body.replaceAll('Gastrochilus calceolaris', name);
 
 type Call = { url: string; method: string; body?: string };
 function network(opts: {
   issueBody: string;
-  existingComments?: Array<{ body: string }>;
+  existingComments?: Array<{ body: string; user?: { login: string } }>;
   gbifOverride?: (url: string) => Response | undefined;
 }) {
   const calls: Call[] = [];
@@ -80,10 +85,10 @@ function network(opts: {
   const fetchImpl = async (url: string, init: { method?: string; body?: string } = {}) => {
     const method = init.method ?? 'GET';
     calls.push({ url, method, body: init.body });
-    if (url === `${API}/repos/${REPO}/issues/825`) return json({ number: 825, body: opts.issueBody });
+    if (url === `${API}/repos/${REPO}/issues/825`) return json({ number: 825, body: opts.issueBody, user: { login: BOT } });
     if (url.startsWith(`${API}/repos/${REPO}/issues/825/comments`)) {
       if (method === 'POST') {
-        comments.push({ body: JSON.parse(init.body!).body });
+        comments.push({ body: JSON.parse(init.body!).body, user: { login: BOT } });
         return json({ id: comments.length }, 201);
       }
       return json(comments);
@@ -106,8 +111,8 @@ function envFor() {
   return { ISSUE_NUMBER: '825', REPO, GH_TOKEN: 'fixture-token', OC_EVIDENCE_DIR: dir, GITHUB_API_URL: API };
 }
 const quiet = () => {};
-const run = (net: ReturnType<typeof network>, env = envFor()) =>
-  runMorphologySourceLookup({ env, fetchImpl: net.fetchImpl as unknown as typeof fetch, now: () => NOW, log: quiet });
+const run = (net: ReturnType<typeof network>, env = envFor(), log: (line: string) => void = quiet) =>
+  runMorphologySourceLookup({ env, fetchImpl: net.fetchImpl as unknown as typeof fetch, now: () => NOW, log });
 const readReport = (env: ReturnType<typeof envFor>) =>
   JSON.parse(readFileSync(join(env.OC_EVIDENCE_DIR, 'morphology-source-report-825.json'), 'utf8'));
 
@@ -142,9 +147,26 @@ describe('description type classification', () => {
     expect(classifyType(type)).toBe(scope);
   });
 
-  it('withholds a citation carrying coordinate-looking text', () => {
-    expect(citationFor('Flora, collected 25.12345 N')).toEqual({ citation: null, citation_withheld: 'coordinate_like_text' });
-    expect(citationFor('Flora Fixturica 1: 12.')).toEqual({ citation: 'Flora Fixturica 1: 12.', citation_withheld: null });
+  it('keeps only a bibliographic citation and withholds anything that could place a site', () => {
+    expect(citationFor('Seidenfaden, G. (1988). Orchid genera in Thailand XIV. Opera Bot. 95: 1-398.'))
+      .toEqual({ citation: 'Seidenfaden, G. (1988). Orchid genera in Thailand XIV. Opera Bot. 95: 1-398.', citation_withheld_reason: null });
+    const LOCALITY = 'possible_locality_or_collecting_marker';
+    for (const text of [
+      'Fl. Fixt. 3: 12 (2001), near Kinabalu waterfall, 1200 m elev.',
+      'Fixture Bull. 1999, 12 30 N, 77 15 W',
+      'Fixture Bull. 1999, 12°30\'N',
+      'Fixture Bull. 1999; 25.12345, 100.12345',
+      'Fixture Bull. 1999, alt. 900',
+      'Fixture Bull. 1999, 3 km from the fixture road',
+      'Fixture Bull. 1999, coll. Fixture 12',
+      'Fixture Bull. 1999, leg. Fixture',
+      'Fixture Bull. 1999, type locality: Fixture Hill',
+      'Fixture Bull. 1999, 3000 ft',
+      'Fixture Bull. 1999, holotype K',
+    ]) expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+    expect(citationFor('Flora Fixturica 1: 12.')).toEqual({ citation: null, citation_withheld_reason: 'no_publication_year' });
+    expect(citationFor(`Fixture ${'x'.repeat(300)} 1999`)).toEqual({ citation: null, citation_withheld_reason: 'longer_than_300_chars' });
+    expect(citationFor(null)).toEqual({ citation: null, citation_withheld_reason: 'no_citation_supplied' });
   });
 });
 
@@ -170,13 +192,16 @@ describe('a real mission against GBIF description records', () => {
     ]);
     expect(report.morphology_sources[0]).toMatchObject({
       term_signals: { fruit_capsule: true, scent: true, diagnostic_comparison: false },
-      dataset_key: '00000000-0000-4000-8000-000000000001', citation: 'FIXTURE-SOURCE Flora Fixturica vol. 1: 12.',
+      dataset_key: '00000000-0000-4000-8000-000000000001', citation: 'FIXTURE-SOURCE Flora Fixturica vol. 1: 12. 2009.',
+      citation_withheld_reason: null, language: 'eng',
       gbif_url: 'https://www.gbif.org/species/900000101',
     });
-    expect(report.morphology_sources[1]).toMatchObject({ license: null, term_signals: { diagnostic_comparison: true } });
-    expect(report.morphology_sources[2]).toMatchObject({ citation: null, citation_withheld: 'coordinate_like_text' });
+    expect(report.morphology_sources[1]).toMatchObject({ license: null, term_signals: { diagnostic_comparison: true },
+      citation: null, citation_withheld_reason: 'possible_locality_or_collecting_marker' });
+    expect(report.morphology_sources[2]).toMatchObject({ citation: null, citation_withheld_reason: 'possible_locality_or_collecting_marker' });
     expect(report.uncertainty.join('\n')).toMatch(/not verified morphological statements/);
-    expect(report.uncertainty.join('\n')).toMatch(/states no licence/);
+    expect(report.uncertainty.join('\n')).toMatch(/states no usable licence/);
+    expect(report.uncertainty.join('\n')).toMatch(/citation was withheld/);
     expect(report.uncertainty.join('\n')).toMatch(/"general" description may mix/);
 
     // Negative control: no description text, locality prose or coordinate
@@ -185,12 +210,43 @@ describe('a real mission against GBIF description records', () => {
     const comment = net.comments[0].body;
     for (const text of [JSON.stringify(report), comment]) {
       expect(text).not.toMatch(/FIXTURE-TEXT|FIXTURE-LOCALITY|Distribution Fixture|Habitat Fixture|Specimen Fixture|Etymology Fixture/);
-      expect(text).not.toMatch(/25\.12345|27\.98765|100\.12345|1800 m|fragrant|saccate/);
+      expect(text).not.toMatch(/25\.12345|27\.98765|100\.12345|1800 m|1200 m|FIXTURE-WATERFALL|fragrant|saccate/);
       expect(text).not.toMatch(/"description":/);
     }
     expect(comment.startsWith(`${COMMENT_MARKER_PREFIX}${report.digest} -->`)).toBe(true);
     expect(comment).toContain(REVIEW_BANNER);
     expect(comment).toContain('3 locality-bearing and 1 other excluded (not described)');
+    // The comment carries no citation text at all, not even a screened one.
+    expect(comment).not.toMatch(/FIXTURE-SOURCE|Flora Fixturica|Fixture Monograph/);
+    expect(comment).toContain('- citation text is in the report artifact for reviewers');
+    expect(comment).toContain('No description text was reproduced; source citations are publisher-supplied, ' +
+      'withheld from this comment, and screened conservatively in the report.');
+  });
+
+  it('writes nothing but a bounded summary to stdout: no description or citation text', async () => {
+    const lines: string[] = [];
+    const env = envFor();
+    await run(network({ issueBody: issue825.body }), env, line => lines.push(line));
+    expect(lines).toHaveLength(1);
+    expect(Object.keys(JSON.parse(lines[0])).sort())
+      .toEqual(['comment', 'digest', 'issue', 'kept', 'outcome', 'provider_calls', 'report']);
+    expect(lines[0]).not.toMatch(/FIXTURE-|Flora Fixturica|Fixture Monograph|1200 m|25\.12345|citation|description/i);
+  });
+
+  it('bounds publisher-supplied language and licence strings', async () => {
+    const odd = { offset: 0, limit: 50, endOfRecords: true, results: [
+      { key: 1, type: 'morphology', description: 'x', source: null, sourceTaxonKey: null,
+        language: 'English, as spoken near Fixture Falls', license: `https://fixture.example/${'l'.repeat(250)}` },
+      { key: 2, type: 'morphology', description: 'x', source: null, sourceTaxonKey: null, language: 'en-GB', license: 'CC0 1.0' },
+    ] };
+    const net = network({ issueBody: issue825.body, gbifOverride: url => url === descriptionsUrl(5310649)
+      ? new Response(JSON.stringify(odd), { status: 200, headers: { 'content-type': 'application/json' } }) : undefined });
+    const env = envFor();
+    await run(net, env);
+    const [a, b] = readReport(env).morphology_sources;
+    expect(a).toMatchObject({ language: null, license: null });
+    expect(b).toMatchObject({ language: 'en-GB', license: 'CC0 1.0' });
+    expect(JSON.stringify(readReport(env)) + net.comments[0].body).not.toMatch(/Fixture Falls|l{200}/);
   });
 
   it('only ever GETs allowlisted GBIF species URLs, never an occurrence or distribution endpoint', async () => {
@@ -285,6 +341,17 @@ describe('failure and idempotence', () => {
     expect(net.gbifCalls()).toEqual([]);
   });
 
+  it('ignores a morphology digest marker posted by anyone but the lane bot', async () => {
+    const first = network({ issueBody: issue825.body });
+    await run(first);
+    const forged = first.comments.map(c => ({ body: c.body, user: { login: 'someone-else' } }));
+    expect(forged[0].body.startsWith(COMMENT_MARKER_PREFIX)).toBe(true);
+    const second = network({ issueBody: issue825.body, existingComments: forged });
+    const result = await run(second, envFor());
+    expect(result.commented).toBe(true);
+    expect(second.calls.filter(c => c.method === 'POST')).toHaveLength(1);
+  });
+
   it('posts once for the same evidence and skips on a re-run', async () => {
     const first = network({ issueBody: issue825.body });
     await run(first);
@@ -309,7 +376,7 @@ describe('binding, routing and settlement shape', () => {
   it('leaves the closed #825-#827 as filed: explicit node, no capability, still undeclared', () => {
     // They carry an explicit OC-GRAPH-NODE line, so nothing is derived and
     // they never become executable retroactively (the owner closed them).
-    for (const i of morphologyIssues.issues) {
+    for (const i of morphologyIssues.issues.map(botIssue)) {
       expect(i.body).toMatch(/^OC-GRAPH-NODE: cap-kg-evidence-gap-research-missions$/m);
       expect(i.body).not.toMatch(/OC-SWARM-CAPABILITY/);
       expect(deriveReserveMissionBinding(i)).toBeNull();
@@ -320,9 +387,14 @@ describe('binding, routing and settlement shape', () => {
 
   it('derives the morphology capability for a legacy body with only the machine lines', () => {
     const legacy = issue825.body.replace('OC-GRAPH-NODE: cap-kg-evidence-gap-research-missions\n', '');
-    expect(deriveReserveMissionBinding({ body: legacy }))
+    expect(deriveReserveMissionBinding({ ...bot, body: legacy }))
       .toEqual({ nodeId: RESERVE_MISSION_NODE, capability: CAPABILITY, domain: 'morphology' });
-    const routing = routeIssue({ number: 825, body: legacy });
+    // #837: without the bot author and `oc-discovered`, nothing is derived.
+    expect(deriveReserveMissionBinding({ body: legacy })).toBeNull();
+    expect(deriveReserveMissionBinding({ ...bot, author: 'octocat', body: legacy })).toBeNull();
+    expect(deriveReserveMissionBinding({ author: BOT, labels: [], body: legacy })).toBeNull();
+    expect(routeIssue({ number: 825, body: legacy }).undeclared).toBe(true);
+    const routing = routeIssue({ ...bot, number: 825, body: legacy });
     expect(routing.providerFree).toBe(true);
     expect(commandsFor(routing)).toEqual(['npm run research:morphology-source-lookup']);
   });
