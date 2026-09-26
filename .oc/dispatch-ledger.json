@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 15,
+  "programSpent": 15.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 3
+    "2026-09-26": 3.5
   },
   "leases": [
     {
@@ -872,6 +872,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "1e3118125ef51854335b9e8a4f530702b65cd8fa00812615a034fb749850e1af",
+      "issue": 801,
+      "nodeId": "cap-lexicon-coverage-instrumentation",
+      "fingerprint": "0dc55677019818a6c689d0eb599ff871d36ba7b0a02af2cfd2ede1fa20ddc50e",
+      "waveHash": "2f525ed8baf5ce3876ffc76ad22132960b464ae9a89e08e5f7461f43cfb00b14",
+      "runId": "36205790346",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T02:14:31.544Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
