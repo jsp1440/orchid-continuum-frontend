@@ -133,16 +133,29 @@ const CalyxScienceStatus: React.FC = () => {
   }, [isUnlocked]);
 
   const topDepartments = useMemo(
-    () => (dashboard?.summary.top_priorities?.length ? dashboard.summary.top_priorities : dashboard?.departments ?? []).slice(0, 8),
+    () => (dashboard?.summary?.top_priorities?.length ? dashboard.summary.top_priorities : dashboard?.departments ?? []).slice(0, 8),
     [dashboard],
   );
 
   const topGaps = useMemo(
-    () => (dashboard?.summary.highest_priority_gaps?.length ? dashboard.summary.highest_priority_gaps : dashboard?.gaps ?? []).slice(0, 6),
+    () => (dashboard?.summary?.highest_priority_gaps?.length ? dashboard.summary.highest_priority_gaps : dashboard?.gaps ?? []).slice(0, 6),
     [dashboard],
   );
 
-  const safety = dashboard?.summary.safety ?? dashboard?.status.safety;
+  const gapsUnavailable = Boolean(dashboard?.sectionErrors.gaps && !dashboard?.summary?.highest_priority_gaps?.length);
+
+  const safety = dashboard?.summary?.safety ?? dashboard?.status?.safety;
+
+  const unavailableSections = useMemo(
+    () => Object.entries(dashboard?.sectionErrors ?? {}) as [string, string][],
+    [dashboard],
+  );
+
+  function statValue(count: number | undefined, section: keyof CalyxScienceDashboard['sectionErrors'], fallbackLength: number): React.ReactNode {
+    if (count !== undefined) return count;
+    if (dashboard?.sectionErrors[section]) return 'unavailable';
+    return fallbackLength;
+  }
 
   if (!isUnlocked) {
     return (
@@ -227,11 +240,19 @@ const CalyxScienceStatus: React.FC = () => {
             </div>
           ) : null}
 
+          {unavailableSections.length ? (
+            <div className="mb-5 rounded-lg border border-amber-300/25 bg-amber-300/10 p-4 text-sm text-amber-100">
+              <AlertTriangle className="mr-2 inline h-4 w-4" />
+              {unavailableSections.length} of 8 Calyx science endpoints did not respond -- their figures below read
+              &quot;unavailable&quot;, not zero: {unavailableSections.map(([section]) => section).join(', ')}
+            </div>
+          ) : null}
+
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Runtime mode" value={dashboard?.summary.mode ?? dashboard?.status.mode ?? 'loading'} icon={Network} />
-            <Stat label="Science departments" value={dashboard?.summary.department_count ?? dashboard?.departments.length ?? '-'} icon={Layers3} />
-            <Stat label="Mission types" value={dashboard?.summary.mission_type_count ?? dashboard?.missions.length ?? '-'} icon={Leaf} />
-            <Stat label="Known gaps" value={dashboard?.status.known_gap_count ?? dashboard?.gaps.length ?? '-'} icon={AlertTriangle} />
+            <Stat label="Runtime mode" value={dashboard?.summary?.mode ?? dashboard?.status?.mode ?? 'loading'} icon={Network} />
+            <Stat label="Science departments" value={statValue(dashboard?.summary?.department_count, 'departments', dashboard?.departments.length ?? 0)} icon={Layers3} />
+            <Stat label="Mission types" value={statValue(dashboard?.summary?.mission_type_count, 'missions', dashboard?.missions.length ?? 0)} icon={Leaf} />
+            <Stat label="Known gaps" value={statValue(dashboard?.status?.known_gap_count, 'gaps', dashboard?.gaps.length ?? 0)} icon={AlertTriangle} />
           </div>
 
           <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -254,7 +275,7 @@ const CalyxScienceStatus: React.FC = () => {
                 <div className="mt-4 space-y-3">
                   {topGaps.length ? topGaps.map((gap) => <GapRow key={gap.gap_id} gap={gap} />) : (
                     <div className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-sm text-[#cfc8b8]/76">
-                      No gap telemetry loaded yet.
+                      {gapsUnavailable ? 'Gap telemetry is unavailable right now -- not confirmed zero.' : 'No gap telemetry loaded yet.'}
                     </div>
                   )}
                 </div>
