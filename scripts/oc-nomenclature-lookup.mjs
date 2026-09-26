@@ -353,6 +353,14 @@ function githubHeaders(token) {
   };
 }
 
+/**
+ * The only author whose digest marker is honoured. The report is posted with
+ * the lane's GITHUB_TOKEN, which the REST API reports as `github-actions[bot]`.
+ * A marker in anyone else's comment is ignored, so a third party cannot pre-post
+ * a digest to suppress the real report.
+ */
+export const REPORT_COMMENT_AUTHOR = 'github-actions[bot]';
+
 async function existingDigests(fetchImpl, api, repo, issue, token) {
   const digests = new Set();
   for (let page = 1; page <= 10; page += 1) {
@@ -360,6 +368,7 @@ async function existingDigests(fetchImpl, api, repo, issue, token) {
       `${api}/repos/${repo}/issues/${issue}/comments?per_page=100&page=${page}`, githubHeaders(token));
     if (!Array.isArray(json)) throw new TransportFailure('GitHub comments response is not an array');
     for (const comment of json) {
+      if (comment?.user?.login !== REPORT_COMMENT_AUTHOR) continue;
       const body = String(comment?.body ?? '');
       const at = body.indexOf(COMMENT_MARKER_PREFIX);
       if (at === 0) digests.add(body.slice(COMMENT_MARKER_PREFIX.length).split(' ')[0]);

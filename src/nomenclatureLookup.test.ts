@@ -80,7 +80,7 @@ type Call = { url: string; method: string; body?: string };
 /** A fake network: GitHub issue/comment endpoints plus replayed GBIF fixtures. */
 function network(opts: {
   issueBody: string;
-  existingComments?: Array<{ body: string }>;
+  existingComments?: Array<{ body: string; user?: { login: string } }>;
   gbifOverride?: (url: string) => Response | undefined;
   extraGbif?: Record<string, string>;
 }) {
@@ -94,7 +94,8 @@ function network(opts: {
     if (url === `${API}/repos/${REPO}/issues/817`) return json({ number: 817, body: opts.issueBody });
     if (url.startsWith(`${API}/repos/${REPO}/issues/817/comments`)) {
       if (method === 'POST') {
-        comments.push({ body: JSON.parse(init.body!).body });
+        // The lane posts with github.token, which GitHub records as the bot.
+        comments.push({ body: JSON.parse(init.body!).body, user: { login: 'github-actions[bot]' } });
         return json({ id: comments.length }, 201);
       }
       return json(comments);
@@ -292,6 +293,22 @@ describe('the executor end to end', () => {
     expect(second.calls.filter(c => c.method === 'POST')).toHaveLength(0);
   });
 
+  it('ignores a digest marker a person posted: the real report is still posted', async () => {
+    const first = network({ issueBody: issue817.body });
+    const a = await runNomenclatureLookup({ env: envFor(), fetchImpl: first.fetchImpl, now: () => NOW, log: quiet });
+    // A third party copies the exact marker (same digest) into their own comment.
+    const forged = first.comments.map(c => ({ body: c.body, user: { login: 'someone-else' } }));
+    const authorless = first.comments.map(c => ({ body: c.body }));
+    for (const existingComments of [forged, authorless]) {
+      const second = network({ issueBody: issue817.body, existingComments });
+      const b = await runNomenclatureLookup({ env: envFor(), fetchImpl: second.fetchImpl, now: () => NOW, log: quiet });
+      expect(b.exitCode).toBe(EXIT.OK);
+      expect(b.report.digest).toBe(a.report.digest);
+      expect(b.commented).toBe(true);
+      expect(second.calls.filter(c => c.method === 'POST')).toHaveLength(1);
+    }
+  });
+
   it.each([
     ['an HTML page', () => new Response('<html>maintenance</html>', { status: 200, headers: { 'content-type': 'text/html' } })],
     ['HTTP 500', () => new Response('{"error":"x"}', { status: 500, headers: { 'content-type': 'application/json' } })],
@@ -378,16 +395,20 @@ describe('reserve bodies declare a binding, gated on domain', () => {
 });
 
 describe('the real reserve missions #816-#818 become executable with no edit', () => {
+  // Built exactly as oc-dispatch-runtime.ts `snapshot()` builds one: `author` is `user.login`.
   const asIssue = (i: (typeof reserveIssues.issues)[number]): Issue => ({
     number: i.number, state: i.state, title: i.title, body: i.body,
     labels: i.labels.map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name)),
+    author: i.user.login,
   });
+  const bot = { author: 'github-actions[bot]', labels: [{ name: 'oc-discovered' }] };
   const issues = reserveIssues.issues.map(asIssue);
 
-  it('carry no explicit marker, exactly as filed', () => {
+  it('carry no explicit marker, exactly as filed, by the reserve bot', () => {
     for (const i of issues) {
       expect(i.body).not.toMatch(/OC-GRAPH-NODE|OC-SWARM-CAPABILITY/);
       expect(i.labels.map(l => l.name)).toEqual(['oc-discovered', 'oc-p2', 'oc-prepared']);
+      expect(i.author).toBe('github-actions[bot]');
     }
   });
 
@@ -425,8 +446,8 @@ describe('the real reserve missions #816-#818 become executable with no edit', (
 
   it('derive the node but no capability for a reserve mission in another domain', () => {
     const body = issue817.body.replace('- Domain: nomenclature', '- Domain: morphology');
-    expect(deriveReserveMissionBinding({ body })).toMatchObject({ nodeId: RESERVE_MISSION_NODE, capability: null });
-    expect(routeIssue({ number: 817, body }).undeclared).toBe(true);
+    expect(deriveReserveMissionBinding({ ...bot, body })).toMatchObject({ nodeId: RESERVE_MISSION_NODE, capability: null });
+    expect(routeIssue({ ...bot, number: 817, body }).undeclared).toBe(true);
     expect(declaredNodesByIssue([{ ...asIssue(issue817), body }])).toEqual({ 817: [RESERVE_MISSION_NODE] });
   });
 
@@ -435,15 +456,15 @@ describe('the real reserve missions #816-#818 become executable with no edit', (
     const inlineSource = issue817.body.replace('\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve', ' OC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve');
     const malformed = issue817.body.replace('- Human review required: yes\n', '');
     for (const body of [withoutSource, inlineSource, malformed]) {
-      expect(deriveReserveMissionBinding({ body })).toBeNull();
-      expect(routeIssue({ number: 817, body }).undeclared).toBe(true);
+      expect(deriveReserveMissionBinding({ ...bot, body })).toBeNull();
+      expect(routeIssue({ ...bot, number: 817, body }).undeclared).toBe(true);
       expect(declaredNodesByIssue([{ ...asIssue(issue817), body }])).toEqual({});
     }
   });
 
   it('let an explicit marker or label win over the derived binding', () => {
     const explicitCap = `${issue817.body}\nOC-SWARM-CAPABILITY: test-execution`;
-    expect(deriveReserveMissionBinding({ body: explicitCap })).toBeNull();
+    expect(deriveReserveMissionBinding({ ...bot, body: explicitCap })).toBeNull();
     expect(routeIssue({ number: 817, body: explicitCap }).deterministic).toEqual(['test-execution']);
 
     const explicitNode = `${issue817.body}\nOC-GRAPH-NODE: gate-journey-research-matrix`;
@@ -453,6 +474,68 @@ describe('the real reserve missions #816-#818 become executable with no edit', (
 
     const labelled = { ...asIssue(issue817), labels: [{ name: 'oc-node:cap-conservatory-collection' }, { name: 'oc-prepared' }] };
     expect(declaredNodesByIssue([labelled])).toEqual({ 817: ['cap-conservatory-collection'] });
+  });
+});
+
+describe('a derived reserve binding requires the reserve bot as author and the oc-discovered label', () => {
+  const real: Issue = {
+    number: 817, state: issue817.state, title: issue817.title, body: issue817.body,
+    labels: issue817.labels.map(name => ({ name })), author: issue817.user.login,
+  };
+  const refused: Array<[string, Record<string, unknown>]> = [
+    ['a person filed the identical body and labels', { ...real, author: 'octocat' }],
+    ['a person filed it, with a REST user.login', { ...real, author: undefined, user: { login: 'octocat' } }],
+    ['the reserve bot filed it without oc-discovered', { ...real, labels: [{ name: 'oc-p2' }, { name: 'oc-prepared' }] }],
+    ['the snapshot records no author (fail closed)', { ...real, author: undefined }],
+    ['the snapshot author is null', { ...real, author: null }],
+    ['the recorded logins disagree', { ...real, user: { login: 'octocat' } }],
+    ['a look-alike login', { ...real, author: 'github-actions-bot' }],
+  ];
+  it.each(refused)('derives nothing when %s', (_label, issue) => {
+    expect(deriveReserveMissionBinding(issue)).toBeNull();
+    expect(routeIssue({ number: 817, ...issue }).undeclared).toBe(true);
+    expect(declaredNodesByIssue([issue as unknown as Issue])).toEqual({});
+  });
+
+  it.each([
+    ['REST user.login', { user: { login: 'github-actions[bot]' } }],
+    ['snapshot author', { author: 'github-actions[bot]' }],
+    ['GraphQL Bot login', { author: 'github-actions' }],
+    ['plain-string labels', { author: 'github-actions[bot]', labels: ['oc-p2', 'oc-discovered'] }],
+  ])('derives the binding for the reserve bot via %s', (_label, identity) => {
+    const issue = { number: 817, body: issue817.body, labels: [{ name: 'oc-discovered' }], ...identity };
+    expect(deriveReserveMissionBinding(issue)).toEqual({
+      nodeId: RESERVE_MISSION_NODE, capability: DERIVED_CAPABILITY, domain: 'nomenclature',
+    });
+    expect(routeIssue(issue).providerFree).toBe(true);
+  });
+
+  // The builders shell out to `gh`, so they are checked at the source: a builder
+  // that dropped the author would silently unbind #816-#818 (fail closed).
+  it.each([
+    ['scripts/oc-dispatch-runtime.ts', /author: user\?\.login \?\? null/],
+    ['scripts/oc-supervisor-discovery.ts', /author: issue\.user\?\.login \?\? null/],
+    ['scripts/oc-provider-free-route.mjs', /routeIssue\(\{[^}]*author: issue\.user\?\.login \?\? null \}\)/],
+  ])('%s threads the issue author into what it routes', (path, pattern) => {
+    expect(readFileSync(new URL(`../${path}`, import.meta.url), 'utf8')).toMatch(pattern);
+  });
+
+  it('keeps a human-filed forgery out of the plan: no node, no lane', () => {
+    const forged: Issue = { ...real, number: 9001, author: 'octocat' };
+    const plan = makePlan({ issues: [forged], prs: [], integrationSha: 'a'.repeat(40), implementationSha: 'b'.repeat(40), material: {} }, [], NOW);
+    expect(plan.leaves.map(l => l.issueNumber)).not.toContain(9001);
+    expect(plan.issues).not.toContain(9001);
+  });
+
+  it('leaves the admission fingerprint unchanged by the author field', () => {
+    // Both logins are the reserve bot, so both bind; if `author` were hashed the
+    // fingerprints would differ (and every existing ledger fingerprint would move).
+    const snap = (issues: Issue[]): Snapshot => ({ issues, prs: [], integrationSha: 'a'.repeat(40), implementationSha: 'b'.repeat(40), material: {} });
+    const rest = makePlan(snap([real]), [], NOW).leaves;
+    const graphql = makePlan(snap([{ ...real, author: 'github-actions' }]), [], NOW).leaves;
+    expect(rest).toHaveLength(1);
+    expect(graphql).toHaveLength(1);
+    expect(rest[0].fingerprint).toBe(graphql[0].fingerprint);
   });
 });
 
@@ -484,8 +567,8 @@ describe('routing and graph binding', () => {
 
   it('holds only its own node while leased; an unrelated leaf is still admitted', () => {
     const issues: Issue[] = [
-      { number: 816, state: 'open', title: 'a', body: reserveIssues.issues[0].body, labels: [{ name: 'oc-running' }] },
-      { number: 817, state: 'open', title: 'b', body: issue817.body, labels: [{ name: 'oc-prepared' }] },
+      { number: 816, state: 'open', title: 'a', body: reserveIssues.issues[0].body, labels: [{ name: 'oc-discovered' }, { name: 'oc-running' }], author: 'github-actions[bot]' },
+      { number: 817, state: 'open', title: 'b', body: issue817.body, labels: [{ name: 'oc-discovered' }, { name: 'oc-prepared' }], author: 'github-actions[bot]' },
       { number: 703, state: 'open', title: 'c', body: null, labels: [{ name: 'oc-node:gate-journey-research-matrix' }, { name: 'oc-queued' }] },
     ];
     const lease: Lease = {

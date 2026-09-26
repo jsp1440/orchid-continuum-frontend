@@ -24,8 +24,10 @@ const issue = JSON.parse(raw);
 
 let routing;
 try {
-  // Labels carry declarations too, so they have to reach the router.
-  routing = routeIssue({ number: issueNumber, body: issue.body, labels: issue.labels });
+  // Labels carry declarations too, so they have to reach the router. The author
+  // does as well: a legacy reserve mission derives its binding only when the
+  // reserve bot filed it (oc-reserve-mission-binding.mjs).
+  routing = routeIssue({ number: issueNumber, body: issue.body, labels: issue.labels, author: issue.user?.login ?? null });
 } catch (error) {
   // An unclassified capability is a routing failure, not a licence to spend.
   const reason = error instanceof CapabilityUnknown ? 'unclassified_capability' : 'invalid_declaration';
