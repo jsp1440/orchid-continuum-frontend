@@ -23,6 +23,7 @@ import {
   visibleConversationMessages,
 } from "@/lib/calyxConversation";
 import {
+  CALYX_BACKEND_UNREACHABLE,
   CalyxApiError,
   createCalyxConversation,
   getBrainMission,
@@ -679,7 +680,7 @@ export default function CalyxWorkspace() {
       }
       const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
       const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the CALYX backend may be waking up. Retrying in ${NETWORK_RETRY_SECONDS}s unless you cancel or edit the message.` : error.message) : "Calyx could not complete that turn.";
+      const detail = error instanceof CalyxApiError ? (isNetwork ? `${CALYX_BACKEND_UNREACHABLE} — it may be waking up. Retrying in ${NETWORK_RETRY_SECONDS}s unless you cancel or edit the message.` : error.message) : "Calyx could not complete that turn.";
       setAuthRequired(isAuth);
       setConversationError(detail);
       if (isNetwork) {
@@ -871,7 +872,7 @@ export default function CalyxWorkspace() {
                   </details>
                   {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} disabled={submitting && micState !== "listening"} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
                   <button className="rounded-full border px-3 py-1 text-xs hover:bg-muted disabled:opacity-50" disabled={submitting} onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button>
-                  <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
+                  <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden aria-label="Attach files to this Calyx conversation" className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
                 </div>
                 <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim()} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>

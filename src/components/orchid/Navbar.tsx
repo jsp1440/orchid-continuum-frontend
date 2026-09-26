@@ -53,6 +53,7 @@ const MORE_GROUPS: MoreGroup[] = [
         route: '/university',
         description: 'Open educational pathways on the knowledge graph',
       },
+      { label: 'Illustrated Lexicon', route: '/lexicon',    description: 'A–Z orchid terms with illustrations and provenance' },
       { label: 'Classroom',           route: '/classroom',  description: 'Teacher dashboards' },
       { label: 'Judging practice',    route: '/education/judging-practice', description: 'Score a rubric sheet criterion by criterion' },
       { label: 'Glossary & Physiology', route: '/education', description: 'BloomBot · glossary · physiology' },
@@ -62,6 +63,8 @@ const MORE_GROUPS: MoreGroup[] = [
     title: 'Research & support',
     items: [
       { label: 'Research Center', route: '/research',     description: 'Queries · traits · networks' },
+      { label: 'Orchid identification', route: '/orchid-identification', description: 'Matrix-guided identification from observed characters' },
+      { label: 'Literature',      route: '/literature',   description: 'The literature corpus · sign-in required' },
       { label: 'Partners',        route: '/partners',     description: 'Advisors & institutions' },
       { label: 'Get Involved',    route: '/get-involved', description: 'Volunteer · donate · join' },
     ],
