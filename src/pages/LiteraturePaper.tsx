@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, EyeOff, Lock, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, EyeOff, Link2, Lock, ShieldCheck } from 'lucide-react';
 
 import PageShell from '@/components/orchid/PageShell';
 import {
@@ -11,6 +11,7 @@ import {
   isReviewed,
   type LiteraturePaperView,
   type PaperClaim,
+  type PaperEvidence,
 } from '@/lib/literaturePaper';
 import { describeWithheld, releaseText } from '@/lib/literatureDisplayPolicy';
 
@@ -102,6 +103,57 @@ function GatedText({
   );
 }
 
+function SourceAnchor({ binding }: { binding: LiteraturePaperView['binding'] }) {
+  if (!binding?.source_object_type || binding.source_object_id === undefined) return null;
+  return (
+    <div
+      className="mt-4 rounded-xl border border-white/10 bg-white/[0.02] p-4"
+      data-testid="source-anchor"
+    >
+      <div className="flex items-center gap-2 text-xs text-white/60">
+        <Link2 className="h-3.5 w-3.5" /> Canonical source anchor
+      </div>
+      <p className="mt-1 text-xs leading-relaxed text-white/45">
+        This extraction is bound to {binding.source_object_type} #{binding.source_object_id} in the
+        Continuum. This identifies where the citation comes from; it is not a link to the source
+        text itself, which remains subject to the display policy above.
+      </p>
+    </div>
+  );
+}
+
+function ConflictEvidence({
+  contradicting,
+  binding,
+}: {
+  contradicting: PaperEvidence[];
+  binding: LiteraturePaperView['binding'];
+}) {
+  if (contradicting.length === 0) return null;
+  return (
+    <div className="mt-3 space-y-2" data-testid="conflict-evidence">
+      {contradicting.map((item) => {
+        const release = releaseText(item.excerpt, binding);
+        return (
+          <div key={item.evidence_id} className="rounded-lg border border-amber-300/20 bg-amber-300/[0.04] p-2">
+            <p className="font-mono text-[9px] uppercase tracking-[0.12em] text-amber-100/60">
+              Contradicting evidence · {item.evidence_id}
+            </p>
+            {release.released === true ? (
+              <p className="mt-1 text-xs text-white/70">
+                {release.text}
+                {release.truncated ? '…' : ''}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-white/45">{describeWithheld(release.reason)}</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperView }) {
   const relation = classifyClaimEvidence(claim, view.paper.evidence);
   const machine = isMachineAuthored(claim);
@@ -177,9 +229,12 @@ function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperVi
         </p>
       ) : null}
       {relation.contradicting.length > 0 ? (
-        <p className="mt-1 text-[11px] leading-relaxed text-amber-100/70" data-testid="contradiction-caveat">
-          This claim has contradicting evidence in the same paper.
-        </p>
+        <>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-100/70" data-testid="contradiction-caveat">
+            This claim has contradicting evidence in the same paper.
+          </p>
+          <ConflictEvidence contradicting={relation.contradicting} binding={view.binding} />
+        </>
       ) : null}
     </li>
   );
@@ -301,6 +356,7 @@ export default function LiteraturePaper() {
                 </p>
                 <p className="mt-1 font-mono text-[10px] text-white/30">{view.paper.paper_id}</p>
                 <GatedText label="Abstract" text={metadata?.abstract} binding={view.binding} />
+                <SourceAnchor binding={view.binding} />
               </div>
 
               {stripped > 0 ? (

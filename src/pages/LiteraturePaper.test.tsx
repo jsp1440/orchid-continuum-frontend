@@ -194,6 +194,49 @@ describe('the page keeps four things apart', () => {
     await mount();
     expect(container.querySelector('[data-testid="contradiction-caveat"]')).toBeNull();
   });
+
+  it('shows the contradicting evidence excerpt for review when text is released', async () => {
+    route(
+      paperBody({
+        evidence: [{ evidence_id: 'ev-1', contradicts_ids: ['c-1'], excerpt: 'No dormancy was observed at any temperature.' }],
+      }),
+      { status: 200, body: { display_policy: 'FULL_TEXT_ALLOWED' } },
+    );
+    await mount();
+    const conflict = container.querySelector('[data-testid="conflict-evidence"]');
+    expect(conflict?.textContent).toContain('No dormancy was observed at any temperature.');
+  });
+
+  it('withholds the contradicting evidence excerpt rather than guessing when there is no binding', async () => {
+    route(
+      paperBody({
+        evidence: [{ evidence_id: 'ev-1', contradicts_ids: ['c-1'], excerpt: 'No dormancy was observed at any temperature.' }],
+      }),
+      { status: 404 },
+    );
+    await mount();
+    const conflict = container.querySelector('[data-testid="conflict-evidence"]');
+    expect(conflict?.textContent).not.toContain('No dormancy was observed at any temperature.');
+    expect(conflict?.textContent).toMatch(/unrecorded permission is not an unrestricted one/i);
+  });
+});
+
+describe('the source anchor identifies where the citation comes from', () => {
+  it('shows the bound source object identity', async () => {
+    route(paperBody(), {
+      status: 200,
+      body: { display_policy: 'FULL_TEXT_ALLOWED', source_object_type: 'species', source_object_id: 42 },
+    });
+    await mount();
+    const anchor = container.querySelector('[data-testid="source-anchor"]');
+    expect(anchor?.textContent).toMatch(/species #42/);
+  });
+
+  it('renders nothing when the paper has no canonical source binding', async () => {
+    route(paperBody(), { status: 404 });
+    await mount();
+    expect(container.querySelector('[data-testid="source-anchor"]')).toBeNull();
+  });
 });
 
 describe('protected locality', () => {

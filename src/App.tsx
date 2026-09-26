@@ -141,8 +141,8 @@ const App = () => (
                   <Route path="/climate" element={<Climate />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
-                  <Route path="/literature" element={<Literature />} />
-                  <Route path="/literature/:paperId" element={<LiteraturePaper />} />
+                  <Route path="/literature" element={<ProtectedRoute title="Literature corpus · authenticated members" description="The literature-extraction service answers this listing only for a signed-in, authorised session. Sign in to browse the corpus."><Literature /></ProtectedRoute>} />
+                  <Route path="/literature/:paperId" element={<ProtectedRoute title="Literature corpus · authenticated members" description="The literature-extraction service answers this listing only for a signed-in, authorised session. Sign in to read this extraction."><LiteraturePaper /></ProtectedRoute>} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />

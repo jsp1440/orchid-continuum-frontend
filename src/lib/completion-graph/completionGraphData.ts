@@ -338,21 +338,46 @@ const atlasDomain = branch({
 ]);
 
 // ─── Literature / evidence ──────────────────────────────────────────────────
-// Real evidence: route /literature renders <ComingSoon/> (confirmed missing at
-// product level); src/lib/scientific-intelligence/literature/adapter.ts exists
-// and is consumed only by Mission Control's own scoring, not by any user route.
+// Real evidence, reconciled on this branch on 2026-09-26 (issue #805): route
+// /literature renders <Literature/> (src/App.tsx), which lists the extraction
+// corpus through src/lib/literatureIndex.ts from
+// GET /api/literature-extraction/papers. The backend router mounts that
+// listing behind verify_owner_or_api_key (app/literature_extraction/routes.py),
+// so an anonymous public visitor was previously answered 401/403 while the
+// frontend route was still classified public. This pass moves /literature and
+// /literature/:paperId to router-authenticated (ProtectedRoute), matching the
+// backend's actual gate rather than presenting a "public" page that fails
+// closed for every anonymous visitor. Product completion stays NOT_MET: the
+// leaf names a PUBLIC browser, and scoping to authenticated users resolves the
+// frontend/backend mismatch without making the corpus public — that remains an
+// owner decision on the backend (expose a bounded public read-only listing, or
+// accept authenticated-only as the final shape).
 
-const literaturePublicBrowser = confirmedMissing({
-  idHint: 'cap-literature-public-browser',
-  parentId: 'module-literature-core',
-  name: 'Public literature/evidence browser',
-  evidence: [
-    { kind: 'route', ref: '/literature', note: 'Routes to <ComingSoon/> in src/App.tsx — confirmed placeholder, not a real browser.' },
-    { kind: 'file', ref: 'src/pages/ComingSoon.tsx' },
-  ],
-  nextAction: 'Build the actual literature discovery/browse UI described in the mission spec (discovery, ingestion status, dedupe, bibliographic identity, full text, extraction, taxon linking, citations/source anchors, conflicts/review, corpus coverage).',
-  lane: 'PRODUCT_COMPLETION',
-});
+const literaturePublicBrowser: CompletionNode = {
+  ...censusPending({
+    idHint: 'cap-literature-public-browser',
+    parentId: 'module-literature-core',
+    name: 'Public literature/evidence browser',
+    evidence: [
+      { kind: 'route', ref: '/literature', note: 'Renders <Literature/> in src/App.tsx, now wrapped in <ProtectedRoute/>; the <ComingSoon/> placeholder is gone from this route.' },
+      { kind: 'file', ref: 'src/pages/Literature.tsx', note: 'Paged corpus listing with distinct unauthorised / outage / rejected / malformed states; counts, not content.' },
+      { kind: 'file', ref: 'src/lib/literatureIndex.ts', note: 'Reads GET /api/literature-extraction/papers?limit&offset; a 200 without a papers array is malformed, never an empty corpus.' },
+      { kind: 'file', ref: 'src/pages/LiteraturePaper.tsx', note: 'Single-paper view over /api/literature-extraction/papers/{id} and its source binding; now also renders the binding identity as a source anchor and lists contradicting evidence per claim.' },
+      { kind: 'file', ref: 'src/lib/routeAccessPolicy.ts', note: '/literature and /literature/:paperId reclassified router-authenticated, matching the backend verify_owner_or_api_key gate.' },
+      { kind: 'test', ref: 'src/pages/Literature.test.tsx', note: '12 page tests: listing, damaged rows, paging, empty store, unauthorised, outage/retry, malformed 200.' },
+      { kind: 'test', ref: 'src/pages/LiteraturePaper.test.tsx' },
+      { kind: 'test', ref: 'src/lib/routeAccessPolicy.test.ts', note: 'Fails if /literature loses its ProtectedRoute wrapper or its access classification.' },
+      { kind: 'file', ref: 'src/lib/explorationContext.ts', note: 'Exploration "literature" nodes route to /literature instead of /coming-soon/literature.' },
+    ],
+    nextAction: 'Owner decision open: expose a bounded public read-only listing on the backend, or accept authenticated-only as final. Discovery, dedupe, taxon linking and corpus-wide conflict review from the mission spec remain unbuilt; citation/source-anchor identity and per-claim contradicting-evidence review are now shown from the existing contract.',
+    lane: 'PRODUCT_COMPLETION',
+  }),
+  status: 'PARTIAL',
+  threeLevels: { codeComplete: 'MET', integratedComplete: 'PARTIAL', productComplete: 'NOT_MET' },
+  gateScores: { architectureContracts: 1, implementationPresent: 1, integrationCanonicalBranch: 1,
+    scientificProvenanceSecurity: 1, browserEndToEnd: null, deployedOperational: null },
+  lastUpdated: '2026-09-26T00:00:00.000Z',
+};
 
 const literatureIntelligenceAdapter: CompletionNode = {
   id: 'cap-literature-intelligence-adapter',

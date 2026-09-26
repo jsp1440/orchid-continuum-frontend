@@ -104,6 +104,22 @@ describe('COMPLETION_GRAPH structural integrity', () => {
     expect(computeGateScore(gate?.gateScores).percentage).not.toBeNull();
   });
 
+  it('scores the public literature browser on the real /literature route, now gated to authenticated users', () => {
+    const leaf = allNodes.find((node) => node.id.startsWith('cap-literature-public-browser'));
+    expect(leaf?.status).toBe('PARTIAL');
+    expect(leaf?.threeLevels.codeComplete).toBe('MET');
+    // Scoping the frontend route to authenticated users resolves the
+    // public/backend mismatch, but does not make the corpus public — product
+    // completion stays NOT_MET until the owner decides the backend should
+    // expose a bounded public listing (or accepts authenticated-only).
+    expect(leaf?.threeLevels.productComplete).toBe('NOT_MET');
+    expect(leaf?.gateScores?.browserEndToEnd).toBeNull();
+    expect(leaf?.gateScores?.deployedOperational).toBeNull();
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/Literature.tsx')).toBe(true);
+    expect(leaf?.evidence.some((e) => e.ref === 'src/lib/routeAccessPolicy.ts')).toBe(true);
+    expect(leaf?.evidence.some((e) => e.ref === 'src/pages/ComingSoon.tsx')).toBe(false);
+  });
+
   it('records the scheduler->issue-automation gap as confirmed missing, not census-pending', () => {
     const gap = allNodes.find((n) => n.name.includes('Scheduler output wired to real GitHub issue creation'));
     expect(gap?.status).toBe('MISSING');
