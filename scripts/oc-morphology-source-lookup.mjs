@@ -25,7 +25,7 @@
  *      keyword-presence booleans. The text itself is read in memory only to
  *      compute those, then discarded. The publisher-supplied source citation is
  *      never put in the issue comment; the report keeps it only when it passes a
- *      conservative bibliographic screen (a 4-digit year, no elevation,
+ *      conservative bibliographic screen (a 4-digit year, no elevation, direction,
  *      distance, collecting, site-word, locality or coordinate marker,
  *      <= 300 chars; only a DOI's `10.NNNN/` prefix is set aside, its suffix
  *      is still screened).
@@ -129,6 +129,43 @@ const surnameSafeMarker = words => {
   return new RegExp(`\\b(?:${lower}|${upper})\\b|\\b(?:${title})\\b(?!${authorInitial})`);
 };
 
+/**
+ * Compass directions that place a site relative to another place. One regex,
+ * case-insensitive, so it catches every shape a collector's label uses:
+ *   - an abbreviated point of one to three letters, dots or a hyphen optional
+ *     ("N", "NE", "N.E.", "SE.", "NNW", "n.", "n.e.", "N-E");
+ *   - a spelled point, compound or not, plain or adjectival ("north",
+ *     "northeast", "north-east", "north east", "northern", "western",
+ *     "southwards");
+ * in any of three shapes:
+ *   1. direction [+ side/slope/flank/face] + "of": "N of", "SE. of",
+ *      "N.E. of", "north-east of", "S side of", "E slope of";
+ *   2. direction + side/slope/flank/face/facing, no "of": "western slope",
+ *      "E slope", "N-facing";
+ *   3. a distance then a direction: "12 km N", "5 mi. NE", "300 m SW" (the
+ *      km/mile/metre markers catch most of these too; this is defence in
+ *      depth).
+ * Authors whose initials are compass letters ("N.E. Brown (1888)",
+ * "Brown, N.E. (1888)") are kept: the initials are followed by neither "of"
+ * nor a side word. The ambiguous shape, compass initials directly followed
+ * by "of" ("Brown, N.E. of Kew"), is withheld: fail safe. So are titles that
+ * name a region by a direction ("Flora of the West of England", "western
+ * slopes of the Andes"); over-withholding costs a reviewer one click, a
+ * published locality cannot be taken back. Lower-case two- and three-letter
+ * runs of n/s/e/w ("we of", "see of") are withheld too; they are rare in a
+ * citation and case-folding keeps "n. of" and "ne of" caught.
+ */
+const COMPASS_ABBR = '[NSEW](?:[.-]?[NSEW]){0,2}';
+const COMPASS_WORD = '(?:(?:north|south)(?:[-\\s]?(?:east|west))?|east|west)(?:ern|erly|wards?)?';
+const COMPASS = `(?:${COMPASS_WORD}|${COMPASS_ABBR})`;
+const SIDE_WORD = '(?:side|slope|flank|face)s?';
+const AFTER_COMPASS = '(?:\\.\\s*|\\s+)';
+export const CITATION_DIRECTION_MARKER = new RegExp([
+  `\\b${COMPASS}${AFTER_COMPASS}(?:${SIDE_WORD}\\s+)?of\\b`,
+  `\\b${COMPASS}(?:\\.\\s*|\\s+|-)(?:${SIDE_WORD}|facing)\\b`,
+  `\\d\\s*(?:km|kms|mi|miles?|m|ft|feet)\\.?\\s+${COMPASS}\\b`,
+].join('|'), 'i');
+
 export const CITATION_LOCALITY_MARKERS = Object.freeze([
   /\d+\s?m\b/i,                     // elevation / distance in metres
   /\d+\s?(?:ft|feet)\b/i,
@@ -142,7 +179,7 @@ export const CITATION_LOCALITY_MARKERS = Object.freeze([
   /\b\d{1,3}(?:[\s.:]\d{1,2}){0,2}\s*[NSEW]\b/, // 12 30 N, 77.15 W
   /-?\b\d{1,3}\.\d{3,}(?:[NSEW]\b|\b)/, // decimal coordinates, also "12.3456N"
   surnameSafeMarker(['mi', 'mile', 'miles']), // distance in miles (not "Miles, R.")
-  /\b[NSEW]\.?\s+(?:side\s+)?of\b/,     // "15 mi E of ...", "S. of ...", "W. side of ..."
+  CITATION_DIRECTION_MARKER,          // "E of", "N.E. of", "north-east of", "W. side of", "western slope", "12 km NW"
   surnameSafeMarker(['lat', 'lon', 'long']),  // lat / lon / long (not "Long, D.G.")
   surnameSafeMarker(['road', 'roads']),       // not "Roads, K."
   /\b(?:ridges?|trails?|villages?|summits?|streams?|rivers?|valleys?|mountains?|hills?)\b/i,

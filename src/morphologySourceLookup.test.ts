@@ -18,6 +18,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
   CAPABILITY,
+  CITATION_DIRECTION_MARKER,
+  CITATION_LOCALITY_MARKERS,
   COMMENT_MARKER_PREFIX,
   EXIT,
   MAX_GBIF_GETS,
@@ -259,6 +261,110 @@ describe('citation screen follow-ups: DOI suffixes and author surnames', () => {
     'Long, N. (1984). Fixture notes. Fixture Bull. 3: 1-2.',
   ])('still withholds a marker word used as locality: %s', text => {
     expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+});
+
+describe('citation screen: compound and spelled-out compass directions', () => {
+  const LOCALITY = 'possible_locality_or_collecting_marker';
+  const CITATION_LOCALITY_MARKERS_WITHOUT_DIRECTION = CITATION_LOCALITY_MARKERS.filter(re => re !== CITATION_DIRECTION_MARKER);
+  // Every string in this block is SYNTHETIC ("Fixture ..." place names), not a
+  // captured GBIF citation. Each carries a year and exactly one locality
+  // marker, the direction, so it is withheld only if the direction marker
+  // fires. Both the full screen and the marker alone are asserted, so a case
+  // cannot pass because some other marker (km, miles, road) caught it.
+  it.each([
+    ['compound point', 'Fixture Bull. 1999, NE of Fixture Town'],
+    ['compound point, trailing dot', 'Fixture Bull. 1999, SE. of Fixture Town'],
+    ['dotted compound point', 'Fixture Bull. 1999, N.E. of Fixture Town'],
+    ['three-letter point', 'Fixture Bull. 1999, NNW of Fixture Town'],
+    ['hyphenated point', 'Fixture Bull. 1999, N-E of Fixture Town'],
+    ['lower-case dotted point', 'Fixture Bull. 1999, n. of Fixture Town'],
+    ['lower-case compound point', 'Fixture Bull. 1999, ne of Fixture Town'],
+    ['lower-case dotted compound point', 'Fixture Bull. 1999, s.w. of Fixture Town'],
+    ['spelled point', 'Fixture Bull. 1999, north of Fixture Town'],
+    ['capitalised spelled point', 'Fixture Bull. 1999, West of Fixture Town'],
+    ['spelled compound point', 'Fixture Bull. 1999, northeast of Fixture Town'],
+    ['hyphenated spelled compound point', 'Fixture Bull. 1999, north-east of Fixture Town'],
+    ['spaced spelled compound point', 'Fixture Bull. 1999, south west of Fixture Town'],
+    ['adjectival side of', 'Fixture Bull. 1999, northern side of Fixture Peak'],
+    ['abbreviated slope of', 'Fixture Bull. 1999, E slope of Fixture Peak'],
+    ['abbreviated flank of', 'Fixture Bull. 1999, SW flank of Fixture Peak'],
+    ['adjectival slope, no "of"', 'Fixture Bull. 1999, western slope'],
+    ['adjectival slopes, no "of"', 'Fixture Bull. 1999, on eastern slopes'],
+    ['facing', 'Fixture Bull. 1999, N-facing cliff'],
+    ['spelled facing', 'Fixture Bull. 1999, south-facing cliff'],
+  ])('withholds a %s: %s', (_form, text) => {
+    expect(CITATION_DIRECTION_MARKER.test(text)).toBe(true);
+    expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+
+  // The "side of" branch had no test of its own: the only earlier case
+  // ("Road, W. side of Doi Pui") is also caught by the road marker. Here the
+  // direction + "side" is the only marker in the string.
+  it.each([
+    'Fixture Bull. 1999, W. side of Fixture Peak',
+    'Fixture Bull. 1999, S side of Fixture Peak',
+  ])('isolates the "side of" branch: %s', text => {
+    expect(CITATION_LOCALITY_MARKERS_WITHOUT_DIRECTION.some(re => re.test(text))).toBe(false);
+    expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+
+  // A distance before a direction: the km / mile / metre markers already
+  // withhold these, so the marker itself is asserted, defence in depth.
+  it.each([
+    'Fixture Bull. 1999, 12 km NW of Fixture Town',
+    'Fixture Bull. 1999, 12 km N of Fixture Town',
+    'Fixture Bull. 1999, 5 mi. NE',
+    'Fixture Bull. 1999, 300 m SW',
+    'Fixture Bull. 1999, 12 km north',
+  ])('the direction marker alone catches a distance + direction: %s', text => {
+    expect(CITATION_DIRECTION_MARKER.test(text)).toBe(true);
+    expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+
+  // Keep-cases. Real bibliographic shapes, typed by hand (SYNTHETIC strings,
+  // not captured from GBIF): compass letters as author initials, a direction
+  // inside a region name, "orchids of" / "Society of" where the letter before
+  // "of" is inside a word.
+  it.each([
+    'Dressler, R.L. 1993. Field guide to the orchids of Costa Rica and Panama. Cornell University Press.',
+    'Schlechter, R. (1915) Die Orchideen, ihre Beschreibung, Kultur und Züchtung.',
+    'N.E. Brown (1888). Fixture notes. Lindenia 4: 1-2.',
+    'Brown, N.E. (1888). Fixture notes. Fixture Bull. 4: 1-2.',
+    'Gale, S.W. & Fixture, A. (2010). Fixture notes. Fixture Bull. 4: 1-2.',
+    'Pridgeon, A.M., Cribb, P.J., Chase, M.W. & Rasmussen, F.N. (2005). Genera Orchidacearum 4.',
+    'Fixture, A. (1989). Flora of Tropical East Africa. Orchidaceae 3.',
+    'Fixture, A. (2005). Orchids of South-East Asia.',
+    'Fixture, A. (1968). Flora of West Tropical Africa 3.',
+    'Fixture, A. (1999). Newsletter of the Swedish Orchid Society 5: 1-2.',
+    'North, A. (1990). Fixture notes. Fixture Bull. 4: 1-2.',
+  ])('keeps a bibliographic citation: %s', text => {
+    expect(CITATION_DIRECTION_MARKER.test(text)).toBe(false);
+    expect(citationFor(text)).toEqual({ citation: text, citation_withheld_reason: null });
+  });
+
+  // Fail safe, documented in the script: compass initials directly followed
+  // by "of", and a direction naming a region, are withheld.
+  it.each([
+    'Brown, N.E. of Kew (1888). Fixture notes.',
+    'Fixture, A. (1999). Flora of the West of Fixtureland.',
+    'Fixture, A. (1999). Orchids of the western slopes of the Fixture Range.',
+  ])('withholds the ambiguous shape (fail safe): %s', text => {
+    expect(citationFor(text)).toEqual({ citation: null, citation_withheld_reason: LOCALITY });
+  });
+
+  it('does not trip on any real publishedIn string in the captured GBIF species fixtures', () => {
+    // Real captures (see each file's _capture block): the species records and
+    // synonym pages for 5310649 and 5310679.
+    const published: string[] = [];
+    for (const name of ['species-5310649', 'species-5310679', 'synonyms-5310649', 'synonyms-5310679']) {
+      const body = JSON.parse(fixture(name).body) as { publishedIn?: string; results?: Array<{ publishedIn?: string }> };
+      for (const row of [body, ...(body.results ?? [])]) if (typeof row.publishedIn === 'string') published.push(row.publishedIn);
+    }
+    expect(published.length).toBeGreaterThan(5);
+    expect(published.filter(text => CITATION_DIRECTION_MARKER.test(text))).toEqual([]);
+    expect(published).toContain('Fl. Brit. India 6: 60 (1890)');
+    expect(citationFor('Fl. Brit. India 6: 60 (1890)')).toEqual({ citation: 'Fl. Brit. India 6: 60 (1890)', citation_withheld_reason: null });
   });
 });
 
