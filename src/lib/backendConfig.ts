@@ -47,6 +47,14 @@ function readOwnerBearerToken(): string | null {
   }
 }
 
+/**
+ * Whether this tab holds an owner bearer session. Exposes presence only, never
+ * the token, so the member-read helper can defer to the owner identity.
+ */
+export function hasOwnerBearerSession(): boolean {
+  return Boolean(readOwnerBearerToken());
+}
+
 function storeOwnerBearerToken(token: string): void {
   try {
     if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(OWNER_SESSION_STORAGE_KEY, token);

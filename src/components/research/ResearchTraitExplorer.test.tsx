@@ -78,8 +78,16 @@ describe('Research Trait Explorer', () => {
     expect(container.querySelectorAll('th[scope="col"]')).toHaveLength(2);
   });
 
-  it.each([[404, 'not yet available'], [401, 'Sign in'], [503, 'Trait data is unavailable']])('renders HTTP %s honestly', async (status, message) => {
-    fetch.mockResolvedValue(response({}, status as number));
+  it.each([
+    [404, {}, 'not yet available'],
+    [401, {}, 'Your session could not be verified — sign in again. No trait records have been loaded.'],
+    [403, {}, 'Access is not permitted for this account. No trait records have been loaded.'],
+    [503, {}, 'Trait data is unavailable'],
+    // Synthetic shape for the backend's member-auth-not-configured 503: a
+    // deployment state, said as such and kept apart from an outage.
+    [503, { detail: { code: 'member_auth_not_configured' } }, 'Member access is not yet configured on the server.'],
+  ])('renders HTTP %s %j honestly', async (status, body, message) => {
+    fetch.mockResolvedValue(response(body, status as number));
     await render();
     await submit();
     expect(container.textContent).toContain(message);

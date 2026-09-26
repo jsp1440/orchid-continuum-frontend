@@ -1,6 +1,12 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
 import {
+  MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  MEMBER_FORBIDDEN_MESSAGE,
+  MEMBER_SESSION_UNVERIFIED_MESSAGE,
+  memberReadRefusal,
+} from '@/lib/memberReadAuth';
+import {
   fetchResearchTraits,
   parseTraitSubject,
   type ResearchTraits,
@@ -88,11 +94,19 @@ export default function ResearchTraitExplorer({ initialSubject = '' }: { initial
       if (active.current === request && !request.signal.aborted) setResult({ status: 'ready', data });
     } catch (error) {
       if (active.current !== request || request.signal.aborted) return;
-      const message = error instanceof CalyxApiError && error.kind === 'authentication_required'
-        ? 'Sign in to retrieve trait data. No trait records have been loaded.'
-        : error instanceof CalyxApiError && error.kind === 'route_unavailable'
-          ? 'Trait Explorer is not yet available from the research service. No trait data has been substituted.'
-          : 'Trait data is unavailable for this request. Try again when the research service is available; missing data is not a zero or biological absence.';
+      // The explorer sits behind ProtectedRoute, so the reader is signed in and
+      // their member session was sent. A refusal says which of three things
+      // happened rather than a generic "sign in".
+      const refusal = error instanceof CalyxApiError ? memberReadRefusal(error.status, error.code) : null;
+      const message = refusal === 'session_unverified'
+        ? `${MEMBER_SESSION_UNVERIFIED_MESSAGE} No trait records have been loaded.`
+        : refusal === 'forbidden'
+          ? `${MEMBER_FORBIDDEN_MESSAGE} No trait records have been loaded.`
+          : refusal === 'member_access_unconfigured'
+            ? `${MEMBER_ACCESS_UNCONFIGURED_MESSAGE} No trait records have been loaded; this is a deployment step, not an outage.`
+            : error instanceof CalyxApiError && error.kind === 'route_unavailable'
+              ? 'Trait Explorer is not yet available from the research service. No trait data has been substituted.'
+              : 'Trait data is unavailable for this request. Try again when the research service is available; missing data is not a zero or biological absence.';
       setResult({ status: 'error', message });
     }
   }

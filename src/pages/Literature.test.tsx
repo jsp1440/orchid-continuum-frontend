@@ -138,12 +138,12 @@ describe('an empty corpus is not a failure', () => {
 });
 
 describe('failures never read as an empty corpus', () => {
-  it('renders a refusal as owner-or-API access required, not a generic error', async () => {
+  it('renders a refusal as an access state, not a generic error', async () => {
     respond({ detail: { code: 'NOT_AUTHORIZED' } }, 403);
     await mount();
 
     expect(container.querySelector('[data-testid="literature-access-required"]')).not.toBeNull();
-    expect(text()).toMatch(/owner or API access required/i);
+    expect(text()).toMatch(/access is not permitted for this account/i);
     expect(text()).toMatch(/says nothing about how much literature the Continuum holds/i);
     expect(container.querySelector('[data-testid="literature-empty"]')).toBeNull();
     expect(container.querySelector('[data-testid="literature-error"]')).toBeNull();
@@ -222,15 +222,16 @@ describe('the list carries no paper bodies', () => {
  * A signed-in member, refused.
  *
  * `/literature` sits behind ProtectedRoute, so the reader here is signed in.
- * The backend still answers only an owner session or API key
- * (`verify_owner_or_api_key`), so a member is refused by design. That refusal
- * must read as exactly that — not as a broken login, not as an outage, and
- * never as an empty corpus. The 401 bodies are the backend's own responses,
- * captured in `literatureAccessDenied.realBackend.json`; the backend gate never
- * emits 403, so the 403 case below is a synthetic shape for the client's
- * 401/403 branch.
+ * Owner decision (2026-09-26): the literature reads accept a member's Supabase
+ * session. A refusal therefore means the session could not be verified (401),
+ * the account is not permitted (403), or member access is not yet configured
+ * on the server (503 with the member-auth-not-configured code) — and each must
+ * read as itself, never as an outage or an empty corpus. The 401 bodies are
+ * the backend's own responses, captured in
+ * `literatureAccessDenied.realBackend.json`; the 403 and the 503
+ * not-configured bodies are clearly synthetic shapes for those branches.
  */
-describe('a signed-in member without owner or API access', () => {
+describe('a signed-in member who is refused', () => {
   const signedIn = () =>
     mocks.useAuth.mockReturnValue({
       user: { id: 'member-1' },
@@ -246,18 +247,20 @@ describe('a signed-in member without owner or API access', () => {
     mocks.useAuth.mockReturnValue({ user: null, session: null, loading: false });
   });
 
-  it('is told the workspace is not yet open to members, on the backend\'s own 401', async () => {
+  it('is told the session could not be verified and to sign in again, on the backend\'s own 401', async () => {
     signedIn();
     respond(accessDenied.list_no_credentials.body, accessDenied.list_no_credentials.status);
     await mount();
 
     expect(accessState()).not.toBeNull();
     expect(accessState()?.getAttribute('data-access-status')).toBe('401');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('session_unverified');
     expect(accessState()?.getAttribute('data-signed-in')).toBe('true');
-    expect(text()).toMatch(/owner or API access required/i);
-    expect(text()).toMatch(/not yet open to members/i);
-    expect(text()).toMatch(/you are signed in/i);
-    expect(text()).toMatch(/signing in again will not change this answer/i);
+    expect(text()).toMatch(/your session could not be verified — sign in again/i);
+    expect(text()).toMatch(/you are signed in here/i);
+    // The superseded "closed to members" copy is gone.
+    expect(text()).not.toMatch(/not yet open to members/i);
+    expect(text()).not.toMatch(/owner or API access required/i);
     // Not the generic error, not the empty corpus, and no retry that cannot help.
     expect(container.querySelector('[data-testid="literature-error"]')).toBeNull();
     expect(container.querySelector('[data-testid="literature-empty"]')).toBeNull();
@@ -271,7 +274,7 @@ describe('a signed-in member without owner or API access', () => {
     await mount();
 
     expect(accessState()?.getAttribute('data-access-status')).toBe('401');
-    expect(text()).toMatch(/not yet open to members/i);
+    expect(text()).toMatch(/your session could not be verified/i);
   });
 
   it('gets the same state on a 403 (synthetic shape)', async () => {
@@ -280,7 +283,24 @@ describe('a signed-in member without owner or API access', () => {
     await mount();
 
     expect(accessState()?.getAttribute('data-access-status')).toBe('403');
-    expect(text()).toMatch(/owner or API access required/i);
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('forbidden');
+    expect(text()).toMatch(/access is not permitted for this account/i);
+    expect(text()).not.toMatch(/your session could not be verified/i);
+    expect(retry()).toBe(false);
+  });
+
+  it('is told member access is not yet configured on the server on a 503 not-configured (synthetic shape)', async () => {
+    signedIn();
+    respond({ detail: { code: 'member_auth_not_configured' } }, 503);
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('503');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('member_access_unconfigured');
+    expect(text()).toMatch(/member access is not yet configured on the server/i);
+    expect(text()).toMatch(/not an outage/i);
+    // Distinct from an outage: no outage panel and no retry that cannot help.
+    expect(container.querySelector('[data-testid="literature-error"]')).toBeNull();
+    expect(container.querySelector('[data-testid="literature-empty"]')).toBeNull();
     expect(retry()).toBe(false);
   });
 
@@ -292,7 +312,7 @@ describe('a signed-in member without owner or API access', () => {
     expect(accessState()).toBeNull();
     expect(container.querySelector('[data-testid="literature-error"]')).not.toBeNull();
     expect(text()).toMatch(/literature corpus is unavailable/i);
-    expect(text()).not.toMatch(/owner or API access required/i);
+    expect(text()).not.toMatch(/member access is not yet configured/i);
     expect(retry()).toBe(true);
   });
 
@@ -328,13 +348,14 @@ describe('a signed-in member without owner or API access', () => {
 });
 
 describe('an anonymous refusal', () => {
-  it('does not promise that a member sign-in would open the workspace', async () => {
+  it('asks for a sign-in rather than claiming a session failed verification', async () => {
     respond(accessDenied.list_no_credentials.body, accessDenied.list_no_credentials.status);
     await mount();
 
     const state = container.querySelector('[data-testid="literature-access-required"]');
     expect(state?.getAttribute('data-signed-in')).toBe('false');
-    expect(text()).toMatch(/a member sign-in will not change this answer either/i);
+    expect(text()).toMatch(/sign in to read the literature workspace/i);
     expect(text()).not.toMatch(/you are signed in/i);
+    expect(text()).not.toMatch(/your session could not be verified/i);
   });
 });

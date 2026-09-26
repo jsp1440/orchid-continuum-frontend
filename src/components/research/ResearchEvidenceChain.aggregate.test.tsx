@@ -103,7 +103,10 @@ describe("ResearchEvidenceChain aggregate links against a captured evidence-aggr
 
   it.each([
     ["503 database unavailable", () => new Response(JSON.stringify({ detail: { code: "AGGREGATION_DATABASE_UNAVAILABLE" } }), { status: 503 }), /could not be read/],
-    ["401 signed out", () => new Response(JSON.stringify({ detail: "Not authenticated" }), { status: 401 }), /could not be read: Not authenticated/],
+    ["401 session not verified", () => new Response(JSON.stringify({ detail: "Not authenticated" }), { status: 401 }), /could not be read: Your session could not be verified — sign in again\./],
+    // Synthetic shapes for the member-read refusals (owner decision 2026-09-26).
+    ["403 not permitted", () => new Response(JSON.stringify({ detail: "Forbidden" }), { status: 403 }), /could not be read: Access is not permitted for this account\./],
+    ["503 member access not configured", () => new Response(JSON.stringify({ detail: { code: "member_auth_not_configured" } }), { status: 503 }), /could not be read: Member access is not yet configured on the server\./],
     ["malformed 200", () => new Response(JSON.stringify({ aggregate_id: "3" })), /not in the expected shape/],
   ])("fails closed on %s", async (_name, response, message) => {
     aggregateResponse = response;

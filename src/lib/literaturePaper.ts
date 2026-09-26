@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import { errorCodeOf, isMemberAuthNotConfigured, withMemberReadAuth } from "@/lib/memberReadAuth";
 import type { DisplayBinding } from "@/lib/literatureDisplayPolicy";
 
 /**
@@ -24,6 +25,8 @@ import type { DisplayBinding } from "@/lib/literatureDisplayPolicy";
 
 export type LiteraturePaperFailureKind =
   | "unauthorized"
+  /** 503 with the backend's member-auth-not-configured code: a deployment state, not an outage. */
+  | "member_access_unconfigured"
   | "not_found"
   | "unavailable"
   | "network"
@@ -226,12 +229,16 @@ export function countStrippedLocality(entities: unknown): number {
 
 async function request(path: string, signal?: AbortSignal): Promise<Response> {
   try {
-    return await fetch(`${CALYX_BACKEND_BASE_URL}/api/literature-extraction${path}`, {
-      method: "GET",
-      credentials: "include",
-      headers: { Accept: "application/json" },
-      signal,
-    });
+    const url = `${CALYX_BACKEND_BASE_URL}/api/literature-extraction${path}`;
+    return await fetch(
+      url,
+      await withMemberReadAuth(url, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+        signal,
+      }),
+    );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     throw new LiteraturePaperError("network", "The literature service could not be reached.");
@@ -262,6 +269,16 @@ export async function fetchLiteraturePaper(
         "This session is not authorised to read this extraction.",
         paperResponse.status,
       );
+    }
+    if (paperResponse.status === 503) {
+      const code = errorCodeOf(await parse(paperResponse.clone()));
+      if (isMemberAuthNotConfigured(code)) {
+        throw new LiteraturePaperError(
+          "member_access_unconfigured",
+          "Member access is not yet configured on the server.",
+          503,
+        );
+      }
     }
     if (paperResponse.status === 404) {
       throw new LiteraturePaperError(

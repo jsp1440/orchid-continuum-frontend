@@ -53,6 +53,11 @@ type State =
   | { status: 'loaded'; view: LiteraturePaperView }
   | { status: 'failed'; error: LiteraturePaperError };
 
+/** Refused rather than broken: rendered as the access state, never as an outage. */
+function isRefusal(kind: LiteraturePaperError['kind']): boolean {
+  return kind === 'unauthorized' || kind === 'member_access_unconfigured';
+}
+
 function Withheld({ reason }: { reason: Parameters<typeof describeWithheld>[0] }) {
   return (
     <div
@@ -274,13 +279,18 @@ export default function LiteraturePaper() {
             <p className="text-sm text-white/60">Loading this extraction…</p>
           ) : null}
 
-          {state.status === 'failed' && state.error.kind === 'unauthorized' ? (
-            // Refused, not missing and not an outage: the service answers only
-            // an owner session or API key, and no member path exists yet.
-            <LiteratureAccessRequired status={state.error.status} subject="paper" />
+          {state.status === 'failed' && isRefusal(state.error.kind) ? (
+            // Refused, not missing and not an outage: the session could not be
+            // verified, is not permitted, or member access is not yet
+            // configured on the server.
+            <LiteratureAccessRequired
+              status={state.error.status}
+              refusal={state.error.kind === 'member_access_unconfigured' ? 'member_access_unconfigured' : null}
+              subject="paper"
+            />
           ) : null}
 
-          {state.status === 'failed' && state.error.kind !== 'unauthorized' ? (
+          {state.status === 'failed' && !isRefusal(state.error.kind) ? (
             <div
               className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5"
               data-testid="paper-error"

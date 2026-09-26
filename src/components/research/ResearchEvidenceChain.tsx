@@ -1,5 +1,13 @@
 import React, { useEffect, useState } from 'react';
 
+import { CalyxApiError } from '@/lib/calyxWorkspace';
+import {
+  MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  MEMBER_FORBIDDEN_MESSAGE,
+  MEMBER_SESSION_UNVERIFIED_MESSAGE,
+  memberReadRefusal,
+  type MemberReadRefusal,
+} from '@/lib/memberReadAuth';
 import type { LedgerRevision } from '@/lib/reasoningLedger';
 import {
   aggregateCounts,
@@ -28,7 +36,17 @@ import type { ResearchEvidenceLink } from '@/lib/researchStation';
 
 type Loaded<T> = { status: 'loading' } | { status: 'ready'; value: T } | { status: 'unavailable'; message: string };
 
+const REFUSAL_MESSAGE: Record<MemberReadRefusal, string> = {
+  session_unverified: MEMBER_SESSION_UNVERIFIED_MESSAGE,
+  forbidden: MEMBER_FORBIDDEN_MESSAGE,
+  member_access_unconfigured: MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+};
+
 function reason(error: unknown): string {
+  // A refused read says why it was refused (session, account, or server
+  // configuration) rather than echoing an owner-only gate message.
+  const refusal = error instanceof CalyxApiError ? memberReadRefusal(error.status, error.code) : null;
+  if (refusal) return REFUSAL_MESSAGE[refusal];
   return error instanceof Error ? error.message : 'The record could not be read.';
 }
 

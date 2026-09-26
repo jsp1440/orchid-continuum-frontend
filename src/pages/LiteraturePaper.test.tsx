@@ -289,12 +289,15 @@ describe('the page against the captured backend paper (main c37ff0ca6)', () => {
 /**
  * A signed-in member, refused, on the paper page.
  *
- * The route is behind ProtectedRoute, so the reader is signed in; the backend
- * still answers only an owner session or API key. The 401 is the backend's own
- * response (`literatureAccessDenied.realBackend.json`); the 403 is a synthetic
- * shape for the client's 401/403 branch, since this gate never emits 403.
+ * The route is behind ProtectedRoute, so the reader is signed in. Owner
+ * decision (2026-09-26): literature reads accept a member's Supabase session,
+ * so a refusal means an unverifiable session (401), an account that is not
+ * permitted (403), or member access not yet configured on the server (503 with
+ * the member-auth-not-configured code). The 401 is the backend's own response
+ * (`literatureAccessDenied.realBackend.json`); the 403 and 503 not-configured
+ * bodies are clearly synthetic shapes for those branches.
  */
-describe('a signed-in member without owner or API access', () => {
+describe('a signed-in member who is refused', () => {
   const signedIn = () =>
     mocks.useAuth.mockReturnValue({
       user: { id: 'member-1' },
@@ -315,7 +318,7 @@ describe('a signed-in member without owner or API access', () => {
     mocks.useAuth.mockReturnValue({ user: null, session: null, loading: false });
   });
 
-  it("is told the workspace is not yet open to members, on the backend's own 401", async () => {
+  it("is told the session could not be verified and to sign in again, on the backend's own 401", async () => {
     signedIn();
     answer(accessDenied.paper_no_credentials.status, accessDenied.paper_no_credentials.body);
     await mount();
@@ -323,8 +326,9 @@ describe('a signed-in member without owner or API access', () => {
     expect(accessState()).not.toBeNull();
     expect(accessState()?.getAttribute('data-access-status')).toBe('401');
     expect(accessState()?.getAttribute('data-signed-in')).toBe('true');
-    expect(text()).toMatch(/owner or API access required/i);
-    expect(text()).toMatch(/not yet open to members/i);
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('session_unverified');
+    expect(text()).toMatch(/your session could not be verified — sign in again/i);
+    expect(text()).not.toMatch(/not yet open to members/i);
     expect(text()).toMatch(/says nothing about what the extraction contains/i);
     expect(container.querySelector('[data-testid="paper-error"]')).toBeNull();
     expect(text()).not.toMatch(/not authorised to read/i);
@@ -342,8 +346,25 @@ describe('a signed-in member without owner or API access', () => {
     await mount();
 
     expect(accessState()?.getAttribute('data-access-status')).toBe('403');
-    expect(text()).toMatch(/owner or API access required/i);
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('forbidden');
+    expect(text()).toMatch(/access is not permitted for this account/i);
     expect(retry()).toBe(false);
+  });
+
+  it('is told member access is not yet configured on the server on a 503 not-configured (synthetic shape)', async () => {
+    signedIn();
+    answer(503, { detail: 'Member authentication is not configured' });
+    await mount();
+
+    expect(accessState()?.getAttribute('data-access-status')).toBe('503');
+    expect(accessState()?.getAttribute('data-access-reason')).toBe('member_access_unconfigured');
+    expect(text()).toMatch(/member access is not yet configured on the server/i);
+    expect(container.querySelector('[data-testid="paper-error"]')).toBeNull();
+    expect(text()).not.toMatch(/literature service is unavailable/i);
+    expect(retry()).toBe(false);
+    expect(container.querySelector('[data-testid="policy-summary"]')?.textContent).toMatch(
+      /nothing is being released/i,
+    );
   });
 
   it('sees a 5xx as an outage, not as a refusal', async () => {

@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import { isMemberAuthNotConfigured, withMemberReadAuth } from "@/lib/memberReadAuth";
 
 /**
  * Client for literature-extraction discovery.
@@ -26,6 +27,8 @@ import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 
 export type LiteratureFailureKind =
   | "unauthorized"
+  /** 503 with the backend's member-auth-not-configured code: a deployment state, not an outage. */
+  | "member_access_unconfigured"
   | "unavailable"
   | "rejected"
   | "network"
@@ -95,9 +98,15 @@ export async function fetchLiteratureIndex(
 
   let response: Response;
   try {
+    const url = `${CALYX_BACKEND_BASE_URL}/api/literature-extraction/papers?limit=${limit}&offset=${offset}`;
     response = await fetch(
-      `${CALYX_BACKEND_BASE_URL}/api/literature-extraction/papers?limit=${limit}&offset=${offset}`,
-      { method: "GET", credentials: "include", headers: { Accept: "application/json" }, signal: options.signal },
+      url,
+      await withMemberReadAuth(url, {
+        method: "GET",
+        credentials: "include",
+        headers: { Accept: "application/json" },
+        signal: options.signal,
+      }),
     );
   } catch (cause) {
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
@@ -119,6 +128,14 @@ export async function fetchLiteratureIndex(
         "unauthorized",
         "This session is not authorised to browse the literature corpus.",
         response.status,
+        code,
+      );
+    }
+    if (response.status === 503 && isMemberAuthNotConfigured(code)) {
+      throw new LiteratureIndexError(
+        "member_access_unconfigured",
+        "Member access is not yet configured on the server.",
+        503,
         code,
       );
     }

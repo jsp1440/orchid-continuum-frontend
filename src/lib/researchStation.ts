@@ -14,6 +14,12 @@
 
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
 import { CalyxApiError } from "@/lib/calyxWorkspace";
+import {
+  errorCodeOf,
+  isMemberAuthNotConfigured,
+  MEMBER_ACCESS_UNCONFIGURED_MESSAGE,
+  withMemberReadAuth,
+} from "@/lib/memberReadAuth";
 
 export type ResearchProjectStatus = "ACTIVE" | "PAUSED" | "COMPLETED";
 
@@ -73,12 +79,16 @@ export type ResearchNote = {
 
 export async function researchRequest<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
+  const url = `${CALYX_BACKEND_BASE_URL}${path}`;
   try {
-    response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
+    // In-scope GETs (e.g. /api/research/traits, candidate-knowledge, evidence
+    // aggregation, reasoning ledgers) carry a signed-in member's session;
+    // research projects and every write stay owner-session / API-key only.
+    response = await fetch(url, await withMemberReadAuth(url, {
       ...init,
       credentials: "include",
       headers: { Accept: "application/json", ...(init?.headers ?? {}) },
-    });
+    }));
   } catch (error) {
     if (init?.signal?.aborted) throw error;
     throw new CalyxApiError(
@@ -89,12 +99,19 @@ export async function researchRequest<T>(path: string, init?: RequestInit): Prom
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as { detail?: unknown } | null;
     const detail = typeof body?.detail === "string" ? body.detail : null;
+    const code = errorCodeOf(body) ?? undefined;
     if (response.status === 401 || response.status === 403) {
       throw new CalyxApiError(
         "authentication_required",
         detail ?? "Sign in to open your research projects.",
         response.status,
+        code,
       );
+    }
+    if (response.status === 503 && isMemberAuthNotConfigured(code)) {
+      // A deployment state, not an outage: the server has not been given its
+      // member-auth settings. Retrying cannot change this answer.
+      throw new CalyxApiError("server_error", MEMBER_ACCESS_UNCONFIGURED_MESSAGE, 503, code);
     }
     if (response.status === 404) {
       throw new CalyxApiError(

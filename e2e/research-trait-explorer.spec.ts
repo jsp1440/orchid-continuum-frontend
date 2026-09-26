@@ -15,6 +15,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
  * capture of backend `GET /api/research/traits` (see the provenance note on
  * `researchTraitsRoute` in e2e/support/reference-backend.mjs). The 401 and 500
  * bodies are backend captures too; only the `malformed` body is synthetic.
+ * The 401 now reads as an unverifiable member session, because the owner
+ * decision of 2026-09-26 opened these reads to signed-in members.
  *
  * WHAT THIS DOES NOT PROVE: any botanical claim, or anything about a deployed
  * service. The captured rows are the backend test suite's fixture rows, and
@@ -109,6 +111,19 @@ test("the Research Center is behind ProtectedRoute until the reader signs in", a
   await page.goto("/research", { waitUntil: "domcontentloaded" });
   await expect(explorer()).toBeVisible({ timeout: 20_000 });
   await expect(explorer()).toContainText("Choose a subject, then retrieve its recorded traits.");
+});
+
+test("the signed-in member's session rides on the trait read to the Calyx origin", async () => {
+  // Owner decision (2026-09-26): member reads accept the Supabase session. The
+  // reference backend issues the throwaway account's token (`at_…`); the read
+  // must carry it as a bearer, to the configured Calyx origin only.
+  const sent = page.waitForRequest(
+    (r) => r.method() === "GET" && r.url().includes("/api/research/traits?"),
+  );
+  await retrieve("species", "Cattleya purpurata");
+  const request = await sent;
+  expect(new URL(request.url()).origin).toBe(new URL(BACKEND).origin);
+  expect((await request.allHeaders())["authorization"]).toMatch(/^Bearer at_[0-9a-f-]+$/);
 });
 
 test("AVAILABLE: captured values render with provenance; unknown counts stay UNKNOWN", async () => {
@@ -222,12 +237,12 @@ test("a body outside the contract is refused rather than partially rendered", as
   await expectNoTraitRecords(section);
 });
 
-test("a 401 from the research service asks for sign-in and loads nothing", async () => {
+test("a 401 from the research service says the session could not be verified and loads nothing", async () => {
   await scenario({ genus: "absent_genus", failure: "unauthenticated" });
   await retrieve("genus", "Cattleya");
   const section = explorer();
   await expect(section.getByRole("status")).toHaveText(
-    "Sign in to retrieve trait data. No trait records have been loaded.",
+    "Your session could not be verified — sign in again. No trait records have been loaded.",
   );
   await expectNoTraitRecords(section);
 });
