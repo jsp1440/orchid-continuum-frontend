@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   parseAtlasInfraspecificQualifier,
+  parseAtlasNothospeciesName,
   parseAtlasTaxonName,
   resolveAtlasNextIncomingSubject,
 } from './incomingTaxon';
@@ -60,8 +61,67 @@ describe('parseAtlasTaxonName', () => {
     ['locality-shaped', 'Cattleya purpurata -22.9,-43.2'],
     ['opaque id', 'taxon-12345'],
     ['oversize', `Cattleya ${'a'.repeat(200)}`],
+    ['upper-case genus', 'CATTLEYA'],
+    ['upper-case genus in a binomial', 'CATTLEYA purpurata'],
+    ['mixed-case genus', 'CattLeya purpurata'],
+    ['mixed-case epithet', 'Cattleya pUrpurata'],
+    ['trailing capital in epithet', 'Cattleya purpuratA'],
+    ['mixed-case infraspecific epithet', 'Cattleya walkeriana var. aLba'],
+    ['digit in genus', 'Catt1eya purpurata'],
+    ['leading hyphen epithet', 'Cattleya -purpurata'],
+    ['trailing hyphen genus', 'Cattleya- purpurata'],
+    ['single-letter genus', 'C purpurata'],
+    ['single-letter epithet', 'Cattleya p'],
+    ['abbreviated genus', 'C. purpurata'],
+    ['intergeneric hybrid', '× Brassolaeliocattleya'],
   ])('rejects %s', (_label, value) => {
     expect(parseAtlasTaxonName(value)).toBeNull();
+  });
+
+  it.each([
+    ['hyphenated epithet', 'Neottia nidus-avis', 'species'],
+    ['hyphenated genus', 'Alpha-beta', 'genus'],
+  ])('still accepts a canonical %s', (_label, value, rank) => {
+    expect(parseAtlasTaxonName(value)?.rank).toBe(rank);
+  });
+});
+
+describe('parseAtlasNothospeciesName', () => {
+  it.each(['Cattleya × hardyana', 'Cattleya ×hardyana', 'Cattleya x hardyana'])(
+    'parses the nothospecies %j to its parent genus',
+    (value) => {
+      expect(parseAtlasNothospeciesName(value)).toEqual({
+        genus: 'Cattleya',
+        epithet: 'hardyana',
+        name: 'Cattleya × hardyana',
+      });
+    },
+  );
+
+  it.each([
+    ['intergeneric with space', '× Brassolaeliocattleya'],
+    ['intergeneric attached', '×Brassolaeliocattleya'],
+    ['intergeneric with epithet', '× Brassolaeliocattleya hybrida'],
+    ['ascii intergeneric', 'x Brassolaeliocattleya'],
+    ['plain binomial', 'Cattleya purpurata'],
+    ['plain genus', 'Cattleya'],
+    ['hybrid formula of two species', 'Cattleya labiata × Cattleya warneri'],
+    ['authority after hybrid', 'Cattleya × hardyana Rchb.f.'],
+    ['rank after hybrid', 'Cattleya × hardyana var. alba'],
+    ['upper-case genus', 'CATTLEYA × hardyana'],
+    ['mixed-case epithet', 'Cattleya × hArdyana'],
+    ['capital X sign', 'Cattleya X hardyana'],
+    ['attached ascii x (ambiguous)', 'Cattleya xhardyana'],
+    ['double space', 'Cattleya  × hardyana'],
+    ['non-string', 42],
+  ])('rejects %s', (_label, value) => {
+    expect(parseAtlasNothospeciesName(value)).toBeNull();
+  });
+
+  it('never becomes a species filter in Atlas Next', () => {
+    expect(resolveAtlasNextIncomingSubject({ species: ['Cattleya × hardyana'] })).toEqual({
+      kind: 'rejected',
+    });
   });
 });
 

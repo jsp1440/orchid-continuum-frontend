@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   RESEARCH_STATION_ORIGIN,
   researchStationAtlasNextHref,
+  researchStationAtlasNextLink,
 } from '@/lib/researchStationNavigation';
 import {
   ATLAS_INFRASPECIFIC_PARAM,
@@ -77,7 +78,11 @@ describe('Research Station → Atlas Next species round trip', () => {
 
   it.each([
     'taxon-12345',
-    'Cattleya × hardyana',
+    '× Brassolaeliocattleya',
+    '×Brassolaeliocattleya',
+    'Cattleya × hardyana Rchb.f.',
+    'CATTLEYA purpurata',
+    'Cattleya pUrpurata',
     'Cattleya purpurata Lindl.',
     'Cattleya purpurata|Vanda coerulea',
     'Cattleya purpurata&lat=-22.9',
@@ -87,6 +92,36 @@ describe('Research Station → Atlas Next species round trip', () => {
   ])('emits no link for a malformed or non-canonical name %j', (taxon) => {
     expect(researchStationAtlasNextHref({ taxon })).toBeNull();
   });
+
+  it.each(['Cattleya × hardyana', 'Cattleya ×hardyana', 'Cattleya x hardyana'])(
+    'gives the nothospecies %j an explicitly labelled genus-level fallback link',
+    (taxon) => {
+      const link = researchStationAtlasNextLink({ taxon, projectId: 'proj-77' });
+      expect(link).not.toBeNull();
+      expect(link!.fallback).toEqual({
+        rank: 'genus',
+        genus: 'Cattleya',
+        hybridName: 'Cattleya × hardyana',
+        label: 'Genus-level fallback · Cattleya (hybrid name not filterable)',
+      });
+
+      const { url, subject } = arrive(link!.href);
+      expect(url.pathname).toBe('/atlas-next');
+      expect([...url.searchParams.keys()].sort()).toEqual(['genera', 'origin', 'project']);
+      expect(url.searchParams.get('genera')).toBe('Cattleya');
+      // The hybrid name is never sent as a species filter.
+      expect(url.searchParams.has('species')).toBe(false);
+      expect(subject).toEqual({ kind: 'genus', genus: 'Cattleya' });
+      expect(researchStationAtlasNextHref({ taxon, projectId: 'proj-77' })).toBe(link!.href);
+    },
+  );
+
+  it.each(['Cattleya purpurata', 'Cattleya', 'Cattleya walkeriana var. alba'])(
+    'labels no fallback when the link is the subject\'s own view (%s)',
+    (taxon) => {
+      expect(researchStationAtlasNextLink({ taxon })?.fallback).toBeNull();
+    },
+  );
 
   it('never carries locality context', () => {
     const href = researchStationAtlasNextHref({ taxon: 'Cattleya purpurata', projectId: 'p' })!;

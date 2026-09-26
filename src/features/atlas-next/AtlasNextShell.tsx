@@ -690,12 +690,21 @@ const AtlasNextShell: React.FC = () => {
             {data.kind === 'loading' && (
               <p className="text-[13.5px] text-white/75">Reading the occurrence store…</p>
             )}
-            {data.kind === 'empty' && (
+            {data.kind === 'empty' && subject.kind === 'species' && data.matched === 0 ? (
+              <p
+                data-testid="atlas-next-species-no-records"
+                className="text-[13.5px] leading-[1.6] text-white/75"
+              >
+                No records for this species in the occurrence store: none of the records it
+                returned is <span className="italic">{subject.binomial}</span>. Nothing is drawn.
+                An absence of records here is not evidence that the orchid is absent anywhere.
+              </p>
+            ) : data.kind === 'empty' ? (
               <p className="text-[13.5px] leading-[1.6] text-white/75">
                 The occurrence store returned no usable coordinates. Nothing is drawn, because
                 drawing something here would be an invention.
               </p>
-            )}
+            ) : null}
             {data.kind === 'unavailable' && (
               <>
                 <p className="font-mono text-[9.5px] uppercase tracking-[0.18em] text-[#8b9487]">
