@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import { expect, test, type Page, type Request, type Route } from "@playwright/test";
 
 /**
@@ -271,38 +273,59 @@ test("an unavailable Matrix session fails closed: no candidates, no next observa
 });
 
 /*
- * Access refusals. Matrix identification is owner-only on the backend today
- * (an owner decision on member/public access is pending); this frontend does
- * not change that. The 401 body is the real backend's text
- * (app/security.py verify_owner_or_api_key); the 403 body is a SYNTHETIC
- * error shape. Before this state existed the page showed the raw string
+ * Access refusals. Owner decision (R1 J4, backend #1647): Matrix
+ * identification is open to signed-in members, so an anonymous 401 asks the
+ * visitor to sign in — it is not an owner-only message — while a 403
+ * OWNER_ACCESS_REQUIRED (member Matrix access switched off on the server)
+ * still says owner access. Both bodies are the real backend's, CAPTURED in
+ * src/lib/__fixtures__/matrixIdentification.memberBackend.json. Before these
+ * states existed the page showed the raw string
  * `Matrix API 401: "Owner session or API key is required"`.
+ * The signed-in member journey itself is e2e/matrix-member-session.spec.ts.
  */
-const REFUSALS: Array<[number, unknown]> = [
-  [401, { detail: "Owner session or API key is required" }],
-  [403, { detail: "Forbidden" }],
-];
+const MEMBER_CAPTURE = JSON.parse(
+  readFileSync(new URL("../src/lib/__fixtures__/matrixIdentification.memberBackend.json", import.meta.url), "utf8"),
+) as Record<string, Captured>;
 
-for (const [status, body] of REFUSALS) {
-  test(`a ${status} on the Matrix registry says owner access is required, with no raw error and no sign-in loop`, async ({ page }) => {
-    await localOnly(page);
-    await page.route(/\/api\/matrix-identification\/registry$/, (route) => (
-      route.request().method() === "OPTIONS" ? route.fallback() : fulfill(route, { status, body })
-    ));
-    await page.goto("/orchid-identification", { waitUntil: "domcontentloaded" });
+test("an anonymous 401 on the Matrix registry asks the visitor to sign in, with no raw error and no owner-only claim", async ({ page }) => {
+  await localOnly(page);
+  await page.route(/\/api\/matrix-identification\/registry$/, (route) => (
+    route.request().method() === "OPTIONS" ? route.fallback() : fulfill(route, MEMBER_CAPTURE.anon_registry_list)
+  ));
+  await page.goto("/orchid-identification", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByTestId("matrix-status-message")).toHaveText(
-      "Matrix identification currently requires owner access.",
-    );
-    await expect(page.getByText("owner access", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Matrix API \d{3}/)).toHaveCount(0);
-    await expect(page.getByText(/Owner session or API key is required/)).toHaveCount(0);
-    await expect(page.getByTestId("matrix-status-message")).not.toContainText(/sign in/i);
-    await expect(page.getByRole("button", { name: /try again/i })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeDisabled();
-    await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
-  });
-}
+  await expect(page.getByTestId("matrix-status-message")).toHaveText(
+    "Sign in to use Matrix identification. It is available to signed-in members.",
+  );
+  await expect(page.getByText("sign in", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("matrix-sign-in")).toBeVisible();
+  await expect(page.getByText(/owner access/i)).toHaveCount(0);
+  await expect(page.getByText(/Matrix API \d{3}/)).toHaveCount(0);
+  await expect(page.getByText(/Owner session, member session, or API key is required/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /try again/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeDisabled();
+  await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
+});
+
+test("a 403 OWNER_ACCESS_REQUIRED on the Matrix registry says owner access is required, with no raw error and no sign-in loop", async ({ page }) => {
+  await localOnly(page);
+  await page.route(/\/api\/matrix-identification\/registry$/, (route) => (
+    route.request().method() === "OPTIONS" ? route.fallback() : fulfill(route, MEMBER_CAPTURE.owner_only_contract)
+  ));
+  await page.goto("/orchid-identification", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByTestId("matrix-status-message")).toHaveText(
+    "Matrix identification currently requires owner access.",
+  );
+  await expect(page.getByText("owner access", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Matrix API \d{3}/)).toHaveCount(0);
+  await expect(page.getByText(/OWNER_ACCESS_REQUIRED/)).toHaveCount(0);
+  await expect(page.getByTestId("matrix-status-message")).not.toContainText(/sign in/i);
+  await expect(page.getByTestId("matrix-sign-in")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /try again/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeDisabled();
+  await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
+});
 
 test("an unavailable Matrix registry offers a retry that recovers once the service answers", async ({ page }) => {
   await localOnly(page);

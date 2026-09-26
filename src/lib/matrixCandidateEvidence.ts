@@ -11,11 +11,13 @@
  * number shown is one the Matrix produced.
  */
 
-import type {
-  CalyxExplanation,
-  CandidateExplanation,
-  CandidateResult,
-  ExplanationCandidateEvidence,
+import {
+  isWithheld,
+  MATRIX_WITHHELD_LABEL,
+  type CalyxExplanation,
+  type CandidateExplanation,
+  type CandidateResult,
+  type ExplanationCandidateEvidence,
 } from "@/lib/matrixIdentification";
 
 export type CandidateRankState = "compared" | "not_compared";
@@ -82,12 +84,20 @@ function containsLocality(value: unknown, depth = 0): boolean {
 }
 
 export function characterStatusLabel(status: string): string {
+  if (isWithheld(status)) return `status ${MATRIX_WITHHELD_LABEL}`;
   return STATUS_LABELS[status] ?? status.replaceAll("_", " ");
+}
+
+/** A character id for display; the withheld marker is said as withheld. */
+export function characterName(character: string): string {
+  return isWithheld(character) ? `character ${MATRIX_WITHHELD_LABEL}` : character.replaceAll("_", " ");
 }
 
 /** Render a Matrix value without inventing one: absent stays "not recorded". */
 export function formatMatrixValue(value: unknown): string {
   if (value === null || value === undefined || value === "") return "not recorded";
+  // The member view's privacy marker is not a state: say it is withheld.
+  if (isWithheld(value)) return MATRIX_WITHHELD_LABEL;
   if (Array.isArray(value)) return value.length ? value.map((item) => formatMatrixValue(item)).join(", ") : "not recorded";
   if (typeof value === "object") {
     const record = value as Record<string, unknown>;

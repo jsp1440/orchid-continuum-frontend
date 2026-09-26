@@ -3,24 +3,42 @@ import { calyxRelativePath } from "@/lib/calyxOrigin";
 import { supabase } from "@/lib/supabase";
 
 /**
- * Member read access to the Calyx product endpoints.
+ * Member access to the Calyx product endpoints: which requests may carry a
+ * signed-in member's Supabase access token.
  *
- * Owner decision (2026-09-26): "Allow member reads: accept Supabase member
- * sessions on the product endpoints." The backend accepts
- * `Authorization: Bearer <Supabase access token>` from a signed-in member on a
- * bounded set of GET routes, in addition to the owner session / API key.
- * Writes, Speak, Relationship Matrix build and Matrix identification sessions
- * stay owner-only.
+ * (The file keeps its original name, from when every member route was a read;
+ * it now also covers the Matrix identification session writes below.)
+ *
+ * Owner decisions (2026-09-26):
+ *  1. "Allow member reads: accept Supabase member sessions on the product
+ *     endpoints" (narrowed in backend #1643 @ b0c1acbcd).
+ *  2. Release 1 journey 4: Matrix identification is available to signed-in
+ *     members, and an identification session is private to the account that
+ *     created it (backend #1647, merged at 92e381c). A member may list the
+ *     registry, read one registry version's character definitions, create a
+ *     session, read their own session, and add observations to / evaluate /
+ *     request the deterministic explanation of their own session.
+ *
+ * Everything else stays owner-only for members: other writes, Speak, the
+ * Relationship Matrix build, and every other Matrix identification route
+ * (Vision, reports, persistence, /contract, stateless /evaluate, registry
+ * create / derive / concept-mapping-status / evaluate).
  *
  * This module is the ONE place the frontend decides whether a request carries
- * the member's Supabase access token. It is deliberately narrow:
+ * the member's Supabase access token. It is deliberately narrow and
+ * default-deny:
  *
- * - GET only. A write never carries the member token, whatever its path.
+ * - Exact method + path pairs only (MEMBER_ROUTES). The method must match
+ *   exactly (a POST to a GET-only path, or a GET to a POST-only path, gets
+ *   nothing), and each path is an anchored pattern.
+ * - Identifier segments are matched safely: a session id must be a canonical
+ *   UUID (the backend addresses member sessions by UUID only, which also keeps
+ *   `sessions/persistence-status` out of scope); a registry id / version is a
+ *   single segment with no '/', no '.'/'..' segment and no encoded '/', '\',
+ *   '.', '%' or NUL.
  * - The Calyx origin only. The URL is parsed and its origin compared with the
- *   configured Calyx base; a string prefix check would accept
+ *   configured Calyx base (calyxOrigin); a string prefix check would accept
  *   `https://calyx.example.com.attacker.test`. Any other origin gets nothing.
- * - The in-scope paths only (MEMBER_READ_PATHS). Anything else on the Calyx
- *   origin — including owner-only reads — gets nothing.
  * - Never overrides a caller's own Authorization header, and never displaces
  *   an owner bearer session: when the owner transport holds one, the owner
  *   identity is what the request must carry.
@@ -29,32 +47,68 @@ import { supabase } from "@/lib/supabase";
  *   anywhere by this module.
  *
  * Callers keep `credentials: "include"`, so an owner-session cookie still
- * works exactly as before.
+ * works exactly as before (the backend prefers a valid owner cookie over a
+ * member bearer).
  */
 
+/** Which member-access decision a route belongs to. */
+export type MemberScope = "read" | "matrix";
+
+type MemberRoute = { method: "GET" | "POST"; pattern: RegExp; scope: MemberScope };
+
+/** A canonical UUID: the only way a member addresses a Matrix session. */
+const UUID_SEGMENT = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
+
 /**
- * Paths, relative to the Calyx base, that accept a member session on GET.
+ * One path segment for a registry id or version, as `encodeURIComponent`
+ * produces it: unreserved characters and percent-escapes, never a '.' or '..'
+ * segment, and never an escape for '/', '\', '.', '%' or NUL (so no encoded
+ * traversal or double encoding).
+ */
+const SAFE_SEGMENT =
+  "(?!\\.{1,2}(?:/|$))(?:[A-Za-z0-9_.~!*'()-]|%(?!2[Ff]|5[Cc]|2[Ee]|25|00)[0-9A-Fa-f]{2})+";
+
+const MATRIX = "/api/matrix-identification";
+
+/**
+ * Method + path pairs, relative to the Calyx base, that accept a member
+ * session. Default-deny: a request matching none of these never carries the
+ * member token.
  *
- * The owner narrowed member reads (backend #1643 @ b0c1acbcd, "narrow member
- * scope to fully schema-defined endpoints"). The backend marks exactly four
- * routes `@member_readable`:
+ * Reads (backend #1643 @ b0c1acbcd marks four GETs `@member_readable`; this
+ * frontend calls only the first two, so only those two are listed):
  *
  *   GET /api/research/traits
  *   GET /api/literature-extraction/papers        (the list only)
- *   GET /api/evidence-aggregation/health
- *   GET /api/evidence-aggregation/registry
  *
- * This frontend calls only the first two, so only those two are listed here:
- * a path the frontend never requests has no business in the token scope.
+ * Matrix identification (backend #1647 `@matrix_member_route`, own sessions):
+ *
+ *   GET  /api/matrix-identification/registry
+ *   GET  /api/matrix-identification/registry/{registry_id}/{version}
+ *   POST /api/matrix-identification/sessions
+ *   GET  /api/matrix-identification/sessions/{session_id}
+ *   POST /api/matrix-identification/sessions/{session_id}/observations
+ *   POST /api/matrix-identification/sessions/{session_id}/evaluate
+ *   POST /api/matrix-identification/sessions/{session_id}/explain
+ *
  * Everything else — all of candidate-knowledge, every other
- * evidence-aggregation route (aggregates, aggregate detail, conflicts),
- * literature source-binding, paper full text, coverage-audit and every
- * reasoning-ledger read — is owner-only for members and never receives the
- * member token. A refusal there is shown as an owner-only view.
+ * evidence-aggregation route, literature source-binding, paper full text,
+ * coverage-audit, every reasoning-ledger read, and every other Matrix route —
+ * is owner-only for members and never receives the member token. A refusal
+ * there is shown as an owner-only view.
  */
-const MEMBER_READ_PATHS: readonly RegExp[] = [
-  /^\/api\/research\/traits$/,
-  /^\/api\/literature-extraction\/papers$/,
+const MEMBER_ROUTES: readonly MemberRoute[] = [
+  { method: "GET", pattern: /^\/api\/research\/traits$/, scope: "read" },
+  { method: "GET", pattern: /^\/api\/literature-extraction\/papers$/, scope: "read" },
+  { method: "GET", pattern: new RegExp(`^${MATRIX}/registry$`), scope: "matrix" },
+  { method: "GET", pattern: new RegExp(`^${MATRIX}/registry/${SAFE_SEGMENT}/${SAFE_SEGMENT}$`), scope: "matrix" },
+  { method: "POST", pattern: new RegExp(`^${MATRIX}/sessions$`), scope: "matrix" },
+  { method: "GET", pattern: new RegExp(`^${MATRIX}/sessions/${UUID_SEGMENT}$`), scope: "matrix" },
+  {
+    method: "POST",
+    pattern: new RegExp(`^${MATRIX}/sessions/${UUID_SEGMENT}/(?:observations|evaluate|explain)$`),
+    scope: "matrix",
+  },
 ];
 
 function requestMethod(method: string | undefined): string {
@@ -62,21 +116,50 @@ function requestMethod(method: string | undefined): string {
 }
 
 /**
- * Whether a request is an in-scope member read against the configured Calyx
- * origin. Pure: no session is consulted.
+ * The member scope of a request against the configured Calyx origin, or null
+ * when the member token must not be sent. Pure: no session is consulted.
  */
+export function memberScopeOf(
+  url: string,
+  method?: string,
+  calyxBase: string = CALYX_BACKEND_BASE_URL,
+): MemberScope | null {
+  // Shared exact-origin check (calyxOrigin): same scheme/host/port, no
+  // userinfo, under the base path on a segment boundary; relative or
+  // unparseable URLs are not provably the Calyx origin. The query string is
+  // never part of the matched path.
+  const relative = calyxRelativePath(url, calyxBase);
+  if (relative === null) return null;
+  const verb = requestMethod(method);
+  const route = MEMBER_ROUTES.find((item) => item.method === verb && item.pattern.test(relative));
+  return route ? route.scope : null;
+}
+
+/** Whether a request is one of the two in-scope member READS (#858). */
 export function isMemberReadRequest(
   url: string,
   method?: string,
   calyxBase: string = CALYX_BACKEND_BASE_URL,
 ): boolean {
-  if (requestMethod(method) !== "GET") return false;
-  // Shared exact-origin check (calyxOrigin): same scheme/host/port, no
-  // userinfo, under the base path on a segment boundary; relative or
-  // unparseable URLs are not provably the Calyx origin.
-  const relative = calyxRelativePath(url, calyxBase);
-  if (relative === null) return false;
-  return MEMBER_READ_PATHS.some((pattern) => pattern.test(relative));
+  return memberScopeOf(url, method, calyxBase) === "read";
+}
+
+/** Whether a request is one of the member Matrix identification pairs (R1 J4). */
+export function isMemberMatrixRequest(
+  url: string,
+  method?: string,
+  calyxBase: string = CALYX_BACKEND_BASE_URL,
+): boolean {
+  return memberScopeOf(url, method, calyxBase) === "matrix";
+}
+
+/** Whether a request may carry the member token at all (any member scope). */
+export function isMemberScopedRequest(
+  url: string,
+  method?: string,
+  calyxBase: string = CALYX_BACKEND_BASE_URL,
+): boolean {
+  return memberScopeOf(url, method, calyxBase) !== null;
 }
 
 /** The current member access token, or null when signed out / unavailable. */
@@ -86,19 +169,20 @@ async function currentMemberAccessToken(): Promise<string | null> {
     const token = data.session?.access_token;
     return typeof token === "string" && token ? token : null;
   } catch {
-    // Identity unavailable is "no member session", never a thrown read.
+    // Identity unavailable is "no member session", never a thrown request.
     return null;
   }
 }
 
 /**
  * Return `init` with the member's Supabase access token attached when — and
- * only when — `url`/`init.method` is an in-scope member read on the Calyx
- * origin, a member session exists, the caller set no Authorization header and
- * no owner bearer session is held. Otherwise `init` is returned unchanged.
+ * only when — `url`/`init.method` is an in-scope member pair on the Calyx
+ * origin (see MEMBER_ROUTES), a member session exists, the caller set no
+ * Authorization header and no owner bearer session is held. Otherwise `init`
+ * is returned unchanged (the same object).
  */
-export async function withMemberReadAuth(url: string, init: RequestInit = {}): Promise<RequestInit> {
-  if (!isMemberReadRequest(url, init.method)) return init;
+export async function withMemberAuth(url: string, init: RequestInit = {}): Promise<RequestInit> {
+  if (!isMemberScopedRequest(url, init.method)) return init;
   const headers = new Headers(init.headers);
   if (headers.has("Authorization")) return init;
   if (hasOwnerBearerSession()) return init;
@@ -107,6 +191,13 @@ export async function withMemberReadAuth(url: string, init: RequestInit = {}): P
   headers.set("Authorization", `Bearer ${token}`);
   return { ...init, headers };
 }
+
+/**
+ * The #858 name for `withMemberAuth`, kept for the read clients and their
+ * tests. It is the same single decision: a request outside MEMBER_ROUTES gets
+ * nothing, whichever name is used.
+ */
+export const withMemberReadAuth = withMemberAuth;
 
 /* ------------------------------------------------------------------------ */
 /* Refusal states                                                           */

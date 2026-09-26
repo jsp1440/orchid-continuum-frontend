@@ -1786,6 +1786,107 @@ function candidateKnowledgeProposal(input) {
   };
 }
 
+/* ------------------------------------- member Matrix identification ----- */
+
+/**
+ * Signed-in member Matrix identification (Release 1 journey 4).
+ *
+ * WHAT THIS IS: a replay of REAL member-shaped responses captured from
+ * orchid-calyx-backend running LOCALLY at the SHA recorded in the fixture's
+ * `_meta` (uvicorn, file store, no DB — never production), for a clearly
+ * SYNTHETIC registry ("Fixture taxon A/B/C"; invented states and provenance,
+ * not claims about any orchid). The fixture lives beside the unit-test
+ * fixtures: src/lib/__fixtures__/matrixIdentification.memberBackend.json.
+ *
+ * It answers ONLY requests that carry a member bearer this server issued, the
+ * way the real backend routes a verified member: the seven member routes get
+ * the captured member view, every other /api/matrix-identification route gets
+ * the captured 403 OWNER_ACCESS_REQUIRED, and a session is private to the
+ * account that created it (another account gets the captured 404). Requests
+ * without a member bearer fall through to the owner-shaped reference handlers
+ * below, unchanged, so the existing owner journeys keep their behaviour.
+ *
+ * The only transformation: each replayed session gets a fresh UUID, substituted
+ * for the captured session id. The replay follows the captured sequence
+ * (observe spur_length_mm = 25 certain, then flower_color = "white" probable);
+ * a request that departs from it gets a SYNTHETIC 409 so a frontend that sent
+ * something else fails loudly instead of rendering a mismatched capture.
+ */
+const MEMBER_MATRIX = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/matrixIdentification.memberBackend.json", import.meta.url), "utf8"),
+);
+const MEMBER_MATRIX_SESSION_ID = MEMBER_MATRIX.create.body.session_id;
+const MEMBER_MATRIX_REGISTRY = MEMBER_MATRIX.registry_detail.body;
+const memberMatrixSessions = new Map(); // session_id -> { userId, observed }
+const MEMBER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function memberMatrixReplay(captured, sessionId) {
+  const text = JSON.stringify(captured.body).replaceAll(MEMBER_MATRIX_SESSION_ID, sessionId);
+  return { status: captured.status, body: JSON.parse(text) };
+}
+
+function memberMatrixNotFound(res, sessionId) {
+  const replay = memberMatrixReplay(MEMBER_MATRIX.other_member_get, sessionId);
+  return json(res, 404, replay.body);
+}
+
+function memberMatrixRoute(req, res, path, userId, input) {
+  const send = (replay) => json(res, replay.status, replay.body);
+  if (path === "/api/matrix-identification/registry" && req.method === "GET") {
+    return send(MEMBER_MATRIX.registry_list);
+  }
+  let match = /^\/api\/matrix-identification\/registry\/([^/]+)\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const [registryId, version] = [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+    if (registryId === MEMBER_MATRIX_REGISTRY.registry_id && version === MEMBER_MATRIX_REGISTRY.version) {
+      return send(MEMBER_MATRIX.registry_detail);
+    }
+    // SYNTHETIC shape (the capture holds one registry).
+    return json(res, 404, { detail: `registry version not found: ${registryId}/${version}` });
+  }
+  if (path === "/api/matrix-identification/sessions" && req.method === "POST") {
+    if (input?.registry_id !== MEMBER_MATRIX_REGISTRY.registry_id || input?.version !== MEMBER_MATRIX_REGISTRY.version) {
+      return json(res, 404, { detail: "registry version not found" }); // SYNTHETIC shape
+    }
+    const sessionId = randomUUID();
+    memberMatrixSessions.set(sessionId, { userId, observed: 0 });
+    return send(memberMatrixReplay(MEMBER_MATRIX.create, sessionId));
+  }
+  match = /^\/api\/matrix-identification\/sessions\/([^/]+)(?:\/(observations|evaluate|explain))?$/.exec(path);
+  const memberRoute = match && MEMBER_UUID.test(match[1]) && (
+    (!match[2] && req.method === "GET") || (match[2] && req.method === "POST")
+  );
+  if (!memberRoute) {
+    // Every other Matrix route is owner-only for a verified member (captured 403).
+    return send(MEMBER_MATRIX.owner_only_reports);
+  }
+  const sessionId = match[1];
+  const session = memberMatrixSessions.get(sessionId);
+  if (!session || session.userId !== userId) return memberMatrixNotFound(res, sessionId);
+  const evaluations = [MEMBER_MATRIX.evaluate0, MEMBER_MATRIX.evaluate1, MEMBER_MATRIX.evaluate2];
+  const observations = [MEMBER_MATRIX.observe1, MEMBER_MATRIX.observe2];
+  if (!match[2]) {
+    return json(res, 200, memberMatrixReplay(evaluations[session.observed], sessionId).body.session);
+  }
+  if (match[2] === "evaluate") return send(memberMatrixReplay(evaluations[session.observed], sessionId));
+  if (match[2] === "observations") {
+    const expected = observations[session.observed]?.request.body;
+    const same = expected
+      && input?.character === expected.character
+      && JSON.stringify(input?.value) === JSON.stringify(expected.value)
+      && input?.certainty === expected.certainty;
+    if (!same) {
+      return json(res, 409, { detail: "SYNTHETIC reference replay: observation departs from the captured sequence", received: input ?? null });
+    }
+    session.observed += 1;
+    return send(memberMatrixReplay(observations[session.observed - 1], sessionId));
+  }
+  if (session.observed !== 2) {
+    return json(res, 409, { detail: "SYNTHETIC reference replay: the explanation was captured after two observations" });
+  }
+  return send(memberMatrixReplay(MEMBER_MATRIX.explain2, sessionId));
+}
+
 async function calyxRoute(req, res, url) {
   const path = url.pathname;
   const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : Buffer.alloc(0);
@@ -1794,6 +1895,10 @@ async function calyxRoute(req, res, url) {
   let match;
 
   /* ------------------------------------------------- Calyx / Brain ----- */
+
+  // A signed-in member's bearer on a Matrix route: the captured member view.
+  const matrixMember = path.startsWith("/api/matrix-identification/") ? bearer(req) : null;
+  if (matrixMember) return memberMatrixRoute(req, res, path, matrixMember, body.length ? asJson() : null);
 
   if (path === "/api/matrix-identification/registry" && req.method === "GET") {
     return json(res, 200, {

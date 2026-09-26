@@ -30,9 +30,13 @@ vi.mock('@/lib/supabase', () => ({
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import {
   errorCodeOf,
+  isMemberMatrixRequest,
   isMemberReadRequest,
+  isMemberScopedRequest,
   isRetryableRefusal,
   memberReadRefusal,
+  memberScopeOf,
+  withMemberAuth,
   withMemberReadAuth,
 } from '@/lib/memberReadAuth';
 import { fetchLiteratureIndex } from '@/lib/literatureIndex';
@@ -119,6 +123,21 @@ const NEVER_MEMBER_TOKEN = [
   '/api/research/projects/p-1/evidence',
   '/api/research/projects/p-1/reasoning-ledgers',
   '/api/research/projects/p-1/epistemic-memory',
+  // Matrix identification GET routes that are owner-only for members
+  // (backend #1647: everything without `@matrix_member_route`).
+  '/api/matrix-identification/contract',
+  '/api/matrix-identification/persistence-readiness',
+  '/api/matrix-identification/registry/persistence-status',
+  '/api/matrix-identification/registry/persistence-preflight',
+  '/api/matrix-identification/registry/r1-synthetic-member-matrix/1/concept-mapping-status',
+  '/api/matrix-identification/sessions',
+  '/api/matrix-identification/sessions/persistence-status',
+  '/api/matrix-identification/sessions/persistence-preflight',
+  `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/reports`,
+  `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/reports/r-1`,
+  `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/vision/suggestions`,
+  `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/vision/suggestions/s-1/region`,
+  `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/vision/images/i-1/analyses`,
   // Other routers and owner tools.
   '/api/calyx/speak',
   '/api/relationship-matrix/build',
@@ -459,5 +478,216 @@ describe('refusal classification against the backend #1643 codes', () => {
       code: 'OWNER_ACCESS_REQUIRED',
       retryable: false,
     });
+  });
+});
+
+/* ------------------------------------------------------------------------ */
+/* Matrix identification (R1 J4, backend #1647)                             */
+/* ------------------------------------------------------------------------ */
+
+const SESSION = '5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11';
+const M = '/api/matrix-identification';
+
+/** Exactly the member Matrix pairs: the token rides on these and nothing else. */
+const MEMBER_MATRIX_PAIRS: Array<[string, string]> = [
+  ['GET', `${M}/registry`],
+  ['GET', `${M}/registry/r1-synthetic-member-matrix/1`],
+  ['GET', `${M}/registry/reference-orchid-matrix/fixture-v1`],
+  // encodeURIComponent output for an id with spaces / parentheses / a colon.
+  ['GET', `${M}/registry/${encodeURIComponent("Fixture matrix (draft):A")}/${encodeURIComponent('v1.0+b')}`],
+  ['POST', `${M}/sessions`],
+  ['GET', `${M}/sessions/${SESSION}`],
+  ['GET', `${M}/sessions/${SESSION.toUpperCase()}`],
+  ['POST', `${M}/sessions/${SESSION}/observations`],
+  ['POST', `${M}/sessions/${SESSION}/evaluate`],
+  ['POST', `${M}/sessions/${SESSION}/explain`],
+];
+
+/**
+ * Every owner-only Matrix route from the backend (vision x5, reports x3,
+ * persistence, /contract, stateless /evaluate, registry create / derive /
+ * concept-mapping-status / evaluate), each with its real method.
+ */
+const OWNER_ONLY_MATRIX_PAIRS: Array<[string, string]> = [
+  ['GET', `${M}/sessions/${SESSION}/vision/images/img-1/analyses`],
+  ['POST', `${M}/sessions/${SESSION}/vision/analyses/an-1/suggestions`],
+  ['GET', `${M}/sessions/${SESSION}/vision/suggestions`],
+  ['GET', `${M}/sessions/${SESSION}/vision/suggestions/sg-1/region`],
+  ['POST', `${M}/sessions/${SESSION}/vision/suggestions/sg-1/review`],
+  ['POST', `${M}/sessions/${SESSION}/reports`],
+  ['GET', `${M}/sessions/${SESSION}/reports`],
+  ['GET', `${M}/sessions/${SESSION}/reports/rep-1`],
+  ['GET', `${M}/sessions/persistence-status`],
+  ['GET', `${M}/sessions/persistence-preflight`],
+  ['GET', `${M}/registry/persistence-status`],
+  ['GET', `${M}/registry/persistence-preflight`],
+  ['GET', `${M}/persistence-readiness`],
+  ['GET', `${M}/contract`],
+  ['POST', `${M}/evaluate`],
+  ['POST', `${M}/registry`],
+  ['POST', `${M}/registry/r1-synthetic-member-matrix/1/derive-concept-mappings`],
+  ['GET', `${M}/registry/r1-synthetic-member-matrix/1/concept-mapping-status`],
+  ['POST', `${M}/registry/evaluate`],
+];
+
+/** The right path with the wrong method gets nothing. */
+const METHOD_MISMATCH: Array<[string, string]> = [
+  ['POST', `${M}/registry`],
+  ['PUT', `${M}/registry`],
+  ['POST', `${M}/registry/r1-synthetic-member-matrix/1`],
+  ['DELETE', `${M}/registry/r1-synthetic-member-matrix/1`],
+  ['GET', `${M}/sessions`],
+  ['PUT', `${M}/sessions`],
+  ['POST', `${M}/sessions/${SESSION}`],
+  ['DELETE', `${M}/sessions/${SESSION}`],
+  ['PATCH', `${M}/sessions/${SESSION}`],
+  ['GET', `${M}/sessions/${SESSION}/observations`],
+  ['GET', `${M}/sessions/${SESSION}/evaluate`],
+  ['GET', `${M}/sessions/${SESSION}/explain`],
+  ['PUT', `${M}/sessions/${SESSION}/observations`],
+  ['HEAD', `${M}/registry`],
+  ['OPTIONS', `${M}/sessions`],
+];
+
+/** Identifier traversal, encoded separators and near misses. */
+const MATRIX_TRAVERSAL: Array<[string, string]> = [
+  ['GET', `${M}/registry/a/b/c`],
+  ['GET', `${M}/registry/a`],
+  ['GET', `${M}/registry/a/`],
+  ['GET', `${M}/registry//b`],
+  ['GET', `${M}/registry/a%2Fb/1`],
+  ['GET', `${M}/registry/a%2fb/1`],
+  ['GET', `${M}/registry/a%5Cb/1`],
+  ['GET', `${M}/registry/%2e%2e/1`],
+  ['GET', `${M}/registry/.%2e/1`],
+  ['GET', `${M}/registry/a%252Fb/1`],
+  ['GET', `${M}/registry/a%00/1`],
+  ['GET', `${M}/registry/r/1%2F..%2Fconcept-mapping-status`],
+  ['GET', `${M}/registry/r/1/../../contract`],
+  ['GET', `${M}/sessions/../contract`],
+  ['GET', `${M}/sessions/${SESSION}/../persistence-status`],
+  ['GET', `${M}/sessions/not-a-uuid`],
+  ['GET', `${M}/sessions/${SESSION}x`],
+  ['GET', `${M}/sessions/${SESSION.replaceAll('-', '')}`],
+  ['GET', `${M}/sessions/{${SESSION}}`],
+  ['GET', `${M}/sessions/${SESSION}%2Freports`],
+  ['POST', `${M}/sessions/${SESSION}%2Fevaluate`],
+  ['POST', `${M}/sessions/${SESSION}/evaluate/`],
+  ['POST', `${M}/sessions/${SESSION}/evaluatex`],
+  ['POST', `${M}/sessions/${SESSION}/explain/extra`],
+  ['POST', `${M}/sessions/`],
+  ['GET', `${M}/registry/`],
+  ['GET', `${M}/registryx`],
+  ['GET', '/api/matrix-identification-other/registry'],
+  ['GET', `/x${M}/registry`],
+  ['POST', `/api/matrix/identification/sessions`],
+];
+
+describe('member Matrix identification pairs (R1 J4)', () => {
+  it.each(MEMBER_MATRIX_PAIRS)('accepts %s %s on the Calyx origin, as a Matrix pair only', (method, path) => {
+    expect(isMemberMatrixRequest(`${base}${path}`, method)).toBe(true);
+    expect(isMemberScopedRequest(`${base}${path}`, method)).toBe(true);
+    expect(memberScopeOf(`${base}${path}`, method)).toBe('matrix');
+    // The #858 read decision is unchanged: a Matrix pair is not a "read".
+    expect(isMemberReadRequest(`${base}${path}`, method)).toBe(false);
+  });
+
+  it('keeps the two #858 read paths exactly as they were', () => {
+    expect(memberScopeOf(`${base}/api/research/traits?genus=Cattleya`, 'GET')).toBe('read');
+    expect(memberScopeOf(`${base}/api/literature-extraction/papers`, 'GET')).toBe('read');
+    expect(memberScopeOf(`${base}/api/research/traits`, 'POST')).toBeNull();
+  });
+
+  it.each(OWNER_ONLY_MATRIX_PAIRS)('rejects the owner-only route %s %s', (method, path) => {
+    expect(isMemberScopedRequest(`${base}${path}`, method)).toBe(false);
+    // ...and with the other method too, unless that pair is itself a member
+    // route (POST /registry is owner-only; GET /registry is the member list).
+    for (const other of ['GET', 'POST']) {
+      if (MEMBER_MATRIX_PAIRS.some(([m, p]) => m === other && p === path)) continue;
+      expect(isMemberScopedRequest(`${base}${path}`, other), `${other} ${path}`).toBe(false);
+    }
+  });
+
+  it.each(METHOD_MISMATCH)('rejects a method mismatch: %s %s', (method, path) => {
+    expect(isMemberScopedRequest(`${base}${path}`, method)).toBe(false);
+  });
+
+  it.each(MATRIX_TRAVERSAL)('rejects identifier traversal / near miss: %s %s', (method, path) => {
+    expect(isMemberScopedRequest(`${base}${path}`, method)).toBe(false);
+  });
+
+  it('matches the method case-insensitively, as fetch normalises it', () => {
+    expect(isMemberMatrixRequest(`${base}${M}/sessions`, 'post')).toBe(true);
+    expect(isMemberMatrixRequest(`${base}${M}/registry`)).toBe(true);
+    expect(isMemberMatrixRequest(`${base}${M}/sessions`)).toBe(false);
+  });
+
+  it('rejects every other origin for a Matrix pair, including lookalikes', () => {
+    const calyx = new URL(base);
+    const other = calyx.protocol === 'https:' ? 'http:' : 'https:';
+    for (const url of [
+      `${calyx.protocol}//${calyx.host}.attacker.test${M}/sessions`,
+      `${calyx.protocol}//attacker.test/${calyx.host}${M}/sessions`,
+      `${calyx.protocol}//${calyx.hostname}:1${M}/sessions`,
+      `${other}//${calyx.host}${M}/sessions`,
+      `${calyx.protocol}//user:pass@${calyx.host}${M}/sessions`,
+      `${calyx.protocol}//${calyx.host}@attacker.test${M}/sessions`,
+      `${M}/sessions`,
+      `//attacker.test${M}/sessions`,
+      'https://api.inaturalist.org/api/matrix-identification/sessions',
+    ]) {
+      expect(isMemberScopedRequest(url, 'POST'), url).toBe(false);
+    }
+  });
+
+  it('attaches the member bearer to each Matrix pair and keeps the caller\'s other headers', async () => {
+    signedIn();
+    for (const [method, path] of MEMBER_MATRIX_PAIRS) {
+      const init = await withMemberAuth(`${base}${path}`, {
+        method,
+        credentials: 'include',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: method === 'POST' ? '{}' : undefined,
+      });
+      expect(authorizationOf(init), `${method} ${path}`).toBe(`Bearer ${MEMBER_TOKEN}`);
+      expect(new Headers(init.headers).get('Content-Type')).toBe('application/json');
+      expect(init.credentials).toBe('include');
+      expect(init.method).toBe(method);
+    }
+  });
+
+  it('never attaches the member bearer to an owner-only route, a method mismatch or a traversal, and does not read the session', async () => {
+    signedIn();
+    for (const [method, path] of [...OWNER_ONLY_MATRIX_PAIRS, ...METHOD_MISMATCH, ...MATRIX_TRAVERSAL]) {
+      const input: RequestInit = { method, body: method === 'POST' ? '{}' : undefined };
+      const init = await withMemberAuth(`${base}${path}`, input);
+      expect(init, `${method} ${path}`).toBe(input);
+      expect(authorizationOf(init), `${method} ${path}`).toBeNull();
+    }
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it('never overrides a caller Authorization on a Matrix pair', async () => {
+    signedIn();
+    const init = await withMemberAuth(`${base}${M}/sessions`, { method: 'POST', headers: { Authorization: 'Bearer caller-owned' } });
+    expect(authorizationOf(init)).toBe('Bearer caller-owned');
+  });
+
+  it('defers to an owner bearer session on a Matrix pair', async () => {
+    signedIn();
+    sessionStorage.setItem(OWNER_BEARER_KEY, 'owner-bearer');
+    const input: RequestInit = { method: 'POST', body: '{}' };
+    expect(await withMemberAuth(`${base}${M}/sessions/${SESSION}/evaluate`, input)).toBe(input);
+  });
+
+  it('attaches nothing to a Matrix pair when signed out or when identity is unavailable', async () => {
+    signedOut();
+    expect(authorizationOf(await withMemberAuth(`${base}${M}/registry`))).toBeNull();
+    mocks.getSession.mockRejectedValue(new Error('identity down'));
+    expect(authorizationOf(await withMemberAuth(`${base}${M}/registry`))).toBeNull();
+  });
+
+  it('withMemberReadAuth is the same single decision (no second, wider path)', () => {
+    expect(withMemberReadAuth).toBe(withMemberAuth);
   });
 });
