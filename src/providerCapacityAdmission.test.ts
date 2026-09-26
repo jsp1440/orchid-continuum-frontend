@@ -43,8 +43,12 @@ const LIVE_PROVIDER_QUEUE: Array<[number, string]> = [
   [805, 'cap-literature-public-browser-7'], [806, 'cap-scheduler-issue-automation-10'],
   [807, 'cap-buying-companion-11'], [809, 'cap-research-evidence-chain'],
 ];
-/** An admissible real leaf the ranker places below every one the live wave admitted. */
-const LOWER_LEAF = 'cap-research-trait-explorer';
+/**
+ * An admissible real leaf the ranker places below every one the live wave admitted.
+ * (Was cap-research-trait-explorer until the 2026-09-26 graph reconciliation
+ * settled that leaf to OWNER_ACTION, which takes it out of admission.)
+ */
+const LOWER_LEAF = 'cap-atlas-next-thematic-5';
 const FREE = 900;
 
 function liveSnapshot(): Snapshot {
@@ -132,7 +136,9 @@ describe('lane class comes from the same router the classify job runs', () => {
 describe('the live starvation replay: 14 provider-required queued issues, dailySpent = 10', () => {
   it('reproduces the defect without provider slots: eight provider lanes, the deterministic issue never admitted', () => {
     const plan = makePlan(liveSnapshot(), [], NOW);
-    expect(plan.issues).toEqual([793, 794, 797, 798, 799, 800, 801, 802]);
+    // Ranking order on the 2026-09-26 reconciled graph: #797's leaf gained its
+    // browser gate and #803's its integration gate, which moved both up.
+    expect(plan.issues).toEqual([797, 793, 794, 803, 798, 799, 800, 801]);
     expect(plan.issues).not.toContain(FREE);
   });
 
@@ -172,7 +178,7 @@ describe('the live starvation replay: 14 provider-required queued issues, dailyS
   it('with budget, admits exactly the wave call cap of provider lanes and fills the rest with deterministic work', () => {
     const plan = makePlan(liveSnapshot(), [], NOW, COMPLETION_GRAPH, undefined,
       providerCapacityFromEnvironment(LANE_ENV, liveLedger({ dailySpent: { [DAY]: 0 } }), NOW));
-    expect(plan.issues).toEqual([793, FREE]);
+    expect(plan.issues).toEqual([797, FREE]);
     expect(plan.providerAdmitted).toBe(1);
     expect(plan.providerDeferred.every(d => d.reason === 'provider_capacity: wave_max_calls')).toBe(true);
     expect(plan.providerDeferred).toHaveLength(13);
@@ -218,7 +224,7 @@ describe('the live reserve missions #816-#818 (verbatim, #819 fixtures) under da
 
   it('reproduces the live wave without provider slots: eight provider lanes, #816-#818 unreachable', () => {
     const plan = makePlan(snapshot(), [], NOW);
-    expect(plan.issues).toEqual([793, 794, 797, 798, 799, 800, 801, 802]);
+    expect(plan.issues).toEqual([797, 793, 794, 803, 798, 799, 800, 801]);
     expect(plan.unreachableQueued).toEqual(expect.arrayContaining([816, 817, 818]
       .map(issueNumber => ({ issueNumber, nodeIds: [RESERVE_LEAF] }))));
   });
@@ -243,7 +249,7 @@ describe('the live reserve missions #816-#818 (verbatim, #819 fixtures) under da
   it('with budget, the one provider slot and the reserve mission share the wave', () => {
     const plan = makePlan(snapshot(), [], NOW, COMPLETION_GRAPH, undefined,
       providerCapacityFromEnvironment(LANE_ENV, liveLedger({ dailySpent: { [DAY]: 0 } }), NOW));
-    expect(plan.issues).toEqual([793, 816]);
+    expect(plan.issues).toEqual([797, 816]);
   });
 });
 
@@ -295,7 +301,10 @@ describe('per-lane-class admission in the graph planner', () => {
 describe('the isolated re-plan reproduces the plan decision', () => {
   // Nine leaves, each bound to one provider-required issue. Issue 791 plays the
   // lane that took the wave's single provider slot.
-  const nodes = ['cap-judging-practice', ...LIVE_PROVIDER_QUEUE.slice(0, 8).map(([, node]) => node)];
+  // 791's leaf must outrank the others so it takes the single slot. It was
+  // cap-judging-practice until that leaf settled to OWNER_ACTION (2026-09-26).
+  const TOP_LEAF = 'cap-conservatory-collection';
+  const nodes = [TOP_LEAF, ...LIVE_PROVIDER_QUEUE.slice(0, 8).map(([, node]) => node)];
   const numbers = [791, ...LIVE_PROVIDER_QUEUE.slice(0, 8).map(([n]) => n)];
   const snapshot = (): Snapshot => ({
     issues: [...numbers.map((n, i) => providerIssue(n, nodes[i])), freeIssue(FREE, LOWER_LEAF)],
@@ -321,7 +330,7 @@ describe('the isolated re-plan reproduces the plan decision', () => {
     const capacity = providerCapacityFromEnvironment(LANE_ENV, liveLedger({ dailySpent: { [DAY]: 0 } }), NOW);
     const s = snapshot();
     const plan = makePlan(s, [], NOW, COMPLETION_GRAPH, undefined, capacity);
-    expect(assertAdmission(plan, s, 791, NOW).nodeId).toBe('cap-judging-practice');
+    expect(assertAdmission(plan, s, 791, NOW).nodeId).toBe(TOP_LEAF);
     // A live recomputation now would say zero -- and would have refused 791.
     expect(providerCapacityFromEnvironment(LANE_ENV, liveLedger(), NOW).slots).toBe(0);
   });
