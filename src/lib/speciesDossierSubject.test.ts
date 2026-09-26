@@ -110,16 +110,13 @@ describe('resolveDossierForSubject', () => {
     expect(deps.resolveSpecies).not.toHaveBeenCalled();
   });
 
-  it('is not found when the route id is another taxon and the subject name resolves to nothing', async () => {
-    // Both Calyx sources answered: the route id is another taxon's record and
-    // the resolver holds no taxon by this name. That is a definitive not-found
-    // (still never the other taxon's dossier).
+  it('is unavailable when the subject name resolves to nothing', async () => {
     const deps = {
       fetchDossier: vi.fn().mockResolvedValue(envelope('6056', 'Caladenia x suffusa')),
       resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'unresolved' })),
     };
     expect(await resolveDossierForSubject('6056', 'Cattleya labiata', deps)).toEqual({
-      state: 'not_found',
+      state: 'unavailable',
     });
   });
 });
@@ -145,9 +142,8 @@ describe('resolver-path dossiers are held to the subject identity', () => {
         resolution({ status: 'resolved', taxon_id: '7904', matched_name: 'Cattleya labiata' }),
       ),
     };
-    // Never the species dossier; every source answered, so the forma has no record.
     expect(await resolveDossierForSubject('6056', 'Cattleya labiata fo. alba', deps)).toEqual({
-      state: 'not_found',
+      state: 'unavailable',
     });
   });
 
@@ -158,7 +154,7 @@ describe('resolver-path dossiers are held to the subject identity', () => {
     };
     expect(
       await resolveDossierForSubject('cattleya-labiata', "Cattleya labiata 'Alba'", deps),
-    ).toEqual({ state: 'not_found' });
+    ).toEqual({ state: 'unavailable' });
   });
 
   it('holds the route dossier to the same check when the resolver names its taxon', async () => {
@@ -167,7 +163,7 @@ describe('resolver-path dossiers are held to the subject identity', () => {
       resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'resolved', taxon_id: '7904' })),
     };
     expect(await resolveDossierForSubject('7904', 'Cattleya labiata ssp. vera', deps)).toEqual({
-      state: 'not_found',
+      state: 'unavailable',
     });
     expect(deps.fetchDossier).toHaveBeenCalledTimes(1);
   });

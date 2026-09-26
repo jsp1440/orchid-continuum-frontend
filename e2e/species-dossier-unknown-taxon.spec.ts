@@ -1,14 +1,18 @@
 import { expect, test, type Page } from "@playwright/test";
 
 /**
- * R1 journeys 3 and 14: a species dossier for a taxon no identity source
- * holds must say so, instead of an empty dossier titled with the requested
- * (invented) name in scientific-name styling; an outage must say the page
- * could not load, never "no record". Identifiers are the reference backend's
- * clearly synthetic unknown-taxon fixtures, not taxa.
+ * R1 journeys 3 and 14: a species dossier for a taxon with no record must say
+ * so instead of an empty dossier titled with the requested (invented) name in
+ * scientific-name styling. "No record" is shown only on positive evidence of
+ * absence from the Calyx sources; a bare id, or a source that did not answer,
+ * gets "could not confirm" with a retry. Identifiers are the reference
+ * backend's clearly synthetic unknown-taxon fixtures, not taxa.
  */
 
 const SCREENSHOT_DIR = process.env.UNKNOWN_TAXON_SCREENSHOT_DIR;
+const UNKNOWN = "/species/Notagenus%20fakeus";
+const REAL = `/species/${encodeURIComponent("taxon:world-plants:phalaenopsis-amabilis")}`;
+const REAL_NAME = "Phalaenopsis amabilis";
 
 async function expectNoDossierShell(page: Page) {
   const main = page.locator("main");
@@ -20,16 +24,16 @@ async function expectNoDossierShell(page: Page) {
 }
 
 test("an invented taxon name shows 'no taxon record found', not an empty dossier", async ({ page }) => {
-  await page.goto("/species/Notagenus%20fakeus");
+  await page.goto(UNKNOWN);
 
   const panel = page.getByTestId("taxon-record-not-found");
   await expect(panel).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("No taxon record found for ‘Notagenus fakeus’");
   // The requested text is shown as input: upright, not the italic serif an
   // accepted scientific name is set in, and with no authority line.
-  const requested = page.getByTestId("requested-taxon-name");
-  await expect(requested).toHaveCSS("font-style", "normal");
+  await expect(page.getByTestId("requested-taxon-name")).toHaveCSS("font-style", "normal");
   await expect(page.getByRole("heading", { level: 1 })).toHaveCSS("font-style", "normal");
+  await expect(panel).not.toContainText(/species directory/i);
   await expect(page.getByTestId("taxon-record-unavailable")).toHaveCount(0);
   await expectNoDossierShell(page);
   await expect(panel.getByRole("link", { name: "Browse the lexicon" })).toHaveAttribute("href", "/lexicon");
@@ -40,34 +44,80 @@ test("an invented taxon name shows 'no taxon record found', not an empty dossier
   await expect(page).toHaveURL(/\/species$/);
 });
 
-test("a nonexistent numeric taxon id shows 'no taxon record found'", async ({ page }) => {
+test("a bare numeric id with no record is 'could not confirm', never 'no record found'", async ({ page }) => {
   await page.goto("/species/987654321");
-  await expect(page.getByTestId("taxon-record-not-found")).toBeVisible();
-  await expect(page.getByTestId("requested-taxon-name")).toHaveText("‘987654321’");
+  const panel = page.getByTestId("taxon-record-unavailable");
+  await expect(panel).toBeVisible();
+  await expect(panel).toContainText("Could not confirm a taxon record for ‘987654321’");
+  await expect(page.getByText(/No taxon record found/)).toHaveCount(0);
   await expectNoDossierShell(page);
 });
 
-test("an outage says the taxon record could not load and offers a retry, never 'no record'", async ({ page }) => {
+test("an outage says it could not confirm the record and retries, never 'no record'", async ({ page }) => {
   await page.goto("/species/Outagenus%20downus");
   const panel = page.getByTestId("taxon-record-unavailable");
   await expect(panel).toBeVisible();
-  await expect(panel).toContainText("Could not load the taxon record for ‘Outagenus downus’");
+  await expect(panel).toContainText("Could not confirm a taxon record for ‘Outagenus downus’");
   await expect(page.getByText(/No taxon record found/)).toHaveCount(0);
   await expectNoDossierShell(page);
 
-  const dossierRequests: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().includes("/api/platform/species/")) dossierRequests.push(request.url());
-  });
+  // Wait on the retry's own request, not on the panel (the old panel is
+  // already visible when the click lands).
+  const retried = page.waitForRequest((request) =>
+    request.url().includes("/api/platform/species/Outagenus%20downus/dossier"),
+  );
   await panel.getByRole("button", { name: /try again/i }).click();
+  await retried;
   await expect(page.getByTestId("taxon-record-unavailable")).toBeVisible();
-  expect(dossierRequests.length).toBeGreaterThan(0);
+  await expect(page.getByText(/No taxon record found/)).toHaveCount(0);
 });
 
 test("a real taxon still renders its dossier", async ({ page }) => {
-  await page.goto(`/species/${encodeURIComponent("taxon:world-plants:phalaenopsis-amabilis")}`);
-  await expect(page.getByRole("heading", { level: 1, name: "Phalaenopsis amabilis" })).toBeVisible();
+  await page.goto(REAL);
+  await expect(page.getByRole("heading", { level: 1, name: REAL_NAME })).toBeVisible();
   await expect(page.getByTestId("dossier-identity")).toBeVisible();
   await expect(page.getByTestId("taxon-record-not-found")).toHaveCount(0);
   await expect(page.getByTestId("taxon-record-unavailable")).toHaveCount(0);
+});
+
+test("history navigation between an unknown and a real taxon never shows one's answer under the other", async ({ page }) => {
+  // Record, on every DOM mutation, whether the page body claims "no record"
+  // or shows a dossier heading, together with the path at that moment.
+  await page.addInitScript(() => {
+    const seen: Array<{ path: string; noRecord: boolean; heading: string }> = [];
+    (window as unknown as { __taxonStates: typeof seen }).__taxonStates = seen;
+    const sample = () => {
+      const main = document.querySelector("main");
+      if (!main) return;
+      seen.push({
+        path: location.pathname,
+        noRecord: /No taxon record found/.test(main.textContent || ""),
+        heading: main.querySelector("h1")?.textContent || "",
+      });
+    };
+    new MutationObserver(sample).observe(document, { subtree: true, childList: true, characterData: true });
+  });
+
+  await page.goto(UNKNOWN);
+  await expect(page.getByTestId("taxon-record-not-found")).toBeVisible();
+
+  // Client-side navigation to the real taxon (pushState + popstate), then back and forward.
+  await page.evaluate((to) => {
+    history.pushState({}, "", to);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  }, REAL);
+  await expect(page.getByRole("heading", { level: 1, name: REAL_NAME })).toBeVisible();
+  await page.goBack();
+  await expect(page.getByTestId("taxon-record-not-found")).toBeVisible();
+  await page.goForward();
+  await expect(page.getByRole("heading", { level: 1, name: REAL_NAME })).toBeVisible();
+
+  const states = await page.evaluate(
+    () => (window as unknown as { __taxonStates: Array<{ path: string; noRecord: boolean; heading: string }> }).__taxonStates,
+  );
+  const realPath = new URL(REAL, "http://x").pathname;
+  const unknownPath = new URL(UNKNOWN, "http://x").pathname;
+  expect(states.filter((s) => s.path === realPath).length).toBeGreaterThan(0);
+  expect(states.filter((s) => s.path === realPath && s.noRecord)).toEqual([]);
+  expect(states.filter((s) => s.path === unknownPath && s.heading === REAL_NAME)).toEqual([]);
 });

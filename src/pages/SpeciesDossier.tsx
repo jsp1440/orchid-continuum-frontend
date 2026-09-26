@@ -109,7 +109,21 @@ function formatConfidence(confidence: number | null): string {
  * reached the page says it could not load and offers a retry instead.
  */
 
+/**
+ * Every piece of state on this page belongs to one requested subject. The
+ * page is remounted whenever the route slug or the linked name changes, so a
+ * history or in-app navigation can never render one subject's answers (for
+ * instance "No taxon record found") under another subject's name, not even
+ * for the one render before the load effect runs.
+ */
 const SpeciesDossier: React.FC = () => {
+  const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const subjectKey = `${slug ?? ''}\u0000${searchParams.get('name') ?? ''}`;
+  return <SpeciesDossierForSubject key={subjectKey} />;
+};
+
+const SpeciesDossierForSubject: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const taxonomyId = slug ?? '';
   // A link from a surface keyed by another id space (the public species search)
@@ -324,7 +338,14 @@ const SpeciesDossier: React.FC = () => {
           ) : recordState === 'unavailable' ? (
             <TaxonRecordUnavailable
               requested={requestedLabel}
-              onRetry={() => setRetryNonce((n) => n + 1)}
+              onRetry={() => {
+                // Back to loading in the same render as the click, so the old
+                // answer is never shown as the answer to the new request.
+                setLoading(true);
+                setSpeciesSource(null);
+                setDossierOutcome(null);
+                setRetryNonce((n) => n + 1);
+              }}
             />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -639,8 +660,10 @@ function TaxonRecordExits() {
 }
 
 /**
- * Every identity source answered and none holds a record: say so, with the
- * requested text shown as input, and render no dossier sections at all.
+ * Positive evidence of absence (the canonical dossier handler holds no record
+ * under this identifier and the canonical name resolver finds no taxon by
+ * this name): say so, with the requested text shown as input, and render no
+ * dossier sections at all.
  */
 function TaxonRecordNotFound({ requested }: { requested: string }) {
   return (
@@ -653,9 +676,9 @@ function TaxonRecordNotFound({ requested }: { requested: string }) {
         No taxon record found for <RequestedName value={requested} />
       </h1>
       <p className="mt-4 text-[14px] leading-relaxed text-[#cfc8b8]/85">
-        Neither the species directory nor the canonical taxon record holds an entry under this
-        name or identifier. The text above is repeated exactly as it was requested; it is not an
-        accepted scientific name, and no dossier exists for it.
+        The canonical taxon index holds no record under this identifier, and the canonical name
+        resolver finds no taxon by this name. The text above is repeated exactly as it was
+        requested; it is not an accepted scientific name, and no dossier exists for it.
       </p>
       <TaxonRecordExits />
     </div>
@@ -663,8 +686,10 @@ function TaxonRecordNotFound({ requested }: { requested: string }) {
 }
 
 /**
- * No source found the taxon, but at least one did not answer: the page cannot
- * say whether it exists, so it neither shows a dossier nor claims "no record".
+ * No source found the taxon, and there is no positive evidence of absence
+ * (a source did not answer, or the only answers cannot settle it): the page
+ * cannot say whether it exists, so it neither shows a dossier nor claims
+ * "no record".
  */
 function TaxonRecordUnavailable({
   requested,
@@ -680,14 +705,15 @@ function TaxonRecordUnavailable({
       className="max-w-[720px] rounded-2xl border border-amber-300/30 bg-amber-300/[0.05] p-8"
     >
       <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.24em] uppercase text-amber-200/80">
-        <CloudOff className="h-4 w-4" /> Records could not be loaded
+        <CloudOff className="h-4 w-4" /> Record not confirmed
       </div>
       <h1 className="mt-3 font-body text-2xl md:text-3xl text-[#faf7f2] leading-snug">
-        Could not load the taxon record for <RequestedName value={requested} />
+        Could not confirm a taxon record for <RequestedName value={requested} />
       </h1>
       <p className="mt-4 text-[14px] leading-relaxed text-[#cfc8b8]/85">
-        One or more record services did not answer, so this page cannot say whether this taxon
-        exists. This is not a statement that no record exists.
+        The record services either did not answer or could not settle whether a record exists
+        under this name or identifier, so this page cannot say whether this taxon exists. This is
+        not a statement that no record exists.
       </p>
       <button
         type="button"
