@@ -85,10 +85,33 @@ export async function fetchGenusOccurrences(genus: string, limit = 500, signal?:
 }
 
 export interface SpeciesSearchResult { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; family?: string; conservation_status?: string | null; }
+/**
+ * Outcome of a species search, keeping a failed request apart from a genuine
+ * empty answer. A network error, timeout, non-2xx status or a 2xx body that
+ * carries no result list is `unavailable`: the service did not answer the
+ * question, so nothing may be rendered as "no species matched".
+ */
+export type SpeciesSearchOutcome =
+  | { status: 'ok'; results: SpeciesSearchResult[] }
+  | { status: 'unavailable'; httpStatus: number };
+export async function searchSpeciesOutcome(q: string, limit = 20, signal?: AbortSignal): Promise<SpeciesSearchOutcome> {
+  const { ok, status, data } = await getJson<unknown>(`${OC_BACKEND_BASE}/api/species/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
+  if (!ok) return { status: 'unavailable', httpStatus: status };
+  if (Array.isArray(data)) return { status: 'ok', results: data as SpeciesSearchResult[] };
+  if (data && typeof data === 'object' && Array.isArray((data as { results?: unknown }).results)) {
+    return { status: 'ok', results: (data as { results: SpeciesSearchResult[] }).results };
+  }
+  return { status: 'unavailable', httpStatus: status };
+}
+/**
+ * Best-effort lookup for callers that only enrich a page and already treat
+ * "no match" and "could not look it up" alike (they show no enrichment). A
+ * search surface that tells a visitor what matched must use
+ * searchSpeciesOutcome instead.
+ */
 export async function searchSpecies(q: string, limit = 20, signal?: AbortSignal): Promise<SpeciesSearchResult[]> {
-  const { data } = await getJson<SpeciesSearchResult[] | { results?: SpeciesSearchResult[] }>(`${OC_BACKEND_BASE}/api/species/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
-  if (!data) return [];
-  return Array.isArray(data) ? data : data.results ?? [];
+  const outcome = await searchSpeciesOutcome(q, limit, signal);
+  return outcome.status === 'ok' ? outcome.results : [];
 }
 
 export interface SpeciesDossierData { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; specific_epithet?: string; species?: string; family?: string; tribe?: string | null; subfamily?: string | null; authority?: string; common_name?: string | null; conservation_status?: string | null; iucn_code?: string | null; region?: string | null; habitat?: string | null; description?: string | null; representative_image_url?: string | null; hero_image_url?: string | null; }

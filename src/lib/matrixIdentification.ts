@@ -1,4 +1,4 @@
-import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
 
 export type Certainty = "certain" | "probable" | "uncertain" | "unknown";
 export type ExplanationAudience = "beginner" | "intermediate" | "expert";
@@ -200,18 +200,78 @@ export type VisionSuggestionList = {
   vision_analyses?: Record<string, Record<string, unknown>>;
 };
 
+/**
+ * Why a Matrix request could not be answered, in terms a visitor can act on.
+ *
+ * Matrix identification is owner-only on the backend today (an owner decision
+ * on member/public access is pending), and the frontend never sends a member
+ * token there. So a 403, or a 401 without an owner session, means "this needs
+ * owner access" — not a broken login, and never a "sign in again" prompt that
+ * a member could loop on. Only a 401 while an owner session is held means the
+ * owner session itself was not accepted. A 5xx or a request that never got an
+ * answer is an outage the visitor can retry.
+ */
+export type MatrixAccessState = "owner_access_required" | "owner_session_unverified" | "unavailable";
+
+export const MATRIX_OWNER_ACCESS_MESSAGE = "Matrix identification currently requires owner access.";
+export const MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE =
+  "Your owner session could not be verified. Sign in again as the owner to use Matrix identification.";
+export const MATRIX_UNAVAILABLE_MESSAGE = "Matrix identification is temporarily unavailable. Try again.";
+
+const MATRIX_ACCESS_MESSAGE: Record<MatrixAccessState, string> = {
+  owner_access_required: MATRIX_OWNER_ACCESS_MESSAGE,
+  owner_session_unverified: MATRIX_OWNER_SESSION_UNVERIFIED_MESSAGE,
+  unavailable: MATRIX_UNAVAILABLE_MESSAGE,
+};
+
+/** Classify a failed Matrix response; null for statuses with their own meaning (400/404/409/422…). */
+export function matrixAccessState(
+  status: number | null,
+  ownerSession: boolean = hasOwnerBearerSession(),
+): MatrixAccessState | null {
+  if (status === null || status === 0 || status >= 500) return "unavailable";
+  if (status === 403) return "owner_access_required";
+  if (status === 401) return ownerSession ? "owner_session_unverified" : "owner_access_required";
+  return null;
+}
+
+export class MatrixApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number | null,
+    public readonly access: MatrixAccessState | null,
+  ) {
+    super(message);
+    this.name = "MatrixApiError";
+  }
+}
+
+/** The access state carried by an error thrown from this module, if any. */
+export function matrixErrorAccess(error: unknown): MatrixAccessState | null {
+  return error instanceof MatrixApiError ? error.access : null;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
-    credentials: "include",
-    headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    ...init,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
+      credentials: "include",
+      headers: { Accept: "application/json", "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      ...init,
+    });
+  } catch {
+    throw new MatrixApiError(MATRIX_UNAVAILABLE_MESSAGE, null, "unavailable");
+  }
   const payload = await response.json().catch(() => null) as T | { detail?: unknown } | null;
   if (!response.ok) {
+    const access = matrixAccessState(response.status);
+    // Refusals and outages are said in plain words; the raw status and body
+    // are not shown to the visitor.
+    if (access) throw new MatrixApiError(MATRIX_ACCESS_MESSAGE[access], response.status, access);
     const detail = payload && typeof payload === "object" && "detail" in payload
       ? JSON.stringify(payload.detail)
       : response.statusText;
-    throw new Error(`Matrix API ${response.status}: ${detail}`);
+    throw new MatrixApiError(`Matrix API ${response.status}: ${detail}`, response.status, null);
   }
   // A 2xx whose body is not JSON (a proxy page, a truncated response) is not
   // an answer. Returning null here let the guided page report "Session ready"

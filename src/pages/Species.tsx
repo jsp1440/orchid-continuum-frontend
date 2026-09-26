@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Search, Loader2, Leaf, ShieldAlert, ArrowRight, X } from 'lucide-react';
+import { Search, Loader2, Leaf, ShieldAlert, ArrowRight, X, RotateCcw } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
-import { searchSpecies, type SpeciesSearchResult } from '@/lib/ocBackend';
+import { searchSpeciesOutcome, type SpeciesSearchResult } from '@/lib/ocBackend';
 import { speciesPageHref } from '@/lib/speciesDossier';
 import {
   resolveSpeciesGenusFilter,
@@ -39,6 +39,10 @@ const Species: React.FC = () => {
   const [results, setResults] = useState<SpeciesSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  // A search the service did not answer (unreachable, timed out, non-2xx) is
+  // not "no species matched". It gets its own state and a retry.
+  const [unavailable, setUnavailable] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
   const ctrlRef = useRef<AbortController | null>(null);
   const previousGenusFilterRef = useRef(genusFilter);
 
@@ -80,6 +84,7 @@ const Species: React.FC = () => {
     if (q.length < 2) {
       setResults([]);
       setSearched(false);
+      setUnavailable(false);
       return;
     }
     const t = setTimeout(() => {
@@ -87,21 +92,27 @@ const Species: React.FC = () => {
       const ctrl = new AbortController();
       ctrlRef.current = ctrl;
       setLoading(true);
-      searchSpecies(q, 20, ctrl.signal)
-        .then((r) => {
-          setResults(r);
+      searchSpeciesOutcome(q, 20, ctrl.signal)
+        .then((outcome) => {
+          // A search superseded by a newer query says nothing about either.
+          if (ctrl.signal.aborted) return;
+          setResults(outcome.status === 'ok' ? outcome.results : []);
+          setUnavailable(outcome.status === 'unavailable');
           setSearched(true);
         })
-        .finally(() => setLoading(false));
+        .finally(() => {
+          if (!ctrl.signal.aborted) setLoading(false);
+        });
     }, 350);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [query, retryNonce]);
 
   const heading = useMemo(() => {
     if (!searched) return null;
     if (loading) return 'Searching…';
+    if (unavailable) return 'Search unavailable';
     return `${results.length} ${results.length === 1 ? 'result' : 'results'}`;
-  }, [searched, loading, results.length]);
+  }, [searched, loading, unavailable, results.length]);
 
   return (
     <div
@@ -192,7 +203,30 @@ const Species: React.FC = () => {
             </div>
           )}
 
-          {searched && !loading && results.length === 0 && (
+          {searched && !loading && unavailable && (
+            <div
+              role="status"
+              data-testid="species-search-unavailable"
+              className="mt-6 rounded-2xl border border-amber-300/30 bg-amber-300/[0.05] p-8 text-center"
+            >
+              <p className="font-display text-xl text-[#faf7f2]">
+                Species search is temporarily unavailable
+              </p>
+              <p className="mt-3 text-[13px] leading-relaxed text-[#cfc8b8]/80">
+                The species service could not be reached, so no results can be shown for
+                &ldquo;{query.trim()}&rdquo;. This is not a statement that no species matched.
+              </p>
+              <button
+                type="button"
+                onClick={() => setRetryNonce((n) => n + 1)}
+                className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#c9a24a]/50 font-mono text-[10px] tracking-[0.18em] uppercase text-[#c9a24a] hover:bg-[#c9a24a]/10"
+              >
+                <RotateCcw className="h-3 w-3" /> Try again
+              </button>
+            </div>
+          )}
+
+          {searched && !loading && !unavailable && results.length === 0 && (
             <div className="mt-6 rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 p-8 text-center font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">
               No species matched &ldquo;{query}&rdquo; · try another term
             </div>

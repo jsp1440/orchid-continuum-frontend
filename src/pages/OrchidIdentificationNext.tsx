@@ -18,6 +18,8 @@ import {
   explainIdentificationSession,
   explanationText,
   listMatrixRegistries,
+  matrixErrorAccess,
+  MATRIX_OWNER_ACCESS_MESSAGE,
   type CalyxExplanation,
   type Certainty,
   type ExplanationAudience,
@@ -35,6 +37,21 @@ function scopeLabel(scope?: Record<string, unknown>): string {
   const genus = typeof scope.genus === "string" ? scope.genus : null;
   const clade = typeof scope.clade === "string" ? scope.clade : null;
   return genus ? `Genus ${genus}` : clade ? clade : "Governed orchid matrix";
+}
+
+type PageStatus = "loading" | "ready" | "working" | "error" | "restricted";
+
+/**
+ * A refused Matrix request is an access state, not an error the visitor caused
+ * or can fix by retrying or signing in again: the pill says "owner access" and
+ * the message says Matrix identification needs owner access. Outages and every
+ * other failure stay errors with a retry path.
+ */
+function failure(error: unknown, fallback: string): { status: PageStatus; message: string } {
+  if (matrixErrorAccess(error) === "owner_access_required") {
+    return { status: "restricted", message: MATRIX_OWNER_ACCESS_MESSAGE };
+  }
+  return { status: "error", message: error instanceof Error ? error.message : fallback };
 }
 
 export default function OrchidIdentificationNext() {
@@ -65,7 +82,7 @@ export default function OrchidIdentificationNext() {
   const [registries, setRegistries] = useState<RegistrySummary[]>([]);
   const [selectedRegistryKey, setSelectedRegistryKey] = useState("");
   const [evaluation, setEvaluation] = useState<SessionEvaluation | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "working" | "error">("loading");
+  const [status, setStatus] = useState<PageStatus>("loading");
   const [message, setMessage] = useState("Loading governed identification matrices…");
   const [answer, setAnswer] = useState("");
   const [certainty, setCertainty] = useState<Certainty>("certain");
@@ -85,8 +102,12 @@ export default function OrchidIdentificationNext() {
     [evaluation],
   );
 
+  const [registryAttempt, setRegistryAttempt] = useState(0);
+
   useEffect(() => {
     const id = ++requestId.current;
+    setStatus("loading");
+    setMessage("Loading governed identification matrices…");
     void listMatrixRegistries()
       .then((items) => {
         if (id !== requestId.current) return;
@@ -97,11 +118,12 @@ export default function OrchidIdentificationNext() {
       })
       .catch((error) => {
         if (id !== requestId.current) return;
-        setStatus("error");
-        setMessage(error instanceof Error ? error.message : "Unable to load Matrix registries.");
+        const failed = failure(error, "Unable to load Matrix registries.");
+        setStatus(failed.status);
+        setMessage(failed.message);
       });
     return () => { requestId.current += 1; };
-  }, []);
+  }, [registryAttempt]);
 
   async function start(): Promise<void> {
     if (!selectedRegistry) return;
@@ -119,8 +141,9 @@ export default function OrchidIdentificationNext() {
       setMessage("Session ready. Add the most useful observation you can make.");
     } catch (error) {
       if (id !== requestId.current) return;
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Unable to start identification.");
+      const failed = failure(error, "Unable to start identification.");
+      setStatus(failed.status);
+      setMessage(failed.message);
     }
   }
 
@@ -145,8 +168,9 @@ export default function OrchidIdentificationNext() {
       setMessage(result.next_observation ? "Evidence updated. The Matrix selected the next most discriminating observation." : "No further discriminating Matrix character is available in this registry.");
     } catch (error) {
       if (id !== requestId.current) return;
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Unable to record observation.");
+      const failed = failure(error, "Unable to record observation.");
+      setStatus(failed.status);
+      setMessage(failed.message);
     }
   }
 
@@ -173,8 +197,9 @@ export default function OrchidIdentificationNext() {
       setMessage("Calyx explanation loaded. The Matrix ranking itself is unchanged.");
     } catch (error) {
       if (id !== requestId.current) return;
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Unable to ask Calyx.");
+      const failed = failure(error, "Unable to ask Calyx.");
+      setStatus(failed.status);
+      setMessage(failed.message);
     }
   }
 
@@ -210,8 +235,17 @@ export default function OrchidIdentificationNext() {
         </header>
 
         <div className="mt-5 flex flex-wrap items-center gap-3" aria-live="polite">
-          <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase">{status}</span>
-          <span className="text-sm text-muted-foreground">{message}</span>
+          <span className="rounded-full border px-3 py-1 text-xs font-semibold uppercase">{status === "restricted" ? "owner access" : status}</span>
+          <span className="text-sm text-muted-foreground" data-testid="matrix-status-message">{message}</span>
+          {status === "error" && !session && registries.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setRegistryAttempt((n) => n + 1)}
+              className="inline-flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-semibold"
+            >
+              <RotateCcw className="h-3 w-3" /> Try again
+            </button>
+          )}
           {session && <span className="rounded-full border px-3 py-1 text-xs">Revision {session.revision}</span>}
         </div>
 

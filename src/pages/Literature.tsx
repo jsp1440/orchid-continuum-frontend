@@ -32,9 +32,10 @@ import {
  * holds no literature.
  *
  * A refusal (401/403) gets its own state rather than a generic "unauthorised":
- * the backend answers only an owner session or API key, so a signed-in member
- * is refused by design, and the page says that instead of implying a broken
- * login or an outage.
+ * the paper list accepts a signed-in member session (backend #1643) as well as
+ * an owner session or API key, so a refusal means the session could not be
+ * verified or the account is not permitted, and the page says that instead of
+ * implying an outage. Full paper views stay owner-only.
  */
 
 type State =

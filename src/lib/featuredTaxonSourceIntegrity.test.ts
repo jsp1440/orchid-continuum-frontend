@@ -112,7 +112,8 @@ describe('featured taxon source integrity', () => {
     expect(research).toContain("featuredGenusWithoutProject ? 'No persisted investigation selected'");
     expect(research).toContain('The Research Station will not auto-select');
     expect(research).toContain('featuredGenusWithoutProject ? (');
-    expect(research).toContain('<ResearchStationWorkbench projectId={projectId} />');
+    // The workbench opens only the carried project (it may also report its data state).
+    expect(research).toMatch(/<ResearchStationWorkbench projectId=\{projectId\}[\s/]/);
   });
 
   it('keeps the public footer on live visitor routes and out of operator-only workspaces', () => {

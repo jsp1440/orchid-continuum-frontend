@@ -9,7 +9,9 @@ import {
   Database,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
-import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
+import ResearchStationWorkbench, {
+  type ResearchStationDataState,
+} from '@/components/research/ResearchStationWorkbench';
 import ResearchTraitExplorer from '@/components/research/ResearchTraitExplorer';
 import {
   researchStationAtlasNextLink,
@@ -60,6 +62,21 @@ const PILLARS = [
     fields: ['csv', 'geojson', 'darwin-core', 'parquet'],
   },
 ] as const;
+
+/**
+ * The hero badge reports what the Research Station actually loaded. The shared
+ * PageShell badge ("Live data · Orchid Continuum + GBIF") is static, and it was
+ * shown to members while every Research Workspace read was refused; nothing on
+ * this page reads GBIF either.
+ */
+const DATA_BADGE: Record<ResearchStationDataState | 'no_project', { label: string; live: boolean }> = {
+  loading: { label: 'Loading research data…', live: false },
+  ready: { label: 'Live data · Research Workspace', live: true },
+  empty: { label: 'No research projects yet', live: false },
+  owner_only: { label: 'Research Workspace · owner access only', live: false },
+  unavailable: { label: 'Research data unavailable', live: false },
+  no_project: { label: 'No investigation loaded', live: false },
+};
 
 const ResearchCenter: React.FC = () => {
   // A project carried in from another module keeps the investigation intact.
@@ -112,6 +129,9 @@ const ResearchCenter: React.FC = () => {
   const onwardContext = { taxon: subjectLabel, projectId };
   const atlasLink = subjectLabel ? researchStationAtlasNextLink(onwardContext) : null;
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
+  const [stationData, setStationData] = useState<ResearchStationDataState>('loading');
+  const badge = DATA_BADGE[featuredGenusWithoutProject ? 'no_project' : stationData];
+  const stationLive = !featuredGenusWithoutProject && stationData === 'ready';
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
     country: '',
@@ -130,6 +150,7 @@ const ResearchCenter: React.FC = () => {
       title="Research Center"
       titleAccent="ask the Continuum harder questions."
       intro="Compose queries across taxonomy, traits, ecology, and geography. Trace every result to evidence, then export reproducible bundles for your analysis."
+      dataBadge={badge}
       heroAside={
         <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/5 p-5">
           <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/80 mb-3 flex items-center gap-2">
@@ -209,7 +230,7 @@ const ResearchCenter: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <div className="mb-6">
             <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/70 mb-2">
-              Research Station · live
+              {stationLive ? 'Research Station · live' : 'Research Station'}
             </div>
             <h2 className="font-serif text-2xl md:text-3xl">
               {featuredGenusWithoutProject ? 'No persisted investigation selected' : 'Your current investigation'}
@@ -229,7 +250,7 @@ const ResearchCenter: React.FC = () => {
               </p>
             </div>
           ) : (
-            <ResearchStationWorkbench projectId={projectId} />
+            <ResearchStationWorkbench projectId={projectId} onDataState={setStationData} />
           )}
         </div>
       </section>
