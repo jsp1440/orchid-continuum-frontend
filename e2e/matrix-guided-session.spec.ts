@@ -255,9 +255,12 @@ test("an unavailable Matrix session fails closed: no candidates, no next observa
   await page.getByRole("button", { name: /begin guided identification/i }).click();
 
   await expect(page.getByText("error", { exact: true })).toBeVisible();
-  await expect(page.getByText(
-    'Matrix API 503: {"code":"MATRIX_SESSION_PERSISTENCE_UNAVAILABLE","message":"MATRIX_SESSION_DATABASE_URL_REQUIRED"}',
-  )).toBeVisible();
+  // An outage is said in plain words with a retry; the raw status and body
+  // (including the internal setting name) are not shown to the visitor.
+  await expect(page.getByTestId("matrix-status-message")).toHaveText(
+    "Matrix identification is temporarily unavailable. Try again.",
+  );
+  await expect(page.getByText(/Matrix API 503|MATRIX_SESSION_/)).toHaveCount(0);
   await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
   await expect(page.getByTestId("matrix-ranking-basis")).toHaveCount(0);
   await expect(page.getByText("2 · Next observation")).toHaveCount(0);
@@ -265,6 +268,60 @@ test("an unavailable Matrix session fails closed: no candidates, no next observa
   // The visitor can retry; nothing pretends a session exists.
   await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeEnabled();
   expect(attempts).toEqual(["POST"]);
+});
+
+/*
+ * Access refusals. Matrix identification is owner-only on the backend today
+ * (an owner decision on member/public access is pending); this frontend does
+ * not change that. The 401 body is the real backend's text
+ * (app/security.py verify_owner_or_api_key); the 403 body is a SYNTHETIC
+ * error shape. Before this state existed the page showed the raw string
+ * `Matrix API 401: "Owner session or API key is required"`.
+ */
+const REFUSALS: Array<[number, unknown]> = [
+  [401, { detail: "Owner session or API key is required" }],
+  [403, { detail: "Forbidden" }],
+];
+
+for (const [status, body] of REFUSALS) {
+  test(`a ${status} on the Matrix registry says owner access is required, with no raw error and no sign-in loop`, async ({ page }) => {
+    await localOnly(page);
+    await page.route(/\/api\/matrix-identification\/registry$/, (route) => (
+      route.request().method() === "OPTIONS" ? route.fallback() : fulfill(route, { status, body })
+    ));
+    await page.goto("/orchid-identification", { waitUntil: "domcontentloaded" });
+
+    await expect(page.getByTestId("matrix-status-message")).toHaveText(
+      "Matrix identification currently requires owner access.",
+    );
+    await expect(page.getByText("owner access", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Matrix API \d{3}/)).toHaveCount(0);
+    await expect(page.getByText(/Owner session or API key is required/)).toHaveCount(0);
+    await expect(page.getByTestId("matrix-status-message")).not.toContainText(/sign in/i);
+    await expect(page.getByRole("button", { name: /try again/i })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeDisabled();
+    await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
+  });
+}
+
+test("an unavailable Matrix registry offers a retry that recovers once the service answers", async ({ page }) => {
+  await localOnly(page);
+  let refused = 0;
+  await page.route(/\/api\/matrix-identification\/registry$/, (route) => {
+    if (route.request().method() === "OPTIONS" || refused > 0) return route.fallback();
+    refused += 1;
+    // SYNTHETIC outage shape; the retry then reaches the reference backend's own handler.
+    return fulfill(route, { status: 503, body: { detail: "Service Unavailable" } });
+  });
+  await page.goto("/orchid-identification", { waitUntil: "domcontentloaded" });
+
+  await expect(page.getByTestId("matrix-status-message")).toHaveText(
+    "Matrix identification is temporarily unavailable. Try again.",
+  );
+  await page.getByRole("button", { name: /try again/i }).click();
+  await expect(page.getByText("Choose a governed matrix and begin.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeEnabled();
+  expect(refused).toBe(1);
 });
 
 test("an unreachable Matrix service fails closed rather than inventing a session", async ({ page }) => {
@@ -277,6 +334,9 @@ test("an unreachable Matrix service fails closed rather than inventing a session
   await page.getByRole("button", { name: /begin guided identification/i }).click();
 
   await expect(page.getByText("error", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("matrix-status-message")).toHaveText(
+    "Matrix identification is temporarily unavailable. Try again.",
+  );
   await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
   await expect(page.getByText("2 · Next observation")).toHaveCount(0);
   await expect(page.getByText(/Session ready/)).toHaveCount(0);
