@@ -12,21 +12,28 @@ import {
   FileCheck2,
   FlaskConical,
   MessagesSquare,
+  RotateCcw,
+  SearchX,
+  CloudOff,
+  BookOpen,
 } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import {
-  fetchSpeciesById,
+  lookupSpeciesById,
   fetchMycorrhizal,
   type SpeciesDossierData,
+  type SpeciesLookupOutcome,
   type MycorrhizalPartner,
 } from '@/lib/ocBackend';
 import {
   ATLAS_LOCALITY_POLICY,
   atlasLayerLabel,
   atlasLayerMessage,
+  dossierRecordState,
   fetchSpeciesDossier,
   pageSubject,
+  requestedTaxonLabel,
   resolveDossierForSubject,
   resolveFederatedSpecies,
   sectionExcerpts,
@@ -36,6 +43,7 @@ import {
   type FederationResolveResult,
   type PageSubject,
   type SpeciesAtlasEnvelope,
+  type SpeciesRecordSourceState,
   type SpeciesDossierEnvelope,
   type DossierSection,
   type EvidenceReceipt,
@@ -59,8 +67,8 @@ const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
 // concept it backs, rather than duplicated in a separate generic list:
 //   - `mycorrhizae`  -> "Mycorrhizal partners" (fetchMycorrhizal-backed, with
 //                       its own graceful "data coming soon" degrade)
-//   - `conservation` -> "Conservation status" (fetchSpeciesById-backed)
-//   - `distribution` -> "Native range & habitat" (fetchSpeciesById-backed)
+//   - `conservation` -> "Conservation status" (lookupSpeciesById-backed)
+//   - `distribution` -> "Native range & habitat" (lookupSpeciesById-backed)
 const DOSSIER_SECTIONS: Array<{ key: keyof SpeciesDossierEnvelope; label: string }> = [
   { key: 'nomenclature', label: 'Nomenclature' },
   { key: 'protologue', label: 'Protologue' },
@@ -94,9 +102,28 @@ function formatConfidence(confidence: number | null): string {
  * a "View on Atlas" action (opens the Atlas filtered to this species), and a
  * "Mycorrhizal Partners" section that gracefully degrades to "Data coming
  * soon" when the backend returns 404 / no records.
+ *
+ * A route no identity source holds a record for (an invented name or a
+ * nonexistent id) renders "No taxon record found" with the requested text as
+ * input, never an empty dossier titled with it; when a source could not be
+ * reached the page says it could not load and offers a retry instead.
  */
 
+/**
+ * Every piece of state on this page belongs to one requested subject. The
+ * page is remounted whenever the route slug or the linked name changes, so a
+ * history or in-app navigation can never render one subject's answers (for
+ * instance "No taxon record found") under another subject's name, not even
+ * for the one render before the load effect runs.
+ */
 const SpeciesDossier: React.FC = () => {
+  const { slug } = useParams<{ slug: string }>();
+  const [searchParams] = useSearchParams();
+  const subjectKey = `${slug ?? ''}\u0000${searchParams.get('name') ?? ''}`;
+  return <SpeciesDossierForSubject key={subjectKey} />;
+};
+
+const SpeciesDossierForSubject: React.FC = () => {
   const { slug } = useParams<{ slug: string }>();
   const taxonomyId = slug ?? '';
   // A link from a surface keyed by another id space (the public species search)
@@ -121,14 +148,30 @@ const SpeciesDossier: React.FC = () => {
   const [federation, setFederation] = useState<FederationResolveResult | null>(null);
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
+  // What each identity source answered, so a taxon no source holds is told
+  // apart from one the page could not look up (see dossierRecordState).
+  const [speciesSource, setSpeciesSource] = useState<SpeciesRecordSourceState | null>(null);
+  const [dossierOutcome, setDossierOutcome] = useState<
+    DossierSubjectResolution['state'] | 'conflict' | null
+  >(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   useEffect(() => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
     setLoading(true);
-    const speciesRequest = fetchSpeciesById(taxonomyId, ctrl.signal).catch(() => null);
+    setSpeciesSource(null);
+    setDossierOutcome(null);
+    const speciesRequest: Promise<SpeciesLookupOutcome> = lookupSpeciesById(
+      taxonomyId,
+      ctrl.signal,
+    ).catch(() => ({ state: 'unavailable', httpStatus: 0 }) as SpeciesLookupOutcome);
     speciesRequest
-      .then((d) => setData(d))
+      .then((outcome) => {
+        if (ctrl.signal.aborted) return;
+        setData(outcome.state === 'found' ? outcome.data : null);
+        setSpeciesSource(outcome.state);
+      })
       .finally(() => setLoading(false));
 
     setMycoLoading(true);
@@ -149,8 +192,10 @@ const SpeciesDossier: React.FC = () => {
     setFederationLoading(true);
     setFederationError(false);
     setFederation(null);
+    let conflicted = false;
     speciesRequest
-      .then((d) => {
+      .then((outcome) => {
+        const d = outcome.state === 'found' ? outcome.data : null;
         const publicName =
           d?.canonical_name ||
           d?.scientific_name ||
@@ -160,7 +205,11 @@ const SpeciesDossier: React.FC = () => {
         // and a disagreement between them fails closed.
         const subject = pageSubject({ linkedName, publicName, slug: taxonomyId });
         if (subject.state === 'conflict') {
-          if (!ctrl.signal.aborted) setSubjectConflict(subject);
+          conflicted = true;
+          if (!ctrl.signal.aborted) {
+            setSubjectConflict(subject);
+            setDossierOutcome('conflict');
+          }
           return { state: 'unavailable' } as DossierSubjectResolution;
         }
         return resolveDossierForSubject(
@@ -172,6 +221,7 @@ const SpeciesDossier: React.FC = () => {
       })
       .then((resolution) => {
         if (ctrl.signal.aborted) return undefined;
+        if (!conflicted) setDossierOutcome(resolution.state);
         if (resolution.state !== 'resolved') {
           setDossierError(true);
           if (resolution.state === 'ambiguous') setDossierAmbiguity(resolution);
@@ -188,7 +238,10 @@ const SpeciesDossier: React.FC = () => {
           });
       })
       .catch(() => {
-        if (!ctrl.signal.aborted) setDossierError(true);
+        if (!ctrl.signal.aborted) {
+          setDossierError(true);
+          if (!conflicted) setDossierOutcome('unavailable');
+        }
       })
       .finally(() => {
         if (!ctrl.signal.aborted) {
@@ -198,7 +251,7 @@ const SpeciesDossier: React.FC = () => {
       });
 
     return () => ctrl.abort();
-  }, [taxonomyId, linkedName]);
+  }, [taxonomyId, linkedName, retryNonce]);
 
   // On a subject conflict the id-keyed public record may be another species,
   // so neither its name nor its fields stand for this page's subject.
@@ -211,8 +264,12 @@ const SpeciesDossier: React.FC = () => {
       .filter(Boolean)
       .join(' ') ||
     dossier?.identity.display_name ||
-    linkedName ||
-    decodeURIComponent(taxonomyId);
+    requestedTaxonLabel(linkedName, taxonomyId);
+  const requestedLabel = requestedTaxonLabel(linkedName, taxonomyId);
+  const recordState = dossierRecordState({
+    species: loading ? null : speciesSource,
+    dossier: dossierOutcome,
+  });
 
   const image = subjectData?.hero_image_url || subjectData?.representative_image_url || null;
   // Resolve one governed canonical species identity for every public
@@ -271,11 +328,25 @@ const SpeciesDossier: React.FC = () => {
             <ArrowLeft className="h-3.5 w-3.5" /> Back to species search
           </Link>
 
-          {loading ? (
+          {loading || recordState === 'loading' ? (
             <div className="flex items-center gap-3 font-mono text-[11px] tracking-[0.2em] uppercase text-[#cfc8b8]/70 py-20">
               <Loader2 className="h-5 w-5 animate-spin text-[#c9a24a]" />
               Loading dossier…
             </div>
+          ) : recordState === 'not_found' ? (
+            <TaxonRecordNotFound requested={requestedLabel} />
+          ) : recordState === 'unavailable' ? (
+            <TaxonRecordUnavailable
+              requested={requestedLabel}
+              onRetry={() => {
+                // Back to loading in the same render as the click, so the old
+                // answer is never shown as the answer to the new request.
+                setLoading(true);
+                setSpeciesSource(null);
+                setDossierOutcome(null);
+                setRetryNonce((n) => n + 1);
+              }}
+            />
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               {/* Image */}
@@ -555,6 +626,106 @@ const SpeciesDossier: React.FC = () => {
     </div>
   );
 };
+
+function RequestedName({ value }: { value: string }) {
+  // Shown as the visitor's own input: upright monospace in quotes, never the
+  // italic display face or authority line an accepted scientific name gets.
+  return (
+    <span
+      data-testid="requested-taxon-name"
+      className="font-mono not-italic text-[#faf7f2] [overflow-wrap:anywhere]"
+    >
+      &lsquo;{value}&rsquo;
+    </span>
+  );
+}
+
+function TaxonRecordExits() {
+  return (
+    <div className="mt-6 flex flex-wrap gap-3">
+      <Link
+        to="/species"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#c9a24a]/50 font-mono text-[10px] tracking-[0.18em] uppercase text-[#c9a24a] hover:bg-[#c9a24a]/10"
+      >
+        <SearchX className="h-3.5 w-3.5" /> Search species
+      </Link>
+      <Link
+        to="/lexicon"
+        className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/[0.14] font-mono text-[10px] tracking-[0.18em] uppercase text-[#cfc8b8] hover:bg-white/[0.06]"
+      >
+        <BookOpen className="h-3.5 w-3.5" /> Browse the lexicon
+      </Link>
+    </div>
+  );
+}
+
+/**
+ * Positive evidence of absence (the canonical dossier handler holds no record
+ * under this identifier and the canonical name resolver finds no taxon by
+ * this name): say so, with the requested text shown as input, and render no
+ * dossier sections at all.
+ */
+function TaxonRecordNotFound({ requested }: { requested: string }) {
+  return (
+    <div
+      role="status"
+      data-testid="taxon-record-not-found"
+      className="max-w-[720px] rounded-2xl border border-white/[0.1] bg-[#0a0d1c]/70 p-8"
+    >
+      <h1 className="font-body text-2xl md:text-3xl text-[#faf7f2] leading-snug">
+        No taxon record found for <RequestedName value={requested} />
+      </h1>
+      <p className="mt-4 text-[14px] leading-relaxed text-[#cfc8b8]/85">
+        The canonical taxon index holds no record under this identifier, and the canonical name
+        resolver finds no taxon by this name. The text above is repeated exactly as it was
+        requested; it is not an accepted scientific name, and no dossier exists for it.
+      </p>
+      <TaxonRecordExits />
+    </div>
+  );
+}
+
+/**
+ * No source found the taxon, and there is no positive evidence of absence
+ * (a source did not answer, or the only answers cannot settle it): the page
+ * cannot say whether it exists, so it neither shows a dossier nor claims
+ * "no record".
+ */
+function TaxonRecordUnavailable({
+  requested,
+  onRetry,
+}: {
+  requested: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      role="status"
+      data-testid="taxon-record-unavailable"
+      className="max-w-[720px] rounded-2xl border border-amber-300/30 bg-amber-300/[0.05] p-8"
+    >
+      <div className="flex items-center gap-2 font-mono text-[10px] tracking-[0.24em] uppercase text-amber-200/80">
+        <CloudOff className="h-4 w-4" /> Record not confirmed
+      </div>
+      <h1 className="mt-3 font-body text-2xl md:text-3xl text-[#faf7f2] leading-snug">
+        Could not confirm a taxon record for <RequestedName value={requested} />
+      </h1>
+      <p className="mt-4 text-[14px] leading-relaxed text-[#cfc8b8]/85">
+        The record services either did not answer or could not settle whether a record exists
+        under this name or identifier, so this page cannot say whether this taxon exists. This is
+        not a statement that no record exists.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#c9a24a]/50 font-mono text-[10px] tracking-[0.18em] uppercase text-[#c9a24a] hover:bg-[#c9a24a]/10"
+      >
+        <RotateCcw className="h-3 w-3" /> Try again
+      </button>
+      <TaxonRecordExits />
+    </div>
+  );
+}
 
 function Block({
   icon: Icon,

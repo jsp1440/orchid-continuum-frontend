@@ -125,8 +125,51 @@ function dossierFixture() {
   };
 }
 
+/* ---- Unknown-taxon fixtures (R1 journeys 3, 14) ---------------------------
+ * Clearly synthetic identifiers that are not taxa. Every other /api/species/*
+ * id keeps answering with the identity-continuity fixture above.
+ *  - UNKNOWN: both identity sources answer "no record" with the shapes the
+ *    real services use (orchid-calyx-backend species_dossier/routes.py 404).
+ *  - OUTAGE: both sources fail with the dossier route's 503 shape, so the
+ *    page must say it could not load rather than "no record".
+ *  - PUBLIC_DOWN: the public species API fails with 503 while the Calyx
+ *    dossier answers its exact no-record 404; a source that could still find
+ *    the taxon did not answer, so the page must not say "no record".
+ * The federation resolver below already answers `unresolved` for every name.
+ */
+// The long unbroken name exercises wrapping of the requested text at phone width.
+const UNKNOWN_TAXON_IDS = new Set(["Notagenus fakeus", "987654321", `Notagenus${"x".repeat(80)} fakeus`]);
+const OUTAGE_TAXON_IDS = new Set(["Outagenus downus", "503503503"]);
+const PUBLIC_DOWN_TAXON_IDS = new Set(["Publicdown fakeus"]);
+
+function unknownTaxonFixture(path) {
+  const match = /^\/api\/(?:species|platform\/species)\/([^/]+)(\/dossier)?$/.exec(path);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]);
+  const dossierRoute = path.startsWith("/api/platform/");
+  if (dossierRoute && !match[2]) return null;
+  if (PUBLIC_DOWN_TAXON_IDS.has(id)) {
+    return dossierRoute
+      ? { status: 404, body: { detail: "No canonical taxon record exists for this identifier." } }
+      : { status: 503, body: { detail: "Species service is unavailable." } };
+  }
+  if (UNKNOWN_TAXON_IDS.has(id)) {
+    return {
+      status: 404,
+      body: { detail: dossierRoute ? "No canonical taxon record exists for this identifier." : "Species not found." },
+    };
+  }
+  if (OUTAGE_TAXON_IDS.has(id)) {
+    return { status: 503, body: { detail: "Species dossier service is unavailable." } };
+  }
+  return null;
+}
+/* ---- end unknown-taxon fixtures ------------------------------------------ */
+
 async function publicSpeciesRoute(req, res, url) {
   const path = url.pathname;
+  const unknownTaxon = req.method === "GET" ? unknownTaxonFixture(path) : null;
+  if (unknownTaxon) return json(res, unknownTaxon.status, unknownTaxon.body);
   let match = /^\/api\/species\/([^/]+)$/.exec(path);
   if (match && req.method === "GET") {
     return json(res, 200, {
