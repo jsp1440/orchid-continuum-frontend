@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL, hasOwnerBearerSession } from "@/lib/backendConfig";
+import { calyxRelativePath } from "@/lib/calyxOrigin";
 import { supabase } from "@/lib/supabase";
 
 /**
@@ -70,22 +71,11 @@ export function isMemberReadRequest(
   calyxBase: string = CALYX_BACKEND_BASE_URL,
 ): boolean {
   if (requestMethod(method) !== "GET") return false;
-  let target: URL;
-  let base: URL;
-  try {
-    base = new URL(calyxBase);
-    target = new URL(url);
-  } catch {
-    // A relative or unparseable URL is not provably the Calyx origin.
-    return false;
-  }
-  if (target.origin !== base.origin) return false;
-  if (target.username || target.password) return false;
-  const basePath = base.pathname.replace(/\/$/, "");
-  if (basePath && !(target.pathname === basePath || target.pathname.startsWith(`${basePath}/`))) {
-    return false;
-  }
-  const relative = target.pathname.slice(basePath.length) || "/";
+  // Shared exact-origin check (calyxOrigin): same scheme/host/port, no
+  // userinfo, under the base path on a segment boundary; relative or
+  // unparseable URLs are not provably the Calyx origin.
+  const relative = calyxRelativePath(url, calyxBase);
+  if (relative === null) return false;
   return MEMBER_READ_PATHS.some((pattern) => pattern.test(relative));
 }
 

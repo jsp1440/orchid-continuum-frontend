@@ -3,6 +3,8 @@
  * origin the frontend talks to.
  */
 
+import { calyxRelativePath, requestUrlOf } from './calyxOrigin';
+
 const env = import.meta.env as Record<string, string | undefined>;
 
 export const BACKEND_BASE_URL = (
@@ -147,10 +149,15 @@ function installOwnerSessionTransport(): void {
   let ownerLoginAttemptInProgress = false;
 
   window.fetch = async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
-    const originalUrl = input instanceof Request ? input.url : String(input);
+    const originalUrl = requestUrlOf(input);
     const originalMethod = (init.method || (input instanceof Request ? input.method : 'GET')).toUpperCase();
-    const isCalyxRequest = originalUrl.startsWith(CALYX_BACKEND_BASE_URL);
-    const originalPath = isCalyxRequest ? originalUrl.slice(CALYX_BACKEND_BASE_URL.length).split('?')[0] : '';
+    // Exact parsed-origin match, never a string prefix: `startsWith` would hand
+    // the owner bearer (and the cookie-recovery retry) to lookalikes such as
+    // `https://<calyx-host>.attacker.test/...` or `https://<calyx-host>@attacker.test/...`.
+    // Every credential decision below derives from this one gate.
+    const calyxPath = calyxRelativePath(originalUrl, CALYX_BACKEND_BASE_URL);
+    const isCalyxRequest = calyxPath !== null;
+    const originalPath = calyxPath ?? '';
     const isOwnerLogin = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'POST';
     const isOwnerSessionInspection = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'GET';
     const isOwnerLogout = isCalyxRequest && originalPath === OWNER_SESSION_PATH && originalMethod === 'DELETE';

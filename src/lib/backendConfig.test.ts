@@ -223,3 +223,146 @@ describe('installOwnerSessionTransport (backendConfig.ts)', () => {
     expect(window.fetch).toBe(wrappedOnce);
   });
 });
+
+// Exact-origin gate for the owner bearer. A string-prefix check
+// (`url.startsWith(CALYX_BASE)`) handed the owner bearer, `credentials:
+// 'include'` and the cookie-recovery retry to lookalike URLs. The URLs below
+// are synthetic attacker shapes; no real token is used.
+describe('owner bearer is attached only to the exact Calyx origin (backendConfig.ts)', () => {
+  const HOST = 'orchid-calyx-backend.onrender.com';
+  const OWNER_BEARER = 'synthetic-owner-bearer';
+
+  let alertSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    alertSpy = vi.spyOn(window, 'alert').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    alertSpy.mockRestore();
+    vi.unstubAllEnvs();
+  });
+
+  async function withStoredBearer(native: ReturnType<typeof vi.fn>) {
+    await freshModule(native);
+    sessionStorage.setItem(BEARER_STORAGE_KEY, OWNER_BEARER);
+  }
+
+  function authorizationOf(init: RequestInit | undefined): string | null {
+    return new Headers(init?.headers).get('Authorization');
+  }
+
+  it.each([
+    ['lookalike host suffix', `https://${HOST}.evil.test/api/mission-control/some-owner-tool`],
+    ['lookalike host suffix without a dot-separated TLD', `https://${HOST}.evil/api/x`],
+    ['host@evil (Calyx host as userinfo)', `https://${HOST}@evil.test/api/x`],
+    ['host:pass@evil', `https://${HOST}:x@evil.test/api/x`],
+    ['userinfo on the real Calyx host', `https://user:pass@${HOST}/api/x`],
+    ['backslash lookalike host', `https://${HOST}.evil.test\\api\\x`],
+    ['different port', `https://${HOST}:8443/api/x`],
+    ['http instead of https', `http://${HOST}/api/x`],
+    ['relative URL', '/api/mission-control/some-owner-tool'],
+  ])('does not attach the owner bearer or credentials to a %s', async (_label, url) => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await withStoredBearer(native);
+
+    await window.fetch(url);
+
+    expect(native).toHaveBeenCalledTimes(1);
+    const [calledUrl, init] = native.mock.calls[0];
+    expect(calledUrl).toBe(url);
+    expect(authorizationOf(init)).toBeNull();
+    expect(init?.credentials).toBe('same-origin');
+  });
+
+  it('does not attach the owner bearer to a lookalike passed as a Request or URL object', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await withStoredBearer(native);
+
+    await window.fetch(new Request(`https://${HOST}.evil.test/api/x`));
+    await window.fetch(new URL(`https://${HOST}.evil.test/api/x`));
+
+    expect(native).toHaveBeenCalledTimes(2);
+    expect(authorizationOf(native.mock.calls[0][1])).toBeNull();
+    expect(authorizationOf(native.mock.calls[1][1])).toBeNull();
+  });
+
+  it('never runs the cookie-recovery refresh-and-retry for a lookalike 401', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({}, 401));
+    await freshModule(native);
+
+    const response = await window.fetch(`https://${HOST}.evil.test/api/mission-control/some-owner-tool`);
+
+    expect(response.status).toBe(401);
+    expect(native).toHaveBeenCalledTimes(1); // no refresh call, no retry
+    expect(String(native.mock.calls[0][0])).not.toContain(OWNER_TOKEN_REFRESH_PATH);
+  });
+
+  it('does not treat a lookalike owner-login POST as a login (no rewrite, no token stored)', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ token: 'attacker-token' }));
+    await freshModule(native);
+
+    const url = `https://${HOST}.evil.test${OWNER_SESSION_PATH}`;
+    await window.fetch(url, { method: 'POST' });
+
+    expect(native.mock.calls[0][0]).toBe(url);
+    expect(sessionStorage.getItem(BEARER_STORAGE_KEY)).toBeNull();
+  });
+
+  it('still attaches the owner bearer to a legitimate Calyx URL with a query and fragment', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await withStoredBearer(native);
+
+    await window.fetch(`${CALYX_BASE}/api/mission-control/some-owner-tool?limit=5#section`);
+
+    const [, init] = native.mock.calls[0];
+    expect(authorizationOf(init)).toBe(`Bearer ${OWNER_BEARER}`);
+    expect(init?.credentials).toBe('include');
+  });
+
+  it('still attaches the owner bearer to a legitimate Calyx Request object and URL object', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await withStoredBearer(native);
+
+    await window.fetch(new Request(`${CALYX_BASE}/api/mission-control/some-owner-tool?x=1`));
+    await window.fetch(new URL(`${CALYX_BASE}/api/mission-control/some-owner-tool`));
+
+    expect(authorizationOf(native.mock.calls[0][1])).toBe(`Bearer ${OWNER_BEARER}`);
+    expect(authorizationOf(native.mock.calls[1][1])).toBe(`Bearer ${OWNER_BEARER}`);
+  });
+
+  it('still recognises the owner-login POST when the Calyx URL carries a query string', async () => {
+    const native = vi.fn().mockResolvedValue(jsonResponse({ token: 'bearer-q' }));
+    await freshModule(native);
+
+    await window.fetch(`${CALYX_BASE}${OWNER_SESSION_PATH}?next=%2Fmission-control`, { method: 'POST' });
+
+    expect(native.mock.calls[0][0]).toBe(`${CALYX_BASE}${OWNER_TOKEN_SESSION_PATH}`);
+    expect(sessionStorage.getItem(BEARER_STORAGE_KEY)).toBe('bearer-q');
+  });
+
+  it('matches a configured base path on a segment boundary only', async () => {
+    vi.stubEnv('VITE_CALYX_API_URL', 'https://calyx.example.test/calyx');
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await withStoredBearer(native);
+
+    await window.fetch('https://calyx.example.test/calyx/api/mission-control/some-owner-tool');
+    await window.fetch('https://calyx.example.test/calyxx/api/mission-control/some-owner-tool');
+    await window.fetch('https://calyx.example.test/api/mission-control/some-owner-tool');
+
+    expect(authorizationOf(native.mock.calls[0][1])).toBe(`Bearer ${OWNER_BEARER}`);
+    expect(authorizationOf(native.mock.calls[1][1])).toBeNull();
+    expect(authorizationOf(native.mock.calls[2][1])).toBeNull();
+  });
+
+  it('fails closed when the configured Calyx base is relative', async () => {
+    vi.stubEnv('VITE_CALYX_API_URL', '/calyx');
+    const native = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    await withStoredBearer(native);
+
+    await window.fetch('/calyx/api/mission-control/some-owner-tool');
+
+    expect(authorizationOf(native.mock.calls[0][1])).toBeNull();
+    expect(native.mock.calls[0][1]?.credentials).toBe('same-origin');
+  });
+});
