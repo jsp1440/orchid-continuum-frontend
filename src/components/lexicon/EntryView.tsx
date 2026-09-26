@@ -5,6 +5,7 @@ import { ConnectedKnowledge } from './ConnectedKnowledge';
 import { EntryHero, type Depth } from './EntryHero';
 import { ResupinateComparison, ResupinationSequence } from './Schematics';
 import { RecoveredScientificSections } from './RecoveredScientificSections';
+import { VisionEvidenceSummary } from './VisionEvidenceSummary';
 import { Disclosure, MaturityChecklist, PendingNote, SectionHeading } from './ui';
 import { getLastSource } from '@/lib/lexiconService';
 import { CalyxAdaptiveWorkspace } from '@/features/calyx-workspace/CalyxAdaptiveWorkspace';
@@ -192,7 +193,7 @@ export const EntryView: React.FC<{ entry: LexiconEntry; onOpen: (slug: string) =
 
             <section className="rounded-sm border border-stone-200 bg-white p-5">
               <h2 className="text-[11px] font-semibold uppercase tracking-[.16em] text-[#4A7C59]">Vision Lab</h2>
-              <p className="mt-3 text-sm leading-relaxed text-stone-600">{entry.vision_lab_notes ?? 'Vision-Lexicon analysis, image regions, reference sets and measurement rules can be attached through the canonical Vision service.'}</p>
+              <VisionEvidenceSummary conceptId={entry.concept_id} fallback={<p className="mt-3 text-sm leading-relaxed text-stone-600">{entry.vision_lab_notes ?? 'Vision-Lexicon analysis, image regions, reference sets and measurement rules can be attached through the canonical Vision service.'}</p>} />
             </section>
           </aside>
         </div>
