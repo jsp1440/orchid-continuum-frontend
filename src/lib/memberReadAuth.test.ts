@@ -253,6 +253,51 @@ describe('withMemberReadAuth: attaching the member token', () => {
   });
 });
 
+describe('member token and inputs fetch resolves against the page base', () => {
+  // fetch resolves its input against the page base: on an https page,
+  // `https:<host>/p` is relative and goes to the frontend origin, so the member
+  // token must not ride along.
+  const host = new URL(base).host;
+  let baseElement: HTMLBaseElement | null = null;
+
+  afterEach(() => {
+    baseElement?.remove();
+    baseElement = null;
+  });
+
+  function setPageBase(href: string) {
+    baseElement = document.createElement('base');
+    baseElement.href = href;
+    document.head.appendChild(baseElement);
+  }
+
+  it.each([
+    ['https:<host>/p', `https:${host}/api/research/traits`],
+    ['https:/<host>/p', `https:/${host}/api/research/traits`],
+  ])('does not attach the member token to %s on an https page', async (_label, url) => {
+    setPageBase('https://frontend.example.test/app/');
+    signedIn();
+    expect(isMemberReadRequest(url, 'GET')).toBe(false);
+    expect(authorizationOf(await withMemberReadAuth(url))).toBeNull();
+  });
+
+  it('does not treat http:<host>:port/p as a member read on an http page', async () => {
+    expect(new URL(document.baseURI).protocol).toBe('http:');
+    expect(
+      isMemberReadRequest('http:127.0.0.1:8893/api/research/traits', 'GET', 'http://127.0.0.1:8893'),
+    ).toBe(false);
+    expect(
+      isMemberReadRequest('http://127.0.0.1:8893/api/research/traits', 'GET', 'http://127.0.0.1:8893'),
+    ).toBe(true);
+  });
+
+  it('control: the absolute in-scope URL on the same https page still gets the member token', async () => {
+    setPageBase('https://frontend.example.test/app/');
+    signedIn();
+    expect(authorizationOf(await withMemberReadAuth(`${base}/api/research/traits`))).toBe(`Bearer ${MEMBER_TOKEN}`);
+  });
+});
+
 describe('the product clients send the member token only where in scope', () => {
   function stubFetch(body: unknown = {}, status = 200) {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }));
