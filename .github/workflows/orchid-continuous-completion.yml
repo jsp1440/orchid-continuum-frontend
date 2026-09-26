@@ -122,9 +122,14 @@ jobs:
           include-hidden-files: true
           if-no-files-found: error
 
+  # A pull_request run is plan-only: it proves the admission plan on the PR's
+  # head, but never reserves leases, relabels issues or runs lanes against the
+  # live queue and ledger. On 2026-09-25 the PR #821 run executed issue #816
+  # from unmerged code. Scheduled, issue-event and manual runs dispatch.
   dispatch:
     needs: plan
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'
+    if: always() && github.event_name != 'pull_request' &&
+      needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'
     permissions:
       contents: write
       issues: write
@@ -141,7 +146,8 @@ jobs:
   audit:
     name: Reconcile admitted plan with lane receipts
     needs: [plan, dispatch]
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'
+    if: always() && github.event_name != 'pull_request' &&
+      needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

@@ -15,8 +15,22 @@ describe('canonical governed autonomous dispatch', () => {
     expect(workflow.env.MAX_ACTIVE_LANES).toBe(8);
     expect(workflow.env.PROVIDER_AUTHORIZED).toBe('true');
     expect(workflow.jobs.dispatch.uses).toBe('./.github/workflows/orchid-deterministic-dispatch.yml');
-    expect(workflow.jobs.dispatch.if).toBe("always() && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'");
+    expect(workflow.jobs.dispatch.if).toBe(
+      "always() && github.event_name != 'pull_request' && needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'",
+    );
     expect(workflow.jobs.audit.if).toContain('always()');
+  });
+  // PR #821's pull_request run executed issue #816 from unmerged code on
+  // 2026-09-25. A PR run may plan on its head; it must never touch the live queue.
+  it('keeps pull_request runs plan-only: no reconcile, discovery, dispatch or audit', () => {
+    for (const name of ['reconcile', 'supervisor', 'dispatch', 'audit']) {
+      expect(workflow.jobs[name].if).toContain("github.event_name != 'pull_request'");
+    }
+    expect(workflow.jobs.plan.if ?? '').not.toContain('github.event_name');
+    expect(workflow.jobs.plan.permissions).toBeUndefined();
+    expect((yaml.load(text) as { permissions: object }).permissions).toEqual({
+      contents: 'read', issues: 'read', 'pull-requests': 'read', actions: 'read',
+    });
   });
   it('converges the old scheduler onto the canonical entrypoint without another timer', () => {
     const alias = read('orchid-no-api-scheduler');
