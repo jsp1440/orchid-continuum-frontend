@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 18,
+  "programSpent": 18.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 6
+    "2026-09-26": 6.5
   },
   "leases": [
     {
@@ -950,6 +950,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "runtime-backoff"
+    },
+    {
+      "id": "c936a4e4c2640ae38604844dc7e2e8b1b12946ec9b50545f05b5382b7248d5d3",
+      "issue": 809,
+      "nodeId": "cap-research-evidence-chain",
+      "fingerprint": "aeb5ee56af7bd2d07de3e22c940a891c228ce92ca2a4f2723d6986f1663290ba",
+      "waveHash": "b8e0e8f586783f8421f043c57fd21b0e5f5fc07adebed91f3de708f4f2c4a459",
+      "runId": "36208773209",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T03:05:12.577Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
