@@ -124,11 +124,17 @@ function missionText(value: unknown, maxLength: number): string | null {
 export const RESERVE_MISSION_GRAPH_NODE = 'cap-kg-evidence-gap-research-missions';
 
 /**
- * Capability declared only for a mission whose domain is exactly
- * `nomenclature`, the one domain with a provider-free executor. Every other
- * domain declares nothing and keeps the router's honest undeclared refusal.
+ * Capability declared only for a mission whose domain is exactly one with a
+ * provider-free executor (`nomenclature`, `morphology`). Every other domain
+ * declares nothing and keeps the router's honest undeclared refusal.
  */
 export const NOMENCLATURE_CAPABILITY = 'nomenclature-evidence-lookup';
+export const MORPHOLOGY_CAPABILITY = 'morphology-source-lookup';
+/** Exact mission domain -> capability; mirrors oc-reserve-mission-binding.mjs. */
+export const RESERVE_DOMAIN_CAPABILITIES: Readonly<Record<string, string>> = Object.freeze({
+  nomenclature: NOMENCLATURE_CAPABILITY,
+  morphology: MORPHOLOGY_CAPABILITY,
+});
 
 function sourcePayloadBody(value: unknown): { body: string; reason?: never } | { body?: never; reason: string } {
   if (value === undefined) return { body: '' };
@@ -172,7 +178,8 @@ function sourcePayloadBody(value: unknown): { body: string; reason?: never } | {
       '- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled',
       '',
       `OC-GRAPH-NODE: ${RESERVE_MISSION_GRAPH_NODE}`,
-      ...(domain === 'nomenclature' ? [`OC-SWARM-CAPABILITY: ${NOMENCLATURE_CAPABILITY}`] : []),
+      ...(Object.prototype.hasOwnProperty.call(RESERVE_DOMAIN_CAPABILITIES, domain)
+        ? [`OC-SWARM-CAPABILITY: ${RESERVE_DOMAIN_CAPABILITIES[domain]}`] : []),
     ].join('\n'),
   };
 }

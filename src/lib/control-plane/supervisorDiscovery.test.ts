@@ -768,7 +768,8 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
   });
 
   // The real plan of 2026-09-25 (morphology, phenology, nomenclature): only the
-  // nomenclature mission can execute, so only it is requested and filed.
+  // morphology and nomenclature missions can execute, so only they are
+  // requested and filed; phenology has no executor.
   it('requests only executable domains and never files a mission no local executor can run', async () => {
     const { materializeBackendReservePlan } = await import('../../../scripts/oc-supervisor-discovery');
     const urls: string[] = [];
@@ -778,13 +779,15 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
       fetchImpl: (async (url: string) => { urls.push(url); return json(capturedPlan); }) as unknown as typeof fetch, ...io,
     });
     if (!run.enabled) throw new Error('expected enabled run');
-    expect(new URL(urls[0]).searchParams.getAll('domain')).toEqual(['nomenclature']);
-    expect(run.filed.map((f) => f.fingerprint)).toEqual([capturedPlan.proposals[2].material_fingerprint]);
-    expect(run.notFiled.map((entry) => entry.reason).sort()).toEqual([
-      'no local executor for reserve domain morphology',
+    expect(new URL(urls[0]).searchParams.getAll('domain')).toEqual(['morphology', 'nomenclature']);
+    expect(run.filed.map((f) => f.fingerprint)).toEqual([
+      capturedPlan.proposals[0].material_fingerprint,
+      capturedPlan.proposals[2].material_fingerprint,
+    ]);
+    expect(run.notFiled.map((entry) => entry.reason)).toEqual([
       'no local executor for reserve domain phenology',
     ]);
-    expect(io.calls.filter((c) => c.startsWith('create:'))).toHaveLength(1);
+    expect(io.calls.filter((c) => c.startsWith('create:'))).toHaveLength(2);
   });
 
   // #825-#827 (morphology, no executor) filled the whole depth on 2026-09-25
@@ -794,7 +797,12 @@ describe('opt-in backend evidence-gap reserve pass in the supervisor script', ()
     const fixture = (await import('../__fixtures__/reserve-mission-issues-825-827.json')).default as {
       issues: Array<{ number: number; title: string; body: string; labels: string[] }>;
     };
-    const stranded = fixture.issues.map((issue) => ({ ...issue, repository: REPO, state: 'open' as const }));
+    // Morphology now has an executor, so the stranded case is replayed with a
+    // domain that still has none (phenology); everything else is verbatim.
+    const stranded = fixture.issues.map((issue) => ({
+      ...issue, body: issue.body.replace('- Domain: morphology', '- Domain: phenology'),
+      repository: REPO, state: 'open' as const,
+    }));
     expect(existingWorkRefs(stranded).map((ref) => ref.holdsReserveSlot)).toEqual([false, false, false]);
     const io = harness();
     const run = await materializeBackendReservePlan(stranded, {

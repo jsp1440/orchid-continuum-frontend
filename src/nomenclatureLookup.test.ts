@@ -368,7 +368,7 @@ describe('reserve bodies declare a binding, gated on domain', () => {
   });
 
   it('emits only the node marker for any other domain, which keeps an honest undeclared route', () => {
-    for (const domain of ['morphology', 'phenology', 'nomenclature-extended', 'Nomenclature']) {
+    for (const domain of ['phenology', 'ecology', 'nomenclature-extended', 'Nomenclature', 'Morphology']) {
       const body = bridged(domain);
       expect(body).toMatch(/^OC-GRAPH-NODE: cap-kg-evidence-gap-research-missions$/m);
       expect(body).not.toMatch(/OC-SWARM-CAPABILITY/);
@@ -424,7 +424,7 @@ describe('the real reserve missions #816-#818 become executable with no edit', (
   });
 
   it('derive the node but no capability for a reserve mission in another domain', () => {
-    const body = issue817.body.replace('- Domain: nomenclature', '- Domain: morphology');
+    const body = issue817.body.replace('- Domain: nomenclature', '- Domain: phenology');
     expect(deriveReserveMissionBinding({ body })).toMatchObject({ nodeId: RESERVE_MISSION_NODE, capability: null });
     expect(routeIssue({ number: 817, body }).undeclared).toBe(true);
     expect(declaredNodesByIssue([{ ...asIssue(issue817), body }])).toEqual({ 817: [RESERVE_MISSION_NODE] });

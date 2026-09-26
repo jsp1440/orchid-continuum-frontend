@@ -1204,7 +1204,7 @@ const kgMissionControlAdapterGate: CompletionNode = {
 // pass files canonical bounded research missions (backendReserveQueueBridge.ts)
 // that no node named, so every one landed in `unboundQueued`. This leaf is their
 // issue-side binding target (`OC-GRAPH-NODE:` in the mission body). Only the
-// `nomenclature` domain has a provider-free executor; other domains bind here
+// `nomenclature` and `morphology` domains have provider-free executors; other domains bind here
 // but declare no capability and keep the honest undeclared refusal. A lane that
 // runs settles to `oc-validating` at most -- a machine report is evidence for
 // human review, never acceptance -- so this leaf stays PARTIAL. It has no
@@ -1226,9 +1226,11 @@ const kgEvidenceGapResearchMissionsGate: CompletionNode = {
     deployedOperational: null,
   },
   evidence: [
-    { kind: 'file', ref: 'src/lib/control-plane/backendReserveQueueBridge.ts', note: 'sourcePayloadBody() emits OC-GRAPH-NODE for every canonical research mission and OC-SWARM-CAPABILITY: nomenclature-evidence-lookup only for domain exactly "nomenclature".' },
+    { kind: 'file', ref: 'src/lib/control-plane/backendReserveQueueBridge.ts', note: 'sourcePayloadBody() emits OC-GRAPH-NODE for every canonical research mission and OC-SWARM-CAPABILITY only for an executable domain: nomenclature-evidence-lookup for "nomenclature", morphology-source-lookup for "morphology".' },
     { kind: 'file', ref: 'scripts/oc-nomenclature-lookup.mjs', note: 'Provider-free executor: at most 3 GBIF species GETs (no occurrence/locality endpoint), writes oc.nomenclature-evidence-report.v1 with review_required true and every mutation/publication flag false, posts one digest-idempotent comment.' },
-    { kind: 'file', ref: 'scripts/oc-capability-router.mjs', note: 'LOCAL_EXECUTORS binds nomenclature-evidence-lookup to npm run research:nomenclature-lookup.' },
+    { kind: 'file', ref: 'scripts/oc-capability-router.mjs', note: 'LOCAL_EXECUTORS binds nomenclature-evidence-lookup to npm run research:nomenclature-lookup and morphology-source-lookup to npm run research:morphology-source-lookup.' },
+    { kind: 'file', ref: 'scripts/oc-morphology-source-lookup.mjs', note: 'Provider-free executor for domain "morphology": GBIF species/match, the accepted usage\'s descriptions and at most 5 source-usage records (no occurrence/distribution endpoint). Keeps only morphology/diagnostic/general description types, never reproduces description text, writes oc.morphology-source-report.v1 (review_required, every mutation/publication flag false) and one digest-idempotent comment.' },
+    { kind: 'test', ref: 'src/morphologySourceLookup.test.ts', note: 'Documented-shape GBIF description fixtures (labelled fixture-only); covers domain gating, type allowlist and locality exclusion, no text reproduction, URL allowlist, transport failure, idempotent comment, routing and settlement to oc-validating.' },
     { kind: 'test', ref: 'src/nomenclatureLookup.test.ts', note: 'Replays GBIF responses captured from api.gbif.org; covers parsing/refusal, domain gating, match-type mapping, contradiction, transport failure, idempotent comment, routing, graph binding and settlement to oc-validating.' },
   ],
   nextAction: 'deliver a review_required nomenclature evidence report; no publication/KG/taxonomy mutation',
