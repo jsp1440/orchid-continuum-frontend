@@ -12,6 +12,7 @@
  * backend only emits `published: false`, and review state is shown verbatim.
  */
 
+import { CalyxApiError } from "@/lib/calyxWorkspace";
 import type { LedgerEntry, LedgerRevision } from "@/lib/reasoningLedger";
 import { researchRequest, type ResearchEvidenceLink } from "@/lib/researchStation";
 
@@ -305,4 +306,132 @@ export function ledgerCitations(ledgers: LedgerRevision[], candidateId: string):
     }
   }
   return citations;
+}
+
+/**
+ * `GET /api/evidence-aggregation/aggregates/{id}` — the active version of one
+ * aggregate assertion (`app/evidence_aggregation/service.py` `_process`). Only
+ * the fields the station renders are typed. Geographic contexts and anchor
+ * locators are deliberately not typed or rendered here.
+ */
+export type EvidenceAggregateRecord = {
+  aggregate_id: number;
+  aggregate_version_id?: number;
+  version?: number;
+  aggregate_type: string;
+  aggregate_status?: string;
+  normalized_subject?: string;
+  normalized_predicate?: string;
+  normalized_object?: string;
+  contributing_candidate_ids: number[];
+  contributing_candidate_version_ids?: string[];
+  source_count?: number;
+  document_count?: number;
+  supporting_evidence_count?: number;
+  contradictory_evidence_count?: number;
+  duplicate_evidence_count?: number;
+  unresolved_evidence_count?: number;
+  uncertainty_dimensions?: Record<string, unknown>;
+  confidence_dimensions?: Record<string, unknown>;
+  aggregation_ruleset_version?: string;
+  reconciliation_model_version?: string;
+  copyright_safe_display_state?: string;
+  review_state: string;
+  verification_state?: string;
+  published: boolean;
+  active: boolean;
+  supersession_state?: string;
+};
+
+export function assertAggregateRecord(value: unknown): EvidenceAggregateRecord {
+  if (
+    !isRecord(value) ||
+    typeof value.aggregate_id !== "number" ||
+    typeof value.aggregate_type !== "string" ||
+    typeof value.review_state !== "string" ||
+    typeof value.published !== "boolean" ||
+    typeof value.active !== "boolean" ||
+    !Array.isArray(value.contributing_candidate_ids) ||
+    !value.contributing_candidate_ids.every((id) => typeof id === "number") ||
+    (value.uncertainty_dimensions !== undefined && !isRecord(value.uncertainty_dimensions)) ||
+    (value.confidence_dimensions !== undefined && !isRecord(value.confidence_dimensions))
+  ) {
+    throw new MalformedEvidenceResponse("evidence aggregate");
+  }
+  return value as EvidenceAggregateRecord;
+}
+
+/**
+ * The backend answers 404 `AGGREGATE_NOT_FOUND` both for an id it never held
+ * and for one whose every version was superseded or withdrawn, so a 404 says
+ * exactly that — never "no evidence".
+ */
+export const fetchEvidenceAggregate = (aggregateId: string) =>
+  researchRequest<unknown>(
+    `/api/evidence-aggregation/aggregates/${encodeURIComponent(aggregateId)}`,
+  ).then(assertAggregateRecord, (error: unknown) => {
+    if (error instanceof CalyxApiError && error.status === 404) {
+      throw new CalyxApiError(
+        "route_unavailable",
+        "No active version of this aggregate is readable (never created, superseded or withdrawn), or the aggregation service is not deployed.",
+        404,
+      );
+    }
+    throw error;
+  });
+
+export function aggregateStatement(aggregate: EvidenceAggregateRecord): string {
+  const subject = displayText(aggregate.normalized_subject, "subject not recorded");
+  const predicate = displayText(aggregate.normalized_predicate, "predicate not recorded").replaceAll("_", " ");
+  const value = aggregate.normalized_object === "MULTIPLE_VALUES"
+    ? "multiple values reported"
+    : displayText(aggregate.normalized_object, "value not recorded");
+  return `${subject} · ${predicate} · ${value}`;
+}
+
+/** The aggregate's standing as the backend states it; it is never a finding. */
+export function aggregateStanding(aggregate: EvidenceAggregateRecord): string[] {
+  const review = aggregate.review_state === "REQUIRED"
+    ? "Human review required"
+    : `Review state: ${displayWords(aggregate.review_state, "not recorded")}`;
+  return [
+    `Consensus status: ${displayWords(aggregate.aggregate_status, "not recorded")}`,
+    review,
+    `Verification: ${displayWords(aggregate.verification_state, "not recorded")}`,
+    aggregate.published === false ? "Not published" : "Publication state not confirmed",
+    aggregate.active && aggregate.supersession_state === "CURRENT"
+      ? "Current version"
+      : "Not confirmed as the current version",
+  ];
+}
+
+const AGGREGATE_COUNTS: Array<[keyof EvidenceAggregateRecord, string]> = [
+  ["source_count", "independent sources"],
+  ["document_count", "documents"],
+  ["supporting_evidence_count", "supporting"],
+  ["contradictory_evidence_count", "contradicting"],
+  ["unresolved_evidence_count", "unresolved"],
+  ["duplicate_evidence_count", "duplicate"],
+];
+
+/** Evidence counts as recorded; a missing count reads "not recorded", never 0. */
+export function aggregateCounts(aggregate: EvidenceAggregateRecord): string[] {
+  return AGGREGATE_COUNTS.map(([key, label]) => `${label} ${displayText(aggregate[key], "not recorded")}`);
+}
+
+/** Uncertainty dimensions (conflicts, independence, taxon ambiguity), numeric only. */
+export function aggregateUncertainty(aggregate: EvidenceAggregateRecord): Array<[string, number]> {
+  return confidenceBreakdown(aggregate.uncertainty_dimensions).map(([key, value]) => [key.replaceAll("_", " "), value]);
+}
+
+/**
+ * The prioritization score, only with the backend's own statement that it is
+ * not a probability of truth. Without that statement it is not shown.
+ */
+export function aggregatePriority(aggregate: EvidenceAggregateRecord): string | null {
+  const dims = aggregate.confidence_dimensions;
+  if (!dims || dims.score_is_truth_probability !== false) return null;
+  const score = dims.prioritization_score;
+  if (typeof score !== "number" || !Number.isFinite(score)) return null;
+  return `review-prioritization score ${score} (${displayText(dims.prioritization_score_formula, "formula not recorded")}; not a probability that the claim is true)`;
 }

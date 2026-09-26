@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 
 import type { LedgerRevision } from '@/lib/reasoningLedger';
 import {
+  aggregateCounts,
+  aggregatePriority,
+  aggregateStanding,
+  aggregateStatement,
+  aggregateUncertainty,
   candidateSources,
   candidateStanding,
   candidateStatement,
@@ -11,11 +16,13 @@ import {
   displayText,
   displayWords,
   fetchCandidateKnowledge,
+  fetchEvidenceAggregate,
   ledgerCitations,
   listCandidateConflicts,
   listProjectReasoningLedgers,
   type CandidateConflictList,
   type CandidateKnowledgeRecord,
+  type EvidenceAggregateRecord,
 } from '@/lib/researchEvidenceChain';
 import type { ResearchEvidenceLink } from '@/lib/researchStation';
 
@@ -35,11 +42,14 @@ const RELATIONSHIP_LABEL: Record<string, string> = {
 /**
  * Each evidence link resolved into what the backend holds for it: the
  * extracted candidate claim, its review standing, the literature anchor it
- * came from, open conflicts, and the reasoning-ledger entries that cite it.
+ * came from, open conflicts, and the reasoning-ledger entries that cite it;
+ * an aggregate link resolves to its active aggregate version (consensus status,
+ * evidence counts, uncertainty, contributing candidates, review standing).
  * Anything that cannot be read is said to be unreadable — never omitted.
  */
 const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEvidenceLink[] }> = ({ projectId, links }) => {
   const [candidates, setCandidates] = useState<Record<string, Loaded<CandidateKnowledgeRecord>>>({});
+  const [aggregates, setAggregates] = useState<Record<string, Loaded<EvidenceAggregateRecord>>>({});
   const [conflicts, setConflicts] = useState<Loaded<CandidateConflictList>>({ status: 'loading' });
   const [ledgers, setLedgers] = useState<Loaded<LedgerRevision[]>>({ status: 'loading' });
 
@@ -51,6 +61,14 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
       fetchCandidateKnowledge(id).then(
         (value) => live && setCandidates((current) => ({ ...current, [id]: { status: 'ready', value } })),
         (error) => live && setCandidates((current) => ({ ...current, [id]: { status: 'unavailable', message: reason(error) } })),
+      );
+    }
+    const aggregateIds = links.filter((item) => item.evidence_kind === 'AGGREGATE').map((item) => item.evidence_id);
+    setAggregates(Object.fromEntries(aggregateIds.map((id) => [id, { status: 'loading' } as const])));
+    for (const id of aggregateIds) {
+      fetchEvidenceAggregate(id).then(
+        (value) => live && setAggregates((current) => ({ ...current, [id]: { status: 'ready', value } })),
+        (error) => live && setAggregates((current) => ({ ...current, [id]: { status: 'unavailable', message: reason(error) } })),
       );
     }
     if (ids.length) {
@@ -70,11 +88,15 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
     <ul className="grid gap-2" data-testid="research-evidence-chain">
       {links.map((link) => {
         const contradicting = link.relationship === 'CONTRADICTS';
-        const loaded = link.evidence_kind === 'CANDIDATE' ? candidates[link.evidence_id] : undefined;
+        const isCandidate = link.evidence_kind === 'CANDIDATE';
+        const loaded = isCandidate ? candidates[link.evidence_id] : undefined;
+        const aggregate = link.evidence_kind === 'AGGREGATE' ? aggregates[link.evidence_id] : undefined;
         const openConflicts = conflicts.status === 'ready'
           ? conflictsForCandidate(conflicts.value.items, link.evidence_id).filter((item) => item.state === 'OPEN')
           : [];
-        const citations = ledgers.status === 'ready' ? ledgerCitations(ledgers.value, link.evidence_id) : [];
+        // Ledger provenance cites candidates by id; an aggregate id is a different
+        // id space, so it is never matched against candidate citations.
+        const citations = isCandidate && ledgers.status === 'ready' ? ledgerCitations(ledgers.value, link.evidence_id) : [];
         return (
           <li
             key={`${link.evidence_kind}-${link.evidence_id}`}
@@ -88,8 +110,37 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
               <span data-testid="research-evidence-relationship">{RELATIONSHIP_LABEL[link.relationship ?? ''] ?? 'relationship not recorded'}</span>
             </p>
 
-            {link.evidence_kind !== 'CANDIDATE' ? (
-              <p className="mt-1 text-white/55">Aggregate detail is not read on this page; only the link is shown.</p>
+            {!isCandidate ? (
+              !aggregate || aggregate.status === 'loading' ? (
+                <p className="mt-1 text-white/55">Reading the aggregate record…</p>
+              ) : aggregate.status === 'unavailable' ? (
+                <p className="mt-1 text-amber-200/90" data-testid="research-aggregate-unavailable">Aggregate record could not be read: {aggregate.message}</p>
+              ) : (
+                <div className="mt-2 space-y-1">
+                  <p className="text-sm text-white/90" data-testid="research-aggregate-statement">{aggregateStatement(aggregate.value)}</p>
+                  <p className="text-white/55">
+                    {displayWords(aggregate.value.aggregate_type, 'unclassified')} · version {displayText(aggregate.value.version, 'not recorded')} ·
+                    ruleset {displayText(aggregate.value.aggregation_ruleset_version, 'not recorded')} · reconciliation {displayText(aggregate.value.reconciliation_model_version, 'not recorded')}
+                  </p>
+                  <p data-testid="research-aggregate-standing">{aggregateStanding(aggregate.value).join(' · ')}</p>
+                  <p data-testid="research-aggregate-counts">Evidence: {aggregateCounts(aggregate.value).join(' · ')}</p>
+                  <p data-testid="research-aggregate-uncertainty">
+                    {aggregateUncertainty(aggregate.value).length
+                      ? `Uncertainty: ${aggregateUncertainty(aggregate.value).map(([key, value]) => `${key} ${value}`).join(' · ')}`
+                      : 'Uncertainty not recorded.'}
+                  </p>
+                  {aggregatePriority(aggregate.value) ? (
+                    <p className="text-white/55" data-testid="research-aggregate-priority">{aggregatePriority(aggregate.value)}</p>
+                  ) : null}
+                  <p data-testid="research-aggregate-candidates">
+                    Contributing candidates: {aggregate.value.contributing_candidate_ids.length
+                      ? displayList(aggregate.value.contributing_candidate_version_ids).length
+                        ? displayList(aggregate.value.contributing_candidate_version_ids).map((id) => `#${id.replace(':', ' v')}`).join(', ')
+                        : aggregate.value.contributing_candidate_ids.map((id) => `#${id}`).join(', ')
+                      : 'none recorded'}
+                  </p>
+                </div>
+              )
             ) : !loaded || loaded.status === 'loading' ? (
               <p className="mt-1 text-white/55">Reading the candidate record…</p>
             ) : loaded.status === 'unavailable' ? (
@@ -132,7 +183,9 @@ const ResearchEvidenceChain: React.FC<{ projectId: string; links: ResearchEviden
             )}
 
             <div className="mt-2" data-testid="research-evidence-ledger">
-              {ledgers.status === 'loading' ? (
+              {!isCandidate ? (
+                <p className="text-white/55">Reasoning-ledger citations are matched for candidate links only; citations of aggregates are not matched on this page.</p>
+              ) : ledgers.status === 'loading' ? (
                 <p className="text-white/55">Reading reasoning ledgers…</p>
               ) : ledgers.status === 'unavailable' ? (
                 <p className="text-amber-200/90">Reasoning ledgers could not be read: {ledgers.message}</p>
