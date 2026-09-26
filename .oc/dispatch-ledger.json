@@ -1,11 +1,11 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 18.5,
+  "programSpent": 19,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
-    "2026-09-26": 6.5
+    "2026-09-26": 7
   },
   "leases": [
     {
@@ -963,6 +963,19 @@
       "reservedUsd": 0.5,
       "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
       "state": "blocked"
+    },
+    {
+      "id": "fa8518f73940bb6bbbd852b99d7d2b27877aeb2c0d347608efd70000f156b4e4",
+      "issue": 807,
+      "nodeId": "cap-buying-companion-11",
+      "fingerprint": "0c0a66551c59f9d57aff79bc0c31de40b87734c8684e4ab5c6b62faf353e3f6b",
+      "waveHash": "cb05108a07130e575ccf94fe7f4aa05febb0da53b23fa7e2336d31ac13d3534e",
+      "runId": "36209687163",
+      "runAttempt": "1",
+      "expiresAt": "2026-09-26T03:21:47.833Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "4ee478807c31a30149b9360ac3022e534ca9057f",
+      "state": "reserved"
     }
   ]
 }
