@@ -153,8 +153,26 @@ const CalyxScienceStatus: React.FC = () => {
 
   function statValue(count: number | undefined, section: keyof CalyxScienceDashboard['sectionErrors'], fallbackLength: number): React.ReactNode {
     if (count !== undefined) return count;
-    if (dashboard?.sectionErrors[section]) return 'unavailable';
+    // No dashboard (still loading, or every endpoint failed) is not a zero.
+    if (!dashboard) return '-';
+    if (dashboard.sectionErrors[section]) return 'unavailable';
     return fallbackLength;
+  }
+
+  // Runtime mode is reported by summary and status alike; only when both
+  // failed is it unavailable. Before any dashboard has loaded it is 'loading'.
+  const runtimeMode =
+    dashboard?.summary?.mode ??
+    dashboard?.status?.mode ??
+    (dashboard?.sectionErrors.summary && dashboard?.sectionErrors.status ? 'unavailable' : 'loading');
+
+  function sectionUnavailable(section: keyof CalyxScienceDashboard['sectionErrors'], hasRows: boolean, label: string) {
+    if (hasRows || !dashboard?.sectionErrors[section]) return null;
+    return (
+      <div className="rounded-lg border border-amber-300/20 bg-amber-300/10 p-3 text-[12px] leading-5 text-amber-100">
+        {label} telemetry is unavailable right now -- not confirmed zero.
+      </div>
+    );
   }
 
   if (!isUnlocked) {
@@ -249,7 +267,7 @@ const CalyxScienceStatus: React.FC = () => {
           ) : null}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Stat label="Runtime mode" value={dashboard?.summary?.mode ?? dashboard?.status?.mode ?? 'loading'} icon={Network} />
+            <Stat label="Runtime mode" value={runtimeMode} icon={Network} />
             <Stat label="Science departments" value={statValue(dashboard?.summary?.department_count, 'departments', dashboard?.departments.length ?? 0)} icon={Layers3} />
             <Stat label="Mission types" value={statValue(dashboard?.summary?.mission_type_count, 'missions', dashboard?.missions.length ?? 0)} icon={Leaf} />
             <Stat label="Known gaps" value={statValue(dashboard?.status?.known_gap_count, 'gaps', dashboard?.gaps.length ?? 0)} icon={AlertTriangle} />
@@ -265,6 +283,7 @@ const CalyxScienceStatus: React.FC = () => {
                   {topDepartments.map((department) => (
                     <DepartmentRow key={department.department_id} department={department} />
                   ))}
+                  {sectionUnavailable('departments', topDepartments.length > 0, 'Department')}
                 </div>
               </section>
 
@@ -300,6 +319,7 @@ const CalyxScienceStatus: React.FC = () => {
                   <Database className="h-4 w-4" /> Dataset readiness
                 </div>
                 <div className="mt-4 space-y-3">
+                  {sectionUnavailable('datasets', false, 'Dataset')}
                   {(dashboard?.datasets ?? []).slice(0, 6).map((dataset) => (
                     <div key={dataset.dataset_id} className="rounded-lg border border-white/[0.07] bg-black/18 p-3">
                       <div className="text-sm text-[#faf7f2]">{dataset.display_name}</div>
@@ -315,6 +335,7 @@ const CalyxScienceStatus: React.FC = () => {
                   <BookOpenText className="h-4 w-4" /> Dossier queues
                 </div>
                 <div className="mt-4 space-y-3">
+                  {sectionUnavailable('dossiers', false, 'Dossier queue')}
                   {(dashboard?.dossiers ?? []).map((candidate) => (
                     <div key={candidate.queue_name} className="rounded-lg border border-white/[0.07] bg-black/18 p-3">
                       <div className="text-sm text-[#faf7f2]">{candidate.queue_name.replace(/_/g, ' ')}</div>
