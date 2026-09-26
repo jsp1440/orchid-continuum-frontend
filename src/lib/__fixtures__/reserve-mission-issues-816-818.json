@@ -3,13 +3,17 @@
     "source": "GitHub REST issues API via the GitHub MCP issue_read tool (method get), jsp1440/orchid-continuum-frontend",
     "captured_at": "2026-09-25",
     "filed_by": "github-actions[bot], scheduled supervisor run 36174667846 (backend reserve pass)",
-    "note": "title, state, labels and body are copied verbatim; the bodies carry no OC-GRAPH-NODE or OC-SWARM-CAPABILITY line"
+    "note": "title, state, labels and body are copied verbatim; the bodies carry no OC-GRAPH-NODE or OC-SWARM-CAPABILITY line",
+    "author_capture": "user.login re-read 2026-09-26 via the GitHub MCP issue_read tool (method get): github-actions[bot] (id 41898282) for #816, #817 and #818; labels then read oc-validating, oc-p2, oc-discovered (oc-prepared above is the state at the original capture)"
   },
   "issues": [
     {
       "number": 816,
       "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/816",
       "created_at": "2026-09-25T18:39:18Z",
+      "user": {
+        "login": "github-actions[bot]"
+      },
       "title": "Research nomenclature gap for Robiquetia andamanica",
       "state": "open",
       "labels": [
@@ -23,6 +27,9 @@
       "number": 817,
       "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/817",
       "created_at": "2026-09-25T18:39:21Z",
+      "user": {
+        "login": "github-actions[bot]"
+      },
       "title": "Research nomenclature gap for Gastrochilus calceolaris",
       "state": "open",
       "labels": [
@@ -36,6 +43,9 @@
       "number": 818,
       "url": "https://github.com/jsp1440/orchid-continuum-frontend/issues/818",
       "created_at": "2026-09-25T18:39:24Z",
+      "user": {
+        "login": "github-actions[bot]"
+      },
       "title": "Research nomenclature gap for Gastrochilus fargesii",
       "state": "open",
       "labels": [

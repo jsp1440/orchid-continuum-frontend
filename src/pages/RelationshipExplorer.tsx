@@ -10,6 +10,7 @@ import {
   type EcologicalNeighborhoodCard as NeighborhoodCard,
 } from "@/lib/ecologicalNeighborhood";
 import EcologicalNeighborhood from "@/components/orchid/EcologicalNeighborhood";
+import InteractionDiscoveryPanel from "@/components/interactions/InteractionDiscoveryPanel";
 
 function valueText(value: unknown, fallback = "Not available") {
   if (value === null || value === undefined || value === "") return fallback;
@@ -308,6 +309,8 @@ export default function RelationshipExplorer() {
                 </div>
               </Card>
             </section>
+
+            <InteractionDiscoveryPanel species={initialSpecies} />
 
             <div className="overflow-hidden rounded-[2rem] border border-emerald-100 shadow-sm">
               <EcologicalNeighborhood

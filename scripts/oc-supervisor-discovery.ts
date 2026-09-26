@@ -50,6 +50,7 @@ type GitHubIssue = {
   labels?: Array<{ name: string }>;
   pull_request?: unknown;
   updated_at?: string;
+  user?: { login?: string } | null;
 };
 
 type GitHubPullRequest = {
@@ -221,6 +222,7 @@ function snapshot(repository: string): SupervisorRepositorySnapshot {
       body: issue.body ?? '',
       labels: (issue.labels ?? []).map((label) => label.name),
       updatedAt: issue.updated_at,
+      author: issue.user?.login ?? null,
     }));
 
   // PR and CI state are evidence sources, not admission commands. If either

@@ -202,7 +202,7 @@ describe('the live reserve missions #816-#818 (verbatim, #819 fixtures) under da
   const RESERVE_LEAF = 'cap-kg-evidence-gap-research-missions';
   // The fixture stores labels as the plain names GitHub's issue_read returned.
   const reserve: Issue[] = reserveIssues.issues
-    .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(name => ({ name })) }));
+    .map(({ number, state, title, body, labels, user }) => ({ number, state, title, body, labels: labels.map(name => ({ name })), author: user.login }));
   const snapshot = (): Snapshot => ({
     issues: [...LIVE_PROVIDER_QUEUE.map(([n, node]) => providerIssue(n, node)), ...reserve],
     prs: [], integrationSha: 'a'.repeat(40), implementationSha: 'b'.repeat(40), material: {},
@@ -482,7 +482,7 @@ describe('the plan job reads the same provider policy as the lane', () => {
 describe('a deterministic-only research node never reaches the paid lane', () => {
   const RESERVE_LEAF = 'cap-kg-evidence-gap-research-missions';
   const reserve: Issue[] = reserveIssues.issues
-    .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(name => ({ name })) }));
+    .map(({ number, state, title, body, labels, user }) => ({ number, state, title, body, labels: labels.map(name => ({ name })), author: user.login }));
   // #825 as filed on 2026-09-25: a reserve mission bound to the leaf whose domain has no local executor.
   const morphology: Issue = {
     number: 825, state: 'open', title: 'Research morphology gap for Gastrochilus calceolaris',

@@ -17,6 +17,7 @@
  */
 import { createServer } from "node:http";
 import { randomUUID, createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { speciesOfStoredIdentity } from "./species-of-stored-identity.mjs";
 
 const store = {
@@ -1206,8 +1207,116 @@ const researchProject = {
   link_counts: { taxa: 1, documents: 2, evidence: 2, notes: 1 },
 };
 
+/* ---------------------------------------- Research Trait Explorer ------ */
+
+/**
+ * `GET /api/research/traits`, answered only with payloads the real backend
+ * returned.
+ *
+ * PROVENANCE. `src/lib/__fixtures__/researchTraits.pr1611.json` holds the
+ * AVAILABLE / UNAVAILABLE / ABSENT bodies captured through FastAPI TestClient
+ * from `app/research_traits/routes.py` (backend #1611), using that suite's
+ * `FakeService` (the real `ResearchTraitsService.get()` pipeline with only the
+ * database boundary replaced) and its `ROWS`. The file's note says the capture
+ * predates the merge; re-capturing from backend `main` 615af698b with the same
+ * harness produced bodies identical to it in every field except
+ * `generated_at`, which is a capture timestamp. They are served verbatim, so
+ * `generated_at` is the capture instant, not the time of this request.
+ *
+ * The rows behind them are the backend test suite's own fixture rows, not
+ * botanical records. A passing browser run proves the frontend renders what
+ * the backend emits; it says nothing about any orchid.
+ *
+ * Only the two subjects the capture covers are answered. Any other valid
+ * subject gets a 503 instead of a borrowed payload, because re-labelling a
+ * captured body with a different name would invent a result for that name.
+ *
+ * Authentication: the real route depends on `verify_owner_or_api_key`, an
+ * owner cookie or API key this stand-in has no equivalent of, so — like the
+ * `/api/research/projects` fixtures above — it does not check one. The
+ * captured 401 is served on request so the signed-out rendering is covered.
+ */
+const CAPTURED_TRAITS = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/researchTraits.pr1611.json", import.meta.url), "utf8"),
+);
+
+/** Both captured genus bodies are for `Cattleya`, so the journey picks one. */
+const TRAIT_GENUS_CAPTURES = new Set(["unavailable_genus", "absent_genus"]);
+
+/**
+ * Failure bodies. `unauthenticated` and `server_error` are what backend `main`
+ * returned through TestClient (the route with no credentials, and an unhandled
+ * service exception). `malformed` is SYNTHETIC — a contract-version the
+ * client must refuse — and exists only to exercise the fail-closed parse.
+ */
+const TRAIT_FAILURES = new Set(["unauthenticated", "server_error", "malformed"]);
+
+const traitsControl = { genus: "unavailable_genus", failure: null };
+
+// Mirrors `_subject` in app/research_traits/routes.py, including its details.
+const TRAIT_GENUS_RE = /^[A-Z][A-Za-z-]{1,79}$/;
+const TRAIT_SPECIES_RE = /^[A-Z][A-Za-z-]{1,79} [a-z][A-Za-z-]{1,79}$/;
+
+function traitSubject(url) {
+  const genus = url.searchParams.get("genus");
+  const species = url.searchParams.get("species");
+  if (Boolean(genus) + Boolean(species) !== 1) return { error: "Supply exactly one of genus or species" };
+  if (genus !== null && genus !== "") {
+    const name = genus.trim();
+    return TRAIT_GENUS_RE.test(name) ? { rank: "genus", name } : { error: "Invalid genus" };
+  }
+  const name = (species || "").trim();
+  return TRAIT_SPECIES_RE.test(name) ? { rank: "species", name } : { error: "Invalid species binomial" };
+}
+
+function researchTraitsRoute(req, res, url) {
+  if (req.method !== "GET") return fail(res, 405, "method_not_allowed", "GET only.");
+  const failure = traitsControl.failure;
+  if (failure === "unauthenticated") return json(res, 401, { detail: "Owner session or API key is required" });
+  if (failure === "server_error") {
+    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", ...cors() });
+    return res.end("Internal Server Error");
+  }
+  const subject = traitSubject(url);
+  if (subject.error) return json(res, 422, { detail: subject.error });
+  if (failure === "malformed") {
+    const body = { ...CAPTURED_TRAITS.absent_genus, subject: { rank: subject.rank, name: subject.name } };
+    return json(res, 200, { ...body, contract_version: "oc-research-traits-v0" });
+  }
+  let capture = null;
+  if (subject.rank === "species" && subject.name === CAPTURED_TRAITS.available_species.subject.name) {
+    capture = CAPTURED_TRAITS.available_species;
+  } else if (subject.rank === "genus" && subject.name === CAPTURED_TRAITS[traitsControl.genus].subject.name) {
+    capture = CAPTURED_TRAITS[traitsControl.genus];
+  }
+  if (!capture) {
+    return json(res, 503, {
+      detail: `The reference backend holds no captured trait payload for ${subject.rank} ${subject.name}.`,
+    });
+  }
+  return json(res, 200, capture);
+}
+
+/**
+ * Test-only switch, reachable only from the Playwright runner. It selects
+ * which captured genus body is served and whether a failure replaces it.
+ */
+async function researchTraitsControlRoute(req, res) {
+  if (req.method !== "PUT") return fail(res, 405, "method_not_allowed", "PUT only.");
+  const body = safeJson(await readBody(req)) || {};
+  const genus = body.genus ?? traitsControl.genus;
+  const failure = body.failure ?? null;
+  if (!TRAIT_GENUS_CAPTURES.has(genus) || (failure !== null && !TRAIT_FAILURES.has(failure))) {
+    return fail(res, 400, "invalid_scenario", "Unknown trait scenario.");
+  }
+  traitsControl.genus = genus;
+  traitsControl.failure = failure;
+  return json(res, 200, { ...traitsControl });
+}
+
 async function researchRoute(req, res, url) {
   const path = url.pathname;
+  if (path === "/api/research/traits") return researchTraitsRoute(req, res, url);
   if (path === "/api/research/projects" && req.method === "GET") {
     return json(res, 200, { items: [researchProject] });
   }
@@ -1681,6 +1790,7 @@ const server = createServer(async (req, res) => {
       return await calyxRoute(req, res, url);
     }
     if (url.pathname === "/__reference/health") return json(res, 200, { ok: true });
+    if (url.pathname === "/__reference/research-traits") return await researchTraitsControlRoute(req, res);
     // The rest of the app reads a handful of tables through PostgREST. None of
     // them belong to the Conservatory journey, but leaving them to 404 fills
     // the console with failures that would mask a real one.

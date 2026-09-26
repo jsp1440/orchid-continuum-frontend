@@ -837,11 +837,12 @@ describe('graph discovery sees derived reserve-mission bindings', () => {
     const { resolveExecutableIssue } = await import('../completion-graph/executableIssue');
     const { COMPLETION_GRAPH } = await import('../completion-graph/completionGraphData');
     const fixture = (await import('../__fixtures__/reserve-mission-issues-816-818.json')).default as {
-      issues: Array<{ number: number; title: string; state: string; labels: string[]; body: string }>;
+      issues: Array<{ number: number; title: string; state: string; labels: string[]; body: string; user: { login: string } }>;
     };
+    // Built as fetchRepositorySnapshot builds one: `author` is `user.login`.
     const snapshots = fixture.issues.map((issue) => ({
       number: issue.number, repository: REPO, state: 'open' as const,
-      title: issue.title, body: issue.body, labels: issue.labels,
+      title: issue.title, body: issue.body, labels: issue.labels, author: issue.user.login,
     }));
     const find = (node: typeof COMPLETION_GRAPH, id: string): typeof COMPLETION_GRAPH | undefined =>
       node.id === id ? node : node.children.map((child) => find(child, id)).find(Boolean);
@@ -855,6 +856,21 @@ describe('graph discovery sees derived reserve-mission bindings', () => {
     // Without the derivation the leaf looks untracked -- the #820 defect.
     const raw = snapshots.map((issue) => ({ number: issue.number, body: issue.body, labels: issue.labels }));
     expect(resolveExecutableIssue(leaf, raw)).toBeNull();
+  });
+
+  it('derives nothing for a person-filed copy of a reserve mission, or one without oc-discovered', async () => {
+    const { openIssueRefs } = await import('../../../scripts/oc-supervisor-discovery');
+    const fixture = (await import('../__fixtures__/reserve-mission-issues-816-818.json')).default as {
+      issues: Array<{ number: number; title: string; labels: string[]; body: string }>;
+    };
+    const [real] = fixture.issues;
+    const base = { number: 9001, repository: REPO, state: 'open' as const, title: real.title, body: real.body };
+    const refs = openIssueRefs([
+      { ...base, labels: real.labels, author: 'octocat' },
+      { ...base, labels: real.labels },
+      { ...base, labels: real.labels.filter((label) => label !== 'oc-discovered'), author: 'github-actions[bot]' },
+    ]);
+    for (const ref of refs) expect(ref.labels).not.toContain('oc-node:cap-kg-evidence-gap-research-missions');
   });
 
   it('derives nothing for an issue that is not a reserve mission', async () => {
