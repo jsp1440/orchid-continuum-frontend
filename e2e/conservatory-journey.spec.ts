@@ -112,7 +112,8 @@ async function signIn(create: boolean) {
 test("1. My Conservatory opens from normal navigation", async () => {
   await signIn(true);
   await visit("/");
-  await page.getByRole("button", { name: "Conservatory", exact: true }).first().click();
+  // Site navigation items are links (announced as links, middle-clickable).
+  await page.getByRole("link", { name: "Conservatory", exact: true }).first().click();
   await expect(page).toHaveURL(/\/conservatory$/);
   await expect(page.getByRole("heading", { name: "My Conservatory" })).toBeVisible();
   // Reaching it must not have required a sign-in wall to be dismissed again.
