@@ -21,8 +21,8 @@ the owner gates listed below.**
 
 - No journey is FAIL.
 - No security or privacy blocker is open as of the `r1-post-hardening` run.
-  Six were found and fixed after the first acceptance; see "Security and
-  privacy findings after acceptance".
+  Five were found and fixed after the `r1-refresh` acceptance; see "Security
+  and privacy findings after acceptance".
 - This is not a claim about production: production hosts cannot be reached from
   the build environment. Deployment, verification against production data and
   the listed decisions remain owner actions.
@@ -33,6 +33,13 @@ the owner gates listed below.**
 |---|---|---|
 | Backend `jsp1440/orchid-calyx-backend` | `b4adfae2e9ee48158aeac8b752a15686b9dd915a` | `r1-post-hardening`, 2026-09-27T05:44Z |
 | Frontend `jsp1440/orchid-continuum-frontend` | `f31421a1f4e2c3dafeb791e5f40c3d94a0a0d2aa` | `r1-post-hardening`, 2026-09-27T05:44Z |
+
+The `r1-post-hardening` run at 05:44Z recorded J03 as **FAIL**. The harness
+assertion expected "unavailable" or "not yet" and did not recognise the product's
+outage copy, "Record not confirmed" / "Could not confirm". The harness assertion
+(`r1-journeys.spec.ts`, local to this session) was widened to accept that copy;
+the product did not change. J03 was then re-run alone at 05:53Z on the same two
+SHAs and passed.
 
 BE #1643 and FE #858, #859 and #860 were merged to `main` earlier on 2026-09-26, under the
 owner-authorised sprint that preceded the Release 1 directive. They reached
@@ -65,12 +72,15 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650; FE #862, #868 | Yes, before merge (session checker agents; #1647 and #868 after a repair round; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head |
+  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677; FE #862, #868, #869, #870, #872, #873, #877, #879 | Yes, before merge (session checker agents; #1647, #868 and #869 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
-  | BE #1663, #1664, #1666; FE #869, #872, #873 | Exact-head CI and focused negative/live controls recorded on each PR | Not recorded in this document | Owner | Clean integration merges; #1666 verified as a whole-tree identity |
+  | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict from this session recorded before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
+  | BE #1676 at `b0f410ad`; FE #878 at `0a68e841` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677 and FE #879 (row above) |
   | BE #1645; FE #856, #861, #864, #865, #866 | Owner's own lineage: exact-head CI plus the readback in the PR comments; no independent checker record from this session | Not recorded | Owner | Blobs identical (FE #865, #866 verified by this session) |
   | BE #1643; FE #858, #859, #860 | Yes, before merge | Not applicable: these merged to `main` under the earlier owner-authorised sprint, before the Release 1 directive, and reached integration only through syncs #1644 and #862 | Coordinator | Tree/blobs identical |
 
+  All merges appear on GitHub under the same account, so "merged by" comes from
+  this session's own merge calls, not from GitHub's `merged_by` field.
   Checker PASS records and gate results for the coordinator-merged PRs live
   in this session's transcript, as checker subagent reports and gate tool
   output, not in GitHub comments. The factory gate takes the checker verdict
@@ -95,7 +105,7 @@ owner-gated.
 | 10 | Conservation information | **PASS** (local, no data) | Shows "Not yet assessed"; no category is made up | — | Existing integration | — |
 | 11 | Calyx / Brain interactions | **OWNER_GATED** (member access to Speak) | Reasoning map, homepage and capabilities render; outages get a plain-language message | Speak conversations are owner-only | FE #866 | — |
 | 12 | Contextual feedback / correction | **PASS** for owner submission and review; member submission **OWNER_GATED** | Anonymous visitors get honest sign-in copy; owners can list cases, inspect exact object versions and append decisions; duplicate clicks and stale case-detail races are suppressed | Frontend and backend share `/api/evidence-feedback`; cases survive restart; the owner-only review API supports reject, governed-review routing and bounded trivial correction without publishing to the knowledge graph | BE #1646 `3c12bce9` → `807746b9`; BE #1650 `86eabee0` → `88e57957`; BE #1663 `902faf88` → `95edfe01`; BE #1664 `d1da6eea` → `36d0e4c1`; FE #856, #861, #872 `37d18a1a` → `ca494111`, #873 `35285e5b` → `f2f57473`, #876 `87fb969a` → `4d45fd99` | Review is owner-session-only; actor references are keyed and opaque; nested identity keys are stripped; decisions remain append-only and non-publication |
-| 13 | Mobile / tablet + accessibility | **PASS** (tested core routes) | No sideways scroll at 390 or 820; the menu, skip link and Tab order work; controls have accessible names; axe (WCAG 2 A/AA) finds 0 critical violations on 10 core routes at both widths, with only near-4.5:1 colour-contrast findings left | — | FE #866; FE #875 `b002ef10` → `7f5f79c6`; FE #876 `87fb969a` → `4d45fd99` | — |
+| 13 | Mobile / tablet + accessibility | **PASS** (tested core routes) | No sideways scroll at 390 or 820; the menu, skip link and Tab order work; controls have accessible names; axe (WCAG 2 A/AA) finds 0 critical violations on 10 core routes at both widths; the only findings left are colour contrast, rated serious | — | FE #866; FE #875 `b002ef10` → `7f5f79c6`; FE #876 `87fb969a` → `4d45fd99` | — |
 | 14 | Failure states | **PASS** | Backend down, API 500, auth failure, unknown route and Supabase down all show honest states; no raw error text; unknown-taxon absence is distinguished from service failure | Widgets return 503 with stable error codes; malformed Unicode and non-finite JSON values return renderable 422 responses instead of 500 or connection reset | FE #865, #866, #869; BE #1649; BE #1666 `243800b1` → `f93cee37` | Unrenderable or oversized validation inputs are sanitized or omitted; ordinary 422 bodies remain compatible |
 
 ### Security and privacy result
@@ -123,8 +133,12 @@ before request validation or project lookup, so project existence is not disclos
 The acceptance above stated that no security or privacy blocker was open. That
 was not true at the time: the following were found after acceptance by
 independent checkers, on the same integration branch. All are now fixed on
-integration and confirmed by the `r1-post-hardening` run (anonymous 401, member
-403, bodies contain only the refusal).
+integration. The `r1-post-hardening` security spot-check probes the route-guard
+fixes: anonymous requests get 401; members get 403, or 401 on the Mission
+Control chat and `/api/shows` routes, which accept only the owner or an API key
+(`verify_owner_or_api_key`); and no refused body contains the data keys the
+check looks for. The constant-time comparisons, the redaction and the
+malformed-input handling rest on unit tests, not on the harness.
 
 | Finding | Exposure before the fix | Fix (PR, exact head → integration) |
 |---|---|---|
@@ -133,14 +147,16 @@ integration and confirmed by the `r1-post-hardening` run (anonymous 401, member
 | Mission Control chat transcript, messages and replies had no authentication | Anyone could read and append to the transcript | BE #1674 `5c608749` → `8af17fcf` |
 | calyx_core show management had no authentication | Anyone could read integration secrets (`config_json`), volunteer tokens and uploader emails; create webhooks, templates and events; inject lines into the ICS export | BE #1675 `c1840260` → `32c911b0`; hardening BE #1676 `b0f410ad` → `3b9f0203`, repaired by BE #1677 `823c299a` → `b4adfae2` |
 | Non-constant-time secret comparisons; non-ASCII credentials crashed with 500 | Timing side-channel on several keys; server errors | BE #1671 `7c0f7b23` → `916b7f8a`; BE #1673 `90147ef2` → `785a6a4f` |
-| Malformed Unicode or undecodable bodies returned 500 on every JSON route | Crashes and dropped connections | BE #1666 `243800b1` → `f93cee37`; BE #1671 |
+| Undecodable request bodies returned 500 on JSON routes | Server errors | BE #1671 `7c0f7b23` → `916b7f8a`, extending BE #1666 `243800b1` → `f93cee37` (malformed Unicode), which was already the `r1-refresh` head |
 
 **Two merges landed code that had failed its independent check.** BE #1676 merged
-at `b0f410ad`, which carried a quadratic ReDoS in secret redaction (a 65K
-uppercase key took about 35 s per request); BE #1677 repaired it. FE #878 merged
+at `b0f410ad`, which carried a quadratic ReDoS in secret redaction (the #1677
+commit measured about 37 s for a 64K uppercase key); BE #1677 repaired it. FE #878 merged
 at `0a68e841`, which carried raw Trojan-source bidi control characters in a test
 file and a caret regression; FE #879 repaired it and added a repository guard
-test that fails on any Unicode format character in `src/`, `e2e/` or `scripts/`.
+test that fails on any Unicode format character in text source files under
+`src/`, `e2e/` and `scripts/` (it skips dot-directories, `node_modules` and
+`dist`).
 Both repairs passed an independent check on the exact head with CI green, and
 integration holds exactly the checked merge.
 
@@ -181,7 +197,7 @@ integration holds exactly the checked merge.
 - When the species services are down, every dossier, including a known
   taxon's, shows "Record not confirmed" with a retry. That is honest, but known
   taxa would need a cached or bundled taxon index to still render.
-- Colour contrast just under 4.5:1 needs a design-system decision: Lexicon
+- Colour-contrast findings (axe, serious) need a design-system decision: Lexicon
   green `#4A7C59` headings, muted `#7a7466` on dark Species/Atlas pages, and
   `text-white/40` on `/conservation`.
 - Remaining redaction gaps in owner-only views: Digest `response=` in free
