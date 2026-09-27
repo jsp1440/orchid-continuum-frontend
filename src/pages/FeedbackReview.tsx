@@ -380,6 +380,12 @@ function CaseDetail({
   );
 }
 
+// Shown when a decision was recorded but the follow-up read of the case
+// failed. Deliberately not `reviewErrorMessage`: that copy says "Nothing was
+// changed", which would be false after a recorded decision.
+const DECISION_REFRESH_FAILED =
+  "The decision was recorded, but the case could not be reloaded to show its updated history. Select the case again to reload it.";
+
 export default function FeedbackReview({ client }: FeedbackReviewProps) {
   const api = useMemo(() => client ?? createEvidenceFeedbackReviewClient(), [client]);
 
@@ -525,12 +531,21 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
           ? { ...current, case: result.case, allowed_decisions: result.allowed_decisions, publication_boundary: result.publication_boundary }
           : current,
       );
+      // This refresh takes over the case-detail request counter, so any read
+      // still in flight for this case (the owner re-opened it while the
+      // decision was pending) is dropped and will never clear the loading
+      // state. The refresh therefore owns `detailLoading` from here on and
+      // must settle it, and must say so honestly if it cannot load the case.
       const request = ++detailRequest.current;
+      setDetailError(null);
       try {
         const refreshed = await api.getCase(caseId);
         if (request === detailRequest.current) setDetail(refreshed);
       } catch {
-        // The decision stands; the refreshed history can be loaded again.
+        // The decision stands; only the re-read failed.
+        if (request === detailRequest.current) setDetailError(DECISION_REFRESH_FAILED);
+      } finally {
+        if (request === detailRequest.current) setDetailLoading(false);
       }
     } catch (error) {
       if (selectedCaseRef.current === caseId) setDecisionError(reviewErrorMessage(error));
