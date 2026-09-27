@@ -49,8 +49,8 @@ const PathProbe: React.FC = () => {
   return null;
 };
 
-async function mount(initial = '/') {
-  mocks.useAuth.mockReturnValue(SIGNED_OUT);
+async function mount(initial = '/', auth: unknown = SIGNED_OUT) {
+  mocks.useAuth.mockReturnValue(auth);
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -63,12 +63,33 @@ async function mount(initial = '/') {
   });
 }
 
-const click = async (element: Element) => {
-  await act(async () => { element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 })); });
+const click = async (element: Element, detail = 1) => {
+  await act(async () => { element.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, button: 0, detail })); });
+};
+/** A pointer event of the given type from a mouse, pen or finger. */
+const pointer = async (element: Element, type: string, pointerType: 'mouse' | 'touch' | 'pen', relatedTarget: Element | null = document.body) => {
+  await act(async () => { element.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerType, relatedTarget })); });
+};
+/** A tap as a touch screen delivers it: pointer events, then a click (detail 1). */
+const tap = async (element: Element) => {
+  await pointer(element, 'pointerover', 'touch');
+  await pointer(element, 'pointerdown', 'touch');
+  await pointer(element, 'pointerup', 'touch');
+  await click(element, 1);
+  await pointer(element, 'pointerout', 'touch');
+};
+/** Move focus from `from` to `to` the way a Tab press does (focusout carries relatedTarget). */
+const moveFocus = async (from: HTMLElement, to: HTMLElement | null) => {
+  await act(async () => {
+    from.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: to }));
+    to?.focus();
+  });
 };
 const desktopNav = () => container.querySelector('header nav[aria-label="Primary"]')!;
 const toggle = () => container.querySelector<HTMLButtonElement>('button[aria-label="Toggle navigation"]')!;
 const drawer = () => container.querySelector('#site-mobile-nav');
+const moreButton = () => [...desktopNav().querySelectorAll('button')].find((b) => b.textContent?.trim() === 'More')!;
+const moreMenu = () => container.querySelector('#site-more-menu');
 const linkIn = (scope: Element, label: string) =>
   [...scope.querySelectorAll('a')].find((a) => a.textContent?.trim() === label);
 
@@ -150,16 +171,48 @@ describe('primary navigation is made of links', () => {
     expect(container.querySelector(`#${more.getAttribute('aria-controls')}`)).not.toBeNull();
   });
 
-  it('a pointer click after hover-open keeps the More menu open; keyboard activation toggles', async () => {
+  it('a mouse click after hover-open keeps the More menu open; the next click closes it', async () => {
     await mount();
-    const more = [...desktopNav().querySelectorAll('button')].find((b) => b.textContent?.trim() === 'More')!;
-    // Pointer: hovering opens it, then the click (detail 1) must not shut it.
-    await act(async () => { more.parentElement!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true, relatedTarget: document.body })); });
+    const more = moreButton();
+    // Mouse: hovering opens it, then the click that follows must not shut it.
+    await pointer(more.parentElement!, 'pointerover', 'mouse');
     expect(more.getAttribute('aria-expanded')).toBe('true');
-    await act(async () => { more.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 })); });
+    await click(more);
     expect(more.getAttribute('aria-expanded')).toBe('true');
-    // Keyboard (Enter/Space activate with detail 0): toggles.
-    await act(async () => { more.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 0 })); });
+    // Once pinned by the click, it stays open when the mouse wanders off...
+    await pointer(more.parentElement!, 'pointerout', 'mouse');
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    // ...and a second click on More closes it.
+    await click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('a mouse hover and click delivered before React re-renders still leave More open', async () => {
+    await mount();
+    const more = moreButton();
+    // A real mouse click moves the pointer in and clicks within one frame.
+    await act(async () => {
+      more.parentElement!.dispatchEvent(new PointerEvent('pointerover', { bubbles: true, pointerType: 'mouse', relatedTarget: document.body }));
+      more.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, detail: 1 }));
+    });
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+  });
+
+  it('a hover-opened More menu closes when the mouse leaves without clicking', async () => {
+    await mount();
+    const more = moreButton();
+    await pointer(more.parentElement!, 'pointerover', 'mouse');
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    await pointer(more.parentElement!, 'pointerout', 'mouse');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keyboard activation (Enter/Space, click detail 0) toggles More', async () => {
+    await mount();
+    const more = moreButton();
+    await click(more, 0);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    await click(more, 0);
     expect(more.getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -215,5 +268,92 @@ describe('phone drawer', () => {
     await click(linkIn(drawer()!, 'Species')!);
     expect(currentPath).toBe('/species');
     expect(drawer()).toBeNull();
+  });
+});
+
+describe('More menu on touch, outside presses and focus', () => {
+  it('a tap opens More and a second tap on More closes it', async () => {
+    await mount();
+    const more = moreButton();
+    await tap(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    expect(moreMenu()).not.toBeNull();
+    await tap(more);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(moreMenu()).toBeNull();
+  });
+
+  it('a press outside the menu closes it; a press inside does not', async () => {
+    await mount();
+    const more = moreButton();
+    await tap(more);
+    await pointer(moreMenu()!, 'pointerdown', 'touch');
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    await pointer(document.body, 'pointerdown', 'touch');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    // Same with a mouse after a click-open.
+    await click(more);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    await pointer(linkIn(desktopNav(), 'Atlas')!, 'pointerdown', 'mouse');
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('closes when focus moves out of the menu, but not while it moves within it', async () => {
+    await mount();
+    const more = moreButton();
+    more.focus();
+    await click(more, 0);
+    const firstItem = moreMenu()!.querySelector('a')!;
+    await moveFocus(more, firstItem);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    await moveFocus(firstItem, linkIn(desktopNav(), 'Join')!);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('a blur with no new focus target (a press on the menu padding) leaves it open', async () => {
+    await mount();
+    const more = moreButton();
+    more.focus();
+    await click(more, 0);
+    await moveFocus(more, null);
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+  });
+});
+
+describe('account menu', () => {
+  const SIGNED_IN = {
+    user: { id: 'synthetic-user', email: 'member@example.org', user_metadata: { display_name: 'Member' } },
+    session: {}, loading: false, signOut: vi.fn(),
+  };
+  const account = () => container.querySelector<HTMLButtonElement>('[data-testid="account-menu"]')!;
+  const accountPanel = () => container.querySelector('[data-testid="account-mission-control"]');
+
+  it('a tap toggles it; a press outside closes it', async () => {
+    await mount('/', SIGNED_IN);
+    await tap(account());
+    expect(account().getAttribute('aria-expanded')).toBe('true');
+    await tap(account());
+    expect(account().getAttribute('aria-expanded')).toBe('false');
+    await tap(account());
+    await pointer(accountPanel()!, 'pointerdown', 'touch');
+    expect(account().getAttribute('aria-expanded')).toBe('true');
+    await pointer(document.body, 'pointerdown', 'touch');
+    expect(account().getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('closes when focus leaves it, and Escape returns focus to its trigger', async () => {
+    await mount('/', SIGNED_IN);
+    account().focus();
+    await click(account(), 0);
+    const item = accountPanel() as HTMLElement;
+    await moveFocus(account(), item);
+    expect(account().getAttribute('aria-expanded')).toBe('true');
+    await moveFocus(item, linkIn(desktopNav(), 'Join')!);
+    expect(account().getAttribute('aria-expanded')).toBe('false');
+
+    await click(account(), 0);
+    await act(async () => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); });
+    expect(account().getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(account());
   });
 });

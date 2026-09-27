@@ -237,3 +237,96 @@ test.describe("phone navigation drawer is keyboard operable", () => {
     await context.close();
   });
 });
+
+test.describe("site menus on a touch tablet and by keyboard", () => {
+  // A touch tablet wide enough for the desktop bar (an 820px-tall tablet held
+  // in landscape, 1180x820): taps arrive as touch pointer events plus the
+  // compatibility mouse events, so a hover-to-open handler must not swallow
+  // the second tap.
+  async function touchContext(browser: Browser, width: number, height: number) {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
+    await context.route("**/*", (route) => {
+      const host = new URL(route.request().url()).hostname;
+      return host === "127.0.0.1" || host === "localhost" ? route.continue() : route.abort("blockedbyclient");
+    });
+    return context;
+  }
+
+  test("More toggles on tap and closes on a tap outside (1180x820 touch)", async ({ browser }) => {
+    const context = await touchContext(browser, 1180, 820);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const more = page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("button", { name: "More" });
+    const menu = page.locator("#site-more-menu");
+
+    await more.tap();
+    await expect(menu).toBeVisible();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    await more.tap();
+    await expect(menu).toBeHidden();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+
+    // A tap inside the menu's own padding keeps it; a tap on the page closes it.
+    await more.tap();
+    await expect(menu).toBeVisible();
+    await menu.tap({ position: { x: 4, y: 4 } });
+    await expect(menu).toBeVisible();
+    await page.locator("main").first().tap({ position: { x: 10, y: 300 } });
+    await expect(menu).toBeHidden();
+    await context.close();
+  });
+
+  test("the phone drawer toggle opens and closes on tap (820x1180 touch)", async ({ browser }) => {
+    const context = await touchContext(browser, 820, 1180);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const toggle = page.getByRole("button", { name: "Toggle navigation" });
+    await toggle.tap();
+    await expect(page.locator("#site-mobile-nav")).toBeVisible();
+    await toggle.tap();
+    await expect(page.locator("#site-mobile-nav")).toBeHidden();
+    await context.close();
+  });
+
+  test("More closes when Tab or Shift+Tab moves focus out of it (desktop keyboard)", async ({ browser }) => {
+    const context = await openContext(browser, 1440, 900);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const more = page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("button", { name: "More" });
+    const menu = page.locator("#site-more-menu");
+
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await expect(menu).toBeHidden();
+
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    const items = await menu.locator("a").count();
+    for (let i = 0; i < items; i += 1) {
+      await page.keyboard.press("Tab");
+      await expect(menu, `still open on item ${i + 1} of ${items}`).toBeVisible();
+    }
+    await page.keyboard.press("Tab");
+    await expect(menu).toBeHidden();
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#site-more-menu"))).toBe(false);
+    await context.close();
+  });
+
+  test("a mouse hover opens More and the click that follows keeps it open", async ({ browser }) => {
+    const context = await openContext(browser, 1440, 900);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const more = page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("button", { name: "More" });
+    const menu = page.locator("#site-more-menu");
+    await more.hover();
+    await expect(menu).toBeVisible();
+    await more.click();
+    await expect(menu).toBeVisible();
+    await more.click();
+    await expect(menu).toBeHidden();
+    await context.close();
+  });
+});
