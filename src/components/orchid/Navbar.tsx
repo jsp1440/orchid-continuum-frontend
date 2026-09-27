@@ -78,6 +78,9 @@ interface NavbarProps {
   topOffset?: number;
 }
 
+const MOBILE_NAV_ID = 'site-mobile-nav';
+const MORE_MENU_ID = 'site-more-menu';
+
 const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
   const [open, setOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -88,6 +91,9 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
   const location = useLocation();
   const { user, signOut } = useAuth();
   const accountRef = useRef<HTMLDivElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
+  const accountTriggerRef = useRef<HTMLButtonElement>(null);
 
   const atlasGenus = (() => {
     if (!(location.pathname === '/atlas' || location.pathname.startsWith('/atlas/'))) return null;
@@ -114,20 +120,61 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
     return () => document.removeEventListener('mousedown', onClick);
   }, [accountOpen]);
 
-  const go = (l: Linkish) => {
-    if (l.external && l.href) window.open(l.href, '_blank', 'noopener,noreferrer');
-    else if (l.route === '/species' && atlasGenus) navigate(atlasWorkspaceSpeciesHref(atlasGenus));
-    else if (l.route === '/calyx' && atlasGenus) navigate(atlasWorkspaceCalyxHref(atlasGenus));
-    else if (l.route === '/research' && atlasGenus) navigate(atlasWorkspaceResearchHref(atlasGenus));
-    else if (l.route) navigate(l.route);
+  // Escape closes whichever menu is open and hands focus back to the control
+  // that opened it, so a keyboard user is never left on a vanished element.
+  // The phone drawer is a disclosure panel inside the header, not a modal
+  // dialog: the page behind it stays in the tab order, so no focus trap.
+  useEffect(() => {
+    if (!open && !moreOpen && !accountOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (open) { setOpen(false); toggleRef.current?.focus(); }
+      if (moreOpen) { setMoreOpen(false); moreRef.current?.focus(); }
+      if (accountOpen) { setAccountOpen(false); accountTriggerRef.current?.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [open, moreOpen, accountOpen]);
+
+  // Following a link (or the browser's back button) closes the menus.
+  useEffect(() => {
     setOpen(false);
     setMoreOpen(false);
+    setAccountOpen(false);
+  }, [location.pathname]);
+
+  // Hovering opens the More menu, so a pointer click (detail > 0) must keep it
+  // open rather than toggle it shut again; tapping it on a tablet otherwise
+  // opened and closed it in one gesture. Keyboard activation (detail 0)
+  // toggles, and Escape closes.
+  const onMoreClick = (e: React.MouseEvent) => setMoreOpen(o => (e.detail === 0 ? !o : true));
+
+  /** Where a navigation item points. Atlas hands its single genus on. */
+  const hrefFor = (l: Linkish): string => {
+    if (l.route === '/species' && atlasGenus) return atlasWorkspaceSpeciesHref(atlasGenus);
+    if (l.route === '/calyx' && atlasGenus) return atlasWorkspaceCalyxHref(atlasGenus);
+    if (l.route === '/research' && atlasGenus) return atlasWorkspaceResearchHref(atlasGenus);
+    return l.route ?? '/';
+  };
+
+  const closeMenus = () => {
+    setOpen(false);
+    setMoreOpen(false);
+    setAccountOpen(false);
   };
 
   const isActive = (l: Linkish) => {
     if (l.external || !l.route) return false;
     if (l.route === '/') return location.pathname === '/';
     return location.pathname.startsWith(l.route);
+  };
+
+  /** A navigation item as a real link: middle-clickable, announced as a link. */
+  const navLink = (l: Linkish, className: string, children: React.ReactNode = l.label) => {
+    if (l.external && l.href) {
+      return <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" className={className}>{children}<ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" /></a>;
+    }
+    return <Link key={l.route} to={hrefFor(l)} aria-current={isActive(l) ? 'page' : undefined} onClick={closeMenus} className={className}>{children}</Link>;
   };
 
   const anySecondaryActive = ALL_SECONDARY.some(s => isActive(s));
@@ -137,28 +184,23 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
     <>
       <header style={{ top: topOffset }} className={'fixed left-0 right-0 z-50 transition-colors duration-300 ' + (scrolled ? 'bg-[#faf7f2]/95 backdrop-blur-md border-b border-quiet shadow-[0_4px_24px_-12px_rgba(28,26,23,0.12)]' : 'bg-[#faf7f2]/80 backdrop-blur-sm border-b border-transparent')}>
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-6">
-          <Link to="/" className="flex items-center gap-3 shrink-0 group" onClick={() => setOpen(false)}>
+          <Link to="/" className="flex items-center gap-3 shrink-0 group" onClick={closeMenus}>
             <Monogram />
             <span className="font-display text-[1.15rem] tracking-wide text-ink group-hover:text-forest transition-colors">Orchid <span className="italic text-forest">Continuum</span></span>
           </Link>
-          <nav className="hidden lg:flex items-center gap-5 xl:gap-6">
-            {PRIMARY.map(l => {
-              const active = isActive(l);
-              const baseCls = 'font-mono text-[11px] tracking-[0.18em] uppercase transition-colors whitespace-nowrap inline-flex items-center gap-1 ' + (active ? 'text-forest' : 'text-charcoal/70 hover:text-forest');
-              if (l.external && l.href) return <a key={l.label} href={l.href} target="_blank" rel="noopener noreferrer" className={baseCls}>{l.label}<ExternalLink className="h-3 w-3 opacity-60" aria-hidden="true" /></a>;
-              return <button key={l.route} onClick={() => go(l)} className={baseCls}>{l.label}</button>;
-            })}
+          <nav aria-label="Primary" className="hidden lg:flex items-center gap-5 xl:gap-6">
+            {PRIMARY.map(l => navLink(l, 'font-mono text-[11px] tracking-[0.18em] uppercase transition-colors whitespace-nowrap inline-flex items-center gap-1 ' + (isActive(l) ? 'text-forest' : 'text-charcoal hover:text-forest')))}
             <div className="relative" onMouseEnter={() => setMoreOpen(true)} onMouseLeave={() => setMoreOpen(false)}>
-              <button type="button" onClick={() => setMoreOpen(o => !o)} className={'inline-flex items-center gap-1 font-mono text-[11px] tracking-[0.18em] uppercase transition-colors ' + (anySecondaryActive ? 'text-forest' : 'text-charcoal/70 hover:text-forest')}>More<ChevronDown className={'h-3 w-3 transition-transform ' + (moreOpen ? 'rotate-180' : '')} /></button>
-              {moreOpen && <div className="absolute top-full right-0 mt-3 w-[640px] max-w-[calc(100vw-3rem)] rounded-sm border border-quiet bg-warm-white shadow-[0_24px_60px_-24px_rgba(28,26,23,0.25)] p-6"><div className="grid grid-cols-3 gap-6">{MORE_GROUPS.map(g => <div key={g.title}><div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-3">{g.title}</div><ul className="space-y-1">{g.items.map(it => <li key={it.route}><button onClick={() => go(it)} className={'block w-full text-left rounded-sm px-3 py-2 transition-colors ' + (isActive(it) ? 'bg-[#f5f0e8] text-forest' : 'text-ink hover:bg-[#f5f0e8] hover:text-forest')}><div className="font-display text-[15px]">{it.label}</div>{it.description && <div className="font-body text-[12px] text-charcoal/70 mt-0.5 leading-snug">{it.description}</div>}</button></li>)}</ul></div>)}</div></div>}
+              <button ref={moreRef} type="button" aria-expanded={moreOpen} aria-controls={MORE_MENU_ID} onClick={onMoreClick} className={'inline-flex items-center gap-1 font-mono text-[11px] tracking-[0.18em] uppercase transition-colors ' + (anySecondaryActive ? 'text-forest' : 'text-charcoal hover:text-forest')}>More<ChevronDown aria-hidden="true" className={'h-3 w-3 transition-transform ' + (moreOpen ? 'rotate-180' : '')} /></button>
+              {moreOpen && <div id={MORE_MENU_ID} className="absolute top-full right-0 mt-3 w-[640px] max-w-[calc(100vw-3rem)] rounded-sm border border-quiet bg-warm-white shadow-[0_24px_60px_-24px_rgba(28,26,23,0.25)] p-6"><div className="grid grid-cols-3 gap-6">{MORE_GROUPS.map(g => <div key={g.title}><div className="font-mono text-[10px] tracking-[0.25em] uppercase text-[#806c39] mb-3">{g.title}</div><ul className="space-y-1">{g.items.map(it => <li key={it.route}>{navLink(it, 'block w-full text-left rounded-sm px-3 py-2 transition-colors ' + (isActive(it) ? 'bg-[#f5f0e8] text-forest' : 'text-ink hover:bg-[#f5f0e8] hover:text-forest'), <><div className="font-display text-[15px]">{it.label}</div>{it.description && <div className="font-body text-[12px] text-[#5c574f] mt-0.5 leading-snug">{it.description}</div>}</>)}</li>)}</ul></div>)}</div></div>}
             </div>
             <FavoritesMenu />
-            {user ? <div className="relative" ref={accountRef}><button type="button" aria-label="Account menu" data-testid="account-menu" onClick={() => setAccountOpen(o => !o)} className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.18em] uppercase text-charcoal/75 hover:text-forest transition-colors"><span className="h-7 w-7 rounded-full bg-[#1f3d2b] text-[#faf7f2] inline-flex items-center justify-center font-display text-[13px]">{displayName.charAt(0).toUpperCase()}</span><span className="hidden xl:inline max-w-[120px] truncate">{displayName}</span><ChevronDown className={'h-3 w-3 transition-transform ' + (accountOpen ? 'rotate-180' : '')} /></button>{accountOpen && <div className="absolute top-full right-0 mt-3 w-56 rounded-sm border border-quiet bg-warm-white shadow-[0_24px_60px_-24px_rgba(28,26,23,0.25)] py-2"><div className="px-4 py-2 border-b border-quiet"><div className="font-display text-[14px] text-ink truncate">{displayName}</div><div className="font-mono text-[10px] tracking-[0.12em] text-charcoal/60 truncate">{user.email}</div></div><button onClick={() => { setAccountOpen(false); navigate('/account'); }} className="w-full text-left px-4 py-2 font-body text-[14px] text-ink hover:bg-[#f5f0e8] hover:text-forest inline-flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" /> My account</button><button onClick={() => { setAccountOpen(false); navigate('/conservatory'); }} className="w-full text-left px-4 py-2 font-body text-[14px] text-ink hover:bg-[#f5f0e8] hover:text-forest">My conservatory</button><div className="mt-1 border-t border-quiet pt-1"><button onClick={() => { setAccountOpen(false); navigate('/mission-control'); }} className="w-full text-left px-4 py-2 font-body text-[14px] text-ink hover:bg-[#f5f0e8] hover:text-forest inline-flex items-center gap-2" data-testid="account-mission-control"><Gauge className="h-3.5 w-3.5" /> Mission Control</button><div className="px-4 pb-1 font-mono text-[9px] tracking-[0.14em] uppercase text-charcoal/45">Owner access required</div></div><button data-testid="account-sign-out" onClick={async () => { setAccountOpen(false); await signOut(); navigate('/'); }} className="w-full text-left px-4 py-2 font-body text-[14px] text-[#7a2a28] hover:bg-[#fdf3f2] inline-flex items-center gap-2"><LogOut className="h-3.5 w-3.5" /> Sign out</button></div>}</div> : <button onClick={() => setAuthOpen(true)} className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.18em] uppercase text-charcoal/75 hover:text-forest transition-colors"><LogIn className="h-3.5 w-3.5" /> Sign in</button>}
-            <button onClick={() => navigate('/get-involved')} className="font-mono text-[11px] tracking-[0.18em] uppercase px-4 py-2 rounded-full bg-[#1f3d2b] text-[#faf7f2] hover:bg-[#14281c] transition-colors whitespace-nowrap">Join</button>
+            {user ? <div className="relative" ref={accountRef}><button ref={accountTriggerRef} type="button" aria-label="Account menu" aria-expanded={accountOpen} data-testid="account-menu" onClick={() => setAccountOpen(o => !o)} className="inline-flex items-center gap-2 font-mono text-[11px] tracking-[0.18em] uppercase text-charcoal hover:text-forest transition-colors"><span className="h-7 w-7 rounded-full bg-[#1f3d2b] text-[#faf7f2] inline-flex items-center justify-center font-display text-[13px]">{displayName.charAt(0).toUpperCase()}</span><span className="hidden xl:inline max-w-[120px] truncate">{displayName}</span><ChevronDown aria-hidden="true" className={'h-3 w-3 transition-transform ' + (accountOpen ? 'rotate-180' : '')} /></button>{accountOpen && <div className="absolute top-full right-0 mt-3 w-56 rounded-sm border border-quiet bg-warm-white shadow-[0_24px_60px_-24px_rgba(28,26,23,0.25)] py-2"><div className="px-4 py-2 border-b border-quiet"><div className="font-display text-[14px] text-ink truncate">{displayName}</div><div className="font-mono text-[10px] tracking-[0.12em] text-[#5c574f] truncate">{user.email}</div></div><Link to="/account" onClick={closeMenus} className="w-full text-left px-4 py-2 font-body text-[14px] text-ink hover:bg-[#f5f0e8] hover:text-forest inline-flex items-center gap-2"><UserIcon className="h-3.5 w-3.5" aria-hidden="true" /> My account</Link><Link to="/conservatory" onClick={closeMenus} className="block w-full text-left px-4 py-2 font-body text-[14px] text-ink hover:bg-[#f5f0e8] hover:text-forest">My conservatory</Link><div className="mt-1 border-t border-quiet pt-1"><Link to="/mission-control" onClick={closeMenus} className="w-full text-left px-4 py-2 font-body text-[14px] text-ink hover:bg-[#f5f0e8] hover:text-forest inline-flex items-center gap-2" data-testid="account-mission-control"><Gauge className="h-3.5 w-3.5" aria-hidden="true" /> Mission Control</Link><div className="px-4 pb-1 font-mono text-[9px] tracking-[0.14em] uppercase text-[#5c574f]">Owner access required</div></div><button type="button" data-testid="account-sign-out" onClick={async () => { setAccountOpen(false); await signOut(); navigate('/'); }} className="w-full text-left px-4 py-2 font-body text-[14px] text-[#7a2a28] hover:bg-[#fdf3f2] inline-flex items-center gap-2"><LogOut className="h-3.5 w-3.5" aria-hidden="true" /> Sign out</button></div>}</div> : <button type="button" onClick={() => setAuthOpen(true)} className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.18em] uppercase text-charcoal hover:text-forest transition-colors"><LogIn className="h-3.5 w-3.5" aria-hidden="true" /> Sign in</button>}
+            <Link to="/get-involved" onClick={closeMenus} className="font-mono text-[11px] tracking-[0.18em] uppercase px-4 py-2 rounded-full bg-[#1f3d2b] text-[#faf7f2] hover:bg-[#14281c] transition-colors whitespace-nowrap">Join</Link>
           </nav>
-          <div className="flex items-center gap-4 lg:hidden"><FavoritesMenu /><button onClick={() => setOpen(!open)} className="text-ink" aria-label="Toggle navigation">{open ? <X /> : <Menu />}</button></div>
+          <div className="flex items-center gap-4 lg:hidden"><FavoritesMenu /><button ref={toggleRef} type="button" onClick={() => setOpen(!open)} className="text-ink" aria-label="Toggle navigation" aria-expanded={open} aria-controls={MOBILE_NAV_ID}>{open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}</button></div>
         </div>
-        {open && <div className="lg:hidden bg-cream border-t border-quiet max-h-[calc(100vh-4rem)] overflow-y-auto"><div className="px-6 py-5 flex flex-col gap-1">{user ? <div className="mb-3 pb-3 border-b border-quiet flex items-center gap-3"><span className="h-9 w-9 rounded-full bg-[#1f3d2b] text-[#faf7f2] inline-flex items-center justify-center font-display text-[15px]">{displayName.charAt(0).toUpperCase()}</span><div className="flex-1 min-w-0"><div className="font-display text-[15px] text-ink truncate">{displayName}</div><div className="font-mono text-[10px] tracking-[0.12em] text-charcoal/60 truncate">{user.email}</div></div><button onClick={() => { setOpen(false); navigate('/account'); }} className="font-mono text-[10px] tracking-[0.2em] uppercase text-forest">Account</button><button onClick={() => { setOpen(false); navigate('/mission-control'); }} className="ml-3 font-mono text-[10px] tracking-[0.2em] uppercase text-forest" data-testid="account-mission-control-mobile">Mission</button></div> : <button onClick={() => { setOpen(false); setAuthOpen(true); }} className="mb-2 inline-flex items-center justify-center gap-2 py-2.5 rounded-sm border border-forest/30 bg-warm-white text-forest font-mono text-[11px] tracking-[0.2em] uppercase"><LogIn className="h-3.5 w-3.5" /> Sign in</button>}{PRIMARY.map(l => <button key={l.route} onClick={() => go(l)} className={'text-left py-2.5 font-mono text-[11px] tracking-[0.2em] uppercase transition-colors ' + (isActive(l) ? 'text-forest' : 'text-charcoal/75 hover:text-forest')}>{l.label}</button>)}{MORE_GROUPS.map(g => <div key={g.title} className="mt-4"><div className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold mb-2">{g.title}</div>{g.items.map(it => <button key={it.route} onClick={() => go(it)} className={'block w-full text-left py-2 font-display text-[15px] transition-colors ' + (isActive(it) ? 'text-forest' : 'text-ink hover:text-forest')}>{it.label}</button>)}</div>)}{user && <button data-testid="account-sign-out-mobile" onClick={async () => { setOpen(false); await signOut(); navigate('/'); }} className="mt-4 inline-flex items-center justify-center gap-2 py-2.5 rounded-sm border border-quiet text-[#7a2a28] font-mono text-[11px] tracking-[0.2em] uppercase"><LogOut className="h-3.5 w-3.5" /> Sign out</button>}<button onClick={() => go({ label: 'Join', route: '/get-involved' })} className="mt-5 font-mono text-[11px] tracking-[0.2em] uppercase px-4 py-2.5 rounded-full bg-[#1f3d2b] text-[#faf7f2]">Join the Continuum</button></div></div>}
+        {open && <nav id={MOBILE_NAV_ID} aria-label="Primary (menu)" className="lg:hidden bg-cream border-t border-quiet max-h-[calc(100vh-4rem)] overflow-y-auto"><div className="px-6 py-5 flex flex-col gap-1">{user ? <div className="mb-3 pb-3 border-b border-quiet flex items-center gap-3"><span className="h-9 w-9 rounded-full bg-[#1f3d2b] text-[#faf7f2] inline-flex items-center justify-center font-display text-[15px]" aria-hidden="true">{displayName.charAt(0).toUpperCase()}</span><div className="flex-1 min-w-0"><div className="font-display text-[15px] text-ink truncate">{displayName}</div><div className="font-mono text-[10px] tracking-[0.12em] text-[#5c574f] truncate">{user.email}</div></div><Link to="/account" onClick={closeMenus} className="font-mono text-[10px] tracking-[0.2em] uppercase text-forest">Account</Link><Link to="/mission-control" onClick={closeMenus} className="ml-3 font-mono text-[10px] tracking-[0.2em] uppercase text-forest" data-testid="account-mission-control-mobile">Mission</Link></div> : <button type="button" onClick={() => { setOpen(false); setAuthOpen(true); }} className="mb-2 inline-flex items-center justify-center gap-2 py-2.5 rounded-sm border border-forest/30 bg-warm-white text-forest font-mono text-[11px] tracking-[0.2em] uppercase"><LogIn className="h-3.5 w-3.5" aria-hidden="true" /> Sign in</button>}{PRIMARY.map(l => navLink(l, 'text-left py-2.5 font-mono text-[11px] tracking-[0.2em] uppercase transition-colors ' + (isActive(l) ? 'text-forest' : 'text-charcoal hover:text-forest')))}{MORE_GROUPS.map(g => <div key={g.title} className="mt-4"><div className="font-mono text-[10px] tracking-[0.25em] uppercase text-[#806c39] mb-2">{g.title}</div>{g.items.map(it => navLink(it, 'block w-full text-left py-2 font-display text-[15px] transition-colors ' + (isActive(it) ? 'text-forest' : 'text-ink hover:text-forest')))}</div>)}{user && <button type="button" data-testid="account-sign-out-mobile" onClick={async () => { setOpen(false); await signOut(); navigate('/'); }} className="mt-4 inline-flex items-center justify-center gap-2 py-2.5 rounded-sm border border-quiet text-[#7a2a28] font-mono text-[11px] tracking-[0.2em] uppercase"><LogOut className="h-3.5 w-3.5" aria-hidden="true" /> Sign out</button>}<Link to="/get-involved" onClick={closeMenus} className="mt-5 text-center font-mono text-[11px] tracking-[0.2em] uppercase px-4 py-2.5 rounded-full bg-[#1f3d2b] text-[#faf7f2]">Join the Continuum</Link></div></nav>}
       </header>
       <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} initialMode="signin" />
     </>

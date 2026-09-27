@@ -70,7 +70,7 @@ describe('Atlas workspace → Research genus continuity', () => {
   it('mounts the handoff in site navigation when Atlas holds exactly one genus', () => {
     expect(navbarSource).toContain('atlasWorkspaceResearchHref');
     expect(navbarSource).toContain(
-      "l.route === '/research' && atlasGenus) navigate(atlasWorkspaceResearchHref(atlasGenus))",
+      "l.route === '/research' && atlasGenus) return atlasWorkspaceResearchHref(atlasGenus)",
     );
   });
 

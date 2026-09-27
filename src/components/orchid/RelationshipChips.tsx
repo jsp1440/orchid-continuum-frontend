@@ -45,7 +45,7 @@ const RelationshipChips: React.FC<RelationshipChipsProps> = ({
 
   return (
     <div className={className} aria-label={label}>
-      <div className="mb-2 font-mono text-[9px] uppercase tracking-[0.22em] text-[#8a8062]">
+      <div className="mb-2 font-mono text-[9px] uppercase tracking-[0.22em] text-[#6e6547]">
         {label}
       </div>
       <div className="flex flex-wrap gap-2">

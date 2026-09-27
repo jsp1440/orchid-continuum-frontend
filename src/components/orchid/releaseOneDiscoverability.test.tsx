@@ -94,18 +94,23 @@ describe('site navigation offers the Release 1 surfaces', () => {
     await mount(<Navbar />);
     const toggle = container.querySelector('button[aria-label="Toggle navigation"]')!;
     await click(toggle);
-    const item = [...container.querySelectorAll('header button')].find((b) => b.textContent === label);
+    // A real link, so it is announced as one and can be opened in a new tab.
+    const item = [...container.querySelectorAll('header a[href]')].find((a) => a.textContent === label);
     expect(item, `${label} in drawer`).toBeDefined();
+    expect(item!.getAttribute('href')).toBe(route);
     await click(item!);
     expect(currentPath).toBe(route);
   });
 
-  it.each(R1_SURFACES)('lists $label in the desktop More menu', async ({ label }) => {
+  it.each(R1_SURFACES)('lists $label in the desktop More menu', async ({ route, label }) => {
     await mount(<Navbar />);
     const more = [...container.querySelectorAll('header nav button')].find((b) => b.textContent?.trim() === 'More')!;
     await click(more);
-    const item = [...container.querySelectorAll('header nav button')].find((b) => b.querySelector('div')?.textContent === label);
+    const item = [...container.querySelectorAll('header nav a[href]')].find((a) => a.querySelector('div')?.textContent === label);
     expect(item, `${label} in More menu`).toBeDefined();
+    expect(item!.getAttribute('href')).toBe(route);
+    await click(item!);
+    expect(currentPath).toBe(route);
   });
 
   it('does not loosen the Literature guard by linking to it', () => {
