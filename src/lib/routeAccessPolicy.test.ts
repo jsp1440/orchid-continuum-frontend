@@ -124,6 +124,14 @@ describe('route access policy', () => {
     }
   });
 
+  it('gates the owner feedback review page behind the router before it mounts', () => {
+    // The review API is owner-session only (backend #1663); the page is a
+    // Mission Control surface and renders the owner-only refusal itself.
+    expect(ROUTE_ACCESS_POLICY.get('/mission-control/feedback-review')).toBe('router-authenticated');
+    expect(PUBLIC_ROUTE_PATTERNS as readonly string[]).not.toContain('/mission-control/feedback-review');
+    expect(routeElementRoots(appSource).get('/mission-control/feedback-review')).toBe('ProtectedRoute');
+  });
+
   it('gates the literature browser because its backend is owner/API-key only', () => {
     // GET /api/literature-extraction/* is mounted behind
     // verify_owner_or_api_key, so an anonymous visitor was always refused while

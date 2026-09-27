@@ -1,0 +1,3232 @@
+{
+ "_meta": {
+  "what": "REAL responses from orchid-calyx-backend PR #1663 (owner review queue) running LOCALLY (uvicorn, file store, no DB) - never production.",
+  "backend_sha": "902faf88342d6679424007161a6e03f20b251784",
+  "captured_at": "2026-09-26T23:48:30.099Z",
+  "inputs": "Every submitted object and statement is SYNTHETIC (labelled 'SYNTHETIC'); nothing is a lexicon, taxonomy or scientific claim. Owner and API key are locally generated per run and never real credentials; the member is a throwaway account on the frontend's identity stand-in.",
+  "script": "maker scratch capture.mjs: real HTTP calls to uvicorn app.main:app; every body below is exactly what the backend emitted",
+  "sequence": "stage0 initial -> reject A -> stage1 -> needs_governed_review C -> stage2 -> accept_trivial B -> stage3",
+  "case_ids": {
+   "A": "efc-f76c0fd03c7406bfd1a9c12a",
+   "B": "efc-253506b8e57ae23dcc2f46cf",
+   "C": "efc-94af914650613148459a7e65",
+   "E": "efc-af4c33ae0e509032eedd67f8"
+  },
+  "inputs_used": {
+   "REJECT_REASON": "SYNTHETIC review: the twist is already covered in the expanded definition.",
+   "GOVERNED_NOTE": "SYNTHETIC review: rank question needs taxonomic review before anything changes.",
+   "corrected_payload_B": {
+    "id": "SYNTHETIC-synthetic-labellum",
+    "concept_id": null,
+    "slug": "synthetic-labellum",
+    "preferred_term": "Labellum (SYNTHETIC)",
+    "quick_definition": "SYNTHETIC: the modified median petal of an orchid flower.",
+    "expanded_definition": null,
+    "review_state": "SYNTHETIC-FIXTURE",
+    "provenance": {
+     "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+    },
+    "source_system": "SYNTHETIC",
+    "source_record_id": null,
+    "date_revised": null
+   }
+  }
+ },
+ "submission": {
+  "created": {
+   "created": true,
+   "duplicate_of": null,
+   "case": {
+    "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+    "fingerprint": "f76c0fd03c7406bfd1a9c12a4c6b0eb0b899016c5ba6ae0bae3abf4d8eef76b6",
+    "object_id": "lexicon:synthetic-resupination",
+    "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+    "object_type": "lexicon",
+    "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+    "feedback_class": "report_problem",
+    "statement": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+    "disposition": "insufficient_evidence",
+    "status": "pending_review",
+    "review_lane": "scientific",
+    "created_at": "2026-09-26T23:48:30.083696+00:00",
+    "updated_at": "2026-09-26T23:48:30.083696+00:00",
+    "proposed_replacement": null,
+    "citation": null,
+    "submitter_id": "owner",
+    "source_partner_id": null,
+    "defect_kind": null,
+    "severity": "normal",
+    "related_case_ids": [],
+    "resolution": null,
+    "resulting_version_hash": null,
+    "reviewer_id": null
+   }
+  },
+  "duplicate": {
+   "created": false,
+   "duplicate_of": "efc-f76c0fd03c7406bfd1a9c12a",
+   "case": {
+    "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+    "fingerprint": "f76c0fd03c7406bfd1a9c12a4c6b0eb0b899016c5ba6ae0bae3abf4d8eef76b6",
+    "object_id": "lexicon:synthetic-resupination",
+    "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+    "object_type": "lexicon",
+    "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+    "feedback_class": "report_problem",
+    "statement": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+    "disposition": "insufficient_evidence",
+    "status": "pending_review",
+    "review_lane": "scientific",
+    "created_at": "2026-09-26T23:48:30.083696+00:00",
+    "updated_at": "2026-09-26T23:48:30.083696+00:00",
+    "proposed_replacement": null,
+    "citation": null,
+    "submitter_id": "owner",
+    "source_partner_id": null,
+    "defect_kind": null,
+    "severity": "normal",
+    "related_case_ids": [],
+    "resolution": null,
+    "resulting_version_hash": null,
+    "reviewer_id": null
+   }
+  }
+ },
+ "auth": {
+  "anonymous": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases?limit=20"
+   },
+   "status": 401,
+   "body": {
+    "detail": "Owner session is required"
+   }
+  },
+  "api_key": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases?limit=20"
+   },
+   "status": 403,
+   "body": {
+    "detail": {
+     "code": "OWNER_SESSION_REQUIRED",
+     "message": "This action requires the owner session; the backend API key is not accepted"
+    }
+   }
+  },
+  "member": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases?limit=20"
+   },
+   "status": 403,
+   "body": {
+    "detail": {
+     "code": "OWNER_ACCESS_REQUIRED",
+     "message": "This view is limited to owner access"
+    }
+   }
+  },
+  "member_decision": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a/decision",
+    "body": {
+     "decision": "reject",
+     "reason": "x"
+    }
+   },
+   "status": 403,
+   "body": {
+    "detail": {
+     "code": "OWNER_ACCESS_REQUIRED",
+     "message": "This view is limited to owner access"
+    }
+   }
+  }
+ },
+ "lists": {
+  "stage0": {
+   "page1": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+       "created_at": "2026-09-26T23:48:30.083696+00:00",
+       "updated_at": "2026-09-26T23:48:30.083696+00:00",
+       "duplicate_count": 1,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-253506b8e57ae23dcc2f46cf",
+       "status": "pending_review",
+       "disposition": "auto_correctable",
+       "review_lane": "deterministic",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-labellum",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "feedback_class": "suggest_correction",
+       "severity": "normal",
+       "defect_kind": "typo",
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+       "statement_preview": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+       "created_at": "2026-09-26T23:48:30.062013+00:00",
+       "updated_at": "2026-09-26T23:48:30.062013+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-94af914650613148459a7e65",
+       "status": "pending_review",
+       "disposition": "needs_taxonomic_review",
+       "review_lane": "taxonomic",
+       "object_type": "taxonomy",
+       "object_id": "taxonomy:synthetic-fixturea-alpha",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+       "statement_preview": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+       "created_at": "2026-09-26T23:48:30.039686+00:00",
+       "updated_at": "2026-09-26T23:48:30.039686+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-af4c33ae0e509032eedd67f8",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case E: challenges the definition without a source.",
+       "created_at": "2026-09-26T23:48:30.019484+00:00",
+       "updated_at": "2026-09-26T23:48:30.019484+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-37bd374707853dbd32b915ed",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 19: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.981661+00:00",
+       "updated_at": "2026-09-26T23:48:29.981661+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b9dd9c7c5a1429e4247a47ec",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 18: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.959674+00:00",
+       "updated_at": "2026-09-26T23:48:29.959674+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-034166bad93076a05f89e76c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 17: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.937921+00:00",
+       "updated_at": "2026-09-26T23:48:29.937921+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-e4a9956472bb247cf01cecb4",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 16: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.915743+00:00",
+       "updated_at": "2026-09-26T23:48:29.915743+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ce11f1b52924184997d74032",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 15: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.892568+00:00",
+       "updated_at": "2026-09-26T23:48:29.892568+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-a05df63d1288c1faf84a62b6",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 14: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.868751+00:00",
+       "updated_at": "2026-09-26T23:48:29.868751+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ca02918ae6c5f6c474c5d152",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 13: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.845582+00:00",
+       "updated_at": "2026-09-26T23:48:29.845582+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-1a4f370dff3ad9d7f3bf8759",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 12: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.822232+00:00",
+       "updated_at": "2026-09-26T23:48:29.822232+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-20966d26c25a250d22902a82",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 11: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.799515+00:00",
+       "updated_at": "2026-09-26T23:48:29.799515+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-26b09759d7ac3c404c8a655a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 10: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.773010+00:00",
+       "updated_at": "2026-09-26T23:48:29.773010+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-8fc637ddcbcabe495d623d51",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 09: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.744929+00:00",
+       "updated_at": "2026-09-26T23:48:29.744929+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b78798d263783620d4ad1128",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 08: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.720594+00:00",
+       "updated_at": "2026-09-26T23:48:29.720594+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-f481103013fc3f889cec3dc1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 07: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.696224+00:00",
+       "updated_at": "2026-09-26T23:48:29.696224+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-c2c4bfd8b60b811bb423286b",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 06: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.666894+00:00",
+       "updated_at": "2026-09-26T23:48:29.666894+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-0d48a09c42912cb5eecc3320",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 05: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.634018+00:00",
+       "updated_at": "2026-09-26T23:48:29.634018+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-40ae9b80f27736afd095e50c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 04: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.612002+00:00",
+       "updated_at": "2026-09-26T23:48:29.612002+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": "eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9",
+     "limit": 20
+    }
+   },
+   "page2": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20&cursor=eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-ea2461d741ed2091100ab9b1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 03: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.580910+00:00",
+       "updated_at": "2026-09-26T23:48:29.580910+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-6a502af2083233885054cc75",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 02: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.552749+00:00",
+       "updated_at": "2026-09-26T23:48:29.552749+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-d87e197be7c96d078037b99f",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 01: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.524136+00:00",
+       "updated_at": "2026-09-26T23:48:29.524136+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": null,
+     "limit": 20
+    }
+   },
+   "filter_pending_lexicon": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?status=pending_review&object_type=lexicon&limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+       "created_at": "2026-09-26T23:48:30.083696+00:00",
+       "updated_at": "2026-09-26T23:48:30.083696+00:00",
+       "duplicate_count": 1,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-253506b8e57ae23dcc2f46cf",
+       "status": "pending_review",
+       "disposition": "auto_correctable",
+       "review_lane": "deterministic",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-labellum",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "feedback_class": "suggest_correction",
+       "severity": "normal",
+       "defect_kind": "typo",
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+       "statement_preview": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+       "created_at": "2026-09-26T23:48:30.062013+00:00",
+       "updated_at": "2026-09-26T23:48:30.062013+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-af4c33ae0e509032eedd67f8",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case E: challenges the definition without a source.",
+       "created_at": "2026-09-26T23:48:30.019484+00:00",
+       "updated_at": "2026-09-26T23:48:30.019484+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-37bd374707853dbd32b915ed",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 19: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.981661+00:00",
+       "updated_at": "2026-09-26T23:48:29.981661+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b9dd9c7c5a1429e4247a47ec",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 18: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.959674+00:00",
+       "updated_at": "2026-09-26T23:48:29.959674+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-034166bad93076a05f89e76c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 17: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.937921+00:00",
+       "updated_at": "2026-09-26T23:48:29.937921+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-e4a9956472bb247cf01cecb4",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 16: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.915743+00:00",
+       "updated_at": "2026-09-26T23:48:29.915743+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ce11f1b52924184997d74032",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 15: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.892568+00:00",
+       "updated_at": "2026-09-26T23:48:29.892568+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-a05df63d1288c1faf84a62b6",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 14: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.868751+00:00",
+       "updated_at": "2026-09-26T23:48:29.868751+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ca02918ae6c5f6c474c5d152",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 13: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.845582+00:00",
+       "updated_at": "2026-09-26T23:48:29.845582+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-1a4f370dff3ad9d7f3bf8759",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 12: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.822232+00:00",
+       "updated_at": "2026-09-26T23:48:29.822232+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-20966d26c25a250d22902a82",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 11: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.799515+00:00",
+       "updated_at": "2026-09-26T23:48:29.799515+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-26b09759d7ac3c404c8a655a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 10: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.773010+00:00",
+       "updated_at": "2026-09-26T23:48:29.773010+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-8fc637ddcbcabe495d623d51",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 09: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.744929+00:00",
+       "updated_at": "2026-09-26T23:48:29.744929+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b78798d263783620d4ad1128",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 08: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.720594+00:00",
+       "updated_at": "2026-09-26T23:48:29.720594+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-f481103013fc3f889cec3dc1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 07: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.696224+00:00",
+       "updated_at": "2026-09-26T23:48:29.696224+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-c2c4bfd8b60b811bb423286b",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 06: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.666894+00:00",
+       "updated_at": "2026-09-26T23:48:29.666894+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-0d48a09c42912cb5eecc3320",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 05: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.634018+00:00",
+       "updated_at": "2026-09-26T23:48:29.634018+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-40ae9b80f27736afd095e50c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 04: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.612002+00:00",
+       "updated_at": "2026-09-26T23:48:29.612002+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ea2461d741ed2091100ab9b1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 03: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.580910+00:00",
+       "updated_at": "2026-09-26T23:48:29.580910+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": "eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS41ODA5MTArMDA6MDAiLCJpIjoiZWZjLWVhMjQ2MWQ3NDFlZDIwOTExMDBhYjliMSJ9",
+     "limit": 20
+    }
+   },
+   "filter_taxonomy": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?object_type=taxonomy&limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-94af914650613148459a7e65",
+       "status": "pending_review",
+       "disposition": "needs_taxonomic_review",
+       "review_lane": "taxonomic",
+       "object_type": "taxonomy",
+       "object_id": "taxonomy:synthetic-fixturea-alpha",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+       "statement_preview": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+       "created_at": "2026-09-26T23:48:30.039686+00:00",
+       "updated_at": "2026-09-26T23:48:30.039686+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": null,
+     "limit": 20
+    }
+   },
+   "filter_resolved": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?status=resolved&limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [],
+     "next_cursor": null,
+     "limit": 20
+    }
+   }
+  },
+  "stage1": {
+   "page1": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+       "status": "resolved",
+       "disposition": "correction_rejected",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+       "created_at": "2026-09-26T23:48:30.083696+00:00",
+       "updated_at": "2026-09-26T23:48:30.212537+00:00",
+       "duplicate_count": 1,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-253506b8e57ae23dcc2f46cf",
+       "status": "pending_review",
+       "disposition": "auto_correctable",
+       "review_lane": "deterministic",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-labellum",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "feedback_class": "suggest_correction",
+       "severity": "normal",
+       "defect_kind": "typo",
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+       "statement_preview": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+       "created_at": "2026-09-26T23:48:30.062013+00:00",
+       "updated_at": "2026-09-26T23:48:30.062013+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-94af914650613148459a7e65",
+       "status": "pending_review",
+       "disposition": "needs_taxonomic_review",
+       "review_lane": "taxonomic",
+       "object_type": "taxonomy",
+       "object_id": "taxonomy:synthetic-fixturea-alpha",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+       "statement_preview": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+       "created_at": "2026-09-26T23:48:30.039686+00:00",
+       "updated_at": "2026-09-26T23:48:30.039686+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-af4c33ae0e509032eedd67f8",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case E: challenges the definition without a source.",
+       "created_at": "2026-09-26T23:48:30.019484+00:00",
+       "updated_at": "2026-09-26T23:48:30.019484+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-37bd374707853dbd32b915ed",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 19: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.981661+00:00",
+       "updated_at": "2026-09-26T23:48:29.981661+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b9dd9c7c5a1429e4247a47ec",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 18: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.959674+00:00",
+       "updated_at": "2026-09-26T23:48:29.959674+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-034166bad93076a05f89e76c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 17: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.937921+00:00",
+       "updated_at": "2026-09-26T23:48:29.937921+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-e4a9956472bb247cf01cecb4",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 16: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.915743+00:00",
+       "updated_at": "2026-09-26T23:48:29.915743+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ce11f1b52924184997d74032",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 15: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.892568+00:00",
+       "updated_at": "2026-09-26T23:48:29.892568+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-a05df63d1288c1faf84a62b6",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 14: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.868751+00:00",
+       "updated_at": "2026-09-26T23:48:29.868751+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ca02918ae6c5f6c474c5d152",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 13: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.845582+00:00",
+       "updated_at": "2026-09-26T23:48:29.845582+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-1a4f370dff3ad9d7f3bf8759",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 12: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.822232+00:00",
+       "updated_at": "2026-09-26T23:48:29.822232+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-20966d26c25a250d22902a82",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 11: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.799515+00:00",
+       "updated_at": "2026-09-26T23:48:29.799515+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-26b09759d7ac3c404c8a655a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 10: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.773010+00:00",
+       "updated_at": "2026-09-26T23:48:29.773010+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-8fc637ddcbcabe495d623d51",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 09: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.744929+00:00",
+       "updated_at": "2026-09-26T23:48:29.744929+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b78798d263783620d4ad1128",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 08: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.720594+00:00",
+       "updated_at": "2026-09-26T23:48:29.720594+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-f481103013fc3f889cec3dc1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 07: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.696224+00:00",
+       "updated_at": "2026-09-26T23:48:29.696224+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-c2c4bfd8b60b811bb423286b",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 06: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.666894+00:00",
+       "updated_at": "2026-09-26T23:48:29.666894+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-0d48a09c42912cb5eecc3320",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 05: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.634018+00:00",
+       "updated_at": "2026-09-26T23:48:29.634018+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-40ae9b80f27736afd095e50c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 04: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.612002+00:00",
+       "updated_at": "2026-09-26T23:48:29.612002+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": "eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9",
+     "limit": 20
+    }
+   },
+   "page2": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20&cursor=eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-ea2461d741ed2091100ab9b1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 03: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.580910+00:00",
+       "updated_at": "2026-09-26T23:48:29.580910+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-6a502af2083233885054cc75",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 02: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.552749+00:00",
+       "updated_at": "2026-09-26T23:48:29.552749+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-d87e197be7c96d078037b99f",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 01: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.524136+00:00",
+       "updated_at": "2026-09-26T23:48:29.524136+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": null,
+     "limit": 20
+    }
+   }
+  },
+  "stage2": {
+   "page1": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+       "status": "resolved",
+       "disposition": "correction_rejected",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+       "created_at": "2026-09-26T23:48:30.083696+00:00",
+       "updated_at": "2026-09-26T23:48:30.212537+00:00",
+       "duplicate_count": 1,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-253506b8e57ae23dcc2f46cf",
+       "status": "pending_review",
+       "disposition": "auto_correctable",
+       "review_lane": "deterministic",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-labellum",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "feedback_class": "suggest_correction",
+       "severity": "normal",
+       "defect_kind": "typo",
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+       "statement_preview": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+       "created_at": "2026-09-26T23:48:30.062013+00:00",
+       "updated_at": "2026-09-26T23:48:30.062013+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-94af914650613148459a7e65",
+       "status": "governed_review_required",
+       "disposition": "needs_taxonomic_review",
+       "review_lane": "taxonomic",
+       "object_type": "taxonomy",
+       "object_id": "taxonomy:synthetic-fixturea-alpha",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+       "statement_preview": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+       "created_at": "2026-09-26T23:48:30.039686+00:00",
+       "updated_at": "2026-09-26T23:48:30.245710+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-af4c33ae0e509032eedd67f8",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case E: challenges the definition without a source.",
+       "created_at": "2026-09-26T23:48:30.019484+00:00",
+       "updated_at": "2026-09-26T23:48:30.019484+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-37bd374707853dbd32b915ed",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 19: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.981661+00:00",
+       "updated_at": "2026-09-26T23:48:29.981661+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b9dd9c7c5a1429e4247a47ec",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 18: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.959674+00:00",
+       "updated_at": "2026-09-26T23:48:29.959674+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-034166bad93076a05f89e76c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 17: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.937921+00:00",
+       "updated_at": "2026-09-26T23:48:29.937921+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-e4a9956472bb247cf01cecb4",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 16: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.915743+00:00",
+       "updated_at": "2026-09-26T23:48:29.915743+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ce11f1b52924184997d74032",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 15: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.892568+00:00",
+       "updated_at": "2026-09-26T23:48:29.892568+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-a05df63d1288c1faf84a62b6",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 14: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.868751+00:00",
+       "updated_at": "2026-09-26T23:48:29.868751+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ca02918ae6c5f6c474c5d152",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 13: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.845582+00:00",
+       "updated_at": "2026-09-26T23:48:29.845582+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-1a4f370dff3ad9d7f3bf8759",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 12: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.822232+00:00",
+       "updated_at": "2026-09-26T23:48:29.822232+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-20966d26c25a250d22902a82",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 11: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.799515+00:00",
+       "updated_at": "2026-09-26T23:48:29.799515+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-26b09759d7ac3c404c8a655a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 10: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.773010+00:00",
+       "updated_at": "2026-09-26T23:48:29.773010+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-8fc637ddcbcabe495d623d51",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 09: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.744929+00:00",
+       "updated_at": "2026-09-26T23:48:29.744929+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b78798d263783620d4ad1128",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 08: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.720594+00:00",
+       "updated_at": "2026-09-26T23:48:29.720594+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-f481103013fc3f889cec3dc1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 07: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.696224+00:00",
+       "updated_at": "2026-09-26T23:48:29.696224+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-c2c4bfd8b60b811bb423286b",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 06: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.666894+00:00",
+       "updated_at": "2026-09-26T23:48:29.666894+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-0d48a09c42912cb5eecc3320",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 05: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.634018+00:00",
+       "updated_at": "2026-09-26T23:48:29.634018+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-40ae9b80f27736afd095e50c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 04: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.612002+00:00",
+       "updated_at": "2026-09-26T23:48:29.612002+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": "eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9",
+     "limit": 20
+    }
+   },
+   "page2": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20&cursor=eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-ea2461d741ed2091100ab9b1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 03: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.580910+00:00",
+       "updated_at": "2026-09-26T23:48:29.580910+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-6a502af2083233885054cc75",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 02: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.552749+00:00",
+       "updated_at": "2026-09-26T23:48:29.552749+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-d87e197be7c96d078037b99f",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 01: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.524136+00:00",
+       "updated_at": "2026-09-26T23:48:29.524136+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": null,
+     "limit": 20
+    }
+   },
+   "filter_governed": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?status=governed_review_required&limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-94af914650613148459a7e65",
+       "status": "governed_review_required",
+       "disposition": "needs_taxonomic_review",
+       "review_lane": "taxonomic",
+       "object_type": "taxonomy",
+       "object_id": "taxonomy:synthetic-fixturea-alpha",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+       "statement_preview": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+       "created_at": "2026-09-26T23:48:30.039686+00:00",
+       "updated_at": "2026-09-26T23:48:30.245710+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": null,
+     "limit": 20
+    }
+   }
+  },
+  "stage3": {
+   "page1": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+       "status": "resolved",
+       "disposition": "correction_rejected",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+       "created_at": "2026-09-26T23:48:30.083696+00:00",
+       "updated_at": "2026-09-26T23:48:30.212537+00:00",
+       "duplicate_count": 1,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-253506b8e57ae23dcc2f46cf",
+       "status": "resolved",
+       "disposition": "correction_accepted",
+       "review_lane": "deterministic",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-labellum",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "feedback_class": "suggest_correction",
+       "severity": "normal",
+       "defect_kind": "typo",
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+       "statement_preview": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+       "created_at": "2026-09-26T23:48:30.062013+00:00",
+       "updated_at": "2026-09-26T23:48:30.275118+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-94af914650613148459a7e65",
+       "status": "governed_review_required",
+       "disposition": "needs_taxonomic_review",
+       "review_lane": "taxonomic",
+       "object_type": "taxonomy",
+       "object_id": "taxonomy:synthetic-fixturea-alpha",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+       "statement_preview": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+       "created_at": "2026-09-26T23:48:30.039686+00:00",
+       "updated_at": "2026-09-26T23:48:30.245710+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-af4c33ae0e509032eedd67f8",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-resupination",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "feedback_class": "challenge",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+       "statement_preview": "SYNTHETIC fixture case E: challenges the definition without a source.",
+       "created_at": "2026-09-26T23:48:30.019484+00:00",
+       "updated_at": "2026-09-26T23:48:30.019484+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-37bd374707853dbd32b915ed",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 19: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.981661+00:00",
+       "updated_at": "2026-09-26T23:48:29.981661+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b9dd9c7c5a1429e4247a47ec",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 18: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.959674+00:00",
+       "updated_at": "2026-09-26T23:48:29.959674+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-034166bad93076a05f89e76c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 17: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.937921+00:00",
+       "updated_at": "2026-09-26T23:48:29.937921+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-e4a9956472bb247cf01cecb4",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 16: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.915743+00:00",
+       "updated_at": "2026-09-26T23:48:29.915743+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ce11f1b52924184997d74032",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 15: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.892568+00:00",
+       "updated_at": "2026-09-26T23:48:29.892568+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-a05df63d1288c1faf84a62b6",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 14: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.868751+00:00",
+       "updated_at": "2026-09-26T23:48:29.868751+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-ca02918ae6c5f6c474c5d152",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 13: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.845582+00:00",
+       "updated_at": "2026-09-26T23:48:29.845582+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-1a4f370dff3ad9d7f3bf8759",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 12: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.822232+00:00",
+       "updated_at": "2026-09-26T23:48:29.822232+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-20966d26c25a250d22902a82",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 11: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.799515+00:00",
+       "updated_at": "2026-09-26T23:48:29.799515+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-26b09759d7ac3c404c8a655a",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 10: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.773010+00:00",
+       "updated_at": "2026-09-26T23:48:29.773010+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-8fc637ddcbcabe495d623d51",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 09: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.744929+00:00",
+       "updated_at": "2026-09-26T23:48:29.744929+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-b78798d263783620d4ad1128",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 08: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.720594+00:00",
+       "updated_at": "2026-09-26T23:48:29.720594+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-f481103013fc3f889cec3dc1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 07: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.696224+00:00",
+       "updated_at": "2026-09-26T23:48:29.696224+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-c2c4bfd8b60b811bb423286b",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 06: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.666894+00:00",
+       "updated_at": "2026-09-26T23:48:29.666894+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-0d48a09c42912cb5eecc3320",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 05: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.634018+00:00",
+       "updated_at": "2026-09-26T23:48:29.634018+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-40ae9b80f27736afd095e50c",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 04: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.612002+00:00",
+       "updated_at": "2026-09-26T23:48:29.612002+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": "eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9",
+     "limit": 20
+    }
+   },
+   "page2": {
+    "request": {
+     "method": "GET",
+     "path": "/api/evidence-feedback/review/cases?limit=20&cursor=eyJjIjoiMjAyNi0wOS0yNlQyMzo0ODoyOS42MTIwMDIrMDA6MDAiLCJpIjoiZWZjLTQwYWU5YjgwZjI3NzM2YWZkMDk1ZTUwYyJ9"
+    },
+    "status": 200,
+    "body": {
+     "items": [
+      {
+       "case_id": "efc-ea2461d741ed2091100ab9b1",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 03: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.580910+00:00",
+       "updated_at": "2026-09-26T23:48:29.580910+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-6a502af2083233885054cc75",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 02: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.552749+00:00",
+       "updated_at": "2026-09-26T23:48:29.552749+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      },
+      {
+       "case_id": "efc-d87e197be7c96d078037b99f",
+       "status": "pending_review",
+       "disposition": "insufficient_evidence",
+       "review_lane": "scientific",
+       "object_type": "lexicon",
+       "object_id": "lexicon:synthetic-filler",
+       "object_version_hash": "39a3aa25e40b828a9413b6ecd7add29b8f15f6be1afcb1c072472af08310701a",
+       "feedback_class": "report_problem",
+       "severity": "normal",
+       "defect_kind": null,
+       "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-filler",
+       "statement_preview": "SYNTHETIC fixture filler case 01: queue paging only.",
+       "created_at": "2026-09-26T23:48:29.524136+00:00",
+       "updated_at": "2026-09-26T23:48:29.524136+00:00",
+       "duplicate_count": 0,
+       "submitter_ref": "actor-9ce975df11947b569dc17f06"
+      }
+     ],
+     "next_cursor": null,
+     "limit": 20
+    }
+   }
+  }
+ },
+ "details": {
+  "A_stage0": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+     "fingerprint": "f76c0fd03c7406bfd1a9c12a4c6b0eb0b899016c5ba6ae0bae3abf4d8eef76b6",
+     "object_id": "lexicon:synthetic-resupination",
+     "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+     "feedback_class": "report_problem",
+     "statement": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+     "disposition": "insufficient_evidence",
+     "status": "pending_review",
+     "review_lane": "scientific",
+     "created_at": "2026-09-26T23:48:30.083696+00:00",
+     "updated_at": "2026-09-26T23:48:30.083696+00:00",
+     "proposed_replacement": null,
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 1,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.083696+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "insufficient_evidence",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "review_lane": "scientific"
+      }
+     },
+     {
+      "event": "duplicate_submission_suppressed",
+      "timestamp": "2026-09-26T23:48:30.097239+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "duplicate_of": "efc-f76c0fd03c7406bfd1a9c12a"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:synthetic-resupination",
+     "object_type": "lexicon",
+     "version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-resupination",
+      "preferred_term": "Resupination (SYNTHETIC)",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "quick_definition": "SYNTHETIC: the twisting of a flower so the lip is lowermost.",
+      "review_state": "SYNTHETIC-FIXTURE",
+      "slug": "synthetic-resupination",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC"
+     },
+     "created_at": "2026-09-26T23:48:30.004891+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "B_stage0": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-253506b8e57ae23dcc2f46cf"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-253506b8e57ae23dcc2f46cf",
+     "fingerprint": "253506b8e57ae23dcc2f46cf4fbbac3163ddc14200bdc2662b388c92387095b8",
+     "object_id": "lexicon:synthetic-labellum",
+     "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+     "disposition": "auto_correctable",
+     "status": "pending_review",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-26T23:48:30.062013+00:00",
+     "updated_at": "2026-09-26T23:48:30.062013+00:00",
+     "proposed_replacement": "SYNTHETIC: the modified median petal of an orchid flower.",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.062013+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "auto_correctable",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "review_lane": "deterministic"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:synthetic-labellum",
+     "object_type": "lexicon",
+     "version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-labellum",
+      "preferred_term": "Labellum (SYNTHETIC)",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "quick_definition": "SYNTHETIC: the modifed median petal of an orchid flower.",
+      "review_state": "SYNTHETIC-FIXTURE",
+      "slug": "synthetic-labellum",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC"
+     },
+     "created_at": "2026-09-26T23:48:30.010462+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review",
+     "accept_trivial"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "C_stage0": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-94af914650613148459a7e65"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-94af914650613148459a7e65",
+     "fingerprint": "94af914650613148459a7e65ee3321674006ad3d0980d77c945e2956630fe15d",
+     "object_id": "taxonomy:synthetic-fixturea-alpha",
+     "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+     "object_type": "taxonomy",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+     "feedback_class": "challenge",
+     "statement": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+     "disposition": "needs_taxonomic_review",
+     "status": "pending_review",
+     "review_lane": "taxonomic",
+     "created_at": "2026-09-26T23:48:30.039686+00:00",
+     "updated_at": "2026-09-26T23:48:30.039686+00:00",
+     "proposed_replacement": null,
+     "citation": "SYNTHETIC citation, not a real reference",
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.039686+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "needs_taxonomic_review",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "review_lane": "taxonomic"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "taxonomy:synthetic-fixturea-alpha",
+     "object_type": "taxonomy",
+     "version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+     "payload": {
+      "name": "Fixturea alpha (SYNTHETIC)",
+      "note": "SYNTHETIC taxonomy object, not a claim about any orchid",
+      "rank": "species"
+     },
+     "created_at": "2026-09-26T23:48:30.014967+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "E_stage0": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-af4c33ae0e509032eedd67f8"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-af4c33ae0e509032eedd67f8",
+     "fingerprint": "af4c33ae0e509032eedd67f8decb5f4c6d1f8b713dd7b279fc31297c584fbe1b",
+     "object_id": "lexicon:synthetic-resupination",
+     "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+     "feedback_class": "challenge",
+     "statement": "SYNTHETIC fixture case E: challenges the definition without a source.",
+     "disposition": "insufficient_evidence",
+     "status": "pending_review",
+     "review_lane": "scientific",
+     "created_at": "2026-09-26T23:48:30.019484+00:00",
+     "updated_at": "2026-09-26T23:48:30.019484+00:00",
+     "proposed_replacement": null,
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.019484+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "insufficient_evidence",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "review_lane": "scientific"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:synthetic-resupination",
+     "object_type": "lexicon",
+     "version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-resupination",
+      "preferred_term": "Resupination (SYNTHETIC)",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "quick_definition": "SYNTHETIC: the twisting of a flower so the lip is lowermost.",
+      "review_state": "SYNTHETIC-FIXTURE",
+      "slug": "synthetic-resupination",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC"
+     },
+     "created_at": "2026-09-26T23:48:30.004891+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "A_stage1": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+     "fingerprint": "f76c0fd03c7406bfd1a9c12a4c6b0eb0b899016c5ba6ae0bae3abf4d8eef76b6",
+     "object_id": "lexicon:synthetic-resupination",
+     "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+     "feedback_class": "report_problem",
+     "statement": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+     "disposition": "correction_rejected",
+     "status": "resolved",
+     "review_lane": "scientific",
+     "created_at": "2026-09-26T23:48:30.083696+00:00",
+     "updated_at": "2026-09-26T23:48:30.212537+00:00",
+     "proposed_replacement": null,
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "SYNTHETIC review: the twist is already covered in the expanded definition.",
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "duplicate_count": 1,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.083696+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "insufficient_evidence",
+       "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+       "review_lane": "scientific"
+      }
+     },
+     {
+      "event": "duplicate_submission_suppressed",
+      "timestamp": "2026-09-26T23:48:30.097239+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "duplicate_of": "efc-f76c0fd03c7406bfd1a9c12a"
+      }
+     },
+     {
+      "event": "owner_decision_rejected",
+      "timestamp": "2026-09-26T23:48:30.212537+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "correction_rejected",
+       "previous_status": "pending_review",
+       "reason": "SYNTHETIC review: the twist is already covered in the expanded definition.",
+       "status": "resolved"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:synthetic-resupination",
+     "object_type": "lexicon",
+     "version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-resupination",
+      "preferred_term": "Resupination (SYNTHETIC)",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "quick_definition": "SYNTHETIC: the twisting of a flower so the lip is lowermost.",
+      "review_state": "SYNTHETIC-FIXTURE",
+      "slug": "synthetic-resupination",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC"
+     },
+     "created_at": "2026-09-26T23:48:30.004891+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "C_stage2": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-94af914650613148459a7e65"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-94af914650613148459a7e65",
+     "fingerprint": "94af914650613148459a7e65ee3321674006ad3d0980d77c945e2956630fe15d",
+     "object_id": "taxonomy:synthetic-fixturea-alpha",
+     "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+     "object_type": "taxonomy",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+     "feedback_class": "challenge",
+     "statement": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+     "disposition": "needs_taxonomic_review",
+     "status": "governed_review_required",
+     "review_lane": "taxonomic",
+     "created_at": "2026-09-26T23:48:30.039686+00:00",
+     "updated_at": "2026-09-26T23:48:30.245710+00:00",
+     "proposed_replacement": null,
+     "citation": "SYNTHETIC citation, not a real reference",
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.039686+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "needs_taxonomic_review",
+       "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+       "review_lane": "taxonomic"
+      }
+     },
+     {
+      "event": "owner_decision_needs_governed_review",
+      "timestamp": "2026-09-26T23:48:30.245710+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "needs_taxonomic_review",
+       "note": "SYNTHETIC review: rank question needs taxonomic review before anything changes.",
+       "previous_status": "pending_review",
+       "status": "governed_review_required"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "taxonomy:synthetic-fixturea-alpha",
+     "object_type": "taxonomy",
+     "version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+     "payload": {
+      "name": "Fixturea alpha (SYNTHETIC)",
+      "note": "SYNTHETIC taxonomy object, not a claim about any orchid",
+      "rank": "species"
+     },
+     "created_at": "2026-09-26T23:48:30.014967+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "B_stage3": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-253506b8e57ae23dcc2f46cf"
+   },
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-253506b8e57ae23dcc2f46cf",
+     "fingerprint": "253506b8e57ae23dcc2f46cf4fbbac3163ddc14200bdc2662b388c92387095b8",
+     "object_id": "lexicon:synthetic-labellum",
+     "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+     "disposition": "correction_accepted",
+     "status": "resolved",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-26T23:48:30.062013+00:00",
+     "updated_at": "2026-09-26T23:48:30.275118+00:00",
+     "proposed_replacement": "SYNTHETIC: the modified median petal of an orchid flower.",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "deterministic trivial correction accepted",
+     "resulting_version_hash": "54d495d3b318b5ca8519dcb09d00b5ff265c65dd8ac7a4bde3f788340f1a93dc",
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-26T23:48:30.062013+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "disposition": "auto_correctable",
+       "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "review_lane": "deterministic"
+      }
+     },
+     {
+      "event": "correction_accepted",
+      "timestamp": "2026-09-26T23:48:30.275118+00:00",
+      "actor_ref": "actor-9ce975df11947b569dc17f06",
+      "details": {
+       "previous_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+       "resulting_version_hash": "54d495d3b318b5ca8519dcb09d00b5ff265c65dd8ac7a4bde3f788340f1a93dc"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:synthetic-labellum",
+     "object_type": "lexicon",
+     "version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-labellum",
+      "preferred_term": "Labellum (SYNTHETIC)",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "quick_definition": "SYNTHETIC: the modifed median petal of an orchid flower.",
+      "review_state": "SYNTHETIC-FIXTURE",
+      "slug": "synthetic-labellum",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC"
+     },
+     "created_at": "2026-09-26T23:48:30.010462+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": {
+     "object_id": "lexicon:synthetic-labellum",
+     "object_type": "lexicon",
+     "version_hash": "54d495d3b318b5ca8519dcb09d00b5ff265c65dd8ac7a4bde3f788340f1a93dc",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-labellum",
+      "preferred_term": "Labellum (SYNTHETIC)",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "quick_definition": "SYNTHETIC: the modified median petal of an orchid flower.",
+      "review_state": "SYNTHETIC-FIXTURE",
+      "slug": "synthetic-labellum",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC"
+     },
+     "created_at": "2026-09-26T23:48:30.274628+00:00",
+     "previous_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f"
+    },
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  }
+ },
+ "decisions": {
+  "reject_A": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a/decision",
+    "body": {
+     "decision": "reject",
+     "reason": "SYNTHETIC review: the twist is already covered in the expanded definition."
+    }
+   },
+   "status": 200,
+   "body": {
+    "decision": "reject",
+    "idempotent": false,
+    "case": {
+     "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+     "fingerprint": "f76c0fd03c7406bfd1a9c12a4c6b0eb0b899016c5ba6ae0bae3abf4d8eef76b6",
+     "object_id": "lexicon:synthetic-resupination",
+     "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+     "feedback_class": "report_problem",
+     "statement": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+     "disposition": "correction_rejected",
+     "status": "resolved",
+     "review_lane": "scientific",
+     "created_at": "2026-09-26T23:48:30.083696+00:00",
+     "updated_at": "2026-09-26T23:48:30.212537+00:00",
+     "proposed_replacement": null,
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "SYNTHETIC review: the twist is already covered in the expanded definition.",
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "reject_A_repeat": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a/decision",
+    "body": {
+     "decision": "reject",
+     "reason": "SYNTHETIC review: the twist is already covered in the expanded definition."
+    }
+   },
+   "status": 200,
+   "body": {
+    "decision": "reject",
+    "idempotent": true,
+    "case": {
+     "case_id": "efc-f76c0fd03c7406bfd1a9c12a",
+     "fingerprint": "f76c0fd03c7406bfd1a9c12a4c6b0eb0b899016c5ba6ae0bae3abf4d8eef76b6",
+     "object_id": "lexicon:synthetic-resupination",
+     "object_version_hash": "e19f2d406b66a527b5d02a63f2e055e884c92cd8c4e4a41b90d87f00f46f8324",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-resupination",
+     "feedback_class": "report_problem",
+     "statement": "SYNTHETIC fixture case A: the definition omits the 180-degree twist of the pedicel or ovary. <script>alert('x')</script>",
+     "disposition": "correction_rejected",
+     "status": "resolved",
+     "review_lane": "scientific",
+     "created_at": "2026-09-26T23:48:30.083696+00:00",
+     "updated_at": "2026-09-26T23:48:30.212537+00:00",
+     "proposed_replacement": null,
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "SYNTHETIC review: the twist is already covered in the expanded definition.",
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "governed_C": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-94af914650613148459a7e65/decision",
+    "body": {
+     "decision": "needs_governed_review",
+     "note": "SYNTHETIC review: rank question needs taxonomic review before anything changes."
+    }
+   },
+   "status": 200,
+   "body": {
+    "decision": "needs_governed_review",
+    "idempotent": false,
+    "case": {
+     "case_id": "efc-94af914650613148459a7e65",
+     "fingerprint": "94af914650613148459a7e65ee3321674006ad3d0980d77c945e2956630fe15d",
+     "object_id": "taxonomy:synthetic-fixturea-alpha",
+     "object_version_hash": "aac2530cedecac8c982a64464673d0736adf2c3a21cf2d1eefdf6e5d6ee18f01",
+     "object_type": "taxonomy",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic",
+     "feedback_class": "challenge",
+     "statement": "SYNTHETIC fixture case C: the rank looks wrong; please route to taxonomic review.",
+     "disposition": "needs_taxonomic_review",
+     "status": "governed_review_required",
+     "review_lane": "taxonomic",
+     "created_at": "2026-09-26T23:48:30.039686+00:00",
+     "updated_at": "2026-09-26T23:48:30.245710+00:00",
+     "proposed_replacement": null,
+     "citation": "SYNTHETIC citation, not a real reference",
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "allowed_decisions": [
+     "reject"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "accept_trivial_B": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-253506b8e57ae23dcc2f46cf/decision",
+    "body": {
+     "decision": "accept_trivial",
+     "corrected_payload": {
+      "id": "SYNTHETIC-synthetic-labellum",
+      "concept_id": null,
+      "slug": "synthetic-labellum",
+      "preferred_term": "Labellum (SYNTHETIC)",
+      "quick_definition": "SYNTHETIC: the modified median petal of an orchid flower.",
+      "expanded_definition": null,
+      "review_state": "SYNTHETIC-FIXTURE",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "source_system": "SYNTHETIC",
+      "source_record_id": null,
+      "date_revised": null
+     }
+    }
+   },
+   "status": 200,
+   "body": {
+    "decision": "accept_trivial",
+    "idempotent": false,
+    "case": {
+     "case_id": "efc-253506b8e57ae23dcc2f46cf",
+     "fingerprint": "253506b8e57ae23dcc2f46cf4fbbac3163ddc14200bdc2662b388c92387095b8",
+     "object_id": "lexicon:synthetic-labellum",
+     "object_version_hash": "df4b2b581dea4b3053d50a1a4ff25c2a5de8fcbabb66c6e4b06b2faa6da94f1f",
+     "object_type": "lexicon",
+     "page_context": "http://127.0.0.1:4291/lexicon/entry/synthetic-labellum",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC fixture case B: 'modifed' is misspelled.",
+     "disposition": "correction_accepted",
+     "status": "resolved",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-26T23:48:30.062013+00:00",
+     "updated_at": "2026-09-26T23:48:30.275118+00:00",
+     "proposed_replacement": "SYNTHETIC: the modified median petal of an orchid flower.",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "deterministic trivial correction accepted",
+     "resulting_version_hash": "54d495d3b318b5ca8519dcb09d00b5ff265c65dd8ac7a4bde3f788340f1a93dc",
+     "submitter_ref": "actor-9ce975df11947b569dc17f06",
+     "reviewer_ref": "actor-9ce975df11947b569dc17f06"
+    },
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  }
+ },
+ "errors": {
+  "accept_trivial_governed": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-af4c33ae0e509032eedd67f8/decision",
+    "body": {
+     "decision": "accept_trivial",
+     "corrected_payload": {
+      "id": "SYNTHETIC-synthetic-resupination",
+      "concept_id": null,
+      "slug": "synthetic-resupination",
+      "preferred_term": "Resupination (SYNTHETIC)",
+      "quick_definition": "SYNTHETIC: the twisting of a flower so the lip is lowermost.",
+      "expanded_definition": null,
+      "review_state": "SYNTHETIC-FIXTURE",
+      "provenance": {
+       "source": "SYNTHETIC fixture for the owner review queue (not a lexicon claim)"
+      },
+      "source_system": "SYNTHETIC",
+      "source_record_id": null,
+      "date_revised": null
+     }
+    }
+   },
+   "status": 409,
+   "body": {
+    "detail": {
+     "code": "GOVERNED_REVIEW_REQUIRED"
+    }
+   }
+  },
+  "reject_blank_reason": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a/decision",
+    "body": {
+     "decision": "reject",
+     "reason": "   "
+    }
+   },
+   "status": 422,
+   "body": {
+    "detail": [
+     {
+      "type": "value_error",
+      "loc": [
+       "body"
+      ],
+      "msg": "Value error, reason is required for decision reject",
+      "input": {
+       "decision": "reject",
+       "reason": "   "
+      },
+      "ctx": {
+       "error": {}
+      }
+     }
+    ]
+   }
+  },
+  "not_found": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases/efc-000000000000000000000000"
+   },
+   "status": 404,
+   "body": {
+    "detail": {
+     "code": "CASE_NOT_FOUND"
+    }
+   }
+  },
+  "invalid_cursor": {
+   "request": {
+    "method": "GET",
+    "path": "/api/evidence-feedback/review/cases?limit=20&cursor=not-a-cursor"
+   },
+   "status": 422,
+   "body": {
+    "detail": {
+     "code": "INVALID_REVIEW_CURSOR"
+    }
+   }
+  },
+  "invalid_transition": {
+   "request": {
+    "method": "POST",
+    "path": "/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a/decision",
+    "body": {
+     "decision": "needs_governed_review",
+     "note": "SYNTHETIC second decision"
+    }
+   },
+   "status": 409,
+   "body": {
+    "detail": {
+     "code": "INVALID_CASE_TRANSITION",
+     "current_status": "resolved",
+     "decision": "needs_governed_review"
+    }
+   }
+  }
+ }
+}

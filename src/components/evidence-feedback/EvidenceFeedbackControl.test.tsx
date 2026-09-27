@@ -153,4 +153,31 @@ describe('EvidenceFeedbackControl', () => {
     expect(container.textContent).toContain('Accepted after governed review.');
     expect(container.textContent).toContain('scientific');
   });
+  it('shows a case routed to governed review as unresolved with the displayed content unchanged', async () => {
+    mocks.submit.mockResolvedValue({ created: true, duplicate_of: null, case: feedbackCase });
+    mocks.status.mockResolvedValue({
+      case_id: 'ef_case_1',
+      status: 'governed_review_required',
+      disposition: 'needs_scientific_review',
+      resolution: null,
+      resulting_version_hash: null,
+    });
+    renderControl();
+
+    act(() => (container.querySelector('button') as HTMLButtonElement).click());
+    await enterStatement('The definition needs a source.');
+    await act(async () => {
+      (container.querySelector('form') as HTMLFormElement).dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      );
+    });
+    const checkButton = Array.from(container.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Check status')) as HTMLButtonElement;
+    await act(async () => checkButton.click());
+
+    expect(container.textContent).toContain('Routed to governed review.');
+    expect(container.textContent).toContain('has not been changed');
+    expect(container.textContent).not.toContain('resolved');
+    expect(container.textContent).not.toContain('triage begins');
+  });
 });

@@ -2466,6 +2466,160 @@ async function constituentRoute(req, res, url) {
   return json(res, 404, { detail: "Not Found" });
 }
 
+/* ==== BEGIN evidence-feedback owner review queue fixture (R1 journey 12) =====
+ *
+ * WHAT THIS IS: a replay of REAL responses captured from orchid-calyx-backend
+ * PR #1663 (owner review queue, merged to backend oc-autonomous-integration as
+ * 95edfe014 with an identical tree) running LOCALLY at the SHA in the
+ * fixture's `_meta` (uvicorn, file store, no DB -- never production). Every
+ * submitted object and statement in it is SYNTHETIC. The fixture lives beside
+ * the unit-test fixtures:
+ * src/lib/__fixtures__/evidenceFeedbackReview.realBackend.json.
+ *
+ * Owner login is a SYNTHETIC stand-in (like the /auth/v1 identity stand-in):
+ * POST /api/mission-control/owner/session-token with the fixture access code
+ * below issues a local token that only this process accepts; the app's own
+ * owner transport stores it and sends it as the owner bearer. The review
+ * routes then answer exactly as the real backend did:
+ *   - owner bearer        -> the captured owner responses
+ *   - member bearer       -> the captured 403 OWNER_ACCESS_REQUIRED
+ *   - X-API-Key           -> the captured 403 OWNER_SESSION_REQUIRED
+ *   - nothing             -> the captured 401
+ * The replay follows the captured sequence (reject A -> route C to governed
+ * review -> accept B's trivial correction); a request that departs from it
+ * gets a SYNTHETIC 409 REPLAY_OUT_OF_SEQUENCE so a frontend that sent
+ * something else fails loudly instead of rendering a mismatched capture.
+ * POST /__reference/evidence-feedback-review/reset restarts the sequence.
+ */
+const FEEDBACK_REVIEW = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/evidenceFeedbackReview.realBackend.json", import.meta.url), "utf8"),
+);
+const FEEDBACK_REVIEW_OWNER_CODE = "reference-owner-code-SYNTHETIC";
+const FEEDBACK_REVIEW_IDS = FEEDBACK_REVIEW._meta.case_ids;
+const FEEDBACK_REVIEW_INPUTS = FEEDBACK_REVIEW._meta.inputs_used;
+const feedbackReviewOwnerTokens = new Set();
+let feedbackReviewStage = 0;
+
+function feedbackReviewCanonical(value) {
+  if (Array.isArray(value)) return value.map(feedbackReviewCanonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, feedbackReviewCanonical(value[key])]));
+  }
+  return value;
+}
+const sameJson = (a, b) => JSON.stringify(feedbackReviewCanonical(a)) === JSON.stringify(feedbackReviewCanonical(b));
+
+function feedbackReviewOutOfSequence(res, what) {
+  // SYNTHETIC: not a backend response.
+  return json(res, 409, { detail: { code: "REPLAY_OUT_OF_SEQUENCE", replay: what, stage: feedbackReviewStage } });
+}
+
+function feedbackReviewOwnerLogin(req, res, path, body) {
+  if (path === "/api/mission-control/owner/session-token" && req.method === "POST") {
+    if (body?.access_code !== FEEDBACK_REVIEW_OWNER_CODE) return json(res, 401, { detail: "Invalid owner access code" });
+    const token = `reference-owner.${randomUUID().replaceAll("-", "")}`;
+    feedbackReviewOwnerTokens.add(token);
+    return json(res, 200, {
+      authenticated: true, status: "authenticated", owner: "owner",
+      expires_at: new Date(Date.now() + 3600_000).toISOString(), token,
+      credential_transport: "httponly_cookie_or_bearer",
+    });
+  }
+  // No owner cookie exists in this stand-in, so a refresh always answers as the real route does without one.
+  return json(res, 401, { detail: "Owner session is required" });
+}
+
+function feedbackReviewListReplay(url) {
+  const lists = FEEDBACK_REVIEW.lists[`stage${feedbackReviewStage}`];
+  const params = url.searchParams;
+  if (params.get("limit") !== "20") return null;
+  const status = params.get("status") || "";
+  const objectType = params.get("object_type") || "";
+  const cursor = params.get("cursor") || "";
+  if (cursor) {
+    if (cursor === lists.page1.body.next_cursor && !status && !objectType) return lists.page2;
+    if (cursor === "not-a-cursor") return FEEDBACK_REVIEW.errors.invalid_cursor;
+    return null;
+  }
+  if (!status && !objectType) return lists.page1;
+  // A captured filtered list for this stage with exactly these filters.
+  return Object.values(lists).find((entry) => {
+    const query = new URL(entry.request.path, "http://reference.invalid").searchParams;
+    return (query.get("status") || "") === status && (query.get("object_type") || "") === objectType && !query.get("cursor");
+  }) || null;
+}
+
+function feedbackReviewDetailReplay(caseId) {
+  const letter = Object.keys(FEEDBACK_REVIEW_IDS).find((key) => FEEDBACK_REVIEW_IDS[key] === caseId);
+  if (!letter) return null;
+  for (let stage = feedbackReviewStage; stage >= 0; stage -= 1) {
+    const captured = FEEDBACK_REVIEW.details[`${letter}_stage${stage}`];
+    if (captured) return captured;
+  }
+  return null;
+}
+
+function feedbackReviewDecisionReplay(caseId, body) {
+  const { A, B, C, E } = FEEDBACK_REVIEW_IDS;
+  const decision = body?.decision;
+  if (caseId === A && decision === "reject" && body.reason === FEEDBACK_REVIEW_INPUTS.REJECT_REASON) {
+    if (feedbackReviewStage === 0) { feedbackReviewStage = 1; return FEEDBACK_REVIEW.decisions.reject_A; }
+    return FEEDBACK_REVIEW.decisions.reject_A_repeat;
+  }
+  if (caseId === A && decision === "reject" && typeof body.reason === "string" && !body.reason.trim()) return FEEDBACK_REVIEW.errors.reject_blank_reason;
+  if (caseId === A && decision === "needs_governed_review" && feedbackReviewStage >= 1) return FEEDBACK_REVIEW.errors.invalid_transition;
+  if (caseId === C && decision === "needs_governed_review" && body.note === FEEDBACK_REVIEW_INPUTS.GOVERNED_NOTE && feedbackReviewStage === 1) {
+    feedbackReviewStage = 2;
+    return FEEDBACK_REVIEW.decisions.governed_C;
+  }
+  if (caseId === B && decision === "accept_trivial" && sameJson(body.corrected_payload, FEEDBACK_REVIEW_INPUTS.corrected_payload_B) && feedbackReviewStage === 2) {
+    feedbackReviewStage = 3;
+    return FEEDBACK_REVIEW.decisions.accept_trivial_B;
+  }
+  if (caseId === E && decision === "accept_trivial") return FEEDBACK_REVIEW.errors.accept_trivial_governed;
+  return null;
+}
+
+async function feedbackReviewRoute(req, res, url) {
+  const path = url.pathname;
+  const body = req.method === "POST" ? safeJson(await readBody(req)) : {};
+  if (path === "/__reference/evidence-feedback-review/reset" && req.method === "POST") {
+    feedbackReviewStage = 0;
+    return json(res, 200, { ok: true, stage: 0 });
+  }
+  if (path.startsWith("/api/mission-control/owner/session-token")) return feedbackReviewOwnerLogin(req, res, path, body);
+
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const send = (captured) => json(res, captured.status, captured.body);
+  if (!feedbackReviewOwnerTokens.has(token)) {
+    if (token && bearer(req)) {
+      return send(req.method === "POST" ? FEEDBACK_REVIEW.auth.member_decision : FEEDBACK_REVIEW.auth.member);
+    }
+    if (req.headers["x-api-key"]) return send(FEEDBACK_REVIEW.auth.api_key);
+    return send(FEEDBACK_REVIEW.auth.anonymous);
+  }
+
+  if (path === "/api/evidence-feedback/review/cases" && req.method === "GET") {
+    const captured = feedbackReviewListReplay(url);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `GET ${url.pathname}${url.search}`);
+  }
+  let match = /^\/api\/evidence-feedback\/review\/cases\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const caseId = decodeURIComponent(match[1]);
+    if (caseId === "efc-000000000000000000000000") return send(FEEDBACK_REVIEW.errors.not_found);
+    const captured = feedbackReviewDetailReplay(caseId);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `GET ${path} (detail not captured)`);
+  }
+  match = /^\/api\/evidence-feedback\/review\/cases\/([^/]+)\/decision$/.exec(path);
+  if (match && req.method === "POST") {
+    const captured = feedbackReviewDecisionReplay(decodeURIComponent(match[1]), body);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `POST ${path}`);
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+/* ==== END evidence-feedback owner review queue fixture ======================= */
+
 const server = createServer(async (req, res) => {
   requestOrigin = req.headers.origin || "*";
   requestHeaders = String(req.headers["access-control-request-headers"] || "");
@@ -2488,6 +2642,14 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname.startsWith("/api/community/")) return await communityRoute(req, res, url);
     if (url.pathname.startsWith("/api/constituent/")) return await constituentRoute(req, res, url);
+    // Evidence-feedback owner review queue fixture (see its BEGIN/END block above).
+    if (
+      url.pathname.startsWith("/api/evidence-feedback/review/") ||
+      url.pathname.startsWith("/api/mission-control/owner/session-token") ||
+      url.pathname === "/__reference/evidence-feedback-review/reset"
+    ) {
+      return await feedbackReviewRoute(req, res, url);
+    }
     if (
       url.pathname.startsWith("/api/species/") ||
       url.pathname.startsWith("/api/mycorrhizal/") ||

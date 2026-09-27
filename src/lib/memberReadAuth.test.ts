@@ -39,6 +39,7 @@ import {
   withMemberAuth,
   withMemberReadAuth,
 } from '@/lib/memberReadAuth';
+import { createEvidenceFeedbackReviewClient } from '@/lib/evidenceFeedbackReview';
 import { fetchLiteratureIndex } from '@/lib/literatureIndex';
 import { fetchLiteraturePaper } from '@/lib/literaturePaper';
 import { fetchLedgerRevision } from '@/lib/reasoningLedger';
@@ -138,6 +139,11 @@ const NEVER_MEMBER_TOKEN = [
   `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/vision/suggestions`,
   `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/vision/suggestions/s-1/region`,
   `/api/matrix-identification/sessions/${'5b1c1c1e-9d8a-4b43-9d59-0a6f4c2b8e11'}/vision/images/i-1/analyses`,
+  // Evidence-feedback owner review queue (backend #1663): owner session only;
+  // a member gets 403 OWNER_ACCESS_REQUIRED, so the member token is never sent.
+  '/api/evidence-feedback/review/cases',
+  '/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a',
+  '/api/evidence-feedback/review/cases/efc-f76c0fd03c7406bfd1a9c12a/decision',
   // Other routers and owner tools.
   '/api/calyx/speak',
   '/api/relationship-matrix/build',
@@ -230,6 +236,24 @@ describe('withMemberReadAuth: attaching the member token', () => {
       ...NEVER_MEMBER_TOKEN.map((path) => `${base}${path}`),
     ]) {
       expect(authorizationOf(await withMemberReadAuth(url, { method: 'GET' })), url).toBeNull();
+    }
+    expect(mocks.getSession).not.toHaveBeenCalled();
+  });
+
+  it('never attaches the member token to the owner feedback review queue, reads or decisions', async () => {
+    signedIn();
+    const review = `${base}/api/evidence-feedback/review/cases`;
+    for (const [url, method] of [
+      [`${review}?status=pending_review&object_type=lexicon&limit=20`, 'GET'],
+      [`${review}?limit=20&cursor=eyJjIjoiMjAyNiJ9`, 'GET'],
+      [`${review}/efc-f76c0fd03c7406bfd1a9c12a`, 'GET'],
+      [`${review}/efc-f76c0fd03c7406bfd1a9c12a/decision`, 'POST'],
+    ] as const) {
+      expect(memberScopeOf(url, method), url).toBeNull();
+      const input: RequestInit = { method, credentials: 'include' };
+      const init = await withMemberAuth(url, input);
+      expect(init, url).toBe(input);
+      expect(authorizationOf(init), url).toBeNull();
     }
     expect(mocks.getSession).not.toHaveBeenCalled();
   });
@@ -376,6 +400,26 @@ describe('the product clients send the member token only where in scope', () => 
       expect(authorizationOf(call.init), call.url).toBeNull();
       expect(call.init.credentials).toBe('include');
     }
+  });
+
+  it('the owner feedback review client carries no member token on its queue, detail or decision calls', async () => {
+    signedIn();
+    const fetchMock = stubFetch({});
+    const review = createEvidenceFeedbackReviewClient();
+    await review.listCases({ status: 'pending_review' }).catch(() => undefined);
+    await review.getCase('efc-1').catch(() => undefined);
+    await review.decide('efc-1', { decision: 'reject', reason: 'SYNTHETIC' }).catch(() => undefined);
+    const calls = callsTo(fetchMock);
+    expect(calls.map((call) => new URL(call.url).pathname)).toEqual([
+      '/api/evidence-feedback/review/cases',
+      '/api/evidence-feedback/review/cases/efc-1',
+      '/api/evidence-feedback/review/cases/efc-1/decision',
+    ]);
+    for (const call of calls) {
+      expect(authorizationOf(call.init), call.url).toBeNull();
+      expect(call.init.credentials).toBe('include');
+    }
+    expect(mocks.getSession).not.toHaveBeenCalled();
   });
 
   it('research project reads and writes through the same client carry no member token', async () => {
