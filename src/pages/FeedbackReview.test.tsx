@@ -251,6 +251,99 @@ describe("FeedbackReview case detail", () => {
   });
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => { resolve = res; reject = rej; });
+  return { promise, resolve, reject };
+}
+
+describe("FeedbackReview stale case responses", () => {
+  const highlighted = () => container.querySelector("[aria-current='true']")?.getAttribute("data-testid");
+  const shownCaseId = () => byTestId("feedback-review-detail")?.querySelector("h2")?.textContent ?? null;
+
+  it("never shows an earlier case that answers after the case now highlighted", async () => {
+    const slowA = deferred<ReturnType<typeof detailOf>>();
+    const fastB = deferred<ReturnType<typeof detailOf>>();
+    const client = fakeClient({ getCase: vi.fn((id: string) => (id === IDS.A ? slowA.promise : fastB.promise)) });
+    await render(client);
+
+    await click(`feedback-review-item-${IDS.A}`);
+    await click(`feedback-review-item-${IDS.B}`);
+    expect(highlighted()).toBe(`feedback-review-item-${IDS.B}`);
+
+    await act(async () => { fastB.resolve(detailOf("B_stage0", IDS.B)); });
+    await flush();
+    expect(shownCaseId()).toBe(IDS.B);
+
+    // A answers last; it must be ignored.
+    await act(async () => { slowA.resolve(detailOf("A_stage0", IDS.A)); });
+    await flush();
+    expect(highlighted()).toBe(`feedback-review-item-${IDS.B}`);
+    expect(shownCaseId()).toBe(IDS.B);
+    expect(byTestId("feedback-decision-accept_trivial")).not.toBeNull();
+  });
+
+  it("keeps loading the highlighted case when an earlier case answers first, then shows the right one", async () => {
+    const slowA = deferred<ReturnType<typeof detailOf>>();
+    const slowB = deferred<ReturnType<typeof detailOf>>();
+    const client = fakeClient({ getCase: vi.fn((id: string) => (id === IDS.A ? slowA.promise : slowB.promise)) });
+    await render(client);
+
+    await click(`feedback-review-item-${IDS.A}`);
+    await click(`feedback-review-item-${IDS.B}`);
+    await act(async () => { slowA.resolve(detailOf("A_stage0", IDS.A)); });
+    await flush();
+    expect(byTestId("feedback-review-detail")).toBeNull();
+    expect(byTestId("feedback-review-page")?.textContent).toContain("Loading case…");
+
+    await act(async () => { slowB.resolve(detailOf("B_stage0", IDS.B)); });
+    await flush();
+    expect(highlighted()).toBe(`feedback-review-item-${IDS.B}`);
+    expect(shownCaseId()).toBe(IDS.B);
+  });
+
+  it("ignores a late failure for an earlier case", async () => {
+    const slowA = deferred<ReturnType<typeof detailOf>>();
+    const client = fakeClient({
+      getCase: vi.fn((id: string) => (id === IDS.A ? slowA.promise : Promise.resolve(detailOf("B_stage0", IDS.B)))),
+    });
+    await render(client);
+    await click(`feedback-review-item-${IDS.A}`);
+    await click(`feedback-review-item-${IDS.B}`);
+    await act(async () => { slowA.reject(new EvidenceFeedbackReviewError(401, "HTTP_401")); });
+    await flush();
+    expect(byTestId("feedback-review-access-sign_in_required")).toBeNull();
+    expect(byTestId("feedback-review-detail-error")).toBeNull();
+    expect(shownCaseId()).toBe(IDS.B);
+  });
+
+  it("does not put a decision's refreshed case over another case opened meanwhile", async () => {
+    const decision = deferred<ReturnType<typeof parseReviewDecisionResult>>();
+    const client = fakeClient();
+    client.decide.mockReturnValue(decision.promise);
+    await render(client);
+    await click(`feedback-review-item-${IDS.A}`);
+    await click("feedback-decision-reject");
+    await type("feedback-decision-input", C._meta.inputs_used.REJECT_REASON);
+    await click("feedback-decision-review");
+    await click("feedback-decision-confirm-button");
+
+    await click(`feedback-review-item-${IDS.B}`);
+    expect(shownCaseId()).toBe(IDS.B);
+    const readsBefore = client.getCase.mock.calls.length;
+
+    await act(async () => { decision.resolve(parseReviewDecisionResult(C.decisions.reject_A.body, "reject", IDS.A)); });
+    await flush();
+    expect(shownCaseId()).toBe(IDS.B);
+    expect(highlighted()).toBe(`feedback-review-item-${IDS.B}`);
+    expect(byTestId("feedback-review-decision-result")).toBeNull();
+    expect(client.getCase.mock.calls.length).toBe(readsBefore);
+    // The decided case's row still reflects the recorded decision.
+    expect(byTestId(`feedback-review-item-${IDS.A}`)?.textContent).toContain("Resolved");
+  });
+});
+
 describe("FeedbackReview decisions", () => {
   it("rejects only with a reason and a confirmation, then shows the recorded result and history", async () => {
     const client = fakeClient();
