@@ -271,33 +271,27 @@ test("an unavailable Matrix session fails closed: no candidates, no next observa
 });
 
 /*
- * Access refusals. Matrix identification is owner-only on the backend today
- * (an owner decision on member/public access is pending); this frontend does
- * not change that. The 401 body is the real backend's text
- * (app/security.py verify_owner_or_api_key); the 403 body is a SYNTHETIC
- * error shape. Before this state existed the page showed the raw string
- * `Matrix API 401: "Owner session or API key is required"`.
+ * Access refusals after backend #1647: the core Matrix session is member
+ * scoped, so a 401 asks the reader to sign in. A 403 still marks an owner-only
+ * capability or disabled member gate. Neither state exposes raw backend text.
  */
-const REFUSALS: Array<[number, unknown]> = [
-  [401, { detail: "Owner session or API key is required" }],
-  [403, { detail: "Forbidden" }],
+const REFUSALS: Array<[number, unknown, string, string]> = [
+  [401, { detail: "Owner session or API key is required" }, "Sign in to use Matrix identification.", "sign in required"],
+  [403, { detail: "Forbidden" }, "This Matrix capability requires owner access.", "owner access"],
 ];
 
-for (const [status, body] of REFUSALS) {
-  test(`a ${status} on the Matrix registry says owner access is required, with no raw error and no sign-in loop`, async ({ page }) => {
+for (const [status, body, message, pill] of REFUSALS) {
+  test(`a ${status} on the Matrix registry renders the correct access state without a raw error`, async ({ page }) => {
     await localOnly(page);
     await page.route(/\/api\/matrix-identification\/registry$/, (route) => (
       route.request().method() === "OPTIONS" ? route.fallback() : fulfill(route, { status, body })
     ));
     await page.goto("/orchid-identification", { waitUntil: "domcontentloaded" });
 
-    await expect(page.getByTestId("matrix-status-message")).toHaveText(
-      "Matrix identification currently requires owner access.",
-    );
-    await expect(page.getByText("owner access", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("matrix-status-message")).toHaveText(message);
+    await expect(page.getByText(pill, { exact: true })).toBeVisible();
     await expect(page.getByText(/Matrix API \d{3}/)).toHaveCount(0);
     await expect(page.getByText(/Owner session or API key is required/)).toHaveCount(0);
-    await expect(page.getByTestId("matrix-status-message")).not.toContainText(/sign in/i);
     await expect(page.getByRole("button", { name: /try again/i })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /begin guided identification/i })).toBeDisabled();
     await expect(page.getByTestId("matrix-candidate")).toHaveCount(0);
