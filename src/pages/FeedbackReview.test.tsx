@@ -353,6 +353,50 @@ describe("FeedbackReview decisions", () => {
     expect(byTestId("feedback-review-decision-error")?.textContent).toMatch(/the case is now resolved/);
   });
 
+  it("sends exactly one decision request when the confirmation is clicked twice in the same tick", async () => {
+    const client = fakeClient();
+    let resolveDecision!: (value: unknown) => void;
+    client.decide.mockImplementation(() => new Promise((resolve) => { resolveDecision = resolve; }));
+    await render(client);
+    await click(`feedback-review-item-${IDS.A}`);
+    client.getCase.mockResolvedValueOnce(detailOf("A_stage1", IDS.A));
+    await click("feedback-decision-reject");
+    await type("feedback-decision-input", C._meta.inputs_used.REJECT_REASON);
+    await click("feedback-decision-review");
+
+    const confirmButton = byTestId("feedback-decision-confirm-button")!;
+    // Both clicks land before React re-renders, so the button is still enabled
+    // for the second one; only the synchronous guard can stop it.
+    await act(async () => {
+      confirmButton.click();
+      confirmButton.click();
+    });
+    await flush();
+    expect(client.decide).toHaveBeenCalledTimes(1);
+
+    await act(async () => { resolveDecision(parseReviewDecisionResult(C.decisions.reject_A.body, "reject", IDS.A)); });
+    await flush();
+    expect(client.decide).toHaveBeenCalledTimes(1);
+    expect(byTestId("feedback-review-decision-result")?.textContent).toContain("Decision recorded: reject");
+  });
+
+  it("allows a new decision once the previous request has settled", async () => {
+    const client = fakeClient();
+    client.decide.mockRejectedValueOnce(refusalFrom(C.errors.accept_trivial_governed));
+    await render(client);
+    await click(`feedback-review-item-${IDS.A}`);
+    await click("feedback-decision-reject");
+    await type("feedback-decision-input", C._meta.inputs_used.REJECT_REASON);
+    await click("feedback-decision-review");
+    await click("feedback-decision-confirm-button");
+    expect(byTestId("feedback-review-decision-error")).not.toBeNull();
+
+    client.decide.mockResolvedValueOnce(parseReviewDecisionResult(C.decisions.reject_A.body, "reject", IDS.A));
+    await click("feedback-decision-confirm-button");
+    expect(client.decide).toHaveBeenCalledTimes(2);
+    expect(byTestId("feedback-review-decision-result")?.textContent).toContain("Decision recorded: reject");
+  });
+
   it("says an idempotent repeat changed nothing", async () => {
     const client = fakeClient();
     client.decide.mockResolvedValue(parseReviewDecisionResult(C.decisions.reject_A_repeat.body, "reject", IDS.A));

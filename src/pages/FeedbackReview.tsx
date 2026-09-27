@@ -402,6 +402,10 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
   const [decisionResult, setDecisionResult] = useState<ReviewDecisionResult | null>(null);
   const loadToken = useRef(0);
   const detailRef = useRef<HTMLDivElement>(null);
+  // Synchronous in-flight guard: React state updates are not visible to a
+  // second click delivered in the same tick, so `deciding` alone would let two
+  // rapid confirmations send two decision requests.
+  const decisionInFlight = useRef(false);
 
   const applyAccessError = (error: unknown): boolean => {
     const state = reviewAccessState(error);
@@ -484,7 +488,8 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
   };
 
   const decide = async (input: ReviewDecisionInput) => {
-    if (!detail || deciding) return;
+    if (!detail || decisionInFlight.current) return;
+    decisionInFlight.current = true;
     const caseId = detail.case.case_id;
     setDeciding(true);
     setDecisionError(null);
@@ -510,6 +515,7 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
     } catch (error) {
       setDecisionError(reviewErrorMessage(error));
     } finally {
+      decisionInFlight.current = false;
       setDeciding(false);
     }
   };
