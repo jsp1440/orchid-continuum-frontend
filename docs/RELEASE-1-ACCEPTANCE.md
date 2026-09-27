@@ -20,9 +20,13 @@ Statuses:
 the owner gates listed below.**
 
 - No journey is FAIL.
-- No security or privacy blocker is open as of the `r1-post-hardening` run.
-  Six were found and fixed after the `r1-refresh` acceptance; see "Security
-  and privacy findings after acceptance".
+- No security or privacy blocker is known to be open as of the `r1-post-matrix`
+  run.
+  - Six were found and fixed after the `r1-refresh` acceptance; see "Security
+    and privacy findings after acceptance".
+  - A seventh was fixed after `r1-post-hardening`: member Matrix explanation
+    rows could carry a withheld character's state. See "Hardening after
+    `r1-post-hardening`".
 - This is not a claim about production: production hosts cannot be reached from
   the build environment. Deployment, verification against production data and
   the listed decisions remain owner actions.
@@ -31,8 +35,8 @@ the owner gates listed below.**
 
 | Repository | Integration head accepted | Last acceptance run |
 |---|---|---|
-| Backend `jsp1440/orchid-calyx-backend` | `b4adfae2e9ee48158aeac8b752a15686b9dd915a` | `r1-post-hardening`, 2026-09-27T05:44Z |
-| Frontend `jsp1440/orchid-continuum-frontend` | `f31421a1f4e2c3dafeb791e5f40c3d94a0a0d2aa` | `r1-post-hardening`, 2026-09-27T05:44Z |
+| Backend `jsp1440/orchid-calyx-backend` | `fdc3ec8faa207427a83900734afc927134937ab9` | `r1-post-matrix`, 2026-09-27T07:24Z |
+| Frontend `jsp1440/orchid-continuum-frontend` | `00bac0b77e5c292b852d97d30acdddbfa733ec3b` | `r1-post-matrix`, 2026-09-27T07:24Z |
 
 The `r1-post-hardening` run at 05:44Z recorded J03 as **FAIL**. The harness
 assertion expected "unavailable" or "not yet" and did not recognise the product's
@@ -40,6 +44,18 @@ outage copy, "Record not confirmed" / "Could not confirm". The harness assertion
 (`r1-journeys.spec.ts`, local to this session) was widened to accept that copy;
 the product did not change. J03 was then re-run alone at 05:53Z on the same two
 SHAs and passed.
+
+The `r1-post-matrix` run at 07:24Z used the widened assertion from the start. On
+those two SHAs:
+
+- all 17 journey tests passed;
+- the security spot-check had 0 failures;
+- the member-token audit found no unexpected routes;
+- axe found 0 critical violations;
+- J12 on a disposable local PostgreSQL 16 cluster (07:33Z) passed durability,
+  with 0 security-check failures.
+
+Frontend `00bac0b7` differs from `f31421a1` only in this document.
 
 BE #1643 and FE #858, #859 and #860 were merged to `main` earlier on 2026-09-26, under the
 owner-authorised sprint that preceded the Release 1 directive. They reached
@@ -72,10 +88,11 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677; FE #862, #868, #869, #870, #872, #873, #877, #879 | Yes, before merge (session checker agents; #1647, #868 and #869 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
+  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680; FE #862, #868, #869, #870, #872, #873, #877, #879 | Yes, before merge (session checker agents; #1647, #868, #869 and #1678 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
   | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict recorded in this document before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
-  | BE #1676 at `b0f410ad`; FE #878 at `0a68e841`; FE #880 at `93bdff3f` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677, FE #879 and the PR that carries this correction |
+  | BE #1676 at `b0f410ad`; FE #878 at `0a68e841`; FE #880 at `93bdff3f` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677, FE #879 and FE #881 |
+  | BE #1679 at `aa8207db` | Not checked at the merged head: the owner lineage added two commits to the maker head `124d02b7` and merged before the verdict; the check of `124d02b7` then FAILED | Not evaluated | Owner lineage, before the verdict | Repaired by BE #1680 |
   | BE #1645; FE #856, #861, #864, #865, #866 | Owner's own lineage: exact-head CI plus the readback in the PR comments; no independent checker record from this session | Not recorded | Owner | Blobs identical (FE #865, #866 verified by this session) |
   | BE #1643; FE #858, #859, #860 | Yes, before merge | Not applicable: these merged to `main` under the earlier owner-authorised sprint, before the Release 1 directive, and reached integration only through syncs #1644 and #862 | Coordinator | Tree/blobs identical |
 
@@ -160,6 +177,16 @@ test that fails on any Unicode format character in text source files under
 Both repairs passed an independent check on the exact head with CI green, and
 integration holds exactly the checked merge.
 
+### Hardening after `r1-post-hardening`
+
+| Change | What it closes | PR, exact head → integration |
+|---|---|---|
+| Owner-only secret redaction | HTTP Digest `response`/`cnonce`, `curl -u`/`--user` passwords (including partly quoted, multi-line and over-long values), secret header lines and flat header lists | BE #1678 `3ce06f63` → `a0dc23a8` (checker FAIL twice, PASS on the third head) |
+| Member Matrix locality screen | Coordinates without degree signs (DMS with prime marks, hemisphere letters, comma decimals, en-dash signs), UTM/MGRS, plus codes, labelled geohashes, Spanish/Portuguese/French locality words, collector abbreviations, elevation character ids such as `elev_m`/`alt_m`, and full-width or zero-width disguises | BE #1679 `aa8207db` → `eaa9d363`; repaired by BE #1680 `23e5b5a7` → `fdc3ec8f` |
+| Member Matrix explanation rows | **A member-facing leak:** an explanation row kept the registry-authored `candidate_state` (for example an elevation range) even when its character id was withheld, or when the row had no character | BE #1679 and BE #1680 |
+
+Elevation-labelled Matrix characters and their states stay withheld from members; see owner gate 7.
+
 ## Owner gates remaining
 
 1. **Deployment.** Deploy both integration heads to Render and set
@@ -186,13 +213,21 @@ integration holds exactly the checked merge.
 6. **Trait tables.** Confirm the production trait tables hold no site-level
    locality traits: type locality, collection site, coordinates, fine elevation.
 
+7. **Elevation for members.** Member Matrix views withhold elevation-labelled
+   characters and their states. Allowing a coarse
+   elevation-band character in Matrix identification needs an owner and
+   scientific decision on whether to allow it and on the band vocabulary.
+
 ## Post-Release-1 items (recorded, not blocking)
 
 - Matrix member views:
-  - broaden the coordinate and abbreviation screening;
   - lint registries when they are authored;
-  - registry character ids that mention elevation or altitude currently come out
-    as "withheld".
+  - screen forms not yet covered: DMS written out in words in Spanish, Portuguese
+    or French, lowercase hemisphere letters after a bare number (`18.9s`),
+    unlabelled geohashes, single comma-decimal values, `herbier`/`exsiccata`,
+    run-together ids (`elevm`, `ELEVmax`), combining marks and homoglyphs;
+  - numeric states of a non-withheld character cannot be screened without
+    semantics, so registries must not carry locality in numeric states.
 - Dossier resolution needs a synonym source.
 - When the species services are down, every dossier, including a known
   taxon's, shows "Record not confirmed" with a retry. That is honest, but known
@@ -200,6 +235,8 @@ integration holds exactly the checked merge.
 - Colour-contrast findings (axe, serious) need a design-system decision: Lexicon
   green `#4A7C59` headings, muted `#7a7466` on dark Species/Atlas pages, and
   `text-white/40` on `/conservation`.
-- Remaining redaction gaps in owner-only views: Digest `response=` in free
-  text, `curl -u user:pw`, and header lists of 5 or more items.
+- Remaining redaction gaps in owner-only views: an unterminated quote in one
+  `curl -u` value can expose part of a later `-u` password in the same string;
+  HTTPie `-a user:pw`; odd-length or nested flat header lists; Digest values
+  stored under a non-secret key.
 - A richer local PostgreSQL harness.
