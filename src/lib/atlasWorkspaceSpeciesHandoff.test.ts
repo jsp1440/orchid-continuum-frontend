@@ -17,7 +17,7 @@ describe('Atlas workspace → Species genus handoff', () => {
   it('mounts the handoff in the shared navbar when Atlas has one active genus', () => {
     expect(navbarSource).toContain('atlasWorkspaceSpeciesHref');
     expect(navbarSource).toContain("l.route === '/species' && atlasGenus");
-    expect(navbarSource).toContain('navigate(atlasWorkspaceSpeciesHref(atlasGenus))');
+    expect(navbarSource).toContain('atlasGenus) return atlasWorkspaceSpeciesHref(atlasGenus)');
   });
 
   it('lands on a receiving surface that immediately acts on the genus', () => {

@@ -32,7 +32,7 @@ const DailyGenusFeature: React.FC = () => {
       continuation={
   <div className="sm:flex sm:items-center sm:justify-between sm:gap-6">
             <div className="min-w-0">
-              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#806c39]">
+              <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#735f2c]">
                 Continue the investigation
               </p>
               <p className="mt-1 text-sm leading-6 text-[#526046]">

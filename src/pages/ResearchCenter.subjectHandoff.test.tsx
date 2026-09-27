@@ -302,9 +302,11 @@ describe('research center hands the subject to Atlas Next at its own rank', () =
       expect(container.textContent).toContain(name);
       // …but no Atlas link claims to be its view, and no genus link replaces it.
       expect(atlasLinks()).toHaveLength(0);
+      // (The site header's plain "Atlas" navigation link is chrome and
+      // carries no subject; it is not a Research → Atlas handoff.)
       expect(
         [...container.querySelectorAll('a')].some((a) =>
-          (a.getAttribute('href') ?? '').startsWith('/atlas'),
+          !a.closest('header') && (a.getAttribute('href') ?? '').startsWith('/atlas'),
         ),
       ).toBe(false);
     },

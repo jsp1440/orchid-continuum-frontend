@@ -631,7 +631,9 @@ describe('Species Dossier → Atlas mounted continuity', () => {
     // The rest of the page still renders, but the Atlas action must be absent
     // rather than leaking the route id into an Atlas search.
     expect(atlasLink()).toBeNull();
-    expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
+    // The site header's plain "Atlas" navigation link (href="/atlas", no
+    // subject) is chrome, not a dossier action; every other Atlas link is.
+    expect([...container.querySelectorAll('a[href^="/atlas"]')].filter((a) => !a.closest('header'))).toEqual([]);
   });
 
   it('fails closed when the authoritative identity field is malformed instead of widening it', async () => {
@@ -997,7 +999,8 @@ describe('dossier subject identity across id spaces', () => {
     expect(container.textContent).not.toContain('Labiata relations.');
     expect(container.textContent).not.toContain('Endangered');
     expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
-    expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
+    // Outside the site header's plain "Atlas" navigation link (chrome, no subject).
+    expect([...container.querySelectorAll('a[href^="/atlas"]')].filter((a) => !a.closest('header'))).toEqual([]);
   });
 });
 

@@ -135,7 +135,7 @@ describe('featured taxon source integrity', () => {
     const navbar = source('components/orchid/Navbar.tsx');
     expect(navbar).toContain("{ label: 'Conservatory', route: '/conservatory' }");
     expect(navbar).not.toContain("{ label: 'Conservatory', route: '/collection' }");
-    expect(navbar).toContain("navigate('/conservatory')");
+    expect(navbar).toContain('to="/conservatory"');
   });
 
   it('fails Conservatory readiness closed without exposing deployment internals', () => {
