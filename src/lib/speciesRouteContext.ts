@@ -86,6 +86,11 @@ export function stripSpeciesQueryFormatCharacters(value: string): string {
   return String(value ?? '').replace(FORMAT_CHARACTERS, '');
 }
 
+/** Whether `value` holds any invisible format character (Unicode category Cf). */
+function hasFormatCharacters(value: string): boolean {
+  return /\p{Cf}/u.test(value);
+}
+
 /**
  * Normalise free text that is about to become a species search (a `?q=` value
  * from the address bar, a name handed over by another page, or the visitor's
@@ -150,4 +155,29 @@ export function speciesSearchParamsForQuery(
  */
 export function speciesRouteQuery(params: URLSearchParams): string {
   return resolveSpeciesQueryParam(params.get('q')) || resolveSpeciesGenusFilter(params.get('genus'));
+}
+
+/**
+ * The Species route's search parameters as the address bar should show them,
+ * so it never displays an invisible format character (such as a bidirectional
+ * override) that a shared link carried:
+ *
+ * - a `genus` holding format characters is not a canonical genus, so it is
+ *   rejected (see {@link resolveSpeciesGenusFilter}) and removed, rather than
+ *   quietly repaired into a filter the link did not validly ask for;
+ * - `q` is normalised with {@link resolveSpeciesQueryParam}, and a genus it
+ *   does not describe is dropped (see {@link speciesSearchParamsForQuery});
+ * - any other parameter keeps its value minus format characters, and a
+ *   parameter whose name holds them is removed.
+ *
+ * The page applies the result with a history replace, never a push.
+ */
+export function speciesRouteSearchParams(current: URLSearchParams): URLSearchParams {
+  const next = new URLSearchParams();
+  for (const [key, value] of current) {
+    if (hasFormatCharacters(key)) continue;
+    if (key === 'genus' && hasFormatCharacters(value)) continue;
+    next.append(key, stripSpeciesQueryFormatCharacters(value));
+  }
+  return next.has('q') ? speciesSearchParamsForQuery(next, speciesRouteQuery(next)) : next;
 }
