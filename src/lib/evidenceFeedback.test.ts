@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import defectKindCapture from './__fixtures__/evidenceFeedbackDefectKind.realBackend.json';
 import {
   EVIDENCE_FEEDBACK_API_BASE,
+  TRIVIAL_DEFECT_KINDS,
+  defectKindApplies,
   fetchEvidenceFeedbackStatus,
   submitEvidenceFeedback,
 } from './evidenceFeedback';
@@ -107,5 +110,63 @@ describe('evidence feedback client', () => {
         code: 'AUTHENTICATED_SUBJECT_REQUIRED',
       }),
     );
+  });
+});
+
+/*
+ * Defect kinds, checked against REAL responses captured from the Calyx backend
+ * running LOCALLY (`__fixtures__/evidenceFeedbackDefectKind.realBackend.json`,
+ * SYNTHETIC inputs; see its `_meta`).
+ */
+type Captured = { status: number; body: Record<string, unknown> };
+const D = defectKindCapture as unknown as {
+  requests: Record<string, Record<string, unknown>>;
+  responses: Record<string, Captured>;
+};
+const caseOf = (key: string) => D.responses[key].body.case as Record<string, unknown>;
+
+describe('trivial defect kinds (backend contract)', () => {
+  it('offers exactly the kinds the backend triages as auto-correctable, as short printable labels', () => {
+    expect([...TRIVIAL_DEFECT_KINDS]).toEqual(['typo', 'format']);
+    for (const kind of TRIVIAL_DEFECT_KINDS) {
+      expect(kind.length).toBeLessThanOrEqual(100);
+      expect(kind).toMatch(/^[\x20-\x7e]+$/);
+    }
+    expect(caseOf('submit_lexicon_typo')).toMatchObject({ defect_kind: 'typo', disposition: 'auto_correctable', review_lane: 'deterministic' });
+    expect(caseOf('submit_lexicon_format')).toMatchObject({ defect_kind: 'format', disposition: 'auto_correctable', review_lane: 'deterministic' });
+    // "Other / not sure" (no defect kind) and any scientific object stay with review.
+    expect(caseOf('submit_lexicon_not_sure')).toMatchObject({ defect_kind: null, disposition: 'insufficient_evidence', review_lane: 'scientific' });
+    expect(caseOf('submit_matrix_typo_label')).toMatchObject({ disposition: 'needs_scientific_review', review_lane: 'scientific' });
+    // The backend refuses a label that is not printable.
+    expect(D.responses.submit_lexicon_control_char).toMatchObject({ status: 422, body: { detail: { code: 'DEFECT_KIND_INVALID_CHARACTERS' } } });
+  });
+
+  it('applies only to lexicon corrections', () => {
+    expect(defectKindApplies('lexicon', 'suggest_correction')).toBe(true);
+    expect(defectKindApplies('lexicon', 'report_problem')).toBe(false);
+    expect(defectKindApplies('lexicon', 'challenge')).toBe(false);
+    expect(defectKindApplies('matrix_identification', 'suggest_correction')).toBe(false);
+    expect(defectKindApplies('taxonomy', 'suggest_correction')).toBe(false);
+  });
+
+  it('sends the defect kind in the same body the backend accepted', async () => {
+    const sent = D.requests.lexicon_typo;
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse(D.responses.register_lexicon_typo.body, 201))
+      .mockResolvedValueOnce(jsonResponse(D.responses.submit_lexicon_typo.body, 201));
+
+    const result = await submitEvidenceFeedback({
+      objectId: String(sent.object_id),
+      objectType: 'lexicon',
+      objectPayload: (D.responses.register_lexicon_typo.body.payload as Record<string, unknown>),
+      pageContext: String(sent.page_context),
+      feedbackClass: 'suggest_correction',
+      statement: String(sent.statement),
+      proposedReplacement: String(sent.proposed_replacement),
+      defectKind: 'typo',
+    });
+
+    expect(JSON.parse(String((fetchSpy.mock.calls[1]?.[1] as RequestInit).body))).toEqual(sent);
+    expect(result.case).toMatchObject({ disposition: 'auto_correctable', status: 'pending_review' });
   });
 });

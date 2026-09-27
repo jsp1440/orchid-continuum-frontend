@@ -22,6 +22,30 @@ export type FeedbackClass =
   | 'image_identification_problem';
 
 /**
+ * The defect kinds the backend's deterministic trivial-correction path
+ * recognises. Backend contract (orchid-calyx-backend
+ * `app/evidence_feedback/service.py`): `_triage` marks a case
+ * auto-correctable only for a `lexicon` object, `suggest_correction`
+ * feedback, proposed wording, and `defect_kind` in {"typo", "format"};
+ * `trivial_correction_blocker` refuses every other kind. Any other value is
+ * stored as a label but never changes triage, so the UI offers exactly these
+ * two, plus "other / not sure" which sends no defect kind. Values are short
+ * printable labels, as the backend's `validate_label` requires.
+ */
+export const TRIVIAL_DEFECT_KINDS = ['typo', 'format'] as const;
+export type TrivialDefectKind = (typeof TRIVIAL_DEFECT_KINDS)[number];
+
+/**
+ * Whether a defect kind can matter for this submission. Only lexicon
+ * corrections can take the trivial path; scientific objects (Matrix
+ * identifications, taxonomy, images, literature, characters, distribution)
+ * always go to governed review whatever defect kind is sent.
+ */
+export function defectKindApplies(objectType: EvidenceObjectType, feedbackClass: FeedbackClass): boolean {
+  return objectType === 'lexicon' && feedbackClass === 'suggest_correction';
+}
+
+/**
  * Case status (backend `CaseStatus`). `governed_review_required` (backend
  * #1663) means the owner routed the case to governed scientific/taxonomic
  * review: it is not resolved and nothing displayed has changed.

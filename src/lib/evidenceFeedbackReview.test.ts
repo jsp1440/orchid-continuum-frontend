@@ -11,6 +11,7 @@ import {
   reviewAccessState,
   reviewErrorMessage,
   reviewQueuePath,
+  stripIdentityKeys,
 } from "@/lib/evidenceFeedbackReview";
 
 /**
@@ -134,6 +135,31 @@ describe("fail-closed projections of the captured payloads", () => {
     const list = structuredClone(C.lists.stage0.page1.body) as { items: Array<Record<string, unknown>> };
     list.items[0].submitter_email = "submitter.private@example.org"; // SYNTHETIC leak
     expect(JSON.stringify(parseReviewQueuePage(list))).not.toContain("@example.org");
+  });
+
+  it("strips known identity keys from event details at any depth and keeps everything else", () => {
+    const leaked = structuredClone(C.details.A_stage0.body) as { events: Array<{ details: Record<string, unknown> }> };
+    const original = structuredClone(leaked.events[0].details);
+    // SYNTHETIC leaks: identity keys a backend could put in an open-ended details record.
+    Object.assign(leaked.events[0].details, {
+      submitter_id: "submitter.private@example.org",
+      reviewer_id: "owner.private@example.org",
+      actor_id: "actor-raw-id-SYNTHETIC",
+      Contact_Email: "contact.private@example.org",
+      nested: { user_id: "user-raw-id-SYNTHETIC", member_id: "m-SYNTHETIC", kept: "SYNTHETIC kept value", list: [{ email: "x.private@example.org", ok: 1 }] },
+    });
+    const detail = parseReviewCaseDetail(leaked, IDS.A);
+    const text = JSON.stringify(detail.events);
+    expect(text).not.toContain("@example.org");
+    expect(text).not.toContain("raw-id-SYNTHETIC");
+    expect(text).not.toContain("m-SYNTHETIC");
+    expect(detail.events[0].details).toEqual({ ...original, nested: { kept: "SYNTHETIC kept value", list: [{ ok: 1 }] } });
+    // The captured details (no identity keys) pass through unchanged.
+    const clean = parseReviewCaseDetail(C.details.A_stage0.body, IDS.A);
+    expect(clean.events.map((event) => event.details)).toEqual(
+      (C.details.A_stage0.body as { events: Array<{ details: unknown }> }).events.map((event) => event.details),
+    );
+    expect(stripIdentityKeys({ subject: "s", reason: "SYNTHETIC reason" })).toEqual({ reason: "SYNTHETIC reason" });
   });
 
   it.each([

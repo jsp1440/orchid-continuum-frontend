@@ -23,10 +23,20 @@
  *    scientific corrections; the backend's `publication_boundary` text is
  *    required on every detail/decision response and shown verbatim.
  *  - Submitter and reviewer identities are opaque references
- *    (`submitter_ref`, `actor_ref`: an unkeyed hash, shown only as an opaque
- *    reference and never labelled as an identity). Responses are projected onto the fields
- *    below, so a raw identity field (e.g. an email) is never carried into
- *    the page even if a backend sent one.
+ *    (`submitter_ref`, `reviewer_ref`, `actor_ref`), shown only as opaque
+ *    references and never labelled as an identity. Case and queue records are
+ *    projected onto the fields below, so a raw identity field on them (e.g.
+ *    `submitter_id` or an email) is never carried into the page.
+ *  - Event `details` are open-ended backend records and are shown as
+ *    recorded, EXCEPT that known identity keys (`submitter_id`,
+ *    `reviewer_id`, `actor_id`, `user_id`, `member_id`, `owner_id`,
+ *    `subject`, and any key containing "email") are removed at any depth
+ *    before they reach the page (`stripIdentityKeys`).
+ *  - The record payload (`object_version.payload`) is the stored record the
+ *    submitter saw -- the thing being corrected -- and is shown verbatim,
+ *    because an accepted trivial correction starts from exactly that payload.
+ *    It is not scrubbed; what goes into it is decided where the record is
+ *    registered (e.g. the Matrix payload deliberately omits provenance).
  *  - Malformed responses fail closed (INVALID_RESPONSE) rather than rendering
  *    a partial case.
  */
@@ -328,6 +338,30 @@ function reviewCase(value: unknown): ReviewCase {
   };
 }
 
+const IDENTITY_DETAIL_KEYS = new Set(["submitter_id", "reviewer_id", "actor_id", "user_id", "member_id", "owner_id", "subject"]);
+
+function isIdentityKey(key: string): boolean {
+  const normalized = key.trim().toLowerCase();
+  return IDENTITY_DETAIL_KEYS.has(normalized) || normalized.includes("email");
+}
+
+/**
+ * A copy of `value` without known identity keys, at any depth. Defensive: the
+ * backend replaces actor identities with `actor_ref` and does not put them in
+ * event details today, but details are open-ended records.
+ */
+export function stripIdentityKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stripIdentityKeys);
+  if (value && typeof value === "object") {
+    const out: Rec = {};
+    for (const [key, item] of Object.entries(value as Rec)) {
+      if (!isIdentityKey(key)) out[key] = stripIdentityKeys(item);
+    }
+    return out;
+  }
+  return value;
+}
+
 function reviewEvent(value: unknown): ReviewEvent {
   const item = record(value);
   const details = item.details;
@@ -335,7 +369,7 @@ function reviewEvent(value: unknown): ReviewEvent {
     event: nonEmpty(item, "event"),
     timestamp: optStr(item, "timestamp"),
     actor_ref: optStr(item, "actor_ref"),
-    details: details && typeof details === "object" && !Array.isArray(details) ? (details as Rec) : {},
+    details: details && typeof details === "object" && !Array.isArray(details) ? (stripIdentityKeys(details) as Rec) : {},
   };
 }
 

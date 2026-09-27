@@ -402,6 +402,15 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
   const [decisionResult, setDecisionResult] = useState<ReviewDecisionResult | null>(null);
   const loadToken = useRef(0);
   const detailRef = useRef<HTMLDivElement>(null);
+  // Synchronous in-flight guard: React state updates are not visible to a
+  // second click delivered in the same tick, so `deciding` alone would let two
+  // rapid confirmations send two decision requests.
+  const decisionInFlight = useRef(false);
+  // The case the owner most recently opened, and a counter for case-detail
+  // reads. A slow read for an earlier case must never replace the detail of
+  // the case now highlighted, so only the latest read may land.
+  const selectedCaseRef = useRef<string | null>(null);
+  const detailRequest = useRef(0);
 
   const applyAccessError = (error: unknown): boolean => {
     const state = reviewAccessState(error);
@@ -463,6 +472,8 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
   };
 
   const openCase = async (caseId: string) => {
+    const request = ++detailRequest.current;
+    selectedCaseRef.current = caseId;
     setSelectedId(caseId);
     setDetail(null);
     setDetailError(null);
@@ -475,23 +486,26 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
       panel.scrollIntoView({ block: "start" });
     }
     try {
-      setDetail(await api.getCase(caseId));
+      const loaded = await api.getCase(caseId);
+      if (request !== detailRequest.current) return;
+      setDetail(loaded);
     } catch (error) {
+      if (request !== detailRequest.current) return;
       if (!applyAccessError(error)) setDetailError(reviewErrorMessage(error));
     } finally {
-      setDetailLoading(false);
+      if (request === detailRequest.current) setDetailLoading(false);
     }
   };
 
   const decide = async (input: ReviewDecisionInput) => {
-    if (!detail || deciding) return;
+    if (!detail || decisionInFlight.current) return;
+    decisionInFlight.current = true;
     const caseId = detail.case.case_id;
     setDeciding(true);
     setDecisionError(null);
     setDecisionResult(null);
     try {
       const result = await api.decide(caseId, input);
-      setDecisionResult(result);
       setItems((current) =>
         current.map((item) =>
           item.case_id === caseId
@@ -499,17 +513,29 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
             : item,
         ),
       );
+      // The owner may have opened another case while the decision was in
+      // flight; its row is updated above, but the open case's panel is not
+      // touched.
+      if (selectedCaseRef.current !== caseId) return;
+      setDecisionResult(result);
       // Re-read the case for its appended event and any resulting version;
       // until that answers, show the decision's own case and allowed actions.
-      setDetail((current) => (current ? { ...current, case: result.case, allowed_decisions: result.allowed_decisions, publication_boundary: result.publication_boundary } : current));
+      setDetail((current) =>
+        current && current.case.case_id === caseId
+          ? { ...current, case: result.case, allowed_decisions: result.allowed_decisions, publication_boundary: result.publication_boundary }
+          : current,
+      );
+      const request = ++detailRequest.current;
       try {
-        setDetail(await api.getCase(caseId));
+        const refreshed = await api.getCase(caseId);
+        if (request === detailRequest.current) setDetail(refreshed);
       } catch {
         // The decision stands; the refreshed history can be loaded again.
       }
     } catch (error) {
-      setDecisionError(reviewErrorMessage(error));
+      if (selectedCaseRef.current === caseId) setDecisionError(reviewErrorMessage(error));
     } finally {
+      decisionInFlight.current = false;
       setDeciding(false);
     }
   };
@@ -644,7 +670,8 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
                   <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive" data-testid="feedback-review-detail-error">{detailError}</p>
                 ) : null}
                 {!selectedId ? <p className="text-sm text-muted-foreground" data-testid="feedback-review-detail-empty">Select a case to read it in full and decide.</p> : null}
-                {detail ? (
+                {/* Invariant: the detail shown is always the highlighted case. */}
+                {detail && detail.case.case_id === selectedId ? (
                   <CaseDetail detail={detail} busy={deciding} decisionError={decisionError} decisionResult={decisionResult} onDecide={(input) => void decide(input)} />
                 ) : null}
               </CardContent>
