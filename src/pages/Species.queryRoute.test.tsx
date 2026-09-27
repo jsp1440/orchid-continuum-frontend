@@ -226,12 +226,12 @@ describe('species search keeps the URL in step', () => {
   });
 });
 
-const BIDI_PATTERN = /[‎‏؜‪-‮⁦-⁩]/;
+const BIDI_PATTERN = /[\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/;
 const echo = () => container.querySelector('bdi');
 
 describe('species search neutralises bidirectional overrides in shared queries', () => {
   // A shared link whose query tries to reverse the copy around its echo.
-  const payload = '‮ABC⁦ try⁩‏؜';
+  const payload = '\u202EABC\u2066 try\u2069\u200F\u061C';
 
   it('strips them from the box, the search, the URL and the echoed copy', async () => {
     mount(`/species?q=${encodeURIComponent(payload)}`);
@@ -245,7 +245,7 @@ describe('species search neutralises bidirectional overrides in shared queries',
   });
 
   it('treats a query made only of bidi controls as no query', async () => {
-    mount(`/species?q=${encodeURIComponent('‮⁧‏')}`);
+    mount(`/species?q=${encodeURIComponent('\u202E\u2067\u200F')}`);
     await settle();
     expect(input().value).toBe('');
     expect(searchedTerms()).toEqual([]);
@@ -254,7 +254,7 @@ describe('species search neutralises bidirectional overrides in shared queries',
 
   it('strips them from what the visitor types or pastes, keeping the spacing typed', async () => {
     mount('/species');
-    await type('Dracula‮ ');
+    await type('Dracula\u202E ');
     expect(input().value).toBe('Dracula ');
     expect(urlQuery()).toBe('Dracula');
     expect(searchedTerms()).toEqual(['Dracula']);
@@ -312,5 +312,55 @@ describe('species search is keyed on the normalised term, not the raw box value'
     await type('Dracula ');
     await type('Dracula v');
     expect(searchedTerms()).toEqual(['Dracula', 'Dracula v']);
+  });
+});
+
+describe('species search keeps the address bar and caret honest around stripped characters', () => {
+  it('removes a genus carrying a format character from the address with a replace', async () => {
+    mount(`/species?genus=${encodeURIComponent('Dracula\u200B')}&ref=home`);
+    await settle();
+    expect(router.state.location.search).toBe('?ref=home');
+    expect(router.state.historyAction).toBe('REPLACE');
+    expect(input().value).toBe('');
+    expect(text()).not.toContain('Filtering by');
+    expect(searchedTerms()).toEqual([]);
+  });
+
+  it('strips a format character from another parameter in the address with a replace', async () => {
+    mount(`/species?ref=${encodeURIComponent('ho\u202Eme')}`);
+    await settle();
+    expect(router.state.location.search).toBe('?ref=home');
+    expect(router.state.historyAction).toBe('REPLACE');
+  });
+
+  it('keeps the caret after pasted text when invisible characters are stripped from it', async () => {
+    mount('/species');
+    await type('Dracula');
+    const box = input();
+    box.focus();
+    // Paste "xy<RLO>z" at position 3: the browser leaves the caret after it (raw index 7).
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    act(() => {
+      setter.call(box, 'Draxy\u202Ezcula');
+      box.setSelectionRange(7, 7);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(box.value).toBe('Draxyzcula');
+    expect([box.selectionStart, box.selectionEnd]).toEqual([6, 6]);
+  });
+
+  it('keeps a selection in place when the paste was nothing but invisible characters', async () => {
+    mount('/species');
+    await type('Dracula');
+    const box = input();
+    box.focus();
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+    act(() => {
+      setter.call(box, 'Dra\u202E\u2066cula');
+      box.setSelectionRange(5, 5);
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    expect(box.value).toBe('Dracula');
+    expect([box.selectionStart, box.selectionEnd]).toEqual([3, 3]);
   });
 });

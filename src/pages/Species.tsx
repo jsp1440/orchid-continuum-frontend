@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Search, Loader2, Leaf, ShieldAlert, ArrowRight, X, RotateCcw } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
@@ -11,6 +11,7 @@ import {
   resolveSpeciesQueryParam,
   speciesQueryAfterRouteQueryChange,
   speciesRouteQuery,
+  speciesRouteSearchParams,
   speciesSearchParamsForQuery,
   stripSpeciesQueryFormatCharacters,
 } from '@/lib/speciesRouteContext';
@@ -61,6 +62,12 @@ const Species: React.FC = () => {
   const [unavailable, setUnavailable] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
   const ctrlRef = useRef<AbortController | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Where the caret belongs after invisible characters were stripped from an
+  // edit, so a paste does not throw the caret to the end of the box. The
+  // nonce re-renders even when stripping left the value unchanged.
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
+  const [selectionNonce, setSelectionNonce] = useState(0);
   // The route query this page last wrote to, or adopted from, the address bar.
   const routeQueryRef = useRef(routeQuery);
   // Whether the current history entry holds a committed search (submitted, or
@@ -85,10 +92,11 @@ const Species: React.FC = () => {
 
   // An arriving ?q= is normalised in place (bounded, trimmed), and a genus
   // filter that does not describe it is dropped so the chip never claims a
-  // filter the search is not applying.
+  // filter the search is not applying. Invisible format characters are
+  // removed from the address bar too: a genus carrying them is rejected and
+  // dropped, other values lose them (speciesRouteSearchParams).
   useEffect(() => {
-    if (!searchParams.has('q')) return;
-    const normalised = speciesSearchParamsForQuery(searchParams, speciesRouteQuery(searchParams));
+    const normalised = speciesRouteSearchParams(searchParams);
     if (normalised.toString() !== searchParams.toString()) {
       routeQueryRef.current = speciesRouteQuery(normalised);
       setSearchParams(normalised, { replace: true });
@@ -124,6 +132,28 @@ const Species: React.FC = () => {
     applyQueryToRoute(typed, { commit });
     setQuery(typed);
   };
+
+  const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { value, selectionStart, selectionEnd } = event.target;
+    const stripped = stripSpeciesQueryFormatCharacters(value);
+    if (stripped !== value && selectionStart != null && selectionEnd != null) {
+      // Each stripped character before a caret position moves it one left.
+      const adjust = (position: number) =>
+        stripSpeciesQueryFormatCharacters(value.slice(0, position)).length;
+      pendingSelectionRef.current = { start: adjust(selectionStart), end: adjust(selectionEnd) };
+      setSelectionNonce((n) => n + 1);
+    }
+    handleQueryChange(value);
+  };
+
+  // Runs after the stripped value is in the box, before the browser paints.
+  useLayoutEffect(() => {
+    const selection = pendingSelectionRef.current;
+    const box = inputRef.current;
+    if (!selection || !box) return;
+    pendingSelectionRef.current = null;
+    if (document.activeElement === box) box.setSelectionRange(selection.start, selection.end);
+  }, [selectionNonce]);
 
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -203,8 +233,9 @@ const Species: React.FC = () => {
               aria-label="Search orchid species"
               enterKeyHint="search"
               maxLength={SPECIES_QUERY_MAX_LENGTH}
+              ref={inputRef}
               value={query}
-              onChange={(e) => handleQueryChange(e.target.value)}
+              onChange={handleInputChange}
               placeholder="Search 30,000 orchid species..."
               className="w-full pl-14 pr-5 py-4 rounded-full bg-[#0a0d1c]/70 border border-white/[0.1] focus:border-[#c9a24a]/60 outline-none font-body text-[15px] text-[#faf7f2] placeholder:text-[#7a7466]"
             />

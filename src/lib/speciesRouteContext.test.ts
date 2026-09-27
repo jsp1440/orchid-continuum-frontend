@@ -4,6 +4,7 @@ import {
   resolveSpeciesGenusFilter,
   resolveSpeciesQueryParam,
   speciesRouteQuery,
+  speciesRouteSearchParams,
   speciesSearchHref,
   speciesSearchParamsForQuery,
   speciesQueryAfterRouteQueryChange,
@@ -238,5 +239,33 @@ describe('speciesRouteQuery', () => {
     expect(speciesRouteQuery(new URLSearchParams('genus=Phalaenopsis'))).toBe('Phalaenopsis');
     expect(speciesRouteQuery(new URLSearchParams('genus=not-a-genus'))).toBe('');
     expect(speciesRouteQuery(new URLSearchParams(''))).toBe('');
+  });
+});
+
+describe('speciesRouteSearchParams', () => {
+  const params = (search: string) => new URLSearchParams(search);
+  const enc = encodeURIComponent;
+
+  it('leaves an address with no format characters as it is', () => {
+    for (const search of ['', 'genus=Phalaenopsis', 'genus=phalaenopsis', 'q=Dracula&ref=home', 'ref=home&view=grid']) {
+      expect(speciesRouteSearchParams(params(search)).toString()).toBe(params(search).toString());
+    }
+  });
+
+  it('rejects and removes a genus carrying format characters instead of repairing it', () => {
+    expect(resolveSpeciesGenusFilter('Dracula\u200B')).toBe('');
+    expect(speciesRouteSearchParams(params(`genus=${enc('Dracula\u200B')}`)).toString()).toBe('');
+    expect(speciesRouteSearchParams(params(`genus=${enc('\u202EDracula')}&ref=home`)).toString()).toBe('ref=home');
+  });
+
+  it('normalises q and strips format characters from other values', () => {
+    const next = speciesRouteSearchParams(params(`q=${enc(' \u202EABC ')}&ref=${enc('ho\u2066me')}`));
+    expect(next.get('q')).toBe('ABC');
+    expect(next.get('ref')).toBe('home');
+    expect(next.toString()).not.toMatch(/%E2%80%AE|%E2%81%A6/i);
+  });
+
+  it('removes a parameter whose name carries format characters', () => {
+    expect(speciesRouteSearchParams(params(`${enc('ref\u202E')}=x&q=Dracula`)).toString()).toBe('q=Dracula');
   });
 });

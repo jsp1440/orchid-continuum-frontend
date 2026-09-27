@@ -117,6 +117,25 @@ test("a right-to-left override (U+202E) in a shared ?q= cannot reverse the copy 
   if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/species-q-rlo-neutralised.png`, fullPage: true });
 });
 
+test("pasting text with a right-to-left override keeps the caret after the pasted text", async ({ page }) => {
+  await answerSearchWithSyntheticEmptyList(page);
+  await page.goto("/species");
+  await searchBox(page).fill("Dracula");
+  await searchBox(page).evaluate((el: HTMLInputElement) => el.setSelectionRange(3, 3));
+  await page.keyboard.insertText("xy\u202Ez");
+  await expect(searchBox(page)).toHaveValue("Draxyzcula");
+  const caret = await searchBox(page).evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd]);
+  expect(caret).toEqual([6, 6]);
+  await expect.poll(() => urlQuery(page)).toBe("Draxyzcula");
+});
+
+test("a genus carrying an invisible format character is dropped from the address bar", async ({ page }) => {
+  await page.goto(`/species?genus=${encodeURIComponent("Dracula\u200B")}`);
+  await expect.poll(() => new URL(page.url()).search).toBe("");
+  await expect(searchBox(page)).toHaveValue("");
+  await expect(page.getByText("Filtering by")).toHaveCount(0);
+});
+
 test("typing replaces the address, Enter commits it, and Back returns to the committed search", async ({ page }) => {
   await answerSearchWithSyntheticEmptyList(page);
   await page.goto("/species");
