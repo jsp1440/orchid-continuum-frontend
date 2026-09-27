@@ -237,3 +237,146 @@ test.describe("phone navigation drawer is keyboard operable", () => {
     await context.close();
   });
 });
+
+test.describe("site menus on a touch tablet and by keyboard", () => {
+  // A touch tablet wide enough for the desktop bar (an 820px-tall tablet held
+  // in landscape, 1180x820): taps arrive as touch pointer events plus the
+  // compatibility mouse events, so a hover-to-open handler must not swallow
+  // the second tap.
+  async function touchContext(browser: Browser, width: number, height: number) {
+    const context = await browser.newContext({ viewport: { width, height }, isMobile: true, hasTouch: true });
+    await context.route("**/*", (route) => {
+      const host = new URL(route.request().url()).hostname;
+      return host === "127.0.0.1" || host === "localhost" ? route.continue() : route.abort("blockedbyclient");
+    });
+    return context;
+  }
+
+  test("More toggles on tap and closes on a tap outside (1180x820 touch)", async ({ browser }) => {
+    const context = await touchContext(browser, 1180, 820);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const more = page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("button", { name: "More" });
+    const menu = page.locator("#site-more-menu");
+
+    await more.tap();
+    await expect(menu).toBeVisible();
+    await expect(more).toHaveAttribute("aria-expanded", "true");
+    await more.tap();
+    await expect(menu).toBeHidden();
+    await expect(more).toHaveAttribute("aria-expanded", "false");
+
+    // A tap inside the menu's own padding keeps it; a tap on the page closes it.
+    await more.tap();
+    await expect(menu).toBeVisible();
+    await menu.tap({ position: { x: 4, y: 4 } });
+    await expect(menu).toBeVisible();
+    await page.locator("main").first().tap({ position: { x: 10, y: 300 } });
+    await expect(menu).toBeHidden();
+    await context.close();
+  });
+
+  test("the phone drawer toggle opens and closes on tap (820x1180 touch)", async ({ browser }) => {
+    const context = await touchContext(browser, 820, 1180);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const toggle = page.getByRole("button", { name: "Toggle navigation" });
+    await toggle.tap();
+    await expect(page.locator("#site-mobile-nav")).toBeVisible();
+    await toggle.tap();
+    await expect(page.locator("#site-mobile-nav")).toBeHidden();
+    await context.close();
+  });
+
+  test("More closes when Tab or Shift+Tab moves focus out of it (desktop keyboard)", async ({ browser }) => {
+    const context = await openContext(browser, 1440, 900);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const more = page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("button", { name: "More" });
+    const menu = page.locator("#site-more-menu");
+
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Shift+Tab");
+    await expect(menu).toBeHidden();
+
+    await more.focus();
+    await page.keyboard.press("Enter");
+    await expect(menu).toBeVisible();
+    const items = await menu.locator("a").count();
+    for (let i = 0; i < items; i += 1) {
+      await page.keyboard.press("Tab");
+      await expect(menu, `still open on item ${i + 1} of ${items}`).toBeVisible();
+    }
+    await page.keyboard.press("Tab");
+    await expect(menu).toBeHidden();
+    expect(await page.evaluate(() => !!document.activeElement?.closest("#site-more-menu"))).toBe(false);
+    await context.close();
+  });
+
+  test("a mouse hover opens More and the click that follows keeps it open", async ({ browser }) => {
+    const context = await openContext(browser, 1440, 900);
+    const page = await context.newPage();
+    await settle(page, "/");
+    const more = page.getByRole("navigation", { name: "Primary", exact: true }).getByRole("button", { name: "More" });
+    const menu = page.locator("#site-more-menu");
+    await more.hover();
+    await expect(menu).toBeVisible();
+    await more.click();
+    await expect(menu).toBeVisible();
+    await more.click();
+    await expect(menu).toBeHidden();
+    await context.close();
+  });
+});
+
+test.describe("Lexicon record-maturity notes meet AA contrast", () => {
+  // The "not yet added" notes on an entry's maturity checklist were stone-400
+  // (2.43:1), then stone-500 (4.63:1 on #FDFBF6), a class the KI-2 exemption
+  // hides from the route scan. They now use stone-600 (7.37:1), outside every
+  // KNOWN_ISSUES entry, and this checks that the notes are really rendered and
+  // really evaluated (not skipped as "needs review").
+  for (const viewport of VIEWPORTS) {
+    test(`resupination checklist (${viewport.name})`, async ({ browser }) => {
+      const context = await openContext(browser, viewport.width, viewport.height);
+      const page = await context.newPage();
+      await settle(page, "/lexicon/entry/resupination");
+      const notes = page.getByTestId("lexicon-maturity-not-yet-added");
+      expect(await notes.count(), "the entry shows at least one unmet maturity item").toBeGreaterThan(0);
+      await notes.first().scrollIntoViewIfNeeded();
+      await expect(notes.first()).toBeVisible();
+
+      const result = await new AxeBuilder({ page })
+        .include('[data-testid="lexicon-maturity-checklist"]')
+        .withRules(["color-contrast"])
+        .analyze();
+      await context.close();
+      const violations = result.violations as AxeViolation[];
+      expect(violations, describeViolations(violations)).toEqual([]);
+      // Evaluated and passed, not skipped as "needs review".
+      const passed = result.passes.flatMap((rule) => rule.nodes.map((node) => node.html));
+      expect(passed.filter((html) => html.includes("lexicon-maturity-not-yet-added")).length).toBeGreaterThan(0);
+      const incomplete = result.incomplete.flatMap((rule) => rule.nodes.map((node) => node.html));
+      expect(incomplete.filter((html) => html.includes("lexicon-maturity-not-yet-added"))).toEqual([]);
+    });
+  }
+});
+
+test.describe("the current navigation item is marked by more than colour", () => {
+  // Forest green and charcoal are nearly the same on the cream bar, including
+  // over the dark Species surface, so the current item also carries an
+  // underline that a sighted visitor can see (aria-current is for AT).
+  test("on the dark Species surface, only the current item is underlined", async ({ browser }) => {
+    const context = await openContext(browser, 1440, 900);
+    const page = await context.newPage();
+    await settle(page, "/species");
+    const nav = page.getByRole("navigation", { name: "Primary", exact: true });
+    const decorations = await nav.locator("a").evaluateAll((anchors) =>
+      anchors.map((a) => ({ text: a.textContent?.trim(), current: a.getAttribute("aria-current"), line: getComputedStyle(a).textDecorationLine })),
+    );
+    const underlined = decorations.filter((d) => d.line.includes("underline"));
+    expect(underlined).toEqual([{ text: "Species", current: "page", line: "underline" }]);
+    await context.close();
+  });
+});

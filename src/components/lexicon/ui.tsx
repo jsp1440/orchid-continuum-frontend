@@ -27,8 +27,13 @@ export const MaturityBadges: React.FC<{ flags: MaturityFlag[]; max?: number; siz
   </ul>;
 };
 
-export const MaturityChecklist: React.FC<{ flags: MaturityFlag[] }> = ({ flags }) => <ul className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
-  {MATURITY_ORDER.map((f) => { const met = flags.includes(f); return <li key={f} className="flex items-start gap-2 text-sm"><span aria-hidden className={`mt-1 inline-flex h-4 w-4 flex-none items-center justify-center rounded-full border ${met ? 'border-[#4A7C59] bg-[#4A7C59]' : 'border-stone-300 bg-white'}`}>{met && <svg viewBox="0 0 10 10" className="h-2.5 w-2.5 text-white" fill="none"><path d="M1 5.2 3.6 8 9 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>}</span><span className={met ? 'text-stone-800' : 'text-stone-500'}>{MATURITY_LABELS[f]}<span className="sr-only">{met ? ' — present' : ' — not yet added'}</span>{!met && <span className="ml-1 text-xs italic text-stone-500">not yet added</span>}</span></li>; })}
+// Unmet items use stone-600 (#57534e: 7.37:1 on the entry page's #FDFBF6,
+// measured by axe) rather than the palette's stone-500, which measures only
+// 4.63:1 there, a hair over the 4.5:1 AA minimum for this 12-14px text, is
+// below it on the Lexicon's darker parchments, and is exempted from the route
+// scan by KI-2 (e2e/a11y-core-routes.spec.ts), so a regression would go unseen.
+export const MaturityChecklist: React.FC<{ flags: MaturityFlag[] }> = ({ flags }) => <ul className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="lexicon-maturity-checklist">
+  {MATURITY_ORDER.map((f) => { const met = flags.includes(f); return <li key={f} className="flex items-start gap-2 text-sm"><span aria-hidden className={`mt-1 inline-flex h-4 w-4 flex-none items-center justify-center rounded-full border ${met ? 'border-[#4A7C59] bg-[#4A7C59]' : 'border-stone-300 bg-white'}`}>{met && <svg viewBox="0 0 10 10" className="h-2.5 w-2.5 text-white" fill="none"><path d="M1 5.2 3.6 8 9 2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>}</span><span className={met ? 'text-stone-800' : 'text-stone-600'}>{MATURITY_LABELS[f]}<span className="sr-only">{met ? ' — present' : ' — not yet added'}</span>{!met && <span className="ml-1 text-xs italic text-stone-600" data-testid="lexicon-maturity-not-yet-added">not yet added</span>}</span></li>; })}
 </ul>;
 
 export const CERTAINTY_LABELS: Record<CertaintyLevel, string> = {

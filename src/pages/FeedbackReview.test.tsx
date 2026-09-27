@@ -353,6 +353,84 @@ describe("FeedbackReview stale case responses", () => {
     // The decided case's row still reflects the recorded decision.
     expect(byTestId(`feedback-review-item-${IDS.A}`)?.textContent).toContain("Resolved");
   });
+
+  // Re-opening the SAME case while its decision is in flight: the decision's
+  // refresh read takes over the request counter and the re-open read is
+  // dropped, so the refresh must settle the loading state itself.
+  async function reopenDuringDecision(refreshRead: () => Promise<ReturnType<typeof detailOf>>) {
+    const decision = deferred<ReturnType<typeof parseReviewDecisionResult>>();
+    const reopen = deferred<ReturnType<typeof detailOf>>();
+    let reads = 0;
+    const client = fakeClient({
+      getCase: vi.fn(() => {
+        reads += 1;
+        if (reads === 1) return Promise.resolve(detailOf("A_stage0", IDS.A));
+        if (reads === 2) return reopen.promise;
+        return refreshRead();
+      }),
+    });
+    client.decide.mockReturnValue(decision.promise);
+    await render(client);
+    await click(`feedback-review-item-${IDS.A}`);
+    await click("feedback-decision-reject");
+    await type("feedback-decision-input", C._meta.inputs_used.REJECT_REASON);
+    await click("feedback-decision-review");
+    await click("feedback-decision-confirm-button");
+
+    await click(`feedback-review-item-${IDS.A}`);
+    expect(byTestId("feedback-review-page")?.textContent).toContain("Loading case…");
+
+    await act(async () => { decision.resolve(parseReviewDecisionResult(C.decisions.reject_A.body, "reject", IDS.A)); });
+    await flush();
+    // The dropped re-open read answers last and must change nothing.
+    await act(async () => { reopen.resolve(detailOf("A_stage0", IDS.A)); });
+    await flush();
+    return { client, reads: () => reads };
+  }
+
+  it("clears the loading state when the same case is re-opened during its decision and the refresh succeeds", async () => {
+    const { reads } = await reopenDuringDecision(() => Promise.resolve(detailOf("A_stage1", IDS.A)));
+    expect(reads()).toBe(3);
+    expect(byTestId("feedback-review-page")?.textContent).not.toContain("Loading case…");
+    expect(highlighted()).toBe(`feedback-review-item-${IDS.A}`);
+    expect(shownCaseId()).toBe(IDS.A);
+    expect(byTestId("feedback-review-events")?.textContent).toContain("owner decision rejected");
+    expect(byTestId("feedback-review-detail-error")).toBeNull();
+  });
+
+  it("says the decision was recorded, and stops loading, when that refresh read fails", async () => {
+    await reopenDuringDecision(() => Promise.reject(new EvidenceFeedbackReviewError(0, "NETWORK_UNAVAILABLE")));
+    const page = byTestId("feedback-review-page")?.textContent ?? "";
+    expect(page).not.toContain("Loading case…");
+    const error = byTestId("feedback-review-detail-error")?.textContent ?? "";
+    expect(error).toContain("The decision was recorded");
+    expect(error).toContain("Select the case again");
+    // Never the generic copy that claims nothing changed.
+    expect(error).not.toContain("Nothing was changed");
+    expect(byTestId(`feedback-review-item-${IDS.A}`)?.textContent).toContain("Resolved");
+    // No outage page replaces the review page for a failed re-read.
+    expect(byTestId("feedback-review-access-outage")).toBeNull();
+  });
+
+  it("reports a failed refresh after an ordinary decision without hiding the recorded result", async () => {
+    const client = fakeClient();
+    client.decide.mockResolvedValue(parseReviewDecisionResult(C.decisions.reject_A.body, "reject", IDS.A));
+    await render(client);
+    await click(`feedback-review-item-${IDS.A}`);
+    client.getCase.mockRejectedValueOnce(new EvidenceFeedbackReviewError(0, "NETWORK_UNAVAILABLE"));
+    await click("feedback-decision-reject");
+    await type("feedback-decision-input", C._meta.inputs_used.REJECT_REASON);
+    await click("feedback-decision-review");
+    await click("feedback-decision-confirm-button");
+    expect(byTestId("feedback-review-decision-result")?.textContent).toContain("Decision recorded: reject");
+    expect(byTestId("feedback-review-detail-error")?.textContent).toContain("The decision was recorded");
+    expect(byTestId("feedback-review-page")?.textContent).not.toContain("Loading case…");
+    // Selecting the case again reloads it and clears the note.
+    client.getCase.mockResolvedValueOnce(detailOf("A_stage1", IDS.A));
+    await click(`feedback-review-item-${IDS.A}`);
+    expect(byTestId("feedback-review-detail-error")).toBeNull();
+    expect(byTestId("feedback-review-events")?.textContent).toContain("owner decision rejected");
+  });
 });
 
 describe("FeedbackReview decisions", () => {
