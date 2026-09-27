@@ -4,7 +4,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { EvidenceFeedbackCase } from '@/lib/evidenceFeedback';
+import defectKindCapture from '@/lib/__fixtures__/evidenceFeedbackDefectKind.realBackend.json';
+import { TRIVIAL_DEFECT_KINDS, type EvidenceFeedbackCase, type EvidenceObjectType } from '@/lib/evidenceFeedback';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -179,5 +180,131 @@ describe('EvidenceFeedbackControl', () => {
     expect(container.textContent).toContain('has not been changed');
     expect(container.textContent).not.toContain('resolved');
     expect(container.textContent).not.toContain('triage begins');
+  });
+
+  describe('defect kind ("What kind of problem is it?")', () => {
+    // REAL submit responses captured from the Calyx backend running LOCALLY
+    // (SYNTHETIC inputs; see the fixture's _meta).
+    const captured = defectKindCapture as unknown as { responses: Record<string, { body: unknown }> };
+    const submitted = (key: string) => captured.responses[key].body;
+
+    function renderFor(objectType: EvidenceObjectType, objectId = 'lexicon:flower'): void {
+      act(() => {
+        root.render(
+          <EvidenceFeedbackControl
+            objectId={objectId}
+            objectType={objectType}
+            objectPayload={{ preferred_term: 'Flower', review_state: 'draft' }}
+            pageContext="/lexicon/flower"
+            objectLabel="Flower"
+          />,
+        );
+      });
+      act(() => (container.querySelector('button') as HTMLButtonElement).click());
+    }
+
+    async function choose(select: HTMLSelectElement, value: string): Promise<void> {
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set;
+      await act(async () => {
+        setter?.call(select, value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+
+    async function fill(id: string, value: string): Promise<void> {
+      const element = container.querySelector(`#${CSS.escape(id)}`) as HTMLTextAreaElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+      await act(async () => {
+        setter?.call(element, value);
+        element.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    const feedbackClass = () => container.querySelector('#feedback-class-lexicon\\:flower') as HTMLSelectElement;
+    const defectKind = () => container.querySelector('[data-testid="feedback-defect-kind"]') as HTMLSelectElement | null;
+    const submit = async () => {
+      await act(async () => {
+        (container.querySelector('form') as HTMLFormElement).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      });
+    };
+
+    it('offers exactly the backend trivial kinds plus "other / not sure", only for a lexicon correction', async () => {
+      renderFor('lexicon');
+      expect(defectKind()).toBeNull();
+      await choose(feedbackClass(), 'suggest_correction');
+      const select = defectKind()!;
+      expect(container.querySelector('label[for="feedback-defect-kind-lexicon:flower"]')?.textContent).toBe('What kind of problem is it? (optional)');
+      const options = Array.from(select.options).map((option) => [option.value, option.textContent]);
+      expect(options).toEqual([
+        ['', 'Other / not sure'],
+        ['typo', 'A spelling mistake or typo'],
+        ['format', 'Formatting (capital letters, punctuation or spacing)'],
+      ]);
+      expect(options.slice(1).map(([value]) => value)).toEqual([...TRIVIAL_DEFECT_KINDS]);
+      expect(select.value).toBe('');
+    });
+
+    it('sends the chosen kind with a lexicon correction and shows the captured pending case', async () => {
+      mocks.submit.mockResolvedValue(submitted('submit_lexicon_typo'));
+      renderFor('lexicon');
+      await choose(feedbackClass(), 'suggest_correction');
+      await fill('feedback-statement-lexicon:flower', 'SYNTHETIC: the term is misspelled.');
+      await choose(defectKind()!, 'typo');
+      expect(container.textContent).toContain('Add the corrected wording above');
+      await fill('feedback-replacement-lexicon:flower', 'Column (SYNTHETIC)');
+      expect(container.textContent).not.toContain('Add the corrected wording above');
+      await submit();
+
+      expect(mocks.submit).toHaveBeenCalledTimes(1);
+      expect(mocks.submit.mock.calls[0][0]).toMatchObject({
+        objectType: 'lexicon',
+        feedbackClass: 'suggest_correction',
+        proposedReplacement: 'Column (SYNTHETIC)',
+        defectKind: 'typo',
+      });
+      expect(container.textContent).toContain('Correction pending review. The displayed scientific content has not been changed.');
+      expect(container.textContent).toContain('deterministic');
+    });
+
+    it('sends no defect kind for "other / not sure"', async () => {
+      mocks.submit.mockResolvedValue(submitted('submit_lexicon_not_sure'));
+      renderFor('lexicon');
+      await choose(feedbackClass(), 'suggest_correction');
+      await fill('feedback-statement-lexicon:flower', 'SYNTHETIC: this wording seems off.');
+      await choose(defectKind()!, 'format');
+      await choose(defectKind()!, '');
+      await submit();
+      expect(mocks.submit.mock.calls[0][0].defectKind).toBeUndefined();
+    });
+
+    it('drops a chosen kind when the feedback is no longer a correction', async () => {
+      mocks.submit.mockResolvedValue({ created: true, duplicate_of: null, case: feedbackCase });
+      renderFor('lexicon');
+      await choose(feedbackClass(), 'suggest_correction');
+      await choose(defectKind()!, 'typo');
+      await choose(feedbackClass(), 'report_problem');
+      expect(defectKind()).toBeNull();
+      await fill('feedback-statement-lexicon:flower', 'The definition needs a source.');
+      await submit();
+      expect(mocks.submit.mock.calls[0][0].defectKind).toBeUndefined();
+    });
+
+    it('never asks on a Matrix identification, which always goes to scientific review', async () => {
+      mocks.submit.mockResolvedValue(submitted('submit_matrix_typo_label'));
+      renderFor('matrix_identification', 'matrix:session');
+      const classSelect = container.querySelector('#feedback-class-matrix\\:session') as HTMLSelectElement;
+      await choose(classSelect, 'suggest_correction');
+      expect(defectKind()).toBeNull();
+      const statement = container.querySelector('#feedback-statement-matrix\\:session') as HTMLTextAreaElement;
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+      await act(async () => {
+        setter?.call(statement, 'SYNTHETIC: a candidate name is misspelled.');
+        statement.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await submit();
+      expect(mocks.submit.mock.calls[0][0]).toMatchObject({ objectType: 'matrix_identification' });
+      expect(mocks.submit.mock.calls[0][0].defectKind).toBeUndefined();
+      expect(container.textContent).toContain('scientific');
+    });
   });
 });
