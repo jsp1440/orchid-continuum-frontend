@@ -115,9 +115,69 @@ export async function searchSpecies(q: string, limit = 20, signal?: AbortSignal)
 }
 
 export interface SpeciesDossierData { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; specific_epithet?: string; species?: string; family?: string; tribe?: string | null; subfamily?: string | null; authority?: string; common_name?: string | null; conservation_status?: string | null; iucn_code?: string | null; region?: string | null; habitat?: string | null; description?: string | null; representative_image_url?: string | null; hero_image_url?: string | null; }
+/**
+ * Outcome of looking a species record up by the public API's taxonomy_id.
+ *
+ * `reported_absent` means the species service itself answered 404/410 with a
+ * JSON body of its own. It is NOT proof that no such taxon exists: this detail
+ * endpoint 404s in production even for real ids its own search links to, so
+ * callers must treat it like "no answer" and never as evidence of absence.
+ * A bare framework or proxy route miss (`{"detail":"Not Found"}`,
+ * `{"message":"Not Found"}`, an HTML or empty body), any other status, a
+ * network error, a timeout or a 2xx body that is not a record is `unavailable`.
+ */
+export type SpeciesLookupOutcome =
+  | { state: 'found'; data: SpeciesDossierData }
+  | { state: 'reported_absent'; httpStatus: number }
+  | { state: 'unavailable'; httpStatus: number };
+
+/** A 404 body that names no record at all: a framework/proxy "no such route" answer. */
+export function isRouteMissBody(body: string): boolean {
+  const text = body.trim();
+  if (!text) return true;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    return true; // HTML or plain text from a proxy or static host
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return true;
+  const record = parsed as Record<string, unknown>;
+  const keys = Object.keys(record);
+  if (keys.length === 0) return true;
+  const message = record.detail ?? record.message ?? record.error;
+  return keys.length === 1 && typeof message === 'string' && /^not found\.?$/i.test(message.trim());
+}
+
+export async function lookupSpeciesById(taxonomyId: string, signal?: AbortSignal): Promise<SpeciesLookupOutcome> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+  if (signal) { if (signal.aborted) controller.abort(); else signal.addEventListener('abort', () => controller.abort()); }
+  try {
+    const res = await fetch(`${OC_BACKEND_BASE}/api/species/${encodeURIComponent(taxonomyId)}`, {
+      signal: controller.signal,
+      headers: { Accept: 'application/json' },
+    });
+    if (res.ok) {
+      const data = (await res.json().catch(() => null)) as unknown;
+      return data && typeof data === 'object' && !Array.isArray(data)
+        ? { state: 'found', data: data as SpeciesDossierData }
+        : { state: 'unavailable', httpStatus: res.status };
+    }
+    if (res.status === 404 || res.status === 410) {
+      const body = await res.text().catch(() => '');
+      if (!isRouteMissBody(body)) return { state: 'reported_absent', httpStatus: res.status };
+    }
+    return { state: 'unavailable', httpStatus: res.status };
+  } catch {
+    return { state: 'unavailable', httpStatus: 0 };
+  } finally {
+    clearTimeout(timer);
+  }
+}
 export async function fetchSpeciesById(taxonomyId: string, signal?: AbortSignal): Promise<SpeciesDossierData | null> {
-  const { data } = await getJson<SpeciesDossierData>(`${OC_BACKEND_BASE}/api/species/${encodeURIComponent(taxonomyId)}`, signal);
-  return data;
+  const outcome = await lookupSpeciesById(taxonomyId, signal);
+  return outcome.state === 'found' ? outcome.data : null;
 }
 
 export interface MycorrhizalPartner { fungal_taxon?: string; family?: string; type?: string; note?: string; }
