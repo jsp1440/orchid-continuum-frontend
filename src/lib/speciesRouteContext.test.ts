@@ -6,9 +6,19 @@ import {
   speciesRouteQuery,
   speciesSearchHref,
   speciesSearchParamsForQuery,
-  speciesQueryAfterGenusRouteChange,
+  speciesQueryAfterRouteQueryChange,
   speciesQueryPreservesGenusFilter,
+  stripSpeciesQueryFormatCharacters,
 } from './speciesRouteContext';
+
+// Every bidirectional control a shared link could use to reorder page copy:
+// LRM, RLM, ALM, the embeddings/overrides LRE…RLO and the isolates LRI…PDI.
+const BIDI_CONTROLS = [
+  '\u200E', '\u200F', '\u061C',
+  '\u202A', '\u202B', '\u202C', '\u202D', '\u202E',
+  '\u2066', '\u2067', '\u2068', '\u2069',
+];
+const BIDI_PATTERN = /[\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/;
 
 describe('resolveSpeciesGenusFilter', () => {
   it('preserves one bounded canonical genus', () => {
@@ -53,20 +63,26 @@ describe('speciesQueryPreservesGenusFilter', () => {
   });
 });
 
-describe('speciesQueryAfterGenusRouteChange', () => {
+describe('speciesQueryAfterRouteQueryChange', () => {
   it('hydrates a newly arrived canonical genus into the search box', () => {
-    expect(speciesQueryAfterGenusRouteChange('', 'Phalaenopsis', 'Dracula')).toBe('Phalaenopsis');
-    expect(speciesQueryAfterGenusRouteChange('Dracula', 'Phalaenopsis', 'Dracula')).toBe('Phalaenopsis');
+    expect(speciesQueryAfterRouteQueryChange('', 'Phalaenopsis', 'Dracula')).toBe('Phalaenopsis');
+    expect(speciesQueryAfterRouteQueryChange('Dracula', 'Phalaenopsis', 'Dracula')).toBe('Phalaenopsis');
   });
 
   it('clears an old route-owned genus when browser navigation removes the filter', () => {
-    expect(speciesQueryAfterGenusRouteChange('Phalaenopsis', '', 'Phalaenopsis')).toBe('');
-    expect(speciesQueryAfterGenusRouteChange('Phalaenopsis', '', '  Phalaenopsis  ')).toBe('');
+    expect(speciesQueryAfterRouteQueryChange('Phalaenopsis', '', 'Phalaenopsis')).toBe('');
+    expect(speciesQueryAfterRouteQueryChange('Phalaenopsis', '', '  Phalaenopsis  ')).toBe('');
   });
 
   it('does not erase an independent free-text query when the route filter disappears', () => {
-    expect(speciesQueryAfterGenusRouteChange('Phalaenopsis', '', 'Dracula')).toBe('Dracula');
-    expect(speciesQueryAfterGenusRouteChange('', '', 'Vanilla')).toBe('Vanilla');
+    expect(speciesQueryAfterRouteQueryChange('Phalaenopsis', '', 'Dracula')).toBe('Dracula');
+    expect(speciesQueryAfterRouteQueryChange('', '', 'Vanilla')).toBe('Vanilla');
+  });
+
+  it('treats a free-text ?q= route query the same way as a genus', () => {
+    expect(speciesQueryAfterRouteQueryChange('', 'Notagenus fakeus', 'Dracula')).toBe('Notagenus fakeus');
+    expect(speciesQueryAfterRouteQueryChange('Notagenus fakeus', '', 'Notagenus fakeus')).toBe('');
+    expect(speciesQueryAfterRouteQueryChange('Notagenus fakeus', '', 'Vanilla')).toBe('Vanilla');
   });
 });
 
@@ -87,6 +103,38 @@ describe('resolveSpeciesQueryParam', () => {
     expect(resolveSpeciesQueryParam('Dracula\u0000\nvampira\t')).toBe('Dracula  vampira');
   });
 
+  it.each(BIDI_CONTROLS.map((c) => [`U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`, c]))(
+    'strips the bidirectional control %s wherever it appears',
+    (_label, control) => {
+      expect(resolveSpeciesQueryParam(`${control}ABC`)).toBe('ABC');
+      expect(resolveSpeciesQueryParam(`Dracula${control} vampira${control}`)).toBe('Dracula vampira');
+      expect(resolveSpeciesQueryParam(`  ${control}  `)).toBe('');
+    },
+  );
+
+  it('strips the reversing payload from a shared link, leaving the visible text', () => {
+    const payload = '\u202EABC \u2066try another\u2069\u202C';
+    const resolved = resolveSpeciesQueryParam(payload);
+    expect(resolved).toBe('ABC try another');
+    expect(resolved).not.toMatch(BIDI_PATTERN);
+  });
+
+  it('removes other invisible format characters without splitting the word they sit in', () => {
+    // Soft hyphen, zero-width space/non-joiner/joiner, word joiner, BOM, a tag character.
+    expect(resolveSpeciesQueryParam('Phalae\u00ADnopsis')).toBe('Phalaenopsis');
+    expect(resolveSpeciesQueryParam('Dra\u200Bcu\u200Cl\u200Da\u2060')).toBe('Dracula');
+    expect(resolveSpeciesQueryParam('\uFEFFVanilla\u{E0041}')).toBe('Vanilla');
+  });
+
+  it('turns Unicode line and paragraph separators into spaces', () => {
+    expect(resolveSpeciesQueryParam('Dracula\u2028vampira\u2029')).toBe('Dracula vampira');
+  });
+
+  it('bounds the query after stripping, so invisible padding cannot push visible text out', () => {
+    const resolved = resolveSpeciesQueryParam(`${'\u202E'.repeat(300)}Dracula`);
+    expect(resolved).toBe('Dracula');
+  });
+
   it('keeps markup as the literal text it is (rendering escapes it)', () => {
     expect(resolveSpeciesQueryParam('<img src=x onerror=alert(1)>')).toBe('<img src=x onerror=alert(1)>');
   });
@@ -97,6 +145,15 @@ describe('resolveSpeciesQueryParam', () => {
     const bounded = resolveSpeciesQueryParam(astral);
     expect(Array.from(bounded)).toHaveLength(SPECIES_QUERY_MAX_LENGTH);
     expect(bounded).toBe('\u{1F33A}'.repeat(SPECIES_QUERY_MAX_LENGTH));
+  });
+});
+
+describe('stripSpeciesQueryFormatCharacters', () => {
+  it('removes bidi and other format characters but keeps spacing exactly as typed', () => {
+    expect(stripSpeciesQueryFormatCharacters(' Dracula\u202E ')).toBe(' Dracula ');
+    expect(stripSpeciesQueryFormatCharacters(BIDI_CONTROLS.join(''))).toBe('');
+    expect(stripSpeciesQueryFormatCharacters('Cattleya × guatemalensis')).toBe('Cattleya × guatemalensis');
+    expect(stripSpeciesQueryFormatCharacters('Épidendrum ñandú \u{1F33A}')).toBe('Épidendrum ñandú \u{1F33A}');
   });
 });
 
@@ -125,6 +182,12 @@ describe('speciesSearchHref', () => {
   it('bounds the carried name', () => {
     const url = new URL(speciesSearchHref(`Notagenus ${'x'.repeat(400)}`), 'https://continuum.local');
     expect(Array.from(url.searchParams.get('q') ?? '')).toHaveLength(SPECIES_QUERY_MAX_LENGTH);
+  });
+
+  it('never carries a bidirectional control into the link', () => {
+    const href = speciesSearchHref('Notagenus\u202E fakeus\u2067');
+    expect(href).toBe('/species?q=Notagenus%20fakeus');
+    expect(decodeURIComponent(href)).not.toMatch(BIDI_PATTERN);
   });
 
   it.each(['', '   ', null, undefined, '987654321', 'taxon:world-plants:phalaenopsis-amabilis'])(
@@ -164,6 +227,12 @@ describe('speciesSearchParamsForQuery', () => {
 });
 
 describe('speciesRouteQuery', () => {
+  it('reads a shared q without its bidirectional controls', () => {
+    const params = new URLSearchParams(`q=${encodeURIComponent('\u202EABC\u200F')}`);
+    expect(speciesRouteQuery(params)).toBe('ABC');
+    expect(speciesSearchParamsForQuery(params, speciesRouteQuery(params)).toString()).toBe('q=ABC');
+  });
+
   it('prefers an explicit q, then a valid genus, then nothing', () => {
     expect(speciesRouteQuery(new URLSearchParams('q=Dracula&genus=Phalaenopsis'))).toBe('Dracula');
     expect(speciesRouteQuery(new URLSearchParams('genus=Phalaenopsis'))).toBe('Phalaenopsis');

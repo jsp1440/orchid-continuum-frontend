@@ -24,7 +24,7 @@ describe('Atlas workspace → Species genus handoff', () => {
     expect(speciesSource).toContain("searchParams.get('genus')");
     expect(speciesSource).toContain('useState(() => urlQueryParam || genusFilter)');
     expect(speciesSource).toContain('Filtering by');
-    expect(speciesSource).toContain('Genus: {genusFilter}');
+    expect(speciesSource).toContain('Genus: <bdi>{genusFilter}</bdi>');
   });
 
   it('does not carry Atlas locality, record, provenance, or evidence material', () => {
