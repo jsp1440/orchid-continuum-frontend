@@ -178,8 +178,9 @@ integration holds exactly the checked merge.
   - registry character ids that mention elevation or altitude currently come out
     as "withheld".
 - Dossier resolution needs a synonym source.
-- When the species services are down, a known taxon's dossier also says the
-  record is not confirmed; it cannot tell "unknown" from "unreachable" there.
+- When the species services are down, every dossier, including a known
+  taxon's, shows "Record not confirmed" with a retry. That is honest, but known
+  taxa would need a cached or bundled taxon index to still render.
 - Colour contrast just under 4.5:1 needs a design-system decision: Lexicon
   green `#4A7C59` headings, muted `#7a7466` on dark Species/Atlas pages, and
   `text-white/40` on `/conservation`.
