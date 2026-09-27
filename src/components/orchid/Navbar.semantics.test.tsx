@@ -357,3 +357,41 @@ describe('account menu', () => {
     expect(document.activeElement).toBe(account());
   });
 });
+
+describe('the current item is marked by more than colour', () => {
+  const underlined = (el: Element) => el.classList.contains('underline');
+
+  it('underlines only the current desktop item', async () => {
+    await mount('/species/Phalaenopsis%20amabilis');
+    const links = [...desktopNav().querySelectorAll('a')];
+    const current = links.filter((a) => a.getAttribute('aria-current') === 'page');
+    expect(current.map((a) => a.textContent)).toEqual(['Species']);
+    expect(underlined(current[0])).toBe(true);
+    expect(links.filter((a) => a !== current[0] && underlined(a))).toEqual([]);
+  });
+
+  it('underlines More when the current page is one of its items, and rules that item in the menu', async () => {
+    await mount('/lexicon');
+    expect(underlined(moreButton())).toBe(true);
+    expect(PRIMARY.some(([label]) => underlined(linkIn(desktopNav(), label)!))).toBe(false);
+    await click(moreButton());
+    const items = [...moreMenu()!.querySelectorAll('a')];
+    const current = items.filter((a) => a.getAttribute('aria-current') === 'page');
+    expect(current).toHaveLength(1);
+    expect(current[0].classList.contains('border-[#1f3d2b]')).toBe(true);
+    expect(items.filter((a) => a !== current[0] && a.classList.contains('border-[#1f3d2b]'))).toEqual([]);
+  });
+
+  it('does not underline More on a primary page', async () => {
+    await mount('/atlas');
+    expect(underlined(moreButton())).toBe(false);
+    expect(underlined(linkIn(desktopNav(), 'Atlas')!)).toBe(true);
+  });
+
+  it('underlines only the current item in the phone drawer', async () => {
+    await mount('/atlas');
+    await click(toggle());
+    const marked = [...drawer()!.querySelectorAll('a')].filter(underlined);
+    expect(marked.map((a) => [a.textContent, a.getAttribute('aria-current')])).toEqual([['Atlas', 'page']]);
+  });
+});

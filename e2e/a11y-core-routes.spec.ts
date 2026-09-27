@@ -362,3 +362,21 @@ test.describe("Lexicon record-maturity notes meet AA contrast", () => {
     });
   }
 });
+
+test.describe("the current navigation item is marked by more than colour", () => {
+  // Forest green and charcoal are nearly the same on the cream bar, including
+  // over the dark Species surface, so the current item also carries an
+  // underline that a sighted visitor can see (aria-current is for AT).
+  test("on the dark Species surface, only the current item is underlined", async ({ browser }) => {
+    const context = await openContext(browser, 1440, 900);
+    const page = await context.newPage();
+    await settle(page, "/species");
+    const nav = page.getByRole("navigation", { name: "Primary", exact: true });
+    const decorations = await nav.locator("a").evaluateAll((anchors) =>
+      anchors.map((a) => ({ text: a.textContent?.trim(), current: a.getAttribute("aria-current"), line: getComputedStyle(a).textDecorationLine })),
+    );
+    const underlined = decorations.filter((d) => d.line.includes("underline"));
+    expect(underlined).toEqual([{ text: "Species", current: "page", line: "underline" }]);
+    await context.close();
+  });
+});
