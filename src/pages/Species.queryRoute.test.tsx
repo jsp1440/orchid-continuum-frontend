@@ -225,3 +225,92 @@ describe('species search keeps the URL in step', () => {
     expect(input().value).toBe('');
   });
 });
+
+const BIDI_PATTERN = /[‎‏؜‪-‮⁦-⁩]/;
+const echo = () => container.querySelector('bdi');
+
+describe('species search neutralises bidirectional overrides in shared queries', () => {
+  // A shared link whose query tries to reverse the copy around its echo.
+  const payload = '‮ABC⁦ try⁩‏؜';
+
+  it('strips them from the box, the search, the URL and the echoed copy', async () => {
+    mount(`/species?q=${encodeURIComponent(payload)}`);
+    await settle();
+    expect(input().value).toBe('ABC try');
+    expect(searchedTerms()).toEqual(['ABC try']);
+    expect(urlQuery()).toBe('ABC try');
+    expect(router.state.location.search).toBe('?q=ABC+try');
+    expect(text()).toContain('No species matched “ABC try” · try another term');
+    expect(text()).not.toMatch(BIDI_PATTERN);
+  });
+
+  it('treats a query made only of bidi controls as no query', async () => {
+    mount(`/species?q=${encodeURIComponent('‮⁧‏')}`);
+    await settle();
+    expect(input().value).toBe('');
+    expect(searchedTerms()).toEqual([]);
+    expect(router.state.location.search).toBe('');
+  });
+
+  it('strips them from what the visitor types or pastes, keeping the spacing typed', async () => {
+    mount('/species');
+    await type('Dracula‮ ');
+    expect(input().value).toBe('Dracula ');
+    expect(urlQuery()).toBe('Dracula');
+    expect(searchedTerms()).toEqual(['Dracula']);
+    expect(text()).not.toMatch(BIDI_PATTERN);
+  });
+
+  it('isolates the echoed query in <bdi> in the no-matches state', async () => {
+    mount('/species?q=Dracula');
+    await settle();
+    const isolated = echo();
+    expect(isolated?.textContent).toBe('Dracula');
+    expect(isolated?.parentElement?.textContent).toBe('No species matched “Dracula” · try another term');
+  });
+
+  it('isolates the echoed query in <bdi> in the unavailable state', async () => {
+    mocks.searchSpeciesOutcome.mockResolvedValue({ status: 'unavailable', httpStatus: 503 });
+    mount('/species?q=Dracula');
+    await settle();
+    const panel = container.querySelector('[data-testid="species-search-unavailable"]')!;
+    const isolated = panel.querySelector('bdi');
+    expect(isolated?.textContent).toBe('Dracula');
+    expect(isolated?.parentElement?.textContent).toContain('no results can be shown for “Dracula”.');
+  });
+
+  it('isolates the genus named in the filter chip in <bdi>', async () => {
+    mount('/species?genus=Phalaenopsis');
+    await settle();
+    const chip = Array.from(container.querySelectorAll('a')).find((a) => a.textContent === 'Genus: Phalaenopsis');
+    expect(chip?.querySelector('bdi')?.textContent).toBe('Phalaenopsis');
+  });
+});
+
+describe('species search is keyed on the normalised term, not the raw box value', () => {
+  it('starts no new search for an edit that leaves the searched term unchanged', async () => {
+    mount('/species');
+    await type('Dracula');
+    expect(searchedTerms()).toEqual(['Dracula']);
+    await type('Dracula ');
+    await type('  Dracula  ');
+    await settle(2000);
+    expect(input().value).toBe('  Dracula  ');
+    expect(searchedTerms()).toEqual(['Dracula']);
+  });
+
+  it('starts no new search when a shared query differs from the box only by padding', async () => {
+    mount(`/species?q=${encodeURIComponent('  Dracula  ')}`);
+    await settle();
+    await type('Dracula ');
+    await settle(2000);
+    expect(searchedTerms()).toEqual(['Dracula']);
+  });
+
+  it('still searches again once the normalised term really changes', async () => {
+    mount('/species');
+    await type('Dracula ');
+    await type('Dracula v');
+    expect(searchedTerms()).toEqual(['Dracula', 'Dracula v']);
+  });
+});

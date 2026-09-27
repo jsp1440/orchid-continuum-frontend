@@ -9,9 +9,10 @@ import {
   SPECIES_QUERY_MAX_LENGTH,
   resolveSpeciesGenusFilter,
   resolveSpeciesQueryParam,
-  speciesQueryAfterGenusRouteChange,
+  speciesQueryAfterRouteQueryChange,
   speciesRouteQuery,
   speciesSearchParamsForQuery,
+  stripSpeciesQueryFormatCharacters,
 } from '@/lib/speciesRouteContext';
 
 /**
@@ -29,7 +30,10 @@ import {
  * address is replaced while the visitor types; submitting (Enter, or a
  * suggestion) commits the current entry, so the next edit starts a new history
  * entry and Back returns to the committed search. The query is bounded plain
- * text: it is rendered as text and sent URL-encoded, never as markup.
+ * text: it is rendered as text and sent URL-encoded, never as markup. Invisible
+ * format characters (bidirectional overrides and the like) are stripped from
+ * the URL and from typing, and every echo of the query sits in a <bdi> so the
+ * visitor's text can never change the direction of the copy around it.
  */
 
 const SUGGESTIONS = [
@@ -75,7 +79,7 @@ const Species: React.FC = () => {
     routeQueryRef.current = routeQuery;
     entryCommittedRef.current = Boolean(urlQueryParam);
     setQuery((currentQuery) =>
-      speciesQueryAfterGenusRouteChange(previousRouteQuery, routeQuery, currentQuery),
+      speciesQueryAfterRouteQueryChange(previousRouteQuery, routeQuery, currentQuery),
     );
   }, [routeQuery, urlQueryParam]);
 
@@ -114,8 +118,11 @@ const Species: React.FC = () => {
     // the same moment (speciesSearchParamsForQuery) so the UI never claims
     // "Filtering by Phalaenopsis" while the backend is actually searching
     // Dracula (or any other free-text subject).
-    applyQueryToRoute(nextQuery, { commit });
-    setQuery(nextQuery);
+    // Invisible format characters (e.g. a pasted right-to-left override) are
+    // dropped as they arrive; spacing is left alone so typing is not disturbed.
+    const typed = stripSpeciesQueryFormatCharacters(nextQuery);
+    applyQueryToRoute(typed, { commit });
+    setQuery(typed);
   };
 
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
@@ -123,7 +130,8 @@ const Species: React.FC = () => {
     applyQueryToRoute(query, { commit: true });
   };
 
-  // Debounced live search.
+  // Debounced live search, keyed on the normalised term: an edit that does not
+  // change what would be searched (e.g. trailing whitespace) starts no search.
   const searchTerm = resolveSpeciesQueryParam(query);
   useEffect(() => {
     const q = searchTerm;
@@ -215,7 +223,7 @@ const Species: React.FC = () => {
                   to={`/genus/${encodeURIComponent(genusFilter)}`}
                   className="font-mono text-[10px] tracking-[0.16em] uppercase text-[#c9a24a] hover:underline"
                 >
-                  Genus: {genusFilter}
+                  Genus: <bdi>{genusFilter}</bdi>
                 </Link>
                 <button
                   type="button"
@@ -264,7 +272,7 @@ const Species: React.FC = () => {
               </p>
               <p className="mt-3 text-[13px] leading-relaxed text-[#cfc8b8]/80 [overflow-wrap:anywhere]">
                 The species service could not be reached, so no results can be shown for
-                &ldquo;{searchTerm}&rdquo;. This is not a statement that no species matched.
+                &ldquo;<bdi>{searchTerm}</bdi>&rdquo;. This is not a statement that no species matched.
               </p>
               <button
                 type="button"
@@ -278,7 +286,7 @@ const Species: React.FC = () => {
 
           {searched && !loading && !unavailable && results.length === 0 && (
             <div className="mt-6 rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 p-8 text-center font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466] [overflow-wrap:anywhere]">
-              No species matched &ldquo;{searchTerm}&rdquo; · try another term
+              No species matched &ldquo;<bdi>{searchTerm}</bdi>&rdquo; · try another term
             </div>
           )}
 

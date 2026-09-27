@@ -34,21 +34,22 @@ export function speciesQueryPreservesGenusFilter(
 }
 
 /**
- * Keep the Species search box synchronized when browser/history navigation
- * changes the route-derived genus.
+ * The Species search box's next value when browser/history navigation or an
+ * in-app link changes the route-derived query: an explicit `?q=` or, failing
+ * that, a canonical `?genus=` (see {@link speciesRouteQuery}).
  *
- * A newly supplied canonical genus owns the query and replaces the prior
- * route/query state. When route navigation removes the genus, clear the query
- * only if it is still the old route-owned genus. A visitor's independent
- * free-text query must survive that route transition.
+ * A newly supplied route query owns the box and replaces the prior
+ * route/query state. When route navigation removes the route query, clear the
+ * box only if it still holds that old route-owned query. A visitor's
+ * independent free-text query must survive that route transition.
  */
-export function speciesQueryAfterGenusRouteChange(
-  previousGenus: string,
-  nextGenus: string,
+export function speciesQueryAfterRouteQueryChange(
+  previousRouteQuery: string,
+  nextRouteQuery: string,
   currentQuery: string,
 ): string {
-  if (nextGenus) return nextGenus;
-  if (previousGenus && speciesQueryPreservesGenusFilter(previousGenus, currentQuery)) {
+  if (nextRouteQuery) return nextRouteQuery;
+  if (previousRouteQuery && speciesQueryPreservesGenusFilter(previousRouteQuery, currentQuery)) {
     return '';
   }
   return currentQuery;
@@ -57,10 +58,33 @@ export function speciesQueryAfterGenusRouteChange(
 /** Longest free-text species query the route will carry or search for. */
 export const SPECIES_QUERY_MAX_LENGTH = 200;
 
-// C0/C1 control characters (tabs, newlines, NUL, DEL, …) never belong in a
-// one-line search box; they become ordinary spaces before trimming.
+// C0/C1 control characters (tabs, newlines, NUL, DEL, …) and the Unicode
+// line/paragraph separators never belong in a one-line search box; they become
+// ordinary spaces before trimming.
 // eslint-disable-next-line no-control-regex
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g;
+
+// Invisible Unicode format characters (general category Cf) are removed
+// outright. They include the bidirectional controls a shared link could use to
+// reverse the page copy around an echoed query (LRM/RLM U+200E/U+200F, ALM
+// U+061C, embeddings/overrides U+202A–U+202E, isolates U+2066–U+2069), plus
+// zero-width spaces and joiners, word joiners, the soft hyphen, the BOM and
+// tag characters. No orchid name needs any of them: scientific names are
+// written in Latin script, where ZWJ/ZWNJ have no role, so those are removed
+// too. They are deleted rather than turned into spaces so a name pasted with a
+// soft hyphen or zero-width space (`Phalae\u00ADnopsis`) still reads as one word.
+const FORMAT_CHARACTERS = /\p{Cf}/gu;
+
+/**
+ * Remove the invisible format characters (Unicode category Cf, including every
+ * bidirectional control) from free text, leaving everything else, including
+ * surrounding whitespace, as it was. The Species page applies this to what the
+ * visitor types, so the box never holds text that could reorder the page copy
+ * that echoes it, without the trimming {@link resolveSpeciesQueryParam} adds.
+ */
+export function stripSpeciesQueryFormatCharacters(value: string): string {
+  return String(value ?? '').replace(FORMAT_CHARACTERS, '');
+}
 
 /**
  * Normalise free text that is about to become a species search (a `?q=` value
@@ -68,14 +92,16 @@ const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
  * own typing) into bounded plain text.
  *
  * The value is only ever a search string: it is rendered as text (never as
- * markup) and sent URL-encoded. Here it is trimmed, stripped of control
- * characters and cut to {@link SPECIES_QUERY_MAX_LENGTH} characters, counted
+ * markup) and sent URL-encoded. Here it is stripped of invisible format
+ * characters (so a shared link cannot smuggle bidirectional overrides into the
+ * page copy that echoes it), has control characters turned into spaces, is
+ * trimmed, and is cut to {@link SPECIES_QUERY_MAX_LENGTH} characters, counted
  * by code point so a cut never splits a surrogate pair. Whitespace inside the
  * value is kept, so hybrid names such as `Genus × epithet` survive intact.
  */
 export function resolveSpeciesQueryParam(value: string | null | undefined): string {
   if (value == null) return '';
-  const plain = String(value).replace(CONTROL_CHARACTERS, ' ').trim();
+  const plain = stripSpeciesQueryFormatCharacters(String(value)).replace(CONTROL_CHARACTERS, ' ').trim();
   const codePoints = Array.from(plain);
   if (codePoints.length <= SPECIES_QUERY_MAX_LENGTH) return plain;
   return codePoints.slice(0, SPECIES_QUERY_MAX_LENGTH).join('').trim();

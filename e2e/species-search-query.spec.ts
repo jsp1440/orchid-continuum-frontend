@@ -65,6 +65,58 @@ test("an injection payload in ?q= is shown as text and never executes", async ({
   expect(await page.evaluate(() => (window as unknown as { __speciesPwned?: number }).__speciesPwned)).toBeUndefined();
 });
 
+test("a right-to-left override (U+202E) in a shared ?q= cannot reverse the copy around its echo", async ({ page }) => {
+  await answerSearchWithSyntheticEmptyList(page);
+  const searches: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (url.pathname === "/api/species/search") searches.push(url.searchParams.get("q") ?? "");
+  });
+  const bidi = /[\u200E\u200F\u061C\u202A-\u202E\u2066-\u2069]/;
+
+  await page.goto(`/species?q=${encodeURIComponent("\u202EABC")}`);
+  await expect(searchBox(page)).toHaveValue("ABC");
+  const empty = page.getByText("No species matched “ABC” · try another term");
+  await expect(empty).toBeVisible();
+  // The address is normalised in place, and the search asked for the visible text only.
+  await expect.poll(() => urlQuery(page)).toBe("ABC");
+  expect(searches).toEqual(["ABC"]);
+  expect(await page.locator("main").innerText()).not.toMatch(bidi);
+
+  // The echoed query is isolated, and the copy around it still runs left to
+  // right: the lead-in, then the query, then the trailing hint.
+  const order = await empty.evaluate((el) => {
+    const isolated = el.querySelector("bdi");
+    const first = el.firstChild;
+    const last = el.lastChild;
+    if (!isolated || !first || !last || first === isolated || last === isolated) return null;
+    const box = (node: Node) => {
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      return range.getBoundingClientRect();
+    };
+    return {
+      isolated: isolated.textContent,
+      lead: first.textContent,
+      tail: last.textContent,
+      leadRight: box(first).right,
+      queryLeft: box(isolated).left,
+      queryRight: box(isolated).right,
+      tailLeft: box(last).left,
+      sameLine: Math.abs(box(first).top - box(last).top) < 2,
+    };
+  });
+  expect(order).not.toBeNull();
+  expect(order!.isolated).toBe("ABC");
+  expect(order!.lead).toBe("No species matched “");
+  expect(order!.tail).toBe("” · try another term");
+  expect(order!.sameLine).toBe(true);
+  expect(order!.leadRight).toBeLessThanOrEqual(order!.queryLeft + 0.5);
+  expect(order!.queryRight).toBeLessThanOrEqual(order!.tailLeft + 0.5);
+
+  if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/species-q-rlo-neutralised.png`, fullPage: true });
+});
+
 test("typing replaces the address, Enter commits it, and Back returns to the committed search", async ({ page }) => {
   await answerSearchWithSyntheticEmptyList(page);
   await page.goto("/species");
