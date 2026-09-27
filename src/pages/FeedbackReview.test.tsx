@@ -231,6 +231,17 @@ describe("FeedbackReview case detail", () => {
     expect(byTestId("feedback-review-detail")?.textContent).toContain(detailOf("A_stage0", IDS.A).case.submitter_ref!);
   });
 
+  it("never renders an identity key a backend put in event details", async () => {
+    const leaked = structuredClone(C.details.A_stage0.body) as { events: Array<{ details: Record<string, unknown> }> };
+    leaked.events[0].details.submitter_id = "submitter.private@example.org"; // SYNTHETIC leak
+    leaked.events[0].details.reviewer_email = "owner.private@example.org"; // SYNTHETIC leak
+    await render(fakeClient({ getCase: vi.fn(async () => parseReviewCaseDetail(leaked, IDS.A)) }));
+    await click(`feedback-review-item-${IDS.A}`);
+    expect(byTestId("feedback-review-events")).not.toBeNull();
+    expect(container.textContent).not.toContain("@example.org");
+    expect(container.textContent).not.toContain("submitter_id");
+  });
+
   it("offers only the decisions the backend allows", async () => {
     await render(fakeClient());
     await click(`feedback-review-item-${IDS.A}`);
