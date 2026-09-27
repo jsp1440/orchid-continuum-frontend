@@ -88,7 +88,7 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680; FE #862, #868, #869, #870, #872, #873, #877, #879 | Yes, before merge (session checker agents; #1647, #868, #869 and #1678 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
+  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680; FE #862, #868, #869, #870, #872, #873, #877, #879, #881 | Yes, before merge (session checker agents; #1647, #868, #869 and #1678 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
   | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict recorded in this document before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
   | BE #1676 at `b0f410ad`; FE #878 at `0a68e841`; FE #880 at `93bdff3f` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677, FE #879 and FE #881 |
@@ -182,7 +182,7 @@ integration holds exactly the checked merge.
 | Change | What it closes | PR, exact head → integration |
 |---|---|---|
 | Owner-only secret redaction | HTTP Digest `response`/`cnonce`, `curl -u`/`--user` passwords (including partly quoted, multi-line and over-long values), secret header lines and flat header lists | BE #1678 `3ce06f63` → `a0dc23a8` (checker FAIL twice, PASS on the third head) |
-| Member Matrix locality screen | Coordinates without degree signs (DMS with prime marks, hemisphere letters, comma decimals, en-dash signs), UTM/MGRS, plus codes, labelled geohashes, Spanish/Portuguese/French locality words, collector abbreviations, elevation character ids such as `elev_m`/`alt_m`, and full-width or zero-width disguises | BE #1679 `aa8207db` → `eaa9d363`; repaired by BE #1680 `23e5b5a7` → `fdc3ec8f` |
+| Member Matrix locality screen | Common forms (not all; see Post-Release-1 items) of: coordinates without degree signs (DMS with prime marks, hemisphere letters, comma decimals, en-dash signs), UTM/MGRS, plus codes, labelled geohashes, Spanish/Portuguese/French locality words, collector abbreviations, elevation character ids such as `elev_m`/`alt_m`, and full-width or zero-width disguises | BE #1679 `aa8207db` → `eaa9d363`; repaired by BE #1680 `23e5b5a7` → `fdc3ec8f` |
 | Member Matrix explanation rows | **A member-facing leak:** an explanation row kept the registry-authored `candidate_state` (for example an elevation range) even when its character id was withheld, or when the row had no character | BE #1679 and BE #1680 |
 
 Elevation-labelled Matrix characters and their states stay withheld from members; see owner gate 7.
@@ -225,7 +225,10 @@ Elevation-labelled Matrix characters and their states stay withheld from members
   - screen forms not yet covered: DMS written out in words in Spanish, Portuguese
     or French, lowercase hemisphere letters after a bare number (`18.9s`),
     unlabelled geohashes, single comma-decimal values, `herbier`/`exsiccata`,
-    run-together ids (`elevm`, `ELEVmax`), combining marks and homoglyphs;
+    run-together ids (`elevm`, `ELEVmax`), combining marks and homoglyphs,
+    lowercase MGRS (`33twn1234567890`), `18d55mS`, French `au-dessus du niveau
+    de la mer`, Spanish `ejemplar` and `altura`, German `hoehe`, and `alt m` /
+    `Alt [m]` labels;
   - numeric states of a non-withheld character cannot be screened without
     semantics, so registries must not carry locality in numeric states.
 - Dossier resolution needs a synonym source.
@@ -237,6 +240,7 @@ Elevation-labelled Matrix characters and their states stay withheld from members
   `text-white/40` on `/conservation`.
 - Remaining redaction gaps in owner-only views: an unterminated quote in one
   `curl -u` value can expose part of a later `-u` password in the same string;
-  HTTPie `-a user:pw`; odd-length or nested flat header lists; Digest values
-  stored under a non-secret key.
+  an unquoted `\` line continuation inside a `-u` password exposes the part
+  after the break; HTTPie `-a user:pw`; odd-length or nested flat header lists;
+  Digest values stored under a non-secret key.
 - A richer local PostgreSQL harness.
