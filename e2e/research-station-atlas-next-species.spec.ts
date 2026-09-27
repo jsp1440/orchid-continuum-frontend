@@ -107,9 +107,14 @@ test("the workbench offers no Atlas link for an opaque subject taxon id", async 
     timeout: 20_000,
   });
   await expect(page.getByTestId("research-station-atlas-withheld")).toBeVisible();
-  // The site header's plain "Atlas" navigation link (href="/atlas", no
-  // subject) is chrome, not a workbench handoff; every other Atlas link is.
+  // No Atlas link outside the site header at all…
   expect(
     await page.locator('a[href^="/atlas"]:not(header a)').count(),
   ).toBe(0);
+  // …and inside it only the plain "Atlas" navigation item, whose href is
+  // exactly /atlas: no taxon, coordinates or query rides on it.
+  const headerAtlasHrefs = await page
+    .locator('header a[href^="/atlas"]')
+    .evaluateAll((anchors) => anchors.map((a) => a.getAttribute("href")));
+  for (const href of headerAtlasHrefs) expect(href).toBe("/atlas");
 });

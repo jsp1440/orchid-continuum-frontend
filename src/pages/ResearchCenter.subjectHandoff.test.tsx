@@ -302,13 +302,16 @@ describe('research center hands the subject to Atlas Next at its own rank', () =
       expect(container.textContent).toContain(name);
       // …but no Atlas link claims to be its view, and no genus link replaces it.
       expect(atlasLinks()).toHaveLength(0);
-      // (The site header's plain "Atlas" navigation link is chrome and
-      // carries no subject; it is not a Research → Atlas handoff.)
-      expect(
-        [...container.querySelectorAll('a')].some((a) =>
-          !a.closest('header') && (a.getAttribute('href') ?? '').startsWith('/atlas'),
-        ),
-      ).toBe(false);
+      // No Atlas link outside the site header at all…
+      const atlasAnchors = [...container.querySelectorAll('a')].filter((a) =>
+        (a.getAttribute('href') ?? '').startsWith('/atlas'),
+      );
+      expect(atlasAnchors.filter((a) => !a.closest('header'))).toEqual([]);
+      // …and inside it only the plain "Atlas" navigation item, whose href is
+      // exactly /atlas: no taxon, coordinates or query rides on it.
+      for (const a of atlasAnchors.filter((anchor) => anchor.closest('header'))) {
+        expect(a.getAttribute('href')).toBe('/atlas');
+      }
     },
   );
 });
