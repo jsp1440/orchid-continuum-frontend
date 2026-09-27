@@ -51,6 +51,7 @@ import {
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
 import { speciesDossierContinuumActions } from '@/lib/speciesDossierContinuumNavigation';
+import { speciesSearchHref } from '@/lib/speciesRouteContext';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -640,11 +641,13 @@ function RequestedName({ value }: { value: string }) {
   );
 }
 
-function TaxonRecordExits() {
+function TaxonRecordExits({ requested }: { requested: string }) {
+  // "Search species" carries the requested name as a plain-text ?q= so the
+  // visitor lands on a search for it instead of retyping it.
   return (
     <div className="mt-6 flex flex-wrap gap-3">
       <Link
-        to="/species"
+        to={speciesSearchHref(requested)}
         className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-[#c9a24a]/50 font-mono text-[10px] tracking-[0.18em] uppercase text-[#c9a24a] hover:bg-[#c9a24a]/10"
       >
         <SearchX className="h-3.5 w-3.5" /> Search species
@@ -680,7 +683,7 @@ function TaxonRecordNotFound({ requested }: { requested: string }) {
         resolver finds no taxon by this name. The text above is repeated exactly as it was
         requested; it is not an accepted scientific name, and no dossier exists for it.
       </p>
-      <TaxonRecordExits />
+      <TaxonRecordExits requested={requested} />
     </div>
   );
 }
@@ -722,7 +725,7 @@ function TaxonRecordUnavailable({
       >
         <RotateCcw className="h-3 w-3" /> Try again
       </button>
-      <TaxonRecordExits />
+      <TaxonRecordExits requested={requested} />
     </div>
   );
 }

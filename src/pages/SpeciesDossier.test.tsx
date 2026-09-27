@@ -1068,7 +1068,8 @@ describe('a taxon with no record vs one the page cannot confirm (R1 journeys 3, 
     expect(notFoundPanel()?.textContent).not.toMatch(/species directory/i);
     expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith({ name: 'Notagenus fakeus' }, expect.anything());
     const hrefs = Array.from(notFoundPanel()?.querySelectorAll('a') ?? []).map((a) => a.getAttribute('href'));
-    expect(hrefs).toEqual(['/species', '/lexicon']);
+    // "Search species" lands on a search already filled with the requested name.
+    expect(hrefs).toEqual(['/species?q=Notagenus%20fakeus', '/lexicon']);
     expectNoDossierShell();
   });
 
@@ -1089,6 +1090,9 @@ describe('a taxon with no record vs one the page cannot confirm (R1 journeys 3, 
       expect(unavailablePanel()).not.toBeNull();
       expect(container.textContent).toContain('Could not confirm a taxon record for \u2018Probeia publica\u2019');
       expect(container.textContent).not.toContain('no dossier exists');
+      const search = unavailablePanel()?.querySelector('a[href^="/species"]');
+      expect(search?.textContent).toContain('Search species');
+      expect(search?.getAttribute('href')).toBe('/species?q=Probeia%20publica');
       expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith({ name: 'Probeia publica' }, expect.anything());
     }
   });
@@ -1120,6 +1124,8 @@ describe('a taxon with no record vs one the page cannot confirm (R1 journeys 3, 
     expect(requested()?.textContent).toBe('‘987654321’');
     expect(container.textContent).toContain('Could not confirm a taxon record for ‘987654321’');
     expect(mocks.resolveFederatedSpecies).not.toHaveBeenCalled();
+    // A bare id is not a name a species search could match: the unfilled search page.
+    expect(unavailablePanel()?.querySelector('a[href^="/species"]')?.getAttribute('href')).toBe('/species');
     expectNoDossierShell();
   });
 

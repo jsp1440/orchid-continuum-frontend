@@ -41,7 +41,7 @@ test("an invented taxon name shows 'no taxon record found', not an empty dossier
   if (SCREENSHOT_DIR) await page.screenshot({ path: `${SCREENSHOT_DIR}/unknown-taxon-reference-backend.png`, fullPage: true });
 
   await panel.getByRole("link", { name: "Search species" }).click();
-  await expect(page).toHaveURL(/\/species$/);
+  await expect(page).toHaveURL(/\/species\?q=Notagenus%20fakeus$/);
 });
 
 test("a bare numeric id with no record is 'could not confirm', never 'no record found'", async ({ page }) => {

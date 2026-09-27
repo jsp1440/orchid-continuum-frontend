@@ -22,7 +22,7 @@ describe('Atlas workspace → Species genus handoff', () => {
 
   it('lands on a receiving surface that immediately acts on the genus', () => {
     expect(speciesSource).toContain("searchParams.get('genus')");
-    expect(speciesSource).toContain('useState(() => genusFilter)');
+    expect(speciesSource).toContain('useState(() => urlQueryParam || genusFilter)');
     expect(speciesSource).toContain('Filtering by');
     expect(speciesSource).toContain('Genus: {genusFilter}');
   });

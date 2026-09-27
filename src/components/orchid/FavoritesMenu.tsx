@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Star, X, Loader2, Check, CloudOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { speciesSearchHref } from '@/lib/speciesRouteContext';
 import {
   getFavorites,
   toggleFavorite,
@@ -138,7 +139,7 @@ const FavoritesMenu: React.FC = () => {
                   <button
                     onClick={() => {
                       setOpen(false);
-                      navigate('/species');
+                      navigate(speciesSearchHref(name));
                     }}
                     className="flex-1 text-left font-display italic text-[14px] text-ink group-hover:text-forest truncate"
                     title={name}
