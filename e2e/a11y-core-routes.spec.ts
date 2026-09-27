@@ -330,3 +330,35 @@ test.describe("site menus on a touch tablet and by keyboard", () => {
     await context.close();
   });
 });
+
+test.describe("Lexicon record-maturity notes meet AA contrast", () => {
+  // The "not yet added" notes on an entry's maturity checklist were stone-400
+  // (2.43:1), then stone-500 (4.63:1 on #FDFBF6), a class the KI-2 exemption
+  // hides from the route scan. They now use stone-600 (7.37:1), outside every
+  // KNOWN_ISSUES entry, and this checks that the notes are really rendered and
+  // really evaluated (not skipped as "needs review").
+  for (const viewport of VIEWPORTS) {
+    test(`resupination checklist (${viewport.name})`, async ({ browser }) => {
+      const context = await openContext(browser, viewport.width, viewport.height);
+      const page = await context.newPage();
+      await settle(page, "/lexicon/entry/resupination");
+      const notes = page.getByTestId("lexicon-maturity-not-yet-added");
+      expect(await notes.count(), "the entry shows at least one unmet maturity item").toBeGreaterThan(0);
+      await notes.first().scrollIntoViewIfNeeded();
+      await expect(notes.first()).toBeVisible();
+
+      const result = await new AxeBuilder({ page })
+        .include('[data-testid="lexicon-maturity-checklist"]')
+        .withRules(["color-contrast"])
+        .analyze();
+      await context.close();
+      const violations = result.violations as AxeViolation[];
+      expect(violations, describeViolations(violations)).toEqual([]);
+      // Evaluated and passed, not skipped as "needs review".
+      const passed = result.passes.flatMap((rule) => rule.nodes.map((node) => node.html));
+      expect(passed.filter((html) => html.includes("lexicon-maturity-not-yet-added")).length).toBeGreaterThan(0);
+      const incomplete = result.incomplete.flatMap((rule) => rule.nodes.map((node) => node.html));
+      expect(incomplete.filter((html) => html.includes("lexicon-maturity-not-yet-added"))).toEqual([]);
+    });
+  }
+});
