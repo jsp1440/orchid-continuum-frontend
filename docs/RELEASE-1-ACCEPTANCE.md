@@ -21,7 +21,7 @@ the owner gates listed below.**
 
 - No journey is FAIL.
 - No security or privacy blocker is open as of the `r1-post-hardening` run.
-  Five were found and fixed after the `r1-refresh` acceptance; see "Security
+  Six were found and fixed after the `r1-refresh` acceptance; see "Security
   and privacy findings after acceptance".
 - This is not a claim about production: production hosts cannot be reached from
   the build environment. Deployment, verification against production data and
@@ -72,10 +72,10 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677; FE #862, #868, #869, #870, #872, #873, #877, #879 | Yes, before merge (session checker agents; #1647, #868 and #869 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head |
+  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677; FE #862, #868, #869, #870, #872, #873, #877, #879 | Yes, before merge (session checker agents; #1647, #868 and #869 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
-  | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict from this session recorded before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
-  | BE #1676 at `b0f410ad`; FE #878 at `0a68e841` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677 and FE #879 (row above) |
+  | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict recorded in this document before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
+  | BE #1676 at `b0f410ad`; FE #878 at `0a68e841`; FE #880 at `93bdff3f` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677, FE #879 and the PR that carries this correction |
   | BE #1645; FE #856, #861, #864, #865, #866 | Owner's own lineage: exact-head CI plus the readback in the PR comments; no independent checker record from this session | Not recorded | Owner | Blobs identical (FE #865, #866 verified by this session) |
   | BE #1643; FE #858, #859, #860 | Yes, before merge | Not applicable: these merged to `main` under the earlier owner-authorised sprint, before the Release 1 directive, and reached integration only through syncs #1644 and #862 | Coordinator | Tree/blobs identical |
 
@@ -134,10 +134,10 @@ The acceptance above stated that no security or privacy blocker was open. That
 was not true at the time: the following were found after acceptance by
 independent checkers, on the same integration branch. All are now fixed on
 integration. The `r1-post-hardening` security spot-check probes the route-guard
-fixes: anonymous requests get 401; members get 403, or 401 on the Mission
-Control chat and `/api/shows` routes, which accept only the owner or an API key
-(`verify_owner_or_api_key`); and no refused body contains the data keys the
-check looks for. The constant-time comparisons, the redaction and the
+fixes: anonymous requests get 401; members get 403, except 401 on the Mission
+Control chat routes (owner or API key, `verify_owner_or_api_key`) and on
+`GET /api/shows` (API key only, `verify_api_key`); and no refused body contains
+the data keys the check looks for. The constant-time comparisons, the redaction and the
 malformed-input handling rest on unit tests, not on the harness.
 
 | Finding | Exposure before the fix | Fix (PR, exact head → integration) |
