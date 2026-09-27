@@ -21,7 +21,12 @@ export type FeedbackClass =
   | 'source_problem'
   | 'image_identification_problem';
 
-export type FeedbackCaseStatus = 'submitted' | 'pending_review' | 'resolved';
+/**
+ * Case status (backend `CaseStatus`). `governed_review_required` (backend
+ * #1663) means the owner routed the case to governed scientific/taxonomic
+ * review: it is not resolved and nothing displayed has changed.
+ */
+export type FeedbackCaseStatus = 'submitted' | 'pending_review' | 'governed_review_required' | 'resolved';
 
 export interface EvidenceObjectVersion {
   object_id: string;

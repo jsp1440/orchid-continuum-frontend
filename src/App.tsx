@@ -63,6 +63,7 @@ import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
 import AdminCenter from "./pages/AdminCenter";
 import MissionControlEntry from "./pages/MissionControlEntry";
+import FeedbackReview from "./pages/FeedbackReview";
 import IntelligenceCenter from "./pages/IntelligenceCenter";
 import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
@@ -125,6 +126,7 @@ const App = () => (
                   <Route path="/intelligence-center" element={<ProtectedRoute title="Intelligence Center · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><IntelligenceCenter /></ProtectedRoute>} />
                   <Route path="/mission-control/science" element={<ProtectedRoute title="Science operations · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxScienceStatus /></ProtectedRoute>} />
                   <Route path="/calyx-science" element={<ProtectedRoute title="Science operations · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxScienceStatus /></ProtectedRoute>} />
+                  <Route path="/mission-control/feedback-review" element={<ProtectedRoute title="Feedback review · owner" description="Sign in, then open the owner session at Mission Control. Reviewing submitted feedback is limited to the owner, and decisions never publish to the knowledge graph."><FeedbackReview /></ProtectedRoute>} />
                   <Route path="/mission-control/matrix-registry-review" element={<ProtectedRoute title="Matrix Registry Review · authenticated reviewers" description="Sign in to derive immutable Matrix registry versions from explicit reviewed canonical concept mappings."><MatrixRegistryConceptReview /></ProtectedRoute>} />
                   <Route path="/mission-control/readiness/homepage" element={<ProtectedRoute title="Homepage readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
                   <Route path="/mission-control/knowledge-graph-readiness" element={<ProtectedRoute title="Knowledge graph readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />

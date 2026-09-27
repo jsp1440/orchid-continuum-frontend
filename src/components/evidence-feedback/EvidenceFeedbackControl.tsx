@@ -39,6 +39,9 @@ function statusText(feedbackCase: EvidenceFeedbackCase): string {
   if (feedbackCase.status === 'resolved') {
     return feedbackCase.resolution || 'This case has been resolved.';
   }
+  if (feedbackCase.status === 'governed_review_required') {
+    return 'Routed to governed review. The displayed scientific content has not been changed while that review is pending.';
+  }
   if (feedbackCase.status === 'pending_review') {
     return 'Correction pending review. The displayed scientific content has not been changed.';
   }
