@@ -1,4 +1,4 @@
-import { Activity, Database, Gauge, Inbox, MessageSquareWarning, ShieldCheck } from 'lucide-react';
+import { Activity, Database, Gauge, Inbox, Layers3, MessageSquareWarning, ShieldCheck } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import FeedbackReview from './FeedbackReview';
 import IntakeReview from './IntakeReview';
@@ -7,6 +7,7 @@ import LiveCompletionLedger from './LiveCompletionLedger';
 import MissionControl from './MissionControl';
 import TaxonomyOperations from './TaxonomyOperations';
 import TaxonomyReleases from './TaxonomyReleases';
+import UiConvergenceAudit from './UiConvergenceAudit';
 
 /**
  * Render static sites need an index.html rewrite for direct nested URLs.
@@ -23,6 +24,10 @@ export default function MissionControlEntry() {
 
   if (view === 'live-ledger') {
     return <LiveCompletionLedger />;
+  }
+
+  if (view === 'ui-convergence') {
+    return <UiConvergenceAudit />;
   }
 
   if (view === 'taxonomy-releases') {
@@ -45,6 +50,14 @@ export default function MissionControlEntry() {
     <>
       <MissionControl />
       <div className="fixed bottom-5 right-5 z-[70] flex flex-col items-end gap-3">
+        <Link
+          to="/mission-control?view=ui-convergence"
+          className="inline-flex items-center gap-2 rounded-full border border-violet-300/40 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-violet-100 shadow-2xl transition hover:bg-[#173823]"
+          aria-label="Open UI Convergence Audit"
+          data-testid="mission-control-ui-convergence-link"
+        >
+          <Layers3 className="h-4 w-4" /> UI Convergence
+        </Link>
         <Link
           to="/mission-control?view=live-ledger"
           className="inline-flex items-center gap-2 rounded-full border border-emerald-300/45 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-emerald-100 shadow-2xl transition hover:bg-[#173823]"
