@@ -83,6 +83,7 @@ export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
   '/calyx-science',
   '/mission-control/matrix-registry-review',
   '/mission-control/feedback-review',
+  '/mission-control/judging',
   '/mission-control/readiness/homepage',
   '/mission-control/knowledge-graph-readiness',
   '/mission-control/ai-orchestration',
@@ -97,6 +98,9 @@ export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
 export const COMPONENT_AUTHORIZED_ROUTE_PATTERNS = [
   '/account',
   '/university/review',
+  // Judges authenticate with their own per-judge bearer credential (Gate 8),
+  // not a member session; the page renders its own sign-in boundary.
+  '/judge/*',
 ] as const;
 
 export const ROUTE_ACCESS_POLICY = new Map<string, RouteAccessKind>([
