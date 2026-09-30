@@ -9,6 +9,7 @@ import {
   REVIEW_OBJECT_TYPE_FILTERS,
   REVIEW_STATUS_FILTERS,
   createEvidenceFeedbackReviewClient,
+  registeredByText,
   reviewAccessState,
   reviewErrorMessage,
   statusLabel,
@@ -308,6 +309,7 @@ function CaseDetail({
         <Field label="Last updated">{formatTime(item.updated_at)}</Field>
         <Field label="Page context" mono>{item.page_context}</Field>
         <Field label="Version the submitter saw" mono>{item.object_version_hash}</Field>
+        <Field label="Snapshot registered by">{registeredByText(detail.object_version?.registered_by_role ?? null)}</Field>
         {item.source_partner_id ? <Field label="Source partner">{item.source_partner_id}</Field> : null}
         {item.resolution ? <Field label="Resolution">{item.resolution}</Field> : null}
       </dl>

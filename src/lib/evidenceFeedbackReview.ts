@@ -133,6 +133,12 @@ export interface ReviewObjectVersion {
   payload: Record<string, unknown>;
   created_at: string | null;
   previous_version_hash: string | null;
+  /**
+   * Who first registered this snapshot (backend `registered_by_role`):
+   * `member`, `owner_session` or `api_key`; null when unrecorded (older
+   * versions, trivial-correction results). A role, never an identity.
+   */
+  registered_by_role: string | null;
 }
 
 export interface ReviewCaseDetail {
@@ -373,6 +379,14 @@ function reviewEvent(value: unknown): ReviewEvent {
   };
 }
 
+/** Plain-language `registered_by_role`: who first registered the snapshot shown. */
+export function registeredByText(role: string | null): string {
+  if (role === "member") return "A member session — what the member reports they saw, not verified content";
+  if (role === "owner_session") return "The owner session";
+  if (role === "api_key") return "The backend API key";
+  return "Not recorded";
+}
+
 function objectVersion(value: unknown): ReviewObjectVersion | null {
   if (value === null || value === undefined) return null;
   const item = record(value);
@@ -383,6 +397,7 @@ function objectVersion(value: unknown): ReviewObjectVersion | null {
     payload: record(item.payload),
     created_at: optStr(item, "created_at"),
     previous_version_hash: optStr(item, "previous_version_hash"),
+    registered_by_role: optStr(item, "registered_by_role"),
   };
 }
 

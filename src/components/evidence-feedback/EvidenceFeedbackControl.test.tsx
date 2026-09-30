@@ -5,7 +5,16 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import defectKindCapture from '@/lib/__fixtures__/evidenceFeedbackDefectKind.realBackend.json';
-import { TRIVIAL_DEFECT_KINDS, type EvidenceFeedbackCase, type EvidenceObjectType } from '@/lib/evidenceFeedback';
+import memberCapture from '@/lib/__fixtures__/evidenceFeedbackMember.realBackend.json';
+import {
+  ALREADY_REPORTED_MESSAGE,
+  EvidenceFeedbackApiError,
+  FEEDBACK_DISABLED_MESSAGE,
+  TRIVIAL_DEFECT_KINDS,
+  parseFeedbackSubmission,
+  type EvidenceFeedbackCase,
+  type EvidenceObjectType,
+} from '@/lib/evidenceFeedback';
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -306,5 +315,103 @@ describe('EvidenceFeedbackControl', () => {
       expect(mocks.submit.mock.calls[0][0].defectKind).toBeUndefined();
       expect(container.textContent).toContain('scientific');
     });
+  });
+});
+
+/*
+ * Member states (Release 1 "Members submit, owner reviews"). Receipts are REAL
+ * responses captured from the Calyx backend running LOCALLY
+ * (`evidenceFeedbackMember.realBackend.json`, SYNTHETIC inputs), passed through
+ * the real `parseFeedbackSubmission`.
+ */
+describe('EvidenceFeedbackControl for a signed-in member', () => {
+  const M = memberCapture as unknown as { responses: Record<string, { status: number; body: Record<string, unknown> }> };
+  const receipt = (key: string) => parseFeedbackSubmission(M.responses[key].body);
+  const ownCase = String(M.responses.member_submit_created.body.case_id);
+
+  async function submitForm(): Promise<void> {
+    act(() => (container.querySelector('button') as HTMLButtonElement).click());
+    await enterStatement('SYNTHETIC: petal is misspelled.');
+    await act(async () => {
+      (container.querySelector('form') as HTMLFormElement).dispatchEvent(
+        new Event('submit', { bubbles: true, cancelable: true }),
+      );
+    });
+  }
+  const checkButton = () => Array.from(container.querySelectorAll('button')).find((button) =>
+    button.textContent?.includes('Check status')) as HTMLButtonElement | undefined;
+
+  it('shows a new member submission as recorded and pending review, with their own case', async () => {
+    mocks.submit.mockResolvedValue(receipt('member_submit_created'));
+    renderControl();
+    await submitForm();
+
+    expect(container.textContent).toContain('Feedback recorded');
+    expect(container.textContent).toContain('Correction pending review');
+    expect(container.textContent).toContain('has not been changed');
+    expect(container.textContent).toContain(ownCase);
+    // A receipt has no review lane; nothing is invented for it.
+    expect(container.textContent).not.toContain('Review route');
+    expect(checkButton()).toBeDefined();
+  });
+
+  it('refreshes the member\'s own case status', async () => {
+    mocks.submit.mockResolvedValue(receipt('member_submit_created'));
+    mocks.status.mockResolvedValue({ ...M.responses.member_status_own_case.body, status: 'governed_review_required' });
+    renderControl();
+    await submitForm();
+    await act(async () => checkButton()?.click());
+
+    expect(mocks.status).toHaveBeenCalledWith(ownCase);
+    expect(container.textContent).toContain('Routed to governed review.');
+  });
+
+  it('a member resubmitting their own report sees it as existing feedback', async () => {
+    mocks.submit.mockResolvedValue(receipt('member_submit_own_duplicate'));
+    renderControl();
+    await submitForm();
+    expect(container.textContent).toContain('Existing feedback found');
+    expect(container.textContent).toContain(ownCase);
+  });
+
+  it('an identical report by someone else shows no case, no status check and nothing about them', async () => {
+    mocks.submit.mockResolvedValue(receipt('member_b_submit_duplicate_of_a'));
+    renderControl();
+    await submitForm();
+
+    expect(container.textContent).toContain('Already reported');
+    expect(container.textContent).toContain(ALREADY_REPORTED_MESSAGE);
+    expect(container.textContent).not.toContain('efc-');
+    expect(container.textContent).not.toContain('Case');
+    expect(checkButton()).toBeUndefined();
+  });
+
+  it('says plainly when member feedback is switched off, and keeps the text', async () => {
+    const refusal = M.responses.member_submit_feature_disabled;
+    mocks.submit.mockRejectedValue(new EvidenceFeedbackApiError(refusal.status, String((refusal.body.detail as { code: string }).code)));
+    renderControl();
+    await submitForm();
+
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(FEEDBACK_DISABLED_MESSAGE);
+    expect((container.querySelector('textarea') as HTMLTextAreaElement).value).toBe('SYNTHETIC: petal is misspelled.');
+    expect(container.textContent).not.toContain('Feedback recorded');
+  });
+
+  it('says plainly when the member is rate limited, with the backend wait', async () => {
+    mocks.submit.mockRejectedValue(new EvidenceFeedbackApiError(429, 'MEMBER_RATE_LIMITED', 600));
+    renderControl();
+    await submitForm();
+
+    const alert = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('several reports in a short time');
+    expect(alert).toContain('Nothing more was recorded');
+    expect(alert).toContain('about 10 minutes');
+  });
+
+  it('keeps an owner-only refusal distinct from the switch being off', async () => {
+    mocks.submit.mockRejectedValue(new EvidenceFeedbackApiError(403, 'OWNER_ACCESS_REQUIRED'));
+    renderControl();
+    await submitForm();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe('Your current session is not permitted to submit this feedback.');
   });
 });
