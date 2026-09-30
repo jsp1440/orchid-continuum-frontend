@@ -11,6 +11,8 @@ import {
   UI_SELECTS,
   checkByName,
   checkNonsense,
+  checkPublicAtlasView,
+  reconcileRevokedBaseTable,
   checkSearch,
   checkTableCount,
   checkTableUiColumns,
@@ -95,6 +97,10 @@ const summary = (name, extra = {}) => ({
   genus: name.split(' ')[0],
   ...extra,
 });
+
+const VIEW = 'atlas_occurrences_public';
+const PROTECTED_VIEW_ROW = { id: 'a', published_cell_deg: 0.05, published_precision_reason: 'unresolved-assessment', locality_withheld: true, assessment_resolved: false };
+const MISSING_VIEW = () => json(404, { code: 'PGRST205', message: `Could not find the table 'public.${VIEW}' in the schema cache` });
 
 const searchCheckFor = (query, status = 'pass') => ({ id: `species-api.search:${query}`, query, status });
 
@@ -324,6 +330,7 @@ describe('Supabase tables', () => {
   it('an empty optional table makes the run PASS_WITH_WARNINGS, surfaced in the summary', async () => {
     const f = routedFetch([
       [(u) => u.includes('species_mycorrhizal'), () => json(200, [], { 'content-range': '*/0' })],
+      [(u) => u.includes(VIEW), () => json(206, [PROTECTED_VIEW_ROW], { 'content-range': '0-0/3' })],
       [(u) => u.includes('select=id&'), () => json(206, [{ id: 'a' }], { 'content-range': '0-0/7' })],
       [(u) => u.includes('/rest/v1/'), () => json(200, [{ id: 'a' }])],
     ]);
@@ -366,6 +373,49 @@ describe('Supabase tables', () => {
   });
 });
 
+describe('optional protected Atlas view (FE #894)', () => {
+  it('reports an absent view as a warning, not a failure', async () => {
+    const c = await checkPublicAtlasView(routedFetch([[() => true, MISSING_VIEW]]), cfg());
+    expect(c).toMatchObject({ status: 'warn', observation: 'view_absent', optional: true });
+    expect(JSON.stringify(c)).not.toContain('schema cache');
+    expect(await checkPublicAtlasView(routedFetch([[() => true, () => json(400, { code: '42P01' })]]), cfg())).toMatchObject({ observation: 'view_absent' });
+  });
+
+  it('passes a view that publishes its protection columns, reading no coordinate', async () => {
+    const f = routedFetch([[() => true, () => json(206, [PROTECTED_VIEW_ROW], { 'content-range': '0-0/11' })]]);
+    expect(await checkPublicAtlasView(f, cfg())).toMatchObject({ status: 'pass', observedCount: 11, protectionColumnsPresent: true });
+    const select = new URL(f.calls[0].url).searchParams.get('select').split(',');
+    expect(select.some((col) => isCoordinateKey(col) || col === 'locality')).toBe(false);
+  });
+
+  it('fails a view without its protection columns, or one anon cannot read', async () => {
+    expect(await checkPublicAtlasView(routedFetch([[() => true, () => json(200, [{ id: 'a' }])]]), cfg())).toMatchObject({ status: 'fail', observation: 'wrong-shape' });
+    expect(await checkPublicAtlasView(routedFetch([[() => true, () => json(403, { code: '42501' })]]), cfg())).toMatchObject({ status: 'fail', observation: 'http-403' });
+    expect(await checkPublicAtlasView(routedFetch([[() => true, () => html(503)]]), cfg())).toMatchObject({ status: 'outage' });
+  });
+
+  it('treats a revoked raw table as protection only when the view serves rows', async () => {
+    const revoked = { id: 'supabase.count:atlas_occurrences', table: 'atlas_occurrences', status: 'fail', observation: 'http-403' };
+    const viewPass = { id: 'v', table: VIEW, status: 'pass' };
+    const viewAbsent = { id: 'v', table: VIEW, status: 'warn', observation: 'view_absent' };
+    expect(reconcileRevokedBaseTable([revoked, viewPass])[0]).toMatchObject({ status: 'pass', observation: 'base-table-anon-revoked' });
+    expect(reconcileRevokedBaseTable([revoked, viewAbsent])[0]).toMatchObject({ status: 'fail', observation: 'http-403' });
+    const other = { ...revoked, observation: 'http-400' };
+    expect(reconcileRevokedBaseTable([other, viewPass])[0].status).toBe('fail');
+  });
+
+  it('an absent view alone makes the run PASS_WITH_WARNINGS, never FAIL', async () => {
+    const f = routedFetch([
+      [(u) => u.includes(VIEW), MISSING_VIEW],
+      [(u) => u.includes('select=id&'), () => json(206, [{ id: 'a' }], { 'content-range': '0-0/7' })],
+      [(u) => u.includes('/rest/v1/'), () => json(200, [{ id: 'a' }])],
+    ]);
+    const report = await runVerification(cfg({ apiBase: '' }), f);
+    const supabase = report.checks.filter((c) => c.id.startsWith('supabase'));
+    expect(verdictOf(supabase)).toBe('PASS_WITH_WARNINGS');
+  });
+});
+
 describe('the cited generalisation sources are the ones the Atlas uses', () => {
   it('/atlas renders through src/lib/atlasLocalitySafety.ts', () => {
     const [atlas, next] = ATLAS_GENERALISATION_SOURCES.map((s) => s.split(' ')[0]);
@@ -384,6 +434,7 @@ describe('report', () => {
       [(u) => u.includes('/by-name/Cattleya'), () => json(200, summary('Cattleya labiata'))],
       [(u) => u.includes('/by-name/'), () => json(404, { detail: 'Species not found' })],
       [(u) => u.includes('/rest/v1/') && u.includes('select=id&'), () => json(206, [{ id: 'a' }], { 'content-range': '0-0/7' })],
+      [(u) => u.includes('/rest/v1/atlas_occurrences_public'), () => json(206, [PROTECTED_VIEW_ROW], { 'content-range': '0-0/7' })],
       [(u) => u.includes('/rest/v1/'), () => json(200, [{ id: 'a' }])],
     ]);
 

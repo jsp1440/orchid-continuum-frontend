@@ -77,6 +77,25 @@ export const UI_SELECTS = {
 };
 
 /**
+ * The protected public Atlas view proposed in FE #894 (unmerged at the time of
+ * writing; owner-applied migration). Optional: its absence is a warning, not a
+ * failure, until the owner applies that migration. Only the columns that
+ * explain the view's own protection decision are selected — never lat/lng or
+ * locality — so this check reads no coordinate at all.
+ */
+export const ATLAS_PUBLIC_VIEW = 'atlas_occurrences_public';
+export const ATLAS_PUBLIC_VIEW_PROTECTION_COLUMNS = [
+  'id',
+  'published_cell_deg',
+  'published_precision_reason',
+  'locality_withheld',
+  'assessment_resolved',
+];
+
+/** PostgREST / Postgres codes that mean "this relation does not exist". */
+const MISSING_RELATION_CODES = new Set(['PGRST205', '42P01']);
+
+/**
  * Where the raw Atlas inputs are generalised before they are drawn. Cited in
  * the report so a reader can check the claim rather than trust it.
  */
@@ -628,6 +647,59 @@ export async function checkTableUiColumns(fetchImpl, cfg, table) {
   return check(id, { ...withKeys, status: 'pass', observation: 'present', ...generalised });
 }
 
+export async function checkPublicAtlasView(fetchImpl, cfg) {
+  const id = `supabase.optional-view:${ATLAS_PUBLIC_VIEW}`;
+  const select = ATLAS_PUBLIC_VIEW_PROTECTION_COLUMNS.join(',');
+  const url = `${cfg.supabaseUrl}/rest/v1/${ATLAS_PUBLIC_VIEW}?select=${encodeURIComponent(select)}&limit=1`;
+  const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs, headers: supabaseHeaders(cfg.anonKey, { Prefer: 'count=exact' }) });
+  const fields = { journey: 'J9', table: ATLAS_PUBLIC_VIEW, optional: true, ...transportFields(res) };
+  const transport = classifyTransport(res);
+  if (transport) return check(id, { ...fields, ...transport });
+  // The error code is compared against fixed values and never recorded.
+  const code = res.isJson && res.json && typeof res.json.code === 'string' ? res.json.code.toUpperCase() : '';
+  if (MISSING_RELATION_CODES.has(code) || (res.status === 404 && res.isJson)) {
+    return check(id, {
+      ...fields,
+      status: 'warn',
+      observation: 'view_absent',
+      warning: 'the protected Atlas view is not deployed (FE #894 migration not applied); the Atlas relies on client-side generalisation only',
+    });
+  }
+  if (res.status !== 200 && res.status !== 206) return check(id, { ...fields, status: 'fail', ...supabaseFailure(res) });
+  if (!res.isJson || !Array.isArray(res.json)) return check(id, { ...fields, status: 'fail', observation: 'non-json' });
+  const observedCount = res.count;
+  const row = res.json[0];
+  const protectionColumnsPresent = row ? ATLAS_PUBLIC_VIEW_PROTECTION_COLUMNS.every((c) => Object.prototype.hasOwnProperty.call(row, c)) : null;
+  const withCount = { ...fields, observedCount, countSource: observedCount === null ? 'unavailable' : 'content-range', protectionColumnsPresent };
+  if (!row || observedCount === 0) {
+    return check(id, { ...withCount, status: 'warn', observation: 'empty_or_hidden', warning: EMPTY_OR_HIDDEN_WARNING });
+  }
+  if (!protectionColumnsPresent) {
+    return check(id, { ...withCount, status: 'fail', observation: 'wrong-shape', detail: 'the view does not publish its protection columns' });
+  }
+  return check(id, { ...withCount, status: 'pass', observation: 'present' });
+}
+
+/**
+ * Once the FE #894 migration revokes anon access to the raw table, a JSON
+ * 401/403 there is the intended protection — provided the public view is
+ * serving rows. Only then is the base-table refusal reclassified.
+ */
+export function reconcileRevokedBaseTable(checks) {
+  const view = checks.find((c) => c.table === ATLAS_PUBLIC_VIEW);
+  if (!view || view.status !== 'pass') return checks;
+  return checks.map((c) =>
+    c.table === 'atlas_occurrences' && c.status === 'fail' && (c.observation === 'http-401' || c.observation === 'http-403')
+      ? {
+          ...c,
+          status: 'pass',
+          observation: 'base-table-anon-revoked',
+          detail: `anon read of the raw table is refused and the Atlas is served by ${ATLAS_PUBLIC_VIEW}`,
+        }
+      : c,
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Orchestration
 // ---------------------------------------------------------------------------
@@ -706,10 +778,13 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
       }),
     );
   } else {
+    const tableChecks = [];
     for (const table of Object.keys(UI_SELECTS)) {
-      checks.push(await checkTableCount(fetchImpl, cfg, table));
-      checks.push(await checkTableUiColumns(fetchImpl, cfg, table));
+      tableChecks.push(await checkTableCount(fetchImpl, cfg, table));
+      tableChecks.push(await checkTableUiColumns(fetchImpl, cfg, table));
     }
+    tableChecks.push(await checkPublicAtlasView(fetchImpl, cfg));
+    checks.push(...reconcileRevokedBaseTable(tableChecks));
   }
 
   const summary = { pass: 0, warn: 0, fail: 0, outage: 0, skipped: 0 };
