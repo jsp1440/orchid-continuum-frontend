@@ -73,24 +73,20 @@ jobs:
           fi
           if [ -n "$ANON_KEY" ]; then echo "::add-mask::$ANON_KEY"; fi
           status=0
+          # The script writes the report and the step summary itself, from
+          # report fields only; no response text is ever recorded.
           VITE_API_BASE_URL="$INPUT_SPECIES_API_URL" \
           VITE_SUPABASE_URL="$SUPA_URL" \
           VITE_SUPABASE_ANON_KEY="$ANON_KEY" \
-            node scripts/verify-release1-data.mjs --taxa "$INPUT_TAXA" --out release1-data-report.json > /dev/null || status=$?
+            node scripts/verify-release1-data.mjs --taxa "$INPUT_TAXA" \
+              --out release1-data-report.json --summary "$GITHUB_STEP_SUMMARY" > /dev/null || status=$?
           if [ ! -f release1-data-report.json ]; then
             echo "verifier produced no report (exit $status)"
             exit "$status"
           fi
           cat release1-data-report.json
-          {
-            echo "### Release 1 data verifier"
-            echo
-            echo "Verdict: \`$(node -e "console.log(require('./release1-data-report.json').verdict)")\` (exit $status)"
-            echo
-            echo '| check | status | observation | observed count |'
-            echo '|---|---|---|---|'
-            node -e "for (const c of require('./release1-data-report.json').checks) console.log('| ' + [c.id, c.status, c.observation ?? '', c.observedCount ?? ''].join(' | ') + ' |')"
-          } >> "$GITHUB_STEP_SUMMARY"
+          # A warning (e.g. an empty or RLS-hidden table) must not pass silently.
+          node -e "for (const c of require('./release1-data-report.json').checks) if (c.status === 'warn') console.log('::warning title=release1-data::' + c.id + ' ' + c.observation)"
           exit "$status"
 
       - name: Upload report

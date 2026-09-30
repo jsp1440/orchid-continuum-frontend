@@ -17,27 +17,39 @@
  *
  * Each check ends in exactly one state:
  *   pass    — reachable and the payload is what the member-facing UI needs;
- *   fail    — reachable, but the answer is wrong (empty for a known taxon,
- *             non-JSON "200", a match for a nonsense name, a coordinate key in
- *             a taxon-page payload, a rejected anon key, a missing column…);
- *   outage  — could not get an answer (network error, timeout, 5xx, 429);
- *   skipped — not configured, or a prerequisite check produced nothing to use.
+ *   warn    — reachable and not wrong, but not proof of data either (an empty
+ *             read, which is indistinguishable from row-level security hiding
+ *             every row);
+ *   fail    — the target, or the production edge in front of it, answered
+ *             wrongly: empty for a known taxon, a non-JSON "200", a JSON 5xx,
+ *             an auth wall, a TLS error, a cross-origin redirect, a match for a
+ *             nonsense name, a coordinate key in a taxon-page payload…;
+ *   outage  — the target did not answer this run: network error, timeout,
+ *             429, a non-JSON 502/503/504 gateway page, or a refusal
+ *             identifiably issued by an egress proxy;
+ *   skipped — not configured, or a prerequisite produced nothing to test.
  *
- * Privacy: the report carries status codes, counts, key NAMES and key PATHS.
- * It never carries payload values, so no coordinate or locality text can reach
- * a CI log through it, and the anon key is scrubbed from every string.
+ * Privacy: NOTHING derived from response body or header text is recorded. The
+ * report carries status codes, counts, booleans, fixed vocabulary terms and
+ * text from this run's own configuration. A taxon name found by search is
+ * referred to by the query that found it plus a short hash, never by its text,
+ * so no coordinate, locality or other payload text can reach stdout, the
+ * report file, a CI log or a step summary. The anon key is also scrubbed from
+ * every string.
  *
  * Usage:
  *   VITE_API_BASE_URL=https://… VITE_SUPABASE_URL=https://… \
- *   VITE_SUPABASE_ANON_KEY=… node scripts/verify-release1-data.mjs [--out report.json]
+ *   VITE_SUPABASE_ANON_KEY=… node scripts/verify-release1-data.mjs \
+ *     [--out report.json] [--summary summary.md]
  *
- * Exit codes: 0 PASS · 1 FAIL · 2 NOT_CONFIGURED · 3 OUTAGE.
+ * Exit codes: 0 PASS / PASS_WITH_WARNINGS · 1 FAIL · 2 NOT_CONFIGURED · 3 OUTAGE.
  */
 
-import { writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
-export const VERIFIER_VERSION = 1;
+export const VERIFIER_VERSION = 2;
 
 /** Genera the member-facing search is expected to know. Queries, not counts. */
 export const DEFAULT_KNOWN_TAXA = ['Cattleya', 'Dracula'];
@@ -46,6 +58,8 @@ export const DEFAULT_KNOWN_TAXA = ['Cattleya', 'Dracula'];
 export const DEFAULT_NONSENSE_TAXON = 'Zzyzxorchis nonexistens';
 
 export const DEFAULT_TIMEOUT_MS = 60_000;
+
+const MAX_SAME_ORIGIN_REDIRECTS = 3;
 
 /**
  * The column lists the UI selects (src/lib/orchidContinuum.ts). Selecting them
@@ -63,13 +77,22 @@ export const UI_SELECTS = {
 };
 
 /**
+ * Where the raw Atlas inputs are generalised before they are drawn. Cited in
+ * the report so a reader can check the claim rather than trust it.
+ */
+export const ATLAS_GENERALISATION_SOURCES = [
+  'src/lib/atlasLocalitySafety.ts (/atlas: src/pages/Atlas.tsx, src/components/atlas/LiveAtlasMap.tsx)',
+  'src/features/atlas-next/sensitivity.ts (/atlas-next)',
+];
+
+/**
  * How a coordinate key in a table payload is judged.
  *
  * `atlas_occurrences` and `species.occurrences` are the raw inputs to the Atlas
- * map; every rendering path generalises them through
- * src/features/atlas-next/sensitivity.ts before drawing. Their coordinate keys
- * are reported, not failed. `species_mycorrhizal` and the species API feed text
- * surfaces that have no business carrying a coordinate, so a key there fails.
+ * map and are generalised client-side (ATLAS_GENERALISATION_SOURCES) before
+ * drawing, so their coordinate keys are reported, not failed.
+ * `species_mycorrhizal` and the species API feed text surfaces that have no
+ * business carrying a coordinate, so a key there fails.
  */
 const TABLE_COORDINATE_POLICY = {
   species: 'expected-raw-atlas-input',
@@ -81,7 +104,9 @@ const TABLE_COORDINATE_POLICY = {
 const TABLE_REQUIRED_NON_EMPTY = {
   species: true,
   atlas_occurrences: true,
-  // The UI has an honest "no partners linked yet" state for this table.
+  // The UI has an honest "no partners linked yet" state for this table, so an
+  // empty read is a warning rather than a failure — but never a silent pass,
+  // because row-level security hiding every row looks exactly the same.
   species_mycorrhizal: false,
 };
 
@@ -89,59 +114,85 @@ const TABLE_REQUIRED_NON_EMPTY = {
 // Coordinate-key detection
 // ---------------------------------------------------------------------------
 
-const COORDINATE_KEYS = new Set([
-  'lat',
-  'lon',
-  'lng',
-  'latitude',
-  'longitude',
-  'latlng',
-  'latlon',
-  'lnglat',
-  'lonlat',
-  'decimallatitude',
-  'decimallongitude',
-  'verbatimlatitude',
-  'verbatimlongitude',
-  'verbatimcoordinates',
-  'geometry',
-  'geom',
-  'geojson',
+/**
+ * The fixed vocabulary. The report names only these terms — never a key as the
+ * payload spelled it, and never a parent key — so a payload cannot smuggle text
+ * into the report through a key name.
+ */
+export const COORDINATE_VOCABULARY = Object.freeze([
+  'bbox',
+  'boundingbox',
+  'centroid',
   'coordinates',
   'coords',
+  'decimallatitude',
+  'decimallongitude',
   'footprintwkt',
+  'geojson',
+  'geolocation',
+  'geom',
+  'geometry',
+  'geopoint',
+  'lat',
+  'latitude',
+  'latitudedecimal',
+  'latlng',
+  'latlon',
+  'lng',
+  'lnglat',
+  'location',
+  'lon',
+  'longitude',
+  'longitudedecimal',
+  'lonlat',
+  'point',
+  'position',
+  'verbatimcoordinates',
+  'verbatimlatitude',
+  'verbatimlongitude',
   'wkt',
+  'x',
+  'y',
 ]);
+const COORDINATE_KEYS = new Set(COORDINATE_VOCABULARY);
 
-/** `decimal_latitude`, `decimalLatitude` and `Decimal-Latitude` are one key. */
+/** Case and `_`, `-`, `.`, space separators are ignored; digits are not. */
+export function coordinateTermOf(key) {
+  if (typeof key !== 'string') return null;
+  const term = key.toLowerCase().replace(/[\s_.-]/g, '');
+  return COORDINATE_KEYS.has(term) ? term : null;
+}
+
 export function isCoordinateKey(key) {
-  if (typeof key !== 'string') return false;
-  return COORDINATE_KEYS.has(key.toLowerCase().replace(/[^a-z]/g, ''));
+  return coordinateTermOf(key) !== null;
 }
 
 /**
- * Every JSON path at which a coordinate-bearing key appears. Paths only — the
- * values are never returned, so a caller cannot accidentally log a locality.
+ * Which vocabulary terms appear anywhere in a payload, and how often. Returns
+ * vocabulary terms and a count only — no path, no parent key, no value.
  */
-export function findCoordinateKeyPaths(value, path = '$', out = [], seen = new WeakSet(), depth = 0) {
-  if (value === null || typeof value !== 'object' || depth > 32) return out;
-  if (seen.has(value)) return out;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    value.forEach((item, i) => findCoordinateKeyPaths(item, `${path}[${i}]`, out, seen, depth + 1));
-    return out;
-  }
-  for (const [key, child] of Object.entries(value)) {
-    const childPath = `${path}.${key}`;
-    if (isCoordinateKey(key)) out.push(childPath);
-    findCoordinateKeyPaths(child, childPath, out, seen, depth + 1);
-  }
-  return out;
-}
-
-/** Distinct coordinate key names, for a compact report line. */
-function distinctKeyNames(paths) {
-  return [...new Set(paths.map((p) => p.split('.').pop().replace(/\[\d+\]$/, '')))].sort();
+export function scanCoordinateKeys(value) {
+  const terms = new Set();
+  let count = 0;
+  const seen = new WeakSet();
+  const walk = (v, depth) => {
+    if (v === null || typeof v !== 'object' || depth > 32 || seen.has(v)) return;
+    seen.add(v);
+    if (Array.isArray(v)) {
+      for (const item of v) walk(item, depth + 1);
+      return;
+    }
+    for (const [key, child] of Object.entries(v)) {
+      const term = coordinateTermOf(key);
+      if (term) {
+        terms.add(term);
+        count++;
+      }
+      walk(child, depth + 1);
+    }
+  };
+  walk(value, 0);
+  return { coordinateKeys: [...terms].sort(), coordinateKeyCount: count };
 }
 
 // ---------------------------------------------------------------------------
@@ -200,6 +251,7 @@ export function resolveConfig(argv = [], env = {}) {
     nonsenseTaxon: args.nonsense || DEFAULT_NONSENSE_TAXON,
     timeoutMs: Number.isFinite(timeout) && timeout > 0 ? timeout : DEFAULT_TIMEOUT_MS,
     out: args.out || '',
+    summary: args.summary || '',
   };
 }
 
@@ -207,68 +259,151 @@ export function resolveConfig(argv = [], env = {}) {
 // Transport
 // ---------------------------------------------------------------------------
 
+/** Node/undici error codes only — a fixed-shape token, never a message. */
+function errorCodeOf(error) {
+  const raw = (error && (error.cause?.code || error.code)) || '';
+  return typeof raw === 'string' && /^[A-Z0-9_]{2,48}$/.test(raw) ? raw : null;
+}
+
+const TLS_ERROR_CODE = /CERT|SSL|TLS|SELF_SIGNED|UNABLE_TO_VERIFY|UNABLE_TO_GET_ISSUER|ALTNAME|HOSTNAME_MISMATCH/;
+
 /**
- * One GET. Never throws. The body is parsed only when the server says it is
- * JSON: a Render static site answers unknown paths with the SPA shell at 200,
- * and a verifier that believed that would report HTML as data.
+ * Whether a refusal was issued by an egress proxy rather than the target.
+ *
+ * Only an identifiable proxy counts: a plain-text 403/407 carrying the proxy's
+ * deny header or its known body. Anything else — an HTML login page, a WAF
+ * page, a bare 403 — is the production edge answering, which is a failure of
+ * the journey, not an outage of this run.
+ */
+function isIdentifiableProxyRefusal(status, headers, text) {
+  if (status !== 403 && status !== 407) return false;
+  const type = String(headers.get('content-type') || '').toLowerCase();
+  if (!type.startsWith('text/plain')) return false;
+  if (headers.get('x-deny-reason')) return true;
+  return /^Host not in allowlist:/.test(text);
+}
+
+function headersOf(res) {
+  const h = res && res.headers;
+  return { get: (name) => (h && typeof h.get === 'function' ? h.get(name) : null) };
+}
+
+/**
+ * One logical GET. Never throws, and never follows a redirect off the origin
+ * it was aimed at: custom headers (the anon key) must not be forwarded to a
+ * host nobody configured. The result holds only fixed-shape facts plus the
+ * parsed JSON, which callers inspect and never record.
  */
 export async function httpGet(fetchImpl, url, { headers = {}, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
+  const elapsed = () => Date.now() - started;
+  let current = url;
   try {
-    const res = await fetchImpl(url, {
-      method: 'GET',
-      headers: { Accept: 'application/json', ...headers },
-      signal: controller.signal,
-      redirect: 'follow',
-    });
-    const contentType = (res.headers && res.headers.get && res.headers.get('content-type')) || '';
-    const contentRange = (res.headers && res.headers.get && res.headers.get('content-range')) || '';
-    const text = await res.text();
-    const isJson = /json/i.test(contentType);
-    let json;
-    let jsonError = false;
-    if (isJson && text.length) {
-      try {
-        json = JSON.parse(text);
-      } catch {
-        jsonError = true;
+    for (let hop = 0; ; hop++) {
+      const res = await fetchImpl(current, {
+        method: 'GET',
+        headers: { Accept: 'application/json', ...headers },
+        signal: controller.signal,
+        redirect: 'manual',
+      });
+      const h = headersOf(res);
+      if (res.status >= 300 && res.status < 400) {
+        const location = h.get('location');
+        if (!location) return { kind: 'redirect-without-location', status: res.status, latencyMs: elapsed() };
+        let next;
+        try {
+          next = new URL(location, current);
+        } catch {
+          return { kind: 'redirect-without-location', status: res.status, latencyMs: elapsed() };
+        }
+        if (next.origin !== new URL(current).origin) {
+          return { kind: 'redirect-cross-origin', status: res.status, latencyMs: elapsed() };
+        }
+        if (hop >= MAX_SAME_ORIGIN_REDIRECTS) return { kind: 'redirect-loop', status: res.status, latencyMs: elapsed() };
+        current = next.toString();
+        continue;
       }
+      const type = String(h.get('content-type') || '');
+      const text = typeof res.text === 'function' ? await res.text() : '';
+      let json;
+      let isJson = false;
+      if (/json/i.test(type) && text.length) {
+        try {
+          json = JSON.parse(text);
+          isJson = true;
+        } catch {
+          isJson = false;
+        }
+      }
+      return {
+        kind: 'response',
+        status: res.status,
+        isJson,
+        json,
+        count: countFromContentRange(String(h.get('content-range') || '')),
+        proxyRefusal: isIdentifiableProxyRefusal(res.status, h, text),
+        latencyMs: elapsed(),
+      };
     }
-    return {
-      kind: 'response',
-      status: res.status,
-      contentType,
-      contentRange,
-      isJson: isJson && !jsonError,
-      json,
-      latencyMs: Date.now() - started,
-    };
   } catch (error) {
     const aborted = controller.signal.aborted || (error && error.name === 'AbortError');
+    const code = aborted ? null : errorCodeOf(error);
     return {
-      kind: aborted ? 'timeout' : 'network-error',
-      message: aborted ? `no response within ${timeoutMs} ms` : String((error && error.message) || error),
-      latencyMs: Date.now() - started,
+      kind: aborted ? 'timeout' : code && TLS_ERROR_CODE.test(code) ? 'tls-error' : 'network-error',
+      errorCode: code,
+      latencyMs: elapsed(),
     };
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** An outage is "no answer", which is a different fact from "a wrong answer". */
-export function outageOf(res) {
-  if (res.kind === 'timeout') return { observation: 'timeout', detail: res.message };
-  if (res.kind === 'network-error') return { observation: 'unreachable', detail: res.message };
-  if (res.status >= 500) return { observation: `http-${res.status}`, detail: 'server error' };
-  if (res.status === 429) return { observation: 'rate-limited', detail: 'HTTP 429' };
-  // A refusal the target itself issued is JSON (PostgREST and the species API
-  // both answer JSON). A plain-text or HTML 401/403/407 comes from something in
-  // between — an egress proxy, a WAF, a challenge page — and says nothing about
-  // the data. Calling it a data failure would be a false red.
-  if ([401, 403, 407].includes(res.status) && !res.isJson) {
-    return { observation: 'blocked-before-target', detail: `non-JSON HTTP ${res.status} from an intermediary; the target did not answer` };
+/** PostgREST `Content-Range: 0-0/31073` or `*\/0`. Returns null when absent. */
+export function countFromContentRange(value) {
+  const m = typeof value === 'string' && value.match(/\/(\d+)\s*$/);
+  return m ? Number(m[1]) : null;
+}
+
+/**
+ * Classify what the transport says before any check-specific judgement.
+ * Returns null when the response is an ordinary answer for the check to judge.
+ *
+ * Outage means "the target did not answer this run". Fail means "the target,
+ * or the production edge in front of it, answered wrongly". Anything not
+ * identifiably an outage fails closed.
+ */
+export function classifyTransport(res) {
+  switch (res.kind) {
+    case 'timeout':
+      return { status: 'outage', observation: 'timeout', detail: 'no response within the timeout' };
+    case 'network-error':
+      return { status: 'outage', observation: 'unreachable', errorCode: res.errorCode, detail: 'connection failed' };
+    case 'tls-error':
+      return { status: 'fail', observation: 'tls_error', errorCode: res.errorCode, detail: 'TLS handshake or certificate verification failed' };
+    case 'redirect-cross-origin':
+      return { status: 'fail', observation: 'cross_origin_redirect', detail: 'redirect to another origin refused; headers were not forwarded' };
+    case 'redirect-loop':
+      return { status: 'fail', observation: 'redirect_loop', detail: 'too many same-origin redirects' };
+    case 'redirect-without-location':
+      return { status: 'fail', observation: 'bad_redirect', detail: 'redirect without a usable Location' };
+    default:
+      break;
+  }
+  const s = res.status;
+  if (s === 429) return { status: 'outage', observation: 'rate-limited', detail: 'HTTP 429' };
+  if (res.proxyRefusal) {
+    return { status: 'outage', observation: 'blocked-before-target', detail: 'refused by an identifiable egress proxy; the target did not answer' };
+  }
+  if ((s === 401 || s === 403 || s === 407) && !res.isJson) {
+    return { status: 'fail', observation: 'auth_wall', detail: `non-JSON HTTP ${s} in front of the target` };
+  }
+  if (s >= 500) {
+    if (!res.isJson && (s === 502 || s === 503 || s === 504)) {
+      return { status: 'outage', observation: `gateway-${s}`, detail: 'non-JSON gateway error; the application did not answer' };
+    }
+    return { status: 'fail', observation: 'server_error', detail: `HTTP ${s} from the application (crash or statement timeout)` };
   }
   return null;
 }
@@ -279,8 +414,13 @@ function check(id, fields) {
 
 function transportFields(res) {
   return res.kind === 'response'
-    ? { httpStatus: res.status, contentType: res.contentType || null, latencyMs: res.latencyMs }
-    : { httpStatus: null, latencyMs: res.latencyMs };
+    ? { httpStatus: res.status, isJson: res.isJson, latencyMs: res.latencyMs }
+    : { httpStatus: res.status ?? null, latencyMs: res.latencyMs };
+}
+
+/** A stable, non-reversible reference to response-derived text. */
+export function shortHash(text) {
+  return createHash('sha256').update(String(text)).digest('hex').slice(0, 12);
 }
 
 // ---------------------------------------------------------------------------
@@ -292,60 +432,37 @@ function nameOf(entry) {
   return String(entry.canonical_name || [entry.genus, entry.specific_epithet].filter(Boolean).join(' ') || '');
 }
 
+/**
+ * Returns the check plus, OUT OF BAND, the name to look up next. The name is
+ * response-derived, so it never goes into a check object.
+ */
 export async function checkSearch(fetchImpl, cfg, taxon) {
   const url = `${cfg.apiBase}/api/species/search?q=${encodeURIComponent(taxon)}`;
   const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs });
   const id = `species-api.search:${taxon}`;
   const base = { journey: 'J3', endpoint: '/api/species/search', query: taxon, ...transportFields(res) };
-  const outage = outageOf(res);
-  if (outage) return { check: check(id, { ...base, status: 'outage', ...outage }), sampleName: '' };
-  if (res.status === 404) {
-    return { check: check(id, { ...base, status: 'fail', observation: 'not-found', detail: 'search answered 404 for a known genus' }), sampleName: '' };
-  }
-  if (res.status !== 200) {
-    return { check: check(id, { ...base, status: 'fail', observation: `http-${res.status}` }), sampleName: '' };
-  }
-  if (!res.isJson) {
-    return {
-      check: check(id, { ...base, status: 'fail', observation: 'non-json', detail: 'HTTP 200 without a JSON body (likely the SPA shell or a proxy page)' }),
-      sampleName: '',
-    };
-  }
-  if (!Array.isArray(res.json)) {
-    return {
-      check: check(id, { ...base, status: 'fail', observation: 'wrong-shape', detail: 'the UI maps the body as an array; this body is not one' }),
-      sampleName: '',
-    };
-  }
-  const coordinatePaths = findCoordinateKeyPaths(res.json);
-  const observedCount = res.json.length;
+  const done = (fields, sampleName = '') => ({ check: check(id, { ...base, ...fields }), sampleName });
+  const transport = classifyTransport(res);
+  if (transport) return done(transport);
+  if (res.status === 404) return done({ status: 'fail', observation: 'not-found', detail: 'search answered 404 for a known genus' });
+  if (res.status !== 200) return done({ status: 'fail', observation: `http-${res.status}` });
+  if (!res.isJson) return done({ status: 'fail', observation: 'non-json', detail: 'HTTP 200 without a JSON body (likely the SPA shell)' });
+  if (!Array.isArray(res.json)) return done({ status: 'fail', observation: 'wrong-shape', detail: 'the UI maps the body as an array; this body is not one' });
+
+  const scan = scanCoordinateKeys(res.json);
   const needle = taxon.toLowerCase();
   const matching = res.json.filter((e) => nameOf(e).toLowerCase().includes(needle) || String(e?.genus || '').toLowerCase() === needle);
   const withTaxonomyId = res.json.filter((e) => e && typeof e.taxonomy_id === 'string' && e.taxonomy_id);
-  const fields = {
-    ...base,
-    observedCount,
-    matchingCount: matching.length,
-    withTaxonomyIdCount: withTaxonomyId.length,
-    coordinateKeyPaths: coordinatePaths.slice(0, 20),
-  };
-  if (coordinatePaths.length) {
-    return {
-      check: check(id, { ...fields, status: 'fail', observation: 'coordinate-keys-present', detail: `taxon-search payload carries ${distinctKeyNames(coordinatePaths).join(', ')}` }),
-      sampleName: nameOf(matching[0]),
-    };
+  const counts = { observedCount: res.json.length, matchingCount: matching.length, withTaxonomyIdCount: withTaxonomyId.length, ...scan };
+  if (scan.coordinateKeyCount) {
+    return done({ ...counts, status: 'fail', observation: 'coordinate-keys-present', detail: 'taxon-search payload carries coordinate keys' });
   }
-  if (observedCount === 0) {
-    return { check: check(id, { ...fields, status: 'fail', observation: 'empty', detail: 'reachable, but no results for a known genus' }), sampleName: '' };
-  }
-  if (matching.length === 0) {
-    return {
-      check: check(id, { ...fields, status: 'fail', observation: 'present-but-unrelated', detail: 'results returned, none named for the queried genus' }),
-      sampleName: '',
-    };
+  if (!res.json.length) return done({ ...counts, status: 'fail', observation: 'empty', detail: 'reachable, but no results for a known genus' });
+  if (!matching.length) {
+    return done({ ...counts, status: 'fail', observation: 'present-but-unrelated', detail: 'results returned, none named for the queried genus' });
   }
   const sample = matching.find((e) => withTaxonomyId.includes(e)) || matching[0];
-  return { check: check(id, { ...fields, status: 'pass', observation: 'present' }), sampleName: nameOf(sample) };
+  return done({ ...counts, status: 'pass', observation: 'present' }, nameOf(sample));
 }
 
 function looksLikeTaxonomy(body) {
@@ -363,67 +480,78 @@ function looksLikeNotFound(body) {
   return /not[\s_-]*found|no such|unknown taxon/i.test(text);
 }
 
-export async function checkByName(fetchImpl, cfg, name, sourceCheckId) {
-  const id = `species-api.by-name:${name || '(none)'}`;
-  const base = { journey: 'J3', endpoint: '/api/species/by-name/{name}', query: name || null, derivedFrom: sourceCheckId };
+/**
+ * `name` is response-derived and only builds the request URL. The check
+ * records the search that supplied it and a short hash, never the name.
+ */
+export async function checkByName(fetchImpl, cfg, name, searchCheck) {
+  const id = `species-api.by-name:first-match-for:${searchCheck.query}`;
+  const base = {
+    journey: 'J3',
+    endpoint: '/api/species/by-name/{name}',
+    nameRef: `first matching search result for query '${searchCheck.query}'`,
+    nameHash: name ? shortHash(name) : null,
+    derivedFrom: searchCheck.id,
+  };
   if (!name) {
-    return check(id, { ...base, status: 'skipped', observation: 'no-name-to-look-up', detail: `${sourceCheckId} produced no matching name` });
+    return check(id, {
+      ...base,
+      status: 'skipped',
+      observation: searchCheck.status === 'outage' ? 'search-outage' : 'search-produced-no-name',
+      detail: 'no name to look up',
+    });
   }
   const url = `${cfg.apiBase}/api/species/by-name/${encodeURIComponent(name)}`;
   const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs });
   const fields = { ...base, ...transportFields(res) };
-  const outage = outageOf(res);
-  if (outage) return check(id, { ...fields, status: 'outage', ...outage });
+  const transport = classifyTransport(res);
+  if (transport) return check(id, { ...fields, ...transport });
   if (res.status === 404) {
     return check(id, { ...fields, status: 'fail', observation: 'not-found', detail: 'a name returned by search is not resolvable by the taxon page' });
   }
   if (res.status !== 200) return check(id, { ...fields, status: 'fail', observation: `http-${res.status}` });
   if (!res.isJson) return check(id, { ...fields, status: 'fail', observation: 'non-json' });
-  const coordinatePaths = findCoordinateKeyPaths(res.json);
-  const withPaths = { ...fields, coordinateKeyPaths: coordinatePaths.slice(0, 20) };
-  if (coordinatePaths.length) {
-    return check(id, {
-      ...withPaths,
-      status: 'fail',
-      observation: 'coordinate-keys-present',
-      detail: `taxon-page payload carries ${distinctKeyNames(coordinatePaths).join(', ')}`,
-    });
+  const scan = scanCoordinateKeys(res.json);
+  if (scan.coordinateKeyCount) {
+    return check(id, { ...fields, ...scan, status: 'fail', observation: 'coordinate-keys-present', detail: 'taxon-page payload carries coordinate keys' });
   }
   if (!looksLikeTaxonomy(res.json)) {
-    return check(id, { ...withPaths, status: 'fail', observation: 'wrong-shape', detail: 'no taxonomy_id with a canonical_name or genus' });
+    return check(id, { ...fields, ...scan, status: 'fail', observation: 'wrong-shape', detail: 'no taxonomy_id with a canonical_name or genus' });
   }
-  const taxonomyFields = ['family', 'subfamily', 'tribe', 'genus', 'specific_epithet', 'authority'].filter(
+  const taxonomyFieldsPresent = ['family', 'subfamily', 'tribe', 'genus', 'specific_epithet', 'authority'].filter(
     (k) => res.json[k] !== undefined && res.json[k] !== null && res.json[k] !== '',
   );
-  return check(id, { ...withPaths, status: 'pass', observation: 'present', taxonomyFieldsPresent: taxonomyFields });
+  return check(id, { ...fields, ...scan, status: 'pass', observation: 'present', taxonomyFieldsPresent });
 }
 
-export async function checkNonsense(fetchImpl, cfg, routeProven) {
+/**
+ * `route` says whether a known-name lookup proved the by-name route exists:
+ * `{ proven: true }` or `{ proven: false, afterOutage: boolean }`.
+ */
+export async function checkNonsense(fetchImpl, cfg, route) {
   const name = cfg.nonsenseTaxon;
   const id = `species-api.by-name-nonsense:${name}`;
   const url = `${cfg.apiBase}/api/species/by-name/${encodeURIComponent(name)}`;
   const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs });
-  const fields = { journey: 'J3', endpoint: '/api/species/by-name/{name}', query: name, ...transportFields(res), routeProvenByKnownLookup: routeProven };
-  const outage = outageOf(res);
-  if (outage) return check(id, { ...fields, status: 'outage', ...outage });
-  if (res.status === 200 && !res.isJson) {
-    return check(id, { ...fields, status: 'fail', observation: 'non-json', detail: 'HTTP 200 without JSON for a nonsense name' });
-  }
+  const fields = { journey: 'J3', endpoint: '/api/species/by-name/{name}', query: name, ...transportFields(res), routeProvenByKnownLookup: route.proven };
+  const transport = classifyTransport(res);
+  if (transport) return check(id, { ...fields, ...transport });
+  if (res.status === 200 && !res.isJson) return check(id, { ...fields, status: 'fail', observation: 'non-json', detail: 'HTTP 200 without JSON for a nonsense name' });
   if (res.status === 200 && looksLikeTaxonomy(res.json)) {
     return check(id, { ...fields, status: 'fail', observation: 'fabricated-match', detail: 'a taxonomy was returned for a name no orchid carries' });
   }
   const notFound = res.status === 404 || res.status === 410 || (res.status === 200 && looksLikeNotFound(res.json));
-  if (!notFound) {
-    return check(id, { ...fields, status: 'fail', observation: `http-${res.status}`, detail: 'neither a not-found nor an outage' });
-  }
-  if (!routeProven) {
+  if (!notFound) return check(id, { ...fields, status: 'fail', observation: `http-${res.status}`, detail: 'neither a not-found nor an outage' });
+  if (!route.proven) {
     // A 404 from a route that does not exist looks identical to a positive
-    // "no such taxon". Without a successful known-name lookup it proves nothing.
+    // "no such taxon". Without a successful known-name lookup this check was
+    // not evaluated, which is not the same as having failed. Whatever stopped
+    // the known lookup is already reported as its own fail or outage.
     return check(id, {
       ...fields,
-      status: 'fail',
-      observation: 'not-found-route-unproven',
-      detail: 'not-found observed, but no known-name lookup succeeded, so the route itself may be missing',
+      status: 'skipped',
+      observation: route.afterOutage ? 'route-unproven-after-outage' : 'route-unproven',
+      detail: 'not-found observed, but no known-name lookup succeeded, so the route itself is unproven',
     });
   }
   return check(id, { ...fields, status: 'pass', observation: 'not-found' });
@@ -437,12 +565,6 @@ function supabaseHeaders(anonKey, extra = {}) {
   return { apikey: anonKey, Authorization: `Bearer ${anonKey}`, ...extra };
 }
 
-/** PostgREST `Content-Range: 0-0/31073` or `*\/0`. Returns null when absent. */
-export function countFromContentRange(value) {
-  const m = typeof value === 'string' && value.match(/\/(\d+)\s*$/);
-  return m ? Number(m[1]) : null;
-}
-
 function supabaseFailure(res) {
   if (res.status === 401 || res.status === 403) return { observation: `http-${res.status}`, detail: 'anon key rejected or row-level policy denies anon read' };
   if (res.status === 404) return { observation: 'http-404', detail: 'table not exposed through the REST API' };
@@ -450,25 +572,32 @@ function supabaseFailure(res) {
   return { observation: `http-${res.status}` };
 }
 
+const journeyOf = (table) => (table === 'atlas_occurrences' ? 'J9' : 'J3/J9');
+
+export const EMPTY_OR_HIDDEN_WARNING =
+  'no rows readable with the anon key: the table is empty OR row-level security hides every row; this run cannot tell which';
+
 export async function checkTableCount(fetchImpl, cfg, table) {
   const id = `supabase.count:${table}`;
   const url = `${cfg.supabaseUrl}/rest/v1/${table}?select=id&limit=1`;
-  const res = await httpGet(fetchImpl, url, {
-    timeoutMs: cfg.timeoutMs,
-    headers: supabaseHeaders(cfg.anonKey, { Prefer: 'count=exact' }),
-  });
-  const fields = { journey: table === 'atlas_occurrences' ? 'J9' : 'J3/J9', table, ...transportFields(res) };
-  const outage = outageOf(res);
-  if (outage) return check(id, { ...fields, status: 'outage', ...outage });
+  const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs, headers: supabaseHeaders(cfg.anonKey, { Prefer: 'count=exact' }) });
+  const fields = { journey: journeyOf(table), table, ...transportFields(res) };
+  const transport = classifyTransport(res);
+  if (transport) return check(id, { ...fields, ...transport });
   if (res.status !== 200 && res.status !== 206) return check(id, { ...fields, status: 'fail', ...supabaseFailure(res) });
   if (!res.isJson || !Array.isArray(res.json)) return check(id, { ...fields, status: 'fail', observation: 'non-json' });
-  const observedCount = countFromContentRange(res.contentRange);
+  const observedCount = res.count;
   const empty = observedCount === 0 || (observedCount === null && res.json.length === 0);
   const withCount = { ...fields, observedCount, countSource: observedCount === null ? 'unavailable' : 'content-range' };
-  if (empty && TABLE_REQUIRED_NON_EMPTY[table]) {
-    return check(id, { ...withCount, status: 'fail', observation: 'empty', detail: 'reachable, but no rows are readable with the anon key' });
+  if (empty) {
+    return check(id, {
+      ...withCount,
+      status: TABLE_REQUIRED_NON_EMPTY[table] ? 'fail' : 'warn',
+      observation: 'empty_or_hidden',
+      warning: EMPTY_OR_HIDDEN_WARNING,
+    });
   }
-  return check(id, { ...withCount, status: 'pass', observation: empty ? 'empty' : 'present' });
+  return check(id, { ...withCount, status: 'pass', observation: 'present' });
 }
 
 export async function checkTableUiColumns(fetchImpl, cfg, table) {
@@ -477,26 +606,26 @@ export async function checkTableUiColumns(fetchImpl, cfg, table) {
   const url = `${cfg.supabaseUrl}/rest/v1/${table}?select=${encodeURIComponent(select)}&limit=1`;
   const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs, headers: supabaseHeaders(cfg.anonKey) });
   const policy = TABLE_COORDINATE_POLICY[table];
-  const fields = { journey: table === 'atlas_occurrences' ? 'J9' : 'J3/J9', table, coordinatePolicy: policy, ...transportFields(res) };
-  const outage = outageOf(res);
-  if (outage) return check(id, { ...fields, status: 'outage', ...outage });
+  const fields = { journey: journeyOf(table), table, coordinatePolicy: policy, ...transportFields(res) };
+  const transport = classifyTransport(res);
+  if (transport) return check(id, { ...fields, ...transport });
   if (res.status !== 200 && res.status !== 206) return check(id, { ...fields, status: 'fail', ...supabaseFailure(res) });
   if (!res.isJson || !Array.isArray(res.json)) return check(id, { ...fields, status: 'fail', observation: 'non-json' });
-  const coordinatePaths = findCoordinateKeyPaths(res.json);
-  const keyNames = distinctKeyNames(coordinatePaths);
-  const withKeys = { ...fields, observedRows: res.json.length, coordinateKeysSeen: keyNames };
-  if (coordinatePaths.length && policy === 'forbidden') {
-    return check(id, { ...withKeys, status: 'fail', observation: 'coordinate-keys-present', detail: `member-facing payload carries ${keyNames.join(', ')}` });
+  const scan = scanCoordinateKeys(res.json);
+  const withKeys = { ...fields, observedRows: res.json.length, ...scan };
+  if (scan.coordinateKeyCount && policy === 'forbidden') {
+    return check(id, { ...withKeys, status: 'fail', observation: 'coordinate-keys-present', detail: 'member-facing text payload carries coordinate keys' });
   }
-  return check(id, {
-    ...withKeys,
-    status: 'pass',
-    observation: res.json.length ? 'present' : 'empty',
-    detail:
-      policy === 'expected-raw-atlas-input' && keyNames.length
-        ? 'raw Atlas input; public rendering generalises it in src/features/atlas-next/sensitivity.ts'
-        : undefined,
-  });
+  if (!res.json.length) {
+    // The select was accepted (no column drift) but proved nothing about data.
+    // The count check owns the fail for required tables.
+    return check(id, { ...withKeys, status: 'warn', observation: 'empty_or_hidden', warning: EMPTY_OR_HIDDEN_WARNING });
+  }
+  const generalised =
+    policy === 'expected-raw-atlas-input' && scan.coordinateKeyCount
+      ? { detail: 'raw Atlas input; generalised client-side before drawing', generalisedBy: ATLAS_GENERALISATION_SOURCES }
+      : {};
+  return check(id, { ...withKeys, status: 'pass', observation: 'present', ...generalised });
 }
 
 // ---------------------------------------------------------------------------
@@ -520,11 +649,12 @@ export function redact(value, secrets) {
 export function verdictOf(checks) {
   if (checks.some((c) => c.status === 'fail')) return 'FAIL';
   if (checks.some((c) => c.status === 'outage')) return 'OUTAGE';
-  if (checks.some((c) => c.status === 'skipped')) return 'NOT_CONFIGURED';
-  return checks.length ? 'PASS' : 'NOT_CONFIGURED';
+  if (!checks.length || checks.some((c) => c.status === 'skipped')) return 'NOT_CONFIGURED';
+  if (checks.some((c) => c.status === 'warn')) return 'PASS_WITH_WARNINGS';
+  return 'PASS';
 }
 
-export const EXIT_CODES = { PASS: 0, FAIL: 1, NOT_CONFIGURED: 2, OUTAGE: 3 };
+export const EXIT_CODES = { PASS: 0, PASS_WITH_WARNINGS: 0, FAIL: 1, NOT_CONFIGURED: 2, OUTAGE: 3 };
 
 function originOnly(url) {
   try {
@@ -549,15 +679,17 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
       }),
     );
   } else {
-    let routeProven = false;
+    let proven = false;
+    let afterOutage = false;
     for (const taxon of cfg.knownTaxa) {
       const { check: searchCheck, sampleName } = await checkSearch(fetchImpl, cfg, taxon);
       checks.push(searchCheck);
-      const byName = await checkByName(fetchImpl, cfg, sampleName, searchCheck.id);
+      const byName = await checkByName(fetchImpl, cfg, sampleName, searchCheck);
       checks.push(byName);
-      if (byName.status === 'pass') routeProven = true;
+      if (byName.status === 'pass') proven = true;
+      if (searchCheck.status === 'outage' || byName.status === 'outage') afterOutage = true;
     }
-    checks.push(await checkNonsense(fetchImpl, cfg, routeProven));
+    checks.push(await checkNonsense(fetchImpl, cfg, { proven, afterOutage }));
   }
 
   if (!cfg.supabaseUrl || !cfg.anonKey) {
@@ -580,7 +712,7 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
     }
   }
 
-  const summary = { pass: 0, fail: 0, outage: 0, skipped: 0 };
+  const summary = { pass: 0, warn: 0, fail: 0, outage: 0, skipped: 0 };
   for (const c of checks) summary[c.status] = (summary[c.status] || 0) + 1;
   const verdict = verdictOf(checks);
 
@@ -589,7 +721,7 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
     version: VERIFIER_VERSION,
     generatedAt: new Date().toISOString(),
     readOnly: true,
-    method: 'GET only',
+    method: 'GET only; redirects never followed off-origin',
     targets: {
       speciesApiOrigin: cfg.apiBase ? originOnly(cfg.apiBase) : null,
       supabaseOrigin: cfg.supabaseUrl ? originOnly(cfg.supabaseUrl) : null,
@@ -601,10 +733,30 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
     checks,
     notes: [
       'Counts are observed during this run; none are expected values.',
-      'Payload values are never recorded; only key names and paths.',
+      "No response body or header text is recorded: only status codes, counts, booleans, fixed vocabulary terms and this run's own configuration.",
+      'Names returned by search are referenced by query and a 12-hex sha256 prefix, never by text.',
     ],
   };
   return redact(report, [cfg.anonKey]);
+}
+
+/** Markdown for a CI step summary, built only from report fields. */
+export function renderSummary(report) {
+  const cell = (v) => String(v ?? '').replace(/[|\n\r`]/g, ' ');
+  const lines = [
+    '### Release 1 data verifier',
+    '',
+    `Verdict: \`${cell(report.verdict)}\` (exit ${cell(report.exitCode)})`,
+    '',
+    '| check | status | observation | observed count |',
+    '|---|---|---|---|',
+    ...report.checks.map((c) => `| ${cell(c.id)} | ${cell(c.status)} | ${cell(c.observation)} | ${cell(c.observedCount)} |`),
+  ];
+  const warnings = report.checks.filter((c) => c.status === 'warn');
+  if (warnings.length) {
+    lines.push('', '**Warnings**', '', ...warnings.map((c) => `- ${cell(c.id)}: ${cell(c.warning || c.observation)}`));
+  }
+  return `${lines.join('\n')}\n`;
 }
 
 async function main() {
@@ -612,16 +764,15 @@ async function main() {
   const report = await runVerification(cfg);
   const text = JSON.stringify(report, null, 2);
   if (cfg.out) writeFileSync(cfg.out, `${text}\n`);
+  if (cfg.summary) appendFileSync(cfg.summary, renderSummary(report));
   process.stdout.write(`${text}\n`);
   process.exitCode = report.exitCode;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   main().catch((error) => {
-    // Never echo the environment: the message is scrubbed of the key first.
-    const key = String(process.env.VITE_SUPABASE_ANON_KEY || '');
-    const message = String((error && error.message) || error);
-    process.stderr.write(`verify-release1-data crashed: ${key.length >= 8 ? message.split(key).join('[redacted]') : message}\n`);
+    // No message: it could carry text from a response or the environment.
+    process.stderr.write(`verify-release1-data crashed (${(error && error.name) || 'Error'})\n`);
     process.exitCode = 1;
   });
 }
