@@ -113,6 +113,12 @@ export interface InteractionDiscoveryResult {
    * copied out (see the allow-list); this count only lets the page say so.
    */
   place_withheld_count?: number;
+  /**
+   * Records not shown at all because a taxon name, taxon id, interaction type
+   * or evidence state carried locality. They are neither "a different taxon"
+   * nor absent: they may include exact-species candidates.
+   */
+  withheld_for_protection_count?: number;
 }
 
 export type InteractionDiscoveryState =
@@ -171,22 +177,23 @@ function parseBackendUnreadableCount(value: unknown): number | "invalid" {
 
 /**
  * Parse one record, allow-listing fields, then screen every allow-listed text
- * value for locality. Returns null when unreadable.
+ * value for locality. Returns null when unreadable, or when the record is
+ * withheld for locality protection.
  */
 export function parseDiscoveredInteraction(raw: unknown): DiscoveredInteraction | null {
-  return parseAndScreenInteraction(raw)?.record ?? null;
+  const screened = parseAndScreenInteraction(raw);
+  return screened && screened.kind === "shown" ? screened.record : null;
 }
 
-function parseAndScreenInteraction(raw: unknown): { record: DiscoveredInteraction; fieldsWithheld: number } | null {
+type ScreenedInteraction =
+  | { kind: "shown"; record: DiscoveredInteraction; fieldsWithheld: number }
+  /** An identity field carried locality: the record cannot be shown honestly. */
+  | { kind: "withheld_for_locality" };
+
+function parseAndScreenInteraction(raw: unknown): ScreenedInteraction | null {
   const record = parseAllowListedInteraction(raw);
   if (!record) return null;
-  // The evidence state is vocabulary, not prose: it is never rewritten, so the
-  // UNVERIFIED label always renders. One that carries a coordinate is a
-  // corrupt record and is not shown at all.
-  if (carriesCoordinate(record.verification_state) || URL_LOCALITY.test(record.verification_state)) return null;
-  const { verification_state, ...text } = record;
-  const screened = screenRecordLocality(text as DiscoveredInteraction);
-  return { record: { ...screened.record, verification_state }, fieldsWithheld: screened.fieldsWithheld };
+  return screenRecordLocality(record);
 }
 
 function parseAllowListedInteraction(raw: unknown): DiscoveredInteraction | null {
@@ -248,9 +255,12 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
   const records: DiscoveredInteraction[] = [];
   let unreadable = 0;
   let localityWithheld = 0;
+  let localityWithheldRecords = 0;
   for (const item of payload.interactions) {
     const screened = parseAndScreenInteraction(item);
-    if (screened) {
+    if (screened && screened.kind === "withheld_for_locality") {
+      localityWithheldRecords += 1;
+    } else if (screened && screened.kind === "shown") {
       records.push(screened.record);
       // A record whose raw body carried a locality-like key, or whose text had
       // a field withheld, is counted so the page can say so.
@@ -280,9 +290,12 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
     taxon_filter: optionalString(payload.taxon_filter),
     note: optionalString(payload.note),
     place_withheld_count: localityWithheld,
+    withheld_for_protection_count: localityWithheldRecords,
   };
 
   if (records.length > 0) return { state: "ok", result };
+  // Records were withheld for locality protection: that is not "none".
+  if (localityWithheldRecords > 0) return { state: "incomplete", result };
   if (payload.interactions.length > 0) {
     // Records came back and none were readable: that is not "no interactions".
     return { state: "malformed", reason: "No interaction record in the response could be read." };
@@ -442,19 +455,35 @@ const DISQUALIFYING_TOKEN =
 /** Lower-case words that may appear inside an authorship ("Rchb. f. ex Lindl."). */
 const AUTHOR_PARTICLES = new Set(["de", "del", "della", "di", "du", "da", "van", "von", "der", "den", "ter", "ex", "et", "in", "la", "le", "fil", "y", "e", "d"]);
 
+/** Latin epithet endings. A capitalised, unabbreviated token with one is read as an epithet, not an author. */
+const EPITHET_ENDING = /(?:a|um|us|is|ae|ii|oides|ans|ens)$/i;
+
 /**
  * Whether a record's taxon name is the exact species `binomial`.
  *
  * Accepts the bare binomial, or the binomial followed by an authorship only.
- * Every later token is examined, not just the first: a rank marker (subsp.,
- * var., f., cv., ...), a hybrid marker (×, x, hybrid), a sensu / auct. / non
- * qualifier, a quoted cultivar epithet, or a bare lower-case word that is not
- * an authorship particle (an epithet written without its rank) anywhere after
- * the binomial means the name is not this exact species. So are names whose
- * epithet merely starts with this one ("masculata").
+ * Every later token is examined, split on whitespace AND on "." (so
+ * "subsp.signifera" is two tokens). Any of these anywhere after the binomial
+ * means the name is not this exact species:
+ *   - a rank marker (subsp., var., f., cv., nothosubsp., ...), hybrid marker
+ *     (×, x, hybrid) or sensu / auct. / non qualifier -- except the filius
+ *     "f." attached to an abbreviated author ("Rchb.f.", "L.f.");
+ *   - a quoted cultivar epithet;
+ *   - a bare lower-case word that is not an authorship particle;
+ *   - a capitalised or upper-case token that looks like an epithet rather
+ *     than an author: the page's own epithet in any case ("L. MASCULA"), an
+ *     all-capitals word, or an unabbreviated word with a Latin epithet ending
+ *     ("L. Alba").
+ * So are names whose epithet merely starts with this one ("masculata").
  *
- * This fails closed: an authorship that happens to contain such a token (for
- * example "L. f.") is not matched, and the record is counted, not shown.
+ * This fails closed: an authorship that happens to look like an epithet (a
+ * spaced "L. f.", an unabbreviated surname ending in -a) is not matched, and
+ * the record is counted, not shown.
+ *
+ * Not detected (follow-up): intergeneric hybrids written without the hybrid
+ * sign under a nothogenus name ("Brassocattleya binosa"). The repository has
+ * no nothogenus list to check against; such a name only binds to a page for
+ * that same nothogenus binomial, never to a parent species page.
  */
 export function nameBindsToExactSpecies(name: string, binomial: string): boolean {
   const n = name.trim().replace(/\s+/g, " ");
@@ -463,14 +492,29 @@ export function nameBindsToExactSpecies(name: string, binomial: string): boolean
   if (n.includes("×") || /['"‘’“”]/.test(n)) return false;
   if (n.toLowerCase() === b.toLowerCase()) return true;
   if (!n.toLowerCase().startsWith(`${b.toLowerCase()} `)) return false;
+  const epithet = b.split(" ")[1]?.toLowerCase() ?? "";
   const rest = n.slice(b.length + 1).split(" ");
   // The first token after the binomial must open an authorship.
   if (!/^[A-Z(]/.test(rest[0] ?? "")) return false;
   for (const raw of rest) {
-    const token = raw.replace(/^[([]+/, "").replace(/[)\].,;:]+$/, "");
-    if (!token) continue;
-    if (DISQUALIFYING_TOKEN.test(token)) return false;
-    if (/^[a-z][a-z-]{2,}$/.test(token) && !AUTHOR_PARTICLES.has(token)) return false;
+    const word = raw.replace(/^[([]+/, "").replace(/[)\],;:]+$/, "");
+    if (!word) continue;
+    const abbreviated = word.includes(".");
+    const bare = word.replace(/\.+$/, "");
+    if (bare.toLowerCase() === epithet) return false;
+    if (/^[A-Z]{3,}$/.test(bare)) return false;
+    if (!abbreviated && /^[A-Z][a-z-]{2,}$/.test(bare) && EPITHET_ENDING.test(bare)) return false;
+    const parts = word.split(".").filter(Boolean);
+    for (let i = 0; i < parts.length; i += 1) {
+      const token = parts[i];
+      if (DISQUALIFYING_TOKEN.test(token)) {
+        // "Rchb.f." / "L.f.": filius attached to an abbreviated author.
+        const filius = (token === "f" || token === "fil") && i > 0 && /^[A-Z]/.test(parts[0]);
+        if (!filius) return false;
+        continue;
+      }
+      if (/^[a-z][a-z-]{2,}$/.test(token) && !AUTHOR_PARTICLES.has(token)) return false;
+    }
   }
   return true;
 }
@@ -496,7 +540,9 @@ export function restrictToExactSpecies(
   if (records.length > 0) return { state: "ok", result };
   // Nothing readable binds to this species. That is "none" only when the
   // backend returned its complete match set and every record was readable.
-  if (result.truncated || result.unreadable_count > 0) return { state: "incomplete", result };
+  if (result.truncated || result.unreadable_count > 0 || (result.withheld_for_protection_count ?? 0) > 0) {
+    return { state: "incomplete", result };
+  }
   if (result.index_state === "memory_unprovisioned") return { state: "unprovisioned", result };
   return { state: "empty", result };
 }
@@ -552,11 +598,101 @@ export function carriesLocalityLikeKey(value: unknown): boolean {
 }
 
 /**
- * Query parameters / schemes that put a position in a URL. A study reference
- * carrying one is withheld, and is never rendered as a link.
+ * URL parameter names that carry a position or a place. Matched as a
+ * substring of the (decoded, lower-cased) parameter name, so prefixed forms
+ * such as GloBI's `nw_lat` / `se_lng` are caught.
  */
-const URL_LOCALITY =
-  /\bgeo:|[?&#;](?:lat|lng|lon|long|latitude|longitude|ll|sll|geo|coord|coords|coordinates|point|bbox|center|centre|location|loc|position|pos)=/i;
+const LOCALITY_PARAM_NAME =
+  /lat|lng|lon|coord|geo|bbox|wkt|point|geometry|locality|state_?province|country|county|municipality|location|position|center|centre|^ll$|^sll$|^pos$|^loc$/;
+
+/** Rounds of percent-decoding before a value is treated as unscreenable. */
+const MAX_DECODE_ROUNDS = 5;
+
+/**
+ * Percent-decode repeatedly (bounded), byte by byte, and fold `+` to a space.
+ * Returns null when the value is still changing after the last round: an
+ * encoding that deep is not screened, it is withheld.
+ */
+function decodeForScreening(value: string): string | null {
+  let current = value;
+  for (let round = 0; round < MAX_DECODE_ROUNDS; round += 1) {
+    const next = current.replace(/\+/g, " ").replace(/%([0-9a-f]{2})/gi, (_m, hex: string) =>
+      String.fromCharCode(parseInt(hex, 16)),
+    );
+    if (next === current) return current;
+    current = next;
+  }
+  return null;
+}
+
+/** Whether a (decoded) value carries a position-bearing URL parameter or a geo: URI. */
+function carriesLocalityParam(decoded: string): boolean {
+  const text = decoded.toLowerCase();
+  if (/\bgeo:/.test(text)) return true;
+  for (const match of text.matchAll(/(?:^|[?&#;/])([^?&#;/=\s]{1,64})=/g)) {
+    if (LOCALITY_PARAM_NAME.test(match[1])) return true;
+  }
+  return false;
+}
+
+const NUMBER_WORD =
+  "(?:zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fourty|fifty|sixty|seventy|eighty|ninety|hundred)";
+const NUMBER_PHRASE = `${NUMBER_WORD}(?:[\\s-]+(?:and[\\s-]+)?${NUMBER_WORD}){0,4}`;
+const DEGREE = "(?:°|deg\\.?|degrees?)";
+
+/**
+ * Coordinate shapes the shared screen does not cover, all bounded (no
+ * unbounded repetition next to an overlapping one), so each start position
+ * costs a bounded amount of work.
+ */
+const EXTRA_COORDINATE_SHAPE = new RegExp(
+  [
+    // Written out: "forty-eight degrees twelve minutes north".
+    `\\b${NUMBER_PHRASE}\\s+${DEGREE}(?![a-z])[^\\n]{0,60}?\\b(?:north|south|east|west|minutes?)\\b`,
+    // Digits then words: "48 degrees twelve minutes".
+    `\\b\\d{1,3}\\s*${DEGREE}\\s+${NUMBER_PHRASE}\\s+minutes?\\b`,
+  ].join("|"),
+  "i",
+);
+
+/** Hemisphere-letter shapes, case-sensitive (lower-case n/s/e/w are ordinary words). */
+const EXTRA_COORDINATE_SHAPE_CASED = new RegExp(
+  [
+    // Spaced DMS: "48 12 30 N", "16 22 23.5 E".
+    "\\b\\d{1,3}\\s\\d{1,2}\\s\\d{1,2}(?:\\.\\d+)?\\s?[NSEW]\\b",
+    // Degrees and decimal minutes: "48 12.500 N".
+    "\\b\\d{1,3}\\s\\d{1,2}\\.\\d+\\s?[NSEW]\\b",
+    // Hemisphere first: "N48 12.500", "E016 22.383", "N 48°12'".
+    "\\b[NSEW]\\s?\\d{1,3}(?:°\\s?|\\s)\\d{1,2}(?:\\.\\d+|['′])",
+  ].join("|"),
+);
+
+/**
+ * Whether one text value carries locality on its own: the shared coordinate
+ * screen, the extra shapes above, and URL position/place parameters after
+ * bounded percent-decoding. Values longer than `MAX_SCREENED_TEXT_LENGTH`, or
+ * encoded too deeply to decode, are treated as carrying locality.
+ */
+export function textCarriesLocality(value: string): boolean {
+  if (value.length > MAX_SCREENED_TEXT_LENGTH) return true;
+  const decoded = decodeForScreening(value);
+  if (decoded === null) return true;
+  let normalised: string;
+  try {
+    normalised = decoded.normalize("NFKC");
+  } catch {
+    normalised = decoded;
+  }
+  // Collapse whitespace runs: no shape depends on run length, and it keeps
+  // the scan's cost proportional to the text.
+  const collapsed = normalised.replace(/\s+/g, " ");
+  for (const variant of collapsed === value ? [value] : [value.replace(/\s+/g, " "), collapsed]) {
+    if (carriesCoordinate(variant) || EXTRA_COORDINATE_SHAPE.test(variant) || EXTRA_COORDINATE_SHAPE_CASED.test(variant)) {
+      return true;
+    }
+  }
+  return carriesLocalityParam(collapsed);
+}
 
 /** A decimal with position precision (three or more places, magnitude up to 180), standing alone. */
 const POSITION_PRECISION_DECIMAL = /(?:^|[^\d.])[-+]?(?:1[0-7]\d|\d{1,2})\.\d{3,}(?![\d.])/;
@@ -567,68 +703,90 @@ export const MAX_SCREENED_TEXT_LENGTH = 2_000;
 export const WITHHELD_UNSCREENABLE = "[withheld: too long to screen for locality]";
 
 /**
- * Screen every text value of a parsed record for locality, whole-field.
- *
- * Reuses the frontend's existing coordinate screen (`sanitiseLocality` in
- * cognitiveIntegration.ts: decimal pairs, lat/lon labels, DMS, UTM/MGRS, grid
- * references, plus codes, geohash, pairs split across fields), adds URL
- * position parameters and `geo:` URIs, and withholds any value longer than
- * `MAX_SCREENED_TEXT_LENGTH` rather than scanning it. A withheld value is
- * replaced whole, never partially redacted.
+ * Fields that say WHAT the record is. They are screened one at a time and
+ * never rewritten: a record whose identity carries locality is withheld
+ * whole (and counted as such), because rewriting a taxon name would make the
+ * exact-species filter read the record as a different taxon.
  */
-export function screenRecordLocality(record: DiscoveredInteraction): {
-  record: DiscoveredInteraction;
-  fieldsWithheld: number;
-} {
+const IDENTITY_FIELDS = [
+  "source_taxon_name",
+  "source_taxon_id",
+  "target_taxon_name",
+  "target_taxon_id",
+  "interaction_type",
+  "verification_state",
+] as const;
+
+/** Free-text provenance fields: screened together, withheld field by field. */
+const FREE_TEXT_FIELDS = [
+  "study_citation",
+  "study_source_citation",
+  "study_external_id",
+  "provider",
+  "provider_stability",
+  "dataset_version",
+] as const;
+
+/**
+ * Screen a parsed record for locality.
+ *
+ * Identity fields (taxon names and ids, interaction type, evidence state) are
+ * checked one at a time; if any carries locality the record is withheld
+ * whole. Free-text provenance fields go through the shared screen
+ * (`sanitiseLocality` in cognitiveIntegration.ts, which also catches pairs
+ * split across adjacent fields) plus `textCarriesLocality`; a value that
+ * carries locality is replaced whole, never partially redacted. A pair split
+ * across non-adjacent fields -- two fields each carrying a position-precision
+ * decimal -- withholds those free-text fields, or the whole record when one
+ * half is an identity field.
+ */
+export function screenRecordLocality(record: DiscoveredInteraction): ScreenedInteraction {
+  const fields = record as unknown as Record<string, unknown>;
+  for (const key of IDENTITY_FIELDS) {
+    const value = fields[key];
+    if (typeof value === "string" && textCarriesLocality(value)) return { kind: "withheld_for_locality" };
+  }
+
   let fieldsWithheld = 0;
-  const original = record as unknown as Record<string, unknown>;
-  // What the shape scan sees: whitespace runs collapsed (no shape depends on
-  // run length, and it keeps the scan's cost proportional to the text), with
-  // over-long and URL-position values already withheld.
-  const scanInput: Record<string, unknown> = {};
-  const preWithheld = new Set<string>();
-  for (const [key, value] of Object.entries(original)) {
-    if (typeof value !== "string") {
-      scanInput[key] = value;
-    } else if (value.length > MAX_SCREENED_TEXT_LENGTH) {
-      scanInput[key] = WITHHELD_UNSCREENABLE;
-      preWithheld.add(key);
-      fieldsWithheld += 1;
-    } else if (URL_LOCALITY.test(value)) {
-      scanInput[key] = WITHHELD_COORDINATE;
-      preWithheld.add(key);
-      fieldsWithheld += 1;
+  const scanInput: Record<string, string> = {};
+  const preWithheld: Record<string, string> = {};
+  for (const key of FREE_TEXT_FIELDS) {
+    const value = fields[key];
+    if (typeof value !== "string") continue;
+    if (value.length > MAX_SCREENED_TEXT_LENGTH) {
+      preWithheld[key] = WITHHELD_UNSCREENABLE;
+    } else if (textCarriesLocality(value)) {
+      preWithheld[key] = WITHHELD_COORDINATE;
     } else {
       scanInput[key] = value.replace(/\s+/g, " ");
     }
   }
+  fieldsWithheld += Object.keys(preWithheld).length;
   const { value: scanned, fieldsWithheld: shapeWithheld } = sanitiseLocality(scanInput);
   fieldsWithheld += shapeWithheld;
-  // A pair split across fields that do not render next to each other (the
-  // shared screen only joins adjacent text): two or more fields each carrying
-  // a position-precision decimal are all withheld. DOIs are not positions.
-  const halves = Object.entries(scanned).filter(
-    ([, value]) =>
-      typeof value === "string" &&
-      value !== WITHHELD_COORDINATE &&
-      !DOI_SHAPE.test(value.trim()) &&
-      POSITION_PRECISION_DECIMAL.test(value),
-  );
-  if (halves.length >= 2) {
-    for (const [key] of halves) {
-      (scanned as Record<string, unknown>)[key] = WITHHELD_COORDINATE;
+
+  const halfOf = (value: unknown) =>
+    typeof value === "string" &&
+    value !== WITHHELD_COORDINATE &&
+    !DOI_SHAPE.test(value.trim()) &&
+    POSITION_PRECISION_DECIMAL.test(value);
+  const identityHalves = IDENTITY_FIELDS.filter((key) => halfOf(fields[key]));
+  const textHalves = Object.keys(scanned).filter((key) => halfOf(scanned[key]));
+  if (identityHalves.length + textHalves.length >= 2) {
+    if (identityHalves.length > 0) return { kind: "withheld_for_locality" };
+    for (const key of textHalves) {
+      scanned[key] = WITHHELD_COORDINATE;
       fieldsWithheld += 1;
     }
   }
-  const out: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(scanned)) {
-    // A value the scan left alone is rendered as the source wrote it.
-    out[key] =
-      !preWithheld.has(key) && typeof value === "string" && value === scanInput[key] && typeof original[key] === "string"
-        ? original[key]
-        : value;
+
+  const out: Record<string, unknown> = { ...fields };
+  for (const key of FREE_TEXT_FIELDS) {
+    if (key in preWithheld) out[key] = preWithheld[key];
+    else if (key in scanned && scanned[key] !== scanInput[key]) out[key] = scanned[key];
+    // Otherwise the value the source wrote is rendered unchanged.
   }
-  return { record: out as unknown as DiscoveredInteraction, fieldsWithheld };
+  return { kind: "shown", record: out as unknown as DiscoveredInteraction, fieldsWithheld };
 }
 
 // ---------------------------------------------------------------------------
@@ -668,10 +826,10 @@ export function studyReferenceUrl(value: string | null): string | null {
   } catch {
     return null;
   }
-  if (url.protocol !== "https:" || url.username || url.password) return null;
+  if (url.protocol !== "https:" || url.username || url.password || url.port) return null;
   if (!LINKABLE_STUDY_HOSTS.has(url.hostname.toLowerCase())) return null;
-  if (/(?:^|[?&#;])(?:lat|lng|lon|long|latitude|longitude|ll|geo|coords?|coordinates|point|bbox|location|loc)=/i.test(`${url.search}${url.hash}`)) {
-    return null;
-  }
+  // Query, fragment and path are screened after bounded percent-decoding;
+  // any position or place parameter makes the reference plain text.
+  if (textCarriesLocality(value) || textCarriesLocality(url.href)) return null;
   return url.toString();
 }

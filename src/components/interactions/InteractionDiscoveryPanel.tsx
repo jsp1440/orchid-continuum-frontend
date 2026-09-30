@@ -197,9 +197,23 @@ function IncompleteNotice({ result, species }: { result: InteractionDiscoveryRes
           candidates may be among {result.unreadable_count === 1 ? "it" : "them"}.
         </div>
       ) : null}
+      {(result.withheld_for_protection_count ?? 0) > 0 ? (
+        <div className="mt-1" data-testid="interaction-discovery-incomplete-locality">
+          <LocalityWithheldRecords count={result.withheld_for_protection_count ?? 0} />
+        </div>
+      ) : null}
       <div className="mt-1">This is not evidence that no interactions are known for {species}.</div>
       <BackendIndexNote result={result} />
     </div>
+  );
+}
+
+function LocalityWithheldRecords({ count }: { count: number }) {
+  return (
+    <>
+      {count} record{count === 1 ? " was" : "s were"} withheld for locality protection and {count === 1 ? "is" : "are"}{" "}
+      not shown; exact-species candidates may be among {count === 1 ? "it" : "them"}.
+    </>
   );
 }
 
@@ -207,9 +221,15 @@ function IncompleteNotice({ result, species }: { result: InteractionDiscoveryRes
 function ExclusionNotes({ result, species }: { result: InteractionDiscoveryResult; species: string }) {
   const other = result.other_taxon_excluded_count ?? 0;
   const locality = result.place_withheld_count ?? 0;
-  if (other === 0 && locality === 0) return null;
+  const withheldRecords = result.withheld_for_protection_count ?? 0;
+  if (other === 0 && locality === 0 && withheldRecords === 0) return null;
   return (
     <div className="mt-2 space-y-1 text-xs text-slate-600">
+      {withheldRecords > 0 ? (
+        <p data-testid="interaction-discovery-locality-withheld-records">
+          <LocalityWithheldRecords count={withheldRecords} />
+        </p>
+      ) : null}
       {other > 0 ? (
         <p data-testid="interaction-discovery-other-taxon-excluded">
           {other} matched candidate{other === 1 ? "" : "s"} carried a different, broader, or possibly synonymous name

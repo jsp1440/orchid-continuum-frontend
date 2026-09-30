@@ -17,6 +17,7 @@ import {
   WITHHELD_UNSCREENABLE,
   speciesInteractionBinding,
   studyReferenceUrl,
+  textCarriesLocality,
 } from "@/lib/interactionDiscovery";
 import captured from "@/lib/__fixtures__/interactionDiscovery.speciesCategories.realBackend.json";
 import earlier from "@/lib/__fixtures__/interactionDiscovery.realBackend.json";
@@ -623,6 +624,166 @@ describe("repair: heading outline", () => {
     });
     expect(container.querySelector("h2")?.textContent).toBe("Interaction discovery");
   });
+});
+
+describe("repair 2: a locality-bearing citation never hides an exact candidate", () => {
+  it("keeps the record, withholds only the citation, and counts nothing as another taxon (SYNTHETIC citation)", async () => {
+    // SYNTHETIC: a coordinate placed in the citation of a captured exact-species record.
+    const record = capturedRecordWith({ study_citation: "Smith 2020, collected at 51.7523, -1.2578" });
+    stubFetch(() => json(pollinatorBodyWith([record])));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(records()).toHaveLength(1);
+    const row = records()[0];
+    expect(row.textContent).toContain("Orchis mascula");
+    expect(row.textContent).toContain("pollinatedBy");
+    expect(row.textContent).toContain("Bombus terrestris");
+    expect(row.textContent).toContain(WITHHELD_COORDINATE);
+    expect(section().textContent).not.toMatch(/51\.75|1\.25/);
+    expect(section().querySelector('[data-testid="interaction-discovery-other-taxon-excluded"]')).toBeNull();
+    expect(section().querySelector('[data-testid="interaction-discovery-empty"]')).toBeNull();
+  });
+
+  it("withholds a record whose identity carries locality, counts it as such, and never says none (SYNTHETIC name)", async () => {
+    // SYNTHETIC: a coordinate inside a captured record's taxon name.
+    const record = capturedRecordWith({ source_taxon_name: "Orchis mascula 51.7523 -1.2578" });
+    stubFetch(() => json(pollinatorBodyWith([record])));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(records()).toHaveLength(0);
+    expect(section().textContent).not.toMatch(/51\.75|1\.25/);
+    expect(section().querySelector('[data-testid="interaction-discovery-empty"]')).toBeNull();
+    expect(section().querySelector('[data-testid="interaction-discovery-other-taxon-excluded"]')).toBeNull();
+    expect(section().querySelector('[data-testid="interaction-discovery-incomplete-locality"]')?.textContent).toContain(
+      "1 record was withheld for locality protection",
+    );
+  });
+
+  it("withholds the record when one half of a split pair is an identity field (SYNTHETIC values)", () => {
+    const body = pollinatorBodyWith([capturedRecordWith({ target_taxon_id: "51.75231", study_citation: "near -1.25784" })]);
+    const parsed = parseInteractionDiscoveryBody(body);
+    expect(parsed.state).toBe("incomplete");
+    if (parsed.state !== "incomplete") return;
+    expect(parsed.result.withheld_for_protection_count).toBe(1);
+    expect(JSON.stringify(parsed.result)).not.toMatch(/51\.75|1\.25/);
+  });
+
+  it("keeps an exact record whose other fields are clean when a sibling record is withheld", () => {
+    const withheld = capturedRecordWith({ interaction_type: "pollinatedBy at 51.7523, -1.2578" });
+    const clean = (fixture.fixture_ingested_pollinator.body.interactions as unknown[])[1];
+    const kept = restrictToExactSpecies(parseInteractionDiscoveryBody(pollinatorBodyWith([withheld, clean])), "Orchis mascula");
+    expect(kept.state).toBe("ok");
+    if (kept.state !== "ok") return;
+    expect(kept.result.records).toHaveLength(1);
+    expect(kept.result.other_taxon_excluded_count).toBe(0);
+    expect(kept.result.withheld_for_protection_count).toBe(1);
+  });
+});
+
+describe("repair 2: encoded, prefixed and place parameters are never links and never shown", () => {
+  const hostile = [
+    "https://www.gbif.org/occurrence/search?lat%3D51.75%26lon%3D-1.25",
+    "https://www.gbif.org/occurrence/search?%6Cat=51.75&%6Con=-1.25",
+    "https://www.gbif.org/occurrence/search#%6Cat=51.75",
+    "https://www.gbif.org/occurrence/search?%256Cat=51.75",
+    "https://www.globalbioticinteractions.org/?nw_lat=51&se_lng=-1",
+    "https://www.gbif.org/occurrence/search?country=AT",
+    "https://www.gbif.org/occurrence/search?state_province=Wien",
+    "https://www.gbif.org/occurrence/search?locality=Hidden%20valley",
+    "https://www.gbif.org/occurrence/search?county=Kent",
+    "https://www.gbif.org/occurrence/search?municipality=Graz",
+    "https://www.gbif.org/occurrence/search?geometry=POLYGON",
+    "https://www.gbif.org/x?%25%36%43at=51",
+  ];
+
+  it.each(hostile)("%s is not linkable and is withheld as text", (value) => {
+    expect(studyReferenceUrl(value)).toBeNull();
+    expect(textCarriesLocality(value)).toBe(true);
+    const parsed = parseDiscoveredInteraction(capturedRecordWith({ study_external_id: value }))!;
+    expect(parsed.study_external_id).toBe(WITHHELD_COORDINATE);
+  });
+
+  it("renders none of them on the page (SYNTHETIC references on real records)", async () => {
+    stubFetch(() => json(pollinatorBodyWith(hostile.map((value) => capturedRecordWith({ study_external_id: value })))));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(records()).toHaveLength(hostile.length);
+    expect(section().querySelectorAll("a")).toHaveLength(0);
+    expect(section().textContent).not.toMatch(/gbif\.org\/occurrence|nw_lat|Wien|Hidden|Kent|Graz/);
+  });
+
+  it("rejects non-default ports and keeps clean allow-listed links", () => {
+    expect(studyReferenceUrl("https://www.gbif.org:8443/dataset/abc")).toBeNull();
+    expect(studyReferenceUrl("https://www.gbif.org:443/dataset/abc")).toBe("https://www.gbif.org/dataset/abc");
+    expect(studyReferenceUrl("https://www.globalbioticinteractions.org/study/abc?taxon=Orchis")).toBe(
+      "https://www.globalbioticinteractions.org/study/abc?taxon=Orchis",
+    );
+  });
+});
+
+describe("repair 2: more coordinate shapes, without over-withholding citations", () => {
+  it.each([
+    "48 12 30 N 16 22 23 E",
+    "collected at 48 12 30 N",
+    "N48 12.500 E016 22.383",
+    "E016 22.383",
+    "48 12.500 N",
+    "N 48°12'",
+    "forty-eight degrees twelve minutes north",
+    "Forty eight degrees, twelve minutes North",
+    "sixteen degrees twenty-two minutes east",
+    "48 degrees twelve minutes",
+  ])("withholds %s", (value) => {
+    expect(textCarriesLocality(value)).toBe(true);
+  });
+
+  it.each([
+    "vol 48, pp 12-30",
+    "Smith J. 2020. J. Ecol. 48: 12-30.",
+    "Table S1 12 species",
+    "three degrees warmer than ambient",
+    "N = 48 plants at 12 sites",
+    "Example study 2020",
+    "GloBI dataset v1",
+    "doi:10.1234/example",
+    "Kullenberg, B. (1961) Studies in Ophrys pollination. Zool. Bidr. Upps. 34: 1-340.",
+    "globi-2026-08",
+    "VERSIONED_STABLE_DATASET",
+  ])("keeps %s", (value) => {
+    expect(textCarriesLocality(value)).toBe(false);
+  });
+
+  it("stays fast on long adversarial input", () => {
+    const inputs = [
+      "1 ".repeat(999),
+      "forty ".repeat(330),
+      "N4 ".repeat(660),
+      "=".repeat(1999),
+      "%25".repeat(600),
+      "a=".repeat(999),
+    ];
+    const started = performance.now();
+    for (const input of inputs) textCarriesLocality(input);
+    expect(performance.now() - started).toBeLessThan(2_000);
+  });
+});
+
+describe("repair 2: rank markers without a following space", () => {
+  it.each([
+    "Orchis mascula L. subsp.signifera",
+    "Orchis mascula L. var.alba",
+    "Orchis mascula L. f.alba",
+    "Orchis mascula (L.) L. ssp.speciosa (Mutel) Hegi",
+    "Orchis mascula L. Alba",
+    "Orchis mascula L. MASCULA",
+    "Orchis mascula L. Mascula",
+  ])("rejects %s", (name) => {
+    expect(nameBindsToExactSpecies(name, "Orchis mascula")).toBe(false);
+  });
+
+  it.each(["Orchis mascula Rchb.f.", "Orchis mascula L.f.", "Orchis mascula (Mutel) Hegi", "Orchis mascula Hook.f. ex Lindl."])(
+    "accepts %s",
+    (name) => {
+      expect(nameBindsToExactSpecies(name, "Orchis mascula")).toBe(true);
+    },
+  );
 });
 
 void React;
