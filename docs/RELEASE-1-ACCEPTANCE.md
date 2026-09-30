@@ -39,7 +39,7 @@ the owner gates listed below.**
 | Frontend `jsp1440/orchid-continuum-frontend` | `b9d7745a88b0bbbe0ba759b2ba88e13ba050fe8a` | `r1-0930b`, 2026-09-30T10:17Z |
 
 Between 2026-09-27 and 2026-09-30 the owner lineage merged further work into
-both integration branches: backend #1547, #1642 (show-day QR, scan, class
+both integration branches: backend #1566 (decision fabric), #1547, #1642 (show-day QR, scan, class
 results and judging lock), #1660, #1681 (Matrix corpus-first acquisition), #1688,
 #1689, a `main` merge and `9ce07655`; frontend #678, #883, #884 and #886. The
 `r1-0930b` run at 10:17Z re-verified Release 1 on the heads above:
@@ -77,10 +77,11 @@ Frontend `00bac0b7` differs from `f31421a1` only in this document.
 
 BE #1643 and FE #858, #859 and #860 were merged to `main` earlier on 2026-09-26, under the
 owner-authorised sprint that preceded the Release 1 directive. They reached
-integration through syncs BE #1644 and FE #862. Nothing has changed `main` since
-the directive: main tips are backend `f6f1c04` and frontend `f59493ab`, both
-ancestors of integration. Merging `oc-autonomous-integration` into `main` is
-owner-gated.
+integration through syncs BE #1644 and FE #862. Since then the owner merged BE
+#1683, #1693 and #1694 to backend `main` (tip `46887089`, 2026-09-29), and
+integration merged `main` at `16af5eea`. Frontend `main` is still `f59493ab`.
+Both `main` tips are ancestors of integration. Merging
+`oc-autonomous-integration` into `main` is owner-gated.
 
 ## How the evidence was produced
 
@@ -106,7 +107,7 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680, #1695, #1696, #1697; FE #862, #868, #869, #870, #872, #873, #877, #879, #881 | Yes, before merge (session checker agents; #1647, #868, #869, #1678, #1695 and #1697 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
+  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680, #1695, #1696, #1697; FE #862, #868, #869, #870, #872, #873, #877, #879, #881 | Yes, before merge (session checker agents; #1647, #868, #869, #1678, #1695 and #1697 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675, #1695, #1697 and FE #869: clean merges of the checked head onto a base that had moved (tree equals `git merge-tree` of the checked head) |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
   | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict recorded in this document before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
   | BE #1676 at `b0f410ad`; FE #878 at `0a68e841`; FE #880 at `93bdff3f` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677, FE #879 and FE #881 |
@@ -211,7 +212,7 @@ Elevation-labelled Matrix characters and their states stay withheld from members
 |---|---|---|
 | Show-day judging lock | While a show is locked, every show-scoped judging, entry and award write and show deletion returns 409 until the owner unlocks it; event status is forward-only; judge assignments must match the event's show and class; the legacy results route withholds exhibitor names for blind events | BE #1695 `960e4758` → `b5770464` (checker FAIL twice, PASS on the third head) |
 | Acquisition ledger time zones | Stored and caller times compared in UTC; a non-UTC caller time no longer stores a lease early and hands out a duplicate paid Firecrawl lease; test fixtures no longer fail by import order | BE #1696 `6bfa14f7` → `3bd21a1d` |
-| Acquisition ledger fencing | A random lease token fences `complete()` and `fail()`, so a stale worker cannot clear a live holder's lease; takeovers compare and swap on the token; retries are bounded; a paid result is never discarded or marked failed | BE #1697 `5488349d` → `3db7cecb` (checker FAIL once, PASS on the second head) |
+| Acquisition ledger fencing | A random lease token fences `complete()` and `fail()`, so a stale worker cannot clear a live holder's lease; takeovers compare and swap on the token; retries are bounded; under ordinary contention a paid result is never discarded or marked failed (see Post-Release-1 items for the database-error cases) | BE #1697 `5488349d` → `3db7cecb` (checker FAIL once, PASS on the second head) |
 
 All three were checked on the exact head and merged by the coordinator after
 `AUTO_INTEGRATE`; each merged tree equals the checked merge.
@@ -296,6 +297,8 @@ All three were checked on the exact head and merged by the coordinator after
   to a closed but unlocked event are allowed.
 - Acquisition ledger: after three consecutive database errors that follow a
   paid success, the result is logged but not recorded, and the key can be paid
-  again after its 120 s lease; consumer-list bookkeeping can drop a name on
+  again after its 120 s lease; a non-transient database error after a paid
+  success is not retried and could re-pay every 120 s (no such error was found
+  reachable in the current service path); consumer-list bookkeeping can drop a name on
   SQLite.
 - A richer local PostgreSQL harness.
