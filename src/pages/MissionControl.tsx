@@ -74,7 +74,6 @@ import {
   toNarrativeTitle,
   buildExecutivePlatformStatus,
   priorityBandMeta,
-  FALLBACK_ACTIVITY_EVENTS,
   type PriorityBand,
   type ScoredSubsystem,
 } from '@/lib/mission-control/intelligentMissionControl';
@@ -1131,16 +1130,18 @@ function DailyBriefPanel({
 
 // ─── BUILD-059: Live Activity Feed ────────────────────────────────────────────
 
-function LiveActivityFeedPanel({ activities }: { activities: RecentActivity[] }) {
+export function LiveActivityFeedPanel({ activities }: { activities: RecentActivity[] }) {
   const feedRef = useRef<HTMLDivElement>(null);
-  const events = activities.length ? activities : FALLBACK_ACTIVITY_EVENTS;
-  const isFallback = activities.length === 0;
+  const events = activities;
 
   return (
     <Panel id="mission-control-activity-feed" eyebrow="Live activity" title="Activity Timeline" icon={TrendingUp}>
-      {isFallback && (
-        <div className="mb-4 rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/08 p-3 text-[11px] leading-5 text-[#f5f0e8]/70">
-          Showing demo events — live backend events will appear here when connected.
+      {events.length === 0 && (
+        <div
+          data-testid="mission-control-activity-empty"
+          className="mb-4 rounded-lg border border-[#d4b34a]/20 bg-[#d4b34a]/08 p-3 text-[11px] leading-5 text-[#f5f0e8]/70"
+        >
+          No activity events available — the backend has not reported any. No demo events are shown.
         </div>
       )}
       <div ref={feedRef} className="max-h-96 space-y-2 overflow-y-auto pr-1">
@@ -1169,7 +1170,7 @@ function LiveActivityFeedPanel({ activities }: { activities: RecentActivity[] })
 
 // ─── BUILD-059: Scientific Insights ──────────────────────────────────────────
 
-function ScientificInsightsPanel({ dashboard }: { dashboard: MissionControlOperations | null }) {
+export function ScientificInsightsPanel({ dashboard }: { dashboard: MissionControlOperations | null }) {
   const insights = useMemo(() => deriveScientificInsights(dashboard), [dashboard]);
   const categoryIcon = (cat: string) => {
     if (cat === 'gap') return '◌';
@@ -1183,8 +1184,18 @@ function ScientificInsightsPanel({ dashboard }: { dashboard: MissionControlOpera
   return (
     <Panel id="mission-control-insights" eyebrow="Scientific intelligence" title="Today's Scientific Insights" icon={Brain}>
       <div className="mb-4 rounded-lg border border-[#d4b34a]/15 bg-[#d4b34a]/08 p-3 text-[12px] leading-5 text-[#f5f0e8]/78">
-        Gaps, discoveries, opportunities, and relationships surfaced from the current platform state.
+        Insights derived only from live Mission Control telemetry. Each card names its source.
       </div>
+      {insights.length === 0 && (
+        <p
+          data-testid="mission-control-insights-empty"
+          className="rounded-lg border border-white/[0.08] bg-black/18 p-4 text-[12.5px] leading-5 text-[#cfc8b8]/82"
+        >
+          {dashboard
+            ? 'No insights available — live telemetry reported no subsystem completeness to derive from.'
+            : 'Insights unavailable — Mission Control telemetry has not loaded. No placeholder insights are shown.'}
+        </p>
+      )}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {insights.map((insight) => (
           <article key={insight.id} className="rounded-lg border border-white/[0.08] bg-black/18 p-4">
@@ -1199,6 +1210,7 @@ function ScientificInsightsPanel({ dashboard }: { dashboard: MissionControlOpera
             </div>
             <p className="mt-3 text-[12.5px] leading-5 text-[#cfc8b8]/82">{insight.detail}</p>
             <p className="mt-3 text-[12px] leading-5 text-emerald-100/82">→ {insight.actionHint}</p>
+            <p className="mt-2 font-mono text-[9px] uppercase tracking-[0.14em] text-[#cfc8b8]/60">Source: {insight.provenance}</p>
           </article>
         ))}
       </div>

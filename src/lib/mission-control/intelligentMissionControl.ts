@@ -5,7 +5,7 @@
  * scientific insights, and narrative recommendation helpers.
  */
 
-import type { ContinuumSubsystem, MissionControlOperations, RecentActivity } from '@/lib/missionControlOps';
+import type { ContinuumSubsystem, MissionControlOperations } from '@/lib/missionControlOps';
 
 // ─── Priority Engine ─────────────────────────────────────────────────────────
 
@@ -179,64 +179,10 @@ export function getGreeting(): string {
 
 // ─── Live Activity Feed ───────────────────────────────────────────────────────
 
-export const FALLBACK_ACTIVITY_EVENTS: RecentActivity[] = [
-  {
-    id: 'fallback-1',
-    label: 'Runtime heartbeat healthy',
-    detail: 'Calyx backend returned healthy on scheduled probe.',
-    timestamp: new Date(Date.now() - 2 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-2',
-    label: 'Atlas subsystem polled',
-    detail: 'Coordinate coverage last verified. No new conflicts detected.',
-    timestamp: new Date(Date.now() - 5 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-3',
-    label: '478 images indexed',
-    detail: 'Vision Lab processed the overnight image batch.',
-    timestamp: new Date(Date.now() - 14 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-4',
-    label: 'New GBIF occurrence',
-    detail: 'GBIF harvester detected a new orchid occurrence record.',
-    timestamp: new Date(Date.now() - 20 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-5',
-    label: 'Taxonomy conflict detected',
-    detail: 'One synonym discrepancy flagged in the species registry.',
-    timestamp: new Date(Date.now() - 31 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-6',
-    label: 'Knowledge Graph: 314 orphan relationships',
-    detail: 'Relationship engine identified unconnected pollinator nodes.',
-    timestamp: new Date(Date.now() - 48 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-7',
-    label: 'Grant Office: Smithsonian deadline approaching',
-    detail: 'Funding deadline is in 18 days. Package prep recommended.',
-    timestamp: new Date(Date.now() - 65 * 60000).toISOString(),
-    source: 'fallback',
-  },
-  {
-    id: 'fallback-8',
-    label: 'Pollinators: literature harvest queued',
-    detail: 'Latest GBIF and iNaturalist pollinator literature batch pending import.',
-    timestamp: new Date(Date.now() - 92 * 60000).toISOString(),
-    source: 'fallback',
-  },
-];
+// There is deliberately NO fallback activity list. Invented events (fabricated
+// image / relationship counts, a "healthy" heartbeat, a grant deadline) used to
+// fill the timeline when the backend sent nothing. The panel now shows an
+// explicit empty state instead.
 
 // ─── Scientific Insights ─────────────────────────────────────────────────────
 
@@ -246,80 +192,41 @@ export type ScientificInsight = {
   detail: string;
   actionHint: string;
   category: 'gap' | 'discovery' | 'opportunity' | 'relationship' | 'grant';
+  /** Where the insight was derived from (always live telemetry). */
+  provenance: string;
 };
 
-export const FALLBACK_SCIENTIFIC_INSIGHTS: ScientificInsight[] = [
-  {
-    id: 'insight-image-gap',
-    label: 'Largest image gap',
-    detail: 'Lepanthes species have the lowest image coverage across all genera — only 12 images mapped.',
-    actionHint: 'Review Vision Lab queue and prioritize Lepanthes imaging.',
-    category: 'gap',
-  },
-  {
-    id: 'insight-active-genus',
-    label: 'Most active genus',
-    detail: 'Dracula has received the most new occurrence records and literature citations this month.',
-    actionHint: 'Update taxonomy and check for new synonym conflicts.',
-    category: 'discovery',
-  },
-  {
-    id: 'insight-literature-topic',
-    label: 'Fastest growing literature topic',
-    detail: 'Pollinator-plant interaction papers are increasing 38% year-on-year in the knowledge base.',
-    actionHint: 'Import latest pollinator literature batch to stay current.',
-    category: 'discovery',
-  },
-  {
-    id: 'insight-relationship',
-    label: 'Most incomplete ecological relationship',
-    detail: 'Pleurothallid–fungal mycorrhizal data is present for less than 6% of species.',
-    actionHint: 'Connect orphan fungal relationship nodes in Knowledge Graph.',
-    category: 'relationship',
-  },
-  {
-    id: 'insight-publication',
-    label: 'Potential publication opportunity',
-    detail: 'High-altitude Pleurothallid distribution data is sufficient for a targeted distribution paper.',
-    actionHint: 'Generate executive report and review data completeness for this cluster.',
-    category: 'opportunity',
-  },
-  {
-    id: 'insight-grant',
-    label: 'Most promising grant target',
-    detail: 'NSF Systematics and Biodiversity Science is well-aligned with current data coverage and project scope.',
-    actionHint: 'Prepare Smithsonian or NSF grant package from the Grant Office.',
-    category: 'grant',
-  },
-];
-
+/**
+ * Insights derived ONLY from live Mission Control telemetry. Returns [] when
+ * the backend is unavailable or reports nothing to derive from; there is no
+ * list of hand-written taxon "insights" (image counts, growth rates, coverage
+ * percentages) to fall back on, because none of those had a source.
+ */
 export function deriveScientificInsights(ops: MissionControlOperations | null): ScientificInsight[] {
-  if (!ops) return FALLBACK_SCIENTIFIC_INSIGHTS;
+  if (!ops) return [];
 
-  const health = ops.globalHealth ?? [];
+  // Rows whose status is unknown (e.g. runner status unavailable) carry no
+  // observed completeness, so they cannot be ranked as the "largest gap".
+  const health = (ops.globalHealth ?? []).filter(
+    (s) => s.status !== 'unknown' && typeof s.completeness === 'number' && Number.isFinite(s.completeness),
+  );
   const insights: ScientificInsight[] = [];
 
-  // Gap insight from least complete scientific system
-  const sorted = [...health].sort((a, b) => (a.completeness ?? 0) - (b.completeness ?? 0));
+  // Gap insight from least complete subsystem reported by the backend.
+  const sorted = [...health].sort((a, b) => a.completeness - b.completeness);
   const leastComplete = sorted[0];
   if (leastComplete) {
     insights.push({
       id: 'insight-live-gap',
       label: 'Largest system gap',
-      detail: `${leastComplete.name} is the least complete subsystem at ${leastComplete.completeness ?? 0}%.`,
+      detail: `${leastComplete.name} is the least complete subsystem at ${leastComplete.completeness}%.`,
       actionHint: leastComplete.recommendedNextAction || `Address blockers in ${leastComplete.name}.`,
       category: 'gap',
+      provenance: `Mission Control subsystem telemetry (${leastComplete.dataSource || 'globalHealth'})`,
     });
   }
 
-  // Fill remaining slots with fallback insights not already covered
-  const used = insights.map((i) => i.id);
-  for (const insight of FALLBACK_SCIENTIFIC_INSIGHTS) {
-    if (!used.includes(insight.id)) insights.push(insight);
-    if (insights.length >= 6) break;
-  }
-
-  return insights.slice(0, 6);
+  return insights;
 }
 
 // ─── Narrative Recommendations ───────────────────────────────────────────────
@@ -519,6 +426,7 @@ export function deriveScientificInsightsWithIntelligence(
       detail: `${bundle.atlas.occurrenceCount.toLocaleString()} occurrences indexed. ${bundle.atlas.missingCoordinates} missing coordinates.`,
       actionHint: bundle.atlas.recommendedNextAction,
       category: 'gap',
+      provenance: 'Scientific intelligence: Atlas adapter',
     })
   }
 
@@ -529,6 +437,7 @@ export function deriveScientificInsightsWithIntelligence(
       detail: `${bundle.knowledgeGraph.connectedEntities} connected entities and ${bundle.knowledgeGraph.relationshipCount} relationships. Graph completeness: ${Math.round(bundle.knowledgeGraph.graphCompleteness * 100)}%.`,
       actionHint: bundle.knowledgeGraph.repairAction,
       category: 'relationship',
+      provenance: 'Scientific intelligence: Knowledge Graph adapter',
     })
   }
 
@@ -539,6 +448,7 @@ export function deriveScientificInsightsWithIntelligence(
       detail: `${bundle.grants.activeOpportunities} active grant opportunities. ${bundle.grants.urgentDeadlines} urgent deadline(s).`,
       actionHint: bundle.grants.nextAction,
       category: 'grant',
+      provenance: 'Scientific intelligence: Grants adapter',
     })
   }
 

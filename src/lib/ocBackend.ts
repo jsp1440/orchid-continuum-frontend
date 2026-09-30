@@ -211,16 +211,6 @@ function pickStr(o: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) { const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); }
   return null;
 }
-const CATTLEYA_FALLBACK: ContinuumGraphData = {
-  genus: 'Cattleya', speciesCount: 113, description: 'Showy epiphytic orchids of Central & South America.', isFallback: true,
-  fungi: { count: 14, summary: '14 partnerships', items: ['Tulasnella', 'Rhizoctonia', 'Ceratobasidium'], hasData: true },
-  pollinators: { count: 8, summary: '8 linked', items: ['Euglossine bees', 'Bumblebees', 'Carpenter bees'], hasData: true },
-  climate: { count: null, summary: 'Montane · 600–2,000m', items: ['Tropical montane', '600–2,000 m elevation'], hasData: true },
-  geography: { count: 1202, summary: '21 countries · 1,202 records', items: ['Brazil', 'Colombia', 'Venezuela'], hasData: true },
-  conservation: { count: 54, summary: '12 EN · 8 VU · 34 LC', items: ['12 Endangered', '8 Vulnerable', '34 Least Concern'], hasData: true, worstStatus: 'EN' },
-  cultivation: { count: 23, summary: '23 grower records', items: ['Cattleya labiata', 'Cattleya mossiae', 'Cattleya warscewiczii'], hasData: true },
-  knowledge: { count: 156, summary: '156 literature records', items: ['Taxonomic revisions', 'Field surveys', 'OREP extractions'], hasData: true },
-};
 function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}): WebNodeData {
   if (!raw || typeof raw !== 'object') return EMPTY_NODE;
   const o = raw as Record<string, unknown>;
@@ -254,10 +244,10 @@ function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}):
 }
 
 export async function fetchContinuumGraph(genus: string, signal?: AbortSignal): Promise<ContinuumGraphData> {
-  if (!genus) {
-    console.warn('[ContinuumWeb] fetchContinuumGraph called with empty genus. Returning Cattleya fallback as a diagnostic.');
-    return { ...CATTLEYA_FALLBACK, isFallback: true };
-  }
+  // No local fallback graph: an empty genus is a caller error (the canonical
+  // caller, fetchFeaturedTaxonContinuum, validates the genus first and treats a
+  // rejection as "relationships unavailable").
+  if (!genus) throw new Error('fetchContinuumGraph requires a genus');
   const g = genus;
   const q = encodeURIComponent(g);
   let speciesCount: number | null = null;

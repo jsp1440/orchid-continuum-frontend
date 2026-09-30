@@ -1,8 +1,8 @@
 /**
- * genusData — shared "Genus of the Day" demo dataset and helpers.
+ * genusData — genus rotation (identity only) and live genus data helpers.
  *
- * Used by the homepage DailyGenusFeature card and the /genus/:name detail page
- * so both share the same content, descriptions, and species plates.
+ * Used by the /genus/:name detail page. The rotation holds genus NAMES only;
+ * every factual field is resolved from a live Orchid Continuum backend.
  */
 
 import { supabase } from '@/lib/supabase';
@@ -14,293 +14,39 @@ import {
 import type { FeaturedSpecies } from '@/lib/speciesFeature';
 
 
-export interface SpeciesPlate {
-  species: string;
-  image?: string;
-  habitat: string;
-  elevation: string;
-  pollinators: string;
-  conservation: string;
-  distribution: string;
-}
-
+/**
+ * A genus in the local rotation / genus-profile index.
+ *
+ * SCIENTIFIC-INTEGRITY CONTRACT: this is IDENTITY + NAVIGATION context only.
+ * It deliberately carries no taxon facts (no species counts, tribe, native
+ * range, elevation, habitat, pollinators, mycorrhizal partners, conservation
+ * status, descriptions or species plates). The previous hand-authored values
+ * had no source, citation or review record and were shown to visitors as if
+ * they were Continuum data. Every factual field on a genus page must come from
+ * a live Orchid Continuum backend contract and carry that provenance; when the
+ * backend is unavailable the UI shows an honest unavailable / empty state.
+ *
+ * `noFabricatedFallbackData.sourceScan.test.ts` fails if factual fields reappear here.
+ */
 export interface GenusEntry {
   genus: string;
-  family: string;
-  tribe: string;
-  speciesCount: number;
-  description: string;
-  /** Primary distribution regions for the map. */
-  regions: string[];
-  /** Ecology summary. */
-  ecology: {
-    pollinatorGuild: string;
-    mycorrhizal: string;
-    elevation: string;
-    habitat: string;
-  };
-  plates: SpeciesPlate[];
+  family: 'Orchidaceae';
 }
 
-// NOTE: No hardcoded photo URLs live here. Per the Orchid Continuum image
-// policy, every photograph must be a real, documented orchid delivered by the
-// backend approved image library — never an iNaturalist/GBIF URL embedded in
-// the frontend, and never an AI-generated illustration. Species plates below
-// therefore carry NO `image` field; the UI renders a clean "Image pending"
-// placeholder until the backend supplies an approved photo.
-
-
 /**
- * Demo genus rotation, keyed by day-of-week.
- *   0 Sun · 1 Mon · 2 Tue · 3 Wed · 4 Thu · 5 Fri · 6 Sat
+ * Genus rotation, keyed by day-of-week (0 Sun ... 6 Sat). Names only.
  */
 export const GENERA: Record<number, GenusEntry> = {
-  1: {
-    genus: 'Dracula',
-    family: 'Orchidaceae',
-    tribe: 'Pleurothallidinae',
-    speciesCount: 118,
-    description:
-      'Dracula orchids are miniature epiphytes of the cloud forests of Ecuador, Colombia, and Peru, growing between 1,500 and 2,800 meters elevation. Their pendant flowers hang below the plant on long spikes, mimicking mushrooms in both appearance and scent to attract fungus gnats as pollinators — one of the most sophisticated deception systems in the plant kingdom.',
-    regions: ['Ecuador', 'Colombia', 'Peru'],
-    ecology: {
-      pollinatorGuild: 'Fungus gnats (Bradysia, Mycetophilidae)',
-      mycorrhizal: 'Tulasnella / Ceratobasidium associates',
-      elevation: '1,500–2,800 m',
-      habitat: 'Andean cloud forest, epiphytic on mossy branches',
-    },
-    plates: [
-      {
-        species: 'Dracula vespertilio',
-        habitat: 'Cloud forest, epiphytic on mossy branches',
-        elevation: '1,800–2,400 m',
-        pollinators: 'Fungus gnats (Bradysia species)',
-        conservation: 'Data Deficient (IUCN)',
-        distribution: 'Ecuador, Colombia',
-      },
-      {
-        species: 'Dracula vampira',
-        habitat: 'Montane cloud forest, mossy trunks',
-        elevation: '1,900–2,200 m',
-        pollinators: 'Fungus gnats',
-        conservation: 'Endemic · Vulnerable',
-        distribution: 'Ecuador (Pichincha)',
-      },
-
-      {
-        species: 'Dracula chimaera',
-        habitat: 'Wet cloud forest understory',
-        elevation: '1,500–2,000 m',
-        pollinators: 'Mycophilous flies',
-        conservation: 'Data Deficient',
-        distribution: 'Colombia',
-      },
-    ],
-  },
-  2: {
-    genus: 'Masdevallia',
-    family: 'Orchidaceae',
-    tribe: 'Pleurothallidinae',
-    speciesCount: 600,
-    description:
-      'Masdevallia is a vast Andean genus of cool-growing epiphytes and lithophytes whose flowers are dominated by three fused sepals, often drawn into long colorful tails. Concentrated in the cloud forests of Ecuador, Colombia, and Peru, many species are pollinated by small flies drawn to bright reds and oranges.',
-    regions: ['Ecuador', 'Colombia', 'Peru', 'Bolivia'],
-    ecology: {
-      pollinatorGuild: 'Small flies and bees',
-      mycorrhizal: 'Tulasnella associates',
-      elevation: '1,500–4,000 m',
-      habitat: 'Cool Andean cloud forest, epiphytic & lithophytic',
-    },
-    plates: [
-      {
-        species: 'Masdevallia veitchiana',
-        habitat: 'Lithophytic on rocky cloud-forest slopes',
-        elevation: '2,000–4,000 m',
-        pollinators: 'Flies and small bees',
-        conservation: 'Near Threatened',
-        distribution: 'Peru',
-      },
-    ],
-  },
-  3: {
-    genus: 'Cattleya',
-    family: 'Orchidaceae',
-    tribe: 'Epidendreae',
-    speciesCount: 120,
-    description:
-      'Cattleya are showy epiphytic orchids of Central and South America, long prized for their large, fragrant blooms. Pseudobulbs store water for seasonal dryness, and most species are pollinated by large bees seeking nectar in the flaring labellum.',
-    regions: ['Brazil', 'Colombia', 'Venezuela', 'Central America'],
-    ecology: {
-      pollinatorGuild: 'Large euglossine and carpenter bees',
-      mycorrhizal: 'Ceratobasidium / Tulasnella associates',
-      elevation: '0–1,500 m',
-      habitat: 'Seasonally dry forest, epiphytic on canopy branches',
-    },
-    plates: [
-      {
-        species: 'Cattleya labiata',
-        habitat: 'Epiphytic in seasonally dry forest',
-        elevation: '500–1,200 m',
-        pollinators: 'Large euglossine bees',
-        conservation: 'Endangered (wild)',
-        distribution: 'Brazil',
-      },
-      {
-        species: 'Cattleya trianae',
-        habitat: 'Epiphytic in subtropical forest',
-        elevation: '800–1,500 m',
-        pollinators: 'Carpenter bees',
-        conservation: 'Endangered',
-        distribution: 'Colombia',
-      },
-      {
-        species: 'Cattleya mossiae',
-        habitat: 'Epiphytic on forest trees',
-        elevation: '800–1,600 m',
-        pollinators: 'Euglossine bees',
-        conservation: 'Vulnerable',
-        distribution: 'Venezuela',
-      },
-    ],
-  },
-  4: {
-    genus: 'Dendrobium',
-    family: 'Orchidaceae',
-    tribe: 'Dendrobieae',
-    speciesCount: 1800,
-    description:
-      'Dendrobium is one of the largest orchid genera, ranging from the Himalayas through Southeast Asia to Australia and the Pacific. Its species span deciduous canes to evergreen epiphytes, with pollination strategies as varied as the habitats they occupy.',
-    regions: ['Himalaya', 'SE Asia', 'Australia', 'Pacific Islands'],
-    ecology: {
-      pollinatorGuild: 'Bees, occasionally birds',
-      mycorrhizal: 'Tulasnella associates',
-      elevation: '0–3,000 m',
-      habitat: 'Montane to lowland forest, epiphytic',
-    },
-    plates: [
-      {
-        species: 'Dendrobium nobile',
-        habitat: 'Epiphytic on montane trees',
-        elevation: '200–2,000 m',
-        pollinators: 'Bees',
-        conservation: 'Least Concern',
-        distribution: 'Himalaya, SE Asia',
-      },
-    ],
-  },
-  5: {
-    genus: 'Bulbophyllum',
-    family: 'Orchidaceae',
-    tribe: 'Dendrobieae',
-    speciesCount: 2000,
-    description:
-      'Bulbophyllum is the largest orchid genus on Earth, pantropical and astonishingly diverse. Many species emit carrion or fungal scents and use hinged, mobile lips to trap and shuttle the fly pollinators they deceive.',
-    regions: ['SE Asia', 'New Guinea', 'Africa', 'Neotropics'],
-    ecology: {
-      pollinatorGuild: 'Carrion and fruit flies',
-      mycorrhizal: 'Tulasnella / Ceratobasidium associates',
-      elevation: '0–2,500 m',
-      habitat: 'Lowland to montane rainforest, epiphytic',
-    },
-    plates: [
-      {
-        species: 'Bulbophyllum echinolabium',
-        habitat: 'Epiphytic in lowland rainforest',
-        elevation: '300–1,200 m',
-        pollinators: 'Carrion flies',
-        conservation: 'Data Deficient',
-        distribution: 'Sulawesi',
-      },
-    ],
-  },
-  6: {
-    genus: 'Catasetum',
-    family: 'Orchidaceae',
-    tribe: 'Cymbidieae',
-    speciesCount: 170,
-    description:
-      'Catasetum is remarkable for producing separate male and female flowers that look entirely different. Male flowers forcibly eject pollinia onto visiting euglossine bees, which gather fragrance compounds rather than nectar across the Neotropics.',
-    regions: ['Brazil', 'Colombia', 'Venezuela', 'Central America'],
-    ecology: {
-      pollinatorGuild: 'Euglossine (orchid) bees',
-      mycorrhizal: 'Ceratobasidium associates',
-      elevation: '0–1,000 m',
-      habitat: 'Seasonally dry forest, epiphytic on palms & rotting wood',
-    },
-    plates: [
-      {
-        species: 'Catasetum macrocarpum',
-        habitat: 'Epiphytic on palms and rotting wood',
-        elevation: '0–900 m',
-        pollinators: 'Euglossine bees',
-        conservation: 'Least Concern',
-        distribution: 'N. South America',
-      },
-    ],
-  },
-  0: {
-    genus: 'Vanilla',
-    family: 'Orchidaceae',
-    tribe: 'Vanilleae',
-    speciesCount: 110,
-    description:
-      'Vanilla is a pantropical genus of climbing, vining orchids — the only orchid grown as a major agricultural crop. Its fermented seed pods yield the vanilla of commerce, while wild populations depend on specific bees and hummingbirds for natural pollination.',
-    regions: ['Mesoamerica', 'Caribbean', 'Africa', 'SE Asia'],
-    ecology: {
-      pollinatorGuild: 'Melipona bees, hummingbirds',
-      mycorrhizal: 'Ceratobasidium associates',
-      elevation: '0–700 m',
-      habitat: 'Humid tropical forest, climbing vines',
-    },
-    plates: [
-      {
-        species: 'Vanilla planifolia',
-        habitat: 'Climbing vine in humid forest',
-        elevation: '0–600 m',
-        pollinators: 'Melipona bees, hummingbirds',
-        conservation: 'Endangered (wild)',
-        distribution: 'Mesoamerica',
-      },
-    ],
-  },
+  0: { genus: 'Vanilla', family: 'Orchidaceae' },
+  1: { genus: 'Dracula', family: 'Orchidaceae' },
+  2: { genus: 'Masdevallia', family: 'Orchidaceae' },
+  3: { genus: 'Cattleya', family: 'Orchidaceae' },
+  4: { genus: 'Dendrobium', family: 'Orchidaceae' },
+  5: { genus: 'Bulbophyllum', family: 'Orchidaceae' },
+  6: { genus: 'Catasetum', family: 'Orchidaceae' },
 };
 
-/** Deterministic genus for "today" — same all day for everyone. */
-export function genusForToday(): GenusEntry {
-  const day = new Date().getDay();
-  return GENERA[day] ?? GENERA[3];
-}
-
-/**
- * Compose a warm, science-grounded 2-3 sentence fallback narrative for a genus
- * directly from its curated ecology fields. Used when the Claude-backed
- * `genus-narrative` edge function is unavailable so the "Field Note" block ALWAYS
- * renders a real, grounded summary (native range + a pollinator/fungal partner),
- * never an empty box.
- */
-export function buildLocalNarrative(g: GenusEntry): string {
-  const range = g.regions.slice(0, 3).join(', ');
-  const lead =
-    (g.description || '').split('. ').slice(0, 1).join('. ').trim();
-  const leadSentence = lead ? (lead.endsWith('.') ? lead : `${lead}.`) : '';
-  const partner = g.ecology.pollinatorGuild
-    ? `It leans on ${g.ecology.pollinatorGuild.toLowerCase()} for pollination`
-    : '';
-  const fungus = g.ecology.mycorrhizal
-    ? `${partner ? ', while ' : 'It '}its seedlings depend on ${g.ecology.mycorrhizal} mycorrhizal fungi to germinate`
-    : '';
-  const ecoSentence =
-    partner || fungus ? `${partner}${fungus}.`.replace('It It', 'It') : '';
-  const rangeSentence = range
-    ? `Native across ${range}, ${g.genus} threads the line between spectacle and quiet ecological dependence.`
-    : '';
-  return [leadSentence, ecoSentence, rangeSentence].filter(Boolean).join(' ');
-}
-
-/** The hardcoded fallback genus used when the live API is unavailable. */
-export const FALLBACK_GENUS: GenusEntry = GENERA[3];
-
-/** Case-insensitive lookup of a genus by name across the demo dataset. */
+/** Case-insensitive lookup of a genus by name across the rotation. */
 export function lookupGenus(name: string): GenusEntry | undefined {
   const key = name.trim().toLowerCase();
   return Object.values(GENERA).find((g) => g.genus.toLowerCase() === key);
@@ -567,7 +313,7 @@ export interface GenusImage {
 // Per-genus trusted-image localStorage cache (keyed by genus + day)
 // ---------------------------------------------------------------------------
 //
-// Mirrors the CachedBundle pattern used by the daily-genus fetch below: the
+// The
 // resolved trusted images for a genus are cached for the current local day so
 // repeat visits to the same genus render instantly and we avoid re-waking the
 // Render harvester backend (which can be slow on a cold start). The cache is
@@ -580,6 +326,11 @@ interface CachedGenusImages {
   date: string;
   writtenAt: number;
   images: GenusImage[];
+}
+
+/** YYYY-MM-DD for "today" (UTC date portion of the ISO timestamp). */
+function todayKey(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 /** Storage key for a genus's images on "today" (case-insensitive genus). */
@@ -2190,36 +1941,6 @@ export async function fetchSpeciesEcology(
 }
 
 /**
- * Fetch the live "genus of the day" from the Orchid Continuum backend, which
- * already validates the genus against our orchid taxonomy:
- *   GET /api/genus/daily   (5s timeout)
- * If the backend is unavailable, falls back to the curated Cattleya entry —
- * never to a GBIF / external lookup. Always resolves to a usable GenusEntry.
- */
-export async function fetchDailyGenus(): Promise<GenusEntry> {
-  const data = await ocFetch<Record<string, unknown>>('/api/genus/daily', undefined, 5000);
-  if (data) {
-    const inner = (data.data as Record<string, unknown>) ?? {};
-    const name =
-      pick(data, ['genus', 'name', 'genus_name']) ||
-      pick(inner, ['genus', 'name', 'genus_name']);
-    if (name) {
-      const matched = lookupGenus(name);
-      if (matched) return matched;
-      // Confirmed orchid genus from the backend, even if not in our demo set.
-      const count = Number(pick(data, ['species_count', 'speciesCount']) ?? 0);
-      return {
-        ...genusForToday(),
-        genus: name,
-        speciesCount: count > 0 ? count : genusForToday().speciesCount,
-      };
-    }
-  }
-  // Curated orchid fallback — still a confirmed orchid genus.
-  return FALLBACK_GENUS;
-}
-
-/**
  * Normalise a scientific name to its lower-case binomial (genus + epithet),
  * stripping authorities, hybrid markers, and infraspecific ranks.
  */
@@ -2261,153 +1982,6 @@ export function isValidatedName(
 export function buildValidatedSet(names: string[]): Set<string> {
   return new Set(names.map(toBinomial).filter(Boolean));
 }
-
-// ---------------------------------------------------------------------------
-// Daily-genus localStorage cache + status-reporting bundle fetch
-// ---------------------------------------------------------------------------
-
-/** A confirmed photo (URL only) cached alongside the daily genus. */
-interface CachedBundle {
-  date: string;
-  writtenAt: number;
-  entry: GenusEntry;
-  photos: SpeciesPhoto[];
-}
-
-export interface DailyBundle {
-  entry: GenusEntry;
-  photos: SpeciesPhoto[];
-  source: 'live' | 'cache' | 'fallback';
-  cacheWrittenAt: number | null;
-  lastPingTime: number | null;
-}
-
-/** YYYY-MM-DD for "today" in the visitor's local timezone. */
-function todayKey(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function cacheKey(): string {
-  return `oc_daily_genus_${todayKey()}`;
-}
-
-function readCache(): CachedBundle | null {
-  try {
-    const raw = localStorage.getItem(cacheKey());
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedBundle;
-    if (parsed.date !== todayKey()) return null;
-    if (!parsed.entry || !Array.isArray(parsed.photos)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function writeCache(entry: GenusEntry, photos: SpeciesPhoto[]): number {
-  const writtenAt = Date.now();
-  try {
-    // Prune any stale day keys so storage doesn't grow unbounded.
-    for (let i = localStorage.length - 1; i >= 0; i--) {
-      const k = localStorage.key(i);
-      if (k && k.startsWith('oc_daily_genus_') && k !== cacheKey()) {
-        localStorage.removeItem(k);
-      }
-    }
-    const payload: CachedBundle = { date: todayKey(), writtenAt, entry, photos };
-    localStorage.setItem(cacheKey(), JSON.stringify(payload));
-  } catch {
-    /* storage may be unavailable / full — non-fatal */
-  }
-  return writtenAt;
-}
-
-/** 2-second threshold the health banner uses to classify "live" data. */
-const LIVE_THRESHOLD_MS = 2000;
-
-/**
- * Resolve the daily genus + its photo set, with a localStorage cache and
- * honest data-source reporting for the curator health banner.
- *
- * Behaviour:
- *  1. If a valid cache for today exists, deliver it INSTANTLY (source:'cache').
- *  2. In parallel (or when no cache), ping the backend within 2s:
- *       - responds in time  → source:'live', refresh cache.
- *       - times out / fails → keep cache if present, else 'fallback'.
- *
- * `onResult` may be invoked up to twice: first from cache (instant), then
- * again if a fresh live response arrives.
- */
-export async function fetchDailyGenusBundle(
-  onResult: (b: DailyBundle) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  const cached = readCache();
-  if (cached) {
-    onResult({
-      entry: cached.entry,
-      photos: cached.photos,
-      source: 'cache',
-      cacheWrittenAt: cached.writtenAt,
-      lastPingTime: null,
-    });
-  }
-
-  // Attempt a fresh live fetch within the 2s "live" threshold.
-  const data = await ocFetch<Record<string, unknown>>(
-    '/api/genus/daily',
-    signal,
-    LIVE_THRESHOLD_MS,
-  );
-
-  if (signal?.aborted) return;
-
-  if (data) {
-    const pingTime = Date.now();
-    const inner = (data.data as Record<string, unknown>) ?? {};
-    const name =
-      pick(data, ['genus', 'name', 'genus_name']) ||
-      pick(inner, ['genus', 'name', 'genus_name']);
-    let entry = FALLBACK_GENUS;
-    if (name) {
-      const matched = lookupGenus(name);
-      if (matched) entry = matched;
-      else {
-        const count = Number(pick(data, ['species_count', 'speciesCount']) ?? 0);
-        entry = {
-          ...genusForToday(),
-          genus: name,
-          speciesCount: count > 0 ? count : genusForToday().speciesCount,
-        };
-      }
-    }
-    const photos = await fetchGenusSpecies(entry.genus, signal, 30);
-    if (signal?.aborted) return;
-    const writtenAt = writeCache(entry, photos);
-    onResult({
-      entry,
-      photos,
-      source: 'live',
-      cacheWrittenAt: writtenAt,
-      lastPingTime: pingTime,
-    });
-    return;
-  }
-
-  // Backend unavailable. If we already served cache above, leave it as-is.
-  if (cached) return;
-
-  // No cache, no backend → hardcoded fallback genus, placeholder photos.
-  onResult({
-    entry: FALLBACK_GENUS,
-    photos: [],
-    source: 'fallback',
-    cacheWrittenAt: null,
-    lastPingTime: null,
-  });
-}
-
-
 
 /** Map an iNaturalist conservation status to a colour + short code. */
 export function conservationBadge(status?: string): { code: string; color: string; bg: string } {

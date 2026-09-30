@@ -866,34 +866,85 @@ function withGovernance(statusPayload?: Record<string, unknown>, missionsPayload
   };
 }
 
-function runtimeSubsystemFrom(statusPayload?: Record<string, unknown>, configurationPayload?: Record<string, unknown>): ContinuumSubsystem | null {
+function optionalNumber(record: Record<string, unknown>, key: string): number | null {
+  const value = record[key];
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return null;
+}
+
+function optionalBoolean(value: unknown): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function yesNoUnknown(value: boolean | null): string {
+  return value === null ? 'unknown' : value ? 'yes' : 'no';
+}
+
+/**
+ * Build the Runners / Jobs subsystem row from the runner status and runtime
+ * configuration payloads.
+ *
+ * TRUTHFULNESS CONTRACT: runner state (running, thread alive, cycles, queue
+ * depth, completed/failed counts, heartbeat) is only ever read from the runner
+ * status payload. When that payload is absent (e.g. GET
+ * /api/runner/autonomous-status answers 404 because the backend does not mount
+ * it) the row says "runner status unavailable" and states no runner facts; it
+ * never presents defaults such as "running: no; cycles: 0" as observations. A
+ * field missing from a status payload is reported as "unknown", not zero.
+ */
+export function runtimeSubsystemFrom(statusPayload?: Record<string, unknown>, configurationPayload?: Record<string, unknown>): ContinuumSubsystem | null {
   if (!statusPayload && !configurationPayload) return null;
-  const engine = asRecord(statusPayload?.runtime_engine) ?? statusPayload ?? {};
   const configuration = configurationPayload ?? asRecord(statusPayload?.configuration) ?? {};
-  const configured = Boolean(configuration.runtime_enabled ?? statusPayload?.runtime_configured);
-  const running = Boolean(engine.running ?? statusPayload?.running);
-  const threadAlive = Boolean(engine.thread_alive ?? statusPayload?.thread_alive);
+  const configured = optionalBoolean(configuration.runtime_enabled ?? statusPayload?.runtime_configured);
   const blockers = pickStringArray(configuration, ['blockers']);
+  // Only the payloads that actually answered are named as the data source.
+  const sources = [
+    statusPayload ? 'runner status (GET /api/runner/autonomous-status)' : null,
+    configurationPayload ? 'runtime configuration (GET /api/runtime/configuration)' : null,
+  ].filter(Boolean).join(' + ');
+
+  if (!statusPayload) {
+    return {
+      id: 'runners_jobs',
+      name: 'Runners / Jobs',
+      category: 'Runtime',
+      status: 'unknown',
+      completeness: 0,
+      lastChecked: nowIso(),
+      summary: `Runner status unavailable: /api/runner/autonomous-status did not return a status payload, so running state, cycles, queue depth and job counts are unknown. Runtime configured (from /api/runtime/configuration): ${yesNoUnknown(configured)}.`,
+      blockers,
+      recommendedNextAction: 'Runner status route is unavailable; read runner state from a mounted backend route before judging the autonomous loop.',
+      route: '/mission-control',
+      dataSource: sources,
+      maturity: pickString(configuration, ['worker_mode'], 'runtime_status_unavailable'),
+    };
+  }
+
+  const engine = asRecord(statusPayload.runtime_engine) ?? statusPayload;
+  const running = optionalBoolean(engine.running ?? statusPayload.running);
+  const threadAlive = optionalBoolean(engine.thread_alive ?? statusPayload.thread_alive);
   const lastHeartbeat = pickString(engine, ['last_heartbeat_status'], 'unknown');
-  const cycleCount = pickNumber(engine, ['cycle_count'], 0);
-  const queueDepth = pickNumber(engine, ['queue_depth'], 0);
-  const completedCount = pickNumber(engine, ['completed_count'], 0);
-  const failedCount = pickNumber(engine, ['failed_count'], 0);
+  const countText = (key: string) => {
+    const value = optionalNumber(engine, key);
+    return value === null ? 'unknown' : String(value);
+  };
   const currentBlocker = pickString(engine, ['current_blocker', 'last_error'], '');
   if (currentBlocker) blockers.push(currentBlocker);
+  const healthy = running === true && threadAlive === true;
 
   return {
     id: 'runners_jobs',
     name: 'Runners / Jobs',
     category: 'Runtime',
-    status: running && threadAlive ? 'healthy' : configured ? 'warning' : 'error',
-    completeness: running && threadAlive ? 82 : configured ? 58 : 32,
+    status: healthy ? 'healthy' : configured ? 'warning' : configured === false ? 'error' : 'unknown',
+    completeness: healthy ? 82 : configured ? 58 : 32,
     lastChecked: nowIso(),
-    summary: `Configured: ${configured ? 'yes' : 'no'}; running: ${running ? 'yes' : 'no'}; thread alive: ${threadAlive ? 'yes' : 'no'}; cycles: ${cycleCount}; queue depth: ${queueDepth}; completed: ${completedCount}; failed: ${failedCount}; heartbeat: ${lastHeartbeat}.`,
+    summary: `Configured: ${yesNoUnknown(configured)}; running: ${yesNoUnknown(running)}; thread alive: ${yesNoUnknown(threadAlive)}; cycles: ${countText('cycle_count')}; queue depth: ${countText('queue_depth')}; completed: ${countText('completed_count')}; failed: ${countText('failed_count')}; heartbeat: ${lastHeartbeat}.`,
     blockers,
     recommendedNextAction: blockers.length ? 'Resolve runtime configuration blockers in Render, then smoke test owner-authorized runtime controls.' : 'Start or monitor the owner-authorized autonomous loop.',
     route: '/mission-control',
-    dataSource: '/api/runner/autonomous-status + /api/runtime/configuration',
+    dataSource: sources,
     maturity: pickString(configuration, ['worker_mode'], 'runtime_status'),
   };
 }

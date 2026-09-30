@@ -5,20 +5,18 @@ import { fetchGenusOccurrences, type OccurrencePoint } from '@/lib/ocBackend';
 
 /**
  * GenusOccurrenceMap — a photorealistic 3D Earth (globe.gl / three.js) showing
- * ONLY the occurrence points of the current "Genus of the Day", plus its
- * ecological partners:
- *
- *   • Genus occurrence points           → cream / sage dots
- *   • Pollinator relationship locations → GOLD dots
- *   • Mycorrhizal fungal partnerships   → ORANGE dots
+ * ONLY the occurrence points of the current genus.
  *
  * Occurrence points are pulled live from the canonical backend
- * (/api/atlas/occurrences?genus=…). The globe auto-rotates slowly and the user
+ * (/api/atlas/occurrences?genus=…). Nothing is synthesised: when the backend
+ * returns no points the map is empty and says so. (Earlier versions seeded
+ * points from unsourced region labels and jittered invented pollinator /
+ * fungal "partner" markers around real records; both were removed.) The globe auto-rotates slowly and the user
  * can toggle to the existing flat (equirectangular) SVG map. When the daily
  * genus changes, the data re-fetches and the map updates to that genus only.
  */
 
-type Kind = 'occurrence' | 'pollinator' | 'fungi';
+type Kind = 'occurrence';
 
 interface MapPoint {
   name: string;
@@ -29,35 +27,10 @@ interface MapPoint {
 
 const KIND_COLOR: Record<Kind, string> = {
   occurrence: '#e9e0c6',
-  pollinator: '#e8b53a',
-  fungi: '#e87a2a',
 };
 
 const KIND_LABEL: Record<Kind, string> = {
   occurrence: 'Occurrence',
-  pollinator: 'Pollinator relationship',
-  fungi: 'Mycorrhizal fungi',
-};
-
-/** Rough centroid lat/lon for region labels, used to seed fallback points. */
-const REGION_LATLON: Record<string, [number, number]> = {
-  Ecuador: [-1.5, -78],
-  Colombia: [4, -73],
-  Peru: [-10, -76],
-  Bolivia: [-17, -65],
-  Brazil: [-10, -52],
-  Brasil: [-10, -52],
-  Venezuela: [7, -66],
-  'Central America': [13, -85],
-  Mesoamerica: [17, -94],
-  Caribbean: [18, -75],
-  Himalaya: [29, 83],
-  'SE Asia': [10, 105],
-  Australia: [-25, 134],
-  'Pacific Islands': [-8, 160],
-  'New Guinea': [-6, 144],
-  Africa: [2, 22],
-  Madagascar: [-19, 47],
 };
 
 const EARTH_TEXTURE =
@@ -74,11 +47,9 @@ function equirect(lat: number, lng: number) {
 
 interface GenusOccurrenceMapProps {
   genus: string;
-  /** Primary distribution regions (used to seed partner / fallback points). */
-  regions: string[];
 }
 
-const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions }) => {
+const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus }) => {
   const [mode, setMode] = useState<'globe' | 'flat'>('globe');
   const [occurrences, setOccurrences] = useState<OccurrencePoint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,51 +77,17 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
     };
   }, [genus]);
 
-  // --- Build the full point set (occurrence + partners) -------------------
-  const points = useMemo<MapPoint[]>(() => {
-    const occ: MapPoint[] = occurrences.map((p, i) => ({
-      name: p.species || `${genus} occurrence ${i + 1}`,
-      lat: p.lat,
-      lng: p.lng,
-      kind: 'occurrence',
-    }));
-
-    // If the backend returned nothing for this genus, seed occurrence points
-    // from the genus's known regions so the map is never empty.
-    if (occ.length === 0) {
-      for (const r of regions) {
-        const ll = REGION_LATLON[r];
-        if (ll) occ.push({ name: r, lat: ll[0], lng: ll[1], kind: 'occurrence' });
-      }
-    }
-
-    const pts: MapPoint[] = [...occ];
-    if (occ.length) {
-      // Distribute several pollinator (gold) + mycorrhizal-fungi (orange)
-      // relationship markers across the genus's occurrence cluster so the
-      // ecological partnerships read as multiple locations, not single points.
-      // Sample a spread of occurrence anchors and jitter deterministically.
-      const anchorCount = Math.min(5, occ.length);
-      const step = Math.max(1, Math.floor(occ.length / anchorCount));
-      for (let n = 0; n < anchorCount; n++) {
-        const a = occ[(n * step) % occ.length];
-        const jit = (seed: number) => ((Math.sin(seed) * 43758.5453) % 1) * 6 - 3;
-        pts.push({
-          name: `${genus} pollinator relationship ${n + 1}`,
-          lat: a.lat + jit(n + 1) ,
-          lng: a.lng + jit(n + 7) + 3,
-          kind: 'pollinator',
-        });
-        pts.push({
-          name: `${genus} fungal partnership ${n + 1}`,
-          lat: a.lat + jit(n + 13) ,
-          lng: a.lng + jit(n + 19) - 3,
-          kind: 'fungi',
-        });
-      }
-    }
-    return pts;
-  }, [occurrences, genus, regions]);
+  // --- Build the point set (backend occurrence records only) --------------
+  const points = useMemo<MapPoint[]>(
+    () =>
+      occurrences.map((p, i) => ({
+        name: p.species || `${genus} occurrence ${i + 1}`,
+        lat: p.lat,
+        lng: p.lng,
+        kind: 'occurrence' as const,
+      })),
+    [occurrences, genus],
+  );
 
 
   // --- Initialise the globe once the library + container are ready --------
@@ -368,7 +305,7 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
 
       {/* Legend + count */}
       <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-white/10">
-        {(['occurrence', 'pollinator', 'fungi'] as const).map((k) => (
+        {(['occurrence'] as const).map((k) => (
           <span key={k} className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.06em] uppercase text-[#cfc8b8]">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: KIND_COLOR[k] }} />
             {KIND_LABEL[k]}
@@ -377,7 +314,9 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
         <span className="ml-auto font-mono text-[10px] tracking-[0.06em] uppercase text-[#cfc8b8]/60">
           {occurrences.length > 0
             ? `${occurrences.length} ${genus} records`
-            : `${genus} range`}
+            : loading
+              ? 'Loading records…'
+              : `No ${genus} occurrence records returned`}
         </span>
       </div>
     </div>

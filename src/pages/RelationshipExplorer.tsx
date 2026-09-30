@@ -21,7 +21,12 @@ function valueText(value: unknown, fallback = "Not available") {
 function numberText(value: unknown) {
   if (typeof value === "number") return value.toLocaleString();
   if (typeof value === "string" && value.trim()) return value;
-  return "0";
+  // A missing count is unknown, never zero.
+  return "Not available";
+}
+
+function sourceText(source: RelationshipExplorerPayload["source"]) {
+  return source === "api" ? "Relationship Explorer API" : "Unavailable";
 }
 
 function Card({
@@ -190,6 +195,18 @@ export default function RelationshipExplorer() {
 
         {payload ? (
           <>
+            {payload.source === "unavailable" ? (
+              <div
+                role="status"
+                data-testid="relationship-explorer-unavailable"
+                className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
+              >
+                The Relationship Explorer service did not respond for {payload.scientific_name}. No
+                atlas, interaction, mycorrhizal or reasoning data is shown, and nothing below has been
+                substituted from a local fallback. Any photographs come separately from the Orchid
+                Continuum image library with their own credits.
+              </div>
+            ) : null}
             <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
               <Card title={payload.scientific_name} eyebrow="Species profile">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -207,7 +224,7 @@ export default function RelationshipExplorer() {
                   </div>
                   <div>
                     <div className="text-sm font-semibold text-slate-500">Payload source</div>
-                    <div className="text-lg capitalize">{payload.source}</div>
+                    <div className="text-lg">{sourceText(payload.source)}</div>
                   </div>
                 </div>
                 {profile?.description ? (

@@ -783,10 +783,15 @@ const KNOWN_MISSES: Record<string, string> = {
   [`src/lib/missionListSignup.ts ${CRM_SUBSCRIBE_PATH}`]: 'CRM backend PRs are unmerged drafts',
   // TODO(backend runner): Mission Control reads GET /api/runner/autonomous-status,
   // which the backend does not mount (only the OPTIONS preflight catch-all
-  // under /api/runner matches). getJson() records the failure as an endpoint
-  // diagnostic; the owner console shows it unavailable rather than inventing
-  // a status. Needs a backend route or a frontend switch to an existing one.
-  'src/lib/missionControlOps.ts /api/runner/autonomous-status': 'backend does not mount this route',
+  // under /api/runner matches), so it answers 404. getJson() records that as
+  // an endpoint diagnostic, and runtimeSubsystemFrom() then reports the
+  // Runners / Jobs row as "runner status unavailable" with status `unknown`
+  // (tested in missionControlOps.runtimeSubsystem.test.ts); it no longer shows
+  // default running/cycle/queue/completed values as facts. The live runner
+  // engine state is exposed by GET /api/runner/health. Needs a backend route or
+  // a frontend switch to that existing one.
+  'src/lib/missionControlOps.ts /api/runner/autonomous-status':
+    'backend does not mount this route (404); runtimeSubsystemFrom() shows runner status unavailable, not default zeros',
 };
 
 /**
