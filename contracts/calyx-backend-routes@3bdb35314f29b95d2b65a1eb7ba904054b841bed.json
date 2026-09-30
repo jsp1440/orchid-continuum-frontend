@@ -2,7 +2,7 @@
   "schema": "calyx-backend-route-inventory.v1",
   "backend_repository": "jsp1440/orchid-calyx-backend",
   "backend_branch": "oc-autonomous-integration",
-  "backend_sha": "3db7cecb76f762ee64947b229349de63b2e5f7d8",
+  "backend_sha": "3bdb35314f29b95d2b65a1eb7ba904054b841bed",
   "source": "app.main:app.routes (FastAPI route table imported in-process; no server, no network)",
   "route_count": 1003,
   "routes": [
