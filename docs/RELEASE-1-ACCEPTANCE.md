@@ -20,7 +20,7 @@ Statuses:
 the owner gates listed below.**
 
 - No journey is FAIL.
-- No security or privacy blocker is known to be open as of the `r1-post-matrix`
+- No security or privacy blocker is known to be open as of the `r1-0930b`
   run.
   - Six were found and fixed after the `r1-refresh` acceptance; see "Security
     and privacy findings after acceptance".
@@ -35,8 +35,26 @@ the owner gates listed below.**
 
 | Repository | Integration head accepted | Last acceptance run |
 |---|---|---|
-| Backend `jsp1440/orchid-calyx-backend` | `fdc3ec8faa207427a83900734afc927134937ab9` | `r1-post-matrix`, 2026-09-27T07:24Z |
-| Frontend `jsp1440/orchid-continuum-frontend` | `00bac0b77e5c292b852d97d30acdddbfa733ec3b` | `r1-post-matrix`, 2026-09-27T07:24Z |
+| Backend `jsp1440/orchid-calyx-backend` | `3db7cecb76f762ee64947b229349de63b2e5f7d8` | `r1-0930b`, 2026-09-30T10:17Z |
+| Frontend `jsp1440/orchid-continuum-frontend` | `b9d7745a88b0bbbe0ba759b2ba88e13ba050fe8a` | `r1-0930b`, 2026-09-30T10:17Z |
+
+Between 2026-09-27 and 2026-09-30 the owner lineage merged further work into
+both integration branches: backend #1547, #1642 (show-day QR, scan, class
+results and judging lock), #1660, #1681 (Matrix corpus-first acquisition), #1688,
+#1689, a `main` merge and `9ce07655`; frontend #678, #883, #884 and #886. The
+`r1-0930b` run at 10:17Z re-verified Release 1 on the heads above:
+
+- all 17 journey tests passed;
+- the security spot-check had 0 failures;
+- the member-token audit found no unexpected routes;
+- axe findings are colour contrast only (rated serious), with none critical;
+- J12 on a disposable local PostgreSQL 16 cluster (10:26Z) passed durability,
+  with 0 security-check failures.
+
+An independent audit of every route added between `fdc3ec8f` and `9ce07655`
+found no release blocker: each show-day, judging and acquisition route returns
+401 to anonymous callers, bogus bearers and wrong API keys, and a member cannot
+trigger a paid acquisition. See owner gates 8–10 for what it did find.
 
 The `r1-post-hardening` run at 05:44Z recorded J03 as **FAIL**. The harness
 assertion expected "unavailable" or "not yet" and did not recognise the product's
@@ -88,7 +106,7 @@ owner-gated.
 
   | PR(s) | Independent checker on exact head | Factory gate | Merged by | Post-merge readback |
   |---|---|---|---|---|
-  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680; FE #862, #868, #869, #870, #872, #873, #877, #879, #881 | Yes, before merge (session checker agents; #1647, #868, #869 and #1678 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
+  | BE #1644, #1647, #1649, #1650, #1663, #1664, #1671, #1674, #1675, #1677, #1678, #1680, #1695, #1696, #1697; FE #862, #868, #869, #870, #872, #873, #877, #879, #881 | Yes, before merge (session checker agents; #1647, #868, #869, #1678, #1695 and #1697 after repair rounds; #1650 after a PR-description correction) | `AUTO_INTEGRATE`, evaluated by the coordinator from the recorded checker verdict and exact heads | Coordinator | Tree identical to checked head, except BE #1675 and FE #869: clean merges of the checked head onto a base that had moved |
   | BE #1646, #1648 | Yes, but after the owner had already merged them | Not evaluated | Owner | Blobs identical to checked head |
   | BE #1666, #1672, #1673; FE #874, #875, #876 | No checker verdict recorded in this document before merge | Not evaluated | Owner lineage | Second parents match the PR heads; covered by the `r1-post-hardening` run |
   | BE #1676 at `b0f410ad`; FE #878 at `0a68e841`; FE #880 at `93bdff3f` | Independent check **FAILED** at these heads | Not evaluated | Owner lineage, after the FAIL | Repaired by BE #1677, FE #879 and FE #881 |
@@ -187,6 +205,17 @@ integration holds exactly the checked merge.
 
 Elevation-labelled Matrix characters and their states stay withheld from members; see owner gate 7.
 
+### Hardening after `r1-post-matrix`
+
+| Change | What it closes | PR, exact head → integration |
+|---|---|---|
+| Show-day judging lock | While a show is locked, every show-scoped judging, entry and award write and show deletion returns 409 until the owner unlocks it; event status is forward-only; judge assignments must match the event's show and class; the legacy results route withholds exhibitor names for blind events | BE #1695 `960e4758` → `b5770464` (checker FAIL twice, PASS on the third head) |
+| Acquisition ledger time zones | Stored and caller times compared in UTC; a non-UTC caller time no longer stores a lease early and hands out a duplicate paid Firecrawl lease; test fixtures no longer fail by import order | BE #1696 `6bfa14f7` → `3bd21a1d` |
+| Acquisition ledger fencing | A random lease token fences `complete()` and `fail()`, so a stale worker cannot clear a live holder's lease; takeovers compare and swap on the token; retries are bounded; a paid result is never discarded or marked failed | BE #1697 `5488349d` → `3db7cecb` (checker FAIL once, PASS on the second head) |
+
+All three were checked on the exact head and merged by the coordinator after
+`AUTO_INTEGRATE`; each merged tree equals the checked merge.
+
 ## Owner gates remaining
 
 1. **Deployment.** Deploy both integration heads to Render and set
@@ -218,6 +247,25 @@ Elevation-labelled Matrix characters and their states stay withheld from members
    elevation-band character in Matrix identification needs an owner and
    scientific decision on whether to allow it and on the band vocabulary.
 
+8. **Show-day judge sign-in (before judges use devices).** Judge identity is
+   only an `X-Judge-Id` header behind the shared `CALYX_API_KEY`, which is also
+   the owner-tier key. Anyone holding it can read and write any judge's
+   scores, read every exhibitor's and judge's contact details, and call owner
+   routes, including the paid acquisition. Never put that key on show devices.
+   Per-judge signed tokens and a separate show-day key need your design
+   decision; #1642 lists them as deferred. The same decision covers blind
+   judging: a blind event's plant list still returns `exhibitor_id`, which
+   `GET /api/exhibitors` resolves to a name. This also applies to `main`.
+9. **Acquisition ledger table.** No migration or startup step creates
+   `acquisition_ledger`, which now has a `lease_token` column. Against a table
+   without it, acquisition fails closed with no provider call. Creating it in
+   production is a database decision.
+10. **CI coverage and `main`.** No workflow runs the acquisition-ledger tests on
+    push to integration, which is how their earlier failures went unseen;
+    adding one is a workflow change. On `main`,
+    `app/source_federation/acquisition_ledger.py` has a syntax error; nothing
+    imports it at startup, so the app still starts.
+
 ## Post-Release-1 items (recorded, not blocking)
 
 - Matrix member views:
@@ -243,4 +291,11 @@ Elevation-labelled Matrix characters and their states stay withheld from members
   an unquoted `\` line continuation inside a `-u` password exposes the part
   after the break; HTTPie `-a user:pw`; odd-length or nested flat header lists;
   Digest values stored under a non-secret key.
+- Show-day: `POST /api/awards` accepts a nonexistent entry (orphan award);
+  `create_criterion` and `create_exhibitor` are global and not locked; writes
+  to a closed but unlocked event are allowed.
+- Acquisition ledger: after three consecutive database errors that follow a
+  paid success, the result is logged but not recorded, and the key can be paid
+  again after its 120 s lease; consumer-list bookkeeping can drop a name on
+  SQLite.
 - A richer local PostgreSQL harness.
