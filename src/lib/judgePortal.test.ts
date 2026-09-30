@@ -46,11 +46,19 @@ beforeEach(() => {
 
 describe("blind projection (defence in depth)", () => {
   it("renders the backend's withheld plant name honestly", () => {
-    const plants = (C.judge_plants_blind.body as unknown[]).map((p) => projectJudgePlant(p, true));
+    const raw = C.judge_plants_blind.body as Array<{ plant_name_withheld: boolean }>;
+    const plants = raw.map((p) => projectJudgePlant(p, true));
     const withheld = plants.filter((p) => p.plant_name_withheld);
-    expect(withheld).toHaveLength(1);
-    expect(withheld[0].plant_name).toBeNull();
-    expect(plantDisplayName(withheld[0])).toBe(WITHHELD_NAME_LABEL);
+    expect(withheld.length).toBe(raw.filter((p) => p.plant_name_withheld).length);
+    expect(withheld.length).toBeGreaterThan(0);
+    for (const plant of withheld) {
+      expect(plant.plant_name).toBeNull();
+      expect(plant.plant_name_source).toBe("withheld");
+      expect(plantDisplayName(plant)).toBe(WITHHELD_NAME_LABEL);
+    }
+    // The one plant whose blind display name the owner approved (real capture).
+    const approved = plants.filter((p) => p.plant_name_source === "owner_approved");
+    expect(approved.map((p) => p.plant_name)).toEqual(["Cattleya labiata"]);
     expect(WITHHELD_NAME_LABEL).toBe("Name withheld (blind judging)");
     expectNoExhibitorData(plants);
     expect(plants.every((p) => p.withheld_fields_discarded === false)).toBe(true);
@@ -135,6 +143,7 @@ describe("error states", () => {
     ["judge_me_revoked_401", "unauthenticated", /signed out on this device/],
     ["judge_me_no_token_401", "unauthenticated", /not accepted/],
     ["judge_me_unconfigured_503", "unconfigured", /not configured/],
+    ["judge_me_rate_limited_429", "rate_limited", /Too many failed/],
   ];
   it.each(cases)("real %s maps to %s", (key, kind, message) => {
     const { status, body } = C[key];

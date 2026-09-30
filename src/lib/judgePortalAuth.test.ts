@@ -162,6 +162,13 @@ describe("judge transport: exact Calyx origin, judge routes only", () => {
     expect(readJudgeToken()).toBe(TOKEN);
   });
 
+  it("keeps the token on the backend's real 429 (failed sign-ins rate limited)", async () => {
+    storeJudgeToken(TOKEN);
+    const fetchImpl = vi.fn(async () => okResponse(C.judge_me_rate_limited_429.body, 429));
+    await judgeFetch(`${BASE}/api/judge-portal/me`, { fetchImpl, calyxBase: BASE });
+    expect(readJudgeToken()).toBe(TOKEN);
+  });
+
   it("never logs the token", async () => {
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((m) => vi.spyOn(console, m).mockImplementation(() => {}));
     storeJudgeToken(TOKEN);

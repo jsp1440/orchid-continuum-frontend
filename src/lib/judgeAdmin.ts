@@ -59,6 +59,12 @@ export interface ReissueResult {
   reissued: number;
 }
 
+export interface BlindDisplayNameResult {
+  plant_id: string;
+  blind_display_name: string | null;
+  warnings: string[];
+}
+
 export interface IssueCredentialInput {
   label?: string | null;
   expires_in_minutes?: number;
@@ -73,13 +79,16 @@ export class JudgeAdminError extends Error {
   readonly status: number;
   readonly kind: JudgeAdminErrorKind;
   readonly detail: string | null;
+  /** Exhibitor-mention warnings the backend attached to a refused display name. */
+  readonly warnings: string[];
 
-  constructor(status: number, kind: JudgeAdminErrorKind, detail: string | null = null) {
+  constructor(status: number, kind: JudgeAdminErrorKind, detail: string | null = null, warnings: string[] = []) {
     super(detail || `Judge admin ${kind} (${status})`);
     this.name = 'JudgeAdminError';
     this.status = status;
     this.kind = kind;
     this.detail = detail;
+    this.warnings = warnings;
   }
 }
 
@@ -161,6 +170,7 @@ export interface JudgeAdminClient {
   revokeCredential(credentialId: string): Promise<JudgeCredentialMeta>;
   audit(filters: { judgingEventId?: string; judgeId?: string; limit?: number }): Promise<JudgeAuditRow[]>;
   reissueQrTokens(eventId: string, includeRandom: boolean): Promise<ReissueResult>;
+  setBlindDisplayName(plantId: string, name: string | null, confirmDespiteWarnings: boolean): Promise<BlindDisplayNameResult>;
   /** The owner's printable tag sheet (HTML). Never stored. */
   tagSheetHtml(eventId: string): Promise<string>;
 }
@@ -179,9 +189,14 @@ export function createJudgeAdminClient(options: { fetchImpl?: typeof fetch; caly
     }
     if (!response.ok) {
       let detail: string | null = null;
+      let warnings: string[] = [];
       try {
         const payload = await response.json();
-        detail = isObj(payload) && typeof payload.detail === 'string' ? payload.detail : null;
+        if (isObj(payload) && typeof payload.detail === 'string') detail = payload.detail;
+        else if (isObj(payload) && isObj(payload.detail)) {
+          detail = str(payload.detail.message);
+          warnings = ids(payload.detail.warnings) ?? [];
+        }
       } catch {
         detail = null;
       }
@@ -197,7 +212,7 @@ export function createJudgeAdminClient(options: { fetchImpl?: typeof fetch; caly
                 : response.status === 503
                   ? 'unconfigured'
                   : 'unavailable';
-      throw new JudgeAdminError(response.status, kind, detail);
+      throw new JudgeAdminError(response.status, kind, detail, warnings);
     }
     return response;
   };
@@ -241,6 +256,18 @@ export function createJudgeAdminClient(options: { fetchImpl?: typeof fetch; caly
       const query = includeRandom ? '?include_random=true' : '';
       return parseReissue(await json(`/api/judging/events/${seg(eventId)}/reissue-qr-tokens${query}`, { method: 'POST' }));
     },
+    async setBlindDisplayName(plantId, name, confirmDespiteWarnings) {
+      const body = await json(`/api/judging/plants/${seg(plantId)}/blind-display-name`, {
+        method: 'PUT',
+        body: JSON.stringify({ blind_display_name: name, confirm_despite_warnings: confirmDespiteWarnings }),
+      });
+      if (!isObj(body)) throw invalid('display name result');
+      return {
+        plant_id: need(body, 'plant_id', 'display name result'),
+        blind_display_name: str(body.blind_display_name),
+        warnings: ids(body.warnings) ?? [],
+      };
+    },
     async tagSheetHtml(eventId) {
       const response = await raw(`/api/judging/events/${seg(eventId)}/tags`);
       return response.text();
@@ -257,6 +284,9 @@ export function judgeAdminErrorMessage(error: unknown): string {
     case 'not_found':
       return `Not found${detail}. Check the id. Nothing was changed.`;
     case 'conflict':
+      if (error.warnings.length) {
+        return `Not saved: this name may identify the exhibitor (${error.warnings.join('; ')}). Change it, or confirm to keep it anyway.`;
+      }
       return `Refused${detail}. Judging may be locked for this show. Nothing was changed.`;
     case 'invalid':
       return `The backend rejected the input${detail}. Nothing was changed.`;

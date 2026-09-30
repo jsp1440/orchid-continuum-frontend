@@ -59,6 +59,11 @@ export interface JudgePlant {
   /** Null when withheld or unnamed. */
   plant_name: string | null;
   plant_name_withheld: boolean;
+  /**
+   * Where a shown name came from: `owner_approved` (the owner's reviewed blind
+   * display name), `entry` (the entered name, non-blind only) or `withheld`.
+   */
+  plant_name_source: 'owner_approved' | 'entry' | 'withheld' | null;
   /** Non-blind events only. */
   notes: string | null;
   /** Present on plant lists: this judge's own card for the plant, if any. */
@@ -116,6 +121,7 @@ export type JudgeErrorKind =
   | 'not_found'
   | 'conflict'
   | 'invalid'
+  | 'rate_limited'
   | 'unconfigured'
   | 'unavailable'
   | 'invalid_response'
@@ -157,6 +163,7 @@ export function errorFromStatus(status: number, detail: string | null): JudgePor
   }
   if (status === 409) return new JudgePortalError(status, 'conflict', detail);
   if (status === 422) return new JudgePortalError(status, 'invalid', detail);
+  if (status === 429) return new JudgePortalError(status, 'rate_limited', detail);
   if (status === 503) return new JudgePortalError(status, 'unconfigured', detail);
   return new JudgePortalError(status, 'unavailable', detail);
 }
@@ -192,6 +199,7 @@ const PLANT_KEYS = new Set([
   'blind',
   'plant_name',
   'plant_name_withheld',
+  'plant_name_source',
   'notes',
   'scorecard_handle',
 ]);
@@ -210,6 +218,12 @@ export function projectJudgePlant(raw: unknown, eventBlind = false): JudgePlant 
   // A blind name is shown only when the server explicitly said it is not withheld.
   const withheld = blind ? raw.plant_name_withheld !== false : raw.plant_name_withheld === true;
   const name = withheld ? null : str(raw.plant_name);
+  const source = raw.plant_name_source;
+  const nameSource: JudgePlant['plant_name_source'] = withheld
+    ? 'withheld'
+    : source === 'owner_approved' || source === 'entry'
+      ? source
+      : null;
   const discarded = blind && Object.keys(raw).some((key) => !PLANT_KEYS.has(key) && WITHHELD_KEY.test(key));
   const scorecardHandle = str(raw.scorecard_handle);
   return {
@@ -220,6 +234,7 @@ export function projectJudgePlant(raw: unknown, eventBlind = false): JudgePlant 
     blind,
     plant_name: name,
     plant_name_withheld: withheld,
+    plant_name_source: nameSource,
     notes: blind ? null : optStr(raw.notes),
     scorecard_handle: scorecardHandle && scorecardHandle.startsWith('s_') ? scorecardHandle : null,
     withheld_fields_discarded: discarded,
@@ -463,6 +478,8 @@ export function judgeErrorMessage(error: unknown): string {
       }
     case 'invalid':
       return error.detail ? `Score not accepted: ${error.detail}` : 'Score not accepted.';
+    case 'rate_limited':
+      return 'Too many failed judge sign-in attempts from this device or credential. Wait a few minutes and try again; nothing was changed.';
     case 'unconfigured':
       return 'Judge sign-in is not configured on this Calyx backend yet. Ask the show owner; nothing is shown rather than guessing.';
     case 'invalid_response':

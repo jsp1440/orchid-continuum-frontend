@@ -177,6 +177,34 @@ describe("judge credential issuance", () => {
   });
 });
 
+describe("blind display name", () => {
+  it("shows the backend's exhibitor-mention warning (real 409) and resends only on confirmation", async () => {
+    const plantPath = (C.owner_set_blind_display_name_warning_409 as unknown as { request: { path: string } }).request.path;
+    routes[`PUT ${plantPath}`] = C.owner_set_blind_display_name_warning_409;
+    await render();
+    await type("judge-admin-blind-plant", plantPath.split("/")[4]);
+    await type("judge-admin-blind-value", "Phal. Featherstonehaugh's Delight");
+    await click("judge-admin-blind-save");
+    expect(byTestId("judge-admin-blind-error")?.textContent).toMatch(/may identify the exhibitor \(contains an exhibitor name word\)/);
+    expect(calls[0].body).toEqual({ blind_display_name: "Phal. Featherstonehaugh's Delight", confirm_despite_warnings: false });
+    // SYNTHETIC success for the confirmed resend (the capture did not confirm it).
+    routes[`PUT ${plantPath}`] = { status: 200, body: { plant_id: "p", blind_display_name: "Phal. Featherstonehaugh's Delight", warnings: ["contains an exhibitor name word"] } };
+    await click("judge-admin-blind-confirm");
+    expect(calls[1].body).toEqual({ blind_display_name: "Phal. Featherstonehaugh's Delight", confirm_despite_warnings: true });
+    expect(byTestId("judge-admin-blind-result")?.textContent).toMatch(/Kept despite/);
+  });
+
+  it("saves an owner-approved name (real 200)", async () => {
+    const plantId = (C.owner_set_blind_display_name.body as { plant_id: string }).plant_id;
+    routes[`PUT /api/judging/plants/${plantId}/blind-display-name`] = C.owner_set_blind_display_name;
+    await render();
+    await type("judge-admin-blind-plant", plantId);
+    await type("judge-admin-blind-value", "Cattleya labiata");
+    await click("judge-admin-blind-save");
+    expect(byTestId("judge-admin-blind-result")?.textContent).toContain("Judges will see “Cattleya labiata”.");
+  });
+});
+
 describe("judge audit and tags", () => {
   it("renders the real judge audit rows", async () => {
     await render();
@@ -194,6 +222,7 @@ describe("judge audit and tags", () => {
     expect(calls).toHaveLength(0);
     await click("judge-admin-tags-confirm");
     expect(calls[0].url).toBe(`${BASE}/api/judging/events/${EVENT_ID}/reissue-qr-tokens`);
-    expect(byTestId("judge-admin-tags-result")?.textContent).toMatch(/Re-issued 1 of 4/);
+    const { reissued, plants } = C.owner_reissue_qr_tokens.body as { reissued: number; plants: number };
+    expect(byTestId("judge-admin-tags-result")?.textContent).toContain(`Re-issued ${reissued} of ${plants}`);
   });
 });

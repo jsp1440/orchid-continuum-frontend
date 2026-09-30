@@ -26,6 +26,8 @@ const EVENT_ID = (C.judge_events_blind.body as Array<{ id: string }>)[0].id;
 const CARDS = C.judge_scorecards_blind.body as Array<{ scorecard_handle: string }>;
 const HANDLE = CARDS[0].scorecard_handle;
 const CRITERION = (C.judge_criteria.body as Array<{ criteria: Array<{ criteria_id: string }> }>)[0].criteria[0].criteria_id;
+const BLIND_PLANTS = C.judge_plants_blind.body as Array<{ plant_name_withheld: boolean }>;
+const WITHHELD_COUNT = BLIND_PLANTS.filter((p) => p.plant_name_withheld).length;
 const EXHIBITOR_STRINGS = ["Rosalind", "Featherstonehaugh", "Bartholomew", "Quince", "exhibitor-", "rfeather", "bquince", "010-4477"];
 
 type Route = { status: number; body: unknown };
@@ -200,8 +202,11 @@ describe("blind event pages", () => {
     const plants = container.querySelectorAll("[data-testid='judge-plant']");
     expect(plants).toHaveLength((C.judge_plants_blind.body as unknown[]).length);
     const withheld = container.querySelectorAll("[data-testid='judge-plant-name'][data-withheld='true']");
-    expect(withheld).toHaveLength(1);
-    expect(withheld[0].textContent).toBe("Name withheld (blind judging)");
+    expect(withheld).toHaveLength(WITHHELD_COUNT);
+    for (const node of Array.from(withheld)) expect(node.textContent).toBe("Name withheld (blind judging)");
+    // The owner-approved blind display name (real capture) is shown and labelled.
+    expect(container.querySelectorAll("[data-testid='judge-plant-name-owner-approved']")).toHaveLength(1);
+    expect(container.textContent).toContain("Cattleya labiata");
     expect(container.textContent).not.toContain("bench 4"); // notes are dropped in blind events
     expect(byTestId("judge-discarded-notice")).toBeNull();
     expectNoExhibitorText();
@@ -222,7 +227,7 @@ describe("blind event pages", () => {
     routes[`GET /api/judge-portal/events/${EVENT_ID}/plants`] = { status: 200, body: contaminated };
     await render(`/judge/events/${EVENT_ID}`);
     expect(byTestId("judge-discarded-notice")).not.toBeNull();
-    expect(container.querySelectorAll("[data-testid='judge-plant-name'][data-withheld='true']")).toHaveLength(1);
+    expect(container.querySelectorAll("[data-testid='judge-plant-name'][data-withheld='true']")).toHaveLength(WITHHELD_COUNT);
     expectNoExhibitorText();
   });
 

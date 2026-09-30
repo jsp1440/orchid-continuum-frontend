@@ -94,8 +94,8 @@ function BlindNotice() {
     <p className="flex items-start gap-2 rounded-md border border-stone-300 bg-stone-50 p-3 text-sm" data-testid="judge-blind-notice">
       <EyeOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>
-        Blind judging: the server withholds exhibitor information for this event. Plants are named by an opaque handle; a
-        name that could identify the exhibitor is withheld.
+        Blind judging: the server withholds exhibitor information and every entered plant name and note for this event.
+        Plants are identified by class and an opaque handle; a name appears only where the show owner approved one.
       </span>
     </p>
   );
@@ -115,6 +115,11 @@ function PlantName({ plant }: { plant: JudgePlant }) {
   return (
     <span data-testid="judge-plant-name" data-withheld={plant.plant_name_withheld ? "true" : "false"} className={plant.plant_name_withheld ? "italic text-muted-foreground" : "font-semibold italic"}>
       {plantDisplayName(plant)}
+      {plant.plant_name_source === "owner_approved" ? (
+        <span className="ml-1 text-[11px] font-normal not-italic text-muted-foreground" data-testid="judge-plant-name-owner-approved">
+          (display name approved by the show owner)
+        </span>
+      ) : null}
     </span>
   );
 }

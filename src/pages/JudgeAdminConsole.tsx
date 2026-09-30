@@ -1,12 +1,14 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { AlertTriangle, Copy, KeyRound, Printer, RefreshCw, ScrollText, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Copy, EyeOff, KeyRound, Printer, RefreshCw, ScrollText, ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  JudgeAdminError,
   createJudgeAdminClient,
   judgeAdminErrorMessage,
+  type BlindDisplayNameResult,
   type IssuedJudgeCredential,
   type JudgeAdminClient,
   type JudgeAuditRow,
@@ -403,6 +405,71 @@ function TagsPanel({ client }: { client: JudgeAdminClient }) {
   );
 }
 
+function BlindNamePanel({ client }: { client: JudgeAdminClient }) {
+  const [plantId, setPlantId] = useState("");
+  const [name, setName] = useState("");
+  const [result, setResult] = useState<BlindDisplayNameResult | null>(null);
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const warned = error instanceof JudgeAdminError && error.warnings.length > 0;
+
+  const save = async (confirm: boolean) => {
+    setBusy(true);
+    setError(null);
+    setResult(null);
+    try {
+      setResult(await client.setBlindDisplayName(plantId.trim(), name.trim() || null, confirm));
+    } catch (e) {
+      setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card data-testid="judge-admin-blind-name">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <EyeOff className="h-5 w-5" aria-hidden="true" /> Blind display name
+        </CardTitle>
+        <CardDescription>
+          In a blind event judges see no entered plant name. Set the one name they may see for a plant (for example the taxon
+          alone). Names that look exhibitor-derived are refused unless you confirm. Leave empty to clear.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="text-sm">
+            Plant id
+            <Input value={plantId} onChange={(e) => setPlantId(e.target.value)} data-testid="judge-admin-blind-plant" autoComplete="off" />
+          </label>
+          <label className="text-sm">
+            Display name judges will see
+            <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={200} data-testid="judge-admin-blind-value" />
+          </label>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={busy || !plantId.trim()} onClick={() => void save(false)} data-testid="judge-admin-blind-save">
+            Save display name
+          </Button>
+          {warned ? (
+            <Button variant="destructive" disabled={busy} onClick={() => void save(true)} data-testid="judge-admin-blind-confirm">
+              Keep it despite the warning
+            </Button>
+          ) : null}
+        </div>
+        {result ? (
+          <p className="text-sm" role="status" data-testid="judge-admin-blind-result">
+            {result.blind_display_name ? `Judges will see “${result.blind_display_name}”.` : "Cleared: judges see no name for this plant."}
+            {result.warnings.length ? ` Kept despite: ${result.warnings.join("; ")}.` : ""}
+          </p>
+        ) : null}
+        {error ? <Failure error={error} testId="judge-admin-blind-error" /> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function JudgeAdminConsole({ client: injected }: JudgeAdminConsoleProps) {
   const client = useMemo(() => injected ?? createJudgeAdminClient(), [injected]);
   return (
@@ -419,6 +486,7 @@ export default function JudgeAdminConsole({ client: injected }: JudgeAdminConsol
         </header>
         <CredentialsPanel client={client} />
         <AuditPanel client={client} />
+        <BlindNamePanel client={client} />
         <TagsPanel client={client} />
       </div>
     </main>
