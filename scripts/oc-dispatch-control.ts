@@ -741,6 +741,9 @@ export type RuntimeBackoffDecision = { issue: number; attempts: number } & (
  */
 export function runtimeBackoffDecisions(snapshot: Snapshot, leases: Lease[], now: string): RuntimeBackoffDecision[] {
   const decisions: RuntimeBackoffDecision[] = [];
+  // An unreadable clock is not "every backoff has expired": `until > NaN` is
+  // false, so without this every parked issue would requeue at once.
+  const clockValid = typeof now === 'string' && Number.isFinite(Date.parse(now));
   const parked = eligibleIssues(snapshot).filter(issue => issue.state === 'open' && !issue.portfolioSteward &&
     labelsOf(issue).includes('oc-runtime-backoff')).sort((a, b) => a.number - b.number);
   for (const issue of parked) {
@@ -754,6 +757,7 @@ export function runtimeBackoffDecisions(snapshot: Snapshot, leases: Lease[], now
           labels: labels.filter(l => ['oc-queued', 'oc-prepared', 'oc-runtime-backoff'].includes(l)).sort() });
         continue;
       }
+      if (!clockValid) { decisions.push({ issue: issue.number, attempts, action: 'kept', reason: `invalid reconciliation time ${JSON.stringify(now)}` }); continue; }
       if (mine.some(isActive)) { decisions.push({ issue: issue.number, attempts, action: 'kept', reason: 'an active lease owns the issue' }); continue; }
       if (attempts === 0) {
         decisions.push({ issue: issue.number, attempts, action: 'kept', reason: 'no runtime-backoff lease records an attempt or a retry time' });
@@ -761,8 +765,12 @@ export function runtimeBackoffDecisions(snapshot: Snapshot, leases: Lease[], now
       }
       if (attempts >= MAX_ABANDONED_ATTEMPTS) {
         decisions.push({ issue: issue.number, attempts, action: 'dead_letter', reason: 'dead_letter',
+          // Relabelling alone does not retry it: with an unchanged admission
+          // fingerprint `claimLease` refuses the attempt as `unchanged_attempt`.
           followUp: `${attempts} runtime backoffs; automatic requeue stops at ${MAX_ABANDONED_ATTEMPTS}. ` +
-            'Confirm the provider chain is healthy (or narrow the issue), then relabel it oc-queued to retry.' });
+            'Relabelling alone will not retry it: while its admission fingerprint is unchanged, claimLease refuses it as unchanged_attempt. ' +
+            'It becomes admissible again only when an input of that fingerprint changes -- a new oc-autonomous-integration head, an edit to the issue ' +
+            'title or body, or a change to its PR lineage. Confirm the provider chain is healthy, make that change, then replace oc-blocked with oc-queued.' });
         continue;
       }
       const last = mine[mine.length - 1];
@@ -815,8 +823,10 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
     }
     // Counted before this lease becomes one, so the first backoff is attempt 1.
     if (state === 'runtime-backoff') {
+      const settledAt = Date.parse(options.now ?? new Date().toISOString());
+      if (!Number.isFinite(settledAt)) throw new Error('Invalid settlement time; runtime backoff not recorded');
       const attempt = runtimeBackoffAttempts(ledger.leases, lease.issue) + 1;
-      lease.backoffUntil = new Date(Date.parse(options.now ?? new Date().toISOString()) + runtimeBackoffDelayMs(attempt)).toISOString();
+      lease.backoffUntil = new Date(settledAt + runtimeBackoffDelayMs(attempt)).toISOString();
     }
     lease.state = state;
     if (await store.compareAndSwap(version, ledger)) return lease;

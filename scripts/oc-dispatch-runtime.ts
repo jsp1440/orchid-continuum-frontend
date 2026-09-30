@@ -278,30 +278,66 @@ export function bindingReport(plan: Plan) {
  * a requeued issue is only relabelled `oc-queued`, and the next plan, provider
  * slots, `claimLease` and `decideBudget` decide whether it runs.
  */
-function reconcileRuntimeBackoff(current: Snapshot, ledger: Ledger) {
+function backoffWarning(message: string) {
+  // An annotation on the run and a line in its summary, not only stdout: a
+  // skipped pass means every backed-off issue stayed parked, and says why.
+  process.stdout.write(`::warning title=runtime backoff::${message.replace(/\r?\n/g, ' ')}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n- Runtime backoff: ${message}\n`);
+}
+/** Post a comment; one retry, then say it was not posted rather than lose it. */
+function comment(issue: number, body: string): { commented: true } | { commented: false; commentError: string } {
+  let last = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { api(`issues/${issue}/comments`, 'POST', { body }); return { commented: true }; }
+    catch (error) { last = error instanceof Error ? error.message : 'comment failed'; }
+  }
+  backoffWarning(`#${issue} relabelled but its follow-up comment was not posted (${last}); the record below is the only copy`);
+  return { commented: false, commentError: last };
+}
+/**
+ * Apply `runtimeBackoffDecisions`: requeue expired backoffs into ordinary
+ * admission, park exhausted ones as `dead_letter` with a follow-up comment, and
+ * record conflicts. Each issue is applied on its own, so one failed write or
+ * conflicting issue never stops the rest. Nothing here dispatches or spends:
+ * a requeued issue is only relabelled `oc-queued`, and the next plan, provider
+ * slots, `claimLease` and `decideBudget` decide whether it runs.
+ *
+ * Exported for tests. A throw outside the per-issue handling (a malformed
+ * snapshot, a bug) is reported and fails closed: nothing further is relabelled,
+ * every remaining issue stays parked, and reconciliation of leases -- which
+ * already ran -- is not undone or failed by it.
+ */
+export function reconcileRuntimeBackoff(current: Snapshot, ledger: Ledger) {
   const records: object[] = [];
-  for (const decision of runtimeBackoffDecisions(current, ledger.leases, now())) {
-    try {
-      if (decision.action === 'requeue' || decision.action === 'dead_letter') {
-        // Re-read: the issue may have moved since the snapshot.
-        const labels = api<Issue>(`issues/${decision.issue}`).labels.map(l => l.name);
-        if (!labels.includes('oc-runtime-backoff') || labels.includes('oc-queued') || labels.includes('oc-prepared')) {
-          records.push({ ...decision, applied: false, reason: 'labels changed since the snapshot' });
-          continue;
+  try {
+    for (const decision of runtimeBackoffDecisions(current, ledger.leases, now())) {
+      try {
+        if (decision.action === 'requeue' || decision.action === 'dead_letter') {
+          // Re-read: the issue may have moved since the snapshot. A person or
+          // another pass that relabelled it owns it now.
+          const labels = api<Issue>(`issues/${decision.issue}`).labels.map(l => l.name);
+          if (!labels.includes('oc-runtime-backoff') || labels.includes('oc-queued') || labels.includes('oc-prepared')) {
+            records.push({ ...decision, applied: false, reason: 'labels changed since the snapshot' });
+            continue;
+          }
+          const next = decision.action === 'requeue' ? 'oc-queued' : 'oc-blocked';
+          api(`issues/${decision.issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => l !== 'oc-runtime-backoff').concat(next))] });
+          const posted = comment(decision.issue, decision.action === 'requeue'
+            ? `[OC-AUTO] Runtime backoff attempt ${decision.attempts} elapsed at ${decision.backoffUntil} (automatic requeue stops at ${MAX_ABANDONED_ATTEMPTS}); returned to oc-queued. ` +
+              'It is admitted only through the ordinary graph, provider-slot and budget gates.\n\nOC-RUNTIME-BACKOFF-REQUEUE: ' + `#${decision.issue}`
+            : `[OC-AUTO] Parked as dead_letter: ${decision.followUp}\n\nOC-DEAD-LETTER: #${decision.issue}\nOC-DEAD-LETTER-REASON: dead_letter`);
+          records.push({ ...decision, applied: true, ...posted });
+        } else {
+          records.push(decision);
         }
-        const next = decision.action === 'requeue' ? 'oc-queued' : 'oc-blocked';
-        api(`issues/${decision.issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => l !== 'oc-runtime-backoff').concat(next))] });
-        api(`issues/${decision.issue}/comments`, 'POST', { body: decision.action === 'requeue'
-          ? `[OC-AUTO] Runtime backoff attempt ${decision.attempts} elapsed at ${decision.backoffUntil} (automatic requeue stops at ${MAX_ABANDONED_ATTEMPTS}); returned to oc-queued. ` +
-            'It is admitted only through the ordinary graph, provider-slot and budget gates.\n\nOC-RUNTIME-BACKOFF-REQUEUE: ' + `#${decision.issue}`
-          : `[OC-AUTO] Parked as dead_letter: ${decision.followUp}\n\nOC-DEAD-LETTER: #${decision.issue}\nOC-DEAD-LETTER-REASON: dead_letter` });
-        records.push({ ...decision, applied: true });
-      } else {
-        records.push(decision);
+      } catch (error) {
+        records.push({ ...decision, applied: false, reason: error instanceof Error ? error.message : 'write failed' });
       }
-    } catch (error) {
-      records.push({ ...decision, applied: false, reason: error instanceof Error ? error.message : 'write failed' });
     }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown failure';
+    records.push({ action: 'failed_closed', reason });
+    backoffWarning(`pass failed closed after ${records.length - 1} record(s); remaining issues stay parked: ${reason}`);
   }
   for (const record of records) process.stdout.write(`runtime-backoff ${JSON.stringify(record)}\n`);
   if (process.env.GITHUB_STEP_SUMMARY && records.length > 0) {
@@ -374,7 +410,9 @@ async function main() {
         pages<{ pull_request?: unknown }>('issues?state=open&labels=oc-runtime-backoff').some(i => !i.pull_request);
       if (!repairs && backoffs) current = snapshot();
     } catch (error) {
-      process.stdout.write(`runtime-backoff ${JSON.stringify({ action: 'skipped', reason: error instanceof Error ? error.message : 'GitHub read failed' })}\n`);
+      const reason = error instanceof Error ? error.message : 'GitHub read failed';
+      process.stdout.write(`runtime-backoff ${JSON.stringify({ action: 'skipped', reason })}\n`);
+      backoffWarning(`pass skipped; every backed-off issue stays parked: ${reason}`);
       backoffs = false;
     }
     if (!repairs && !backoffs) return;
