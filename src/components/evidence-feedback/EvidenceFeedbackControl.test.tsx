@@ -408,6 +408,15 @@ describe('EvidenceFeedbackControl for a signed-in member', () => {
     expect(alert).toContain('about 10 minutes');
   });
 
+  it('explains a format-character refusal without recording anything', async () => {
+    mocks.submit.mockRejectedValue(new EvidenceFeedbackApiError(422, 'MEMBER_TEXT_FORMAT_CHARACTERS'));
+    renderControl();
+    await submitForm();
+    const alert = container.querySelector('[role="alert"]')?.textContent ?? '';
+    expect(alert).toContain('invisible formatting characters');
+    expect(alert).toContain('nothing was recorded');
+  });
+
   it('keeps an owner-only refusal distinct from the switch being off', async () => {
     mocks.submit.mockRejectedValue(new EvidenceFeedbackApiError(403, 'OWNER_ACCESS_REQUIRED'));
     renderControl();

@@ -2,8 +2,8 @@
  "_meta": {
   "what": "REAL responses from orchid-calyx-backend running LOCALLY (FastAPI TestClient over app.main:app, file store, no DB) - never production.",
   "backend_branch": "claude/gate3-member-feedback-submission",
-  "backend_sha": "7257868f44a0703bddcfffddce0d0cf544d0f436",
-  "captured_at": "2026-09-30T13:27:25+00:00",
+  "backend_sha": "7d8e198a986f05aefb5e671b9e395b1f53d3a609",
+  "captured_at": "2026-09-30T20:45:59+00:00",
   "member_verification": "Supabase /auth/v1/user was STUBBED locally (two synthetic member UUIDs); every other layer (auth dependency, rate limiter, routes, store) is the real backend code.",
   "switches": "OC_MEMBER_FEEDBACK_ENABLED=true (false for member_submit_feature_disabled); OC_MEMBER_FEEDBACK_RATE_LIMIT=2 (member A: 2 case submissions allowed, the third is refused).",
   "inputs": "Every object and statement is SYNTHETIC; nothing is a lexicon or scientific claim. Credentials are local, generated for this run, not real."
@@ -54,7 +54,7 @@
    "body": {
     "case_id": "efc-d00e50dd24ec13c8b4924189",
     "status": "pending_review",
-    "disposition": "auto_correctable",
+    "disposition": "needs_scientific_review",
     "resolution": null,
     "resulting_version_hash": null
    }
@@ -113,11 +113,11 @@
      "page_context": "/lexicon/SYNTHETIC-labellum",
      "feedback_class": "suggest_correction",
      "statement": "SYNTHETIC: petal is misspelled.",
-     "disposition": "auto_correctable",
+     "disposition": "needs_scientific_review",
      "status": "pending_review",
-     "review_lane": "deterministic",
-     "created_at": "2026-09-30T13:27:25.393513+00:00",
-     "updated_at": "2026-09-30T13:27:25.393513+00:00",
+     "review_lane": "scientific",
+     "created_at": "2026-09-30T20:45:59.591788+00:00",
+     "updated_at": "2026-09-30T20:45:59.591788+00:00",
      "proposed_replacement": "SYNTHETIC: a modified petal.",
      "citation": null,
      "source_partner_id": null,
@@ -126,6 +126,8 @@
      "related_case_ids": [],
      "resolution": null,
      "resulting_version_hash": null,
+     "submitter_role": "member",
+     "object_type_source": "member_claimed",
      "submitter_ref": "actor-5bf0521e418d7c352366e9c3",
      "reviewer_ref": null
     },
@@ -133,17 +135,17 @@
     "events": [
      {
       "event": "case_submitted",
-      "timestamp": "2026-09-30T13:27:25.393513+00:00",
+      "timestamp": "2026-09-30T20:45:59.591788+00:00",
       "actor_ref": "actor-5bf0521e418d7c352366e9c3",
       "details": {
-       "disposition": "auto_correctable",
+       "disposition": "needs_scientific_review",
        "object_version_hash": "2a25c2548d5ff50c1d4d09bb2f9398bd4f55da484c95d0cb201951d6438b6594",
-       "review_lane": "deterministic"
+       "review_lane": "scientific"
       }
      },
      {
       "event": "duplicate_submission_suppressed",
-      "timestamp": "2026-09-30T13:27:25.411167+00:00",
+      "timestamp": "2026-09-30T20:45:59.607695+00:00",
       "actor_ref": "actor-5bf0521e418d7c352366e9c3",
       "details": {
        "duplicate_of": "efc-d00e50dd24ec13c8b4924189"
@@ -151,7 +153,7 @@
      },
      {
       "event": "duplicate_submission_suppressed",
-      "timestamp": "2026-09-30T13:27:25.431543+00:00",
+      "timestamp": "2026-09-30T20:45:59.618626+00:00",
       "actor_ref": "actor-a904b3d26d65bde287ea4fc5",
       "details": {
        "duplicate_of": "efc-d00e50dd24ec13c8b4924189"
@@ -159,25 +161,70 @@
      }
     ],
     "object_version": {
-     "object_id": "lexicon:SYNTHETIC-labellum",
+     "object_id": "member-snapshot:lexicon:lexicon:SYNTHETIC-labellum",
      "object_type": "lexicon",
      "version_hash": "2a25c2548d5ff50c1d4d09bb2f9398bd4f55da484c95d0cb201951d6438b6594",
      "payload": {
       "preferred_term": "Labellum (SYNTHETIC)",
       "quick_definition": "SYNTHETIC: a modified petel."
      },
-     "created_at": "2026-09-30T13:27:25.364075+00:00",
+     "created_at": "2026-09-30T20:45:59.568065+00:00",
      "previous_version_hash": null,
      "registered_by_role": "member"
     },
     "object_version_available": true,
+    "object_version_provisional": true,
     "resulting_object_version": null,
     "allowed_decisions": [
      "reject",
-     "needs_governed_review",
-     "accept_trivial"
+     "needs_governed_review"
     ],
     "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "owner_review_queue": {
+   "status": 200,
+   "body": {
+    "items": [
+     {
+      "case_id": "efc-d00e50dd24ec13c8b4924189",
+      "status": "pending_review",
+      "disposition": "needs_scientific_review",
+      "review_lane": "scientific",
+      "object_type": "lexicon",
+      "object_id": "lexicon:SYNTHETIC-labellum",
+      "object_version_hash": "2a25c2548d5ff50c1d4d09bb2f9398bd4f55da484c95d0cb201951d6438b6594",
+      "feedback_class": "suggest_correction",
+      "severity": "normal",
+      "defect_kind": "typo",
+      "page_context": "/lexicon/SYNTHETIC-labellum",
+      "statement_preview": "SYNTHETIC: petal is misspelled.",
+      "created_at": "2026-09-30T20:45:59.591788+00:00",
+      "updated_at": "2026-09-30T20:45:59.591788+00:00",
+      "duplicate_count": 2,
+      "submitter_ref": "actor-5bf0521e418d7c352366e9c3",
+      "submitter_role": "member",
+      "object_type_source": "member_claimed"
+     }
+    ],
+    "next_cursor": null,
+    "limit": 25
+   }
+  },
+  "member_submit_format_characters": {
+   "status": 422,
+   "body": {
+    "detail": {
+     "code": "MEMBER_TEXT_FORMAT_CHARACTERS"
+    }
+   }
+  },
+  "member_register_format_characters": {
+   "status": 422,
+   "body": {
+    "detail": {
+     "code": "OBJECT_PAYLOAD_FORMAT_CHARACTERS"
+    }
    }
   }
  }

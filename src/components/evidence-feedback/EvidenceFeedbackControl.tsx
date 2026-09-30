@@ -57,6 +57,12 @@ function errorMessage(error: unknown): string {
     return `You have sent several reports in a short time. Nothing more was recorded; please wait ${waitText(error.retryAfterSeconds)} and try again.`;
   }
   if (error.status === 404 && error.code === 'CASE_NOT_FOUND') return 'That case could not be found for your account.';
+  if (error.code === 'MEMBER_TEXT_FORMAT_CHARACTERS') {
+    return 'Your text contains invisible formatting characters (such as direction or zero-width marks). Please retype it without them; nothing was recorded.';
+  }
+  if (error.code === 'OBJECT_PAYLOAD_FORMAT_CHARACTERS' || error.code === 'OBJECT_PAYLOAD_TOO_DEEP' || error.code === 'OBJECT_PAYLOAD_TOO_LARGE') {
+    return 'This record cannot be attached to member feedback as displayed; nothing was recorded.';
+  }
   if (error.code === 'NETWORK_UNAVAILABLE') return 'The feedback service is currently unreachable.';
   return `Feedback was not accepted (${error.code.replaceAll('_', ' ').toLowerCase()}).`;
 }

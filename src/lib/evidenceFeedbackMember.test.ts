@@ -275,3 +275,20 @@ describe('owner review: who registered the snapshot', () => {
     expect(registeredByText('SYNTHETIC-unknown')).toBe('Not recorded');
   });
 });
+
+describe('member input hygiene refusals (checker round 1)', () => {
+  it('surfaces the backend refusal of format characters in member text and snapshots', async () => {
+    signedIn();
+    stubFetch(R.member_register_object, R.member_submit_format_characters);
+    await expect(submitEvidenceFeedback(INPUT)).rejects.toMatchObject({ status: 422, code: 'MEMBER_TEXT_FORMAT_CHARACTERS' });
+    stubFetch(R.member_register_format_characters);
+    await expect(submitEvidenceFeedback(INPUT)).rejects.toMatchObject({ status: 422, code: 'OBJECT_PAYLOAD_FORMAT_CHARACTERS' });
+  });
+
+  it('never sends a partner source for a member', async () => {
+    signedIn();
+    const fetchMock = stubFetch(R.member_register_object, R.member_submit_created);
+    await submitEvidenceFeedback(INPUT);
+    expect(JSON.parse(String((fetchMock.mock.calls[1][1] as RequestInit).body)).source_partner_id).toBeNull();
+  });
+});

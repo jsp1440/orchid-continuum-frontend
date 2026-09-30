@@ -9,10 +9,12 @@ import {
   REVIEW_OBJECT_TYPE_FILTERS,
   REVIEW_STATUS_FILTERS,
   createEvidenceFeedbackReviewClient,
+  formatSafeJson,
   registeredByText,
   reviewAccessState,
   reviewErrorMessage,
   statusLabel,
+  submittedByText,
   type EvidenceFeedbackReviewClient,
   type ReviewAccessState,
   type ReviewCase,
@@ -85,7 +87,8 @@ function humanize(value: string | null | undefined): string {
 
 function prettyJson(value: unknown): string {
   try {
-    return JSON.stringify(value, null, 2);
+    // Format characters become visible \uXXXX escapes (round-trip exact).
+    return formatSafeJson(value);
   } catch {
     return String(value);
   }
@@ -303,13 +306,20 @@ function CaseDetail({
         <Field label="Feedback">{humanize(item.feedback_class)}{item.defect_kind ? ` · ${humanize(item.defect_kind)}` : ""}{item.severity ? ` · ${item.severity}` : ""}</Field>
         <Field label="Triage">{humanize(item.disposition)} · {humanize(item.review_lane)} lane</Field>
         <Field label="Duplicate submissions">{detail.duplicate_count}</Field>
+        <Field label="Submitted by">
+          <span data-testid="feedback-review-submitted-by">{submittedByText(item.submitter_role)}</span>
+          {item.object_type_source === "member_claimed" ? " · record type is the member's claim, not a registered type" : ""}
+        </Field>
         <Field label="Submitter ref (opaque, not an identity)" mono>{item.submitter_ref ?? "—"}</Field>
         <Field label="Reviewer ref (opaque, not an identity)" mono>{item.reviewer_ref ?? "—"}</Field>
         <Field label="Submitted">{formatTime(item.created_at)}</Field>
         <Field label="Last updated">{formatTime(item.updated_at)}</Field>
         <Field label="Page context" mono>{item.page_context}</Field>
         <Field label="Version the submitter saw" mono>{item.object_version_hash}</Field>
-        <Field label="Snapshot registered by">{registeredByText(detail.object_version?.registered_by_role ?? null)}</Field>
+        <Field label="Snapshot registered by">
+          <span data-testid="feedback-review-registered-by">{registeredByText(detail.object_version?.registered_by_role ?? null)}</span>
+          {detail.object_version_provisional ? " · provisional member snapshot (no registered record of this content yet)" : ""}
+        </Field>
         {item.source_partner_id ? <Field label="Source partner">{item.source_partner_id}</Field> : null}
         {item.resolution ? <Field label="Resolution">{item.resolution}</Field> : null}
       </dl>
@@ -657,7 +667,10 @@ export default function FeedbackReview({ client }: FeedbackReviewProps) {
                         className={`w-full rounded-lg border p-3 text-left transition hover:bg-muted/40 ${selectedId === item.case_id ? "border-primary ring-1 ring-primary" : ""}`}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <span className="text-xs text-muted-foreground">{humanize(item.object_type)} · {humanize(item.feedback_class)}</span>
+                          <span className="text-xs text-muted-foreground">
+                            {humanize(item.object_type)} · {humanize(item.feedback_class)}
+                            {item.submitter_role === "member" ? <span data-testid="feedback-review-member-badge"> · member submission</span> : null}
+                          </span>
                           <StatusBadge status={item.status} />
                         </div>
                         <p className="mt-1 line-clamp-3 break-words text-sm">{item.statement_preview}</p>
