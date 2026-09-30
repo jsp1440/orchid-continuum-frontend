@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { InteractionDiscoveryView, UNPROVISIONED_EMPTY_HEADLINE } from "./InteractionDiscoveryPanel";
+import { WITHHELD_COORDINATE } from "@/lib/cognitiveIntegration";
 import {
   carriesLocalityLikeKey,
   isLocalityLikeKey,
@@ -12,7 +13,10 @@ import {
   parseDiscoveredInteraction,
   parseInteractionDiscoveryBody,
   restrictToExactSpecies,
+  MAX_SCREENED_TEXT_LENGTH,
+  WITHHELD_UNSCREENABLE,
   speciesInteractionBinding,
+  studyReferenceUrl,
 } from "@/lib/interactionDiscovery";
 import captured from "@/lib/__fixtures__/interactionDiscovery.speciesCategories.realBackend.json";
 import earlier from "@/lib/__fixtures__/interactionDiscovery.realBackend.json";
@@ -265,7 +269,9 @@ describe("species page: candidate interactions (unverified)", () => {
     expect(doi?.getAttribute("href")).toBe("https://doi.org/10.1234/example");
     expect(doi?.getAttribute("rel")).toBe("noopener noreferrer");
 
-    expect(section().textContent).toContain("Showing 2 of 2 matched candidates.");
+    expect(section().querySelector('[data-testid="interaction-discovery-summary"]')?.textContent).toContain(
+      "Showing 2 candidates bound to Orchis mascula, from 2 broader name matches returned.",
+    );
   });
 
   it("renders a network outage as unavailable, never as no interactions known (SYNTHETIC failure)", async () => {
@@ -380,7 +386,7 @@ describe("candidate binding and locality helpers", () => {
     });
     expect(
       container.querySelector('[data-testid="interaction-discovery-other-taxon-excluded"]')?.textContent,
-    ).toContain("3 matched candidates named a different or broader taxon than Orchis militaris");
+    ).toContain("3 matched candidates carried a different, broader, or possibly synonymous name than Orchis militaris");
     expect(container.querySelector('[data-testid="interaction-discovery-unprovisioned"]')).not.toBeNull();
   });
 
@@ -397,6 +403,225 @@ describe("candidate binding and locality helpers", () => {
       if (name.startsWith("_")) continue;
       expect(carriesLocalityLikeKey(entry.body), name).toBe(false);
     }
+  });
+});
+
+/** A captured record with some fields replaced. Every caller labels its replacement SYNTHETIC. */
+function capturedRecordWith(overrides: Record<string, unknown>): Record<string, unknown> {
+  const [first] = fixture.fixture_ingested_pollinator.body.interactions as Record<string, unknown>[];
+  return { ...first, ...overrides };
+}
+
+function pollinatorBodyWith(interactions: unknown[], extra: Record<string, unknown> = {}) {
+  return { ...fixture.fixture_ingested_pollinator.body, interactions, ...extra };
+}
+
+describe("repair: infraspecific and hybrid names never bind to the species", () => {
+  it.each([
+    "Orchis mascula L. subsp. signifera",
+    "Orchis mascula (L.) L. subsp. speciosa (Mutel) Hegi",
+    "Orchis mascula L. × Orchis pallens L.",
+    "Orchis mascula L. x Orchis pallens L.",
+    "Orchis mascula L. var. alba",
+    "Orchis mascula (L.) L. f. alba",
+    "Orchis mascula L. ssp. signifera",
+    "Orchis mascula L. nothosubsp. hybrida",
+    "Orchis mascula L. cv. Alba",
+    "Orchis mascula 'Alba'",
+    "Orchis mascula L. signifera",
+    "Orchis mascula auct. non L.",
+    "Orchis mascula s.l.",
+    "Orchis mascula L. hybrid",
+    "Orchis ×mascula",
+  ])("rejects %s", (name) => {
+    expect(nameBindsToExactSpecies(name, "Orchis mascula")).toBe(false);
+  });
+
+  it.each(["Orchis mascula", "Orchis mascula L.", "Orchis mascula (L.) L.", "Orchis mascula Rchb. ex Lindl.", "Orchis mascula (L.) L. 1755"])(
+    "accepts %s",
+    (name) => {
+      expect(nameBindsToExactSpecies(name, "Orchis mascula")).toBe(true);
+    },
+  );
+
+  it("does not render an infraspecific record on the species page", async () => {
+    // SYNTHETIC: a captured record with its source name replaced by an infraspecific name.
+    const infraspecific = capturedRecordWith({ source_taxon_name: "Orchis mascula L. subsp. signifera" });
+    stubFetch(() => json(pollinatorBodyWith([infraspecific])));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(section().textContent).not.toContain("signifera");
+    expect(records()).toHaveLength(0);
+    expect(section().querySelector('[data-testid="interaction-discovery-other-taxon-excluded"]')?.textContent).toContain(
+      "1 matched candidate carried a different, broader, or possibly synonymous name than Orchis mascula",
+    );
+  });
+});
+
+describe("repair: an incomplete result is never shown as none", () => {
+  const militaris = async (body: unknown) => {
+    stubFetch(() => json(body));
+    await renderSpeciesPage("Orchis", "militaris");
+    expect(records()).toHaveLength(0);
+    expect(section().querySelector('[data-testid="interaction-discovery-empty"]')).toBeNull();
+    expect(section().textContent).not.toMatch(/holds no candidate interactions/);
+    const box = section().querySelector('[data-testid="interaction-discovery-incomplete"]');
+    expect(box?.textContent).toContain("This is not evidence that no interactions are known for Orchis militaris.");
+    return box!;
+  };
+  const captured = fixture.fixture_ingested_genus_substring.body;
+
+  it("mismatched records plus an unparseable one (SYNTHETIC unparseable item)", async () => {
+    const box = await militaris({ ...captured, interactions: [...(captured.interactions as unknown[]), {}] });
+    expect(box.querySelector('[data-testid="interaction-discovery-incomplete-unreadable"]')?.textContent).toContain(
+      "1 record could not be read; exact-species candidates may be among it.",
+    );
+  });
+
+  it("mismatched records plus a backend unreadable_count (SYNTHETIC count)", async () => {
+    const box = await militaris({ ...captured, unreadable_count: 2 });
+    expect(box.querySelector('[data-testid="interaction-discovery-incomplete-unreadable"]')?.textContent).toContain(
+      "2 records could not be read",
+    );
+  });
+
+  it("a truncated result that is all mismatched (SYNTHETIC totals)", async () => {
+    const box = await militaris({ ...captured, total_matched: 900, truncated: true });
+    expect(box.querySelector('[data-testid="interaction-discovery-incomplete-truncated"]')?.textContent).toContain(
+      "Only the first 3 of 900 broader matches were checked; exact-species candidates may exist.",
+    );
+  });
+
+  it("a truncated result with exact matches says more may exist (SYNTHETIC totals)", async () => {
+    stubFetch(() => json({ ...fixture.fixture_ingested_pollinator.body, total_matched: 900, truncated: true }));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(records()).toHaveLength(2);
+    expect(section().querySelector('[data-testid="interaction-discovery-summary"]')?.textContent).toContain(
+      "Only the first 2 of 900 broader matches were checked; more exact-species candidates may exist.",
+    );
+  });
+
+  it("shows the none copy only for a complete, durable result with no exact match (real test-double body)", async () => {
+    stubFetch(() => json(earlierFixture.ok_durable_test_double.body));
+    await renderSpeciesPage("Orchis", "militaris");
+    expect(section().querySelector('[data-testid="interaction-discovery-incomplete"]')).toBeNull();
+    expect(section().querySelector('[data-testid="interaction-discovery-empty"]')?.textContent).toContain(
+      "not an ecological finding",
+    );
+  });
+});
+
+describe("repair: locality in allow-listed text fields is withheld", () => {
+  it("withholds coordinates, WKT, lat/lon URLs, geo: URIs and split pairs (SYNTHETIC values on a real record)", async () => {
+    // SYNTHETIC: locality-bearing text placed in allow-listed fields of captured records.
+    const leaky = capturedRecordWith({
+      study_citation: "Smith 2020, collected at 51.7523, -1.2578",
+      study_source_citation: "POINT(45.6789 -12.3456)",
+      study_external_id: "https://www.gbif.org/occurrence/search?lat=51.75&lon=-1.25",
+      dataset_version: "geo:51,-1",
+    });
+    const split = capturedRecordWith({
+      target_taxon_name: "Bombus pascuorum",
+      study_citation: "Jones site near 51.75231",
+      dataset_version: "-1.25784",
+    });
+    stubFetch(() => json(pollinatorBodyWith([leaky, split])));
+    await renderSpeciesPage("Orchis", "mascula");
+
+    const text = section().textContent ?? "";
+    expect(records()).toHaveLength(2);
+    expect(text).not.toMatch(/51\.75|1\.25|45\.6789|12\.3456|POINT|geo:|lat=|lon=/);
+    expect(text).toContain(WITHHELD_COORDINATE);
+    for (const anchor of Array.from(section().querySelectorAll("a"))) {
+      expect(anchor.getAttribute("href") ?? "").not.toMatch(/lat|lon|geo/i);
+    }
+    expect(section().querySelector('[data-testid="interaction-discovery-locality-withheld"]')?.textContent).toContain(
+      "Fields in 2 records were withheld",
+    );
+  });
+
+  it("withholds a text value too long to screen, and leaves captured values untouched", () => {
+    // SYNTHETIC: an over-long citation.
+    const parsed = parseDiscoveredInteraction(capturedRecordWith({ study_citation: "a ".repeat(MAX_SCREENED_TEXT_LENGTH) }));
+    expect(parsed?.study_citation).toBe(WITHHELD_UNSCREENABLE);
+    for (const raw of fixture.fixture_ingested_all.body.interactions as Record<string, unknown>[]) {
+      const clean = parseDiscoveredInteraction(raw)!;
+      expect(clean.study_citation).toBe(raw.study_citation);
+      expect(clean.study_external_id).toBe(raw.study_external_id);
+      expect(clean.source_taxon_name).toBe(raw.source_taxon_name);
+    }
+  });
+});
+
+describe("repair: the locality key scan is unbounded, cycle-safe and fails closed", () => {
+  function nested(depth: number, leaf: Record<string, unknown>) {
+    let node: Record<string, unknown> = leaf;
+    for (let i = 0; i < depth; i += 1) node = { child: node };
+    return node;
+  }
+
+  it("finds a locality key far below the old depth limit", () => {
+    expect(carriesLocalityLikeKey(nested(40, { decimalLatitude: 1 }))).toBe(true);
+    expect(carriesLocalityLikeKey([[[[[[{ locality: "x" }]]]]]])).toBe(true);
+  });
+
+  it("treats a value too deep to scan as carrying locality", () => {
+    expect(carriesLocalityLikeKey(nested(5000, { harmless: 1 }))).toBe(true);
+  });
+
+  it("terminates on a cycle", () => {
+    const a: Record<string, unknown> = { name: "a" };
+    const b: Record<string, unknown> = { name: "b", a };
+    a.b = b;
+    expect(carriesLocalityLikeKey(a)).toBe(false);
+    b.stateProvince = "x";
+    expect(carriesLocalityLikeKey(a)).toBe(true);
+  });
+});
+
+describe("repair: only a DOI or an allow-listed provider host becomes a link", () => {
+  it.each([
+    ["doi:10.1234/example", "https://doi.org/10.1234/example"],
+    ["10.1234/example", "https://doi.org/10.1234/example"],
+    ["https://doi.org/10.1234/example", "https://doi.org/10.1234/example"],
+    ["https://www.gbif.org/dataset/abc", "https://www.gbif.org/dataset/abc"],
+    ["https://doi.org.evil.com/10.1234/example", null],
+    ["https://evil.example/10.1234/example", null],
+    ["https://evil.example/?u=https://www.gbif.org/", null],
+    ["https://www.gbif.org.evil.com/dataset/abc", null],
+    ["http://www.gbif.org/dataset/abc", null],
+    ["https://user:pw@www.gbif.org/dataset/abc", null],
+    ["https://www.gbif.org/occurrence/search?lat=51.7&lon=-1.2", null],
+    ["https://doi.org/10.1234/example?lat=51.7", null],
+    ["javascript:alert(1)", null],
+  ])("%s -> %s", (value, expected) => {
+    expect(studyReferenceUrl(value)).toBe(expected);
+  });
+
+  it("renders a look-alike DOI host as plain text (SYNTHETIC reference on a real record)", async () => {
+    // SYNTHETIC: a hostile study reference.
+    const record = capturedRecordWith({ study_external_id: "https://doi.org.evil.com/10.1234/example" });
+    stubFetch(() => json(pollinatorBodyWith([record])));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(section().textContent).toContain("https://doi.org.evil.com/10.1234/example");
+    expect(section().querySelectorAll("a")).toHaveLength(0);
+  });
+});
+
+describe("repair: heading outline", () => {
+  it("nests the panel heading under the section heading on the species page", async () => {
+    stubFetch(byCategory("fixture_ingested"));
+    await renderSpeciesPage("Orchis", "mascula");
+    expect(Array.from(section().querySelectorAll("h2")).map((h) => h.textContent)).toEqual([
+      "Candidate interactions (unverified)",
+    ]);
+    expect(section().querySelector("h3")?.textContent).toBe("Interaction discovery");
+  });
+
+  it("keeps h2 as the panel's default heading elsewhere", () => {
+    act(() => {
+      root.render(<InteractionDiscoveryView species="Orchis mascula" discovery={null} />);
+    });
+    expect(container.querySelector("h2")?.textContent).toBe("Interaction discovery");
   });
 });
 

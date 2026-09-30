@@ -92,7 +92,12 @@ export default function SpeciesInteractionCandidates({
             id="species-interaction-candidates-tabpanel"
             aria-labelledby={`species-interaction-tab-${category}`}
           >
-            <InteractionDiscoveryPanel species={binding.binomial} category={category} exactSpeciesOnly />
+            <InteractionDiscoveryPanel
+              species={binding.binomial}
+              category={category}
+              exactSpeciesOnly
+              headingLevel={3}
+            />
           </div>
         </>
       )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   fetchInteractionDiscovery,
+  studyReferenceUrl,
   restrictToExactSpecies,
   type DiscoveredInteraction,
   type InteractionCategory,
@@ -51,26 +52,6 @@ function groupKeyOf(categories: InteractionCategory[]): GroupKey {
   if (p) return "pollinator";
   if (m) return "mycorrhizal";
   return "other";
-}
-
-const DOI_PATTERN = /^(?:doi:\s*|https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,9}\/\S+)$/i;
-
-/** A study reference that is a DOI resolves through doi.org; the id is still shown verbatim. */
-function studyReferenceUrl(value: string | null): string | null {
-  if (!value) return null;
-  const doi = value.trim().match(DOI_PATTERN);
-  if (doi) return `https://doi.org/${doi[1]}`;
-  return safeHttpUrl(value);
-}
-
-function safeHttpUrl(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" || url.protocol === "http:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
 }
 
 function recordKey(record: DiscoveredInteraction, index: number) {
@@ -189,6 +170,39 @@ function IndexStateNotice({ result }: { result: InteractionDiscoveryResult }) {
   return null;
 }
 
+/**
+ * Nothing readable binds to the exact species, but the result was truncated or
+ * carried unreadable records: never the "none" copy.
+ */
+function IncompleteNotice({ result, species }: { result: InteractionDiscoveryResult; species: string }) {
+  return (
+    <div
+      role="status"
+      data-testid="interaction-discovery-incomplete"
+      className="rounded-2xl border border-dashed border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+    >
+      <div className="font-semibold">
+        No candidate bound to {species} was found in the part of the result that could be checked, but the result is
+        incomplete.
+      </div>
+      {result.truncated ? (
+        <div className="mt-1" data-testid="interaction-discovery-incomplete-truncated">
+          Only the first {result.count} of {result.total_matched} broader matches were checked; exact-species candidates
+          may exist.
+        </div>
+      ) : null}
+      {result.unreadable_count > 0 ? (
+        <div className="mt-1" data-testid="interaction-discovery-incomplete-unreadable">
+          {result.unreadable_count} record{result.unreadable_count === 1 ? "" : "s"} could not be read; exact-species
+          candidates may be among {result.unreadable_count === 1 ? "it" : "them"}.
+        </div>
+      ) : null}
+      <div className="mt-1">This is not evidence that no interactions are known for {species}.</div>
+      <BackendIndexNote result={result} />
+    </div>
+  );
+}
+
 /** Records withheld from this view, stated rather than silently dropped. */
 function ExclusionNotes({ result, species }: { result: InteractionDiscoveryResult; species: string }) {
   const other = result.other_taxon_excluded_count ?? 0;
@@ -198,14 +212,15 @@ function ExclusionNotes({ result, species }: { result: InteractionDiscoveryResul
     <div className="mt-2 space-y-1 text-xs text-slate-600">
       {other > 0 ? (
         <p data-testid="interaction-discovery-other-taxon-excluded">
-          {other} matched candidate{other === 1 ? "" : "s"} named a different or broader taxon than {species} (for
-          example an infraspecific name) and {other === 1 ? "is" : "are"} not shown here.
+          {other} matched candidate{other === 1 ? "" : "s"} carried a different, broader, or possibly synonymous name
+          than {species} (for example an infraspecific or hybrid name) and {other === 1 ? "is" : "are"} not shown here.
+          A possible synonym is not resolved on this page.
         </p>
       ) : null}
       {locality > 0 ? (
         <p data-testid="interaction-discovery-locality-withheld">
-          Locality fields carried by {locality} record{locality === 1 ? "" : "s"} were withheld; this page never shows
-          locality.
+          Fields in {locality} record{locality === 1 ? "" : "s"} were withheld because they carried, or could not be
+          screened for, locality; this page never shows locality.
         </p>
       ) : null}
     </div>
@@ -215,10 +230,15 @@ function ExclusionNotes({ result, species }: { result: InteractionDiscoveryResul
 export function InteractionDiscoveryView({
   species,
   discovery,
+  headingLevel = 2,
 }: {
   species: string;
   discovery: InteractionDiscoveryState | null;
+  /** 3 when the panel sits inside a section that already has its own h2. */
+  headingLevel?: 2 | 3;
 }) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
+  const GroupHeading = headingLevel === 3 ? "h4" : "h3";
   let body: React.ReactNode;
   if (!discovery) {
     body = <p className="text-slate-600">Looking up interaction candidates…</p>;
@@ -236,6 +256,13 @@ export function InteractionDiscoveryView({
         </div>
         <div className="mt-1">{discovery.reason}</div>
         <div className="mt-1">This is not evidence that no interactions are known for {species}.</div>
+      </div>
+    );
+  } else if (discovery.state === "incomplete") {
+    body = (
+      <div className="space-y-3">
+        <IncompleteNotice result={discovery.result} species={species} />
+        <ExclusionNotes result={discovery.result} species={species} />
       </div>
     );
   } else if (discovery.state === "unprovisioned") {
@@ -274,10 +301,22 @@ export function InteractionDiscoveryView({
     body = (
       <div className="space-y-5" data-testid="interaction-discovery-ok">
         <IndexStateNotice result={result} />
-        <p className="text-sm text-slate-600">
-          Showing {result.records.length} of {result.total_matched} matched candidate
-          {result.total_matched === 1 ? "" : "s"}.
-          {result.truncated ? " More candidates exist than this panel requested." : ""}
+        <p className="text-sm text-slate-600" data-testid="interaction-discovery-summary">
+          {result.other_taxon_excluded_count === undefined ? (
+            <>
+              Showing {result.records.length} of {result.total_matched} matched candidate
+              {result.total_matched === 1 ? "" : "s"}.
+              {result.truncated ? " More candidates exist than this panel requested." : ""}
+            </>
+          ) : (
+            <>
+              Showing {result.records.length} candidate{result.records.length === 1 ? "" : "s"} bound to {species}, from{" "}
+              {result.count} broader name match{result.count === 1 ? "" : "es"} returned.
+              {result.truncated
+                ? ` Only the first ${result.count} of ${result.total_matched} broader matches were checked; more exact-species candidates may exist.`
+                : ""}
+            </>
+          )}
           {result.unreadable_count > 0
             ? ` ${result.unreadable_count} record${result.unreadable_count === 1 ? "" : "s"} could not be read and ${
                 result.unreadable_count === 1 ? "is" : "are"
@@ -287,9 +326,9 @@ export function InteractionDiscoveryView({
         <ExclusionNotes result={result} species={species} />
         {GROUP_ORDER.filter((key) => groups.has(key)).map((key) => (
           <section key={key} data-testid={`interaction-discovery-group-${key}`}>
-            <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-800">
+            <GroupHeading className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-800">
               {GROUP_LABEL[key]} ({groups.get(key)!.length})
-            </h3>
+            </GroupHeading>
             <ul className="space-y-3">
               {groups.get(key)!.map((record, index) => (
                 <InteractionRow key={recordKey(record, index)} record={record} />
@@ -306,7 +345,7 @@ export function InteractionDiscoveryView({
   }
 
   const note =
-    discovery && (discovery.state === "ok" || discovery.state === "empty" || discovery.state === "unprovisioned")
+    discovery && (discovery.state !== "unavailable" && discovery.state !== "malformed")
       ? discovery.result.note
       : null;
 
@@ -319,7 +358,7 @@ export function InteractionDiscoveryView({
       <div className="mb-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-700">
         Review-bound candidates · GloBI
       </div>
-      <h2 className="mb-2 text-2xl font-semibold text-slate-900">Interaction discovery</h2>
+      <Heading className="mb-2 text-2xl font-semibold text-slate-900">Interaction discovery</Heading>
       <p className="mb-4 text-sm text-slate-600">
         Unverified candidate interactions from the Continuum&apos;s discovery index. None of these is a verified
         Knowledge Graph relationship.
@@ -338,12 +377,14 @@ export default function InteractionDiscoveryPanel({
   species,
   category = "all",
   exactSpeciesOnly = false,
+  headingLevel = 2,
 }: {
   species: string;
   /** Sent as `category=`; defaults to every category. */
   category?: InteractionCategoryFilter;
   /** Show only records in which one side is exactly `species` (the backend matches substrings). */
   exactSpeciesOnly?: boolean;
+  headingLevel?: 2 | 3;
 }) {
   const [discovery, setDiscovery] = useState<InteractionDiscoveryState | null>(null);
 
@@ -366,5 +407,5 @@ export default function InteractionDiscoveryPanel({
     return () => controller.abort();
   }, [species, category, exactSpeciesOnly]);
 
-  return <InteractionDiscoveryView species={species} discovery={discovery} />;
+  return <InteractionDiscoveryView species={species} discovery={discovery} headingLevel={headingLevel} />;
 }
