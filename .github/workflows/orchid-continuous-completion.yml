@@ -80,6 +80,7 @@ jobs:
         with:
           name: oc-supervisor-${{ github.run_attempt }}
           path: .oc-wave/supervisor-discovery.json
+          include-hidden-files: true
           if-no-files-found: error
 
   plan:

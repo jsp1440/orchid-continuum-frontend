@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
-  providerCapacityFromEnvironment, providerFreeRepairsReadyForRequeue, reconcileStaleRunningLabels, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
+import { MAX_ABANDONED_ATTEMPTS, assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
+  providerCapacityFromEnvironment, providerFreeRepairsReadyForRequeue, reconcileStaleRunningLabels, runtimeBackoffDecisions, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY || '';
@@ -270,6 +270,45 @@ export function bindingReport(plan: Plan) {
   return lines.length > 0 ? `\n${lines.join('\n')}\n` : '';
 }
 
+/**
+ * Apply `runtimeBackoffDecisions`: requeue expired backoffs into ordinary
+ * admission, park exhausted ones as `dead_letter` with a follow-up comment, and
+ * record conflicts. Each issue is applied on its own, so one failed write or
+ * conflicting issue never stops the rest. Nothing here dispatches or spends:
+ * a requeued issue is only relabelled `oc-queued`, and the next plan, provider
+ * slots, `claimLease` and `decideBudget` decide whether it runs.
+ */
+function reconcileRuntimeBackoff(current: Snapshot, ledger: Ledger) {
+  const records: object[] = [];
+  for (const decision of runtimeBackoffDecisions(current, ledger.leases, now())) {
+    try {
+      if (decision.action === 'requeue' || decision.action === 'dead_letter') {
+        // Re-read: the issue may have moved since the snapshot.
+        const labels = api<Issue>(`issues/${decision.issue}`).labels.map(l => l.name);
+        if (!labels.includes('oc-runtime-backoff') || labels.includes('oc-queued') || labels.includes('oc-prepared')) {
+          records.push({ ...decision, applied: false, reason: 'labels changed since the snapshot' });
+          continue;
+        }
+        const next = decision.action === 'requeue' ? 'oc-queued' : 'oc-blocked';
+        api(`issues/${decision.issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => l !== 'oc-runtime-backoff').concat(next))] });
+        api(`issues/${decision.issue}/comments`, 'POST', { body: decision.action === 'requeue'
+          ? `[OC-AUTO] Runtime backoff attempt ${decision.attempts} elapsed at ${decision.backoffUntil} (automatic requeue stops at ${MAX_ABANDONED_ATTEMPTS}); returned to oc-queued. ` +
+            'It is admitted only through the ordinary graph, provider-slot and budget gates.\n\nOC-RUNTIME-BACKOFF-REQUEUE: ' + `#${decision.issue}`
+          : `[OC-AUTO] Parked as dead_letter: ${decision.followUp}\n\nOC-DEAD-LETTER: #${decision.issue}\nOC-DEAD-LETTER-REASON: dead_letter` });
+        records.push({ ...decision, applied: true });
+      } else {
+        records.push(decision);
+      }
+    } catch (error) {
+      records.push({ ...decision, applied: false, reason: error instanceof Error ? error.message : 'write failed' });
+    }
+  }
+  for (const record of records) process.stdout.write(`runtime-backoff ${JSON.stringify(record)}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY && records.length > 0) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Runtime backoff\n\n${records.map(r => `- \`${JSON.stringify(r)}\``).join('\n')}\n`);
+  }
+  return records;
+}
 async function main() {
   const command = process.argv[2];
   const store = new GitHubLeaseStore();
@@ -320,11 +359,27 @@ async function main() {
     }
     const { ledger } = await store.read();
     // Avoid a live GitHub snapshot unless the ledger contains a terminal
-    // deterministic failure that could actually be eligible for repair. This
-    // keeps expiry reconciliation provider-free and avoids turning a missing
-    // issue/PR read into a false failure for ordinary lease expiry.
-    if (ledger.leases.some(lease => laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed')) {
-      const current = snapshot();
+    // deterministic failure that could actually be eligible for repair, or an
+    // issue is parked in runtime backoff. This keeps expiry reconciliation
+    // provider-free and avoids turning a missing issue/PR read into a false
+    // failure for ordinary lease expiry.
+    const repairs = ledger.leases.some(lease => laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed');
+    // The backoff pass is fail-soft: if it cannot read GitHub, every backed-off
+    // issue simply stays parked (the old behaviour), and it says so, instead of
+    // failing reconciliation and with it the supervisor that `needs` it.
+    let backoffs = false;
+    let current: Snapshot | null = null;
+    try {
+      backoffs = ledger.leases.some(lease => lease.state === 'runtime-backoff') ||
+        pages<{ pull_request?: unknown }>('issues?state=open&labels=oc-runtime-backoff').some(i => !i.pull_request);
+      if (!repairs && backoffs) current = snapshot();
+    } catch (error) {
+      process.stdout.write(`runtime-backoff ${JSON.stringify({ action: 'skipped', reason: error instanceof Error ? error.message : 'GitHub read failed' })}\n`);
+      backoffs = false;
+    }
+    if (!repairs && !backoffs) return;
+    current ??= snapshot();
+    if (repairs) {
       for (const issueNumber of providerFreeRepairsReadyForRequeue(current, ledger.leases)) {
         const record = current.issues.find(issue => issue.number === issueNumber);
         if (!record) continue;
@@ -334,6 +389,7 @@ async function main() {
         api(`issues/${issueNumber}`, 'PATCH', { labels: [...new Set(record.labels.map(label => label.name).concat('oc-queued'))] });
       }
     }
+    if (backoffs) reconcileRuntimeBackoff(current, ledger);
     return;
   }
   const plan = readPlan();
@@ -608,7 +664,7 @@ async function main() {
     // Labels first: a crash retains the lease conservatively. CAS release cannot
     // erase a successor's lease, and all writes retain unrelated owner holds.
     api(`issues/${issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat(`oc-${outcome}`))] });
-    await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome, { requireActive: true });
+    await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome, { requireActive: true, now: now() });
     receipt(issue, plan.wave.hash, outcome, { providerCalls: null, providerCostUsd: null, accounting: 'reservation retained; no unverified billing claims' });
     // Immediate per-lane refill. Does not wait for sibling lanes; planner reads durable capacity.
     const refillRef = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || 'main';
