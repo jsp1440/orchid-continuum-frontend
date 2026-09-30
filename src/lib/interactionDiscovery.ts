@@ -102,6 +102,16 @@ export interface InteractionDiscoveryResult {
   taxon_filter: string | null;
   /** Backend's own disclaimer, verbatim. */
   note: string | null;
+  /**
+   * Readable records not shown because neither side is the page's exact
+   * species (set only by `restrictToExactSpecies`).
+   */
+  other_taxon_excluded_count?: number;
+  /**
+   * Records whose raw body carried a locality-like key. The key is never
+   * copied out (see the allow-list); this count only lets the page say so.
+   */
+  place_withheld_count?: number;
 }
 
 export type InteractionDiscoveryState =
@@ -211,7 +221,9 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
 
   const records: DiscoveredInteraction[] = [];
   let unreadable = 0;
+  let localityWithheld = 0;
   for (const item of payload.interactions) {
+    if (carriesLocalityLikeKey(item)) localityWithheld += 1;
     const record = parseDiscoveredInteraction(item);
     if (record) records.push(record);
     else unreadable += 1;
@@ -236,6 +248,7 @@ export function parseInteractionDiscoveryBody(payload: unknown): InteractionDisc
     category,
     taxon_filter: optionalString(payload.taxon_filter),
     note: optionalString(payload.note),
+    place_withheld_count: localityWithheld,
   };
 
   if (records.length > 0) return { state: "ok", result };
@@ -314,4 +327,145 @@ export async function fetchInteractionDiscovery(
     return { state: "malformed", reason: "The interaction discovery response was not valid JSON." };
   }
   return parseInteractionDiscoveryBody(payload);
+}
+
+// ---------------------------------------------------------------------------
+// Species-page binding
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a species page names exactly one species, so that interaction
+ * candidates may be requested for it.
+ *
+ * The backend's `taxon` filter is a case-insensitive SUBSTRING match on either
+ * side of a record (app/interaction_discovery/service.py::_taxon_matches), so
+ * `taxon=Orchis` returns every Orchis species' records. A genus-level,
+ * infraspecific, hybrid, open-nomenclature (`sp.`, `cf.`, `aff.`) or otherwise
+ * ambiguous page therefore sends NO request: showing those records would bind
+ * other taxa's candidates to this page.
+ */
+export type SpeciesInteractionBinding =
+  | { kind: "exact_species"; binomial: string }
+  | { kind: "genus_level"; reason: string }
+  | { kind: "ambiguous"; reason: string };
+
+const GENUS_TOKEN = /^[A-Z][a-z]+$/;
+const EPITHET_TOKEN = /^[a-z][a-z-]*[a-z]$/;
+const OPEN_NOMENCLATURE = new Set(["sp", "spp", "ssp", "cf", "aff", "indet", "hybrid", "x", "nothosp"]);
+
+export function speciesInteractionBinding(
+  genus: string | null | undefined,
+  epithet: string | null | undefined,
+): SpeciesInteractionBinding {
+  const g = String(genus ?? "").trim();
+  const e = String(epithet ?? "").trim().replace(/\s+/g, " ");
+  if (!g) {
+    return {
+      kind: "ambiguous",
+      reason: "This page carries no genus name, so it is not bound to one exact species.",
+    };
+  }
+  if (!GENUS_TOKEN.test(g)) {
+    return {
+      kind: "ambiguous",
+      reason: `The genus name "${g}" is not a plain genus name (for example a hybrid or intergeneric name), so this page is not bound to one exact species.`,
+    };
+  }
+  if (!e) {
+    return {
+      kind: "genus_level",
+      reason: `This page is bound to the genus ${g}, not to one species. Candidates for a genus would mix records from every species in it, so none are requested.`,
+    };
+  }
+  const first = e.split(" ")[0].replace(/\.$/, "").toLowerCase();
+  if (OPEN_NOMENCLATURE.has(first) || e.startsWith("×")) {
+    return {
+      kind: "ambiguous",
+      reason: `"${g} ${e}" is an open-nomenclature or hybrid name, not one exact species, so no candidates are requested.`,
+    };
+  }
+  if (e.includes(" ")) {
+    return {
+      kind: "ambiguous",
+      reason: `"${g} ${e}" is an infraspecific or compound name. Candidate lookup matches names loosely, so it would not stay bound to this exact taxon; none are requested.`,
+    };
+  }
+  if (!EPITHET_TOKEN.test(e)) {
+    return {
+      kind: "ambiguous",
+      reason: `"${g} ${e}" is not a plain species binomial, so this page is not bound to one exact species.`,
+    };
+  }
+  return { kind: "exact_species", binomial: `${g} ${e}` };
+}
+
+const INFRASPECIFIC_MARKER = /^(subsp|ssp|var|subvar|f|forma|fo|cv|nothosubsp|nothovar|×|x)\.?$/i;
+
+/**
+ * Whether a record's taxon name is the exact species `binomial`.
+ *
+ * Accepts the bare binomial, or the binomial followed by an authorship (a
+ * token starting with an upper-case letter or "("). Rejects longer names the
+ * backend's substring match lets through: infraspecific names, other epithets
+ * that merely start with this one ("mascula" in "masculata"), hybrids.
+ */
+export function nameBindsToExactSpecies(name: string, binomial: string): boolean {
+  const n = name.trim().replace(/\s+/g, " ");
+  const b = binomial.trim().replace(/\s+/g, " ");
+  if (!n || !b) return false;
+  if (n.toLowerCase() === b.toLowerCase()) return true;
+  if (!n.toLowerCase().startsWith(`${b.toLowerCase()} `)) return false;
+  const next = n.slice(b.length + 1).split(" ")[0];
+  if (INFRASPECIFIC_MARKER.test(next)) return false;
+  return /^[A-Z(]/.test(next);
+}
+
+/**
+ * Keep only records in which one side is exactly `binomial`; count the rest.
+ *
+ * Records bound to another name are NOT dropped silently: the count is kept on
+ * the result so the page can say they exist and are not shown here.
+ */
+export function restrictToExactSpecies(
+  state: InteractionDiscoveryState,
+  binomial: string,
+): InteractionDiscoveryState {
+  if (state.state !== "ok") return state;
+  const records = state.result.records.filter(
+    (record) =>
+      nameBindsToExactSpecies(record.source_taxon_name, binomial) ||
+      nameBindsToExactSpecies(record.target_taxon_name, binomial),
+  );
+  const excluded = state.result.records.length - records.length;
+  const result: InteractionDiscoveryResult = { ...state.result, records, other_taxon_excluded_count: excluded };
+  if (records.length > 0) return { state: "ok", result };
+  if (result.index_state === "memory_unprovisioned") return { state: "unprovisioned", result };
+  return { state: "empty", result };
+}
+
+// ---------------------------------------------------------------------------
+// Locality guard
+// ---------------------------------------------------------------------------
+
+/**
+ * Key names that denote a place. No captured backend body carries one today
+ * (`locator` is a provenance locator: source, study id, taxon ids, type); the
+ * record allow-list above already drops every key not listed, and this
+ * pattern pins that none of the allow-listed keys is locality-like.
+ */
+export const LOCALITY_LIKE_KEY =
+  /(^|_)(lat|lng|lon|long|latitude|longitude|coord|coords|coordinates|geo|geometry|geojson|point|wkt|locality|localities|location|locationid|place|site|country|countrycode|stateprovince|province|county|municipality|region|elevation|altitude|depth|footprint)(_|$)|decimal(lat|long)|verbatim(locality|coordinates|latitude|longitude)|state_province|^(decimallatitude|decimallongitude|localityname|locationname|georeference.*)$/i;
+
+export function isLocalityLikeKey(key: string): boolean {
+  const normalised = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  return LOCALITY_LIKE_KEY.test(normalised) || LOCALITY_LIKE_KEY.test(key.toLowerCase());
+}
+
+/** Whether a raw value carries a locality-like key, at any depth up to 4. */
+export function carriesLocalityLikeKey(value: unknown, depth = 0): boolean {
+  if (depth > 4 || !value || typeof value !== "object") return false;
+  if (Array.isArray(value)) return value.some((item) => carriesLocalityLikeKey(item, depth + 1));
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, nested]) => isLocalityLikeKey(key) || carriesLocalityLikeKey(nested, depth + 1),
+  );
 }

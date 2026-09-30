@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import {
   fetchInteractionDiscovery,
+  restrictToExactSpecies,
   type DiscoveredInteraction,
   type InteractionCategory,
+  type InteractionCategoryFilter,
   type InteractionDiscoveryResult,
   type InteractionDiscoveryState,
 } from "@/lib/interactionDiscovery";
@@ -51,6 +53,16 @@ function groupKeyOf(categories: InteractionCategory[]): GroupKey {
   return "other";
 }
 
+const DOI_PATTERN = /^(?:doi:\s*|https?:\/\/(?:dx\.)?doi\.org\/)?(10\.\d{4,9}\/\S+)$/i;
+
+/** A study reference that is a DOI resolves through doi.org; the id is still shown verbatim. */
+function studyReferenceUrl(value: string | null): string | null {
+  if (!value) return null;
+  const doi = value.trim().match(DOI_PATTERN);
+  if (doi) return `https://doi.org/${doi[1]}`;
+  return safeHttpUrl(value);
+}
+
 function safeHttpUrl(value: string | null): string | null {
   if (!value) return null;
   try {
@@ -81,7 +93,7 @@ function ProvenanceRow({ label, value }: { label: string; value: React.ReactNode
 }
 
 function InteractionRow({ record }: { record: DiscoveredInteraction }) {
-  const studyUrl = safeHttpUrl(record.study_external_id);
+  const studyUrl = studyReferenceUrl(record.study_external_id);
   return (
     <li className="rounded-2xl bg-slate-50 p-4 text-sm" data-testid="interaction-discovery-record">
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -97,6 +109,12 @@ function InteractionRow({ record }: { record: DiscoveredInteraction }) {
           data-testid="interaction-discovery-verification"
         >
           {record.verification_state} candidate
+        </span>
+        <span
+          className="ml-2 rounded-full border border-amber-300 px-2 py-0.5 text-xs font-semibold text-amber-900"
+          data-testid="interaction-discovery-review-label"
+        >
+          Review-bound · not evidence
         </span>
       </div>
       <dl className="mt-3 space-y-1 text-xs">
@@ -171,6 +189,29 @@ function IndexStateNotice({ result }: { result: InteractionDiscoveryResult }) {
   return null;
 }
 
+/** Records withheld from this view, stated rather than silently dropped. */
+function ExclusionNotes({ result, species }: { result: InteractionDiscoveryResult; species: string }) {
+  const other = result.other_taxon_excluded_count ?? 0;
+  const locality = result.place_withheld_count ?? 0;
+  if (other === 0 && locality === 0) return null;
+  return (
+    <div className="mt-2 space-y-1 text-xs text-slate-600">
+      {other > 0 ? (
+        <p data-testid="interaction-discovery-other-taxon-excluded">
+          {other} matched candidate{other === 1 ? "" : "s"} named a different or broader taxon than {species} (for
+          example an infraspecific name) and {other === 1 ? "is" : "are"} not shown here.
+        </p>
+      ) : null}
+      {locality > 0 ? (
+        <p data-testid="interaction-discovery-locality-withheld">
+          Locality fields carried by {locality} record{locality === 1 ? "" : "s"} were withheld; this page never shows
+          locality.
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 export function InteractionDiscoveryView({
   species,
   discovery,
@@ -206,6 +247,7 @@ export function InteractionDiscoveryView({
       >
         <div className="font-semibold">{UNPROVISIONED_EMPTY_HEADLINE}</div>
         <BackendIndexNote result={discovery.result} />
+        <ExclusionNotes result={discovery.result} species={species} />
       </div>
     );
   } else if (discovery.state === "empty") {
@@ -219,6 +261,7 @@ export function InteractionDiscoveryView({
           The discovery index holds no candidate interactions matching {species}. Absence here reflects what has been
           ingested so far, not an ecological finding.
         </div>
+        <ExclusionNotes result={discovery.result} species={species} />
       </div>
     );
   } else {
@@ -241,6 +284,7 @@ export function InteractionDiscoveryView({
               } not shown.`
             : ""}
         </p>
+        <ExclusionNotes result={result} species={species} />
         {GROUP_ORDER.filter((key) => groups.has(key)).map((key) => (
           <section key={key} data-testid={`interaction-discovery-group-${key}`}>
             <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-800">
@@ -290,15 +334,25 @@ export function InteractionDiscoveryView({
   );
 }
 
-export default function InteractionDiscoveryPanel({ species }: { species: string }) {
+export default function InteractionDiscoveryPanel({
+  species,
+  category = "all",
+  exactSpeciesOnly = false,
+}: {
+  species: string;
+  /** Sent as `category=`; defaults to every category. */
+  category?: InteractionCategoryFilter;
+  /** Show only records in which one side is exactly `species` (the backend matches substrings). */
+  exactSpeciesOnly?: boolean;
+}) {
   const [discovery, setDiscovery] = useState<InteractionDiscoveryState | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setDiscovery(null);
-    fetchInteractionDiscovery(species, { signal: controller.signal })
+    fetchInteractionDiscovery(species, { category, signal: controller.signal })
       .then((state) => {
-        if (!controller.signal.aborted) setDiscovery(state);
+        if (!controller.signal.aborted) setDiscovery(exactSpeciesOnly ? restrictToExactSpecies(state, species) : state);
       })
       .catch(() => {
         if (!controller.signal.aborted) {
@@ -310,7 +364,7 @@ export default function InteractionDiscoveryPanel({ species }: { species: string
         }
       });
     return () => controller.abort();
-  }, [species]);
+  }, [species, category, exactSpeciesOnly]);
 
   return <InteractionDiscoveryView species={species} discovery={discovery} />;
 }
