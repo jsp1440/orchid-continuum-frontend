@@ -1,3 +1,7 @@
+-- SUPERSEDED (2026-09-30) by the owner-applied, tested migration
+-- docs/atlas-next/migrations/20260930_atlas_occurrences_locality_protection.sql
+-- (runbook: docs/atlas-next/APPLY-LOCALITY-PROTECTION.md). Kept for review
+-- history only; do not apply this draft.
 -- =============================================================================
 -- PROPOSAL — NOT APPLIED. DO NOT RUN AGAINST PRODUCTION WITHOUT OWNER REVIEW.
 -- =============================================================================
