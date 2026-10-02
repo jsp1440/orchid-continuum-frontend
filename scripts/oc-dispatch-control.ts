@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { buildGraphDispatchPlan } from './oc-graph-dispatch-plan';
 import { COMPLETION_GRAPH } from '../src/lib/completion-graph/completionGraphData';
+import { findNode as findGraphNode } from '../src/lib/completion-graph/graphOps';
 import type { CompletionNode } from '../src/lib/completion-graph/types';
 import { buildWaveContext } from './oc-wave-context.mjs';
 import { BLOCKED_LABELS, MAX_ACTIVE_LANES, selectLanes } from './oc-multilane-selector.mjs';
@@ -468,6 +469,95 @@ export function makePlan(snapshot: Snapshot, leases: Lease[] = [], now = new Dat
   return { ...plan, leaves, wave, pendingNotReachingAdmission, providerCapacity, inventory: { ...inventory, active: runningCount(snapshot, leases) }, implementationSha: snapshot.implementationSha, integrationSha: snapshot.integrationSha };
 }
 export type Plan = ReturnType<typeof makePlan>;
+
+/**
+ * #900: machine-readable verdict on a plan that admitted nothing.
+ *
+ * The stranded set is `plan.unreachableQueued` minus anything `providerDeferred`
+ * already explains: issues a completion-graph node actually NAMES (proof the
+ * work is real and bound), that reached the ranker, and that no provider-slot
+ * shortage accounts for. `plan.unboundQueued` is deliberately excluded: no node
+ * naming an issue at all means no owner has wired it into the graph yet, which
+ * is ordinary, common backlog state (and already its own reported line, "bind
+ * one with an `oc-node:<node-id>` label") -- not scheduler starvation, and
+ * treating it as such would fail this job closed on every unbound backlog
+ * issue rather than on an actual admission malfunction. Binding an unbound
+ * issue automatically is `#899`'s auto-bind subproblem, deliberately out of
+ * this slice.
+ *
+ * A node declared `OWNER_ACTION`/`EXTERNAL_BLOCKER` in the CANONICAL graph
+ * (`root`, checked by its persistent status, never the plan's internal
+ * lease-occupancy clone -- a node temporarily marked `OWNER_ACTION` only
+ * because an active lease occupies it is exactly the starvation this exists
+ * to catch, not an explanation of it) is also excluded: that status is itself
+ * the explicit owner/external gate the acceptance criteria say must hold, and
+ * the only reason the named issue is in `unreachableQueued` at all is that a
+ * gated leaf is never examined by the ranker, so nothing else records why.
+ * `BLOCKED` status is deliberately NOT treated as a gate here: the scheduler
+ * itself calls it "internally repairable" and keeps it eligible, so a
+ * `BLOCKED` leaf that still was not reached is unexplained, same as any other
+ * eligible leaf. Live graph data confirms the exclusion is not hypothetical:
+ * `cap-research-trait-explorer` (#525) and `research-atlas` (#788) are both
+ * real `OWNER_ACTION` leaves naming a queued issue.
+ */
+export type ZeroAdmissionReport = {
+  /** `true` for a legitimate idle terminal state; `false` for unexplained starvation. */
+  healthy: boolean;
+  reason: string;
+  /** Graph-bound executable queued issues that reached admission and were not admitted. Empty when healthy. */
+  strandedIssues: number[];
+};
+export function classifyZeroAdmission(plan: Plan, root: CompletionNode = COMPLETION_GRAPH): ZeroAdmissionReport {
+  if (plan.issues.length !== 0) throw new Error('Plan admitted work; it is not a zero-admission result');
+  const gated = (nodeId: string) => {
+    const status = findGraphNode(root, nodeId)?.status;
+    return status === 'OWNER_ACTION' || status === 'EXTERNAL_BLOCKER';
+  };
+  const stranded = plan.unreachableQueued
+    .filter(entry => entry.nodeIds.some(nodeId => !gated(nodeId)))
+    .map(entry => entry.issueNumber)
+    .filter(number => !plan.providerDeferred.some(d => d.issueNumber === number));
+  if (stranded.length === 0) {
+    return { healthy: true, reason: 'No graph-bound executable queued work reached admission unexplained this wave; idle is the correct terminal state.', strandedIssues: [] };
+  }
+  return {
+    healthy: false,
+    reason: `${stranded.length} executable queued issue(s) (${stranded.map(n => `#${n}`).join(', ')}) are named by a completion-graph node, reached graph admission with ${plan.capacity} free lane(s) and no owner/provider gate, yet nothing was admitted.`,
+    strandedIssues: stranded,
+  };
+}
+
+export type StarvationOutcome =
+  | { status: 'admitted'; plan: Plan }
+  | { status: 'idle'; plan: Plan; reason: string }
+  | { status: 'starved'; plan: Plan; reason: string; strandedIssues: number[] };
+
+/**
+ * A wave that admits nothing while safe executable queued work and free lane
+ * capacity exist is never a healthy terminal state (#900). Before the cycle may
+ * report that, it gets exactly one bounded reconsideration: `repair` runs once,
+ * then `computePlan` is called again against whatever state that left. Neither
+ * callback is replaced or re-invoked beyond that single retry, so this invents
+ * no second queue, ranker or scheduler -- `computePlan` is the caller's own
+ * canonical snapshot-and-`makePlan`, called at most twice.
+ */
+export async function planWithStarvationRepair(
+  computePlan: () => Plan | Promise<Plan>,
+  repair: () => Promise<void>,
+  root: CompletionNode = COMPLETION_GRAPH,
+): Promise<StarvationOutcome> {
+  const first = await computePlan();
+  if (first.issues.length > 0) return { status: 'admitted', plan: first };
+  const firstReport = classifyZeroAdmission(first, root);
+  if (firstReport.healthy) return { status: 'idle', plan: first, reason: firstReport.reason };
+
+  await repair();
+  const second = await computePlan();
+  if (second.issues.length > 0) return { status: 'admitted', plan: second };
+  const secondReport = classifyZeroAdmission(second, root);
+  if (secondReport.healthy) return { status: 'idle', plan: second, reason: secondReport.reason };
+  return { status: 'starved', plan: second, reason: secondReport.reason, strandedIssues: secondReport.strandedIssues };
+}
 
 export function assertAdmission(plan: Plan, snapshot: Snapshot, issueNumber: number, now: string, root = COMPLETION_GRAPH) {
   validatePlan(plan);
