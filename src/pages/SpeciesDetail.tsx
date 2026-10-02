@@ -19,6 +19,7 @@ import {
   INTERACTION_PLACEHOLDER_MESSAGE,
 } from '@/lib/interactions';
 import EcologicalInteractionPanel from '@/components/interactions/EcologicalInteractionPanel';
+import SpeciesInteractionCandidates from '@/components/interactions/SpeciesInteractionCandidates';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 
@@ -220,6 +221,11 @@ const SpeciesDetail: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Review-bound discovery candidates — separate from the live API panel above */}
+                <SpeciesInteractionCandidates
+                  genus={species.genus}
+                  epithet={species.epithet}
+                />
 
                 {/* References */}
                 {species.references_list?.length > 0 && (
