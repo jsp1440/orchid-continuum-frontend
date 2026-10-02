@@ -274,3 +274,6 @@ jobs:
         with:
           name: oc-lane-${{ github.run_attempt }}-${{ inputs.issue_number }}
           path: .oc-receipts/*.json
+          # upload-artifact v4 drops dot-directories unless told otherwise; without
+          # this the settle receipt never reached the audit (run 36230834756).
+          include-hidden-files: true
