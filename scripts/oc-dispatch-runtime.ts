@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, planWithStarvationRepair, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
   providerCapacityFromEnvironment, providerFreeRepairsReadyForRequeue, reconcileStaleRunningLabels, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
@@ -274,24 +274,50 @@ async function main() {
   const command = process.argv[2];
   const store = new GitHubLeaseStore();
   if (command === 'plan') {
-    const current = snapshot();
-    let durable: Ledger | null = null;
-    try { const { ledger } = await store.read(); validateLedger(ledger); durable = ledger; }
-    catch (error) { if (!status(error, 404)) throw error; }
-    const at = now();
-    // Provider slots are decided once, here, from the same policy environment
-    // and ledger the lanes' preflights read, and are hash-bound into the wave.
-    const plan = makePlan(current, durable?.leases ?? [], at, undefined, undefined,
-      providerCapacityFromEnvironment(process.env, durable, at));
+    // Provider slots are decided once per attempt, from the same policy
+    // environment and ledger the lanes' preflights read, and are hash-bound
+    // into the wave.
+    const buildPlan = async () => {
+      const liveSnapshot = snapshot();
+      let durable: Ledger | null = null;
+      try { const { ledger } = await store.read(); validateLedger(ledger); durable = ledger; }
+      catch (error) { if (!status(error, 404)) throw error; }
+      const at = now();
+      return makePlan(liveSnapshot, durable?.leases ?? [], at, undefined, undefined,
+        providerCapacityFromEnvironment(process.env, durable, at));
+    };
+    // #900: a wave that admits nothing while safe executable queued work and
+    // free capacity exist is never healthy. One bounded reconsideration --
+    // re-reading current GitHub/ledger state and recomputing the same
+    // canonical admission -- is attempted before the cycle may fail closed.
+    // This re-read is the repair for the class of starvation this slice
+    // targets (state that changed between the `reconcile` job's writes and
+    // this read becoming visible). Deeper repair -- reusing `reconcileExpired`
+    // / `reconcileStaleRunningLabels` / provider-free requeue inside this same
+    // pass -- is `#899` scope and intentionally not added here: it needs
+    // mutation authority this read-only job does not hold, and inventing that
+    // here would be the second scheduler this slice is told not to build.
+    const outcome = await planWithStarvationRepair(buildPlan, async () => {});
+    const plan = outcome.plan;
     const dir = process.env.OC_PLAN_DIR || '.oc-wave';
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'plan.json'), JSON.stringify(plan, null, 2) + '\n');
+    writeFileSync(join(dir, 'plan.json'), JSON.stringify({ ...plan,
+      zeroAdmission: outcome.status === 'admitted' ? null
+        : { status: outcome.status, reason: outcome.reason, strandedIssues: outcome.status === 'starved' ? outcome.strandedIssues : [] } },
+      null, 2) + '\n');
     writeFileSync(join(dir, `wave-${plan.wave.hash}.json`), plan.wave.canonical + '\n');
     output('issues', JSON.stringify(plan.issues));
     output('wave_hash', plan.wave.hash);
-    const summary = planSummary(plan);
+    output('zero_admission_status', outcome.status === 'admitted' ? '' : outcome.status);
+    const summary = planSummary(plan) +
+      (outcome.status === 'idle' ? `\n**WAITING**: ${outcome.reason}\n` : '') +
+      (outcome.status === 'starved' ? `\n**STARVATION (fail-closed)**: ${outcome.reason} One bounded reconsideration re-read current GitHub/ledger state and still admitted nothing.\n` : '');
     process.stdout.write(summary);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+    if (outcome.status === 'starved') {
+      console.error(`Starvation: ${outcome.reason}`);
+      process.exitCode = 1;
+    }
     return;
   }
   if (command === 'reconcile') {

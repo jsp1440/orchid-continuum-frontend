@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
+import { describe, expect, it, vi } from 'vitest';
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, classifyZeroAdmission, isActive, laneOf, lineageFor, makePlan, planWithStarvationRepair, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
   providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -415,5 +415,155 @@ describe('canonical graph → durable lease → independent dispatch → refill'
     expect(() => assertAdmission(plan, snapshot, 999, now, root)).toThrow('missing');
     plan.wave.packet.governance.push('tampered');
     expect(() => assertAdmission(plan, snapshot, plan.issues[0], now, root)).toThrow('hash');
+  });
+
+  describe('#900: zero-admission with queued executable work fails closed, not healthy', () => {
+    // Two issues sharing one completion-graph leaf: #2 is already executing
+    // (an active lease occupies the node), #1 is plainly `oc-queued`, passes
+    // every `selectLanes` exclusion, and the graph node itself names it -- so
+    // nothing in `pendingNotReachingAdmission`'s own reasons explains it either
+    // (it falls through to "no rule this report knows about"). This is real,
+    // unexplained starvation, not merely-unbound backlog.
+    const sharedNodeFixture = () => {
+      const { root, snapshot } = fixture(1);
+      root.children[0].issues = ['#1', '#2'];
+      snapshot.issues.push(issue(2, ['oc-running']));
+      const activeLease: Ledger['leases'][number] = { id: 'active-2', issue: 2, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w',
+        runId: '1', runAttempt: '1', expiresAt: now, reservedUsd: 0, lane: 'provider-free', state: 'running' };
+      return { root, snapshot, activeLease };
+    };
+
+    it('classifies an executable, graph-bound, unadmitted issue as starved, naming it and the reason', () => {
+      const { root, snapshot, activeLease } = sharedNodeFixture();
+      const plan = makePlan(snapshot, [activeLease], now, root);
+      expect(plan.issues).toEqual([]);
+      expect(plan.capacity).toBeGreaterThan(0);
+      expect(plan.unreachableQueued).toEqual([{ issueNumber: 1, nodeIds: ['leaf-1'] }]);
+
+      const report = classifyZeroAdmission(plan, root);
+      expect(report.healthy).toBe(false);
+      expect(report.strandedIssues).toEqual([1]);
+      expect(report.reason).toContain('#1');
+    });
+
+    it('classifies legitimately idle work -- blocked, gated or durable -- as healthy with no stranded issues', () => {
+      const { root, snapshot } = fixture(1);
+      snapshot.issues[0] = issue(1, ['oc-queued', 'oc-owner-gate']);
+      const plan = makePlan(snapshot, [], now, root);
+      expect(plan.issues).toEqual([]);
+      expect(plan.unreachableQueued).toEqual([]);
+
+      const report = classifyZeroAdmission(plan, root);
+      expect(report.healthy).toBe(true);
+      expect(report.strandedIssues).toEqual([]);
+    });
+
+    it('classifies merely-unbound backlog (no node names it at all) as healthy, not starvation', () => {
+      // Common, ordinary state -- real production backlog outpaces graph
+      // leaves -- and already has its own reported line ("bind one with an
+      // `oc-node:<node-id>` label"). Treating it as starvation would fail this
+      // job closed on routine unbound backlog instead of an actual admission
+      // malfunction, which is exactly the regression this test guards against.
+      const { root, snapshot } = fixture(1);
+      root.children[0].issues = [];
+      const plan = makePlan(snapshot, [], now, root);
+      expect(plan.issues).toEqual([]);
+      expect(plan.unboundQueued).toEqual([1]);
+      expect(plan.unreachableQueued).toEqual([]);
+
+      const report = classifyZeroAdmission(plan, root);
+      expect(report.healthy).toBe(true);
+      expect(report.strandedIssues).toEqual([]);
+    });
+
+    it('classifies a node declared OWNER_ACTION/EXTERNAL_BLOCKER in the canonical graph as healthy, not starvation', () => {
+      // Regression: the real completion graph has leaves genuinely gated this
+      // way (e.g. `cap-research-trait-explorer` naming #525, `research-atlas`
+      // naming #788) -- a gated leaf is never examined by the ranker, so its
+      // named issue lands in `unreachableQueued` with nothing else to explain
+      // it. That is an explicit owner/external gate, not unexplained starvation.
+      const { root, snapshot } = fixture(1);
+      root.children[0].status = 'OWNER_ACTION';
+      const plan = makePlan(snapshot, [], now, root);
+      expect(plan.issues).toEqual([]);
+      expect(plan.unreachableQueued).toEqual([{ issueNumber: 1, nodeIds: ['leaf-1'] }]);
+
+      const report = classifyZeroAdmission(plan, root);
+      expect(report.healthy).toBe(true);
+      expect(report.strandedIssues).toEqual([]);
+    });
+
+    it('does not let a lease-occupancy OWNER_ACTION mutation (internal to planning) masquerade as a canonical gate', () => {
+      // `buildGraphDispatchPlan` marks an occupied node `OWNER_ACTION` on an
+      // internal CLONE for planning purposes only; the canonical `root` this
+      // function is given is never mutated. Checking the clone instead of the
+      // canonical graph would make every lease-occupancy starvation case
+      // falsely read as a legitimate gate and silently heal nothing.
+      const { root, snapshot, activeLease } = sharedNodeFixture();
+      expect(root.children[0].status).toBe('MISSING');
+      const plan = makePlan(snapshot, [activeLease], now, root);
+      expect(root.children[0].status).toBe('MISSING');
+      expect(classifyZeroAdmission(plan, root).healthy).toBe(false);
+    });
+
+    it('throws rather than classify a plan that actually admitted work', () => {
+      const { root, snapshot } = fixture(1);
+      const plan = makePlan(snapshot, [], now, root);
+      expect(plan.issues).toEqual([1]);
+      expect(() => classifyZeroAdmission(plan, root)).toThrow('admitted work');
+    });
+
+    it('starvation case: attempts exactly one bounded repair, and admits the issue once the repair releases the blocking node', async () => {
+      const { root, snapshot, activeLease } = sharedNodeFixture();
+      let leases = [activeLease];
+      const computePlan = () => makePlan(snapshot, leases, now, root);
+      // The bounded repair this slice implements: reconcile proves #2's run
+      // actually completed, so its lease is released and the shared node frees up.
+      const repair = vi.fn(async () => { leases = []; });
+
+      const outcome = await planWithStarvationRepair(computePlan, repair, root);
+      expect(repair).toHaveBeenCalledTimes(1);
+      expect(outcome.status).toBe('admitted');
+      expect(outcome.plan.issues).toEqual([1]);
+    });
+
+    it('starvation case: fails closed naming the stranded issue when the one bounded repair does not fix it', async () => {
+      const { root, snapshot, activeLease } = sharedNodeFixture();
+      const computePlan = () => makePlan(snapshot, [activeLease], now, root);
+      const repair = vi.fn(async () => {});
+
+      const outcome = await planWithStarvationRepair(computePlan, repair, root);
+      expect(outcome.status).toBe('starved');
+      if (outcome.status === 'starved') {
+        expect(outcome.strandedIssues).toEqual([1]);
+        expect(outcome.reason).toContain('#1');
+      }
+      // Bounded: never a second repair attempt chasing the same unfixed gap.
+      expect(repair).toHaveBeenCalledTimes(1);
+    });
+
+    it('legitimate idle case: never spends a repair attempt, and records a deliberate idle reason', async () => {
+      const { root, snapshot } = fixture(1);
+      snapshot.issues[0] = issue(1, ['oc-queued', 'oc-owner-gate']);
+      const computePlan = () => makePlan(snapshot, [], now, root);
+      const repair = vi.fn(async () => {});
+
+      const outcome = await planWithStarvationRepair(computePlan, repair, root);
+      expect(repair).not.toHaveBeenCalled();
+      expect(outcome.status).toBe('idle');
+      expect(outcome.plan.issues).toEqual([]);
+      if (outcome.status === 'idle') expect(outcome.reason).toBeTruthy();
+    });
+
+    it('healthy case: passes an already-admitting plan straight through with no repair attempt', async () => {
+      const { root, snapshot } = fixture(8);
+      const computePlan = () => makePlan(snapshot, [], now, root);
+      const repair = vi.fn(async () => {});
+
+      const outcome = await planWithStarvationRepair(computePlan, repair, root);
+      expect(repair).not.toHaveBeenCalled();
+      expect(outcome.status).toBe('admitted');
+      expect(outcome.plan.issues).toHaveLength(8);
+    });
   });
 });
