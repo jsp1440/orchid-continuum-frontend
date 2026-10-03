@@ -54,6 +54,13 @@ function extractRows<T = BackendOccurrence>(payload: unknown): T[] {
   }
   return [];
 }
+function hasOccurrenceRowsShape(payload: unknown): boolean {
+  if (Array.isArray(payload)) return true;
+  if (!payload || typeof payload !== 'object') return false;
+  const o = payload as Record<string, unknown>;
+  return ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points']
+    .some((key) => Array.isArray(o[key]));
+}
 function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
   const out: OccurrencePoint[] = [];
   rows.forEach((r, i) => {
@@ -95,6 +102,7 @@ export async function fetchGenusOccurrencesOutcome(
   const q = encodeURIComponent(genus);
   const res = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
   if (!res.ok || res.data === null) return { status: 'unavailable', httpStatus: res.status };
+  if (!hasOccurrenceRowsShape(res.data)) return { status: 'unavailable', httpStatus: res.status };
   return { status: 'ok', results: normalizeBackend(extractRows(res.data)) };
 }
 

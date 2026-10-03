@@ -34,4 +34,12 @@ describe('genus image outcome', () => {
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network down'); }));
     await expect(fetchGenusImagesWithSource('Testorchis')).resolves.toEqual({ images: [], source: 'pending' });
   });
+
+  it('reports pending for a 2xx error envelope instead of confirming an empty result', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ detail: 'temporarily unavailable' }), { status: 200 })));
+    const pending = fetchGenusImagesWithSource('Testorchis');
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toEqual({ images: [], source: 'pending' });
+  });
 });

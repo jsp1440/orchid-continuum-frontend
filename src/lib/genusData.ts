@@ -168,6 +168,14 @@ function extractArray(payload: unknown): Record<string, unknown>[] {
   return [];
 }
 
+function hasRecognizedArrayPayload(payload: unknown): boolean {
+  if (Array.isArray(payload)) return true;
+  if (!payload || typeof payload !== 'object') return false;
+  const p = payload as Record<string, unknown>;
+  return ['photos', 'results', 'data', 'species', 'items', 'records', 'images']
+    .some((key) => Array.isArray(p[key]));
+}
+
 function pick(obj: Record<string, unknown>, keys: string[]): string | undefined {
   for (const k of keys) {
     const v = obj[k];
@@ -1464,9 +1472,9 @@ async function fetchGenusImagesOnce(
   }
 
 
-  if (!payload) {
-    console.warn('[fetchGenusImages] empty payload — returning []');
-    return { images: [], networkError: false, answered: true };
+  if (!hasRecognizedArrayPayload(payload)) {
+    console.warn('[fetchGenusImages] unrecognized payload shape — treating source as unavailable');
+    return { images: [], networkError: false, answered: false };
   }
 
   const arr = extractArray(payload);
