@@ -150,7 +150,7 @@ describe('GenusDetail — no fabricated genus facts', () => {
     assertNoFabricatedFacts();
   });
 
-  it('a backbone-confirmed name is badged Verified; unconfirmed names are hidden', async () => {
+  it('a limited backbone sample verifies matches without hiding trusted images outside the sample', async () => {
     live.images = [
       {
         scientific_name: 'Dracula vampira',
@@ -158,7 +158,7 @@ describe('GenusDetail — no fabricated genus facts', () => {
         image_urls: ['https://images.example.test/a.jpg'],
       },
       {
-        scientific_name: 'Dracula notrealname',
+        scientific_name: 'Dracula chimaera',
         image_url: 'https://images.example.test/b.jpg',
         image_urls: ['https://images.example.test/b.jpg'],
       },
@@ -167,9 +167,9 @@ describe('GenusDetail — no fabricated genus facts', () => {
     await renderGenus('Dracula');
     const text = container.textContent ?? '';
     expect(text).toContain('Dracula vampira');
-    expect(text).not.toContain('Dracula notrealname');
+    expect(text).toContain('Dracula chimaera');
     expect(text).toContain('Verified');
-    expect(text).not.toContain('Unverified');
+    expect(text).toContain('Unverified');
     assertNoFabricatedFacts();
   });
 });

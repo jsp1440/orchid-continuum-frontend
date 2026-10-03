@@ -342,13 +342,13 @@ const GenusDetail: React.FC = () => {
     );
   }
 
-  // Species plates are built ONLY from live backend image records (their
-  // scientific_name + image URLs + source/licence). When the backbone returned
-  // validated names, plates whose name is not confirmed are hidden; when it
-  // returned nothing, plates stay visible but carry an "Unverified" badge. A
-  // plate never carries locally authored distribution, elevation, pollinator
-  // or conservation text.
-  const unverifiedMode = validationLoaded && validatedSet.size === 0;
+  // Species plates are built ONLY from trusted backend image records (their
+  // scientific_name + image URLs + source/licence). The separately requested
+  // backbone sample is limited and therefore may verify a name, but absence
+  // from that sample must never reject a taxonomy-joined image record. A plate
+  // never carries locally authored distribution, elevation, pollinator or
+  // conservation text.
+  const unverifiedMode = validationLoaded;
 
   /**
    * Representative species plates.
@@ -360,12 +360,8 @@ const GenusDetail: React.FC = () => {
   const visiblePlates = useMemo(() => {
     if (!entry) return [];
     const withName = images.filter((img) => binomialOf(img.scientific_name || '').includes(' '));
-    const base =
-      validatedSet.size === 0
-        ? withName
-        : withName.filter((img) => isValidatedName(img.scientific_name, validatedSet));
 
-    const representative = buildRepresentativePlates(base, {
+    const representative = buildRepresentativePlates(withName, {
       nameOf: (img) => img.scientific_name,
       urlsOf: (img) => {
         const trusted = imageMap.get(binomialOf(img.scientific_name));
@@ -382,7 +378,7 @@ const GenusDetail: React.FC = () => {
       if (plate.urls.length === 0) return false;
       return true;
     });
-  }, [entry, images, validatedSet, failedSpecies, imageMap]);
+  }, [entry, images, failedSpecies, imageMap]);
 
   /**
    * Ecological relationships, expressed as evidence states rather than as
@@ -656,7 +652,7 @@ const GenusDetail: React.FC = () => {
                           and a photograph, so the badge covers the whole plate:
                           GREEN "Verified" when the name is confirmed against the
                           OC taxonomic backbone; orange "Unverified" when the
-                          backbone returned nothing to confirm it against. */}
+                          limited backbone response did not confirm it. */}
                       {nameVerified ? (
                         <span
                           className="absolute top-2 left-2 inline-flex items-center gap-1 rounded bg-[#0c2a16]/80 px-1.5 py-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[#7ee0a0] backdrop-blur-sm"
