@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 25.5,
+  "programSpent": 26,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 4.5
+    "2026-10-03": 5
   },
   "leases": [
     {
@@ -1197,6 +1197,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T16:53:17.791Z"
+    },
+    {
+      "id": "f49f45fda2ab3f03d4e30d2ce5f03acd4b7e6bc9f8a6c1f7e3f32a80a1813b2b",
+      "issue": 790,
+      "nodeId": "cap-education-glossary-hub",
+      "fingerprint": "d16ce23c2d26023c503e914054296f0a2687b5acbb3036bbcb543ad880d6fc1e",
+      "waveHash": "4a8c17cafcc5d2a0594cac3e55a607dc03a96d655ff20afac729b1a9a51b7a24",
+      "runId": "37134834636",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:26:05.228Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
