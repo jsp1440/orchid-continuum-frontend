@@ -32,4 +32,12 @@ describe('genus occurrence outcome', () => {
       httpStatus: 200,
     });
   });
+
+  it('reports non-object rows as unavailable without rejecting', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [null, 'error'] }), { status: 200 })));
+    await expect(fetchGenusOccurrencesOutcome('Dracula')).resolves.toEqual({
+      status: 'unavailable',
+      httpStatus: 200,
+    });
+  });
 });

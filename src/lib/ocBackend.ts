@@ -61,9 +61,11 @@ function hasOccurrenceRowsShape(payload: unknown): boolean {
   return ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points']
     .some((key) => Array.isArray(o[key]));
 }
-function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
+function normalizeBackend(rows: unknown[]): OccurrencePoint[] {
   const out: OccurrencePoint[] = [];
-  rows.forEach((r, i) => {
+  rows.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return;
+    const r = raw as BackendOccurrence;
     const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
     const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
       ?? numOf(p.decimal_latitude) ?? numOf(p.latitude) ?? numOf(p.lat);

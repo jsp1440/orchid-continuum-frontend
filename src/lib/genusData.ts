@@ -1487,6 +1487,7 @@ async function fetchGenusImagesOnce(
   const byName = new Map<string, GenusImage>();
   const order: string[] = [];
   for (const r of arr) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
     // Reconstruct the full binomial when the API returns separate genus +
     // species epithet fields (e.g. harvester2: { genus:'Cattleya', species:'labiata' })
     // rather than a pre-joined scientific_name. This is the common shape from

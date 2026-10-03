@@ -50,4 +50,12 @@ describe('genus image outcome', () => {
     await vi.runAllTimersAsync();
     await expect(pending).resolves.toEqual({ images: [], source: 'pending' });
   });
+
+  it('reports pending for non-object image rows without rejecting', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ images: [null, 'error'] }), { status: 200 })));
+    const pending = fetchGenusImagesWithSource('Testorchis');
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toEqual({ images: [], source: 'pending' });
+  });
 });
