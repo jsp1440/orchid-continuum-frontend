@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 22,
+  "programSpent": 22.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 1
+    "2026-10-03": 1.5
   },
   "leases": [
     {
@@ -1099,6 +1099,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T16:14:58.735Z"
+    },
+    {
+      "id": "544fc1a6b097636e61f426e16d70efd87562c167ca536462c6aaf999d309262e",
+      "issue": 781,
+      "nodeId": "cap-vision-matrix-activation-preflight",
+      "fingerprint": "d2b7cf741c5a1f651b14741ac4497d74bb31668dfac9911d3e2d5002912b8a7b",
+      "waveHash": "1daae96edc98c0ecd9190643ad9203d36d0c562c6283693f9bc38ee85268b5a2",
+      "runId": "37132573764",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T16:48:41.837Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
