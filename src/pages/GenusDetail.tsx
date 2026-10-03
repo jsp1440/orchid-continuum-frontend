@@ -361,7 +361,7 @@ const GenusDetail: React.FC = () => {
     if (!entry) return [];
     const withName = images.filter((img) => binomialOf(img.scientific_name || '').includes(' '));
     const plateCandidates = imageSource === 'inaturalist'
-      ? validationLoaded
+      ? validationLoaded && validatedSet.size > 0
         ? withName.filter((img) => isValidatedName(img.scientific_name, validatedSet))
         : []
       : withName;

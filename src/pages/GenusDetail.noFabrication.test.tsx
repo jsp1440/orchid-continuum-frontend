@@ -195,4 +195,20 @@ describe('GenusDetail — no fabricated genus facts', () => {
     expect(text).not.toContain('Dracula chimaera');
     expect(text).toContain('Verified');
   });
+
+  it('shows no iNaturalist species plates when the backbone returns no names', async () => {
+    live.source = 'inaturalist';
+    live.images = [
+      {
+        scientific_name: 'Dracula vampira',
+        image_url: 'https://images.example.test/a.jpg',
+        image_urls: ['https://images.example.test/a.jpg'],
+      },
+    ];
+    live.validated = [];
+    await renderGenus('Dracula');
+    const text = container.textContent ?? '';
+    expect(text).not.toContain('View dossier Dracula vampira');
+    expect(container.querySelector('[data-testid="genus-plates-empty"]')).not.toBeNull();
+  });
 });
