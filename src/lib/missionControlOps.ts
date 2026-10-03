@@ -34,6 +34,8 @@ export type ContinuumSubsystem = {
   failures?: string[];
   sourceRecordCounts?: Record<string, number>;
   telemetryFreshness?: string;
+  /** Whether completeness/status came from backend telemetry or a UI fallback row. */
+  telemetryProvenance?: 'live' | 'fallback';
 };
 
 export type HarvesterStatus = {
@@ -303,6 +305,7 @@ const fallbackGlobalHealth: ContinuumSubsystem[] = [
   summary: String(summary),
   blockers: blockers as string[],
   recommendedNextAction: String(recommendedNextAction),
+  telemetryProvenance: 'fallback',
 }));
 
 const fallbackHarvesters: HarvesterStatus[] = [
@@ -415,6 +418,7 @@ const fallbackScientificSystems: ContinuumSubsystem[] = [
   route: String(route),
   dataSource: String(dataSource),
   maturity: String(maturity),
+  telemetryProvenance: 'fallback',
 }));
 
 const fallbackRecommendations: Recommendation[] = [
@@ -599,6 +603,7 @@ function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsy
     failures: pickStringArray(record, ['failures']),
     sourceRecordCounts: Object.fromEntries(Object.entries(sourceCounts).map(([key, count]) => [key, Number(count) || 0])),
     telemetryFreshness: pickString(record, ['telemetry_freshness', 'telemetryFreshness'], ''),
+    telemetryProvenance: 'live',
   };
 }
 
@@ -946,6 +951,7 @@ export function runtimeSubsystemFrom(statusPayload?: Record<string, unknown>, co
     route: '/mission-control',
     dataSource: sources,
     maturity: pickString(configuration, ['worker_mode'], 'runtime_status'),
+    telemetryProvenance: 'live',
   };
 }
 

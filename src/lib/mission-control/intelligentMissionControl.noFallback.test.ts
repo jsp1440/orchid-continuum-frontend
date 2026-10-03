@@ -21,6 +21,7 @@ function subsystem(partial: Partial<ContinuumSubsystem>): ContinuumSubsystem {
     summary: '',
     blockers: [],
     recommendedNextAction: '',
+    telemetryProvenance: 'live',
     ...partial,
   };
 }
@@ -39,7 +40,22 @@ describe('deriveScientificInsights — live telemetry only', () => {
       subsystem({ id: 'literature', name: 'Literature System', status: 'stub', completeness: 15 }),
     ]);
     fallback.dataMode = 'fallback';
+    fallback.globalHealth[0].telemetryProvenance = 'fallback';
     expect(imc.deriveScientificInsights(fallback)).toEqual([]);
+  });
+
+  it('mixed mode still excludes fallback subsystem rows', () => {
+    const mixed = ops([
+      subsystem({
+        id: 'literature',
+        name: 'Literature System',
+        status: 'stub',
+        completeness: 15,
+        telemetryProvenance: 'fallback',
+      }),
+    ]);
+    mixed.dataMode = 'mixed';
+    expect(imc.deriveScientificInsights(mixed)).toEqual([]);
   });
 
   it('partial telemetry → only the live-derived insight, with provenance', () => {

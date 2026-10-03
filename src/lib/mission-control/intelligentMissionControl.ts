@@ -205,10 +205,11 @@ export type ScientificInsight = {
 export function deriveScientificInsights(ops: MissionControlOperations | null): ScientificInsight[] {
   if (!ops || ops.dataMode === 'fallback') return [];
 
-  // Rows whose status is unknown (e.g. runner status unavailable) carry no
-  // observed completeness, so they cannot be ranked as the "largest gap".
+  // Only row-level live telemetry may produce an insight. Page-level `mixed`
+  // mode can be caused by an unrelated healthy endpoint while globalHealth is
+  // still populated entirely from hard-coded fallback rows.
   const health = (ops.globalHealth ?? []).filter(
-    (s) => s.status !== 'unknown' && typeof s.completeness === 'number' && Number.isFinite(s.completeness),
+    (s) => s.telemetryProvenance === 'live' && s.status !== 'unknown' && typeof s.completeness === 'number' && Number.isFinite(s.completeness),
   );
   const insights: ScientificInsight[] = [];
 
