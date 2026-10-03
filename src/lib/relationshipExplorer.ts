@@ -253,22 +253,12 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-function isOptionalNullableString(record: Record<string, unknown>, key: string): boolean {
-  return !Object.prototype.hasOwnProperty.call(record, key) || isNullableString(record[key]);
-}
-
-function isOptionalNullableNumber(record: Record<string, unknown>, key: string): boolean {
-  return !Object.prototype.hasOwnProperty.call(record, key)
-    || record[key] === null
-    || (typeof record[key] === "number" && Number.isFinite(record[key]));
-}
-
 function isStringArrayOrNull(value: unknown): boolean {
   return value === null || (Array.isArray(value) && value.every((item) => typeof item === "string"));
 }
 
-function isOptionalStringArrayOrNull(record: Record<string, unknown>, key: string): boolean {
-  return !Object.prototype.hasOwnProperty.call(record, key) || isStringArrayOrNull(record[key]);
+function hasAllOwn(record: Record<string, unknown>, keys: string[]): boolean {
+  return keys.every((key) => Object.prototype.hasOwnProperty.call(record, key));
 }
 
 function isCardAvailability(value: unknown): boolean {
@@ -281,63 +271,59 @@ function isCardAvailability(value: unknown): boolean {
 
 function isSpeciesProfile(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return typeof value.scientific_name === "string"
+  const nullableKeys = ["genus", "species_epithet", "author", "common_name", "description"];
+  return hasAllOwn(value, ["scientific_name", ...nullableKeys])
+    && typeof value.scientific_name === "string"
     && value.scientific_name.trim().length > 0
-    && ["genus", "species_epithet", "author", "common_name", "description"].every(
-      (key) => isOptionalNullableString(value, key),
-    );
+    && nullableKeys.every((key) => isNullableString(value[key]));
 }
 
 function isAtlasSummary(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const keys = ["occurrence_count", "atlas_confidence_score", "atlas_readiness", "elevation_range", "countries"];
-  return keys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
-    && isOptionalNullableNumber(value, "occurrence_count")
-    && isOptionalNullableNumber(value, "atlas_confidence_score")
-    && isOptionalNullableString(value, "atlas_readiness")
-    && isOptionalNullableString(value, "elevation_range")
-    && isOptionalStringArrayOrNull(value, "countries");
+  return hasAllOwn(value, keys)
+    && (value.occurrence_count === null || (typeof value.occurrence_count === "number" && Number.isFinite(value.occurrence_count)))
+    && (value.atlas_confidence_score === null || (typeof value.atlas_confidence_score === "number" && Number.isFinite(value.atlas_confidence_score)))
+    && isNullableString(value.atlas_readiness)
+    && isNullableString(value.elevation_range)
+    && isStringArrayOrNull(value.countries);
 }
 
 function isGalleryImage(value: unknown): boolean {
   return isRecord(value)
+    && hasAllOwn(value, ["url", "caption", "credit"])
     && typeof value.url === "string"
     && value.url.trim().length > 0
-    && isOptionalNullableString(value, "caption")
-    && isOptionalNullableString(value, "credit");
+    && isNullableString(value.caption)
+    && isNullableString(value.credit);
 }
 
 function isMycorrhizaClaim(value: unknown): boolean {
   if (!isRecord(value)) return false;
   const keys = ["fungal_taxon", "relationship_type", "evidence", "source"];
-  return keys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
-    && keys.every(
-      (key) => isOptionalNullableString(value, key),
-    );
+  return hasAllOwn(value, keys) && keys.every((key) => isNullableString(value[key]));
 }
 
 function isFungalDependency(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return (Object.prototype.hasOwnProperty.call(value, "dependency_level")
-      || Object.prototype.hasOwnProperty.call(value, "notes"))
-    && isOptionalNullableString(value, "dependency_level")
-    && isOptionalNullableString(value, "notes");
+  return hasAllOwn(value, ["dependency_level", "notes"])
+    && isNullableString(value.dependency_level)
+    && isNullableString(value.notes);
 }
 
 function isReasoningItem(value: unknown): boolean {
   return isRecord(value)
     && typeof value.statement === "string"
-    && isOptionalNullableString(value, "confidence")
-    && isOptionalNullableString(value, "basis");
+    && value.statement.trim().length > 0
+    && hasAllOwn(value, ["statement", "confidence", "basis"])
+    && isNullableString(value.confidence)
+    && isNullableString(value.basis);
 }
 
 function isInteractionRecord(value: unknown): boolean {
   if (!isRecord(value)) return false;
-  return ["partner", "interaction_type", "source"].some(
-    (key) => Object.prototype.hasOwnProperty.call(value, key),
-  ) && isOptionalNullableString(value, "partner")
-    && isOptionalNullableString(value, "interaction_type")
-    && isOptionalNullableString(value, "source");
+  const keys = ["partner", "interaction_type", "source"];
+  return hasAllOwn(value, keys) && keys.every((key) => isNullableString(value[key]));
 }
 
 function isNullableArrayOf(value: unknown, guard: (item: unknown) => boolean): boolean {
