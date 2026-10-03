@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 27.5,
+  "programSpent": 28,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 6.5
+    "2026-10-03": 7
   },
   "leases": [
     {
@@ -1252,6 +1252,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T17:09:04.463Z"
+    },
+    {
+      "id": "10c106b3f09cca15560fd14ba3b57a5a890172850a4e36efceb6a1ec3e33cea8",
+      "issue": 799,
+      "nodeId": "cap-oasis-greenhouse-monitoring",
+      "fingerprint": "22fcffdba464288dab92dae62336e0e690138e7604abf35afeb2841c980e1d35",
+      "waveHash": "e4b933f6ecd397b76a8d444af970d5eccf9354d103498905f8dab081103dabaa",
+      "runId": "37135788677",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:41:55.738Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
