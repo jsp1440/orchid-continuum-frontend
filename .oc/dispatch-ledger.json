@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 24.5,
+  "programSpent": 25,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 3.5
+    "2026-10-03": 4
   },
   "leases": [
     {
@@ -1169,6 +1169,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T16:42:37.501Z"
+    },
+    {
+      "id": "a2df8144a7ffcd7e73bc84c7db681bf27cad0132902df512cc1e7d9ed85914eb",
+      "issue": 787,
+      "nodeId": "gate-journey-genus-profile-fanout",
+      "fingerprint": "4bd37b152e40ee8c08dcb13dc8878d7c6c6c723dfeb52167d360901202b837b3",
+      "waveHash": "579280917a188e81ccf414157ecfb77ed60e83b77648d74a8ba60ad60e8aeffc",
+      "runId": "37134203298",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:15:36.104Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
