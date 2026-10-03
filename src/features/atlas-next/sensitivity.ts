@@ -23,6 +23,8 @@
 
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import type { AtlasAccessLevel } from './types';
+import { CITES_APPENDIX_I_FLOOR_DEG, isCitesAppendixIOrchid } from '@/lib/atlasCitesAppendixI';
+import { sourcePrecisionPolicy, sourcePublishedCellDeg, sourceWithheld } from '@/lib/atlasOccurrenceSource';
 
 /**
  * Whether a conservation assessment could be reached for this record at all.
@@ -143,7 +145,18 @@ export function resolveLocation(
   point: Pick<
     AtlasOccurrencePoint,
     'lat' | 'lng' | 'iucnCode' | 'conservationStatus' | 'coordinateUncertaintyM'
-  > & { assessmentResolved?: boolean },
+  > & { assessmentResolved?: boolean } & Partial<
+      Pick<
+        AtlasOccurrencePoint,
+        | 'genus'
+        | 'species'
+        | 'canonicalName'
+        | 'acceptedName'
+        | 'publishedCellDeg'
+        | 'publishedPrecisionReason'
+        | 'localityWithheldAtSource'
+      >
+    >,
   access: AtlasAccessLevel = 'public',
   floorCellDeg = 0,
 ): DisplayedLocation {
@@ -162,17 +175,34 @@ export function resolveLocation(
   // record. It may NOT see through coordinate uncertainty: that is a property
   // of the observation itself and no authorisation makes it more precise.
   const threatCell = tier && access !== 'research' ? TIER_CELL_DEG[tier] : 0;
+  // CITES Appendix I orchids never render finer than 0.1 degrees publicly.
+  const citesCell = access !== 'research' && isCitesAppendixIOrchid(point) ? CITES_APPENDIX_I_FLOOR_DEG : 0;
+  // Rows from the protected view arrive generalised; nothing renders them finer.
+  const sourceCell = sourcePublishedCellDeg(point);
 
-  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg);
+  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, citesCell, sourceCell, floorCellDeg);
   const { lat, lng } = snapToCell(point.lat, point.lng, cellDeg);
+  const source = sourcePrecisionPolicy(point);
 
   // Reasons are ranked by which one actually decided the rendering, so the
   // notice always explains the constraint in force rather than a weaker one.
   let reason: SensitivityReason = 'none';
   let notice = '';
-  if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
+  if (
+    threatCell > 0 &&
+    threatCell >= uncertaintyCell &&
+    threatCell >= precautionCell &&
+    threatCell >= citesCell &&
+    threatCell >= sourceCell
+  ) {
     reason = point.iucnCode ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km. This species is assessed as threatened (${tier}), and precise sites are withheld to reduce collection risk.`;
+  } else if (source && sourceCell >= uncertaintyCell && sourceCell >= precautionCell && sourceCell >= citesCell) {
+    reason = source.reason;
+    notice = source.notice;
+  } else if (citesCell > 0 && citesCell >= uncertaintyCell && citesCell >= precautionCell) {
+    reason = 'conservation-status';
+    notice = `Location generalised to about ${km(citesCell)} km. This taxon is listed in CITES Appendix I, and precise sites are withheld to reduce collection risk.`;
   } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
     reason = 'coordinate-uncertainty';
     notice = `Shown as an area of about ${km(uncertaintyCell)} km, because the source record states a coordinate uncertainty of ${Math.round(point.coordinateUncertaintyM as number)} m. Nothing is being withheld — the record was never more precise than this.`;
@@ -192,7 +222,8 @@ export function resolveLocation(
       // the coordinate — threat-based or precautionary. A locality string
       // defeats generalisation, so it has to follow the same rule. Source
       // imprecision is different: nothing is being withheld there.
-      localityTextAllowed: threatCell === 0 && precautionCell === 0,
+      localityTextAllowed:
+        threatCell === 0 && precautionCell === 0 && citesCell === 0 && !sourceWithheld(point),
       notice,
     },
   };
