@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 26,
+  "programSpent": 26.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 5
+    "2026-10-03": 5.5
   },
   "leases": [
     {
@@ -1211,6 +1211,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T16:58:27.862Z"
+    },
+    {
+      "id": "6dbe6b107f1e5567ac49414bdc319f0b03f0744393626ad7ba315f94d5958a2e",
+      "issue": 792,
+      "nodeId": "cap-scientific-method-lab",
+      "fingerprint": "1a7213488e0de274090801b3797f7dd23aac932cf581335713214da2a4e42a56",
+      "waveHash": "462e223c025f2e3dd4bb0af20c3e08fe49662406a8512aeda73bd2b5d1d3a17a",
+      "runId": "37135139881",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:31:19.938Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
