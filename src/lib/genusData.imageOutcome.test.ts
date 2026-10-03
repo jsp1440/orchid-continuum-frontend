@@ -58,4 +58,16 @@ describe('genus image outcome', () => {
     await vi.runAllTimersAsync();
     await expect(pending).resolves.toEqual({ images: [], source: 'pending' });
   });
+
+  it('ignores malformed local cache rows instead of returning a cache hit', async () => {
+    const key = `oc_genus_images_v3_testorchis_${new Date().toISOString().slice(0, 10)}`;
+    localStorage.setItem(key, JSON.stringify({
+      genus: 'Testorchis',
+      date: new Date().toISOString().slice(0, 10),
+      writtenAt: Date.now(),
+      images: [null, 'error'],
+    }));
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('network down'); }));
+    await expect(fetchGenusImagesWithSource('Testorchis')).resolves.toEqual({ images: [], source: 'pending' });
+  });
 });

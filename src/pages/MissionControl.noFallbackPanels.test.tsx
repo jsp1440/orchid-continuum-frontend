@@ -57,6 +57,13 @@ describe('Mission Control panels — no fabricated fallback content', () => {
     assertNoFabrication(text);
   });
 
+  it('insights panel treats a fallback dashboard as unavailable, not successfully empty', () => {
+    const text = render(<ScientificInsightsPanel dashboard={{ dataMode: 'fallback', globalHealth: [] } as unknown as MissionControlOperations} />);
+    expect(text).toContain('Insights unavailable');
+    expect(text).not.toContain('live telemetry reported no subsystem completeness');
+    expect(container.querySelectorAll('article')).toHaveLength(0);
+  });
+
   it('insights panel with partial telemetry renders only live-derived insights with their source', () => {
     const row = {
       id: 'atlas', name: 'Atlas', category: 'Science', status: 'warning', completeness: 20,

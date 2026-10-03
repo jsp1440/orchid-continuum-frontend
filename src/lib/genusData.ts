@@ -336,6 +336,32 @@ interface CachedGenusImages {
   images: GenusImage[];
 }
 
+function normalizeCachedGenusImages(value: unknown): GenusImage[] | null {
+  if (!Array.isArray(value)) return null;
+  const normalized: GenusImage[] = [];
+  for (const raw of value) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
+    const record = raw as Record<string, unknown>;
+    const scientificName = typeof record.scientific_name === 'string' ? record.scientific_name.trim() : '';
+    const candidates = Array.isArray(record.image_urls)
+      ? record.image_urls.filter((url): url is string => typeof url === 'string' && Boolean(url.trim())).map((url) => url.trim())
+      : [];
+    const primary = typeof record.image_url === 'string' && record.image_url.trim()
+      ? record.image_url.trim()
+      : candidates[0];
+    if (!scientificName || !primary) continue;
+    if (!candidates.includes(primary)) candidates.unshift(primary);
+    normalized.push({
+      scientific_name: scientificName,
+      image_url: primary,
+      image_urls: candidates,
+      image_source: typeof record.image_source === 'string' ? record.image_source : undefined,
+      image_license: typeof record.image_license === 'string' ? record.image_license : undefined,
+    });
+  }
+  return value.length > 0 && normalized.length === 0 ? null : normalized;
+}
+
 /** YYYY-MM-DD for "today" (UTC date portion of the ISO timestamp). */
 function todayKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -353,8 +379,7 @@ function readGenusImagesCache(genus: string): GenusImage[] | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as CachedGenusImages;
     if (parsed.date !== todayKey()) return null;
-    if (!Array.isArray(parsed.images)) return null;
-    return parsed.images;
+    return normalizeCachedGenusImages(parsed.images);
   } catch {
     return null;
   }
@@ -404,8 +429,8 @@ async function readServerImageCache(genus: string, limit = 200): Promise<GenusIm
       body: { action: 'get', genus, limit },
     });
     if (error) return [];
-    const imgs = (data as { images?: GenusImage[] } | null)?.images;
-    return Array.isArray(imgs) ? imgs : [];
+    const imgs = (data as { images?: unknown } | null)?.images;
+    return normalizeCachedGenusImages(imgs) ?? [];
   } catch {
     return [];
   }
