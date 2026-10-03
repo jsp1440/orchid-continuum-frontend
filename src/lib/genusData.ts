@@ -425,9 +425,10 @@ function writeServerImageCache(genus: string, images: GenusImage[]): void {
  *                     the public iNaturalist API because the trusted OC library
  *                     had nothing. Tagged distinctly so curators can tell at a
  *                     glance which photos are NOT from the vetted OC library.
- *   • 'pending'     — no source returned anything; UI shows "Image pending".
+ *   • 'empty'       — the trusted harvester answered successfully with no usable rows.
+ *   • 'pending'     — no source returned a verifiable answer; UI shows "Image pending".
  */
-export type ImageSource = 'live' | 'cache' | 'proxy' | 'inaturalist' | 'pending';
+export type ImageSource = 'live' | 'cache' | 'proxy' | 'inaturalist' | 'empty' | 'pending';
 
 /** A resolved genus-image set tagged with the source it came from. */
 export interface GenusImageResult {
@@ -496,10 +497,11 @@ const server = await readServerImageCache(g, limit);
   const MAX_ATTEMPTS = 3;
   const BACKOFF_MS = 3000;
   const TIMEOUTS_MS = [40000, 20000, 20000];
+  let sawSuccessfulEmpty = false;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     if (signal?.aborted) return { images: [], source: 'pending' };
     console.log(`[fetchGenusImages] ➜ harvester attempt ${attempt}/${MAX_ATTEMPTS} for "${g}"`);
-    const { images: result, networkError } = await fetchGenusImagesOnce(
+    const { images: result, networkError, answered } = await fetchGenusImagesOnce(
       g,
       signal,
       limit,
@@ -510,6 +512,7 @@ const server = await readServerImageCache(g, limit);
       writeServerImageCache(g, result); // warm the shared cache for everyone
       return { images: result, source: 'live' };
     }
+    if (answered) sawSuccessfulEmpty = true;
     if (networkError) {
       // Hard CORS / network failure — retrying cannot help. Bail to fallback.
       console.warn(
@@ -546,8 +549,9 @@ const server = await readServerImageCache(g, limit);
     }
   }
 
-  // No cache, no proxy, no harvester rows, no iNat match → "Image pending".
-  return { images: [], source: 'pending' };
+  // A successful trusted-harvester response with zero usable rows is evidence
+  // of an empty result. If no source answered successfully, preserve outage.
+  return { images: [], source: sawSuccessfulEmpty ? 'empty' : 'pending' };
 }
 
 
@@ -1377,7 +1381,7 @@ export async function fetchGenusImages(
 /**
  * A single network attempt for {@link fetchGenusImages} (no retry/cache).
  *
- * Returns `{ images, networkError }`:
+ * Returns `{ images, networkError, answered }`:
  *   • images       — the parsed trusted images (empty on any miss).
  *   • networkError — TRUE only for a hard, unrecoverable transport failure
  *                    (status 0 "Load failed" — i.e. CORS rejection, DNS, or the
@@ -1391,7 +1395,7 @@ async function fetchGenusImagesOnce(
   signal?: AbortSignal,
   limit = 20,
   timeoutMs = 40000,
-): Promise<{ images: GenusImage[]; networkError: boolean }> {
+): Promise<{ images: GenusImage[]; networkError: boolean; answered: boolean }> {
   const url = `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limit}`;
   console.log(`[fetchGenusImages] ➜ requesting (timeout ${timeoutMs}ms):`, url);
 
@@ -1422,7 +1426,7 @@ async function fetchGenusImagesOnce(
     if (!res.ok) {
       const text = await res.text().catch(() => '<unreadable body>');
       console.warn('[fetchGenusImages] non-OK response body:', text.slice(0, 500));
-      return { images: [], networkError: false };
+      return { images: [], networkError: false, answered: false };
     }
     payload = await res.json();
     console.log('[fetchGenusImages] parsed JSON payload:', payload);
@@ -1430,7 +1434,7 @@ async function fetchGenusImagesOnce(
     if (signal?.aborted) {
       // Caller aborted (component unmount / new genus requested) — expected.
       console.log('[fetchGenusImages] request cancelled by caller for', url);
-      return { images: [], networkError: false };
+      return { images: [], networkError: false, answered: false };
     }
     if (timedOut) {
       // Our own cold-start timeout fired — the retry loop will try again.
@@ -1439,7 +1443,7 @@ async function fetchGenusImagesOnce(
         url,
         '— will retry if attempts remain',
       );
-      return { images: [], networkError: false };
+      return { images: [], networkError: false, answered: false };
     }
     // Hard transport failure: CORS rejection, DNS failure, or the host being
     // unreachable (surfaces as a TypeError / status-0 "Load failed"). Retrying
@@ -1453,7 +1457,7 @@ async function fetchGenusImagesOnce(
       '\n  detail:',
       err instanceof Error ? err.message : String(err),
     );
-    return { images: [], networkError: true };
+    return { images: [], networkError: true, answered: false };
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);
@@ -1462,7 +1466,7 @@ async function fetchGenusImagesOnce(
 
   if (!payload) {
     console.warn('[fetchGenusImages] empty payload — returning []');
-    return { images: [], networkError: false };
+    return { images: [], networkError: false, answered: true };
   }
 
   const arr = extractArray(payload);
@@ -1543,7 +1547,7 @@ async function fetchGenusImagesOnce(
     writeGenusImagesCache(g, out);
   }
 
-  return { images: out, networkError: false };
+  return { images: out, networkError: false, answered: true };
 }
 
 

@@ -16,6 +16,7 @@ import type { ImageSource } from '@/lib/genusData';
  *                   instantly tell this photo did NOT come from the vetted OC
  *                   library and may need manual review / replacement.
  *   • pending     — no source returned anything; the "Image pending" placeholder.
+ *   • empty       — the trusted harvester answered, but returned no usable photos.
  *
  * Renders nothing while the source is still resolving (null), so it never
  * flashes during the initial load.
@@ -62,6 +63,13 @@ const META: Record<ImageSource, SourceMeta> = {
     dot: '#d97706',
     text: '#b45309',
     review: true,
+  },
+  empty: {
+    label: 'No images returned',
+    detail: 'The trusted image harvester answered successfully but returned no usable photos.',
+    icon: ImageOff,
+    dot: '#78716c',
+    text: '#78716c',
   },
   pending: {
     label: 'Image pending',

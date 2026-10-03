@@ -40,14 +40,22 @@ beforeEach(() => {
 });
 
 describe('fetchSpeciesEcologicalNeighborhood — no curated fallback cards', () => {
-  it('outage / nothing harvested → only the honest gap cards', async () => {
+  it('outage → an unavailable card that does not claim no rows exist', async () => {
     db.error = new Error('offline');
     const cards = await fetchSpeciesEcologicalNeighborhood('Dracula vampira');
-    expect(cards.map((c) => c.type)).toEqual(['species', 'missing']);
+    expect(cards.map((c) => c.type)).toEqual(['missing']);
+    expect(cards[0].title).toContain('unavailable');
+    expect(cards[0].relationship).not.toContain('No harvested');
     expect(cards.every((c) => c.confidenceClass === 'gap')).toBe(true);
     expect(cards.some((c) => c.confidenceClass === 'curated' || c.sourceView === 'src.lib.genusData.GENERA')).toBe(false);
     const text = JSON.stringify(cards);
     for (const fact of FABRICATED_FACTS) expect(text, fact).not.toContain(fact);
+  });
+
+  it('successful empty harvest → honest not-yet-harvested gap cards', async () => {
+    const cards = await fetchSpeciesEcologicalNeighborhood('Dracula vampira');
+    expect(cards.map((c) => c.type)).toEqual(['species', 'missing']);
+    expect(cards[1].title).toContain('not yet harvested');
   });
 
   it('partial harvest → harvested rows only, never topped up with curated cards', async () => {

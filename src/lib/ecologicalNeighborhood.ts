@@ -254,6 +254,19 @@ function fallbackCards(scientificName: string): EcologicalNeighborhoodCard[] {
   ];
 }
 
+function unavailableCards(): EcologicalNeighborhoodCard[] {
+  return [{
+    id: 'ecological-neighborhood:unavailable',
+    type: 'missing',
+    title: 'Ecological neighborhood unavailable',
+    relationship: 'The relationship service could not answer this request. No absence of relationships is inferred.',
+    evidenceLabel: 'Status',
+    evidenceValue: 'service unavailable',
+    confidenceClass: 'gap',
+    priority: PRIORITY.missing,
+  }];
+}
+
 async function enrichCardImages(cards: EcologicalNeighborhoodCard[], focalSpecies: string): Promise<EcologicalNeighborhoodCard[]> {
   const names = Array.from(
     new Set(
@@ -297,8 +310,10 @@ export async function fetchSpeciesEcologicalNeighborhood(
     .ilike('focal_species', scientificName)
     .limit(Math.max(limit * 2, 24));
 
+  if (error || !Array.isArray(data)) return unavailableCards();
+
   const harvestedCards =
-    error || !Array.isArray(data) || data.length === 0
+    data.length === 0
       ? []
       : (data as HarvestRow[])
           .map((row) => mapHarvestRow(row, scientificName))

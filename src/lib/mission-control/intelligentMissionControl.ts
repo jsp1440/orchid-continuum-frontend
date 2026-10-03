@@ -203,7 +203,7 @@ export type ScientificInsight = {
  * percentages) to fall back on, because none of those had a source.
  */
 export function deriveScientificInsights(ops: MissionControlOperations | null): ScientificInsight[] {
-  if (!ops) return [];
+  if (!ops || ops.dataMode === 'fallback') return [];
 
   // Rows whose status is unknown (e.g. runner status unavailable) carry no
   // observed completeness, so they cannot be ranked as the "largest gap".

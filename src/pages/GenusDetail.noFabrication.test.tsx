@@ -16,7 +16,7 @@ import type { GenusImage } from '@/lib/genusData';
 const live = vi.hoisted(() => ({
   images: [] as GenusImage[],
   validated: [] as string[],
-  source: 'pending' as 'live' | 'pending',
+  source: 'pending' as 'empty' | 'pending',
 }));
 
 vi.mock('@/components/orchid/Navbar', () => ({ default: () => null }));
@@ -123,7 +123,7 @@ describe('GenusDetail — no fabricated genus facts', () => {
   });
 
   it('uses a definitive empty message only after a successful image response', async () => {
-    live.source = 'live';
+    live.source = 'empty';
     await renderGenus('Dracula');
     const text = container.textContent ?? '';
     expect(text).toContain('image services returned no photographed species');

@@ -34,6 +34,14 @@ describe('deriveScientificInsights — live telemetry only', () => {
     expect(imc.deriveScientificInsights(null)).toEqual([]);
   });
 
+  it('fallback subsystem rows never become live-sounding insights', () => {
+    const fallback = ops([
+      subsystem({ id: 'literature', name: 'Literature System', status: 'stub', completeness: 15 }),
+    ]);
+    fallback.dataMode = 'fallback';
+    expect(imc.deriveScientificInsights(fallback)).toEqual([]);
+  });
+
   it('partial telemetry → only the live-derived insight, with provenance', () => {
     const insights = imc.deriveScientificInsights(
       ops([subsystem({ id: 'atlas', name: 'Atlas', completeness: 30, dataSource: '/api/executive/state' }), subsystem({ id: 'kg', name: 'Knowledge Graph', completeness: 70 })]),
