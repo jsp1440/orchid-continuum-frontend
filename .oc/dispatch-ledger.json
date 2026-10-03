@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 26.5,
+  "programSpent": 27,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 5.5
+    "2026-10-03": 6
   },
   "leases": [
     {
@@ -1225,6 +1225,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T17:03:33.915Z"
+    },
+    {
+      "id": "16837a72652f94c39de0ccc21dbb4a46e7e9f312c1518a43e75876c000fa3179",
+      "issue": 794,
+      "nodeId": "cap-pollinator-mycorrhiza-real-data",
+      "fingerprint": "aa1933d508bd56d42bc137284c1de91df4739567c922db33d99af7a2e00529c8",
+      "waveHash": "dbba239c4a03c31827d829e77669666210fa96a7d9bed92f130c0aeb717599a7",
+      "runId": "37135351552",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:34:31.522Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
