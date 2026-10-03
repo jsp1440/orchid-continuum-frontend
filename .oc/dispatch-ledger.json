@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 28,
+  "programSpent": 28.5,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 7
+    "2026-10-03": 7.5
   },
   "leases": [
     {
@@ -1266,6 +1266,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T17:14:07.963Z"
+    },
+    {
+      "id": "918eef4238a36e7ab66a6e59cb5bc4b7b539355c6c9ed5c37ed1b9a1f08a4da7",
+      "issue": 800,
+      "nodeId": "cap-kg-mission-control-adapter",
+      "fingerprint": "574a2551786e5355892f05f36795c06b5f36c9130ec5b10bd6f95c386ae61723",
+      "waveHash": "2e4dbca713999f0c5b62fe89d8c40fb480508a7aaba04961afceed62dc39b70c",
+      "runId": "37136100913",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:47:17.131Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
