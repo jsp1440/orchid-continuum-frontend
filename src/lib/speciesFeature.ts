@@ -377,60 +377,11 @@ const wait = (ms: number, signal?: AbortSignal) =>
     });
   });
 
-/**
- * Known-valid Cattleya species drawn from the OC taxonomic backbone. Used as a
- * last-resort fallback so the UI never fabricates species.
- */
-const CATTLEYA_FALLBACK: FeaturedSpecies[] = [
-  {
-    name: 'Cattleya labiata',
-    genus: 'Cattleya',
-    family: 'Orchidaceae',
-    conservation: 'Vulnerable',
-    habitat: 'Epiphytic on exposed trees in seasonally dry forest',
-    elevation: '500–1,000 m',
-    pollinator: 'Large-bodied Bombus and Xylocopa bees',
-    mycorrhizal: 'Tulasnella spp.',
-    distribution: 'Northeastern Brazil',
-    climate: 'Warm, with a marked dry season and bright light',
-  },
-  {
-    name: 'Cattleya mossiae',
-    genus: 'Cattleya',
-    family: 'Orchidaceae',
-    conservation: 'Endangered',
-    habitat: 'Epiphyte in humid montane cloud forest',
-    elevation: '800–1,500 m',
-    pollinator: 'Euglossine and Bombus bees',
-    mycorrhizal: 'Rhizoctonia-type fungi',
-    distribution: 'Coastal cordillera of Venezuela',
-    climate: 'Intermediate, humid, with strong seasonal light',
-  },
-  {
-    name: 'Cattleya trianae',
-    genus: 'Cattleya',
-    family: 'Orchidaceae',
-    conservation: 'Endangered',
-    habitat: 'Epiphyte on trees along Andean river valleys',
-    elevation: '600–1,200 m',
-    pollinator: 'Carpenter bees (Xylocopa)',
-    mycorrhizal: 'Ceratobasidium spp.',
-    distribution: 'Andes of Colombia (national flower)',
-    climate: 'Intermediate, humid montane',
-  },
-  {
-    name: 'Cattleya warscewiczii',
-    genus: 'Cattleya',
-    family: 'Orchidaceae',
-    conservation: 'Vulnerable',
-    habitat: 'Epiphyte on tall canopy trees',
-    elevation: '900–1,600 m',
-    pollinator: 'Large euglossine bees',
-    mycorrhizal: 'Tulasnella spp.',
-    distribution: 'Antioquia, Colombia',
-    climate: 'Warm to intermediate, humid',
-  },
-];
+// NOTE: there is deliberately NO local species fallback. An earlier
+// hand-authored Cattleya list (conservation status, elevation, pollinators,
+// mycorrhizal partners, distribution) had no source and was served to visitors
+// without any fallback flag. When every live source is empty or unavailable the
+// loaders below return [] and the UI renders its honest empty state.
 
 async function searchSpecies(url: string, limit: number, fallbackGenus: string, signal?: AbortSignal, retry = false): Promise<FeaturedSpecies[]> {
   let payload = await fetchOnce(url, 7000, signal);
@@ -499,7 +450,7 @@ function shuffle<T>(arr: T[]): T[] {
  *   1. /api/species/search?genus={genus} — taxonomy backbone search.
  *   2. /api/search?q={genus} — legacy search path.
  *   3. /images/genus/{genus} — image harvester rows with genus+epithet.
- *   4. Cattleya-only curated fallback.
+ *   4. Nothing: resolves to [] so the caller shows its empty state.
  */
 export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
   const g = normalizeGenus(genus) || 'Cattleya';
@@ -526,10 +477,6 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
   const harvesterPool = await searchGenusImageHarvester(g, 50, signal);
   if (harvesterPool.length > 0) return shuffle(harvesterPool).slice(0, requested);
 
-  if (signal?.aborted) return [];
-  if (g.toLowerCase() === 'cattleya') {
-    return shuffle(CATTLEYA_FALLBACK).slice(0, Math.min(requested, CATTLEYA_FALLBACK.length));
-  }
   return [];
 }
 
@@ -566,7 +513,6 @@ export async function fetchGenusSpeciesQueue(limit = 160, signal?: AbortSignal, 
     }
   }
 
-  if (merged.length === 0 && g.toLowerCase() === 'cattleya') return shuffle(CATTLEYA_FALLBACK);
   return shuffle(merged).slice(0, requested);
 }
 
@@ -580,8 +526,10 @@ const queueMemoryByGenus = new Map<string, FeaturedSpecies[]>();
 const queueInFlightByGenus = new Map<string, Promise<FeaturedSpecies[]>>();
 
 function sessionKey(genus: string): string {
-  // v5 invalidates earlier caches before homepage image-quality filtering.
-  return `oc:species-in-focus:v5:${genus.trim().toLowerCase()}`;
+  // v6 invalidates v5 entries that may contain the removed hand-authored
+  // Cattleya fallback. Binomial validation alone cannot distinguish those
+  // fabricated ecology fields from a live record.
+  return `oc:species-in-focus:v6:${genus.trim().toLowerCase()}`;
 }
 
 function queueSessionKey(genus: string): string {

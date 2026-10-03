@@ -7,7 +7,6 @@ import {
   Mountain,
   Bug,
   Sprout,
-  MapPin,
   Trees,
   ShieldQuestion,
   ShieldCheck,
@@ -42,12 +41,11 @@ import {
 import {
   lookupGenus,
   fetchGenusImagesWithSource,
-  fetchValidatedSpecies,
+  fetchValidatedSpeciesOutcome,
   buildImageMap,
   binomialOf,
   buildValidatedSet,
   isValidatedName,
-  buildLocalNarrative,
   warmBackends,
   type GenusEntry,
   type GenusImage,
@@ -58,9 +56,13 @@ import {
 /**
  * GenusDetail — dedicated /genus/:name page.
  *
- * Hero (name, family, tribe, species count, description) over a deep-green
- * field, a static distribution map, a grid of species plates, and an ecology
- * panel. Cross-platform navigation to the wider Continuum.
+ * Hero (genus name, family) over a deep-green field, the live occurrence map,
+ * species plates built from live backend images, and an ecology panel whose
+ * rows state their evidence. The local genus index carries NO taxon facts:
+ * species counts, tribe, range, elevation, habitat, pollinators, mycorrhizae
+ * and conservation are only shown when a live Continuum contract supplies
+ * them; otherwise the page shows an honest unavailable / empty state.
+ * Cross-platform navigation to the wider Continuum.
  */
 
 const PLATFORM_LINKS = (genus: string): { label: string; to: string }[] => [
@@ -72,79 +74,6 @@ const PLATFORM_LINKS = (genus: string): { label: string; to: string }[] => [
   { label: 'Field Station', to: '/ecosystems' },
   { label: 'Deception Lab', to: '/pollinators' },
 ];
-
-// Approximate label coordinates (percent of the SVG viewport) for regions.
-const REGION_DOTS: Record<string, { x: number; y: number }> = {
-  Ecuador: { x: 27, y: 58 },
-  Colombia: { x: 28, y: 53 },
-  Peru: { x: 29, y: 62 },
-  Bolivia: { x: 31, y: 66 },
-  Brazil: { x: 35, y: 64 },
-  Venezuela: { x: 30, y: 50 },
-  'Central America': { x: 22, y: 48 },
-  Mesoamerica: { x: 20, y: 46 },
-  Caribbean: { x: 28, y: 45 },
-  Himalaya: { x: 68, y: 42 },
-  'SE Asia': { x: 76, y: 54 },
-  Australia: { x: 84, y: 74 },
-  'Pacific Islands': { x: 92, y: 60 },
-  'New Guinea': { x: 86, y: 62 },
-  Africa: { x: 53, y: 60 },
-};
-
-const DistributionMap: React.FC<{ regions: string[] }> = ({ regions }) => (
-  <div className="rounded-2xl overflow-hidden border border-[#2f3b21]/15 bg-[#eef3e3]">
-    <div className="relative w-full" style={{ aspectRatio: '2 / 1' }}>
-      <svg viewBox="0 0 100 50" className="absolute inset-0 w-full h-full">
-        {/* Stylised land masses (decorative) */}
-        <g fill="#cdd9b8" stroke="#b9c9a0" strokeWidth="0.2">
-          <path d="M8,14 Q14,8 24,12 Q30,18 26,26 Q20,34 16,30 Q9,24 8,14 Z" />
-          <path d="M24,30 Q30,28 30,38 Q28,46 24,46 Q21,40 24,30 Z" />
-          <path d="M44,12 Q54,8 60,14 Q60,24 54,30 Q48,34 46,26 Q42,18 44,12 Z" />
-          <path d="M62,12 Q76,8 86,16 Q90,24 84,30 Q74,30 68,24 Q62,18 62,12 Z" />
-          <path d="M80,34 Q88,32 90,38 Q88,42 82,40 Q79,37 80,34 Z" />
-        </g>
-        {regions.map((r) => {
-          const dot = REGION_DOTS[r];
-          if (!dot) return null;
-          const cx = (dot.x / 100) * 100;
-          const cy = (dot.y / 100) * 50;
-          return (
-            <g key={r}>
-              <circle cx={cx} cy={cy} r="2.4" fill="#c9a24a" opacity="0.25" />
-              <circle cx={cx} cy={cy} r="1.1" fill="#b08a1e" stroke="#fff" strokeWidth="0.3" />
-            </g>
-          );
-        })}
-      </svg>
-    </div>
-    <div className="flex flex-wrap gap-2 p-4 border-t border-[#2f3b21]/10 bg-[#f5f0e8]">
-      {regions.map((r) => (
-        <span
-          key={r}
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#2f3b21]/[0.06] font-mono text-[10px] tracking-[0.14em] uppercase text-[#3a4630]"
-        >
-          <MapPin className="h-3 w-3 text-[#b08a1e]" />
-          {r}
-        </span>
-      ))}
-    </div>
-  </div>
-);
-
-const EcologyRow: React.FC<{ icon: React.ReactNode; label: string; value: string }> = ({
-  icon,
-  label,
-  value,
-}) => (
-  <div className="flex items-start gap-3 py-3 border-b border-[#2f3b21]/10 last:border-0">
-    <span className="mt-0.5 text-[#5a6b3f]">{icon}</span>
-    <div>
-      <div className="font-mono text-[9px] tracking-[0.2em] uppercase text-[#8a8062]">{label}</div>
-      <div className="text-[14px] text-[#3a4630] leading-snug">{value}</div>
-    </div>
-  </div>
-);
 
 const EVIDENCE_BADGE_STYLE: Record<EcologicalEvidence['state'], string> = {
   available: 'border-[#2f6b3f]/40 bg-[#2f6b3f]/10 text-[#2f6b3f]',
@@ -225,7 +154,7 @@ const GenusDetail: React.FC = () => {
   // Validated OC backbone binomials for this genus. Empty + loaded => the
   // backend returned nothing, so plates are shown with an "unverified" badge.
   const [validatedSet, setValidatedSet] = useState<Set<string>>(new Set());
-  const [validationLoaded, setValidationLoaded] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<'loading' | 'ok' | 'unavailable'>('loading');
   // Where the current genus images came from (for the source-health indicator).
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
 
@@ -346,41 +275,38 @@ const GenusDetail: React.FC = () => {
         if (!ctrl.signal.aborted) setGraphEvidence({ status: 'unavailable' });
       });
 
-    setValidationLoaded(false);
+    setValidationStatus('loading');
     setValidatedSet(new Set());
-    fetchValidatedSpecies(entry.genus, ctrl.signal, 60)
-      .then((names) => {
+    fetchValidatedSpeciesOutcome(entry.genus, ctrl.signal, 60)
+      .then((outcome) => {
         if (ctrl.signal.aborted) return;
-        setValidatedSet(buildValidatedSet(names));
-        setValidationLoaded(true);
+        setValidatedSet(buildValidatedSet(outcome.names));
+        setValidationStatus(outcome.status);
       })
       .catch(() => {
-        if (!ctrl.signal.aborted) setValidationLoaded(true);
+        if (!ctrl.signal.aborted) setValidationStatus('unavailable');
       });
     return () => ctrl.abort();
   }, [entry]);
 
-  // Fetch the AI genus narrative (Claude Sonnet via the genus-narrative edge fn).
-  // If the edge function is unavailable / returns nothing, fall back to a warm,
-  // science-grounded narrative composed locally from the curated ecology data
-  // so the Field Note block ALWAYS renders a real summary rather than an empty
-  // box.
+  // Fetch the genus narrative from the genus-narrative edge function. There is
+  // NO local fallback text: when the service is unavailable the Field Note
+  // block is simply not rendered rather than filled with unsourced claims.
   useEffect(() => {
     if (!entry) return;
     let cancelled = false;
     setNarrative('');
     setFailedSpecies(new Set()); // reset per-genus failed-image tracking
     setNarrativeLoading(true);
-    const fallback = buildLocalNarrative(entry);
     supabase.functions
       .invoke('genus-narrative', { body: { genus: entry.genus } })
       .then(({ data, error }) => {
         if (cancelled) return;
         const text = (data as { narrative?: string } | null)?.narrative;
-        setNarrative(!error && text ? text : fallback);
+        setNarrative(!error && text ? text : '');
       })
       .catch(() => {
-        if (!cancelled) setNarrative(fallback);
+        if (!cancelled) setNarrative('');
       })
       .finally(() => {
         if (!cancelled) setNarrativeLoading(false);
@@ -416,13 +342,14 @@ const GenusDetail: React.FC = () => {
     );
   }
 
-  // When the backbone is non-empty, hide plates whose species isn't confirmed.
-  // When it's empty (endpoint unpopulated), keep all plates but flag them.
-  // In both cases, drop plates whose every image URL failed to load AND — once
-  // the image fetch has completed — drop plates the backend supplied NO image
-  // for at all (these are the "empty" IMAGE PENDING cards the request wants
-  // removed from the grid entirely).
-  const unverifiedMode = validationLoaded && validatedSet.size === 0;
+  // Species plates are built ONLY from trusted backend image records (their
+  // scientific_name + image URLs + source/licence). The separately requested
+  // backbone sample is limited and therefore may verify a name, but absence
+  // from that sample must never reject a taxonomy-joined image record. A plate
+  // never carries locally authored distribution, elevation, pollinator or
+  // conservation text.
+  const validationLoaded = validationStatus !== 'loading';
+  const unverifiedMode = validationLoaded;
 
   /**
    * Representative species plates.
@@ -433,30 +360,56 @@ const GenusDetail: React.FC = () => {
    */
   const visiblePlates = useMemo(() => {
     if (!entry) return [];
-    const base =
-      validatedSet.size === 0
-        ? entry.plates
-        : entry.plates.filter((p) => isValidatedName(p.species, validatedSet));
+    const withName = images.filter((img) => binomialOf(img.scientific_name || '').includes(' '));
+    const plateCandidates = imageSource === 'inaturalist'
+      ? validationStatus === 'ok' && validatedSet.size > 0
+        ? withName.filter((img) => isValidatedName(img.scientific_name, validatedSet))
+        : []
+      : withName;
 
-    const representative = buildRepresentativePlates(base, {
-      nameOf: (plate) => plate.species,
-      urlsOf: (plate) => {
-        const trusted = imageMap.get(binomialOf(plate.species));
-        return [
-          ...(trusted?.image_urls ?? (trusted?.image_url ? [trusted.image_url] : [])),
-          ...(plate.image ? [plate.image] : []),
-        ].filter((url): url is string => Boolean(url));
+    const representative = buildRepresentativePlates(plateCandidates, {
+      nameOf: (img) => img.scientific_name,
+      urlsOf: (img) => {
+        const trusted = imageMap.get(binomialOf(img.scientific_name));
+        return (trusted?.image_urls?.length ? trusted.image_urls : img.image_url ? [img.image_url] : []).filter(
+          (url): url is string => Boolean(url),
+        );
       },
     });
 
     return representative.filter((plate) => {
       // Skip plates whose every candidate image failed to load.
-      if (failedSpecies.has(plate.entry.species)) return false;
-      // Once images have loaded, skip plates with NO candidate image left.
-      if (!imagesLoading && plate.urls.length === 0) return false;
+      if (failedSpecies.has(plate.entry.scientific_name)) return false;
+      // A plate exists only to show a live photograph; drop it with none left.
+      if (plate.urls.length === 0) return false;
       return true;
     });
-  }, [entry, validatedSet, failedSpecies, imageMap, imagesLoading]);
+  }, [entry, images, imageSource, validationStatus, validatedSet, failedSpecies, imageMap]);
+
+  const hasFallbackPlateCandidates = imageSource === 'inaturalist'
+    && images.some((img) => binomialOf(img.scientific_name || '').includes(' '));
+
+  const hasFailedMatchedFallback = imageSource === 'inaturalist'
+    && validationStatus === 'ok'
+    && validatedSet.size > 0
+    && images.some((img) => (
+      isValidatedName(img.scientific_name, validatedSet)
+      && failedSpecies.has(img.scientific_name)
+    ));
+
+  const emptyPlateReason = imageSource === 'pending'
+    ? 'the Orchid Continuum image services are unavailable, so their result could not be verified.'
+    : hasFallbackPlateCandidates && validationStatus === 'loading'
+      ? 'fallback photographs were returned, but taxonomic-backbone validation is not yet available.'
+      : hasFallbackPlateCandidates && validationStatus === 'unavailable'
+        ? 'fallback photographs were returned, but the taxonomic backbone is unavailable, so they could not be confirmed.'
+        : hasFallbackPlateCandidates && validatedSet.size === 0
+        ? 'fallback photographs were returned, but the taxonomic backbone returned no names to confirm them.'
+        : hasFailedMatchedFallback
+          ? 'fallback photographs matched the taxonomic backbone, but their image files could not be loaded.'
+          : hasFallbackPlateCandidates
+            ? 'fallback photographs were returned, but none matched the taxonomic backbone.'
+          : 'the Orchid Continuum image services returned no photographed species.';
 
   /**
    * Ecological relationships, expressed as evidence states rather than as
@@ -474,21 +427,29 @@ const GenusDetail: React.FC = () => {
       linkedSummary: domain
         ? `${domain.nodes} linked pollination nodes · ${domain.edges} relationships in the Continuum graph`
         : null,
-      curatedGenusSummary: entry?.ecology.pollinatorGuild ?? null,
     });
-  }, [graphEvidence, entry]);
+  }, [graphEvidence]);
 
   const mycorrhizalEvidence = useMemo(
     () =>
       // The knowledge-graph contract exposes no mycorrhizal domain, so no
-      // canonical linkage can be claimed here yet. The curated summary is
-      // therefore surfaced as provisional, genus-scope context.
+      // canonical linkage can be claimed here yet: the row states that gap.
       deriveEcologicalEvidence({
         serviceAnswered: graphEvidence !== null && graphEvidence.status !== 'unavailable',
         hasLinkedEvidence: false,
-        curatedGenusSummary: entry?.ecology.mycorrhizal ?? null,
       }),
-    [graphEvidence, entry],
+    [graphEvidence],
+  );
+
+  // No Continuum contract currently supplies genus elevation or habitat, so
+  // these rows state that gap instead of showing locally authored values.
+  const unsourcedEcologyEvidence = useMemo(
+    () =>
+      deriveEcologicalEvidence({
+        serviceAnswered: graphEvidence !== null && graphEvidence.status !== 'unavailable',
+        hasLinkedEvidence: false,
+      }),
+    [graphEvidence],
   );
 
 
@@ -535,13 +496,15 @@ const GenusDetail: React.FC = () => {
               {entry.genus}
             </h1>
             <div className="mt-3 font-mono text-[11px] tracking-[0.16em] uppercase text-[#a9b896]">
-              {entry.family} · {entry.tribe} · {entry.speciesCount} species
+              {entry.family}
             </div>
             <p
-              className="mt-5 max-w-3xl text-[#d8e0c8] leading-relaxed"
-              style={{ fontFamily: '"Cormorant Garamond",Georgia,serif', fontSize: 'clamp(1.1rem,1.6vw,1.35rem)' }}
+              data-testid="genus-profile-unsourced-notice"
+              className="mt-5 max-w-3xl font-mono text-[11px] leading-[1.7] tracking-[0.04em] text-[#a9b896]"
             >
-              {entry.description}
+              Species count, tribe, native range and genus description are not shown here until they
+              are available from a sourced Continuum record. Photographs, occurrence points and
+              species names below come from live Orchid Continuum services.
             </p>
           </section>
 
@@ -626,11 +589,7 @@ const GenusDetail: React.FC = () => {
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a] mb-3">
                 Occurrences &amp; ecological partners
               </div>
-              <GenusOccurrenceMap genus={entry.genus} regions={entry.regions} />
-              {/* Static label-map kept as a compact legend strip below the globe. */}
-              <div className="mt-4">
-                <DistributionMap regions={entry.regions} />
-              </div>
+              <GenusOccurrenceMap genus={entry.genus} />
             </div>
             <div>
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a] mb-3">
@@ -647,15 +606,15 @@ const GenusDetail: React.FC = () => {
                   label="Mycorrhizal partners"
                   evidence={mycorrhizalEvidence}
                 />
-                <EcologyRow
+                <EcologyEvidenceRow
                   icon={<Mountain className="h-4 w-4" />}
                   label="Elevation range"
-                  value={entry.ecology.elevation}
+                  evidence={unsourcedEcologyEvidence}
                 />
-                <EcologyRow
+                <EcologyEvidenceRow
                   icon={<Trees className="h-4 w-4" />}
                   label="Habitat type"
-                  value={entry.ecology.habitat}
+                  evidence={unsourcedEcologyEvidence}
                 />
               </div>
             </div>
@@ -677,12 +636,12 @@ const GenusDetail: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
               {visiblePlates.map(({ entry: plate, urls, displayName, authoredName }) => {
-                // Match a trusted, backbone-validated image to this plate by
-                // its binomial (genus + epithet). When a match exists the real
-                // photograph replaces the "Image pending" leaf placeholder.
-                // Candidate URLs already had photographs claimed by an earlier
-                // plate removed, so no image can appear twice in this gallery.
-                const trusted = imageMap.get(binomialOf(plate.species));
+                // Every plate is a live backend image record. Candidate URLs
+                // already had photographs claimed by an earlier plate removed,
+                // so no image can appear twice in this gallery.
+                const trusted = imageMap.get(binomialOf(plate.scientific_name));
+                const nameVerified =
+                  validatedSet.size > 0 && isValidatedName(plate.scientific_name, validatedSet);
                 const image = urls[0];
                 const attribution = [trusted?.image_source, trusted?.image_license]
                   .filter(Boolean)
@@ -696,8 +655,8 @@ const GenusDetail: React.FC = () => {
                   hasAuthorship(trustedAuthoredName) ? trustedAuthoredName : authoredName;
                 return (
                   <Link
-                    key={plate.species}
-                    to={`/species/${encodeURIComponent(plate.species)}`}
+                    key={plate.scientific_name}
+                    to={`/species/${encodeURIComponent(displayName)}`}
                     className="group rounded-2xl overflow-hidden bg-[#f5f0e8] text-[#2f3b21] border border-[#2f3b21]/12 hover:border-[#c9a24a]/60 transition-colors flex flex-col"
                   >
                     <div className="relative aspect-[4/3] bg-[#eae3d2]">
@@ -705,7 +664,7 @@ const GenusDetail: React.FC = () => {
                         <FallbackImage
                           urls={urls}
                           alt={displayName}
-                          onSettled={(ok) => handlePlateSettled(plate.species, ok)}
+                          onSettled={(ok) => handlePlateSettled(plate.scientific_name, ok)}
                           className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
                         />
                       ) : (
@@ -720,16 +679,15 @@ const GenusDetail: React.FC = () => {
                           </span>
                         </div>
                       )}
-                      {/* Verification badge.
-                          A plate backed by an image from v_orchid_images_trusted
-                          (i.e. `trusted` matched) is a reviewed, backbone-joined
-                          record → show a GREEN "Verified" badge. Only plates with
-                          NO trusted image, while the backbone endpoint is
-                          unpopulated, carry the orange "Unverified" badge. */}
-                      {trusted ? (
+                      {/* Name-verification badge. The plate carries only a name
+                          and a photograph, so the badge covers the whole plate:
+                          GREEN "Verified" when the name is confirmed against the
+                          OC taxonomic backbone; orange "Unverified" when the
+                          limited backbone response did not confirm it. */}
+                      {nameVerified ? (
                         <span
                           className="absolute top-2 left-2 inline-flex items-center gap-1 rounded bg-[#0c2a16]/80 px-1.5 py-0.5 font-mono text-[9px] tracking-[0.12em] uppercase text-[#7ee0a0] backdrop-blur-sm"
-                          title="Reviewed image from the trusted Orchid Continuum library (v_orchid_images_trusted)"
+                          title="Name confirmed against the OC taxonomic backbone"
                         >
                           <ShieldCheck className="h-2.5 w-2.5" />
                           Verified
@@ -747,22 +705,22 @@ const GenusDetail: React.FC = () => {
                       <button
                         type="button"
                         aria-label={
-                          isFavorite(plate.species)
-                            ? `Remove ${plate.species} from favorites`
-                            : `Save ${plate.species} to favorites`
+                          isFavorite(displayName)
+                            ? `Remove ${displayName} from favorites`
+                            : `Save ${displayName} to favorites`
                         }
-                        aria-pressed={isFavorite(plate.species)}
-                        title={isFavorite(plate.species) ? 'Saved to favorites' : 'Save to favorites'}
+                        aria-pressed={isFavorite(displayName)}
+                        title={isFavorite(displayName) ? 'Saved to favorites' : 'Save to favorites'}
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          toggleFavorite(plate.species);
+                          toggleFavorite(displayName);
                         }}
                         className="absolute top-2 right-2 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[#10160d]/65 backdrop-blur-sm border border-white/15 hover:bg-[#10160d]/85 transition-colors"
                       >
                         <Heart
                           className={`h-4 w-4 transition-colors ${
-                            isFavorite(plate.species)
+                            isFavorite(displayName)
                               ? 'fill-[#e0556b] text-[#e0556b]'
                               : 'text-[#f5f0e8]'
                           }`}
@@ -783,9 +741,6 @@ const GenusDetail: React.FC = () => {
                           Recorded as {provenanceName}
                         </div>
                       )}
-                      <div className="mt-1.5 font-mono text-[15px] tracking-[0.04em] uppercase text-[#7b724f]">
-                        {plate.distribution} · {plate.elevation}
-                      </div>
                       {image && attribution && (
                         <div className="mt-2 flex items-center gap-1.5 font-mono text-[15px] tracking-[0.02em] text-[#7b724f]">
                           <Camera className="h-3.5 w-3.5 shrink-0" />
@@ -800,6 +755,16 @@ const GenusDetail: React.FC = () => {
                 );
               })}
             </div>
+            {!imagesLoading && visiblePlates.length === 0 && (
+              <p
+                data-testid="genus-plates-empty"
+                className="rounded-2xl border border-dashed border-[#c9a24a]/30 px-5 py-6 font-mono text-[11px] leading-[1.7] tracking-[0.04em] text-[#a9b896]"
+              >
+                No species plates are available for <span className="italic">{entry.genus}</span> right now:{' '}
+                {emptyPlateReason}{' '}
+                No local substitute is shown.
+              </p>
+            )}
 
 
             <div className="mt-8">
