@@ -86,6 +86,10 @@ export interface ReviewQueueItem {
   updated_at: string;
   duplicate_count: number;
   submitter_ref: string | null;
+  /** `member`, `owner_session` or `api_key` (a role, never an identity); null when unrecorded. */
+  submitter_role: string | null;
+  /** `registered` or `member_claimed` (the type is only the member's claim). */
+  object_type_source: string | null;
 }
 
 export interface ReviewQueuePage {
@@ -117,6 +121,8 @@ export interface ReviewCase {
   updated_at: string;
   submitter_ref: string | null;
   reviewer_ref: string | null;
+  submitter_role: string | null;
+  object_type_source: string | null;
 }
 
 export interface ReviewEvent {
@@ -133,6 +139,12 @@ export interface ReviewObjectVersion {
   payload: Record<string, unknown>;
   created_at: string | null;
   previous_version_hash: string | null;
+  /**
+   * Who first registered this snapshot (backend `registered_by_role`):
+   * `member`, `owner_session` or `api_key`; null when unrecorded (older
+   * versions, trivial-correction results). A role, never an identity.
+   */
+  registered_by_role: string | null;
 }
 
 export interface ReviewCaseDetail {
@@ -141,6 +153,11 @@ export interface ReviewCaseDetail {
   events: ReviewEvent[];
   object_version: ReviewObjectVersion | null;
   object_version_available: boolean;
+  /**
+   * True when the version shown is a member's provisional snapshot (what the
+   * member says they saw), not a canonical registered record.
+   */
+  object_version_provisional: boolean;
   resulting_object_version: ReviewObjectVersion | null;
   allowed_decisions: ReviewDecision[];
   publication_boundary: string;
@@ -259,10 +276,37 @@ function record(value: unknown): Rec {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Malformed();
   return value as Rec;
 }
+/**
+ * Invisible Unicode format characters (general category Cf): bidirectional
+ * overrides/isolates and zero-width characters. Rendered raw, they make a
+ * submitted statement read differently from what it contains (the Trojan
+ * Source pattern; cf. #879). The backend refuses them in member input; the
+ * review page neutralises any that reach it, as defence in depth.
+ */
+const FORMAT_CHARACTER = /\p{Cf}/gu;
+
+/** `value` with every format character replaced by a visible `[U+XXXX]` marker. */
+export function neutraliseFormatCharacters(value: string): string {
+  return value.replace(FORMAT_CHARACTER, (char) =>
+    `[U+${(char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, "0")}]`);
+}
+
+/**
+ * JSON for display and editing, with every format character written as a
+ * `\uXXXX` escape: visible in review, and `JSON.parse` restores the exact
+ * original, so an accepted correction starts from the stored payload.
+ */
+export function formatSafeJson(value: unknown): string {
+  const text = JSON.stringify(value, null, 2);
+  if (text === undefined) return String(value);
+  return text.replace(FORMAT_CHARACTER, (char) =>
+    `\\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`);
+}
+
 function str(source: Rec, key: string): string {
   const value = source[key];
   if (typeof value !== "string") throw new Malformed();
-  return value;
+  return neutraliseFormatCharacters(value);
 }
 function nonEmpty(source: Rec, key: string): string {
   const value = str(source, key);
@@ -273,7 +317,7 @@ function optStr(source: Rec, key: string): string | null {
   const value = source[key];
   if (value === undefined || value === null) return null;
   if (typeof value !== "string") throw new Malformed();
-  return value;
+  return neutraliseFormatCharacters(value);
 }
 function count(source: Rec, key: string): number {
   const value = source[key];
@@ -306,6 +350,8 @@ function queueItem(value: unknown): ReviewQueueItem {
     updated_at: str(item, "updated_at"),
     duplicate_count: count(item, "duplicate_count"),
     submitter_ref: optStr(item, "submitter_ref"),
+    submitter_role: optStr(item, "submitter_role"),
+    object_type_source: optStr(item, "object_type_source"),
   };
 }
 
@@ -335,6 +381,8 @@ function reviewCase(value: unknown): ReviewCase {
     updated_at: str(item, "updated_at"),
     submitter_ref: optStr(item, "submitter_ref"),
     reviewer_ref: optStr(item, "reviewer_ref"),
+    submitter_role: optStr(item, "submitter_role"),
+    object_type_source: optStr(item, "object_type_source"),
   };
 }
 
@@ -373,6 +421,22 @@ function reviewEvent(value: unknown): ReviewEvent {
   };
 }
 
+/** Plain-language `submitter_role`: who submitted the case (a role, never an identity). */
+export function submittedByText(role: string | null): string {
+  if (role === "member") return "A member";
+  if (role === "owner_session") return "The owner session";
+  if (role === "api_key") return "The backend API key";
+  return "Not recorded";
+}
+
+/** Plain-language `registered_by_role`: who first registered the snapshot shown. */
+export function registeredByText(role: string | null): string {
+  if (role === "member") return "A member session — what the member reports they saw, not verified content";
+  if (role === "owner_session") return "The owner session";
+  if (role === "api_key") return "The backend API key";
+  return "Not recorded";
+}
+
 function objectVersion(value: unknown): ReviewObjectVersion | null {
   if (value === null || value === undefined) return null;
   const item = record(value);
@@ -383,6 +447,7 @@ function objectVersion(value: unknown): ReviewObjectVersion | null {
     payload: record(item.payload),
     created_at: optStr(item, "created_at"),
     previous_version_hash: optStr(item, "previous_version_hash"),
+    registered_by_role: optStr(item, "registered_by_role"),
   };
 }
 
@@ -418,6 +483,7 @@ export function parseReviewCaseDetail(body: unknown, expectedCaseId?: string): R
       events: detail.events.map(reviewEvent),
       object_version: version,
       object_version_available: detail.object_version_available === true && version !== null,
+      object_version_provisional: detail.object_version_provisional === true && version !== null,
       resulting_object_version: objectVersion(detail.resulting_object_version),
       allowed_decisions: decisions(detail.allowed_decisions),
       publication_boundary: nonEmpty(detail, "publication_boundary"),
