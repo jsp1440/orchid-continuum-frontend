@@ -77,11 +77,25 @@ export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): 
   return [];
 }
 export async function fetchGenusOccurrences(genus: string, limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
-  if (!genus) return [];
+  const outcome = await fetchGenusOccurrencesOutcome(genus, limit, signal);
+  return outcome.status === 'ok' ? outcome.results : [];
+}
+
+export type GenusOccurrencesOutcome =
+  | { status: 'ok'; results: OccurrencePoint[] }
+  | { status: 'unavailable'; httpStatus: number };
+
+/** Keep an Atlas outage distinct from a successful query with zero rows. */
+export async function fetchGenusOccurrencesOutcome(
+  genus: string,
+  limit = 500,
+  signal?: AbortSignal,
+): Promise<GenusOccurrencesOutcome> {
+  if (!genus) return { status: 'ok', results: [] };
   const q = encodeURIComponent(genus);
   const res = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
-  if (res.ok && res.data) return normalizeBackend(extractRows(res.data));
-  return [];
+  if (!res.ok || res.data === null) return { status: 'unavailable', httpStatus: res.status };
+  return { status: 'ok', results: normalizeBackend(extractRows(res.data)) };
 }
 
 export interface SpeciesSearchResult { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; family?: string; conservation_status?: string | null; }

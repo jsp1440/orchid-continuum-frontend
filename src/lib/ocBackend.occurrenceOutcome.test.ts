@@ -1,0 +1,19 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { fetchGenusOccurrencesOutcome } from './ocBackend';
+
+afterEach(() => vi.unstubAllGlobals());
+
+describe('genus occurrence outcome', () => {
+  it('preserves a successful empty response', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ results: [] }), { status: 200 })));
+    await expect(fetchGenusOccurrencesOutcome('Dracula')).resolves.toEqual({ status: 'ok', results: [] });
+  });
+
+  it('reports network and HTTP failures as unavailable', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
+    await expect(fetchGenusOccurrencesOutcome('Dracula')).resolves.toEqual({
+      status: 'unavailable',
+      httpStatus: 503,
+    });
+  });
+});

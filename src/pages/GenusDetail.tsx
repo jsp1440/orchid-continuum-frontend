@@ -733,9 +733,11 @@ const GenusDetail: React.FC = () => {
                 data-testid="genus-plates-empty"
                 className="rounded-2xl border border-dashed border-[#c9a24a]/30 px-5 py-6 font-mono text-[11px] leading-[1.7] tracking-[0.04em] text-[#a9b896]"
               >
-                No species plates are available for <span className="italic">{entry.genus}</span> right now:
-                the Orchid Continuum image services returned no photographed species. No local
-                substitute is shown.
+                No species plates are available for <span className="italic">{entry.genus}</span> right now:{' '}
+                {imageSource === 'pending'
+                  ? 'the Orchid Continuum image services are unavailable, so their result could not be verified.'
+                  : 'the Orchid Continuum image services returned no photographed species.'}{' '}
+                No local substitute is shown.
               </p>
             )}
 

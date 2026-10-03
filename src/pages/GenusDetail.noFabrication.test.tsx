@@ -16,6 +16,7 @@ import type { GenusImage } from '@/lib/genusData';
 const live = vi.hoisted(() => ({
   images: [] as GenusImage[],
   validated: [] as string[],
+  source: 'pending' as 'live' | 'pending',
 }));
 
 vi.mock('@/components/orchid/Navbar', () => ({ default: () => null }));
@@ -35,7 +36,7 @@ vi.mock('@/lib/genusData', async () => ({
   warmBackends: vi.fn(),
   fetchGenusImagesWithSource: vi.fn(async () => ({
     images: live.images,
-    source: live.images.length ? 'live' : 'pending',
+    source: live.source,
   })),
   fetchValidatedSpecies: vi.fn(async () => live.validated),
 }));
@@ -93,6 +94,7 @@ function assertNoFabricatedFacts() {
 beforeEach(() => {
   live.images = [];
   live.validated = [];
+  live.source = 'pending';
   vi.spyOn(console, 'log').mockImplementation(() => {});
   container = document.createElement('div');
   document.body.appendChild(container);
@@ -112,10 +114,20 @@ describe('GenusDetail — no fabricated genus facts', () => {
     expect(text).toContain('Dracula');
     expect(container.querySelector('[data-testid="genus-profile-unsourced-notice"]')).not.toBeNull();
     expect(container.querySelector('[data-testid="genus-plates-empty"]')).not.toBeNull();
+    expect(text).toContain('image services are unavailable');
+    expect(text).not.toContain('image services returned no photographed species');
     // Pollinator, mycorrhizal, elevation and habitat rows all state the gap.
     expect(text.match(/Evidence unavailable/g)?.length).toBe(4);
     expect(text).not.toContain('Provisional · genus-level');
     assertNoFabricatedFacts();
+  });
+
+  it('uses a definitive empty message only after a successful image response', async () => {
+    live.source = 'live';
+    await renderGenus('Dracula');
+    const text = container.textContent ?? '';
+    expect(text).toContain('image services returned no photographed species');
+    expect(text).not.toContain('image services are unavailable');
   });
 
   it('partial payload: a live image record becomes a name-only plate, flagged Unverified', async () => {

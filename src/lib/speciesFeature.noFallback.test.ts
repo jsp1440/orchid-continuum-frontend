@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fetchFeaturedSpecies, fetchGenusSpeciesQueue } from './speciesFeature';
+import { fetchFeaturedSpecies, fetchGenusSpeciesQueue, getFeaturedSpeciesCached } from './speciesFeature';
 
 /**
  * speciesFeature must never serve a hand-authored species list. It used to
@@ -37,6 +38,7 @@ function stubFetch(handler: (url: string) => { status: number; body?: unknown } 
 }
 
 afterEach(() => {
+  sessionStorage.clear();
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });
@@ -73,5 +75,18 @@ describe('speciesFeature — no local species fallback', () => {
     }
     const text = JSON.stringify(out);
     for (const fact of FABRICATED_FACTS) expect(text).not.toContain(fact);
+  });
+
+  it('ignores the retired v5 cache that may contain the fabricated fallback', async () => {
+    sessionStorage.setItem(
+      'oc:species-in-focus:v5:cattleya',
+      JSON.stringify([{ name: 'Cattleya labiata', conservation: 'Vulnerable' }]),
+    );
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    stubFetch(() => 'throw');
+    const pending = getFeaturedSpeciesCached(4, undefined, 'Cattleya');
+    await vi.runAllTimersAsync();
+    expect(await pending).toEqual([]);
+    expect(sessionStorage.getItem('oc:species-in-focus:v6:cattleya')).toBeNull();
   });
 });

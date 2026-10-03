@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Globe as GlobeIcon, Map as MapIcon, Loader2 } from 'lucide-react';
 import useGlobeGl, { type GlobeInstance } from '@/hooks/useGlobeGl';
-import { fetchGenusOccurrences, type OccurrencePoint } from '@/lib/ocBackend';
+import { fetchGenusOccurrencesOutcome, type OccurrencePoint } from '@/lib/ocBackend';
 
 /**
  * GenusOccurrenceMap — a photorealistic 3D Earth (globe.gl / three.js) showing
@@ -53,6 +53,7 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus }) => {
   const [mode, setMode] = useState<'globe' | 'flat'>('globe');
   const [occurrences, setOccurrences] = useState<OccurrencePoint[]>([]);
   const [loading, setLoading] = useState(true);
+  const [unavailable, setUnavailable] = useState(false);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const globeRef = useRef<GlobeInstance<MapPoint> | null>(null);
@@ -63,10 +64,14 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus }) => {
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setUnavailable(false);
+    setOccurrences([]);
     const ctrl = new AbortController();
-    fetchGenusOccurrences(genus, 600, ctrl.signal)
-      .then((pts) => {
-        if (alive) setOccurrences(pts);
+    fetchGenusOccurrencesOutcome(genus, 600, ctrl.signal)
+      .then((outcome) => {
+        if (!alive) return;
+        if (outcome.status === 'ok') setOccurrences(outcome.results);
+        else setUnavailable(true);
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -316,7 +321,9 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus }) => {
             ? `${occurrences.length} ${genus} records`
             : loading
               ? 'Loading records…'
-              : `No ${genus} occurrence records returned`}
+              : unavailable
+                ? `${genus} occurrence service unavailable`
+                : `No ${genus} occurrence records returned`}
         </span>
       </div>
     </div>

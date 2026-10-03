@@ -526,8 +526,10 @@ const queueMemoryByGenus = new Map<string, FeaturedSpecies[]>();
 const queueInFlightByGenus = new Map<string, Promise<FeaturedSpecies[]>>();
 
 function sessionKey(genus: string): string {
-  // v5 invalidates earlier caches before homepage image-quality filtering.
-  return `oc:species-in-focus:v5:${genus.trim().toLowerCase()}`;
+  // v6 invalidates v5 entries that may contain the removed hand-authored
+  // Cattleya fallback. Binomial validation alone cannot distinguish those
+  // fabricated ecology fields from a live record.
+  return `oc:species-in-focus:v6:${genus.trim().toLowerCase()}`;
 }
 
 function queueSessionKey(genus: string): string {
