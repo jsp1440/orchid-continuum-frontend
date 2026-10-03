@@ -16,7 +16,7 @@ import type { GenusImage } from '@/lib/genusData';
 const live = vi.hoisted(() => ({
   images: [] as GenusImage[],
   validated: [] as string[],
-  source: 'pending' as 'empty' | 'pending',
+  source: 'pending' as 'live' | 'cache' | 'proxy' | 'inaturalist' | 'empty' | 'pending',
 }));
 
 vi.mock('@/components/orchid/Navbar', () => ({ default: () => null }));
@@ -151,6 +151,7 @@ describe('GenusDetail — no fabricated genus facts', () => {
   });
 
   it('a limited backbone sample verifies matches without hiding trusted images outside the sample', async () => {
+    live.source = 'live';
     live.images = [
       {
         scientific_name: 'Dracula vampira',
@@ -171,5 +172,27 @@ describe('GenusDetail — no fabricated genus facts', () => {
     expect(text).toContain('Verified');
     expect(text).toContain('Unverified');
     assertNoFabricatedFacts();
+  });
+
+  it('requires a backbone match before an iNaturalist fallback can create a species plate', async () => {
+    live.source = 'inaturalist';
+    live.images = [
+      {
+        scientific_name: 'Dracula vampira',
+        image_url: 'https://images.example.test/a.jpg',
+        image_urls: ['https://images.example.test/a.jpg'],
+      },
+      {
+        scientific_name: 'Dracula chimaera',
+        image_url: 'https://images.example.test/b.jpg',
+        image_urls: ['https://images.example.test/b.jpg'],
+      },
+    ];
+    live.validated = ['Dracula vampira'];
+    await renderGenus('Dracula');
+    const text = container.textContent ?? '';
+    expect(text).toContain('Dracula vampira');
+    expect(text).not.toContain('Dracula chimaera');
+    expect(text).toContain('Verified');
   });
 });

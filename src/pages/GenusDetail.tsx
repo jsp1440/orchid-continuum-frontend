@@ -360,8 +360,13 @@ const GenusDetail: React.FC = () => {
   const visiblePlates = useMemo(() => {
     if (!entry) return [];
     const withName = images.filter((img) => binomialOf(img.scientific_name || '').includes(' '));
+    const plateCandidates = imageSource === 'inaturalist'
+      ? validationLoaded
+        ? withName.filter((img) => isValidatedName(img.scientific_name, validatedSet))
+        : []
+      : withName;
 
-    const representative = buildRepresentativePlates(withName, {
+    const representative = buildRepresentativePlates(plateCandidates, {
       nameOf: (img) => img.scientific_name,
       urlsOf: (img) => {
         const trusted = imageMap.get(binomialOf(img.scientific_name));
@@ -378,7 +383,7 @@ const GenusDetail: React.FC = () => {
       if (plate.urls.length === 0) return false;
       return true;
     });
-  }, [entry, images, failedSpecies, imageMap]);
+  }, [entry, images, imageSource, validationLoaded, validatedSet, failedSpecies, imageMap]);
 
   /**
    * Ecological relationships, expressed as evidence states rather than as
