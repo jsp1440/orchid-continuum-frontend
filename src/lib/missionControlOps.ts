@@ -34,8 +34,8 @@ export type ContinuumSubsystem = {
   failures?: string[];
   sourceRecordCounts?: Record<string, number>;
   telemetryFreshness?: string;
-  /** Whether completeness/status came from backend telemetry or a UI fallback row. */
-  telemetryProvenance?: 'live' | 'fallback';
+  /** Whether completeness came from backend telemetry, a UI heuristic, or a fallback row. */
+  telemetryProvenance?: 'live' | 'derived' | 'fallback';
 };
 
 export type HarvesterStatus = {
@@ -510,6 +510,15 @@ function pickNumber(record: Record<string, unknown>, keys: string[], fallback: n
   return fallback;
 }
 
+function pickOptionalNumber(record: Record<string, unknown>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    if (typeof value === 'string' && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+  return null;
+}
+
 function pickBoolean(record: Record<string, unknown>, keys: string[], fallback: boolean): boolean {
   for (const key of keys) {
     const value = record[key];
@@ -578,7 +587,8 @@ function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsy
   const name = pickString(record, ['name', 'title', 'label', 'id'], id);
   const category = pickString(record, ['category', 'group', 'domain', 'type'], 'Live Telemetry');
   const status = normalizeStatus(record.status ?? record.health ?? record.state ?? record.mode);
-  const completeness = Math.max(0, Math.min(100, pickNumber(record, ['completeness', 'percentComplete', 'percentage', 'score'], status === 'healthy' ? 75 : 50)));
+  const observedCompleteness = pickOptionalNumber(record, ['completeness', 'percentComplete', 'percentage', 'score']);
+  const completeness = Math.max(0, Math.min(100, observedCompleteness ?? (status === 'healthy' ? 75 : 50)));
   const sourceCounts = asRecord(record.source_record_counts ?? record.sourceRecordCounts) ?? {};
 
   return {
@@ -603,7 +613,7 @@ function normalizeSubsystemRecord(value: unknown, index: number): ContinuumSubsy
     failures: pickStringArray(record, ['failures']),
     sourceRecordCounts: Object.fromEntries(Object.entries(sourceCounts).map(([key, count]) => [key, Number(count) || 0])),
     telemetryFreshness: pickString(record, ['telemetry_freshness', 'telemetryFreshness'], ''),
-    telemetryProvenance: 'live',
+    telemetryProvenance: observedCompleteness === null ? 'derived' : 'live',
   };
 }
 
@@ -951,7 +961,9 @@ export function runtimeSubsystemFrom(statusPayload?: Record<string, unknown>, co
     route: '/mission-control',
     dataSource: sources,
     maturity: pickString(configuration, ['worker_mode'], 'runtime_status'),
-    telemetryProvenance: 'live',
+    // The status payload supplies runtime facts, but this completeness score is
+    // a UI heuristic and must never be attributed to backend telemetry.
+    telemetryProvenance: 'derived',
   };
 }
 

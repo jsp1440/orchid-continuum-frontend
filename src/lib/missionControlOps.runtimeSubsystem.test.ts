@@ -38,6 +38,7 @@ describe('runtimeSubsystemFrom', () => {
   it('a status payload missing counters reports them as unknown, not zero', () => {
     const row = runtimeSubsystemFrom({ runtime_engine: { running: true, thread_alive: true } }, CONFIGURATION);
     expect(row!.status).toBe('healthy');
+    expect(row!.telemetryProvenance).toBe('derived');
     expect(row!.summary).toContain('running: yes');
     expect(row!.summary).toContain('cycles: unknown');
     expect(row!.summary).toContain('queue depth: unknown');
@@ -81,5 +82,22 @@ describe('fetchMissionControlOperations — autonomous-status 404', () => {
     for (const fact of DEFAULT_FACTS) expect(runner!.summary).not.toContain(fact);
     const diag = ops.diagnostics.find((d) => d.endpoint.endsWith('/api/runner/autonomous-status'));
     expect(diag?.status).toBe('error');
+  });
+
+  it('does not label inferred subsystem completeness as live telemetry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith('/api/mission-control/subsystems')) {
+          return new Response(JSON.stringify({ subsystems: [{ id: 'atlas', name: 'Atlas', status: 'healthy' }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ detail: 'Not Found' }), { status: 404 });
+      }),
+    );
+
+    const ops = await fetchMissionControlOperations();
+    const atlas = ops.globalHealth.find((row) => row.id === 'atlas');
+    expect(atlas).toMatchObject({ completeness: 75, telemetryProvenance: 'derived' });
   });
 });

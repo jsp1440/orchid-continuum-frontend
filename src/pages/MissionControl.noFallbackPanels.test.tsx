@@ -62,6 +62,7 @@ describe('Mission Control panels — no fabricated fallback content', () => {
       id: 'atlas', name: 'Atlas', category: 'Science', status: 'warning', completeness: 20,
       lastChecked: '2026-01-01T00:00:00Z', summary: '', blockers: [], recommendedNextAction: 'Fix atlas.',
       dataSource: '/api/executive/state',
+      telemetryProvenance: 'live',
     } satisfies ContinuumSubsystem;
     const text = render(<ScientificInsightsPanel dashboard={{ globalHealth: [row] } as unknown as MissionControlOperations} />);
     expect(container.querySelectorAll('article')).toHaveLength(1);

@@ -58,6 +58,19 @@ describe('deriveScientificInsights — live telemetry only', () => {
     expect(imc.deriveScientificInsights(mixed)).toEqual([]);
   });
 
+  it('excludes UI-derived completeness even when the row contains live runtime facts', () => {
+    const mixed = ops([
+      subsystem({
+        id: 'runners_jobs',
+        name: 'Runners / Jobs',
+        completeness: 58,
+        telemetryProvenance: 'derived',
+      }),
+    ]);
+    mixed.dataMode = 'mixed';
+    expect(imc.deriveScientificInsights(mixed)).toEqual([]);
+  });
+
   it('partial telemetry → only the live-derived insight, with provenance', () => {
     const insights = imc.deriveScientificInsights(
       ops([subsystem({ id: 'atlas', name: 'Atlas', completeness: 30, dataSource: '/api/executive/state' }), subsystem({ id: 'kg', name: 'Knowledge Graph', completeness: 70 })]),
