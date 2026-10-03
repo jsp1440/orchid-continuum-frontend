@@ -42,4 +42,12 @@ describe('genus image outcome', () => {
     await vi.runAllTimersAsync();
     await expect(pending).resolves.toEqual({ images: [], source: 'pending' });
   });
+
+  it('reports pending when a recognized image array contains only malformed rows', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ images: [{ detail: 'temporarily unavailable' }] }), { status: 200 })));
+    const pending = fetchGenusImagesWithSource('Testorchis');
+    await vi.runAllTimersAsync();
+    await expect(pending).resolves.toEqual({ images: [], source: 'pending' });
+  });
 });

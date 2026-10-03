@@ -1555,6 +1555,12 @@ async function fetchGenusImagesOnce(
     writeGenusImagesCache(g, out);
   }
 
+  // A non-empty container whose records cannot produce even one named image
+  // is not evidence of an empty collection; it is a malformed response.
+  if (arr.length > 0 && out.length === 0) {
+    return { images: [], networkError: false, answered: false };
+  }
+
   return { images: out, networkError: false, answered: true };
 }
 

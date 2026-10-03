@@ -103,7 +103,10 @@ export async function fetchGenusOccurrencesOutcome(
   const res = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
   if (!res.ok || res.data === null) return { status: 'unavailable', httpStatus: res.status };
   if (!hasOccurrenceRowsShape(res.data)) return { status: 'unavailable', httpStatus: res.status };
-  return { status: 'ok', results: normalizeBackend(extractRows(res.data)) };
+  const rows = extractRows(res.data);
+  const results = normalizeBackend(rows);
+  if (rows.length > 0 && results.length === 0) return { status: 'unavailable', httpStatus: res.status };
+  return { status: 'ok', results };
 }
 
 export interface SpeciesSearchResult { taxonomy_id: string; canonical_name?: string; scientific_name?: string; genus?: string; family?: string; conservation_status?: string | null; }
