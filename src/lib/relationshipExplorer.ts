@@ -249,6 +249,119 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isOptionalNullableString(record: Record<string, unknown>, key: string): boolean {
+  return !Object.prototype.hasOwnProperty.call(record, key) || isNullableString(record[key]);
+}
+
+function isOptionalNullableNumber(record: Record<string, unknown>, key: string): boolean {
+  return !Object.prototype.hasOwnProperty.call(record, key)
+    || record[key] === null
+    || (typeof record[key] === "number" && Number.isFinite(record[key]));
+}
+
+function isStringArrayOrNull(value: unknown): boolean {
+  return value === null || (Array.isArray(value) && value.every((item) => typeof item === "string"));
+}
+
+function isOptionalStringArrayOrNull(record: Record<string, unknown>, key: string): boolean {
+  return !Object.prototype.hasOwnProperty.call(record, key) || isStringArrayOrNull(record[key]);
+}
+
+function isCardAvailability(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = Object.keys(emptyCards()) as Array<keyof CardAvailability>;
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(value, key)) && keys.every(
+    (key) => !Object.prototype.hasOwnProperty.call(value, key) || typeof value[key] === "boolean",
+  );
+}
+
+function isSpeciesProfile(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return typeof value.scientific_name === "string"
+    && value.scientific_name.trim().length > 0
+    && ["genus", "species_epithet", "author", "common_name", "description"].every(
+      (key) => isOptionalNullableString(value, key),
+    );
+}
+
+function isAtlasSummary(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = ["occurrence_count", "atlas_confidence_score", "atlas_readiness", "elevation_range", "countries"];
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && isOptionalNullableNumber(value, "occurrence_count")
+    && isOptionalNullableNumber(value, "atlas_confidence_score")
+    && isOptionalNullableString(value, "atlas_readiness")
+    && isOptionalNullableString(value, "elevation_range")
+    && isOptionalStringArrayOrNull(value, "countries");
+}
+
+function isGalleryImage(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.url === "string"
+    && value.url.trim().length > 0
+    && isOptionalNullableString(value, "caption")
+    && isOptionalNullableString(value, "credit");
+}
+
+function isMycorrhizaClaim(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  const keys = ["fungal_taxon", "relationship_type", "evidence", "source"];
+  return keys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
+    && keys.every(
+      (key) => isOptionalNullableString(value, key),
+    );
+}
+
+function isFungalDependency(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return (Object.prototype.hasOwnProperty.call(value, "dependency_level")
+      || Object.prototype.hasOwnProperty.call(value, "notes"))
+    && isOptionalNullableString(value, "dependency_level")
+    && isOptionalNullableString(value, "notes");
+}
+
+function isReasoningItem(value: unknown): boolean {
+  return isRecord(value)
+    && typeof value.statement === "string"
+    && isOptionalNullableString(value, "confidence")
+    && isOptionalNullableString(value, "basis");
+}
+
+function isInteractionRecord(value: unknown): boolean {
+  if (!isRecord(value)) return false;
+  return ["partner", "interaction_type", "source"].some(
+    (key) => Object.prototype.hasOwnProperty.call(value, key),
+  ) && isOptionalNullableString(value, "partner")
+    && isOptionalNullableString(value, "interaction_type")
+    && isOptionalNullableString(value, "source");
+}
+
+function isNullableArrayOf(value: unknown, guard: (item: unknown) => boolean): boolean {
+  return value === null || (Array.isArray(value) && value.every(guard));
+}
+
+/** Reject malformed 2xx envelopes before any field can be labelled live. */
+function hasValidRecognizedFields(payload: Record<string, unknown>): boolean {
+  const validators: Record<string, (value: unknown) => boolean> = {
+    scientific_name: (value) => typeof value === "string" && value.trim().length > 0,
+    species_profile: (value) => value === null || isSpeciesProfile(value),
+    atlas_summary: (value) => value === null || isAtlasSummary(value),
+    image_gallery: (value) => isNullableArrayOf(value, isGalleryImage),
+    mycorrhiza_claims: (value) => isNullableArrayOf(value, isMycorrhizaClaim),
+    fungal_dependency: (value) => value === null || isFungalDependency(value),
+    reasoning: (value) => isNullableArrayOf(value, isReasoningItem),
+    interaction_summary: (value) => isNullableArrayOf(value, isInteractionRecord),
+    cards: isCardAvailability,
+    mvp_card_status: isCardAvailability,
+  };
+  const present = Object.entries(validators).filter(([key]) => Object.prototype.hasOwnProperty.call(payload, key));
+  return present.length > 0 && present.every(([key, validate]) => validate(payload[key]));
+}
+
 /** Card availability derived only from what the API payload actually holds. */
 function cardsFromPayload(payload: Omit<RelationshipExplorerPayload, "cards" | "source">): CardAvailability {
   return {
@@ -271,19 +384,7 @@ export function normalizePayload(name: string, raw: unknown): RelationshipExplor
   if (!isRecord(raw)) return null;
 
   const payload = raw as RelationshipExplorerApiPayload;
-  const recognizedFields = [
-    "scientific_name",
-    "species_profile",
-    "atlas_summary",
-    "image_gallery",
-    "mycorrhiza_claims",
-    "fungal_dependency",
-    "reasoning",
-    "interaction_summary",
-    "cards",
-    "mvp_card_status",
-  ];
-  if (!recognizedFields.some((key) => Object.prototype.hasOwnProperty.call(payload, key))) return null;
+  if (!hasValidRecognizedFields(raw)) return null;
   const imageGallery = cleanGallery(Array.isArray(payload.image_gallery) ? payload.image_gallery : null);
 
   const fields = {

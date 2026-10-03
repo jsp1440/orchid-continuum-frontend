@@ -83,6 +83,30 @@ describe('relationshipExplorer — outage', () => {
     stubFetch(() => new Response(JSON.stringify({ detail: 'temporarily unavailable' }), { status: 200 }));
     expect((await fetchRelationshipExplorerPayload('Angraecum sesquipedale')).source).toBe('unavailable');
   });
+
+  it.each([
+    { cards: 'temporarily unavailable' },
+    { cards: {} },
+    { cards: { reasoning: 'yes' } },
+    { species_profile: [] },
+    { atlas_summary: {} },
+    { atlas_summary: { occurrence_count: 'many' } },
+    { image_gallery: [null] },
+    { mycorrhiza_claims: ['not a claim'] },
+    { mycorrhiza_claims: [{}] },
+    { fungal_dependency: { notes: 42 } },
+    { fungal_dependency: {} },
+    { reasoning: [{ statement: null }] },
+    { interaction_summary: [null] },
+    { interaction_summary: [{}] },
+    { interaction_summary: [{ partner: 42 }] },
+  ])('malformed recognized 2xx payload %# is unavailable', async (body) => {
+    stubFetch(() => new Response(JSON.stringify(body), { status: 200 }));
+    const payload = await fetchRelationshipExplorerPayload('Angraecum sesquipedale');
+    expect(payload.source).toBe('unavailable');
+    expect(payload.interaction_summary).toBeNull();
+    expect(Object.values(payload.cards).some(Boolean)).toBe(false);
+  });
 });
 
 describe('relationshipExplorer — partial API payloads', () => {
