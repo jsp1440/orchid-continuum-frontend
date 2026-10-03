@@ -39,6 +39,13 @@ export type Lease = {
    */
   lane?: LeaseLane;
   state: ExecutionLeaseState | HistoricalProviderFreeState | 'not-executed';
+  /**
+   * When a `runtime-backoff` lease may be retried. Written at settlement from
+   * the issue's attempt count; see `runtimeBackoffDecisions`. Leases settled
+   * before this field existed have none, and `effectiveBackoffUntil` derives a
+   * conservative one from `expiresAt`.
+   */
+  backoffUntil?: string;
 };
 export function laneOf(lease: Lease): LeaseLane {
   if (lease.lane) return lease.lane;
@@ -594,7 +601,9 @@ export function validateLedger(ledger: Ledger) {
       ((l.state === 'provider-free-done' || l.state === 'provider-free-failed') &&
         (l.reservedUsd !== 0 || laneOf(l) !== 'provider-free')) ||
       !['reserved','running','validating','blocked','owner-gate','runtime-backoff','done',
-        'provider-free-done','provider-free-failed','not-executed'].includes(l.state))) throw new Error('Malformed lease');
+        'provider-free-done','provider-free-failed','not-executed'].includes(l.state) ||
+      // A retry time means something only on a runtime backoff.
+      (l.backoffUntil !== undefined && (l.state !== 'runtime-backoff' || !Number.isFinite(Date.parse(l.backoffUntil)))))) throw new Error('Malformed lease');
   const active = ledger.leases.filter(isActive);
   if (new Set(active.map(l => l.issue)).size !== active.length || new Set(active.map(l => l.nodeId)).size !== active.length) throw new Error('Duplicate active leases in ledger');
 }
@@ -630,8 +639,13 @@ export async function claimLease(store: LeaseStore, plan: Plan, snapshot: Snapsh
     // `claimDeterministicLease` has always done. Genuine drift -- no durable
     // lease for this work -- still reaches `assertAdmission` below and throws.
     if (ledger.leases.some(l => (l.issue === input.issueNumber || l.nodeId === leaf.nodeId) && isActive(l))) return { allowed: false, reason: 'lease_owned', lease: null };
-    // Unchanged failed/completed work is never blindly paid for again.
-    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint)) return { allowed: false, reason: 'unchanged_attempt', lease: null };
+    // Unchanged failed/completed work is never blindly paid for again. The one
+    // exception is a runtime backoff whose delay has elapsed and whose attempt
+    // bound is not spent: the provider chain was unavailable, the work itself
+    // was never judged. It still passes admission and the budget below.
+    if (ledger.leases.some(l => l.fingerprint === leaf.fingerprint && !runtimeBackoffRetryable(l, ledger.leases, input.now))) {
+      return { allowed: false, reason: 'unchanged_attempt', lease: null };
+    }
     assertAdmission(plan, snapshot, input.issueNumber, input.now, root);
     if (runningCount(snapshot, ledger.leases) >= MAX_ACTIVE_LANES) return { allowed: false, reason: 'capacity_full', lease: null };
     const day = input.now.slice(0, 10);
@@ -761,7 +775,118 @@ export function providerFreeRepairsReadyForRequeue(snapshot: Snapshot, leases: L
   return parked.map(issue => issue.number).sort((a, b) => a - b);
 }
 
-export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state'], options: { requireActive?: boolean } = {}) {
+/**
+ * Runtime backoff: bounded, exponential, and never terminal by accident.
+ *
+ * `oc-runtime-backoff` used to be a one-way door. The lane parked the issue when
+ * the provider chain was unavailable, settlement recorded a `runtime-backoff`
+ * lease, and nothing ever looked at it again: no expiry, no requeue (#238 has
+ * been parked since 09-05). Now each such lease carries `backoffUntil`, set at
+ * settlement to 30 min x 2^(attempt-1) capped at 8 h, and reconciliation
+ * requeues it once that time has passed -- by relabelling it `oc-queued`, so it
+ * re-enters the ordinary graph admission, provider-slot and budget path. It is
+ * never dispatched from here.
+ *
+ * The attempt bound is the one abandoned PRs already use,
+ * `MAX_ABANDONED_ATTEMPTS`: an issue with that many runtime backoffs is not
+ * requeued a further time but parked as `dead_letter` with a follow-up record.
+ */
+export const RUNTIME_BACKOFF_BASE_MS = 30 * 60_000;
+export const RUNTIME_BACKOFF_CAP_MS = 8 * 60 * 60_000;
+export function runtimeBackoffDelayMs(attempt: number) {
+  return Math.min(RUNTIME_BACKOFF_CAP_MS, RUNTIME_BACKOFF_BASE_MS * 2 ** Math.max(0, attempt - 1));
+}
+export function runtimeBackoffAttempts(leases: Lease[], issue: number) {
+  return leases.filter(lease => lease.issue === issue && lease.state === 'runtime-backoff').length;
+}
+/**
+ * The retry time for a runtime-backoff lease. A lease settled before
+ * `backoffUntil` existed is timed from `expiresAt`, which is never earlier than
+ * its settlement, so the derived delay is at least as long as the real one.
+ */
+export function effectiveBackoffUntil(lease: Lease, leases: Lease[]) {
+  if (lease.backoffUntil !== undefined) return lease.backoffUntil;
+  const attempt = leases.filter(l => l.issue === lease.issue && l.state === 'runtime-backoff').indexOf(lease) + 1;
+  return new Date(Date.parse(lease.expiresAt) + runtimeBackoffDelayMs(Math.max(1, attempt))).toISOString();
+}
+function runtimeBackoffRetryable(lease: Lease, leases: Lease[], now: string) {
+  return lease.state === 'runtime-backoff' && laneOf(lease) === 'provider' &&
+    runtimeBackoffAttempts(leases, lease.issue) < MAX_ABANDONED_ATTEMPTS &&
+    Date.parse(effectiveBackoffUntil(lease, leases)) <= Date.parse(now);
+}
+export type RuntimeBackoffDecision = { issue: number; attempts: number } & (
+  | { action: 'requeue'; backoffUntil: string }
+  | { action: 'wait'; backoffUntil: string }
+  | { action: 'dead_letter'; reason: 'dead_letter'; followUp: string }
+  | { action: 'conflict'; reason: 'queued_and_backoff_labels'; labels: string[] }
+  | { action: 'kept'; reason: string }
+);
+/**
+ * Decide, per issue labelled `oc-runtime-backoff`, whether reconciliation may
+ * requeue it. Pure: it reads a snapshot and the ledger and writes nothing.
+ *
+ * Fail-closed per issue: an issue that is also queued is a label conflict --
+ * something else already put it back, and requeueing on top would hide that --
+ * so it is recorded and skipped, and every other issue is still decided.
+ */
+export function runtimeBackoffDecisions(snapshot: Snapshot, leases: Lease[], now: string): RuntimeBackoffDecision[] {
+  const decisions: RuntimeBackoffDecision[] = [];
+  // An unreadable clock is not "every backoff has expired": `until > NaN` is
+  // false, so without this every parked issue would requeue at once.
+  const clockValid = typeof now === 'string' && Number.isFinite(Date.parse(now));
+  const parked = eligibleIssues(snapshot).filter(issue => issue.state === 'open' && !issue.portfolioSteward &&
+    labelsOf(issue).includes('oc-runtime-backoff')).sort((a, b) => a.number - b.number);
+  for (const issue of parked) {
+    const labels = labelsOf(issue);
+    const mine = leases.filter(lease => lease.issue === issue.number);
+    const backoffs = mine.filter(lease => lease.state === 'runtime-backoff');
+    const attempts = backoffs.length;
+    try {
+      if (labels.includes('oc-queued') || labels.includes('oc-prepared')) {
+        decisions.push({ issue: issue.number, attempts, action: 'conflict', reason: 'queued_and_backoff_labels',
+          labels: labels.filter(l => ['oc-queued', 'oc-prepared', 'oc-runtime-backoff'].includes(l)).sort() });
+        continue;
+      }
+      if (!clockValid) { decisions.push({ issue: issue.number, attempts, action: 'kept', reason: `invalid reconciliation time ${JSON.stringify(now)}` }); continue; }
+      if (mine.some(isActive)) { decisions.push({ issue: issue.number, attempts, action: 'kept', reason: 'an active lease owns the issue' }); continue; }
+      if (attempts === 0) {
+        decisions.push({ issue: issue.number, attempts, action: 'kept', reason: 'no runtime-backoff lease records an attempt or a retry time' });
+        continue;
+      }
+      if (attempts >= MAX_ABANDONED_ATTEMPTS) {
+        decisions.push({ issue: issue.number, attempts, action: 'dead_letter', reason: 'dead_letter',
+          // Relabelling alone does not retry it: with an unchanged admission
+          // fingerprint `claimLease` refuses the attempt as `unchanged_attempt`.
+          followUp: `${attempts} runtime backoffs; automatic requeue stops at ${MAX_ABANDONED_ATTEMPTS}. ` +
+            'Relabelling alone will not retry it: while its admission fingerprint is unchanged, claimLease refuses it as unchanged_attempt. ' +
+            'It becomes admissible again only when an input of that fingerprint changes -- a new oc-autonomous-integration head, an edit to the issue ' +
+            'title or body, or a change to its PR lineage. Confirm the provider chain is healthy, make that change, then replace oc-blocked with oc-queued.' });
+        continue;
+      }
+      const last = mine[mine.length - 1];
+      if (last.state !== 'runtime-backoff') {
+        decisions.push({ issue: issue.number, attempts, action: 'kept', reason: `latest lease is ${last.state}, not runtime-backoff` });
+        continue;
+      }
+      const until = effectiveBackoffUntil(last, leases);
+      if (!Number.isFinite(Date.parse(until))) throw new Error('unreadable backoff time');
+      if (Date.parse(until) > Date.parse(now)) { decisions.push({ issue: issue.number, attempts, action: 'wait', backoffUntil: until }); continue; }
+      // Owner/publication holds, blocked, running and durable-PR exclusions all
+      // still apply: requeue only what ordinary admission would select.
+      const candidate = { ...issue, labels: [...issue.labels.filter(l => l.name !== 'oc-runtime-backoff'), { name: 'oc-queued' }] };
+      if (selectLanes({ issues: [candidate] }).selected.length === 0) {
+        decisions.push({ issue: issue.number, attempts, action: 'kept', reason: 'admission would not select it (hold, blocked, running or durable PR)' });
+        continue;
+      }
+      decisions.push({ issue: issue.number, attempts, action: 'requeue', backoffUntil: until });
+    } catch (error) {
+      decisions.push({ issue: issue.number, attempts, action: 'kept', reason: error instanceof Error ? error.message : 'unknown failure' });
+    }
+  }
+  return decisions;
+}
+
+export async function transitionLease(store: LeaseStore, id: string, runId: string, runAttempt: string, state: Lease['state'], options: { requireActive?: boolean; now?: string } = {}) {
   for (let attempt = 0; attempt < 8; attempt++) {
     const { version, ledger } = await store.read();
     validateLedger(ledger);
@@ -785,6 +910,13 @@ export async function transitionLease(store: LeaseStore, id: string, runId: stri
     if (!isActive(lease) || state === 'reserved') return lease;
     if (laneOf(lease) === 'provider-free' && !['running', 'provider-free-done', 'provider-free-failed', 'not-executed'].includes(state)) {
       throw new Error('Deterministic lease cannot settle into a provider outcome');
+    }
+    // Counted before this lease becomes one, so the first backoff is attempt 1.
+    if (state === 'runtime-backoff') {
+      const settledAt = Date.parse(options.now ?? new Date().toISOString());
+      if (!Number.isFinite(settledAt)) throw new Error('Invalid settlement time; runtime backoff not recorded');
+      const attempt = runtimeBackoffAttempts(ledger.leases, lease.issue) + 1;
+      lease.backoffUntil = new Date(settledAt + runtimeBackoffDelayMs(attempt)).toISOString();
     }
     lease.state = state;
     if (await store.compareAndSwap(version, ledger)) return lease;
