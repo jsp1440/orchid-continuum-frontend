@@ -41,7 +41,7 @@ import {
 import {
   lookupGenus,
   fetchGenusImagesWithSource,
-  fetchValidatedSpecies,
+  fetchValidatedSpeciesOutcome,
   buildImageMap,
   binomialOf,
   buildValidatedSet,
@@ -154,7 +154,7 @@ const GenusDetail: React.FC = () => {
   // Validated OC backbone binomials for this genus. Empty + loaded => the
   // backend returned nothing, so plates are shown with an "unverified" badge.
   const [validatedSet, setValidatedSet] = useState<Set<string>>(new Set());
-  const [validationLoaded, setValidationLoaded] = useState(false);
+  const [validationStatus, setValidationStatus] = useState<'loading' | 'ok' | 'unavailable'>('loading');
   // Where the current genus images came from (for the source-health indicator).
   const [imageSource, setImageSource] = useState<ImageSource | null>(null);
 
@@ -275,16 +275,16 @@ const GenusDetail: React.FC = () => {
         if (!ctrl.signal.aborted) setGraphEvidence({ status: 'unavailable' });
       });
 
-    setValidationLoaded(false);
+    setValidationStatus('loading');
     setValidatedSet(new Set());
-    fetchValidatedSpecies(entry.genus, ctrl.signal, 60)
-      .then((names) => {
+    fetchValidatedSpeciesOutcome(entry.genus, ctrl.signal, 60)
+      .then((outcome) => {
         if (ctrl.signal.aborted) return;
-        setValidatedSet(buildValidatedSet(names));
-        setValidationLoaded(true);
+        setValidatedSet(buildValidatedSet(outcome.names));
+        setValidationStatus(outcome.status);
       })
       .catch(() => {
-        if (!ctrl.signal.aborted) setValidationLoaded(true);
+        if (!ctrl.signal.aborted) setValidationStatus('unavailable');
       });
     return () => ctrl.abort();
   }, [entry]);
@@ -348,6 +348,7 @@ const GenusDetail: React.FC = () => {
   // from that sample must never reject a taxonomy-joined image record. A plate
   // never carries locally authored distribution, elevation, pollinator or
   // conservation text.
+  const validationLoaded = validationStatus !== 'loading';
   const unverifiedMode = validationLoaded;
 
   /**
@@ -361,7 +362,7 @@ const GenusDetail: React.FC = () => {
     if (!entry) return [];
     const withName = images.filter((img) => binomialOf(img.scientific_name || '').includes(' '));
     const plateCandidates = imageSource === 'inaturalist'
-      ? validationLoaded && validatedSet.size > 0
+      ? validationStatus === 'ok' && validatedSet.size > 0
         ? withName.filter((img) => isValidatedName(img.scientific_name, validatedSet))
         : []
       : withName;
@@ -383,19 +384,31 @@ const GenusDetail: React.FC = () => {
       if (plate.urls.length === 0) return false;
       return true;
     });
-  }, [entry, images, imageSource, validationLoaded, validatedSet, failedSpecies, imageMap]);
+  }, [entry, images, imageSource, validationStatus, validatedSet, failedSpecies, imageMap]);
 
   const hasFallbackPlateCandidates = imageSource === 'inaturalist'
     && images.some((img) => binomialOf(img.scientific_name || '').includes(' '));
 
+  const hasFailedMatchedFallback = imageSource === 'inaturalist'
+    && validationStatus === 'ok'
+    && validatedSet.size > 0
+    && images.some((img) => (
+      isValidatedName(img.scientific_name, validatedSet)
+      && failedSpecies.has(img.scientific_name)
+    ));
+
   const emptyPlateReason = imageSource === 'pending'
     ? 'the Orchid Continuum image services are unavailable, so their result could not be verified.'
-    : hasFallbackPlateCandidates && !validationLoaded
+    : hasFallbackPlateCandidates && validationStatus === 'loading'
       ? 'fallback photographs were returned, but taxonomic-backbone validation is not yet available.'
-      : hasFallbackPlateCandidates && validatedSet.size === 0
+      : hasFallbackPlateCandidates && validationStatus === 'unavailable'
+        ? 'fallback photographs were returned, but the taxonomic backbone is unavailable, so they could not be confirmed.'
+        : hasFallbackPlateCandidates && validatedSet.size === 0
         ? 'fallback photographs were returned, but the taxonomic backbone returned no names to confirm them.'
-        : hasFallbackPlateCandidates
-          ? 'fallback photographs were returned, but none matched the taxonomic backbone.'
+        : hasFailedMatchedFallback
+          ? 'fallback photographs matched the taxonomic backbone, but their image files could not be loaded.'
+          : hasFallbackPlateCandidates
+            ? 'fallback photographs were returned, but none matched the taxonomic backbone.'
           : 'the Orchid Continuum image services returned no photographed species.';
 
   /**

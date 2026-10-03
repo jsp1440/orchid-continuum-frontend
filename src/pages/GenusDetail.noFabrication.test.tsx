@@ -16,6 +16,7 @@ import type { GenusImage } from '@/lib/genusData';
 const live = vi.hoisted(() => ({
   images: [] as GenusImage[],
   validated: [] as string[],
+  validationStatus: 'ok' as 'ok' | 'unavailable',
   source: 'pending' as 'live' | 'cache' | 'proxy' | 'inaturalist' | 'empty' | 'pending',
 }));
 
@@ -38,7 +39,10 @@ vi.mock('@/lib/genusData', async () => ({
     images: live.images,
     source: live.source,
   })),
-  fetchValidatedSpecies: vi.fn(async () => live.validated),
+  fetchValidatedSpeciesOutcome: vi.fn(async () => ({
+    status: live.validationStatus,
+    names: live.validationStatus === 'ok' ? live.validated : [],
+  })),
 }));
 
 import GenusDetail from './GenusDetail';
@@ -94,6 +98,7 @@ function assertNoFabricatedFacts() {
 beforeEach(() => {
   live.images = [];
   live.validated = [];
+  live.validationStatus = 'ok';
   live.source = 'pending';
   vi.spyOn(console, 'log').mockImplementation(() => {});
   container = document.createElement('div');
@@ -213,5 +218,43 @@ describe('GenusDetail — no fabricated genus facts', () => {
     expect(text).toContain('fallback photographs were returned');
     expect(text).toContain('taxonomic backbone returned no names to confirm them');
     expect(text).not.toContain('image services returned no photographed species');
+  });
+
+  it('reports a backbone outage without claiming a successful zero-name result', async () => {
+    live.source = 'inaturalist';
+    live.validationStatus = 'unavailable';
+    live.images = [
+      {
+        scientific_name: 'Dracula vampira',
+        image_url: 'https://images.example.test/a.jpg',
+        image_urls: ['https://images.example.test/a.jpg'],
+      },
+    ];
+    await renderGenus('Dracula');
+    const text = container.textContent ?? '';
+    expect(text).toContain('taxonomic backbone is unavailable');
+    expect(text).not.toContain('taxonomic backbone returned no names');
+  });
+
+  it('reports matched fallback photographs whose image files fail to load', async () => {
+    live.source = 'inaturalist';
+    live.validated = ['Dracula vampira'];
+    live.images = [
+      {
+        scientific_name: 'Dracula vampira',
+        image_url: 'https://images.example.test/a.jpg',
+        image_urls: ['https://images.example.test/a.jpg'],
+      },
+    ];
+    await renderGenus('Dracula');
+    const image = container.querySelector('img[src="https://images.example.test/a.jpg"]');
+    expect(image).not.toBeNull();
+    await act(async () => {
+      image?.dispatchEvent(new Event('error', { bubbles: true }));
+    });
+    const text = container.textContent ?? '';
+    expect(text).toContain('matched the taxonomic backbone');
+    expect(text).toContain('image files could not be loaded');
+    expect(text).not.toContain('none matched the taxonomic backbone');
   });
 });

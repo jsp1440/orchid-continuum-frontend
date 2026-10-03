@@ -1660,21 +1660,29 @@ export function buildImageMap(images: GenusImage[]): Map<string, GenusImage> {
  * highest occurrence / record counts first — so the 9 most-documented species
  * fill the 3x3 grid.
  */
-export async function fetchValidatedSpecies(
+export type ValidatedSpeciesOutcome =
+  | { status: 'ok'; names: string[] }
+  | { status: 'unavailable'; names: [] };
+
+export async function fetchValidatedSpeciesOutcome(
   genus: string,
   signal?: AbortSignal,
   limit = 30,
-): Promise<string[]> {
+): Promise<ValidatedSpeciesOutcome> {
   const payload = await ocFetch<unknown>(
     `/api/species/search?genus=${encodeURIComponent(genus)}&limit=${limit}`,
     signal,
   );
-  if (!payload) return [];
+  if (!payload || !hasRecognizedArrayPayload(payload)) {
+    return { status: 'unavailable', names: [] };
+  }
 
   const ranked: { name: string; rank: number }[] = [];
   const seen = new Set<string>();
+  const records = extractArray(payload);
 
-  for (const r of extractArray(payload)) {
+  for (const r of records) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) continue;
     const nested = (r.taxon as Record<string, unknown>) ?? {};
 
     // Try to find a complete scientific / canonical name first.
@@ -1733,7 +1741,20 @@ export async function fetchValidatedSpecies(
 
   // Most species-rich first; preserve original order when counts are equal.
   ranked.sort((a, b) => b.rank - a.rank);
-  return ranked.map((r) => r.name);
+  const names = ranked.map((r) => r.name);
+  if (records.length > 0 && names.length === 0) {
+    return { status: 'unavailable', names: [] };
+  }
+  return { status: 'ok', names };
+}
+
+export async function fetchValidatedSpecies(
+  genus: string,
+  signal?: AbortSignal,
+  limit = 30,
+): Promise<string[]> {
+  const outcome = await fetchValidatedSpeciesOutcome(genus, signal, limit);
+  return outcome.names;
 }
 
 
