@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 30.5,
+  "programSpent": 31,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 9.5
+    "2026-10-03": 10
   },
   "leases": [
     {
@@ -1336,6 +1336,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T18:32:16.156Z"
+    },
+    {
+      "id": "a7b120aa198f82ee2f2b6a0fdd0827cb565a76c4aae9c891d256bff570d70e11",
+      "issue": 802,
+      "nodeId": "cap-literature-intelligence-adapter",
+      "fingerprint": "9314d8d1a057a34aca57ed46e937eec2f27a3144a5a380a8ef2f62d1e1419b72",
+      "waveHash": "c01e8311a5a23da42a1350225c8ca8e5791c5658959c2e2cefd32e2a232cd2d4",
+      "runId": "37137073480",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T18:02:58.729Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
