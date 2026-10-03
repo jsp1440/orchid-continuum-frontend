@@ -79,6 +79,9 @@ describe('relationshipExplorer — outage', () => {
 
     stubFetch(() => new Response(JSON.stringify(['not', 'an', 'object']), { status: 200 }));
     expect((await fetchRelationshipExplorerPayload('Angraecum sesquipedale')).source).toBe('unavailable');
+
+    stubFetch(() => new Response(JSON.stringify({ detail: 'temporarily unavailable' }), { status: 200 }));
+    expect((await fetchRelationshipExplorerPayload('Angraecum sesquipedale')).source).toBe('unavailable');
   });
 });
 

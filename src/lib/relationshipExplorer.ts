@@ -271,6 +271,19 @@ export function normalizePayload(name: string, raw: unknown): RelationshipExplor
   if (!isRecord(raw)) return null;
 
   const payload = raw as RelationshipExplorerApiPayload;
+  const recognizedFields = [
+    "scientific_name",
+    "species_profile",
+    "atlas_summary",
+    "image_gallery",
+    "mycorrhiza_claims",
+    "fungal_dependency",
+    "reasoning",
+    "interaction_summary",
+    "cards",
+    "mvp_card_status",
+  ];
+  if (!recognizedFields.some((key) => Object.prototype.hasOwnProperty.call(payload, key))) return null;
   const imageGallery = cleanGallery(Array.isArray(payload.image_gallery) ? payload.image_gallery : null);
 
   const fields = {

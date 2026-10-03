@@ -267,6 +267,14 @@ function unavailableCards(): EcologicalNeighborhoodCard[] {
   }];
 }
 
+export type EcologicalNeighborhoodOutcome =
+  | { status: 'ok'; cards: EcologicalNeighborhoodCard[] }
+  | { status: 'unavailable'; cards: EcologicalNeighborhoodCard[] };
+
+export function isEcologicalNeighborhoodUnavailableCard(card: EcologicalNeighborhoodCard): boolean {
+  return card.id === 'ecological-neighborhood:unavailable';
+}
+
 async function enrichCardImages(cards: EcologicalNeighborhoodCard[], focalSpecies: string): Promise<EcologicalNeighborhoodCard[]> {
   const names = Array.from(
     new Set(
@@ -294,12 +302,12 @@ async function enrichCardImages(cards: EcologicalNeighborhoodCard[], focalSpecie
   });
 }
 
-export async function fetchSpeciesEcologicalNeighborhood(
+export async function fetchSpeciesEcologicalNeighborhoodOutcome(
   scientificNameInput: string,
   limit = 12,
-): Promise<EcologicalNeighborhoodCard[]> {
+): Promise<EcologicalNeighborhoodOutcome> {
   const scientificName = cleanSpecies(scientificNameInput);
-  if (!scientificName) return [];
+  if (!scientificName) return { status: 'ok', cards: [] };
 
   const { data, error } = await supabase
     .schema('oc_api')
@@ -310,7 +318,9 @@ export async function fetchSpeciesEcologicalNeighborhood(
     .ilike('focal_species', scientificName)
     .limit(Math.max(limit * 2, 24));
 
-  if (error || !Array.isArray(data)) return unavailableCards();
+  if (error || !Array.isArray(data)) {
+    return { status: 'unavailable', cards: unavailableCards() };
+  }
 
   const harvestedCards =
     data.length === 0
@@ -322,5 +332,13 @@ export async function fetchSpeciesEcologicalNeighborhood(
   // Only harvested, sourced relationship rows are shown. There is no local
   // curated fallback: when nothing was harvested the honest gap cards render.
   const enriched = await enrichCardImages(harvestedCards.length > 0 ? harvestedCards : fallbackCards(scientificName), scientificName);
-  return enriched.slice(0, limit);
+  return { status: 'ok', cards: enriched.slice(0, limit) };
+}
+
+export async function fetchSpeciesEcologicalNeighborhood(
+  scientificNameInput: string,
+  limit = 12,
+): Promise<EcologicalNeighborhoodCard[]> {
+  const outcome = await fetchSpeciesEcologicalNeighborhoodOutcome(scientificNameInput, limit);
+  return outcome.cards;
 }

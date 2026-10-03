@@ -12,6 +12,7 @@ const ScientificName: React.FC<{ name?: string }> = ({ name }) => {
 interface Props {
   scientificName: string;
   cards: Card[];
+  status?: 'loading' | 'ok' | 'unavailable';
   loading?: boolean;
   className?: string;
 }
@@ -56,12 +57,17 @@ function relationshipCounts(cards: Card[]): { harvested: number; curated: number
 const EcologicalNeighborhood: React.FC<Props> = ({
   scientificName,
   cards,
+  status = 'ok',
   loading = false,
   className = '',
 }) => {
   const sortedCards = useMemo(() => [...cards].sort((a, b) => a.priority - b.priority), [cards]);
-  const counts = useMemo(() => relationshipCounts(sortedCards), [sortedCards]);
-  const sourceView = useMemo(() => sourceSummary(sortedCards), [sortedCards]);
+  const countableCards = useMemo(() => status === 'unavailable' ? [] : sortedCards, [sortedCards, status]);
+  const counts = useMemo(() => relationshipCounts(countableCards), [countableCards]);
+  const sourceView = useMemo(
+    () => status === 'unavailable' ? 'service unavailable' : sourceSummary(sortedCards),
+    [sortedCards, status],
+  );
   const chipValues = useMemo(
     () => ({
       genus: genusOf(scientificName),
@@ -115,7 +121,7 @@ const EcologicalNeighborhood: React.FC<Props> = ({
 
           <div className="mt-4 flex flex-wrap gap-2 font-mono text-[10px] uppercase tracking-[0.16em] text-[#f4df9f]">
             <span className="rounded-full border border-[#c9a24a]/25 bg-[#13291a]/70 px-3 py-1">
-              {sortedCards.length} relationship cards
+              {countableCards.length} relationship cards
             </span>
             {counts.harvested > 0 && (
               <span className="rounded-full border border-[#c9a24a]/25 bg-[#13291a]/70 px-3 py-1">

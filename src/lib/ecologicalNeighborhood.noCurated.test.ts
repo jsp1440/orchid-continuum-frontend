@@ -21,7 +21,10 @@ vi.mock('@/lib/supabase', () => {
   return { supabase: chain };
 });
 
-import { fetchSpeciesEcologicalNeighborhood } from './ecologicalNeighborhood';
+import {
+  fetchSpeciesEcologicalNeighborhood,
+  fetchSpeciesEcologicalNeighborhoodOutcome,
+} from './ecologicalNeighborhood';
 
 const FABRICATED_FACTS = [
   'Fungus gnats',
@@ -42,7 +45,9 @@ beforeEach(() => {
 describe('fetchSpeciesEcologicalNeighborhood — no curated fallback cards', () => {
   it('outage → an unavailable card that does not claim no rows exist', async () => {
     db.error = new Error('offline');
-    const cards = await fetchSpeciesEcologicalNeighborhood('Dracula vampira');
+    const outcome = await fetchSpeciesEcologicalNeighborhoodOutcome('Dracula vampira');
+    const cards = outcome.cards;
+    expect(outcome.status).toBe('unavailable');
     expect(cards.map((c) => c.type)).toEqual(['missing']);
     expect(cards[0].title).toContain('unavailable');
     expect(cards[0].relationship).not.toContain('No harvested');
