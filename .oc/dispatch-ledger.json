@@ -1,13 +1,13 @@
 {
   "schema": 1,
   "programStartedAt": "2026-09-19T21:15:22.086Z",
-  "programSpent": 23.5,
+  "programSpent": 24,
   "dailySpent": {
     "2026-09-24": 2,
     "2026-09-25": 10,
     "2026-09-26": 8,
     "2026-10-02": 1,
-    "2026-10-03": 2.5
+    "2026-10-03": 3
   },
   "leases": [
     {
@@ -1141,6 +1141,19 @@
       "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
       "state": "runtime-backoff",
       "backoffUntil": "2026-10-03T16:31:47.466Z"
+    },
+    {
+      "id": "039bf5f68dd4028c65dd140570b11272134e780d90a502c99b37097a1d40fb81",
+      "issue": 785,
+      "nodeId": "gate-journey-dossier-calyx",
+      "fingerprint": "4de2d6a7e74f46e51f34a49d12ef607187a61141f87cba54e8185b4644385c64",
+      "waveHash": "23e95559d25f87940a6155a026b1c66412917c319c8cf5be8e1edaf3f7756d2a",
+      "runId": "37133564238",
+      "runAttempt": "1",
+      "expiresAt": "2026-10-03T17:05:15.898Z",
+      "reservedUsd": 0.5,
+      "implementationSha": "6241b2f7a579d91f48399bd78c0c4659cb1b9923",
+      "state": "reserved"
     }
   ]
 }
