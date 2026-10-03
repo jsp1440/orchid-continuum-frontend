@@ -385,6 +385,19 @@ const GenusDetail: React.FC = () => {
     });
   }, [entry, images, imageSource, validationLoaded, validatedSet, failedSpecies, imageMap]);
 
+  const hasFallbackPlateCandidates = imageSource === 'inaturalist'
+    && images.some((img) => binomialOf(img.scientific_name || '').includes(' '));
+
+  const emptyPlateReason = imageSource === 'pending'
+    ? 'the Orchid Continuum image services are unavailable, so their result could not be verified.'
+    : hasFallbackPlateCandidates && !validationLoaded
+      ? 'fallback photographs were returned, but taxonomic-backbone validation is not yet available.'
+      : hasFallbackPlateCandidates && validatedSet.size === 0
+        ? 'fallback photographs were returned, but the taxonomic backbone returned no names to confirm them.'
+        : hasFallbackPlateCandidates
+          ? 'fallback photographs were returned, but none matched the taxonomic backbone.'
+          : 'the Orchid Continuum image services returned no photographed species.';
+
   /**
    * Ecological relationships, expressed as evidence states rather than as
    * universal genus-wide assertions. `available` requires canonical Continuum
@@ -735,9 +748,7 @@ const GenusDetail: React.FC = () => {
                 className="rounded-2xl border border-dashed border-[#c9a24a]/30 px-5 py-6 font-mono text-[11px] leading-[1.7] tracking-[0.04em] text-[#a9b896]"
               >
                 No species plates are available for <span className="italic">{entry.genus}</span> right now:{' '}
-                {imageSource === 'pending'
-                  ? 'the Orchid Continuum image services are unavailable, so their result could not be verified.'
-                  : 'the Orchid Continuum image services returned no photographed species.'}{' '}
+                {emptyPlateReason}{' '}
                 No local substitute is shown.
               </p>
             )}

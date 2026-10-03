@@ -210,5 +210,8 @@ describe('GenusDetail — no fabricated genus facts', () => {
     const text = container.textContent ?? '';
     expect(text).not.toContain('View dossier Dracula vampira');
     expect(container.querySelector('[data-testid="genus-plates-empty"]')).not.toBeNull();
+    expect(text).toContain('fallback photographs were returned');
+    expect(text).toContain('taxonomic backbone returned no names to confirm them');
+    expect(text).not.toContain('image services returned no photographed species');
   });
 });
