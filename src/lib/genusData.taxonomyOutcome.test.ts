@@ -54,4 +54,15 @@ describe('taxonomy validation outcome', () => {
       names: ['Dracula vampira'],
     });
   });
+
+  it('reconstructs a binomial from separate genus and species fields', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(
+      JSON.stringify({ results: [{ genus: 'Dracula', species: 'vampira' }] }),
+      { status: 200 },
+    )));
+    await expect(fetchValidatedSpeciesOutcome('Dracula')).resolves.toEqual({
+      status: 'ok',
+      names: ['Dracula vampira'],
+    });
+  });
 });

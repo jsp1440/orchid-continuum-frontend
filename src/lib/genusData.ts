@@ -1697,17 +1697,25 @@ export async function fetchValidatedSpeciesOutcome(
       pick(r, ['genus', 'genus_name']) ||
       pick(nested, ['genus', 'genus_name']) ||
       genus;
+    const speciesField = pick(r, ['species']) || pick(nested, ['species']);
     const epithet = pick(r, [
       'specific_epithet',
       'specificEpithet',
       'epithet',
       'species_epithet',
-    ]);
+    ]) || pick(nested, [
+      'specific_epithet',
+      'specificEpithet',
+      'epithet',
+      'species_epithet',
+    ]) || (speciesField && !/\s/.test(speciesField) ? speciesField : undefined);
 
     // If the resolved name has no space (genus-only) but we have an epithet,
     // reconstruct the full binomial.
     if (name && !/\s/.test(name.trim()) && epithet) {
-      name = `${name.trim()} ${epithet.trim()}`;
+      name = name.trim().toLowerCase() === epithet.trim().toLowerCase()
+        ? `${recGenus} ${epithet.trim()}`
+        : `${name.trim()} ${epithet.trim()}`;
     } else if ((!name || !/\s/.test(name.trim())) && epithet) {
       name = `${recGenus} ${epithet.trim()}`;
     } else if (name && /\s/.test(name.trim())) {
