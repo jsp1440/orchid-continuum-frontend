@@ -7,6 +7,10 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DailyGenusState } from '@/lib/dailyGenusContext';
 import type { GenusMediaItem } from '@/lib/genusMediaResolver';
+import {
+  FEATURED_GENUS_NO_MEDIA_PATTERN,
+  FEATURED_GENUS_SECTION_SELECTOR,
+} from '../../../scripts/featured-genus-validation-policy.mjs';
 
 // React 18 needs this flag before act() drives updates outside a test runner
 // that sets it automatically.
@@ -233,5 +237,61 @@ describe('DailyGenusFeatureContinuum evidence states', () => {
     expect(container.textContent).toContain('It describes the genus, not every species within it.');
     // An empty relationship stays an explicit gap, never a zero-valued claim.
     expect(container.textContent).toContain('knowledge gap');
+  });
+});
+
+describe('DailyGenusFeatureContinuum render-sentinel contract (FRONTEND-FEATURED-GENUS-RENDER-001)', () => {
+  // The deployed sentinel finds the section with FEATURED_GENUS_SECTION_SELECTOR
+  // and then requires a loaded photograph or an honest no-media state inside it.
+  const sentinelSection = () => container.querySelectorAll(FEATURED_GENUS_SECTION_SELECTOR);
+
+  it('is found by the stable selector and shows a loaded photograph when approved media exists', () => {
+    mocks.useDailyGenus.mockReturnValue(
+      state({ continuum: continuumWithMedia([mediaItem({})]) as never }),
+    );
+    render();
+
+    const sections = sentinelSection();
+    expect(sections).toHaveLength(1);
+    expect(sections[0].querySelectorAll('img').length).toBeGreaterThan(0);
+    expect(sections[0].querySelector('img')?.getAttribute('src')).toBe('https://cdn.example.test/a.jpg');
+  });
+
+  it('is found by the stable selector and shows an honest no-media state when no media is approved', () => {
+    mocks.useDailyGenus.mockReturnValue(state({ continuum: continuumWithMedia([]) as never }));
+    render();
+
+    const sections = sentinelSection();
+    expect(sections).toHaveLength(1);
+    expect(sections[0].querySelectorAll('img')).toHaveLength(0);
+    expect(FEATURED_GENUS_NO_MEDIA_PATTERN.test(sections[0].textContent ?? '')).toBe(true);
+  });
+
+  it('is found by the stable selector and stays honest while the Continuum evidence is unavailable', () => {
+    mocks.useDailyGenus.mockReturnValue(state({ continuum: null, continuumStatus: 'unavailable' }));
+    render();
+
+    const sections = sentinelSection();
+    expect(sections).toHaveLength(1);
+    expect(sections[0].querySelectorAll('img')).toHaveLength(0);
+    expect(FEATURED_GENUS_NO_MEDIA_PATTERN.test(sections[0].textContent ?? '')).toBe(true);
+    expect(sections[0].textContent).toContain('temporarily unavailable');
+  });
+
+  it('regression: copy-based location is unreliable, so the sentinel must not locate the section by text', () => {
+    // With relationship evidence unavailable the section never says "featured
+    // genus", so the former text locator ("Featured Genus", case-insensitive)
+    // did not match it and the sentinel inspected a different section instead.
+    mocks.useDailyGenus.mockReturnValue(
+      state({ continuum: continuumWithMedia([mediaItem({})]) as never }),
+    );
+    render();
+
+    const section = sentinelSection()[0];
+    expect(section).toBeDefined();
+    expect((section.textContent ?? '').toLowerCase()).not.toContain('featured genus');
+    // ...while the stable selector still finds it.
+    expect(section.getAttribute('aria-labelledby')).toBe('featured-genus-title');
+    expect(section.querySelector('#featured-genus-title')).not.toBeNull();
   });
 });
