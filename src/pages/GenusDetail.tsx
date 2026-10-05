@@ -290,7 +290,7 @@ const GenusDetail: React.FC = () => {
   }, [entry]);
 
   // Fetch the genus narrative from the genus-narrative edge function. There is
-  // NO local fallback text: when the service is unavailable the Field Note
+  // NO local fallback text: when the service is unavailable the AI summary
   // block is simply not rendered rather than filled with unsourced claims.
   useEffect(() => {
     if (!entry) return;
@@ -553,20 +553,31 @@ const GenusDetail: React.FC = () => {
             </div>
           </section>
 
-          {/* AI species narrative — Claude-generated, 2-3 sentences. Off-white
-              serif text on a dark-green field with a gold left-border accent. */}
+          {/* AI-generated genus summary, 2-3 sentences. It is model inference from the
+              genus NAME alone: it is not a field observation, carries no citations and
+              has no recorded review status, and the surface says so (FRONTEND-SCI-INTEGRITY-001). */}
           {(narrative || narrativeLoading) && (
             <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-8">
               <div
                 className="rounded-r-xl bg-[#13241a] border-l-4 border-[#c9a24a] px-6 py-5"
                 style={{ fontFamily: 'Georgia, "Cormorant Garamond", serif' }}
+                data-testid="genus-ai-narrative"
+                data-epistemic-state="ai-generated"
               >
-                <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]/85 mb-2">
-                  Field Note · genus-level context
+                <div className="mb-2 flex flex-wrap items-center gap-2 font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]/85">
+                  <span
+                    className="rounded-full border border-[#c9a24a]/60 px-2 py-0.5 tracking-[0.18em]"
+                    data-testid="genus-ai-narrative-badge"
+                  >
+                    AI-generated
+                  </span>
+                  <span>Genus-level summary · not a field observation</span>
                 </div>
                 <p className="mb-3 font-mono text-[10px] leading-[1.6] tracking-[0.06em] text-[#a9b896]">
-                  This note describes <span className="italic">{entry.genus}</span> as a genus. It is
-                  not a species-specific account and does not change with the photograph shown above.
+                  Written by an AI model from the genus name <span className="italic">{entry.genus}</span> alone,
+                  the only input sent to the summary service. It cites no sources and no review status is
+                  recorded for it, so treat it as unverified inference, not a sourced finding. It describes
+                  the genus as a whole, not a species, and does not change with the photograph shown above.
                 </p>
                 {narrative ? (
                   <p className="text-[#f3eee2]" style={{ fontSize: '16px', lineHeight: 1.65 }}>
@@ -574,7 +585,7 @@ const GenusDetail: React.FC = () => {
                   </p>
                 ) : (
                   <p className="text-[#a9b896] italic" style={{ fontSize: '16px' }}>
-                    Composing a field note about {entry.genus}…
+                    Generating an AI summary about {entry.genus}…
                   </p>
                 )}
               </div>
