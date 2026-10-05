@@ -513,24 +513,66 @@ export type ZeroAdmissionReport = {
   reason: string;
   /** Graph-bound executable queued issues that reached admission and were not admitted. Empty when healthy. */
   strandedIssues: number[];
+  /** `true` when nothing was admitted only because every lane is occupied (`plan.capacity === 0`). */
+  waitingOnCapacity: boolean;
+  /** Queued issues explicitly held by an OWNER_ACTION/EXTERNAL_BLOCKER on their own node or a prerequisite. */
+  gatedIssues: number[];
 };
+
+/**
+ * #198: is `nodeId` explicitly gated -- itself, or through any prerequisite --
+ * by an OWNER_ACTION/EXTERNAL_BLOCKER status in the CANONICAL graph?
+ *
+ * The scheduler admits a leaf only when every `dependsOn` node is `DONE`, so a
+ * queued leaf whose prerequisite is owner/external-gated is never reached and
+ * lands in `unreachableQueued` exactly like a directly gated leaf. Checking only
+ * the leaf's own status reported that ordinary, explicitly gated work as stranded
+ * starvation.
+ *
+ * Fail-closed on everything else: a `DONE` prerequisite is satisfied and its own
+ * upstream no longer matters; a missing dependency id, a `BLOCKED` prerequisite
+ * (the scheduler calls it internally repairable) or any other status is NOT a
+ * gate, so such a leaf stays reported as unexplained. `seen` also makes a
+ * dependency cycle terminate instead of recursing.
+ */
+function gatedThroughChain(root: CompletionNode, nodeId: string, seen: Set<string> = new Set()): boolean {
+  if (seen.has(nodeId)) return false;
+  seen.add(nodeId);
+  const node = findGraphNode(root, nodeId);
+  if (!node || node.status === 'DONE') return false;
+  if (node.status === 'OWNER_ACTION' || node.status === 'EXTERNAL_BLOCKER') return true;
+  return (node.dependsOn ?? []).some(dependency => gatedThroughChain(root, dependency, seen));
+}
 export function classifyZeroAdmission(plan: Plan, root: CompletionNode = COMPLETION_GRAPH): ZeroAdmissionReport {
   if (plan.issues.length !== 0) throw new Error('Plan admitted work; it is not a zero-admission result');
-  const gated = (nodeId: string) => {
-    const status = findGraphNode(root, nodeId)?.status;
-    return status === 'OWNER_ACTION' || status === 'EXTERNAL_BLOCKER';
-  };
-  const stranded = plan.unreachableQueued
+  const gated = (nodeId: string) => gatedThroughChain(root, nodeId);
+  const reached = plan.unreachableQueued
+    .filter(entry => !plan.providerDeferred.some(d => d.issueNumber === entry.issueNumber));
+  const gatedIssues = reached.filter(entry => entry.nodeIds.every(gated)).map(entry => entry.issueNumber);
+  // #198: with every lane occupied, admitting nothing is the saturated steady
+  // state, not starvation. It must not trigger a repair pass or turn the
+  // ordinary full-capacity cycle red; the work waits for a lane to free.
+  if (plan.capacity === 0) {
+    return {
+      healthy: true,
+      reason: 'All lanes are occupied (0 free lanes); queued work is waiting on capacity, not starved.',
+      strandedIssues: [],
+      waitingOnCapacity: true,
+      gatedIssues,
+    };
+  }
+  const stranded = reached
     .filter(entry => entry.nodeIds.some(nodeId => !gated(nodeId)))
-    .map(entry => entry.issueNumber)
-    .filter(number => !plan.providerDeferred.some(d => d.issueNumber === number));
+    .map(entry => entry.issueNumber);
   if (stranded.length === 0) {
-    return { healthy: true, reason: 'No graph-bound executable queued work reached admission unexplained this wave; idle is the correct terminal state.', strandedIssues: [] };
+    return { healthy: true, reason: 'No graph-bound executable queued work reached admission unexplained this wave; idle is the correct terminal state.', strandedIssues: [], waitingOnCapacity: false, gatedIssues };
   }
   return {
     healthy: false,
     reason: `${stranded.length} executable queued issue(s) (${stranded.map(n => `#${n}`).join(', ')}) are named by a completion-graph node, reached graph admission with ${plan.capacity} free lane(s) and no owner/provider gate, yet nothing was admitted.`,
     strandedIssues: stranded,
+    waitingOnCapacity: false,
+    gatedIssues,
   };
 }
 

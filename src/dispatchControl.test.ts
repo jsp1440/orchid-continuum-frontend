@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, classifyZeroAdmission, isActive, laneOf, lineageFor, makePlan, planWithStarvationRepair, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
+import { assertAdmission, assertReceipts, claimDeterministicLease, claimLease, classifyZeroAdmission, isActive, laneOf, lineageFor, makePlan, MAX_ACTIVE_LANES, planWithStarvationRepair, reconcileExpired, runningCount, terminalIssueLabel, transitionLease,
   providerFreeRepairsReadyForRequeue, validateLedger, type Issue, type Ledger, type LeaseStore, type Snapshot } from '../scripts/oc-dispatch-control';
 import type { CompletionNode } from './lib/completion-graph/types';
 
@@ -504,6 +504,114 @@ describe('canonical graph → durable lease → independent dispatch → refill'
       const plan = makePlan(snapshot, [activeLease], now, root);
       expect(root.children[0].status).toBe('MISSING');
       expect(classifyZeroAdmission(plan, root).healthy).toBe(false);
+    });
+
+    describe('#198: full capacity and dependency-gated work are not starvation', () => {
+      const dependencyFixture = (gateStatus: CompletionNode['status'], chain: 'direct' | 'transitive' = 'direct') => {
+        const { root, snapshot } = fixture(chain === 'direct' ? 2 : 3);
+        // Only #1 is queued; every other leaf is graph structure without work.
+        snapshot.issues = [issue(1)];
+        root.children.slice(1).forEach(child => { child.issues = []; });
+        if (chain === 'direct') {
+          root.children[0].dependsOn = ['leaf-2'];
+          root.children[1].status = gateStatus;
+        } else {
+          root.children[0].dependsOn = ['leaf-2'];
+          root.children[1].dependsOn = ['leaf-3'];
+          root.children[2].status = gateStatus;
+        }
+        return { root, snapshot };
+      };
+
+      it('reports capacity=0 as capacity-constrained waiting: healthy, and no repair pass is spent', async () => {
+        const { root, snapshot } = fixture(1);
+        const running: Ledger['leases'] = Array.from({ length: MAX_ACTIVE_LANES }, (_, i) => ({
+          id: `busy-${i}`, issue: 100 + i, nodeId: 'leaf-1', fingerprint: 'f', waveHash: 'w', runId: String(i), runAttempt: '1',
+          expiresAt: now, reservedUsd: 0, lane: 'provider-free', state: 'running' as const }));
+        snapshot.issues.push(...running.map(lease => issue(lease.issue, ['oc-running'])));
+        const plan = makePlan(snapshot, running, now, root);
+        expect(plan.issues).toEqual([]);
+        expect(plan.capacity).toBe(0);
+
+        const report = classifyZeroAdmission(plan, root);
+        expect(report.healthy).toBe(true);
+        expect(report.waitingOnCapacity).toBe(true);
+        expect(report.strandedIssues).toEqual([]);
+
+        const repair = vi.fn(async () => {});
+        const outcome = await planWithStarvationRepair(() => plan, repair, root);
+        expect(outcome.status).toBe('idle');
+        expect(repair).not.toHaveBeenCalled();
+      });
+
+      it('classifies a queued leaf behind an OWNER_ACTION prerequisite as explicitly gated, not stranded', () => {
+        const { root, snapshot } = dependencyFixture('OWNER_ACTION');
+        const plan = makePlan(snapshot, [], now, root);
+        expect(plan.issues).toEqual([]);
+        expect(plan.unreachableQueued).toEqual([{ issueNumber: 1, nodeIds: ['leaf-1'] }]);
+
+        const report = classifyZeroAdmission(plan, root);
+        expect(report.healthy).toBe(true);
+        expect(report.strandedIssues).toEqual([]);
+        expect(report.gatedIssues).toEqual([1]);
+        expect(report.waitingOnCapacity).toBe(false);
+      });
+
+      it('propagates an EXTERNAL_BLOCKER through a transitive prerequisite chain', () => {
+        const { root, snapshot } = dependencyFixture('EXTERNAL_BLOCKER', 'transitive');
+        const plan = makePlan(snapshot, [], now, root);
+        expect(plan.issues).toEqual([]);
+
+        const report = classifyZeroAdmission(plan, root);
+        expect(report.healthy).toBe(true);
+        expect(report.gatedIssues).toEqual([1]);
+      });
+
+      it('does not treat a BLOCKED prerequisite as an owner/external gate: that stays unexplained and fails closed', () => {
+        // The scheduler calls BLOCKED "internally repairable"; it is not a gate.
+        const { root, snapshot } = dependencyFixture('BLOCKED');
+        const plan = makePlan(snapshot, [], now, root);
+        expect(plan.issues).toEqual([]);
+
+        const report = classifyZeroAdmission(plan, root);
+        expect(report.healthy).toBe(false);
+        expect(report.strandedIssues).toEqual([1]);
+        expect(report.gatedIssues).toEqual([]);
+      });
+
+      it('does not let a DONE prerequisite or a dependency cycle manufacture a gate or recurse forever', () => {
+        const { root, snapshot } = dependencyFixture('DONE');
+        // leaf-2 is DONE, so leaf-1 is admissible and plan admits it: not a zero-admission plan at all.
+        expect(makePlan(snapshot, [], now, root).issues).toEqual([1]);
+
+        const cyclic = dependencyFixture('MISSING', 'transitive');
+        cyclic.root.children[2].dependsOn = ['leaf-1'];
+        const plan = makePlan(cyclic.snapshot, [], now, cyclic.root);
+        expect(plan.issues).toEqual([]);
+        const report = classifyZeroAdmission(plan, cyclic.root);
+        expect(report.healthy).toBe(false);
+        expect(report.gatedIssues).toEqual([]);
+      });
+
+      it('keeps unrelated admissible work dispatchable while a dependency-gated leaf waits', () => {
+        const { root, snapshot } = fixture(3);
+        root.children[0].dependsOn = ['leaf-2'];
+        root.children[1].status = 'OWNER_ACTION';
+        root.children[1].issues = [];
+        snapshot.issues = [issue(1), issue(3)];
+        const plan = makePlan(snapshot, [], now, root);
+        expect(plan.issues).toEqual([3]);
+        expect(plan.issues).not.toContain(1);
+      });
+
+      it('genuine starvation still fails closed after exactly one bounded reconsideration', async () => {
+        const { root, snapshot, activeLease } = sharedNodeFixture();
+        const repair = vi.fn(async () => {});
+        const outcome = await planWithStarvationRepair(() => makePlan(snapshot, [activeLease], now, root), repair, root);
+        expect(repair).toHaveBeenCalledTimes(1);
+        expect(outcome.status).toBe('starved');
+        if (outcome.status === 'starved') expect(outcome.strandedIssues).toEqual([1]);
+      });
     });
 
     it('throws rather than classify a plan that actually admitted work', () => {
