@@ -99,3 +99,46 @@ describe('deriveScientificInsights — live telemetry only', () => {
     expect('FALLBACK_ACTIVITY_EVENTS' in imc).toBe(false);
   });
 });
+
+describe('toNarrativeTitle states only what the input title says (FRONTEND-SCI-INTEGRITY-001)', () => {
+  // Each of these used to be rewritten into a sentence that asserted a cause, a
+  // count or a downstream impact the input never contained.
+  const KEYWORD_TITLES = [
+    'Knowledge Graph orphan relationships',
+    'Vision Lab backlog',
+    'Pollinators coverage',
+    'Atlas coordinate review',
+    'Smithsonian grant package',
+    'NSF submission',
+    'Taxonomy conflicts',
+    'Pending deploy',
+    'Build output check',
+    'GBIF harvester stalled',
+    'iNaturalist harvester',
+  ];
+  const INVENTED = [
+    'currently blocks',
+    'will unlock',
+    'three downstream',
+    'enough image coverage',
+    'deadline is approaching',
+    'preventing accurate',
+    'slowing species verification',
+    'pending deployment is required',
+    'needs attention. Resolving',
+  ];
+
+  it('returns every keyword-bearing title unchanged, so no claim is added', () => {
+    for (const title of KEYWORD_TITLES) {
+      const out = imc.toNarrativeTitle(title);
+      expect(out, title).toBe(title);
+      for (const phrase of INVENTED) expect(out.toLowerCase(), `${title} / ${phrase}`).not.toContain(phrase.toLowerCase());
+    }
+  });
+
+  it('behaves the same for empty, whitespace and unmatched titles', () => {
+    for (const title of ['', '   ', 'Unrelated maintenance item']) {
+      expect(imc.toNarrativeTitle(title)).toBe(title);
+    }
+  });
+});

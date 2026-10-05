@@ -45,6 +45,7 @@ vi.mock('@/lib/genusData', async () => ({
   })),
 }));
 
+import { supabase } from '@/lib/supabase';
 import GenusDetail from './GenusDetail';
 
 // Values that existed only in the removed hand-authored genus dataset.
@@ -256,5 +257,51 @@ describe('GenusDetail — no fabricated genus facts', () => {
     expect(text).toContain('matched the taxonomic backbone');
     expect(text).toContain('image files could not be loaded');
     expect(text).not.toContain('none matched the taxonomic backbone');
+  });
+});
+
+describe('GenusDetail — AI-generated summary is labelled as inference (FRONTEND-SCI-INTEGRITY-001)', () => {
+  const invoke = () => vi.mocked(supabase.functions.invoke);
+
+  it('labels a returned summary as AI-generated, unsourced and not a field observation', async () => {
+    invoke().mockResolvedValueOnce({
+      data: { narrative: 'A genus of epiphytic orchids.' },
+      error: null,
+    } as never);
+    await renderGenus('Dracula');
+
+    const block = container.querySelector('[data-testid="genus-ai-narrative"]');
+    expect(block).not.toBeNull();
+    expect(block?.getAttribute('data-epistemic-state')).toBe('ai-generated');
+    expect(container.querySelector('[data-testid="genus-ai-narrative-badge"]')?.textContent).toBe('AI-generated');
+
+    const text = block?.textContent ?? '';
+    expect(text).toContain('A genus of epiphytic orchids.');
+    expect(text).toContain('not a field observation');
+    expect(text).toContain('genus name');
+    expect(text).toContain('cites no sources');
+    expect(text).toContain('no review status is recorded');
+    // It must never be presented as a human field note.
+    expect(container.textContent ?? '').not.toContain('Field Note');
+    expect(container.textContent ?? '').not.toContain('field note about');
+  });
+
+  it('sends only the genus name to the summary service', async () => {
+    invoke().mockResolvedValueOnce({ data: { narrative: 'x' }, error: null } as never);
+    await renderGenus('Dracula');
+    expect(invoke()).toHaveBeenCalledWith('genus-narrative', { body: { genus: 'Dracula' } });
+  });
+
+  it('shows no summary and no substitute text when the service is unavailable', async () => {
+    // The default mock returns an error: nothing may stand in for the summary.
+    await renderGenus('Dracula');
+    expect(container.querySelector('[data-testid="genus-ai-narrative"]')).toBeNull();
+    expect(container.textContent ?? '').not.toContain('AI-generated');
+  });
+
+  it('shows no summary when the service answers with an empty narrative', async () => {
+    invoke().mockResolvedValueOnce({ data: { narrative: '' }, error: null } as never);
+    await renderGenus('Dracula');
+    expect(container.querySelector('[data-testid="genus-ai-narrative"]')).toBeNull();
   });
 });

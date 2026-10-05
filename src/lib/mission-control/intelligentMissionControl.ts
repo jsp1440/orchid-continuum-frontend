@@ -233,29 +233,21 @@ export function deriveScientificInsights(ops: MissionControlOperations | null): 
 // ─── Narrative Recommendations ───────────────────────────────────────────────
 
 /**
- * Convert a terse recommendation title into a narrative sentence.
- * Falls back to the original title when no pattern matches.
+ * Mission Control recommendation titles are shown exactly as the input data
+ * states them (FRONTEND-SCI-INTEGRITY-001).
+ *
+ * This used to rewrite a title into prose chosen by keyword alone ("graph",
+ * "vision", "grant", "deploy", ...), asserting things the input never said: that
+ * an item "currently blocks" something, that resolving it "will unlock three
+ * downstream systems", that a vision lab "now contains enough image coverage",
+ * that "a grant deadline is approaching". None of those were derived from data,
+ * so they were fabricated causal, count and downstream-impact claims.
+ *
+ * It is kept as a pass-through so existing callers keep working: a recommendation
+ * whose rendered title equals its source title simply shows no extra narrative
+ * line, and the card's own rationale and owner-decision fields carry the content.
  */
 export function toNarrativeTitle(title: string): string {
-  const t = title.toLowerCase();
-
-  if (t.includes('knowledge graph') || t.includes('graph'))
-    return 'The Knowledge Graph currently blocks pollinator integration. Resolving orphan relationships will unlock three downstream systems.';
-  if (t.includes('vision lab') || t.includes('vision'))
-    return 'Vision Lab now contains enough image coverage to begin automated quality scoring.';
-  if (t.includes('pollinator'))
-    return 'Pollinators data is incomplete and blocking ecological relationship mapping. Import the latest literature to advance this lane.';
-  if (t.includes('atlas'))
-    return 'Atlas coordinate conflicts are preventing accurate species distribution analysis. Resolving them unlocks habitat modeling.';
-  if (t.includes('grant') || t.includes('smithsonian') || t.includes('nsf'))
-    return 'A grant deadline is approaching. Preparing the application package now will preserve this funding opportunity.';
-  if (t.includes('taxonomy'))
-    return 'Taxonomy conflicts are slowing species verification. Resolving them will improve data quality across all linked systems.';
-  if (t.includes('deploy') || t.includes('build'))
-    return 'A pending deployment is required before new backend capabilities become available to the platform.';
-  if (t.includes('harvester') || t.includes('gbif') || t.includes('inaturalist'))
-    return 'A data harvester needs attention. Resolving its state will resume automatic data ingestion.';
-
   return title;
 }
 
