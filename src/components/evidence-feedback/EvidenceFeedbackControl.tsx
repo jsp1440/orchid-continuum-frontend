@@ -1,12 +1,17 @@
 import { useState, type FormEvent } from 'react';
 import {
+  ALREADY_REPORTED_MESSAGE,
+  EVIDENCE_FEEDBACK_CODES,
   EvidenceFeedbackApiError,
+  FEEDBACK_DISABLED_MESSAGE,
+  MEMBER_ALREADY_REPORTED,
   defectKindApplies,
   fetchEvidenceFeedbackStatus,
   submitEvidenceFeedback,
-  type EvidenceFeedbackCase,
   type EvidenceObjectType,
+  type FeedbackCaseStatus,
   type FeedbackClass,
+  type FeedbackSubmissionResult,
   type TrivialDefectKind,
 } from '@/lib/evidenceFeedback';
 
@@ -37,25 +42,82 @@ const DEFECT_KIND_OPTIONS: Array<{ value: TrivialDefectKind | ''; label: string 
   { value: 'format', label: 'Formatting (capital letters, punctuation or spacing)' },
 ];
 
+function waitText(seconds: number | null): string {
+  if (!seconds) return 'a few minutes';
+  const minutes = Math.ceil(seconds / 60);
+  return minutes <= 1 ? 'about a minute' : `about ${minutes} minutes`;
+}
+
 function errorMessage(error: unknown): string {
   if (!(error instanceof EvidenceFeedbackApiError)) return 'Feedback could not be submitted. Please try again.';
   if (error.status === 401) return 'Sign in is required before feedback can be recorded.';
+  if (error.status === 403 && error.code === EVIDENCE_FEEDBACK_CODES.memberFeedbackDisabled) return FEEDBACK_DISABLED_MESSAGE;
   if (error.status === 403) return 'Your current session is not permitted to submit this feedback.';
+  if (error.status === 429) {
+    return `You have sent several reports in a short time. Nothing more was recorded; please wait ${waitText(error.retryAfterSeconds)} and try again.`;
+  }
+  if (error.status === 404 && error.code === 'CASE_NOT_FOUND') return 'That case could not be found for your account.';
+  if (error.code === 'MEMBER_TEXT_FORMAT_CHARACTERS') {
+    return 'Your text contains invisible formatting characters (such as direction or zero-width marks). Please retype it without them; nothing was recorded.';
+  }
+  if (error.code === 'OBJECT_PAYLOAD_FORMAT_CHARACTERS' || error.code === 'OBJECT_PAYLOAD_TOO_DEEP' || error.code === 'OBJECT_PAYLOAD_TOO_LARGE') {
+    return 'This record cannot be attached to member feedback as displayed; nothing was recorded.';
+  }
   if (error.code === 'NETWORK_UNAVAILABLE') return 'The feedback service is currently unreachable.';
   return `Feedback was not accepted (${error.code.replaceAll('_', ' ').toLowerCase()}).`;
 }
 
-function statusText(feedbackCase: EvidenceFeedbackCase): string {
-  if (feedbackCase.status === 'resolved') {
-    return feedbackCase.resolution || 'This case has been resolved.';
+/**
+ * What the panel shows after a submission. Built only from the caller's own
+ * submission: a member receipt carries no other person's data, and an owner
+ * case keeps the fields the panel showed before.
+ */
+interface SubmittedView {
+  /** The caller's own case, or null when someone else's identical report exists. */
+  caseId: string | null;
+  status: FeedbackCaseStatus | typeof MEMBER_ALREADY_REPORTED;
+  resolution: string | null;
+  /** Owner responses only. */
+  reviewLane: string | null;
+  duplicate: boolean;
+}
+
+function submittedView(result: FeedbackSubmissionResult): SubmittedView {
+  if (result.kind === 'receipt') {
+    return {
+      caseId: result.case_id,
+      status: result.status,
+      resolution: null,
+      reviewLane: null,
+      duplicate: !result.created,
+    };
   }
-  if (feedbackCase.status === 'governed_review_required') {
+  return {
+    caseId: result.case.case_id,
+    status: result.case.status,
+    resolution: result.case.resolution,
+    reviewLane: result.case.review_lane,
+    duplicate: !result.created || Boolean(result.duplicate_of),
+  };
+}
+
+function statusText(view: Pick<SubmittedView, 'status' | 'resolution'>): string {
+  if (view.status === MEMBER_ALREADY_REPORTED) return ALREADY_REPORTED_MESSAGE;
+  if (view.status === 'resolved') {
+    return view.resolution || 'This case has been resolved.';
+  }
+  if (view.status === 'governed_review_required') {
     return 'Routed to governed review. The displayed scientific content has not been changed while that review is pending.';
   }
-  if (feedbackCase.status === 'pending_review') {
+  if (view.status === 'pending_review') {
     return 'Correction pending review. The displayed scientific content has not been changed.';
   }
   return 'Feedback submitted. The displayed scientific content remains unchanged while triage begins.';
+}
+
+function headingText(view: SubmittedView): string {
+  if (view.status === MEMBER_ALREADY_REPORTED) return 'Already reported';
+  return view.duplicate ? 'Existing feedback found' : 'Feedback recorded';
 }
 
 export function EvidenceFeedbackControl({
@@ -73,8 +135,7 @@ export function EvidenceFeedbackControl({
   const [citation, setCitation] = useState('');
   const [defectKind, setDefectKind] = useState<TrivialDefectKind | ''>('');
   const [submitting, setSubmitting] = useState(false);
-  const [duplicate, setDuplicate] = useState(false);
-  const [feedbackCase, setFeedbackCase] = useState<EvidenceFeedbackCase | null>(null);
+  const [submitted, setSubmitted] = useState<SubmittedView | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const askDefectKind = defectKindApplies(objectType, feedbackClass);
@@ -97,8 +158,7 @@ export function EvidenceFeedbackControl({
         // Only where the backend can use it; otherwise no defect kind is sent.
         defectKind: askDefectKind && defectKind ? defectKind : undefined,
       });
-      setFeedbackCase(result.case);
-      setDuplicate(!result.created || Boolean(result.duplicate_of));
+      setSubmitted(submittedView(result));
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -107,12 +167,15 @@ export function EvidenceFeedbackControl({
   }
 
   async function refreshStatus() {
-    if (!feedbackCase || submitting) return;
+    const caseId = submitted?.caseId;
+    if (!caseId || submitting) return;
     setSubmitting(true);
     setError(null);
     try {
-      const status = await fetchEvidenceFeedbackStatus(feedbackCase.case_id);
-      setFeedbackCase((current) => current ? { ...current, ...status } : current);
+      const status = await fetchEvidenceFeedbackStatus(caseId);
+      setSubmitted((current) => current && current.caseId === caseId
+        ? { ...current, status: status.status, resolution: status.resolution }
+        : current);
     } catch (reason) {
       setError(errorMessage(reason));
     } finally {
@@ -137,17 +200,24 @@ export function EvidenceFeedbackControl({
         >
           Report, correct, or add evidence
         </button>
-      ) : feedbackCase ? (
+      ) : submitted ? (
         <div className="mt-4 rounded-sm border border-[#245C38]/30 bg-white p-4" role="status" aria-live="polite">
-          <p className="font-semibold text-stone-950">{duplicate ? 'Existing feedback found' : 'Feedback recorded'}</p>
-          <p className="mt-2 text-[15px] leading-6 text-stone-800">{statusText(feedbackCase)}</p>
-          <dl className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2">
-            <div><dt className="font-semibold text-stone-900">Case</dt><dd className="break-all">{feedbackCase.case_id}</dd></div>
-            <div><dt className="font-semibold text-stone-900">Review route</dt><dd>{feedbackCase.review_lane.replaceAll('_', ' ')}</dd></div>
-          </dl>
-          <button type="button" onClick={refreshStatus} disabled={submitting} className="mt-4 rounded-sm border border-[#245C38] px-3 py-2 text-sm font-semibold text-[#19482A] disabled:opacity-60">
-            {submitting ? 'Checking…' : 'Check status'}
-          </button>
+          <p className="font-semibold text-stone-950">{headingText(submitted)}</p>
+          <p className="mt-2 text-[15px] leading-6 text-stone-800">{statusText(submitted)}</p>
+          {submitted.caseId ? (
+            <dl className="mt-3 grid gap-2 text-sm text-stone-700 sm:grid-cols-2">
+              <div><dt className="font-semibold text-stone-900">Case</dt><dd className="break-all">{submitted.caseId}</dd></div>
+              {submitted.reviewLane ? (
+                <div><dt className="font-semibold text-stone-900">Review route</dt><dd>{submitted.reviewLane.replaceAll('_', ' ')}</dd></div>
+              ) : null}
+            </dl>
+          ) : null}
+          {error ? <p role="alert" className="mt-3 rounded-sm border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-900">{error}</p> : null}
+          {submitted.caseId ? (
+            <button type="button" onClick={refreshStatus} disabled={submitting} className="mt-4 rounded-sm border border-[#245C38] px-3 py-2 text-sm font-semibold text-[#19482A] disabled:opacity-60">
+              {submitting ? 'Checking…' : 'Check status'}
+            </button>
+          ) : null}
         </div>
       ) : (
         <form className="mt-5 space-y-4" onSubmit={onSubmit}>
