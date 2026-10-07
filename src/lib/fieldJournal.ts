@@ -215,6 +215,7 @@ export function applyFieldObservationEdit(
     ...edited,
     createdAt: observation.createdAt,
     observedAt: input.observedAt || observation.observedAt,
+    deviceCapturedAt: observation.deviceCapturedAt,
     serverId: observation.serverId,
     syncStatus: observation.serverId ? "queued" : "local_only",
     syncAttempts: observation.syncAttempts,
