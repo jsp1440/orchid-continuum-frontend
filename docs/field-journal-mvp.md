@@ -61,6 +61,7 @@ Original media bytes then upload once per observation to `/api/field-observation
 ## Offline and sync behavior
 
 - Offline create/edit/save uses IndexedDB (`src/lib/fieldJournalStore.ts`), including original media blobs.
+- The production app registers `public/field-journal-sw.js`, which caches the app shell and hashed static assets after the first online load so `/field` can reopen without a network.
 - Closing/reopening the app reloads observations and media from IndexedDB.
 - Save while offline → `local_only`; save while online → `queued`, then a sync attempt.
 - Retry uses the same `client_draft_id`; backend `POST /api/field-observations` returns the existing record instead of duplicating it.
@@ -95,7 +96,7 @@ Frontend (`src/lib/fieldJournal.test.ts`):
 
 1. On Wi‑Fi, open the Orchid Continuum frontend and sign in to the protected `/field` route.
 2. Sign in to the Calyx owner/Mission Control session so the frontend’s Calyx transport can authorize the field-observation write.
-3. Open `/field` once while online so the app shell is loaded.
+3. Open `/field` once while online so the app shell and static assets are cached for offline reopening.
 4. Turn on airplane mode / disable Wi‑Fi.
 5. Create Observation A: attach at least two photos and one video, capture private location, leave identification blank, add habitat/ecology/relationships/notes.
 6. Save. Confirm the observation appears as **Local only** with media thumbnails.
