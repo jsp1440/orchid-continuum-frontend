@@ -37,10 +37,14 @@ function run<T>(
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(STORE_NAME, mode);
     const request = action(transaction.objectStore(STORE_NAME));
+    let result: T;
+    request.onerror = () => reject(request.error ?? new Error("Offline field storage request failed."));
+    request.onsuccess = () => {
+      result = request.result;
+    };
     transaction.onerror = () => reject(transaction.error ?? new Error("Offline field storage transaction failed."));
     transaction.onabort = () => reject(transaction.error ?? new Error("Offline field storage transaction aborted."));
-    request.onerror = () => reject(request.error ?? new Error("Offline field storage request failed."));
-    request.onsuccess = () => resolve(request.result);
+    transaction.oncomplete = () => resolve(result);
   });
 }
 
