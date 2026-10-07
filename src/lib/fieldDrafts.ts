@@ -59,6 +59,13 @@ export type FieldMediaDescriptor = {
   capturedAt: string | null;
 };
 
+export type FieldTaxonomyMatch = {
+  /** Orchid Continuum canonical taxonomy id, when the public API resolved one. */
+  taxonomyId: string | null;
+  canonicalName: string;
+  matchedAt: string;
+};
+
 export type FieldDraft = {
   schemaVersion: 2;
   id: string;
@@ -77,6 +84,12 @@ export type FieldDraft = {
   media: FieldMediaDescriptor[];
   syncStatus: FieldSyncStatus;
   syncError: string | null;
+  /** Backend observation id (fo-…) once the Calyx backend confirmed the
+   *  record. Presence is the dedupe guard: a synced draft is never re-posted. */
+  backendObservationId: string | null;
+  /** Canonical taxonomy resolved from the public API while online. A match
+   *  never replaces the observer's tentative label. */
+  taxonomyMatch: FieldTaxonomyMatch | null;
 };
 
 export type NewFieldDraft = {
@@ -212,6 +225,20 @@ function normalizeRelationships(value: Partial<FieldRelationships> | undefined):
   };
 }
 
+function normalizeTaxonomyMatch(value: unknown): FieldTaxonomyMatch | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Partial<FieldTaxonomyMatch>;
+  const canonicalName = normalizeOptionalText(candidate.canonicalName ?? null, 240);
+  if (!canonicalName || typeof candidate.matchedAt !== "string" || !candidate.matchedAt) {
+    return null;
+  }
+  return {
+    taxonomyId: normalizeOptionalText(candidate.taxonomyId ?? null, 120),
+    canonicalName,
+    matchedAt: candidate.matchedAt,
+  };
+}
+
 export function createFieldDraft(
   input: NewFieldDraft,
   identity: { id: string; now: string },
@@ -247,6 +274,8 @@ export function createFieldDraft(
     media,
     syncStatus: "local_saved",
     syncError: null,
+    backendObservationId: null,
+    taxonomyMatch: null,
   };
 }
 
@@ -329,6 +358,8 @@ export function migrateFieldDraftV1(draft: FieldDraftV1): FieldDraft {
     })),
     syncStatus: "local_saved",
     syncError: null,
+    backendObservationId: null,
+    taxonomyMatch: null,
   };
 }
 
@@ -385,6 +416,8 @@ export function readFieldDrafts(
         provenance: normalizeOptionalText(draft.provenance, 500),
         media: normalizeMedia(draft.media),
         syncError: normalizeOptionalText(draft.syncError, 300),
+        backendObservationId: normalizeOptionalText(draft.backendObservationId, 120),
+        taxonomyMatch: normalizeTaxonomyMatch(draft.taxonomyMatch),
       }));
   } catch {
     return [];
