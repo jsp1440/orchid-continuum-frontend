@@ -38,7 +38,7 @@ Local durable record (`src/lib/fieldJournal.ts`) keeps the field source of truth
 - durable local UUID: `FieldObservation.id`
 - observer account boundary: `accountId`
 - `observedAt`, `deviceCapturedAt`
-- optional private capture location: latitude, longitude, accuracy, elevation, captured-at, locality notes
+- optional private capture location: latitude, longitude, accuracy, elevation, captured-at, and device-local locality notes entered in the Location step
 - optional taxon label; absent means `identificationStatus = "unresolved"`
 - observer certainty, habitat, substrate, ecology, associated organisms, pollinator and mycorrhizal notes, phenology
 - original media blobs with SHA-256, capture timestamp, local id, upload state
@@ -98,7 +98,7 @@ Frontend (`src/lib/fieldJournal.test.ts`):
 2. Sign in to the Calyx owner/Mission Control session so the frontend’s Calyx transport can authorize the field-observation write.
 3. Open `/field` once while online so the app shell and static assets are cached for offline reopening.
 4. Turn on airplane mode / disable Wi‑Fi.
-5. Create Observation A: attach at least two photos and one video, capture private location, leave identification blank, add habitat/ecology/relationships/notes.
+5. Create Observation A: attach at least two photos and one video, capture private location, add an optional private locality note, leave identification blank, add habitat/ecology/relationships/notes.
 6. Save. Confirm the observation appears as **Local only** with media thumbnails.
 7. Close the browser/tab and reopen `/field`. Confirm Observation A and media are still present.
 8. Edit Observation A while still offline; save and confirm the local UUID did not change.
