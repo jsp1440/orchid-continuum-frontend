@@ -35,6 +35,7 @@ import {
   observationExportFilename,
   serializeObservationBundle,
 } from "@/lib/fieldExport";
+import { syncDraftWithTaxonomy } from "@/lib/fieldSync";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
@@ -130,8 +131,11 @@ export default function CalyxField() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [online, setOnline] = useState(navigator.onLine);
+  const [syncingIds, setSyncingIds] = useState<ReadonlySet<string>>(new Set());
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const thumbnailsRef = useRef<Record<string, string>>({});
+  const draftsRef = useRef<FieldDraft[]>(drafts);
+  draftsRef.current = drafts;
 
   useEffect(() => {
     const update = () => setOnline(navigator.onLine);
@@ -286,6 +290,55 @@ export default function CalyxField() {
     );
   }
 
+  async function syncOne(draft: FieldDraft) {
+    setSyncingIds((current) => new Set(current).add(draft.id));
+    setError(null);
+    try {
+      const outcome = await syncDraftWithTaxonomy(draft);
+      persist(draftsRef.current.map((item) => (item.id === draft.id ? outcome.draft : item)));
+      if (outcome.confirmed) {
+        setNotice(`Synced to Orchid Continuum (${outcome.backendObservationId ?? "confirmed"}). Originals stay on this device.`);
+      } else {
+        setError(outcome.draft.syncError ?? "Sync failed. The observation is safe on this device.");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Sync failed. The observation is safe on this device.");
+    } finally {
+      setSyncingIds((current) => {
+        const next = new Set(current);
+        next.delete(draft.id);
+        return next;
+      });
+    }
+  }
+
+  async function syncAll() {
+    const targets = draftsRef.current.filter((draft) => draft.syncStatus !== "synced");
+    for (const draft of targets) {
+      // Sequential: one observation at a time is gentler on field bandwidth
+      // and each failure is isolated to its own record.
+      // eslint-disable-next-line no-await-in-loop
+      await syncOne(draft);
+    }
+  }
+
+  // Connectivity returned: push everything still waiting. The backend dedupes
+  // per (observer, client_draft_id), so re-sending is always safe.
+  useEffect(() => {
+    if (!online) return;
+    const waiting = draftsRef.current.filter(
+      (draft) => draft.syncStatus === "sync_pending" || draft.syncStatus === "sync_error",
+    );
+    if (waiting.length === 0) return;
+    void (async () => {
+      for (const draft of waiting) {
+        // eslint-disable-next-line no-await-in-loop
+        await syncOne(draft);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
+
   function queueForSync(draft: FieldDraft) {
     try {
       persist(
@@ -295,7 +348,11 @@ export default function CalyxField() {
             : item,
         ),
       );
-      setNotice("Queued for sync. Export the bundle and hand it to Jeff until the governed upload path exists.");
+      if (navigator.onLine) {
+        void syncOne({ ...draft, syncStatus: "sync_pending" });
+      } else {
+        setNotice("Queued for sync. It will upload automatically when connectivity returns — export remains available as backup.");
+      }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not queue the draft.");
     }
@@ -574,9 +631,19 @@ export default function CalyxField() {
               {unidentifiedOnly ? "All" : "Unidentified"}
             </button>
           </div>
-          <button type="button" onClick={exportManifest} className="mt-3 flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm hover:bg-secondary">
-            <Download aria-hidden="true" className="h-4 w-4" /> Export index of all observations
-          </button>
+          <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <button type="button" onClick={exportManifest} className="flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm hover:bg-secondary">
+              <Download aria-hidden="true" className="h-4 w-4" /> Export index
+            </button>
+            <button
+              type="button"
+              onClick={() => void syncAll()}
+              disabled={!online || drafts.every((draft) => draft.syncStatus === "synced")}
+              className="flex w-full items-center justify-center gap-2 rounded-md border px-4 py-3 text-sm hover:bg-secondary disabled:opacity-40"
+            >
+              <RefreshCw aria-hidden="true" className="h-4 w-4" /> Sync all now
+            </button>
+          </div>
 
           <div className="mt-4 space-y-3">
             {filteredDrafts.map((draft) => (
@@ -611,13 +678,28 @@ export default function CalyxField() {
                     {draft.media.length} original file{draft.media.length === 1 ? "" : "s"} preserved on this device.
                   </p>
                 ) : null}
+                {draft.taxonomyMatch ? (
+                  <p className="mt-3 rounded-md bg-[#e2f0e5] p-2 text-xs text-forest">
+                    Canonical match: <em>{draft.taxonomyMatch.canonicalName}</em>
+                    {draft.taxonomyMatch.taxonomyId ? ` (${draft.taxonomyMatch.taxonomyId})` : ""} — the observer's label stays tentative.
+                  </p>
+                ) : null}
+                {draft.backendObservationId ? (
+                  <p className="mt-2 text-[11px] uppercase tracking-wide text-muted-foreground">Backend record {draft.backendObservationId}</p>
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" onClick={() => exportDraft(draft)} className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs hover:bg-secondary">
                     <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export bundle
                   </button>
-                  {draft.syncStatus === "local_saved" || draft.syncStatus === "sync_error" ? (
-                    <button type="button" onClick={() => queueForSync(draft)} className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs hover:bg-secondary">
-                      <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" /> Queue for sync
+                  {draft.syncStatus !== "synced" ? (
+                    <button
+                      type="button"
+                      onClick={() => (online ? void syncOne(draft) : queueForSync(draft))}
+                      disabled={syncingIds.has(draft.id)}
+                      className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs hover:bg-secondary disabled:opacity-50"
+                    >
+                      <RefreshCw aria-hidden="true" className={`h-3.5 w-3.5 ${syncingIds.has(draft.id) ? "animate-spin" : ""}`} />
+                      {syncingIds.has(draft.id) ? "Syncing…" : online ? "Sync now" : "Queue for sync"}
                     </button>
                   ) : null}
                   <button type="button" aria-label="Discard observation" onClick={() => discardDraft(draft)} className="flex items-center gap-1.5 rounded-md border px-3 py-2 text-xs text-destructive hover:bg-destructive/5">
