@@ -216,7 +216,7 @@ export default function CalyxField() {
           accuracyM: Number.isFinite(position.coords.accuracy) ? position.coords.accuracy : null,
           elevationM: Number.isFinite(position.coords.altitude ?? NaN) ? position.coords.altitude : null,
           capturedAt: new Date(position.timestamp).toISOString(),
-          localityNotes: null,
+          localityNotes: privateLocation?.localityNotes ?? null,
         });
         setLocationStatus("captured");
       },
@@ -226,6 +226,10 @@ export default function CalyxField() {
       },
       { enableHighAccuracy: true, maximumAge: 30_000, timeout: 15_000 },
     );
+  }
+
+  function updateLocalityNotes(value: string) {
+    setPrivateLocation((current) => current ? { ...current, localityNotes: value || null } : current);
   }
 
   function selectMedia(files: FileList | null, input: HTMLInputElement) {
@@ -432,11 +436,24 @@ export default function CalyxField() {
                 </select>
               </div>
               {privateLocation ? (
-                <p className="mt-3 rounded-md bg-secondary p-3 text-xs">
-                  <MapPin aria-hidden="true" className="mr-1 inline h-4 w-4" />
-                  Private capture saved on this device{privateLocation.accuracyM ? ` · accuracy ±${Math.round(privateLocation.accuracyM)} m` : ""}. Sync sends only the visibility class above; exact coordinates are not uploaded by this MVP.
-                </p>
-              ) : <p className="mt-3 text-xs text-muted-foreground">Optional. If skipped, the observation still saves with time, notes, ecology and media.</p>}
+                <div className="mt-3 space-y-3">
+                  <p className="rounded-md bg-secondary p-3 text-xs">
+                    <MapPin aria-hidden="true" className="mr-1 inline h-4 w-4" />
+                    Private capture saved on this device{privateLocation.accuracyM ? ` · accuracy ±${Math.round(privateLocation.accuracyM)} m` : ""}. Sync sends only the visibility class above; exact coordinates and locality notes are not uploaded by this MVP.
+                  </p>
+                  <label className="block text-sm font-semibold" htmlFor="field-locality-notes">
+                    Private locality notes <span className="font-normal text-muted-foreground">(device-local only)</span>
+                    <textarea
+                      id="field-locality-notes"
+                      value={privateLocation.localityNotes ?? ""}
+                      onChange={(event) => updateLocalityNotes(event.target.value)}
+                      className="mt-2 min-h-16 w-full rounded-md border bg-white px-3 py-2 font-normal"
+                      placeholder="Access notes, landmarks, or cautions that must not be published"
+                      maxLength={1000}
+                    />
+                  </label>
+                </div>
+              ) : <p className="mt-3 text-xs text-muted-foreground">Optional. If skipped, the observation still saves with time, notes, ecology and media. Capture a private point first if you need device-local locality notes.</p>}
             </li>
 
             <li className="rounded-lg border border-quiet p-4">
