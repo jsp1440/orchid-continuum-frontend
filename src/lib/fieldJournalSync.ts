@@ -88,28 +88,50 @@ async function uploadServerMedia(serverObservationId: string, media: FieldMedia)
     throw new FieldJournalSyncError(errorMessage(payload, response.status), response.status, "MEDIA_REJECTED");
   }
   const serverMedia = payload as ServerMedia;
-  if (typeof serverMedia.content_hash === "string" && serverMedia.content_hash !== contentHash) {
+  if (serverMedia.content_hash !== contentHash) {
     throw new FieldJournalSyncError("The backend stored a different media hash than the local original.", response.status, "HASH_MISMATCH");
+  }
+  if (typeof serverMedia.id !== "string" || !serverMedia.id ||
+      typeof serverMedia.storage_key !== "string" || !serverMedia.storage_key) {
+    throw new FieldJournalSyncError("The backend returned no durable media receipt.", response.status, "NO_MEDIA_RECEIPT");
   }
   return {
     ...media,
     sha256: contentHash,
-    storageKey: typeof serverMedia.storage_key === "string" ? serverMedia.storage_key : media.storageKey,
-    serverMediaId: typeof serverMedia.id === "string" ? serverMedia.id : media.serverMediaId,
+    storageKey: serverMedia.storage_key,
+    serverMediaId: serverMedia.id,
     uploadedAt: nowIso(),
   };
 }
 
-export async function syncFieldObservation(observation: FieldObservation): Promise<FieldObservation> {
+export async function syncFieldObservation(
+  observation: FieldObservation,
+  checkpoint: (progress: FieldObservation) => Promise<unknown> = async () => undefined,
+): Promise<FieldObservation> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     throw new FieldJournalSyncError("The iPad is offline. The observation remains safely stored on this device.", null, "OFFLINE");
   }
 
+  const persistCheckpoint = async (progress: FieldObservation) => {
+    try {
+      await checkpoint(progress);
+    } catch {
+      throw new FieldJournalSyncError("Upload progress could not be saved on this device. Local originals are retained; free storage and retry.", null, "CHECKPOINT_FAILED");
+    }
+  };
   try {
     const serverId = observation.serverId ?? await createServerObservation(observation);
-    const uploadedMedia: FieldMedia[] = [];
-    for (const media of observation.media) {
-      uploadedMedia.push(await uploadServerMedia(serverId, media));
+    let progress = { ...observation, serverId };
+    // Persist acceptance before uploading large files. A retry must not create a
+    // second observation or retransmit media whose receipt is already durable.
+    await persistCheckpoint(progress);
+    const uploadedMedia = [...observation.media];
+    for (let index = 0; index < uploadedMedia.length; index += 1) {
+      const media = uploadedMedia[index];
+      if (media.serverMediaId && media.storageKey && media.sha256 && media.uploadedAt) continue;
+      uploadedMedia[index] = await uploadServerMedia(serverId, media);
+      progress = { ...progress, media: [...uploadedMedia] };
+      await persistCheckpoint(progress);
     }
     return {
       ...observation,
