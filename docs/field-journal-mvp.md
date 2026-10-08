@@ -72,6 +72,14 @@ Original media bytes then upload once per observation to `/api/field-observation
 - An interrupted persisted `syncing` attempt becomes retryable on reopening after 30 minutes. Recent attempts are preserved to avoid reclaiming another active tab's upload. No automatic provider work or production writes are triggered by recovery.
 - Editing any server-accepted record (including one with incomplete media upload) is disabled until an authenticated server-update contract exists. Local records not yet accepted by the server can still be edited.
 
+## Device-local metadata export
+
+Use **Export metadata** on one saved observation or **Export all saved metadata** for every saved observation in the signed-in device account, regardless of the search filter. Downloads work offline and do not contact the backend or change draft/sync state.
+
+Default JSON downloads omit the structured private capture location, GPS, accuracy, elevation and locality notes. They retain observation notes, ecology, unresolved identification state, timestamps, local/server ids and photo/video metadata including hashes and accepted receipts. Account identity, private storage keys, media bytes and embedded EXIF are excluded.
+
+Only select **Include private capture GPS and locality notes in this metadata backup** when you intend to save that sensitive location data privately. This explicit option adds the structured private capture location to the JSON. Treat both modes as private working copies: free-text notes and filenames may identify a site even when captured GPS is omitted. Neither mode is a public-safe Atlas projection, a media backup or an import/restore file. Original photo/video blobs remain on the device unchanged; preserve them separately before clearing browser storage.
+
 ## Locality protection
 
 Exact coordinates are captured only into the device-local `privateLocation` object. The sync payload does not include latitude, longitude, elevation, locality notes, geohash, site, or similar keys. The backend contract still rejects those keys at any nesting depth through `assert_no_sensitive_locality`. Atlas/public exposure remains a downstream consumer concern and must continue to pass through the existing Atlas locality-safety projection before any public map display.
