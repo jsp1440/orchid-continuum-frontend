@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyFieldObservationEdit, canEditFieldObservation, createFieldObservation, recoverInterruptedFieldSync, type FieldMedia, type FieldObservation } from "./fieldJournal";
-import { failureForSync, syncFieldObservation } from "./fieldJournalSync";
+import { applyFieldObservationEdit, canEditFieldObservation, createFieldObservation, type FieldMedia, type FieldObservation } from "./fieldJournal";
+import { failureForSync, FIELD_SYNC_REQUEST_TIMEOUT_MS, syncFieldObservation } from "./fieldJournalSync";
 
 const NOW = "2026-10-03T14:00:00.000Z";
 const HASH = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
@@ -18,7 +18,7 @@ function json(payload: unknown, status = 201) {
 function receipt(id: string) {
   return { id, storage_key: `opaque-${id}`, content_hash: HASH };
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 describe("Field Journal durable sync receipts", () => {
   it("persists each accepted stage and resumes without resending the first original", async () => {
@@ -76,21 +76,20 @@ describe("Field Journal durable sync receipts", () => {
 });
 
 
-describe("iPad interrupted sync recovery", () => {
-  it("recovers a stale persisted upload without losing receipts or private originals", () => {
-    const observation = { ...draft(), serverId: "fo-1", syncStatus: "syncing" as const, lastSyncAttemptAt: NOW };
-    observation.media[0] = { ...observation.media[0], serverMediaId: "photo-1", storageKey: "opaque", sha256: HASH, uploadedAt: NOW };
-    const recovered = recoverInterruptedFieldSync(observation, "2026-10-03T15:00:00.000Z");
-    expect(recovered.syncStatus).toBe("failed");
-    expect(recovered.serverId).toBe("fo-1");
-    expect(recovered.media).toBe(observation.media);
-    expect(recovered.media[0].blob).toBe(observation.media[0].blob);
-    expect(recovered.media[0].serverMediaId).toBe("photo-1");
-  });
-  it("leaves recent uploads and already settled drafts unchanged", () => {
-    const observation = { ...draft(), syncStatus: "syncing" as const, lastSyncAttemptAt: NOW };
-    expect(recoverInterruptedFieldSync(observation, "2026-10-03T14:01:00.000Z")).toBe(observation);
-    const local = draft();
-    expect(recoverInterruptedFieldSync(local, "2026-10-03T15:00:00.000Z")).toBe(local);
+describe("bounded Field Journal network requests", () => {
+  it("aborts an unresponsive upload and retains local originals for an idempotent retry", async () => {
+    vi.useFakeTimers();
+    const observation = draft();
+    const fetch = vi.fn().mockImplementation((_url, options: RequestInit) => new Promise((_resolve, reject) => {
+      options.signal?.addEventListener("abort", () => reject(new DOMException("Aborted", "AbortError")));
+    }));
+    vi.stubGlobal("fetch", fetch);
+    const attempt = expect(syncFieldObservation(observation)).rejects.toMatchObject({ code: "REQUEST_TIMEOUT" });
+    await vi.advanceTimersByTimeAsync(FIELD_SYNC_REQUEST_TIMEOUT_MS);
+    await attempt;
+    expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+    expect(observation.media[0].blob.size).toBe(3);
+    expect(observation.serverId).toBeNull();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -21,8 +21,6 @@ import {
   canEditFieldObservation,
   createFieldObservation,
   fieldObservationStatusLabel,
-  recoverInterruptedFieldSync,
-  markFieldObservationSyncing,
   mediaKindFromType,
   newFieldJournalId,
   nowIso,
@@ -36,12 +34,11 @@ import {
   type PrivateCaptureLocation,
 } from "@/lib/fieldJournal";
 import {
-  deleteFieldObservation,
   listFieldObservations,
   saveFieldObservation,
 } from "@/lib/fieldJournalStore";
 import { fieldJournalMetadataExport } from "@/lib/fieldJournalExport";
-import { failureForSync, syncFieldObservation } from "@/lib/fieldJournalSync";
+import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, syncSavedFieldObservation } from "@/lib/fieldJournalCoordinator";
 
 const localityLabels: Record<FieldLocalityVisibility, string> = {
   private: "Private",
@@ -126,11 +123,9 @@ export default function CalyxField() {
       return;
     }
     setStoreReady(false);
-    listFieldObservations(accountId)
-      .then(async (rows) => Promise.all(rows.map(async (row) => {
-        const recovered = recoverInterruptedFieldSync(row, nowIso());
-        return recovered === row ? row : saveFieldObservation(recovered);
-      })))
+    const refresh = () => {
+      void listFieldObservations(accountId)
+      .then((rows) => Promise.all(rows.map(recoverSavedFieldObservation)))
       .then((rows) => {
         if (!cancelled) {
           setObservations(rows);
@@ -143,8 +138,14 @@ export default function CalyxField() {
           setStoreReady(false);
         }
       });
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener("pageshow", refresh);
     return () => {
       cancelled = true;
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("pageshow", refresh);
     };
   }, [accountId]);
 
@@ -179,15 +180,6 @@ export default function CalyxField() {
       return haystack.includes(normalizedQuery);
     });
   }, [observations, query, unidentifiedOnly]);
-
-  async function persistObservation(observation: FieldObservation) {
-    const saved = await saveFieldObservation(observation);
-    setObservations((current) => {
-      const remaining = current.filter((item) => item.id !== saved.id);
-      return [saved, ...remaining].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-    });
-    return saved;
-  }
 
   function resetForm() {
     setEditingId(null);
@@ -306,7 +298,10 @@ export default function CalyxField() {
         : createFieldObservation({ ...input, accountId }, { id: newFieldJournalId(), now });
 
       if (navigator.onLine) observation = queueFieldObservation(observation);
-      const saved = await persistObservation(observation);
+      const saved = existing
+        ? await editSavedFieldObservation(existing, observation)
+        : await saveFieldObservation(observation);
+      setObservations((current) => [saved, ...current.filter((row) => row.id !== saved.id)]);
       resetForm();
       setNotice(navigator.onLine ? "Observation saved and queued for sync." : "Observation saved offline on this iPad.");
       if (navigator.onLine) void syncOne(saved);
@@ -347,11 +342,11 @@ export default function CalyxField() {
       return;
     }
     try {
-      await deleteFieldObservation(observation.id);
+      await discardSavedFieldObservation(observation);
       setObservations((current) => current.filter((item) => item.id !== observation.id));
       if (editingId === observation.id) resetForm();
-    } catch {
-      setError("The observation could not be removed from this device.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The observation could not be removed from this device.");
     }
   }
 
@@ -360,23 +355,15 @@ export default function CalyxField() {
     setError(null);
     setNotice(null);
     setSyncingIds((current) => new Set(current).add(observation.id));
-    let syncing = markFieldObservationSyncing(observation, nowIso());
     try {
-      await persistObservation(syncing);
-      const synced = await syncFieldObservation(syncing, async (progress) => {
-        syncing = progress;
-        await persistObservation(progress);
+      const synced = await syncSavedFieldObservation(observation, (progress) => {
+        setObservations((current) => current.map((row) => row.id === progress.id ? progress : row));
       });
-      await persistObservation(synced);
-      setNotice(`Observation ${synced.serverId} synchronized. The original media remain on this iPad.`);
+      setNotice(synced
+        ? `Observation ${synced.serverId} synchronized. The original media remain on this iPad.`
+        : "This observation is already syncing in another tab. Return here after it finishes.");
     } catch (caught) {
-      const failed = failureForSync(syncing, caught);
-      try {
-        await persistObservation(failed);
-        setError(failed.syncError ?? "Synchronization failed.");
-      } catch {
-        setError("Sync stopped because device storage could not save progress. Existing local originals are retained; free storage and retry.");
-      }
+      setError(caught instanceof Error ? caught.message : "Sync could not complete. Local originals are retained.");
     } finally {
       setSyncingIds((current) => {
         const next = new Set(current);

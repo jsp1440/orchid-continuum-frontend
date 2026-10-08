@@ -1,4 +1,4 @@
-# Field Journal MVP — offline-first Saturday field test
+# Field Journal MVP — offline-first scientific field capture
 
 Branch: `field-journal/offline-mvp`
 Repositories: `jsp1440/orchid-continuum-frontend`, `jsp1440/orchid-calyx-backend`
@@ -69,7 +69,8 @@ Original media bytes then upload once per observation to `/api/field-observation
 - Sync success never deletes the local original.
 - Observation acceptance and every media receipt are checkpointed to IndexedDB before continuing. A partial retry reuses the accepted server id and skips media with saved durable receipts; local originals remain intact.
 - A media upload succeeds only with the exact original SHA-256 plus a nonempty server media id and opaque storage key. Missing or mismatching receipts leave the observation unsynchronized.
-- An interrupted persisted `syncing` attempt becomes retryable on reopening after 30 minutes. Recent attempts are preserved to avoid reclaiming another active tab's upload. No automatic provider work or production writes are triggered by recovery.
+- Reopening or returning to the page immediately makes interrupted `syncing` records retryable when no browser-owned Web Lock remains. The same exclusive lock covers sync, edits, deletion, durable checkpoints and recovery; an active tab is never reclaimed by age. Every attempt rereads IndexedDB under ownership, so stale cards cannot resend confirmed media or erase accepted receipts. Network requests time out after five minutes and preserve retry keys and originals. Recovery itself performs no network writes.
+- Web Locks require a supported secure browser. If unavailable, synchronization and edits/deletion of existing drafts fail closed; new offline capture, reading, and export remain available. Closing a stalled tab releases its lock; a suspended but still living tab is never forcibly stolen.
 - Editing any server-accepted record (including one with incomplete media upload) is disabled until an authenticated server-update contract exists. Local records not yet accepted by the server can still be edited.
 
 ## Device-local metadata export
@@ -103,7 +104,7 @@ Frontend (`src/lib/fieldJournal.test.ts`):
 - SHA-256 of original media bytes
 - Darwin Core mapping remains documentation, not a public coordinate mapping
 
-## Saturday iPad runbook
+## iPad acceptance runbook
 
 1. On Wi‑Fi, open the Orchid Continuum frontend and sign in to the protected `/field` route.
 2. Sign in to the Calyx owner/Mission Control session so the frontend’s Calyx transport can authorize the field-observation write.
@@ -125,5 +126,5 @@ Frontend (`src/lib/fieldJournal.test.ts`):
 - Exact coordinates are not uploaded because the existing backend contract rejects them without a DataPolicy consent path. They remain on the iPad in this MVP.
 - Atlas display is not wired to field observations yet. Atlas must remain a consumer of canonical/reviewed records and must use generalized/protected locality only.
 - Taxonomic binding is unresolved by design when no identification is supplied; no taxon is invented.
-- Server-side update of an accepted observation is deferred. The Saturday acceptance flow edits before server acceptance; interrupted uploads resume without changing accepted notes.
+- Server-side update of an accepted observation is deferred. The acceptance flow edits before server acceptance; interrupted uploads resume without changing accepted notes.
 - Public API/Darwin Core export of field observations is not enabled by this MVP.

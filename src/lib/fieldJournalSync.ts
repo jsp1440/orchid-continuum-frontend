@@ -51,14 +51,33 @@ function errorMessage(payload: Record<string, unknown>, status: number): string 
   return `Field Journal sync failed (${status}).`;
 }
 
+// Bound stalled network attempts so an open but disconnected tab releases its
+// browser lock. Original bytes and server idempotency keys survive every retry.
+export const FIELD_SYNC_REQUEST_TIMEOUT_MS = 5 * 60 * 1000;
+async function requestJson(url: string, options: RequestInit): Promise<{ response: Response; payload: Record<string, unknown> }> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FIELD_SYNC_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    const payload = await readJson(response);
+    return { response, payload };
+  } catch (error) {
+    if (controller.signal.aborted) {
+      throw new FieldJournalSyncError("The sync request timed out. Retry to resume using saved receipts; local originals are retained.", null, "REQUEST_TIMEOUT");
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function createServerObservation(observation: FieldObservation): Promise<string> {
-  const response = await fetch(`${CALYX_BACKEND_BASE_URL}/api/field-observations`, {
+  const { response, payload } = await requestJson(`${CALYX_BACKEND_BASE_URL}/api/field-observations`, {
     method: "POST",
     credentials: "include",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(toFieldObservationUploadPayload(observation)),
   });
-  const payload = await readJson(response);
   if (!response.ok) {
     throw new FieldJournalSyncError(errorMessage(payload, response.status), response.status, "OBSERVATION_REJECTED");
   }
@@ -77,13 +96,12 @@ async function uploadServerMedia(serverObservationId: string, media: FieldMedia)
   form.set("media_kind", media.kind);
   form.set("client_media_id", media.id);
 
-  const response = await fetch(`${CALYX_BACKEND_BASE_URL}/api/field-observations/${serverObservationId}/media`, {
+  const { response, payload } = await requestJson(`${CALYX_BACKEND_BASE_URL}/api/field-observations/${serverObservationId}/media`, {
     method: "POST",
     credentials: "include",
     headers: { Accept: "application/json" },
     body: form,
   });
-  const payload = await readJson(response);
   if (!response.ok) {
     throw new FieldJournalSyncError(errorMessage(payload, response.status), response.status, "MEDIA_REJECTED");
   }

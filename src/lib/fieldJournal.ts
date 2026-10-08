@@ -220,7 +220,7 @@ export function applyFieldObservationEdit(
     syncStatus: observation.serverId ? "queued" : "local_only",
     syncAttempts: observation.syncAttempts,
     syncedAt: observation.syncedAt,
-    syncError: observation.serverId ? "Edited after sync; server update is deferred in the Saturday MVP." : null,
+    syncError: observation.serverId ? "Edited after sync; server update is deferred in the current MVP." : null,
   };
 }
 
@@ -286,15 +286,4 @@ export function fieldObservationStatusLabel(status: FieldSyncStatus): string {
     case "synchronized": return "Synchronized";
     case "failed": return "Sync failed";
   }
-}
-
-// A suspended iPad tab may never receive its fetch rejection. Do not reclaim a
-// recent upload (another tab may be active), but make stale attempts retryable.
-export const FIELD_JOURNAL_SYNC_RECOVERY_MS = 30 * 60 * 1000;
-export function recoverInterruptedFieldSync(observation: FieldObservation, now: string): FieldObservation {
-  if (observation.syncStatus !== "syncing") return observation;
-  const attemptedAt = Date.parse(observation.lastSyncAttemptAt ?? "");
-  const elapsed = Date.parse(now) - attemptedAt;
-  if (Number.isFinite(attemptedAt) && elapsed < FIELD_JOURNAL_SYNC_RECOVERY_MS) return observation;
-  return markFieldObservationFailed(observation, "A previous sync was interrupted. Retry to resume saved media uploads.", now);
 }
