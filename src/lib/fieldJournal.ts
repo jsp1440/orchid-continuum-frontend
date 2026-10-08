@@ -204,8 +204,8 @@ export function applyFieldObservationEdit(
   input: Omit<NewFieldObservationInput, "accountId">,
   now: string,
 ): FieldObservation {
-  if (observation.syncStatus === "syncing") {
-    throw new Error("This observation is currently syncing and cannot be edited.");
+  if (!canEditFieldObservation(observation)) {
+    throw new Error("An observation accepted by the server or currently syncing cannot be edited locally.");
   }
   const edited = createFieldObservation(
     { ...input, accountId: observation.accountId },
@@ -252,7 +252,7 @@ export function markFieldObservationFailed(observation: FieldObservation, messag
 }
 
 export function canEditFieldObservation(observation: FieldObservation): boolean {
-  return observation.syncStatus !== "syncing" && observation.syncStatus !== "synchronized";
+  return !observation.serverId && observation.syncStatus !== "syncing" && observation.syncStatus !== "synchronized";
 }
 
 export function toFieldObservationUploadPayload(observation: FieldObservation): Record<string, unknown> {
@@ -286,4 +286,15 @@ export function fieldObservationStatusLabel(status: FieldSyncStatus): string {
     case "synchronized": return "Synchronized";
     case "failed": return "Sync failed";
   }
+}
+
+// A suspended iPad tab may never receive its fetch rejection. Do not reclaim a
+// recent upload (another tab may be active), but make stale attempts retryable.
+export const FIELD_JOURNAL_SYNC_RECOVERY_MS = 30 * 60 * 1000;
+export function recoverInterruptedFieldSync(observation: FieldObservation, now: string): FieldObservation {
+  if (observation.syncStatus !== "syncing") return observation;
+  const attemptedAt = Date.parse(observation.lastSyncAttemptAt ?? "");
+  const elapsed = Date.parse(now) - attemptedAt;
+  if (Number.isFinite(attemptedAt) && elapsed < FIELD_JOURNAL_SYNC_RECOVERY_MS) return observation;
+  return markFieldObservationFailed(observation, "A previous sync was interrupted. Retry to resume saved media uploads.", now);
 }
