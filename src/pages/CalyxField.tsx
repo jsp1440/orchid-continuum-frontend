@@ -4,6 +4,7 @@ import {
   Camera,
   CheckCircle2,
   Edit3,
+  Download,
   LocateFixed,
   MapPin,
   RefreshCw,
@@ -39,6 +40,7 @@ import {
   listFieldObservations,
   saveFieldObservation,
 } from "@/lib/fieldJournalStore";
+import { fieldJournalMetadataExport } from "@/lib/fieldJournalExport";
 import { failureForSync, syncFieldObservation } from "@/lib/fieldJournalSync";
 
 const localityLabels: Record<FieldLocalityVisibility, string> = {
@@ -88,6 +90,7 @@ export default function CalyxField() {
   const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
 
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [includePrivateExportLocation, setIncludePrivateExportLocation] = useState(false);
   const [note, setNote] = useState("");
   const [taxonLabel, setTaxonLabel] = useState("");
   const [certainty, setCertainty] = useState<FieldCertainty>("POSSIBLE");
@@ -383,6 +386,21 @@ export default function CalyxField() {
     }
   }
 
+  function exportMetadata(rows: FieldObservation[]) {
+    const mode = includePrivateExportLocation ? "private_backup" : "metadata";
+    const payload = fieldJournalMetadataExport(rows, nowIso(), mode);
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `field-journal-${mode}-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    // Give iPad Safari time to start the download before releasing its URL.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    setNotice("Metadata download requested. Original photos and videos remain on this device; this is not a media backup.");
+  }
+
   async function syncAll() {
     for (const observation of observations) {
       if (observation.syncStatus !== "synchronized" && observation.syncStatus !== "syncing") {
@@ -517,6 +535,16 @@ export default function CalyxField() {
             <div><p className="label-eyebrow">On this device</p><h2 id="drafts-heading" className="mt-1 text-2xl">Observations</h2></div>
             <span className="text-sm text-muted-foreground">{storeReady ? `${observations.length} saved` : "opening storage…"}</span>
           </div>
+          <div className="mt-4 rounded-md border bg-secondary p-3">
+            <p className="text-xs">Download a private working copy of observation and media metadata. Captured GPS and locality notes are excluded by default. Free-text notes and filenames may still be sensitive; this is not a public-safe export. Original photo/video bytes and EXIF are not included or changed.</p>
+            <label className="mt-3 flex items-start gap-2 text-xs">
+              <input type="checkbox" checked={includePrivateExportLocation} onChange={(event) => setIncludePrivateExportLocation(event.target.checked)} />
+              Include private capture GPS and locality notes in this metadata backup
+            </label>
+            <button type="button" onClick={() => exportMetadata(observations)} disabled={!storeReady || observations.length === 0} className="mt-3 flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
+              <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export all saved metadata
+            </button>
+          </div>
           <div className="mt-4 flex gap-2">
             <label className="relative flex-1"><span className="sr-only">Search observations</span><Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full rounded-md border bg-white py-2 pl-9 pr-3" placeholder="Search observations" /></label>
             <button type="button" aria-pressed={unidentifiedOnly} onClick={() => setUnidentifiedOnly((value) => !value)} className="rounded-md border bg-white px-3 text-xs">{unidentifiedOnly ? "All" : "Unidentified"}</button>
@@ -564,6 +592,9 @@ export default function CalyxField() {
                   ) : <span className="text-xs text-emerald-700">Server accepted exactly once; local original retained.</span>}
                   <button type="button" onClick={() => startEdit(observation)} disabled={!canEditFieldObservation(observation)} className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs disabled:opacity-50">
                     <Edit3 aria-hidden="true" className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button type="button" onClick={() => exportMetadata([observation])} className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
+                    <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export metadata
                   </button>
                   {observation.syncStatus !== "synchronized" ? (
                     <button type="button" aria-label="Discard observation" onClick={() => void discard(observation)} disabled={observation.syncStatus === "syncing"} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50">
