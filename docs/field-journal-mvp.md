@@ -67,7 +67,10 @@ Original media bytes then upload once per observation to `/api/field-observation
 - Retry uses the same `client_draft_id`; backend `POST /api/field-observations` returns the existing record instead of duplicating it.
 - Media retry uses the same SHA-256/content-addressed storage and `attach_photo` idempotency; re-uploading the same bytes does not create a second media record.
 - Sync success never deletes the local original.
-- Editing a synchronized record is disabled in this MVP; unsynchronized local/queued/failed records can be edited.
+- Observation acceptance and every media receipt are checkpointed to IndexedDB before continuing. A partial retry reuses the accepted server id and skips media with saved durable receipts; local originals remain intact.
+- A media upload succeeds only with the exact original SHA-256 plus a nonempty server media id and opaque storage key. Missing or mismatching receipts leave the observation unsynchronized.
+- An interrupted persisted `syncing` attempt becomes retryable on reopening after 30 minutes. Recent attempts are preserved to avoid reclaiming another active tab's upload. No automatic provider work or production writes are triggered by recovery.
+- Editing any server-accepted record (including one with incomplete media upload) is disabled until an authenticated server-update contract exists. Local records not yet accepted by the server can still be edited.
 
 ## Locality protection
 
@@ -114,5 +117,5 @@ Frontend (`src/lib/fieldJournal.test.ts`):
 - Exact coordinates are not uploaded because the existing backend contract rejects them without a DataPolicy consent path. They remain on the iPad in this MVP.
 - Atlas display is not wired to field observations yet. Atlas must remain a consumer of canonical/reviewed records and must use generalized/protected locality only.
 - Taxonomic binding is unresolved by design when no identification is supplied; no taxon is invented.
-- Server-side update of an already synchronized observation is deferred. The Saturday acceptance flow edits only before sync.
+- Server-side update of an accepted observation is deferred. The Saturday acceptance flow edits before server acceptance; interrupted uploads resume without changing accepted notes.
 - Public API/Darwin Core export of field observations is not enabled by this MVP.
