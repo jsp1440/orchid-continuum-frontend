@@ -20,6 +20,7 @@ import {
   canEditFieldObservation,
   createFieldObservation,
   fieldObservationStatusLabel,
+  recoverInterruptedFieldSync,
   markFieldObservationSyncing,
   mediaKindFromType,
   newFieldJournalId,
@@ -123,6 +124,10 @@ export default function CalyxField() {
     }
     setStoreReady(false);
     listFieldObservations(accountId)
+      .then(async (rows) => Promise.all(rows.map(async (row) => {
+        const recovered = recoverInterruptedFieldSync(row, nowIso());
+        return recovered === row ? row : saveFieldObservation(recovered);
+      })))
       .then((rows) => {
         if (!cancelled) {
           setObservations(rows);
@@ -309,7 +314,7 @@ export default function CalyxField() {
 
   function startEdit(observation: FieldObservation) {
     if (!canEditFieldObservation(observation)) {
-      setError("Only unsynchronized observations can be edited in the Saturday MVP. A synchronized record is preserved as the server accepted it.");
+      setError("Only observations not yet accepted by the server can be edited. Retry incomplete uploads to preserve the accepted record.");
       return;
     }
     setError(null);
@@ -352,15 +357,23 @@ export default function CalyxField() {
     setError(null);
     setNotice(null);
     setSyncingIds((current) => new Set(current).add(observation.id));
-    const syncing = await persistObservation(markFieldObservationSyncing(observation, nowIso()));
+    let syncing = markFieldObservationSyncing(observation, nowIso());
     try {
-      const synced = await syncFieldObservation(syncing);
+      await persistObservation(syncing);
+      const synced = await syncFieldObservation(syncing, async (progress) => {
+        syncing = progress;
+        await persistObservation(progress);
+      });
       await persistObservation(synced);
       setNotice(`Observation ${synced.serverId} synchronized. The original media remain on this iPad.`);
     } catch (caught) {
       const failed = failureForSync(syncing, caught);
-      await persistObservation(failed);
-      setError(failed.syncError ?? "Synchronization failed.");
+      try {
+        await persistObservation(failed);
+        setError(failed.syncError ?? "Synchronization failed.");
+      } catch {
+        setError("Sync stopped because device storage could not save progress. Existing local originals are retained; free storage and retry.");
+      }
     } finally {
       setSyncingIds((current) => {
         const next = new Set(current);
