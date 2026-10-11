@@ -119,6 +119,9 @@ function stringList(value: unknown): string[] | null {
 
 function normalizeDomainRecord(value: unknown): FeaturedGenusDomainRecord | null {
   if (!isRecord(value)) return null;
+  // Both linkage counters must be present (null is a valid, explicit value;
+  // a missing key means the producer is off-contract).
+  if (!('linked_nodes' in value) || !('linked_edges' in value)) return null;
   const state = evidenceState(value.state);
   const linkedNodes = nonNegativeNumber(value.linked_nodes);
   const linkedEdges = nonNegativeNumber(value.linked_edges);

@@ -99,8 +99,11 @@ const DomainChip: React.FC<{ domain: string; record: FeaturedGenusDomainRecord }
     title={`${domainLabel(domain)} — ${EVIDENCE_BADGE[record.state].label}`}
   >
     {domainLabel(domain)}
-    {record.state === 'known' && record.linkedNodes !== null && record.linkedNodes > 0 && (
+    {record.state === 'known' && record.linkedNodes !== null && record.linkedNodes > 0 ? (
       <span className="text-[#7ee0a0]">· {record.linkedNodes.toLocaleString()}</span>
+    ) : (
+      // Colour alone never carries the evidence state: every chip names it.
+      <span>· {EVIDENCE_BADGE[record.state].label}</span>
     )}
   </span>
 );

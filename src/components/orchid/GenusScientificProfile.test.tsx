@@ -105,7 +105,6 @@ describe('GenusScientificProfile exhibit', () => {
     expect(container.textContent).toContain('Cattleya');
     expect(container.textContent).toContain('142');
     expect(container.textContent).toContain('9');
-    expect(container.textContent).toContain('Documented');
 
     expect(container.querySelector('a[href^="/atlas?genera=Cattleya"]')).not.toBeNull();
     expect(container.querySelector('a[href="/relationship-matrix?genus=Cattleya"]')).not.toBeNull();
@@ -114,12 +113,13 @@ describe('GenusScientificProfile exhibit', () => {
   });
 
   it('marks a synonym request with the accepted name', async () => {
+    // The backbone resolved the requested synonym genus to the accepted genus.
     mocks.fetchFeaturedGenusProfile.mockResolvedValue({
       status: 'ok',
-      profile: profileFixture({ requestedGenus: 'cattleya' }),
+      profile: profileFixture({ requestedGenus: 'Broughtonia' }),
     });
-    await render('cattleya');
-    expect(container.textContent).toContain('Requested as cattleya — accepted name Cattleya');
+    await render('Broughtonia');
+    expect(container.textContent).toContain('Requested as Broughtonia — accepted name Cattleya');
   });
 
   it('keeps research details collapsed until the toggle is pressed', async () => {
@@ -139,6 +139,7 @@ describe('GenusScientificProfile exhibit', () => {
 
     const details = container.querySelector('[data-testid="genus-scientific-profile-details"]');
     expect(details).not.toBeNull();
+    expect(details?.textContent).toContain('Documented');
     expect(details?.textContent).toContain('Representative names');
     expect(details?.textContent).toContain('Cattleya labiata');
     expect(details?.textContent).toContain('600–1,800 m');
