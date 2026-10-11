@@ -19,6 +19,7 @@ import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
 const AtlasNext = lazy(() => import("./pages/AtlasNext"));
+const AtlasExplorer = lazy(() => import("./features/atlas-explorer/AtlasExplorer"));
 import OrchidZoo from "./pages/OrchidZoo";
 import OACS from "./pages/OACS";
 import Widgets from "./pages/Widgets";
@@ -109,6 +110,14 @@ const App = () => (
                   <Route path="/about" element={<About />} />
                   <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
                   <Route path="/atlas" element={<Atlas />} />
+                  <Route
+                    path="/atlas/explorer"
+                    element={
+                      <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-slate-100 text-sm text-slate-600">Loading the Atlas Explorer…</div>}>
+                        <AtlasExplorer />
+                      </Suspense>
+                    }
+                  />
                   <Route
                     path="/atlas-next"
                     element={
