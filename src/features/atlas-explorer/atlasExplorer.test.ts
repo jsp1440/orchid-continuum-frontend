@@ -18,6 +18,7 @@ import {
   attributionOf,
   fromBackendPoint,
   fromCanonicalPoint,
+  isOutOfFamily,
   matchesFilters,
   queryBackend,
   queryUrl,
@@ -116,6 +117,17 @@ describe('canonical-store projection (locality safety)', () => {
     expect(o.generalisationReason).toBe('unresolved-assessment');
     expect(o.locality).toBeNull();
     expect(o.assessment).toBe('unresolved');
+  });
+
+  it('excludes records a source states are not orchids, and labels unstated families', () => {
+    expect(fromCanonicalPoint(point({ genus: 'Hypoxis', species: 'decumbens', canonicalName: 'Hypoxis decumbens', family: 'Hypoxidaceae' }))).toBeNull();
+    expect(fromCanonicalPoint(point({ family: ' orchidaceae ' }))!.familyStated).toBe(true);
+    const unstated = fromCanonicalPoint(point({ family: undefined }))!;
+    expect(unstated).not.toBeNull();
+    expect(unstated.familyStated).toBe(false);
+    expect(isOutOfFamily('Hypoxidaceae')).toBe(true);
+    expect(isOutOfFamily('Orchidaceae')).toBe(false);
+    expect(isOutOfFamily(undefined)).toBe(false);
   });
 
   it('drops 0,0 and out-of-range coordinates', () => {

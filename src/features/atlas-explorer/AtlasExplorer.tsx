@@ -301,6 +301,10 @@ const AtlasExplorer: React.FC = () => {
     }
   }, [selected]);
 
+  const familyUnstated = useMemo(
+    () => viewData.records.filter((r) => !r.familyStated).length,
+    [viewData.records],
+  );
   const recordsAvailable = viewData.records.length > 0 || viewData.mode === 'points';
   const filterSummary = [
     filters.scientificName ?? filters.genus,
@@ -608,6 +612,12 @@ const AtlasExplorer: React.FC = () => {
               <SourceNotice kind="info">
                 {fallbackReason} Records are read from the canonical occurrence store and protected in the browser with the same
                 locality policy.
+              </SourceNotice>
+            ) : null}
+            {familyUnstated > 0 ? (
+              <SourceNotice kind="info">
+                {familyUnstated.toLocaleString()} of these records have no stated family; their place in this Orchidaceae Atlas rests on
+                the source&apos;s own orchid export. Records a source states are not orchids are excluded.
               </SourceNotice>
             ) : null}
             {viewData.status === 'unavailable' ? (

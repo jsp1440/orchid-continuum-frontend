@@ -58,6 +58,20 @@ export interface ExplorerOccurrence {
   generalisationReason: string;
   generalisationNotice: string | null;
   provider: ProviderId;
+  /**
+   * Whether the source stated this record's family. Backend records are always
+   * stated (the service serves only family = Orchidaceae). Canonical-store
+   * records state it only when linked to a curated species row.
+   */
+  familyStated: boolean;
+}
+
+/** The Atlas is an Orchidaceae atlas. */
+export const ATLAS_FAMILY = 'Orchidaceae';
+
+export function isOutOfFamily(family: string | null | undefined): boolean {
+  const stated = (family ?? '').trim();
+  return stated !== '' && stated.toLowerCase() !== ATLAS_FAMILY.toLowerCase();
 }
 
 export interface BackendCluster {
@@ -160,6 +174,7 @@ export function fromBackendPoint(raw: Record<string, unknown>): ExplorerOccurren
     generalisationReason: str(raw.generalisationReason) ?? 'none',
     generalisationNotice: str(raw.generalisationNotice),
     provider: 'calyx-viewport',
+    familyStated: true,
   };
 }
 
@@ -177,6 +192,9 @@ export function fromCanonicalPoint(point: AtlasOccurrencePoint): ExplorerOccurre
   ) {
     return null;
   }
+  // A record a source states is not an orchid (e.g. Hypoxis, Hypoxidaceae) is
+  // excluded from the Orchidaceae Atlas outright.
+  if (isOutOfFamily(point.family)) return null;
   const shown = resolveAtlasLocation(point, 'public');
   const name =
     (point.acceptedName || point.canonicalName || `${point.genus ?? ''} ${point.species ?? ''}`).trim();
@@ -216,6 +234,7 @@ export function fromCanonicalPoint(point: AtlasOccurrencePoint): ExplorerOccurre
     generalisationReason: shown.policy.reason,
     generalisationNotice: shown.policy.notice || null,
     provider: 'canonical-store',
+    familyStated: !!point.family?.trim(),
   };
 }
 
