@@ -2,7 +2,7 @@
   "schema": "calyx-backend-route-inventory.v1",
   "backend_repository": "jsp1440/orchid-calyx-backend",
   "backend_branch": "claude/atlas-explorer-backend",
-  "backend_sha": "fa1fde3dfcc305d26fb045b5f55c3d0a62fe602c",
+  "backend_sha": "0b2a3b470422bdee7d24fb5874802096bf711f85",
   "source": "app.main:app.routes (FastAPI route table imported in-process; no server, no network)",
   "route_count": 1010,
   "routes": [
