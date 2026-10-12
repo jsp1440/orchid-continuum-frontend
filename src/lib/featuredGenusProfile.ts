@@ -102,6 +102,12 @@ function nonNegativeNumber(value: unknown): number | null | undefined {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 }
 
+// Elevation may be below sea level; any finite number is a valid reading.
+function finiteNumber(value: unknown): number | null | undefined {
+  if (value === null || value === undefined) return null;
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
 function optionalString(value: unknown): string | null | undefined {
   if (value === null || value === undefined) return null;
   return typeof value === 'string' ? value : undefined;
@@ -167,8 +173,8 @@ export function normalizeFeaturedGenusProfile(payload: unknown): FeaturedGenusPr
   }
 
   const habitatState = evidenceState(habitat.state);
-  const minElevationM = nonNegativeNumber(habitat.min_elevation_m);
-  const maxElevationM = nonNegativeNumber(habitat.max_elevation_m);
+  const minElevationM = finiteNumber(habitat.min_elevation_m);
+  const maxElevationM = finiteNumber(habitat.max_elevation_m);
   const climateTag = optionalString(habitat.climate_tag);
   const collectionTag = optionalString(habitat.collection_tag);
   const habitatSource = optionalString(habitat.source);

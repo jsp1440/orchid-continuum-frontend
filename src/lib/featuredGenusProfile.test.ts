@@ -101,6 +101,20 @@ describe('normalizeFeaturedGenusProfile', () => {
     expect(normalizeFeaturedGenusProfile(payload)).toBeNull();
   });
 
+  it('accepts a below-sea-level elevation instead of voiding the whole profile', () => {
+    const payload = profilePayload();
+    (payload.habitat as Record<string, unknown>).min_elevation_m = -5;
+    const profile = normalizeFeaturedGenusProfile(payload);
+    expect(profile).not.toBeNull();
+    expect(profile?.habitat.minElevationM).toBe(-5);
+  });
+
+  it('still rejects a non-finite elevation', () => {
+    const payload = profilePayload();
+    (payload.habitat as Record<string, unknown>).max_elevation_m = Number.POSITIVE_INFINITY;
+    expect(normalizeFeaturedGenusProfile(payload)).toBeNull();
+  });
+
   it('rejects representative names that are not all strings', () => {
     const payload = profilePayload();
     (payload.taxonomy as Record<string, unknown>).representative_names = ['Cattleya labiata', 7];
