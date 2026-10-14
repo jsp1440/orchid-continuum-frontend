@@ -401,7 +401,7 @@ export default function CalyxField() {
       <header className="border-b border-quiet bg-ink px-4 py-8 text-white sm:px-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="label-eyebrow">Calyx Field · Lance pilot</p>
+            <p className="label-eyebrow">Calyx Field · Scientific research</p>
             <h1 className="mt-2 text-4xl">Field Journal</h1>
             <p className="mt-2 max-w-3xl text-sm text-white/75">
               Offline-first field capture: originals and exact private capture coordinates stay on this iPad until you choose to sync. The backend receives the governed observation record and original media provenance — never exact coordinates in this MVP.
