@@ -63,6 +63,8 @@ describe('evidence feedback client', () => {
       statement: 'The definition needs a source.',
     });
 
+    expect(result.kind).toBe('case');
+    if (result.kind !== 'case') throw new Error('expected the owner case response');
     expect(result.case.case_id).toBe('ef_case_1');
     expect(fetchSpy).toHaveBeenCalledTimes(2);
     expect(fetchSpy.mock.calls[0]?.[0]).toBe(`${EVIDENCE_FEEDBACK_API_BASE}/objects`);
@@ -167,6 +169,8 @@ describe('trivial defect kinds (backend contract)', () => {
     });
 
     expect(JSON.parse(String((fetchSpy.mock.calls[1]?.[1] as RequestInit).body))).toEqual(sent);
+    expect(result.kind).toBe('case');
+    if (result.kind !== 'case') throw new Error('expected the owner case response');
     expect(result.case).toMatchObject({ disposition: 'auto_correctable', status: 'pending_review' });
   });
 });

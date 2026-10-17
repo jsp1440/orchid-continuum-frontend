@@ -18,6 +18,13 @@ import { calyxRelativePath } from "@/lib/calyxOrigin";
  *     session, read their own session, and add observations to / evaluate /
  *     request the deterministic explanation of their own session.
  *
+ *  3. Release 1 ledger: "Members submit, owner reviews". A signed-in member may
+ *     register the snapshot they saw, submit evidence feedback on it, and read
+ *     the status of their OWN case (backend `@member_writable` /
+ *     `@member_readable` under `owner_or_member_write`, kill switch
+ *     OC_MEMBER_FEEDBACK_ENABLED). Accept-trivial and the whole owner review
+ *     queue stay owner-only.
+ *
  * Everything else stays owner-only for members: other writes, Speak, the
  * Relationship Matrix build, and every other Matrix identification route
  * (Vision, reports, persistence, /contract, stateless /evaluate, registry
@@ -51,7 +58,7 @@ import { calyxRelativePath } from "@/lib/calyxOrigin";
  */
 
 /** Which member-access decision a route belongs to. */
-export type MemberScope = "read" | "matrix";
+export type MemberScope = "read" | "matrix" | "feedback";
 
 type MemberRoute = { method: "GET" | "POST"; pattern: RegExp; scope: MemberScope };
 
@@ -68,6 +75,15 @@ const SAFE_SEGMENT =
   "(?!\\.{1,2}(?:/|$))(?:[A-Za-z0-9_.~!*'()-]|%(?!2[Ff]|5[Cc]|2[Ee]|25|00)[0-9A-Fa-f]{2})+";
 
 const MATRIX = "/api/matrix-identification";
+
+const FEEDBACK = "/api/evidence-feedback";
+
+/**
+ * A backend evidence-feedback case id: `efc-` plus 24 lowercase hex digits
+ * (the first 24 of the case fingerprint). Anything else — `review`, a
+ * sub-path, an encoded separator — is not a member case.
+ */
+const FEEDBACK_CASE_ID = "efc-[0-9a-f]{24}";
 
 /**
  * Method + path pairs, relative to the Calyx base, that accept a member
@@ -90,6 +106,12 @@ const MATRIX = "/api/matrix-identification";
  *   POST /api/matrix-identification/sessions/{session_id}/evaluate
  *   POST /api/matrix-identification/sessions/{session_id}/explain
  *
+ * Evidence feedback (Release 1 "Members submit, owner reviews"):
+ *
+ *   POST /api/evidence-feedback/objects
+ *   POST /api/evidence-feedback/cases
+ *   GET  /api/evidence-feedback/cases/{case_id}      (efc-<24 hex> only)
+ *
  * Everything else — all of candidate-knowledge, every other
  * evidence-aggregation route, literature source-binding, paper full text,
  * coverage-audit, every reasoning-ledger read, and every other Matrix route —
@@ -108,6 +130,9 @@ const MEMBER_ROUTES: readonly MemberRoute[] = [
     pattern: new RegExp(`^${MATRIX}/sessions/${UUID_SEGMENT}/(?:observations|evaluate|explain)$`),
     scope: "matrix",
   },
+  { method: "POST", pattern: new RegExp(`^${FEEDBACK}/objects$`), scope: "feedback" },
+  { method: "POST", pattern: new RegExp(`^${FEEDBACK}/cases$`), scope: "feedback" },
+  { method: "GET", pattern: new RegExp(`^${FEEDBACK}/cases/${FEEDBACK_CASE_ID}$`), scope: "feedback" },
 ];
 
 function requestMethod(method: string | undefined): string {
@@ -150,6 +175,15 @@ export function isMemberMatrixRequest(
   calyxBase: string = CALYX_BACKEND_BASE_URL,
 ): boolean {
   return memberScopeOf(url, method, calyxBase) === "matrix";
+}
+
+/** Whether a request is one of the member evidence-feedback pairs (R1 J12). */
+export function isMemberFeedbackRequest(
+  url: string,
+  method?: string,
+  calyxBase: string = CALYX_BACKEND_BASE_URL,
+): boolean {
+  return memberScopeOf(url, method, calyxBase) === "feedback";
 }
 
 /** Whether a request may carry the member token at all (any member scope). */
