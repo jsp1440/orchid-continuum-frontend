@@ -50,7 +50,7 @@ function errorMessage(payload: Record<string, unknown>, status: number): string 
     return String((detail as { message: unknown }).message);
   }
   if (status === 401 || status === 403) {
-    return "The field backend rejected the session. Sign in with the owner/Mission Control session, then retry.";
+    return "The field backend rejected the session. Sign in with the owner access code (shown at the top of the Field Journal), then retry.";
   }
   return `Field Journal sync failed (${status}).`;
 }

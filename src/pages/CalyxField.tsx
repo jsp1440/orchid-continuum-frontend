@@ -18,6 +18,8 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import FieldSyncOwnerSignIn from "@/components/field/FieldSyncOwnerSignIn";
+import { isOwnerSessionRejection } from "@/lib/fieldJournalOwnerSession";
 import {
   applyFieldObservationEdit,
   canEditFieldObservation,
@@ -93,6 +95,7 @@ export default function CalyxField() {
   const [unidentifiedOnly, setUnidentifiedOnly] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [ownerSignInNeeded, setOwnerSignInNeeded] = useState(false);
   const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -391,6 +394,7 @@ export default function CalyxField() {
         ? `Observation ${synced.serverId} synchronized. The original media remain on this iPad.`
         : "This observation is already syncing in another tab. Return here after it finishes.");
     } catch (caught) {
+      if (isOwnerSessionRejection(caught)) setOwnerSignInNeeded(true);
       setError(caught instanceof Error ? caught.message : "Sync could not complete. Local originals are retained.");
     } finally {
       setSyncingIds((current) => {
@@ -501,6 +505,17 @@ export default function CalyxField() {
           </div>
         </div>
       </header>
+      {ownerSignInNeeded ? (
+        <div className="px-4 sm:px-8">
+          <FieldSyncOwnerSignIn
+            onSignedIn={() => {
+              setOwnerSignInNeeded(false);
+              setError(null);
+              setNotice("Signed in for sync. Tap Sync all (or Retry on an entry) to continue.");
+            }}
+          />
+        </div>
+      ) : null}
 
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-8 lg:grid-cols-[1.15fr_0.85fr] sm:px-8">
         <section aria-labelledby="new-observation-heading" className="rounded-xl border border-quiet bg-white p-5 shadow-sm">
