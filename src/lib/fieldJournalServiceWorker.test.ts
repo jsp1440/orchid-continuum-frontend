@@ -11,6 +11,7 @@ type Handler = (event: { waitUntil: (p: Promise<unknown>) => void; respondWith: 
 
 function loadWorker(existingCaches: string[] = [], network: (input: unknown) => Promise<Response> = async () => new Response(HTML, { status: 200 })) {
   const stores = new Map<string, Map<string, string>>(existingCaches.map((name) => [name, new Map([["/old", "old"]])]));
+  const matchOptions: (CacheQueryOptions | undefined)[] = [];
   const keyOf = (request: string | Request) => typeof request === "string" ? request : new URL(request.url).pathname;
   const open = async (name: string) => {
     if (!stores.has(name)) stores.set(name, new Map());
@@ -19,7 +20,10 @@ function loadWorker(existingCaches: string[] = [], network: (input: unknown) => 
       put: async (request: string | Request) => { store.set(keyOf(request), "ok"); },
       add: async (request: string | Request) => { store.set(keyOf(request), "ok"); },
       addAll: async (requests: Request[]) => { requests.forEach((request) => store.set(keyOf(request), "ok")); },
-      match: async (request: string) => store.has(keyOf(request)) ? new Response(`cached:${keyOf(request)}`) : undefined,
+      match: async (request: string | Request, options?: CacheQueryOptions) => {
+        matchOptions.push(options);
+        return store.has(keyOf(request)) ? new Response(`cached:${keyOf(request)}`) : undefined;
+      },
     };
   };
   const handlers = new Map<string, Handler>();
@@ -44,7 +48,13 @@ function loadWorker(existingCaches: string[] = [], network: (input: unknown) => 
     handlers.get("fetch")!({ waitUntil: () => undefined, respondWith: (p) => { response = p; }, request });
     return response!;
   };
-  return { stores, run, self, navigate };
+  const fetchAsset = async (path: string) => {
+    let response: Promise<Response> | undefined;
+    const request = new RequestWithOrigin(path, { headers: { Origin: ORIGIN } });
+    handlers.get("fetch")!({ waitUntil: () => undefined, respondWith: (p) => { response = p; }, request });
+    return response;
+  };
+  return { stores, run, self, navigate, fetchAsset, matchOptions, fetch };
 }
 
 describe("Field Journal offline shell service worker", () => {
@@ -92,6 +102,19 @@ describe("Field Journal offline shell service worker", () => {
     const offline = loadWorker([], async () => { throw new TypeError("offline"); });
     (await caches(offline)).put("/");
     expect(await (await offline.navigate("/field")).text()).toBe("cached:/");
+  });
+  it("serves a cached module script offline even when the host varies on Origin", async () => {
+    // A module script carries an Origin header; the install-time copy has none.
+    // Without ignoreVary a "Vary: Origin" response never matches offline.
+    const worker = loadWorker();
+    await worker.run("install");
+    worker.fetch.mockImplementation(async () => { throw new TypeError("offline"); });
+    worker.matchOptions.length = 0;
+    const response = await worker.fetchAsset("/assets/index-abc123.js");
+    expect(response).toBeDefined();
+    expect(await response!.text()).toBe("cached:/assets/index-abc123.js");
+    expect(worker.matchOptions.length).toBeGreaterThan(0);
+    expect(worker.matchOptions.every((options) => options?.ignoreVary === true)).toBe(true);
   });
 });
 

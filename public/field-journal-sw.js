@@ -4,6 +4,10 @@
 // update never strands an offline device without a complete shell.
 const FIELD_JOURNAL_SHELL_CACHE = "orchid-field-journal-shell-v2";
 const FIELD_JOURNAL_ROUTES = ["/", "/field"];
+// Shell assets are content-hashed and cached without request headers, but a
+// module script is fetched with an Origin header; a host that answers with
+// "Vary: Origin" would otherwise make every cached lookup miss offline.
+const MATCH = { ignoreVary: true };
 const STATIC_ASSET_PATTERN = /\.(?:css|js|mjs|svg|png|jpe?g|webp|ico|woff2?|ttf|otf|webmanifest)$/i;
 const FIELD_JOURNAL_OPTIONAL_ASSETS = [
   "/field-journal.webmanifest",
@@ -94,7 +98,7 @@ self.addEventListener("message", (event) => {
     caches.open(FIELD_JOURNAL_SHELL_CACHE).then((cache) =>
       Promise.all(
         [...paths].map(async (path) => {
-          if (await cache.match(path)) return;
+          if (await cache.match(path, MATCH)) return;
           await cache.add(path).catch(() => undefined);
         }),
       ),
@@ -133,7 +137,7 @@ async function networkFirstNavigation(request) {
   const cache = await caches.open(FIELD_JOURNAL_SHELL_CACHE);
   const { pathname } = new URL(request.url);
   const key = SHELL_KEYS.has(pathname) ? pathname : null;
-  const cachedShell = async () => (key && (await cache.match(key))) || (await cache.match("/field")) || (await cache.match("/"));
+  const cachedShell = async () => (key && (await cache.match(key, MATCH))) || (await cache.match("/field", MATCH)) || (await cache.match("/", MATCH));
   const network = fetch(request).then(async (response) => {
     if (key && response.ok && !response.redirected) {
       await cache.put(key, response.clone());
@@ -159,7 +163,7 @@ async function networkFirstNavigation(request) {
 
 async function cacheFirstStaticAsset(request) {
   const cache = await caches.open(FIELD_JOURNAL_SHELL_CACHE);
-  const cached = await cache.match(request);
+  const cached = await cache.match(request, MATCH);
   if (cached) {
     return cached;
   }
