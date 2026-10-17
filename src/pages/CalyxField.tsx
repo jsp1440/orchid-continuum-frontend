@@ -40,7 +40,7 @@ import {
   saveFieldObservation,
 } from "@/lib/fieldJournalStore";
 import { fieldJournalMetadataExport } from "@/lib/fieldJournalExport";
-import { buildFieldJournalBackup, FIELD_JOURNAL_PRODUCT_NAME, parseFieldJournalBackup } from "@/lib/fieldJournalBackup";
+import { backupMatchesAccount, buildFieldJournalBackup, FIELD_JOURNAL_PRODUCT_NAME, parseFieldJournalBackup } from "@/lib/fieldJournalBackup";
 import { applyFieldJournalHead } from "@/lib/fieldJournalHead";
 import { formatBytes, handOffBackupFile, readFieldStorageStatus, requestPersistentFieldStorage, type FieldStorageStatus } from "@/lib/fieldJournalDevice";
 import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, restoreFieldObservationFromBackup, syncSavedFieldObservation } from "@/lib/fieldJournalCoordinator";
@@ -415,7 +415,7 @@ export default function CalyxField() {
     setBackupBusy("backing_up");
     try {
       const mode = includePrivateExportLocation ? "private_backup" : "metadata";
-      const { blob, manifest, fileName } = await buildFieldJournalBackup(rows, nowIso(), mode);
+      const { blob, manifest, fileName } = await buildFieldJournalBackup(rows, nowIso(), mode, accountId);
       const outcome = await handOffBackupFile(blob, fileName, "Orchid Continuum Field Journal backup");
       const summary = `${manifest.observationCount} observation${manifest.observationCount === 1 ? "" : "s"}, ${manifest.mediaCount} original photo/video file${manifest.mediaCount === 1 ? "" : "s"} (${formatBytes(blob.size)})`;
       setNotice(outcome === "cancelled"
@@ -439,12 +439,13 @@ export default function CalyxField() {
     setBackupBusy("restoring");
     try {
       const parsed = await parseFieldJournalBackup(file);
+      const sameAccount = await backupMatchesAccount(parsed.manifest.accountBinding, accountId);
       let restored = 0;
       let skipped = 0;
       let rejected = parsed.rejected.length;
       const reasons = parsed.rejected.map((item) => `${item.id ?? "unknown"}: ${item.reason}`);
       for (const observation of parsed.observations) {
-        const decision = await restoreFieldObservationFromBackup(observation, accountId, parsed.manifest.includesPrivateCaptureLocation);
+        const decision = await restoreFieldObservationFromBackup(observation, accountId, parsed.manifest.includesPrivateCaptureLocation, sameAccount);
         if (decision.action === "insert" || decision.action === "replace") restored += 1;
         else if (decision.action === "skip") skipped += 1;
         else { rejected += 1; reasons.push(`${observation.id}: ${decision.reason}`); }
@@ -453,6 +454,7 @@ export default function CalyxField() {
       setObservations(rows);
       refreshStorageStatus();
       setRestoreReport(`Restore finished: ${restored} restored, ${skipped} skipped (device copy kept), ${rejected} rejected.` +
+        (sameAccount ? "" : " This backup was made by another account (or has no account binding): only records never sent to the server were restored.") +
         (reasons.length ? ` Rejected: ${reasons.slice(0, 5).join("; ")}${reasons.length > 5 ? "; …" : ""}` : ""));
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The backup could not be restored. Nothing on this device changed.");
@@ -612,7 +614,7 @@ export default function CalyxField() {
               <input type="checkbox" checked={includePrivateExportLocation} onChange={(event) => setIncludePrivateExportLocation(event.target.checked)} />
               Include private capture GPS and locality notes in this backup or metadata download
             </label>
-            <p className="text-xs">Captured GPS and locality notes are excluded unless the box above is checked. Free-text notes and filenames may still be sensitive; treat every backup as a private working copy, not a public-safe export.</p>
+            <p className="text-xs">The box controls only the structured capture GPS and locality-note fields. <strong>Original photos and videos are copied unchanged and may contain embedded location (EXIF/GPS) whether or not the box is checked.</strong> Free-text notes and filenames may also be sensitive; treat every backup as a private working copy, not a public-safe export.</p>
             <div className="flex flex-wrap gap-2">
               <button type="button" onClick={() => void exportBackup(observations)} disabled={!storeReady || observations.length === 0 || backupBusy !== "idle"} className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
                 <HardDrive aria-hidden="true" className="h-3.5 w-3.5" /> {backupBusy === "backing_up" ? "Preparing backup…" : "Back up with photos/videos (.zip)"}
@@ -625,7 +627,7 @@ export default function CalyxField() {
                 <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export all saved metadata (no media)
               </button>
             </div>
-            <p className="text-[11px] text-muted-foreground">Restore adds records to this signed-in account. A device copy that is newer, or already accepted by the server, is kept; damaged or foreign files are rejected.</p>
+            <p className="text-[11px] text-muted-foreground">Restore adds records to this signed-in account. A device copy that is newer, or already accepted by the server, is kept; damaged or foreign files are rejected. From another account's backup, only records never sent to the server are restored.</p>
             {restoreReport ? <p role="status" data-testid="field-restore-report" className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">{restoreReport}</p> : null}
           </div>
           <div className="mt-4 flex gap-2">

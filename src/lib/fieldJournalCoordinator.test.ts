@@ -124,11 +124,17 @@ describe("cross-tab edits preserve accepted receipts", () => {
 });
 
 describe("backup restore uses the same browser-owned lock", () => {
+  it("rejects another account's server-accepted record without writing", async () => {
+    vi.mocked(getFieldObservation).mockResolvedValueOnce(null);
+    const { accountId: _a, ...rest } = { ...durable, serverId: "fo-a" };
+    await expect(restoreFieldObservationFromBackup(rest, "observer-b", false, false)).resolves.toMatchObject({ action: "reject" });
+    expect(saveFieldObservation).not.toHaveBeenCalled();
+  });
   const incoming = () => { const { accountId: _a, ...rest } = durable; return { ...rest, note: "from backup", updatedAt: "2026-10-09T05:00:00.000Z" }; };
   it("replaces an older device copy for the current account and keeps receipts", async () => {
     const next = incoming();
     next.media = [{ ...next.media[0], serverMediaId: null, storageKey: null, uploadedAt: null }];
-    const decision = await restoreFieldObservationFromBackup(next, "observer", false);
+    const decision = await restoreFieldObservationFromBackup(next, "observer", false, true);
     expect(decision.action).toBe("replace");
     expect(durable.note).toBe("from backup");
     expect(durable.media[0].serverMediaId).toBe("media-receipt");
@@ -136,14 +142,14 @@ describe("backup restore uses the same browser-owned lock", () => {
   });
   it("skips while another tab holds the observation and never writes", async () => {
     held.add("orchid-field-sync:draft");
-    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false)).resolves.toMatchObject({ action: "skip" });
+    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false, true)).resolves.toMatchObject({ action: "skip" });
     expect(saveFieldObservation).not.toHaveBeenCalled();
   });
   it("inserts new ids without lock support but refuses to replace device copies", async () => {
     vi.stubGlobal("navigator", {});
-    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false)).resolves.toMatchObject({ action: "skip" });
+    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false, true)).resolves.toMatchObject({ action: "skip" });
     vi.mocked(getFieldObservation).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
-    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false)).resolves.toMatchObject({ action: "insert" });
+    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false, true)).resolves.toMatchObject({ action: "insert" });
     expect(saveFieldObservation).toHaveBeenCalledTimes(1);
   });
 });

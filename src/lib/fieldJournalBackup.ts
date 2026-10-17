@@ -24,7 +24,20 @@ const ZIP32_MEDIA_MAX = 0xffffffff - 1;
 
 export const FIELD_JOURNAL_BACKUP_NOTICE =
   "Private working copy of the Orchid Continuum Field Journal on this device: observation records plus original photo/video bytes, " +
-  "each verified by SHA-256. Observer notes and filenames may contain sensitive information. This is not a public-safe export.";
+  "each verified by SHA-256. Original photos and videos are copied unchanged and may contain embedded location (EXIF/GPS metadata) " +
+  "whether or not the private GPS option is chosen; that option controls only the structured capture GPS and locality-note fields. " +
+  "Observer notes and filenames may also contain sensitive information. This is not a public-safe export.";
+
+const ACCOUNT_BINDING_CONTEXT = "orchid-continuum-field-journal-backup/v1/account-binding:";
+
+/**
+ * Non-secret account binding: SHA-256 of a fixed app string plus the account
+ * id. It lets restore recognise "same account" without writing the id itself.
+ */
+export async function fieldJournalAccountBinding(accountId: string): Promise<string> {
+  if (!globalThis.crypto?.subtle) throw new Error("This browser cannot compute the backup account binding.");
+  return hex(await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(ACCOUNT_BINDING_CONTEXT + accountId)));
+}
 
 export type FieldJournalBackupMedia = Omit<FieldMedia, "blob"> & { sha256: string; path: string };
 export type FieldJournalBackupObservation = Omit<FieldObservation, "accountId" | "media" | "privateLocation"> & {
@@ -40,6 +53,7 @@ export type FieldJournalBackupManifest = {
   includesMediaBytes: true;
   includesPrivateCaptureLocation: boolean;
   includesSyncReceipts: true;
+  accountBinding: string;
   notice: string;
   observationCount: number;
   mediaCount: number;
@@ -72,8 +86,13 @@ function extensionFor(name: string): string {
 export async function buildFieldJournalBackup(
   observations: readonly FieldObservation[],
   exportedAt: string,
-  mode: FieldJournalExportMode = "metadata",
+  mode: FieldJournalExportMode,
+  accountId: string,
 ): Promise<{ blob: Blob; manifest: FieldJournalBackupManifest; fileName: string }> {
+  if (!accountId) throw new Error("Sign in before making a backup.");
+  if (observations.some((observation) => observation.accountId !== accountId)) {
+    throw new Error("A backup can only contain observations of the signed-in account.");
+  }
   if (mode !== "metadata" && mode !== "private_backup") throw new Error("Choose a valid Field Journal export mode.");
   if (observations.length > FIELD_JOURNAL_BACKUP_MAX_OBSERVATIONS) {
     throw new Error(`Back up at most ${FIELD_JOURNAL_BACKUP_MAX_OBSERVATIONS} observations at a time.`);
@@ -114,6 +133,7 @@ export async function buildFieldJournalBackup(
     includesMediaBytes: true,
     includesPrivateCaptureLocation: includePrivateLocation,
     includesSyncReceipts: true,
+    accountBinding: await fieldJournalAccountBinding(accountId),
     notice: FIELD_JOURNAL_BACKUP_NOTICE,
     observationCount: backupObservations.length,
     mediaCount: mediaEntries.length,
@@ -131,7 +151,10 @@ export async function buildFieldJournalBackup(
 
 export type FieldJournalRestoreRejection = { id: string | null; reason: string };
 export type ParsedFieldJournalBackup = {
-  manifest: Pick<FieldJournalBackupManifest, "schema" | "exportedAt" | "mode" | "includesPrivateCaptureLocation">;
+  manifest: Pick<FieldJournalBackupManifest, "schema" | "exportedAt" | "mode" | "includesPrivateCaptureLocation"> & {
+    /** null when the manifest carries no valid binding; treated as another account. */
+    accountBinding: string | null;
+  };
   /** Validated observations without accountId; restore binds them to the current account. */
   observations: Omit<FieldObservation, "accountId">[];
   rejected: FieldJournalRestoreRejection[];
@@ -349,10 +372,24 @@ export async function parseFieldJournalBackup(file: Blob): Promise<ParsedFieldJo
     }
   }
   return {
-    manifest: { schema: FIELD_JOURNAL_BACKUP_SCHEMA, exportedAt: raw.exportedAt, mode: raw.mode, includesPrivateCaptureLocation: includesLocation },
+    manifest: {
+      schema: FIELD_JOURNAL_BACKUP_SCHEMA, exportedAt: raw.exportedAt, mode: raw.mode, includesPrivateCaptureLocation: includesLocation,
+      accountBinding: typeof raw.accountBinding === "string" && SHA256_HEX.test(raw.accountBinding) ? raw.accountBinding : null,
+    },
     observations,
     rejected,
   };
+}
+
+/** True when a record carries any server acceptance or media upload receipt. */
+export function hasServerState(observation: Omit<FieldObservation, "accountId">): boolean {
+  return !!observation.serverId || !!observation.syncedAt || observation.syncStatus === "synchronized" ||
+    observation.media.some((item) => !!(item.serverMediaId || item.storageKey || item.uploadedAt));
+}
+
+/** Whether a parsed backup was made by the signed-in account (missing binding = no). */
+export async function backupMatchesAccount(binding: string | null, accountId: string): Promise<boolean> {
+  return !!binding && !!accountId && binding === await fieldJournalAccountBinding(accountId);
 }
 
 export type FieldJournalRestoreDecision =
@@ -370,8 +407,14 @@ export function decideFieldJournalRestore(
   incoming: Omit<FieldObservation, "accountId">,
   accountId: string,
   backupIncludesLocation: boolean,
+  sameAccount: boolean,
 ): FieldJournalRestoreDecision {
   if (!accountId) return { action: "reject", reason: "no signed-in account" };
+  if (!sameAccount && hasServerState(incoming)) {
+    // Server ids and media receipts belong to the account that made the backup;
+    // binding them to this account would show or retry another account's records.
+    return { action: "reject", reason: "belongs to another account (already sent to the server)" };
+  }
   const candidate: FieldObservation = { ...incoming, accountId };
   if (!local) return { action: "insert", observation: candidate, reason: "new on this device" };
   if (local.accountId !== accountId) return { action: "reject", reason: "this id belongs to another account on this device" };

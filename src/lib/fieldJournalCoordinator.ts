@@ -96,9 +96,10 @@ export async function restoreFieldObservationFromBackup(
   incoming: Omit<FieldObservation, "accountId">,
   accountId: string,
   backupIncludesLocation: boolean,
+  sameAccount: boolean,
 ): Promise<FieldJournalRestoreDecision> {
   const apply = async (): Promise<FieldJournalRestoreDecision> => {
-    const decision = decideFieldJournalRestore(await getFieldObservation(incoming.id), incoming, accountId, backupIncludesLocation);
+    const decision = decideFieldJournalRestore(await getFieldObservation(incoming.id), incoming, accountId, backupIncludesLocation, sameAccount);
     if (decision.action === "insert" || decision.action === "replace") await saveFieldObservation(decision.observation);
     return decision;
   };
