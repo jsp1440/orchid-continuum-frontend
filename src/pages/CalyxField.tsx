@@ -43,6 +43,7 @@ import {
 import { fieldJournalMetadataExport } from "@/lib/fieldJournalExport";
 import { backupMatchesAccount, buildFieldJournalBackup, FIELD_JOURNAL_PRODUCT_NAME, parseFieldJournalBackup } from "@/lib/fieldJournalBackup";
 import { applyFieldJournalHead } from "@/lib/fieldJournalHead";
+import { registerFieldJournalShell } from "@/lib/fieldJournalShell";
 import { formatBytes, handOffBackupFile, readFieldStorageStatus, requestPersistentFieldStorage, type FieldStorageStatus } from "@/lib/fieldJournalDevice";
 import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, restoreFieldObservationFromBackup, syncSavedFieldObservation } from "@/lib/fieldJournalCoordinator";
 
@@ -167,6 +168,10 @@ export default function CalyxField() {
   }, []);
 
   useEffect(() => applyFieldJournalHead(), []);
+
+  useEffect(() => {
+    void registerFieldJournalShell();
+  }, []);
 
   const mediaUrls = useMemo(() => {
     const urls = new Map<string, string>();

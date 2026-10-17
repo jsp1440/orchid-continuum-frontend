@@ -1,23 +1,15 @@
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import './index.css'
+import { isFieldJournalPath, registerFieldJournalShell } from "./lib/fieldJournalShell";
 
 // Remove dark mode class addition
 createRoot(document.getElementById("root")!).render(<App />);
 
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+if (isFieldJournalPath(window.location.pathname)) {
+  // Opening /field directly (Home Screen, reload, offline) installs the shell
+  // on load; arriving in-app registers it when the Field Journal mounts.
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("/field-journal-sw.js")
-      .then(() => navigator.serviceWorker.ready)
-      .then((registration) => {
-        // Let the offline shell cache static files this page loaded before the
-        // worker controlled it (for example lazily imported chunks).
-        const urls = performance.getEntriesByType("resource").map((entry) => entry.name)
-          .filter((url) => url.startsWith(window.location.origin));
-        registration.active?.postMessage({ type: "FIELD_JOURNAL_CACHE_URLS", urls });
-      })
-      .catch((error) => {
-        console.warn("Field Journal offline shell registration failed", error);
-      });
+    void registerFieldJournalShell();
   });
 }
