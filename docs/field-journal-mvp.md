@@ -1,4 +1,6 @@
-# Field Journal MVP — offline-first scientific field capture
+# The Orchid Continuum Field Journal — offline-first scientific field capture
+
+Official product name: **the Orchid Continuum Field Journal** (route `/field`). It is a general-purpose orchid field-research product and is not named for any contributor, tester, destination or individual.
 
 Branch: `field-journal/offline-mvp`
 Repositories: `jsp1440/orchid-continuum-frontend`, `jsp1440/orchid-calyx-backend`
@@ -16,6 +18,7 @@ It does not create a parallel observation, occurrence, taxonomy, Atlas, media, o
 Frontend:
 
 - `src/pages/CalyxField.tsx` — existing `/field` page, now backed by durable offline storage.
+- `public/field-journal.webmanifest`, `public/field-journal-icon-*.png`, `src/lib/fieldJournalHead.ts` — Home Screen identity for `/field` (standalone display, `start_url` `/field`, PNG apple-touch-icon).
 - `src/lib/backendConfig.ts` — Calyx origin allowlist and owner-session bearer transport.
 - `src/lib/atlasLocalitySafety.ts` — existing public Atlas generalization policy; Field Journal does not weaken it.
 - `src/contexts/AuthContext.tsx` — Supabase account boundary for the protected `/field` route.
@@ -79,7 +82,28 @@ Use **Export metadata** on one saved observation or **Export all saved metadata*
 
 Default JSON downloads omit the structured private capture location, GPS, accuracy, elevation and locality notes. They retain observation notes, ecology, unresolved identification state, timestamps, local/server ids and photo/video metadata including hashes and accepted receipts. Account identity, private storage keys, media bytes and embedded EXIF are excluded.
 
-Only select **Include private capture GPS and locality notes in this metadata backup** when you intend to save that sensitive location data privately. This explicit option adds the structured private capture location to the JSON. Treat both modes as private working copies: free-text notes and filenames may identify a site even when captured GPS is omitted. Neither mode is a public-safe Atlas projection, a media backup or an import/restore file. Original photo/video blobs remain on the device unchanged; preserve them separately before clearing browser storage.
+Only select **Include private capture GPS and locality notes in this backup or metadata download** when you intend to save that sensitive location data privately. This explicit option adds the structured private capture location to the JSON. Treat both modes as private working copies: free-text notes and filenames may identify a site even when captured GPS is omitted. Neither metadata mode is a public-safe Atlas projection, a media backup or an import/restore file. Use the full-media backup below to preserve originals.
+
+## Full-media device backup and restore
+
+**Back up with photos/videos (.zip)** writes one uncompressed (STORE) `.zip` built by an in-repo writer (`src/lib/fieldJournalZip.ts`, CRC-32, no dependency):
+
+- `manifest.json` — schema `orchid-continuum-field-journal-backup/v1`: every saved observation record for the signed-in device account (notes, ecology, identification state, sync state, server id and media receipts), plus for each photo/video its SHA-256, size, type and path. Account identity is never written.
+- `media/<n>/<m>.<ext>` — the original photo/video bytes, byte-for-byte (the stored Blob is a ZIP part, not re-encoded or copied into one buffer).
+
+Captured GPS/locality notes follow the same unchecked-by-default option as the metadata download. Every backup is a private working copy: notes and filenames may be sensitive.
+
+On iPad Safari the file is handed to the share sheet (`navigator.share` with files) — choose **Save to Files**; other browsers download it. The backup file is the real safety copy. Browser storage can be cleared by the system or by clearing website data; `/field` asks once for persistent storage after the first durable save and shows whether the browser agreed plus current usage/quota. On iPad, adding the Field Journal to the Home Screen improves storage durability but is not a substitute for the backup file.
+
+**Restore from backup** only accepts this app's own manifest schema in a STORE ZIP (no compression/encryption/ZIP64/extra fields, contiguous entries, bounded entry count and sizes, no unlisted files). Every media file is verified by CRC-32 and SHA-256; an observation with any failing file is rejected and reported. Restored records are bound to the account currently signed in and merged under the same exclusive lock as sync/edit:
+
+- new id → restored;
+- device copy with the same or later `updatedAt` → kept (skipped);
+- device copy already server-accepted/synchronized is never downgraded by an unsynced backup copy; conflicting server ids are rejected;
+- when the backup copy is newer, saved media receipts and device-only originals are kept, and device GPS is kept if the backup excluded it;
+- a record backed up mid-sync restores as **Sync failed** (retryable with its receipts).
+
+The UI reports restored / skipped / rejected counts.
 
 ## Locality protection
 
@@ -119,6 +143,9 @@ Frontend (`src/lib/fieldJournal.test.ts`):
 11. Tap sync again. Confirm no duplicate observation is created and media count stays the same.
 12. Confirm the local original photos/video still open from the observation card.
 13. On the backend, retrieve `GET /api/field-observations/{server_id}` with the same authorized session and confirm the record exists with `identification_status: "unresolved"` and no coordinate fields.
+14. Tap **Back up with photos/videos (.zip)** and choose **Save to Files**. In Files, confirm the `.zip` exists and its size is roughly the total of the originals.
+15. On a test account/device, tap **Restore from backup**, pick that `.zip`, and confirm the report (e.g. `1 restored, 0 skipped, 0 rejected`) and that photos/video open. Restoring again reports the records as skipped.
+16. Optional: Share → **Add to Home Screen** from `/field`; the icon opens the Orchid Continuum Field Journal standalone.
 
 ## Remaining limitations
 
