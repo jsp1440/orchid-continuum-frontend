@@ -36,6 +36,9 @@ function boundedQuestion(question: string | null | undefined): string | null {
  */
 export function parseAtlasCalyxQuestionContext(search: string): AtlasCalyxQuestionContext | null {
   const params = new URLSearchParams(search);
+  if (['origin', 'question', 'question_source', 'question_is_evidence'].some(
+    (key) => params.getAll(key).length > 1,
+  )) return null;
   const origin = params.get('origin')?.trim() ?? '';
   if (
     origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN &&
