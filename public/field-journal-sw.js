@@ -123,17 +123,37 @@ self.addEventListener("fetch", (event) => {
   }
 });
 
+// Navigations are stored only under fixed keys, never under their query
+// string, so one-time auth URLs (e.g. ?code=) are not cached and the cache
+// cannot grow per URL. A slow network falls back to the cached shell.
+const NAVIGATION_TIMEOUT_MS = 4000;
+const SHELL_KEYS = new Set(["/", "/field"]);
+
 async function networkFirstNavigation(request) {
   const cache = await caches.open(FIELD_JOURNAL_SHELL_CACHE);
-  try {
-    const response = await fetch(request);
-    if (response.ok) {
-      await cache.put(request, response.clone());
+  const { pathname } = new URL(request.url);
+  const key = SHELL_KEYS.has(pathname) ? pathname : null;
+  const cachedShell = async () => (key && (await cache.match(key))) || (await cache.match("/field")) || (await cache.match("/"));
+  const network = fetch(request).then(async (response) => {
+    if (key && response.ok && !response.redirected) {
+      await cache.put(key, response.clone());
     }
     return response;
+  });
+  // Avoid an unhandled rejection when the cached shell answers first.
+  network.catch(() => undefined);
+  let timer;
+  const timeout = new Promise((resolve) => {
+    timer = setTimeout(() => resolve(null), NAVIGATION_TIMEOUT_MS);
+  });
+  try {
+    const response = await Promise.race([network, timeout]);
+    if (response) return response;
+    return (await cachedShell()) || (await network);
   } catch (error) {
-    const cachedPage = await cache.match(request, { ignoreSearch: true });
-    return cachedPage || (await cache.match("/field")) || (await cache.match("/")) || Promise.reject(error);
+    return (await cachedShell()) || Promise.reject(error);
+  } finally {
+    clearTimeout(timer);
   }
 }
 

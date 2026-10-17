@@ -7,9 +7,9 @@ const HTML = `<!doctype html><link rel="manifest" href="/calyx-manifest.webmanif
 <script type="module" crossorigin src="/assets/index-abc123.js"></script><link rel="stylesheet" crossorigin href="/assets/index-def456.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter"><script src="https://third.party/x.js"></script>`;
 
-type Handler = (event: { waitUntil: (p: Promise<unknown>) => void; data?: unknown }) => void;
+type Handler = (event: { waitUntil: (p: Promise<unknown>) => void; respondWith: (p: Promise<Response>) => void; data?: unknown; request?: Request }) => void;
 
-function loadWorker(existingCaches: string[] = []) {
+function loadWorker(existingCaches: string[] = [], network: (input: unknown) => Promise<Response> = async () => new Response(HTML, { status: 200 })) {
   const stores = new Map<string, Map<string, string>>(existingCaches.map((name) => [name, new Map([["/old", "old"]])]));
   const keyOf = (request: string | Request) => typeof request === "string" ? request : new URL(request.url).pathname;
   const open = async (name: string) => {
@@ -19,7 +19,7 @@ function loadWorker(existingCaches: string[] = []) {
       put: async (request: string | Request) => { store.set(keyOf(request), "ok"); },
       add: async (request: string | Request) => { store.set(keyOf(request), "ok"); },
       addAll: async (requests: Request[]) => { requests.forEach((request) => store.set(keyOf(request), "ok")); },
-      match: async (request: string) => store.get(keyOf(request)),
+      match: async (request: string) => store.has(keyOf(request)) ? new Response(`cached:${keyOf(request)}`) : undefined,
     };
   };
   const handlers = new Map<string, Handler>();
@@ -30,15 +30,21 @@ function loadWorker(existingCaches: string[] = []) {
     clients: { claim: vi.fn(async () => undefined) },
   };
   const caches = { open, keys: async () => [...stores.keys()], delete: async (name: string) => stores.delete(name) };
-  const fetch = vi.fn(async () => new Response(HTML, { status: 200 }));
+  const fetch = vi.fn(network);
   const RequestWithOrigin = class extends Request { constructor(input: string, init?: RequestInit) { super(new URL(input, ORIGIN), init); } };
   new Function("self", "caches", "fetch", "Request", SOURCE)(self, caches, fetch, RequestWithOrigin);
   const run = async (type: string, data?: unknown) => {
     let pending: Promise<unknown> = Promise.resolve();
-    handlers.get(type)!({ waitUntil: (p) => { pending = p; }, data });
+    handlers.get(type)!({ waitUntil: (p) => { pending = p; }, respondWith: () => undefined, data });
     await pending;
   };
-  return { stores, run, self };
+  const navigate = async (path: string) => {
+    let response: Promise<Response> | undefined;
+    const request = { method: "GET", mode: "navigate", url: `${ORIGIN}${path}` } as unknown as Request;
+    handlers.get("fetch")!({ waitUntil: () => undefined, respondWith: (p) => { response = p; }, request });
+    return response!;
+  };
+  return { stores, run, self, navigate };
 }
 
 describe("Field Journal offline shell service worker", () => {
@@ -63,4 +69,34 @@ describe("Field Journal offline shell service worker", () => {
     await worker.run("message", { type: "FIELD_JOURNAL_CACHE_URLS", urls: [`${ORIGIN}/assets/lazy-1.js`, `${ORIGIN}/api/field-observations`, "https://evil.example/x.js", `${ORIGIN}/field`, 42] });
     expect([...worker.stores.get("orchid-field-journal-shell-v2")!.keys()]).toEqual(["/assets/lazy-1.js"]);
   });
+
+  it("stores navigations only under fixed shell keys (never ?code= URLs)", async () => {
+    const worker = loadWorker();
+    await worker.navigate("/field?code=one-time-secret");
+    await worker.navigate("/atlas");
+    await worker.navigate("/");
+    expect([...worker.stores.get("orchid-field-journal-shell-v2")!.keys()].sort()).toEqual(["/", "/field"]);
+  });
+
+  it("falls back to the cached shell when the network stalls or fails", async () => {
+    vi.useFakeTimers();
+    try {
+      const stalled = loadWorker([], () => new Promise<Response>(() => undefined));
+      (await caches(stalled)).put("/field");
+      const pending = stalled.navigate("/field?source=home-screen");
+      await vi.advanceTimersByTimeAsync(4000);
+      expect(await (await pending).text()).toBe("cached:/field");
+    } finally {
+      vi.useRealTimers();
+    }
+    const offline = loadWorker([], async () => { throw new TypeError("offline"); });
+    (await caches(offline)).put("/");
+    expect(await (await offline.navigate("/field")).text()).toBe("cached:/");
+  });
 });
+
+async function caches(worker: ReturnType<typeof loadWorker>) {
+  if (!worker.stores.has("orchid-field-journal-shell-v2")) worker.stores.set("orchid-field-journal-shell-v2", new Map());
+  const store = worker.stores.get("orchid-field-journal-shell-v2")!;
+  return { put: (key: string) => store.set(key, "ok") };
+}
