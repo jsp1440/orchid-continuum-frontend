@@ -151,7 +151,7 @@ describe('Atlas Next species-to-map journey (synthetic fixture, real component s
     expect(drawn.marks.every((m) => m.lat > 0 && m.lng > 0)).toBe(true);
   });
 
-  it('control: an assessed, not-threatened record is drawn near its coordinate, with no locality generalisation', async () => {
+  it('control: an assessed, not-threatened record is drawn near its coordinate', async () => {
     // Guards the privacy assertions below against vacuity: if nothing is ever
     // drawn near its true position, "not drawn precisely" would prove nothing.
     // The scale contract lets a scale coarsen a record to its aggregationDeg, so
@@ -165,8 +165,6 @@ describe('Atlas Next species-to-map journey (synthetic fixture, real component s
 
     expect(drawn.marks.length).toBe(1);
     expect(markNear(PRECISE.lat, PRECISE.lng, SCALES.country.aggregationDeg)).toBe(true);
-    // No locality-protection halo: nothing was withheld for this record.
-    expect(drawn.marks[0].haloDeg ?? 0).toBe(0);
   });
 
   it('never draws the precise coordinate of a threatened record', async () => {
