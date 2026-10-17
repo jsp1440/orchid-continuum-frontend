@@ -129,6 +129,10 @@ async function uploadServerMedia(serverObservationId: string, media: FieldMedia)
   };
 }
 
+function clearMediaReceipt(media: FieldMedia): FieldMedia {
+  return { ...media, storageKey: null, serverMediaId: null, uploadedAt: null, serverDurability: null, serverArchive: null };
+}
+
 export async function syncFieldObservation(
   observation: FieldObservation,
   checkpoint: (progress: FieldObservation) => Promise<unknown> = async () => undefined,
@@ -145,12 +149,17 @@ export async function syncFieldObservation(
     }
   };
   try {
+    // Defense in depth: a record the server never accepted cannot hold genuine media
+    // receipts (e.g. a forged restore). Treat them as untrusted so every original is
+    // uploaded after the server observation exists.
+    const untrustedReceipts = !observation.serverId;
+    const startMedia = untrustedReceipts ? observation.media.map(clearMediaReceipt) : observation.media;
     const serverId = observation.serverId ?? await createServerObservation(observation);
-    let progress = { ...observation, serverId };
+    let progress = { ...observation, serverId, media: [...startMedia] };
     // Persist acceptance before uploading large files. A retry must not create a
     // second observation or retransmit media whose receipt is already durable.
     await persistCheckpoint(progress);
-    const uploadedMedia = [...observation.media];
+    const uploadedMedia = [...startMedia];
     for (let index = 0; index < uploadedMedia.length; index += 1) {
       const media = uploadedMedia[index];
       if (hasCompleteMediaReceipt(media)) continue;

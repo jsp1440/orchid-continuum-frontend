@@ -268,6 +268,10 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
   let syncError = text(raw.syncError, "syncError", 500, { nullable: true, required: false });
   const serverId = text(raw.serverId, "serverId", 200, { nullable: true });
   if (syncStatus === "synchronized" && !serverId) throw new RecordError("synchronized record without a server id");
+  if (!serverId && media.some(({ media: item }) =>
+    item.serverMediaId != null || item.storageKey != null || item.uploadedAt != null || item.serverDurability != null || item.serverArchive != null)) {
+    throw new RecordError("media receipt on a record without a server id");
+  }
   if (syncStatus === "syncing") {
     // A backup taken mid-upload restores as retryable; saved receipts are kept.
     syncStatus = "failed";

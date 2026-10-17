@@ -141,6 +141,19 @@ describe("Field Journal full-media backup", () => {
   });
 
   it.each([
+    ["complete forged receipt with archive verified", { serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified" } }],
+    ["complete forged receipt only", {}],
+  ])("rejects a restored media receipt on a record without a server id: %s", async (_name, extra) => {
+    const source = await observation();
+    source.media[0] = { ...(await media("receipted", "a.jpg", "image/jpeg", bytes(10, 1), true)), ...extra } as FieldMedia;
+    const { blob } = await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT);
+    expect((await manifestOf(blob)).observations[0]).toMatchObject({ serverId: null, syncStatus: "local_only" });
+    const parsed = await parseFieldJournalBackup(blob);
+    expect(parsed.observations).toEqual([]);
+    expect(parsed.rejected[0].reason).toContain("media receipt on a record without a server id");
+  });
+
+  it.each([
     [{ provider: "google_drive", state: "archived" }],
     [{ provider: "dropbox", state: "verified" }],
     [{ provider: "google_drive", state: "verified", drive_file_id: "drive-secret-id" }],

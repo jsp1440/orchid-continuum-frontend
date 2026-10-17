@@ -76,12 +76,18 @@ export function hasCompleteMediaReceipt(media: Pick<FieldMedia, "serverMediaId" 
 
 type FieldMediaLabelInput = Pick<FieldMedia, "serverMediaId" | "storageKey" | "sha256" | "uploadedAt" | "serverDurability" | "serverArchive">;
 
+/** A media receipt is only trusted on a record the server has accepted (non-empty serverId). */
+export function hasTrustedMediaReceipt(media: Parameters<typeof hasCompleteMediaReceipt>[0], serverId: string | null | undefined): boolean {
+  return Boolean(serverId) && hasCompleteMediaReceipt(media);
+}
+
 /**
  * Truthful upload label: a server receipt is never presented as a guaranteed backup, and no
- * server, durability or archive label is shown unless the receipt is complete.
+ * server, durability or archive label is shown unless the receipt is complete and belongs to
+ * a server-accepted record.
  */
-export function fieldMediaUploadLabel(media: FieldMediaLabelInput): string {
-  if (!hasCompleteMediaReceipt(media)) return "Original on this device";
+export function fieldMediaUploadLabel(media: FieldMediaLabelInput, serverId: string | null | undefined): string {
+  if (!hasTrustedMediaReceipt(media, serverId)) return "Original on this device";
   const archiveState = media.serverArchive?.provider === "google_drive" ? media.serverArchive.state : null;
   if (archiveState === "verified" && media.serverDurability === "durable") return "Archived in Google Drive (verified)";
   if (archiveState === "pending") return "Server copy (Drive archive pending)";
@@ -91,9 +97,9 @@ export function fieldMediaUploadLabel(media: FieldMediaLabelInput): string {
 }
 
 /** Card caption: the upload label plus the reminder that the device original is retained. */
-export function fieldMediaReceiptCaption(media: FieldMediaLabelInput): string {
-  const label = fieldMediaUploadLabel(media);
-  return hasCompleteMediaReceipt(media) ? `${label} · original kept here` : label;
+export function fieldMediaReceiptCaption(media: FieldMediaLabelInput, serverId: string | null | undefined): string {
+  const label = fieldMediaUploadLabel(media, serverId);
+  return hasTrustedMediaReceipt(media, serverId) ? `${label} · original kept here` : label;
 }
 
 export type FieldObservation = {
