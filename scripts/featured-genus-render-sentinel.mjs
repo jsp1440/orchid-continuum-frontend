@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import { chromium } from 'playwright';
-import { isExpectedMediaConsoleError, isExpectedOptionalSnapshotFailure } from './featured-genus-validation-policy.mjs';
+import {
+  FEATURED_GENUS_NO_MEDIA_PATTERN,
+  FEATURED_GENUS_SECTION_SELECTOR,
+  isExpectedMediaConsoleError,
+  isExpectedOptionalSnapshotFailure,
+} from './featured-genus-validation-policy.mjs';
 
 const frontendUrl = (process.env.FRONTEND_URL || 'https://orchid-continuum-frontend-vof6.onrender.com/').replace(/\/$/, '');
 const calyxUrl = (process.env.CALYX_URL || 'https://orchid-calyx-backend.onrender.com').replace(/\/$/, '');
@@ -82,7 +87,8 @@ try {
     assert.match(releaseSha || '', /^[a-f0-9]{40}$/, 'deployed frontend did not attest a full release SHA');
     if (expectedReleaseSha) assert.equal(releaseSha, expectedReleaseSha, 'deployed frontend is not the expected release');
     report.release_sha = releaseSha;
-    const feature = page.locator('section').filter({ hasText: 'Featured Genus' }).first();
+    // Select by the stable heading id, not by copy: see FEATURED_GENUS_SECTION_SELECTOR.
+    const feature = page.locator(FEATURED_GENUS_SECTION_SELECTOR);
     assert.equal(await feature.count(), 1, 'Featured Genus section was not rendered');
     assert.equal(await page.locator('#featured-genus-title').count(), 1, 'Featured Genus heading was not rendered');
     const continuationCount = await page.locator('[data-testid="featured-genus-continuation"]').count();
@@ -98,7 +104,7 @@ try {
       complete: image.complete,
       naturalWidth: image.naturalWidth,
     })));
-    const noMediaText = await feature.getByText(/No approved Continuum photograph available|No verified Orchid Continuum photograph|This approved photograph could not be loaded\. No substitute image is shown\./i).count();
+    const noMediaText = await feature.getByText(FEATURED_GENUS_NO_MEDIA_PATTERN).count();
     const serviceErrorText = await feature.getByText(/media service is temporarily unavailable/i).count();
     await page.screenshot({ path: 'artifacts/featured-genus.png', fullPage: false });
 

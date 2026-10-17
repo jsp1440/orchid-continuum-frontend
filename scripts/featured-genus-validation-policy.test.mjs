@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { isExpectedMediaConsoleError, isExpectedOptionalSnapshotFailure } from "./featured-genus-validation-policy.mjs";
+import {
+  FEATURED_GENUS_NO_MEDIA_PATTERN,
+  FEATURED_GENUS_SECTION_SELECTOR,
+  isExpectedMediaConsoleError,
+  isExpectedOptionalSnapshotFailure,
+} from "./featured-genus-validation-policy.mjs";
 
 const optionalSnapshotFailure = (overrides = {}) => ({
   status: 400,
@@ -54,5 +59,18 @@ describe("featured genus optional snapshot validation policy", () => {
     expect(isExpectedOptionalSnapshotFailure(optionalSnapshotFailure({
       url: "https://example.supabase.co/rest/v1/daily_genus_snapshot?select=genus%2Csnapshot_date&snapshot_date=eq.2026-09-23&limit=1",
     }))).toBe(false);
+  });
+});
+
+describe("featured genus sentinel section location", () => {
+  it("locates the section by its stable heading id, not by copy", () => {
+    expect(FEATURED_GENUS_SECTION_SELECTOR).toBe('section[aria-labelledby="featured-genus-title"]');
+    expect(FEATURED_GENUS_SECTION_SELECTOR.toLowerCase()).not.toContain("featured genus");
+  });
+
+  it("accepts only the documented honest no-media states", () => {
+    expect(FEATURED_GENUS_NO_MEDIA_PATTERN.test("No approved Continuum photograph available")).toBe(true);
+    expect(FEATURED_GENUS_NO_MEDIA_PATTERN.test("This approved photograph could not be loaded. No substitute image is shown.")).toBe(true);
+    expect(FEATURED_GENUS_NO_MEDIA_PATTERN.test("Loading the connected Continuum evidence…")).toBe(false);
   });
 });
