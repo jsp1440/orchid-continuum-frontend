@@ -23,12 +23,14 @@ import {
   canEditFieldObservation,
   createFieldObservation,
   fieldMediaReceiptCaption,
+  FIELD_MEDIA_EXIF_UPLOAD_NOTICE,
   fieldObservationStatusLabel,
   mediaKindFromType,
   newFieldJournalId,
   nowIso,
   queueFieldObservation,
   sha256Hex,
+  validateFieldMediaFile,
   type FieldCertainty,
   type FieldLocalityVisibility,
   type FieldMedia,
@@ -260,7 +262,7 @@ export default function CalyxField() {
     if (!files) return;
     const chosen = Array.from(files).slice(0, 20);
     try {
-      chosen.forEach((file) => mediaKindFromType(file.type));
+      chosen.forEach((file) => validateFieldMediaFile(file));
       setSelectedFiles(chosen);
       setError(null);
     } catch (caught) {
@@ -485,7 +487,7 @@ export default function CalyxField() {
             <p className="label-eyebrow">Orchid Continuum · Field research</p>
             <h1 className="mt-2 text-4xl">Orchid Continuum Field Journal</h1>
             <p className="mt-2 max-w-3xl text-sm text-white/75">
-              {`Offline-first field capture with ${FIELD_JOURNAL_PRODUCT_NAME}:`} originals and exact private capture coordinates stay on this iPad until you choose to sync. The backend receives the governed observation record and original media provenance — never exact coordinates in this MVP.
+              {`Offline-first field capture with ${FIELD_JOURNAL_PRODUCT_NAME}:`} originals and the privately captured point stay on this iPad until you choose to sync. Sync sends the governed observation record and your original photos and videos unchanged; it never sends the captured point or locality notes in this MVP, but a photo file may carry its own embedded location (EXIF/GPS).
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -519,6 +521,7 @@ export default function CalyxField() {
                 <input className="sr-only" type="file" accept="image/*,video/*" multiple onChange={(event) => selectMedia(event.target.files, event.currentTarget)} />
               </label>
               {selectedFiles.length ? <p className="mt-2 text-xs text-muted-foreground">{selectedFiles.length} new original{selectedFiles.length === 1 ? "" : "s"} will be preserved byte-for-byte in offline storage.</p> : null}
+              <p className="mt-2 text-xs text-muted-foreground" data-testid="field-media-exif-notice">{FIELD_MEDIA_EXIF_UPLOAD_NOTICE}</p>
             </li>
 
             <li className="rounded-lg border border-quiet p-4">
@@ -538,7 +541,7 @@ export default function CalyxField() {
                 <div className="mt-3 space-y-3">
                   <p className="rounded-md bg-secondary p-3 text-xs">
                     <MapPin aria-hidden="true" className="mr-1 inline h-4 w-4" />
-                    Private capture saved on this device{privateLocation.accuracyM ? ` · accuracy ±${Math.round(privateLocation.accuracyM)} m` : ""}. Sync sends only the visibility class above; exact coordinates and locality notes are not uploaded by this MVP.
+                    Private capture saved on this device{privateLocation.accuracyM ? ` · accuracy ±${Math.round(privateLocation.accuracyM)} m` : ""}. Sync sends only the visibility class above; this captured point and your locality notes are not uploaded by this MVP. Photo and video files are uploaded unchanged and may carry their own embedded location.
                   </p>
                   <label className="block text-sm font-semibold" htmlFor="field-locality-notes">
                     Private locality notes <span className="font-normal text-muted-foreground">(device-local only)</span>
