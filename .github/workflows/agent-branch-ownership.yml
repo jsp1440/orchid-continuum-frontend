@@ -1,0 +1,155 @@
+name: Agent Branch Ownership
+
+# Claude owns claude/** and field-journal/**. This check fails when anything
+# other than Claude pushed to, or committed on, such a branch, labels the PR
+# `ownership-violation` and keeps one comment naming the foreign commits.
+# It only reads, labels and comments: it never pushes, reverts or force-updates.
+# Enforcement is the owner-applied ruleset in docs/rulesets/; see
+# docs/AGENT-BRANCH-OWNERSHIP.md.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - 'claude/**'
+      - 'field-journal/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: agent-branch-ownership-${{ github.event.pull_request.head.ref || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  agent-branch-ownership:
+    name: agent-branch-ownership
+    if: >-
+      github.event_name == 'push' ||
+      startsWith(github.event.pull_request.head.ref, 'claude/') ||
+      startsWith(github.event.pull_request.head.ref, 'field-journal/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 1
+
+      - name: Use the detector from the default branch
+        # A foreign push could edit the detector on its own branch, so the
+        # default branch's copy is authoritative once it exists there.
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          detector="scripts/agent_branch_ownership.py"
+          if git fetch --no-tags --depth=1 origin "$DEFAULT_BRANCH" \
+             && git cat-file -e "FETCH_HEAD:$detector" 2>/dev/null; then
+            git show "FETCH_HEAD:$detector" > "$RUNNER_TEMP/agent_branch_ownership.py"
+            echo "Using $detector from $DEFAULT_BRANCH."
+          else
+            cp "$detector" "$RUNNER_TEMP/agent_branch_ownership.py"
+            echo "::notice::Bootstrap: $detector is not on $DEFAULT_BRANCH yet; using the checked-out copy."
+          fi
+
+      - name: Collect pull requests and commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPOSITORY: ${{ github.repository }}
+          OWNER: ${{ github.repository_owner }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PUSH_REF: ${{ github.ref_name }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ownership"
+          mkdir -p "$work"
+          : > "$work/targets.tsv"
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" --jq '.[]' > "$work/pr-$PR_NUMBER.jsonl"
+            printf '%s\t%s\t%s\t%s\n' "$PR_NUMBER" "$PR_HEAD_REF" "$PR_HEAD_REPO" "$work/pr-$PR_NUMBER.jsonl" >> "$work/targets.tsv"
+          else
+            gh api "repos/$REPOSITORY/pulls?state=open&head=$OWNER:$PUSH_REF&per_page=100" --jq '.[].number' > "$work/prs.txt"
+            while read -r number; do
+              [ -n "$number" ] || continue
+              gh api --paginate "repos/$REPOSITORY/pulls/$number/commits?per_page=100" --jq '.[]' > "$work/pr-$number.jsonl"
+              printf '%s\t%s\t%s\t%s\n' "$number" "$PUSH_REF" "$REPOSITORY" "$work/pr-$number.jsonl" >> "$work/targets.tsv"
+            done < "$work/prs.txt"
+            if [ ! -s "$work/targets.tsv" ]; then
+              # No open PR: check what this push added relative to its parent
+              # state, or to the default branch for a new branch.
+              base="$PUSH_BEFORE"
+              if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+                base="$DEFAULT_BRANCH"
+              fi
+              gh api "repos/$REPOSITORY/compare/$base...$PUSH_AFTER" --jq '.commits[]' > "$work/push.jsonl"
+              printf '%s\t%s\t%s\t%s\n' "-" "$PUSH_REF" "$REPOSITORY" "$work/push.jsonl" >> "$work/targets.tsv"
+            fi
+          fi
+          cat "$work/targets.tsv"
+
+      - name: Detect foreign pushes and commits
+        id: detect
+        env:
+          ACTOR: ${{ github.actor }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          work="$RUNNER_TEMP/ownership"
+          : > "$work/violations.txt"
+          status=0
+          while IFS=$'\t' read -r number ref head_repo commits; do
+            [ -n "$ref" ] || continue
+            python3 "$RUNNER_TEMP/agent_branch_ownership.py" \
+              --head-ref "$ref" --actor "$ACTOR" --commits "$commits" \
+              --head-repo "$head_repo" --base-repo "$REPOSITORY" \
+              --run-url "$RUN_URL" \
+              --markdown-out "$work/comment-$number.md" --json-out "$work/report-$number.json"
+            rc=$?
+            if [ "$rc" -eq 1 ]; then
+              echo "$number" >> "$work/violations.txt"
+              status=1
+            elif [ "$rc" -ne 0 ]; then
+              exit "$rc"
+            fi
+          done < "$work/targets.tsv"
+          echo "violated=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Label and comment on violating pull requests
+        if: steps.detect.outputs.violated == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/ownership"
+          marker='<!-- agent-branch-ownership:v1 -->'
+          gh api "repos/$REPOSITORY/labels" -f name=ownership-violation -f color=B60205 \
+            -f description="Foreign push or commit on a Claude-owned branch" >/dev/null 2>&1 || true
+          while read -r number; do
+            [ "$number" != "-" ] || continue
+            gh api "repos/$REPOSITORY/issues/$number/labels" -f 'labels[]=ownership-violation' >/dev/null
+            existing=$(gh api --paginate "repos/$REPOSITORY/issues/$number/comments?per_page=100" \
+              --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | contains(\"$marker\"))) | .id" | sed -n 1p)
+            if [ -n "$existing" ]; then
+              gh api -X PATCH "repos/$REPOSITORY/issues/comments/$existing" -F "body=@$work/comment-$number.md" >/dev/null
+            else
+              gh api "repos/$REPOSITORY/issues/$number/comments" -F "body=@$work/comment-$number.md" >/dev/null
+            fi
+          done < "$work/violations.txt"
+
+      - name: Fail on violation
+        if: always() && steps.detect.outputs.violated == '1'
+        run: |
+          echo "::error::Claude-owned branch carries a foreign push or commit. See docs/AGENT-BRANCH-OWNERSHIP.md."
+          exit 1
