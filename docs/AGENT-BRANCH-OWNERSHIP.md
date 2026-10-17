@@ -69,7 +69,24 @@ The workflow has `contents: read`. It never pushes, reverts, resets or force-upd
 - `non_fast_forward`: block force pushes;
 - `deletion`: restrict deletions.
 
-The only bypass actor is the Claude GitHub App (`Integration`, id `1236702`). Branch creation is not restricted, so Claude can still start new branches.
+Bypass actors:
+
+- the **Repository admin** role (`RepositoryRole`, id `5`);
+- the Claude GitHub App (`Integration`, id `1236702`).
+
+Branch creation is not restricted, so Claude can still start new branches.
+
+**Why the admin role is on the list.** Claude pushes through the app's user-to-server token, so GitHub sees the push as the owner `jsp1440` acting through the app. GitHub's ruleset documentation lists GitHub Apps as bypass actors, but it does not say whether an app's bypass covers pushes the app makes on a user's behalf. The app entry alone may therefore reject Claude. The admin role covers the owner, and Claude acting as the owner, either way.
+
+**What the ruleset still stops.** Copilot cloud-agent pushes are made by the `Copilot` bot (id `198982749`; `github.actor` is `Copilot`), not by the owner who started the session. GitHub documents the Copilot coding agent as its own ruleset bypass actor: when a rule blocks the agent, an admin must add Copilot to the bypass list explicitly. Restrict-updates therefore rejects Copilot pushes to `claude/**` and `field-journal/**`. **Never add Copilot to this bypass list.**
+
+**What the ruleset cannot stop.** The owner account's own pushes are admitted, including:
+
+- "Update branch" clicks;
+- web merges;
+- any agent holding the owner's credentials.
+
+The `agent-branch-ownership` check still flags those, because their commits are not authored by Claude. The underlying fix for Copilot is to stop starting Copilot sessions on `claude/*` PRs. The only setting that limits the agent itself is per repository, not per branch. It is in the owner's account settings, **Settings → Copilot → Cloud agent → Repository access** (<https://github.com/settings/copilot/coding_agent>), which offers no repositories, all repositories, or only selected repositories. Turning it off for a repository also stops the backend's `github_copilot_cloud_provider` lane there.
 
 The ruleset has no `required_status_checks` rule, on purpose. A required check on the owned branches themselves would gate pushes to them, which would include Claude's own direct pushes. To require this check, add `agent-branch-ownership` to the protection of the **base** branches (`main`, `oc-autonomous-integration`). There it gates merging a Claude PR, not pushing to it.
 
@@ -81,13 +98,13 @@ Only the owner can apply the ruleset. Agents must not apply, edit or disable it.
    - backend: <https://github.com/jsp1440/orchid-calyx-backend/settings/rules>
    - frontend: <https://github.com/jsp1440/orchid-continuum-frontend/settings/rules>
 2. Choose **New ruleset → Import a ruleset**, and select `docs/rulesets/claude-owned-branches.json` from that repository.
-3. Check that the bypass list shows the **Claude** app. If it does not, add it under **Bypass list → Add bypass → Apps → Claude**, and set it to always allow.
+3. Check that the bypass list shows **Repository admin** and the **Claude** app, both set to always allow. It must not list Copilot.
 4. Save the ruleset with enforcement **Active**.
 5. Verify it with Claude's next push to a `claude/*` branch:
-   - the push must succeed;
-   - a push to the same branch from any other actor (for example "Update branch") must be rejected.
+   - Claude's push must succeed;
+   - the next Copilot cloud-agent push to a `claude/*` branch must be rejected; if instead the agent is blocked from starting, that is also a pass.
 
-   If Claude's push is rejected, set the ruleset's enforcement to **Disabled** and report it. The bypass may not apply to the app's user-to-server pushes. Do not add a broader bypass, such as the admin role or the owner account. That would readmit the owner-account pushes this ruleset exists to stop.
+   If Claude's push is rejected, set the ruleset's enforcement to **Disabled** and report it.
 
 ## Before merging any PR
 
