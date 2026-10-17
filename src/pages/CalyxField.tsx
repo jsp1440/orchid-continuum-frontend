@@ -40,7 +40,8 @@ import {
   saveFieldObservation,
 } from "@/lib/fieldJournalStore";
 import { fieldJournalMetadataExport } from "@/lib/fieldJournalExport";
-import { buildFieldJournalBackup, parseFieldJournalBackup } from "@/lib/fieldJournalBackup";
+import { buildFieldJournalBackup, FIELD_JOURNAL_PRODUCT_NAME, parseFieldJournalBackup } from "@/lib/fieldJournalBackup";
+import { applyFieldJournalHead } from "@/lib/fieldJournalHead";
 import { formatBytes, handOffBackupFile, readFieldStorageStatus, requestPersistentFieldStorage, type FieldStorageStatus } from "@/lib/fieldJournalDevice";
 import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, restoreFieldObservationFromBackup, syncSavedFieldObservation } from "@/lib/fieldJournalCoordinator";
 
@@ -163,6 +164,8 @@ export default function CalyxField() {
   useEffect(() => {
     refreshStorageStatus();
   }, []);
+
+  useEffect(() => applyFieldJournalHead(), []);
 
   const mediaUrls = useMemo(() => {
     const urls = new Map<string, string>();
@@ -471,10 +474,10 @@ export default function CalyxField() {
       <header className="border-b border-quiet bg-ink px-4 py-8 text-white sm:px-8">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="label-eyebrow">Calyx Field · Scientific research</p>
-            <h1 className="mt-2 text-4xl">Field Journal</h1>
+            <p className="label-eyebrow">Orchid Continuum · Field research</p>
+            <h1 className="mt-2 text-4xl">Orchid Continuum Field Journal</h1>
             <p className="mt-2 max-w-3xl text-sm text-white/75">
-              Offline-first field capture: originals and exact private capture coordinates stay on this iPad until you choose to sync. The backend receives the governed observation record and original media provenance — never exact coordinates in this MVP.
+              {`Offline-first field capture with ${FIELD_JOURNAL_PRODUCT_NAME}:`} originals and exact private capture coordinates stay on this iPad until you choose to sync. The backend receives the governed observation record and original media provenance — never exact coordinates in this MVP.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">

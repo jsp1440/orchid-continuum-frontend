@@ -35,7 +35,7 @@ describe("field journal offline contract", () => {
   it("saves an unresolved observation with private capture location on the device only", () => {
     const observation = createFieldObservation(
       {
-        accountId: "lance-ipad",
+        accountId: "pilot-ipad",
         note: "Flower open beside the trail.",
         localityVisibility: "private",
         privateLocation: {
@@ -62,7 +62,7 @@ describe("field journal offline contract", () => {
   it("upload payload carries ecology and idempotency key but never coordinates or locality notes", () => {
     const observation = createFieldObservation(
       {
-        accountId: "lance-ipad",
+        accountId: "pilot-ipad",
         note: "Flower open beside the trail.",
         taxonLabel: "Phragmipedium",
         localityVisibility: "research_restricted",
@@ -107,7 +107,7 @@ describe("field journal offline contract", () => {
 
   it("keeps local_only → queued → syncing → failed/synchronized states explicit", () => {
     const observation = createFieldObservation(
-      { accountId: "lance-ipad", note: "Observed", localityVisibility: "private" },
+      { accountId: "pilot-ipad", note: "Observed", localityVisibility: "private" },
       { id: "draft-3", now: NOW },
     );
     const queued = queueFieldObservation(observation);
@@ -126,7 +126,7 @@ describe("field journal offline contract", () => {
 
   it("allows editing an unsynchronized draft without changing its durable local id", () => {
     const observation = createFieldObservation(
-      { accountId: "lance-ipad", note: "Observed", localityVisibility: "private" },
+      { accountId: "pilot-ipad", note: "Observed", localityVisibility: "private" },
       { id: "draft-4", now: NOW },
     );
     const edited = applyFieldObservationEdit(
