@@ -13,13 +13,15 @@ import { FieldJournalSyncError } from '@/lib/fieldJournalSync';
 
 const mocks = vi.hoisted(() => ({
   sync: vi.fn(),
+  auth: { user: { id: 'owner-1' } as { id: string } | null, offlineUser: null as { id: string } | null },
+  list: vi.fn(),
 }));
 
 vi.mock('@/contexts/AuthContext', () => ({
-  useAuth: () => ({ user: { id: 'owner-1' }, offlineUser: null }),
+  useAuth: () => mocks.auth,
 }));
 vi.mock('@/lib/fieldJournalStore', () => ({
-  listFieldObservations: vi.fn(async () => [observation]),
+  listFieldObservations: mocks.list,
   saveFieldObservation: vi.fn(async () => undefined),
 }));
 vi.mock('@/lib/fieldJournalCoordinator', () => ({
@@ -56,6 +58,9 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   mocks.sync.mockReset();
+  mocks.auth = { user: { id: 'owner-1' }, offlineUser: null };
+  mocks.list.mockReset();
+  mocks.list.mockImplementation(async () => [observation]);
 });
 
 afterEach(() => {
@@ -86,5 +91,20 @@ describe('CalyxField owner sign-in for sync', () => {
     await renderAndSyncAll();
     expect(mocks.sync).toHaveBeenCalled();
     expect(signInShown()).toBe(false);
+  });
+
+  it('opens only the offline account\'s local journal, never another account\'s', async () => {
+    mocks.auth = { user: null, offlineUser: { id: 'member-2' } };
+    await act(async () => { root.render(<CalyxField />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.list).toHaveBeenCalled();
+    expect(new Set(mocks.list.mock.calls.map((call) => call[0]))).toEqual(new Set(['member-2']));
+  });
+
+  it('loads no local journal when there is neither a session nor an offline account', async () => {
+    mocks.auth = { user: null, offlineUser: null };
+    await act(async () => { root.render(<CalyxField />); });
+    await act(async () => { await Promise.resolve(); });
+    expect(mocks.list).not.toHaveBeenCalled();
   });
 });

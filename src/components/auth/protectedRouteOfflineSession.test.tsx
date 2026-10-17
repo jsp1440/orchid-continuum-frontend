@@ -18,6 +18,7 @@ const STORAGE_KEY = 'sb-test-auth-token';
 
 const auth = vi.hoisted(() => ({
   getSession: vi.fn(),
+  signOut: vi.fn(),
   listener: null as null | ((event: string, session: unknown) => void),
 }));
 
@@ -30,14 +31,15 @@ vi.mock('@/lib/supabase', () => ({
         auth.listener = callback;
         return { data: { subscription: { unsubscribe: () => { auth.listener = null; } } } };
       },
-      signOut: vi.fn(async () => ({ error: null })),
+      signOut: auth.signOut,
     },
   },
 }));
 
 vi.mock('./AuthModal', () => ({ default: () => null }));
 
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { SIGNED_OUT_MARKER_KEY } from '@/lib/offlineAuthSession';
 import ProtectedRoute from './ProtectedRoute';
 
 let container: HTMLDivElement;
@@ -54,18 +56,35 @@ function setOnline(online: boolean) {
   Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => online });
 }
 
+let signOutFromPage: (() => Promise<void>) | null = null;
+
+function Journal() {
+  const { user, offlineUser, signOut } = useAuth();
+  signOutFromPage = signOut;
+  return <div data-testid="journal" data-account={(user ?? offlineUser)?.id ?? ''}>journal</div>;
+}
+
 async function renderGate(allowOfflineSession: boolean) {
   await act(async () => {
     root.render(
       <AuthProvider>
         <ProtectedRoute allowOfflineSession={allowOfflineSession} title="Sign in to use the Field Journal">
-          <div data-testid="journal">journal</div>
+          <Journal />
         </ProtectedRoute>
       </AuthProvider>,
     );
   });
   await act(async () => { await Promise.resolve(); });
 }
+
+/** Close the app and open it again (a fresh AuthProvider over the same storage). */
+async function reopen() {
+  act(() => root.unmount());
+  root = createRoot(container);
+  await renderGate(true);
+}
+
+const offlineRefreshFailure = () => ({ data: { session: null }, error: new AuthRetryableFetchError('Failed to fetch', 0) });
 
 const journalShown = () => container.querySelector('[data-testid="journal"]') !== null;
 const gateShown = () => (container.textContent ?? '').includes('Sign in to use the Field Journal');
@@ -77,6 +96,8 @@ beforeEach(() => {
   root = createRoot(container);
   window.localStorage.clear();
   auth.getSession.mockReset();
+  auth.signOut.mockReset();
+  signOutFromPage = null;
   setOnline(true);
 });
 
@@ -134,5 +155,85 @@ describe('ProtectedRoute offline session', () => {
     await act(async () => { auth.listener?.('SIGNED_OUT', null); });
     expect(journalShown()).toBe(false);
     expect(gateShown()).toBe(true);
+  });
+
+  it('offline sign-out on a shared iPad: reopening offline shows the sign-in gate, not the previous account', async () => {
+    storeSession();
+    setOnline(false);
+    auth.getSession.mockResolvedValue(offlineRefreshFailure());
+    // What supabase-js returns offline: the session load fails before removal.
+    auth.signOut.mockResolvedValue({ error: new AuthRetryableFetchError('Failed to fetch', 0) });
+    window.localStorage.setItem(`${STORAGE_KEY}-code-verifier`, 'verifier');
+    await renderGate(true);
+    expect(journalShown()).toBe(true);
+
+    await act(async () => { await signOutFromPage!(); });
+    expect(journalShown()).toBe(false);
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(`${STORAGE_KEY}-code-verifier`)).toBeNull();
+
+    await reopen();
+    expect(journalShown()).toBe(false);
+    expect(gateShown()).toBe(true);
+  });
+
+  it('a sign-out that throws still removes the session and keeps the gate closed offline', async () => {
+    storeSession();
+    setOnline(false);
+    auth.getSession.mockResolvedValue(offlineRefreshFailure());
+    auth.signOut.mockRejectedValue(new TypeError('Load failed'));
+    await renderGate(true);
+    await act(async () => { await signOutFromPage!(); });
+    expect(window.localStorage.getItem(STORAGE_KEY)).toBeNull();
+    await reopen();
+    expect(gateShown()).toBe(true);
+  });
+
+  it('never resurrects a signed-out account even if its stored session could not be removed', async () => {
+    storeSession();
+    window.localStorage.setItem(SIGNED_OUT_MARKER_KEY, '1');
+    setOnline(false);
+    auth.getSession.mockResolvedValue(offlineRefreshFailure());
+    await renderGate(true);
+    expect(journalShown()).toBe(false);
+    expect(gateShown()).toBe(true);
+  });
+
+  it('online sign-out still works and leaves supabase to remove the session', async () => {
+    storeSession();
+    auth.getSession.mockResolvedValue({ data: { session: { user: { id: 'owner-1' } } }, error: null });
+    auth.signOut.mockImplementation(async () => {
+      window.localStorage.removeItem(STORAGE_KEY);
+      auth.listener?.('SIGNED_OUT', null);
+      return { error: null };
+    });
+    await renderGate(true);
+    expect(container.querySelector('[data-testid="journal"]')?.getAttribute('data-account')).toBe('owner-1');
+
+    await act(async () => { await signOutFromPage!(); });
+    expect(auth.signOut).toHaveBeenCalledTimes(1);
+    expect(journalShown()).toBe(false);
+    expect(gateShown()).toBe(true);
+    expect(window.localStorage.getItem(SIGNED_OUT_MARKER_KEY)).toBe('1');
+  });
+
+  it('a new real sign-in lifts the signed-out marker, and only that account is opened offline later', async () => {
+    window.localStorage.setItem(SIGNED_OUT_MARKER_KEY, '1');
+    auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+    await renderGate(true);
+    expect(gateShown()).toBe(true);
+
+    // Someone else signs in on the same iPad.
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ access_token: 'a', refresh_token: 'r2', expires_at: 1, user: { id: 'member-2' } }),
+    );
+    await act(async () => { auth.listener?.('SIGNED_IN', { user: { id: 'member-2' } }); });
+    expect(window.localStorage.getItem(SIGNED_OUT_MARKER_KEY)).toBeNull();
+
+    setOnline(false);
+    auth.getSession.mockResolvedValue(offlineRefreshFailure());
+    await reopen();
+    expect(container.querySelector('[data-testid="journal"]')?.getAttribute('data-account')).toBe('member-2');
   });
 });

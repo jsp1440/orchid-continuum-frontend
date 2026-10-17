@@ -20,12 +20,66 @@ import { isAuthRetryableFetchError, type User } from '@supabase/supabase-js';
  */
 
 type ReadableStorage = Pick<Storage, 'getItem'>;
+type WritableStorage = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
+
+/**
+ * Set when someone signs out on this device and cleared only when a real
+ * session is next established. While it is set, the offline path returns no
+ * account, so a sign-out that could not reach the network (shared iPad) can
+ * never be undone by reopening the journal offline.
+ */
+export const SIGNED_OUT_MARKER_KEY = 'oc-auth-explicitly-signed-out';
+
+export function markSignedOut(storage: WritableStorage | undefined | null): void {
+  try {
+    storage?.setItem(SIGNED_OUT_MARKER_KEY, '1');
+  } catch {
+    // Storage unavailable: nothing persisted can be resurrected either.
+  }
+}
+
+export function clearSignedOutMarker(storage: WritableStorage | undefined | null): void {
+  try {
+    storage?.removeItem(SIGNED_OUT_MARKER_KEY);
+  } catch {
+    // Non-fatal.
+  }
+}
+
+function markedSignedOut(storage: ReadableStorage): boolean {
+  try {
+    return storage.getItem(SIGNED_OUT_MARKER_KEY) !== null;
+  } catch {
+    // Cannot prove the device was not signed out: fail closed.
+    return true;
+  }
+}
+
+/**
+ * Remove the persisted supabase session (and its PKCE verifier and split user
+ * record) when supabase-js could not do it itself. Offline, its signOut()
+ * fails while loading the session and returns before removing anything.
+ */
+export function clearPersistedAuthSession(
+  storage: WritableStorage | undefined | null,
+  storageKey: string | undefined | null,
+): void {
+  if (!storage || !storageKey) return;
+  for (const key of [storageKey, `${storageKey}-code-verifier`, `${storageKey}-user`]) {
+    try {
+      storage.removeItem(key);
+    } catch {
+      // The signed-out marker still blocks offline access.
+    }
+  }
+}
 
 export function readPersistedAuthUser(
   storage: ReadableStorage | undefined | null,
   storageKey: string | undefined | null,
 ): User | null {
   if (!storage || !storageKey) return null;
+  if (markedSignedOut(storage)) return null;
   let raw: string | null;
   try {
     raw = storage.getItem(storageKey);
@@ -63,7 +117,7 @@ export function browserIsOnline(): boolean {
   return typeof navigator === 'undefined' || navigator.onLine !== false;
 }
 
-export function browserLocalStorage(): ReadableStorage | null {
+export function browserLocalStorage(): WritableStorage | null {
   try {
     return typeof window === 'undefined' ? null : window.localStorage;
   } catch {

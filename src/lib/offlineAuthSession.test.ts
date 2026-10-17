@@ -1,6 +1,13 @@
 import { AuthApiError, AuthRetryableFetchError } from '@supabase/supabase-js';
 import { describe, expect, it } from 'vitest';
-import { readPersistedAuthUser, sessionMissingBecauseOffline } from './offlineAuthSession';
+import {
+  clearPersistedAuthSession,
+  clearSignedOutMarker,
+  markSignedOut,
+  readPersistedAuthUser,
+  sessionMissingBecauseOffline,
+  SIGNED_OUT_MARKER_KEY,
+} from './offlineAuthSession';
 
 const KEY = 'sb-project-auth-token';
 
@@ -39,5 +46,48 @@ describe('sessionMissingBecauseOffline', () => {
     expect(sessionMissingBecauseOffline(null, true)).toBe(false);
     expect(sessionMissingBecauseOffline(new AuthApiError('Invalid Refresh Token', 400, 'refresh_token_not_found'), true)).toBe(false);
     expect(sessionMissingBecauseOffline(new Error('boom'), true)).toBe(false);
+  });
+});
+
+describe('signed-out marker', () => {
+  function memoryStorage(initial: Record<string, string> = {}) {
+    const data = new Map(Object.entries(initial));
+    return {
+      data,
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => { data.set(key, value); },
+      removeItem: (key: string) => { data.delete(key); },
+    };
+  }
+  const session = JSON.stringify({ refresh_token: 'r', user: { id: 'user-1' } });
+
+  it('hides the stored account until a real session clears it', () => {
+    const storage = memoryStorage({ [KEY]: session });
+    markSignedOut(storage);
+    expect(storage.data.get(SIGNED_OUT_MARKER_KEY)).toBe('1');
+    expect(readPersistedAuthUser(storage, KEY)).toBeNull();
+    clearSignedOutMarker(storage);
+    expect(readPersistedAuthUser(storage, KEY)?.id).toBe('user-1');
+  });
+
+  it('fails closed when the marker cannot be read', () => {
+    const storage = {
+      getItem: (key: string) => {
+        if (key === SIGNED_OUT_MARKER_KEY) throw new Error('blocked');
+        return session;
+      },
+    };
+    expect(readPersistedAuthUser(storage, KEY)).toBeNull();
+  });
+
+  it('clearPersistedAuthSession removes the session, its code verifier and split user record only', () => {
+    const storage = memoryStorage({
+      [KEY]: session,
+      [`${KEY}-code-verifier`]: 'v',
+      [`${KEY}-user`]: '{}',
+      unrelated: 'keep',
+    });
+    clearPersistedAuthSession(storage, KEY);
+    expect([...storage.data.keys()]).toEqual(['unrelated']);
   });
 });

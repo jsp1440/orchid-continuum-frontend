@@ -4,6 +4,9 @@ import { supabase } from '@/lib/supabase';
 import {
   browserIsOnline,
   browserLocalStorage,
+  clearPersistedAuthSession,
+  clearSignedOutMarker,
+  markSignedOut,
   readPersistedAuthUser,
   sessionMissingBecauseOffline,
 } from '@/lib/offlineAuthSession';
@@ -75,7 +78,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!mounted) return;
       setSession(data.session ?? null);
       setUser(data.session?.user ?? null);
-      if (data.session) setOfflineUser(null);
+      if (data.session) {
+        clearSignedOutMarker(browserLocalStorage());
+        setOfflineUser(null);
+      }
       else setOfflineUser(sessionMissingBecauseOffline(error, browserIsOnline()) ? persistedUser() : null);
       setLoading(false);
     }).catch((error: unknown) => {
@@ -85,6 +91,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (newSession) clearSignedOutMarker(browserLocalStorage());
+      else if (event === 'SIGNED_OUT') markSignedOut(browserLocalStorage());
       setSession(newSession ?? null);
       setUser(newSession?.user ?? null);
       // A real session replaces the offline identity; an explicit sign-out (or
@@ -132,9 +140,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signOut = useCallback(async () => {
+    const storage = browserLocalStorage();
+    // First, so that nothing after this point can leave the device unlockable
+    // offline as the account that just signed out.
+    markSignedOut(storage);
+    let removed = false;
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      removed = !error;
+    } catch {
+      removed = false;
     } finally {
+      // Offline, supabase-js fails while loading the session and returns
+      // before deleting it; remove it here so it cannot be read back.
+      if (!removed) clearPersistedAuthSession(storage, supabaseAuthStorageKey());
       setSession(null);
       setUser(null);
       setOfflineUser(null);
