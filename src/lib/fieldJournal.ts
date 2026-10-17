@@ -5,6 +5,13 @@ export type FieldCertainty = "CONFIRMED" | "PROBABLE" | "POSSIBLE" | "UNCERTAIN"
 export type FieldIdentificationStatus = "unresolved" | "observer_hint_unresolved";
 /** Backend-reported durability of the server copy; null/absent = unknown (older backend). */
 export type FieldServerDurability = "durable" | "not_guaranteed";
+/** Backend-reported state of the off-site archive copy of the original. */
+export type FieldServerArchiveState = "verified" | "pending" | "not_configured";
+/**
+ * Only the provider and state are kept on the device receipt. The Drive file id and
+ * backend error detail are deliberately never stored, backed up or exported.
+ */
+export type FieldServerArchive = { provider: "google_drive"; state: FieldServerArchiveState };
 
 export const FIELD_JOURNAL_SCHEMA_VERSION = 2;
 export const FIELD_JOURNAL_MEDIA_LIMIT = 20;
@@ -31,6 +38,8 @@ export type FieldMedia = {
   serverMediaId: string | null;
   uploadedAt: string | null;
   serverDurability?: FieldServerDurability | null;
+  /** Absent/null = no archive information (older backend or older receipt). */
+  serverArchive?: FieldServerArchive | null;
 };
 
 /** Backend filename limit for media uploads (longer names are rejected with 422). */
@@ -49,12 +58,48 @@ export function parseServerDurability(value: unknown): FieldServerDurability | n
   return value === "durable" || value === "not_guaranteed" ? value : null;
 }
 
-/** Truthful upload label: a server receipt is never presented as a guaranteed backup. */
-export function fieldMediaUploadLabel(media: Pick<FieldMedia, "uploadedAt" | "serverDurability">): string {
-  if (!media.uploadedAt) return "Original on this device";
+const ARCHIVE_STATES: readonly FieldServerArchiveState[] = ["verified", "pending", "not_configured"];
+
+/** Lenient parse of a backend response: keeps only provider + state, drops ids and error detail. */
+export function parseServerArchive(value: unknown): FieldServerArchive | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const { provider, state } = value as Record<string, unknown>;
+  if (provider !== "google_drive") return null;
+  if (typeof state !== "string" || !(ARCHIVE_STATES as readonly string[]).includes(state)) return null;
+  return { provider, state: state as FieldServerArchiveState };
+}
+
+/** The sync completeness check: only a full server receipt counts as uploaded. */
+export function hasCompleteMediaReceipt(media: Pick<FieldMedia, "serverMediaId" | "storageKey" | "sha256" | "uploadedAt">): boolean {
+  return Boolean(media.serverMediaId && media.storageKey && media.sha256 && media.uploadedAt);
+}
+
+type FieldMediaLabelInput = Pick<FieldMedia, "serverMediaId" | "storageKey" | "sha256" | "uploadedAt" | "serverDurability" | "serverArchive">;
+
+/** A media receipt is only trusted on a record the server has accepted (non-empty serverId). */
+export function hasTrustedMediaReceipt(media: Parameters<typeof hasCompleteMediaReceipt>[0], serverId: string | null | undefined): boolean {
+  return Boolean(serverId) && hasCompleteMediaReceipt(media);
+}
+
+/**
+ * Truthful upload label: a server receipt is never presented as a guaranteed backup, and no
+ * server, durability or archive label is shown unless the receipt is complete and belongs to
+ * a server-accepted record.
+ */
+export function fieldMediaUploadLabel(media: FieldMediaLabelInput, serverId: string | null | undefined): string {
+  if (!hasTrustedMediaReceipt(media, serverId)) return "Original on this device";
+  const archiveState = media.serverArchive?.provider === "google_drive" ? media.serverArchive.state : null;
+  if (archiveState === "verified" && media.serverDurability === "durable") return "Archived in Google Drive (verified)";
+  if (archiveState === "pending") return "Server copy (Drive archive pending)";
   if (media.serverDurability === "durable") return "Server copy (durable)";
   if (media.serverDurability === "not_guaranteed") return "Server copy (not yet durable)";
   return "Server copy (durability unknown)";
+}
+
+/** Card caption: the upload label plus the reminder that the device original is retained. */
+export function fieldMediaReceiptCaption(media: FieldMediaLabelInput, serverId: string | null | undefined): string {
+  const label = fieldMediaUploadLabel(media, serverId);
+  return hasTrustedMediaReceipt(media, serverId) ? `${label} · original kept here` : label;
 }
 
 export type FieldObservation = {

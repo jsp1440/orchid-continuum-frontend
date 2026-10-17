@@ -53,6 +53,15 @@ describe("device-local Field Journal metadata export", () => {
     expect(source.syncStatus).toBe("failed");
   });
 
+  it("exports only the Drive archive provider and state, null for older receipts", () => {
+    const source = observation();
+    expect(fieldJournalMetadataExport([source], NOW).observations[0].media[0].serverArchive).toBeNull();
+    source.media[0] = { ...source.media[0], serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified", drive_file_id: "drive-secret-id" } as never };
+    const result = fieldJournalMetadataExport([source], NOW);
+    expect(result.observations[0].media[0].serverArchive).toEqual({ provider: "google_drive", state: "verified" });
+    expect(JSON.stringify(result)).not.toContain("drive-secret-id");
+  });
+
   it("supports one-observation and all-observation downloads including offline drafts", () => {
     const sources = [observation(), observation("draft-2")];
     expect(fieldJournalMetadataExport(sources, NOW).observations.map((item) => item.id)).toEqual(["draft-1", "draft-2"]);

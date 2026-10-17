@@ -2,6 +2,8 @@ import {
   FIELD_JOURNAL_MEDIA_LIMIT,
   FIELD_JOURNAL_SCHEMA_VERSION,
   mediaKindFromType,
+  hasCompleteMediaReceipt,
+  parseServerArchive,
   parseServerDurability,
   validatePrivateLocation,
   type FieldCertainty,
@@ -115,7 +117,8 @@ export async function buildFieldJournalBackup(
       media.push({
         id: item.id, name: item.name, size: item.blob.size, type: item.type, kind: item.kind, capturedAt: item.capturedAt,
         sha256: digest.sha256, storageKey: item.storageKey, serverMediaId: item.serverMediaId, uploadedAt: item.uploadedAt,
-        serverDurability: item.serverDurability ?? null, path,
+        serverDurability: item.serverDurability ?? null,
+        serverArchive: item.serverArchive ? { provider: item.serverArchive.provider, state: item.serverArchive.state } : null, path,
       });
     }
     const { accountId: _accountId, media: _media, privateLocation, ...record } = observation;
@@ -217,6 +220,14 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
     if (!MEDIA_PATH.test(path)) throw new RecordError("invalid media path");
     const size = item.size;
     if (typeof size !== "number" || !Number.isInteger(size) || size < 0 || size > ZIP32_MEDIA_MAX) throw new RecordError("invalid media size");
+    const storageKey = text(item.storageKey, "media storageKey", 1000, { nullable: true });
+    const serverMediaId = text(item.serverMediaId, "media serverMediaId", 500, { nullable: true });
+    const uploadedAt = timestamp(item.uploadedAt, "media uploadedAt", true);
+    // Upload/durability/archive claims are only accepted alongside a complete server receipt.
+    if ((uploadedAt != null || item.serverDurability != null || item.serverArchive != null) &&
+        !hasCompleteMediaReceipt({ serverMediaId, storageKey, sha256, uploadedAt })) {
+      throw new RecordError("media upload state without a complete server receipt");
+    }
     return {
       path, sha256, size,
       media: {
@@ -224,12 +235,21 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
         name: text(item.name, "media name", 500) as string,
         size, type, kind, sha256,
         capturedAt: timestamp(item.capturedAt, "media capturedAt") as string,
-        storageKey: text(item.storageKey, "media storageKey", 1000, { nullable: true }),
-        serverMediaId: text(item.serverMediaId, "media serverMediaId", 500, { nullable: true }),
-        uploadedAt: timestamp(item.uploadedAt, "media uploadedAt", true),
+        storageKey,
+        serverMediaId,
+        uploadedAt,
         serverDurability: (() => {
           if (item.serverDurability != null && parseServerDurability(item.serverDurability) === null) throw new RecordError("invalid media serverDurability");
           return parseServerDurability(item.serverDurability);
+        })(),
+        serverArchive: (() => {
+          if (item.serverArchive == null) return null;
+          // Strict: exactly { provider, state }. A manifest carrying Drive ids or error text is refused.
+          const archive = parseServerArchive(item.serverArchive);
+          if (archive === null || Object.keys(item.serverArchive as object).some((key) => key !== "provider" && key !== "state")) {
+            throw new RecordError("invalid media serverArchive");
+          }
+          return archive;
         })(),
       },
     };
@@ -248,6 +268,10 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
   let syncError = text(raw.syncError, "syncError", 500, { nullable: true, required: false });
   const serverId = text(raw.serverId, "serverId", 200, { nullable: true });
   if (syncStatus === "synchronized" && !serverId) throw new RecordError("synchronized record without a server id");
+  if (!serverId && media.some(({ media: item }) =>
+    item.serverMediaId != null || item.storageKey != null || item.uploadedAt != null || item.serverDurability != null || item.serverArchive != null)) {
+    throw new RecordError("media receipt on a record without a server id");
+  }
   if (syncStatus === "syncing") {
     // A backup taken mid-upload restores as retryable; saved receipts are kept.
     syncStatus = "failed";
@@ -439,7 +463,7 @@ export function decideFieldJournalRestore(
   const media = candidate.media.map((item) => {
     const existing = localMedia.get(item.id);
     if (existing && existing.sha256 === item.sha256 && existing.serverMediaId && !item.serverMediaId) {
-      return { ...item, storageKey: existing.storageKey, serverMediaId: existing.serverMediaId, uploadedAt: existing.uploadedAt, serverDurability: existing.serverDurability ?? null };
+      return { ...item, storageKey: existing.storageKey, serverMediaId: existing.serverMediaId, uploadedAt: existing.uploadedAt, serverDurability: existing.serverDurability ?? null, serverArchive: existing.serverArchive ?? null };
     }
     return item;
   });

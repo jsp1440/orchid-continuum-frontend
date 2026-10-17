@@ -53,6 +53,7 @@ export function fieldJournalMetadataExport(
         serverMediaId: media.serverMediaId,
         uploadedAt: media.uploadedAt,
         serverDurability: media.serverDurability ?? null,
+        serverArchive: media.serverArchive ? { provider: media.serverArchive.provider, state: media.serverArchive.state } : null,
       })),
     })),
   };

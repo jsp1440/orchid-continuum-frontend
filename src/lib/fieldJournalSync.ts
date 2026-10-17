@@ -1,7 +1,9 @@
 import { CALYX_BACKEND_BASE_URL } from "./backendConfig";
 import {
+  hasCompleteMediaReceipt,
   markFieldObservationFailed,
   nowIso,
+  parseServerArchive,
   parseServerDurability,
   sha256Hex,
   uploadFileName,
@@ -22,7 +24,7 @@ export class FieldJournalSyncError extends Error {
 }
 
 type ServerObservation = { id?: unknown };
-type ServerMedia = { id?: unknown; storage_key?: unknown; content_hash?: unknown; durability?: unknown };
+type ServerMedia = { id?: unknown; storage_key?: unknown; content_hash?: unknown; durability?: unknown; archive?: unknown };
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -123,7 +125,12 @@ async function uploadServerMedia(serverObservationId: string, media: FieldMedia)
     serverMediaId: serverMedia.id,
     uploadedAt: nowIso(),
     serverDurability: parseServerDurability(serverMedia.durability),
+    serverArchive: parseServerArchive(serverMedia.archive),
   };
+}
+
+function clearMediaReceipt(media: FieldMedia): FieldMedia {
+  return { ...media, storageKey: null, serverMediaId: null, uploadedAt: null, serverDurability: null, serverArchive: null };
 }
 
 export async function syncFieldObservation(
@@ -142,15 +149,20 @@ export async function syncFieldObservation(
     }
   };
   try {
+    // Defense in depth: a record the server never accepted cannot hold genuine media
+    // receipts (e.g. a forged restore). Treat them as untrusted so every original is
+    // uploaded after the server observation exists.
+    const untrustedReceipts = !observation.serverId;
+    const startMedia = untrustedReceipts ? observation.media.map(clearMediaReceipt) : observation.media;
     const serverId = observation.serverId ?? await createServerObservation(observation);
-    let progress = { ...observation, serverId };
+    let progress = { ...observation, serverId, media: [...startMedia] };
     // Persist acceptance before uploading large files. A retry must not create a
     // second observation or retransmit media whose receipt is already durable.
     await persistCheckpoint(progress);
-    const uploadedMedia = [...observation.media];
+    const uploadedMedia = [...startMedia];
     for (let index = 0; index < uploadedMedia.length; index += 1) {
       const media = uploadedMedia[index];
-      if (media.serverMediaId && media.storageKey && media.sha256 && media.uploadedAt) continue;
+      if (hasCompleteMediaReceipt(media)) continue;
       uploadedMedia[index] = await uploadServerMedia(serverId, media);
       progress = { ...progress, media: [...uploadedMedia] };
       await persistCheckpoint(progress);

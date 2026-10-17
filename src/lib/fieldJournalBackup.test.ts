@@ -103,6 +103,81 @@ describe("Field Journal full-media backup", () => {
     expect(again.observations[0].media[0].serverDurability).toBe("not_guaranteed");
   });
 
+  it("carries the Drive archive state through backup and restore, absent on older receipts", async () => {
+    const source = await observation();
+    source.serverId = "fo-1";
+    source.syncStatus = "synchronized";
+    source.media[0] = { ...(await media("receipted", "a.jpg", "image/jpeg", bytes(10, 1), true)), serverDurability: "durable" };
+    const legacy = await parseFieldJournalBackup((await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT)).blob);
+    expect(legacy.observations[0].media[0].serverArchive).toBeNull();
+    source.media[0] = { ...source.media[0], serverArchive: { provider: "google_drive", state: "verified" } };
+    const { blob } = await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT);
+    const parsed = await parseFieldJournalBackup(blob);
+    expect(parsed.observations[0].media[0].serverArchive).toEqual({ provider: "google_drive", state: "verified" });
+    expect((await manifestOf(blob)).observations[0].media[0].serverArchive).toEqual({ provider: "google_drive", state: "verified" });
+  });
+
+  it.each([
+    ["archive verified (crafted)", { uploadedAt: NOW, serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified" } }],
+    ["durable only (pre-existing gap)", { uploadedAt: NOW, serverDurability: "durable" }],
+    ["uploadedAt only", { uploadedAt: NOW }],
+    ["durability without uploadedAt", { serverDurability: "durable" }],
+    ["archive without uploadedAt", { serverArchive: { provider: "google_drive", state: "pending" } }],
+    ["receipt missing storageKey", { uploadedAt: NOW, serverMediaId: "srv-media", serverDurability: "durable" }],
+    ["receipt missing serverMediaId", { uploadedAt: NOW, storageKey: "opaque-key", serverDurability: "durable" }],
+  ])("rejects a restored local-only media claiming upload state without a complete receipt: %s", async (_name, claim) => {
+    const { blob } = await buildFieldJournalBackup([await observation()], NOW, "metadata", ACCOUNT);
+    const manifest = await manifestOf(blob);
+    const entries = await readStoreZip(blob, () => true, { maxEntrySize: () => Number.MAX_SAFE_INTEGER });
+    expect(manifest.observations[0]).toMatchObject({ serverId: null, syncStatus: "local_only" });
+    Object.assign(manifest.observations[0].media[0], claim);
+    const tampered = await buildStoreZip([
+      { name: "manifest.json", data: new Blob([JSON.stringify(manifest)]) },
+      ...entries.slice(1).map((entry) => ({ name: entry.name, data: entry.data })),
+    ], NOW);
+    const parsed = await parseFieldJournalBackup(tampered);
+    expect(parsed.observations).toEqual([]);
+    expect(parsed.rejected[0].reason).toContain("without a complete server receipt");
+  });
+
+  it.each([
+    ["complete forged receipt with archive verified", { serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified" } }],
+    ["complete forged receipt only", {}],
+  ])("rejects a restored media receipt on a record without a server id: %s", async (_name, extra) => {
+    const source = await observation();
+    source.media[0] = { ...(await media("receipted", "a.jpg", "image/jpeg", bytes(10, 1), true)), ...extra } as FieldMedia;
+    const { blob } = await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT);
+    expect((await manifestOf(blob)).observations[0]).toMatchObject({ serverId: null, syncStatus: "local_only" });
+    const parsed = await parseFieldJournalBackup(blob);
+    expect(parsed.observations).toEqual([]);
+    expect(parsed.rejected[0].reason).toContain("media receipt on a record without a server id");
+  });
+
+  it.each([
+    [{ provider: "google_drive", state: "archived" }],
+    [{ provider: "dropbox", state: "verified" }],
+    [{ provider: "google_drive", state: "verified", drive_file_id: "drive-secret-id" }],
+    [{ provider: "google_drive", state: "pending", error_code: "drive_timeout" }],
+    ["verified"],
+    [["google_drive", "verified"]],
+  ])("rejects a restored media serverArchive of %j", async (serverArchive) => {
+    const source = await observation();
+    source.serverId = "fo-1";
+    source.syncStatus = "synchronized";
+    source.media[0] = { ...(await media("receipted", "a.jpg", "image/jpeg", bytes(10, 1), true)), serverDurability: "durable" };
+    const { blob } = await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT);
+    const manifest = await manifestOf(blob);
+    const entries = await readStoreZip(blob, () => true, { maxEntrySize: () => Number.MAX_SAFE_INTEGER });
+    manifest.observations[0].media[0].serverArchive = serverArchive;
+    const tampered = await buildStoreZip([
+      { name: "manifest.json", data: new Blob([JSON.stringify(manifest)]) },
+      ...entries.slice(1).map((entry) => ({ name: entry.name, data: entry.data })),
+    ], NOW);
+    const parsed = await parseFieldJournalBackup(tampered);
+    expect(parsed.observations).toEqual([]);
+    expect(parsed.rejected[0].reason).toContain("serverArchive");
+  });
+
   it("stops rather than back up an original that no longer matches its recorded hash", async () => {
     const source = await observation();
     source.media[0] = { ...source.media[0], sha256: "0".repeat(64) };
@@ -194,17 +269,17 @@ describe("Field Journal restore merge rule", () => {
 
   it("replaces an older device copy without dropping local originals, receipts or excluded GPS", async () => {
     const local = await observation("x", NOW);
-    local.media[0] = { ...local.media[0], storageKey: "k", serverMediaId: "m", uploadedAt: NOW };
+    local.media[0] = { ...local.media[0], storageKey: "k", serverMediaId: "m", uploadedAt: NOW, serverDurability: "durable", serverArchive: { provider: "google_drive", state: "pending" } };
     const localOnly = await media("local-only", "extra.jpg", "image/jpeg", bytes(5, 9));
     local.media.push(localOnly);
     const incoming = { ...strip(await observation("x", LATER)), privateLocation: null, note: "Newer note" };
-    incoming.media = [{ ...local.media[0], serverMediaId: null, storageKey: null, uploadedAt: null }];
+    incoming.media = [{ ...local.media[0], serverMediaId: null, storageKey: null, uploadedAt: null, serverDurability: null, serverArchive: null }];
     const decision = decideFieldJournalRestore(local, incoming, "device-account", false, true);
     expect(decision.action).toBe("replace");
     if (decision.action !== "replace") return;
     expect(decision.observation.note).toBe("Newer note");
     expect(decision.observation.privateLocation).toEqual(local.privateLocation);
-    expect(decision.observation.media[0]).toMatchObject({ serverMediaId: "m", storageKey: "k" });
+    expect(decision.observation.media[0]).toMatchObject({ serverMediaId: "m", storageKey: "k", serverDurability: "durable", serverArchive: { provider: "google_drive", state: "pending" } });
     expect(decision.observation.media.map((item) => item.id)).toContain("local-only");
   });
 
