@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFieldObservation, type FieldObservation } from "./fieldJournal";
-import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, syncSavedFieldObservation } from "./fieldJournalCoordinator";
+import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, restoreFieldObservationFromBackup, syncSavedFieldObservation } from "./fieldJournalCoordinator";
 import { deleteFieldObservation, getFieldObservation, saveFieldObservation } from "./fieldJournalStore";
 import { syncFieldObservation } from "./fieldJournalSync";
 
@@ -120,5 +120,30 @@ describe("cross-tab edits preserve accepted receipts", () => {
     await discardSavedFieldObservation(edited);
     expect(deleteFieldObservation).toHaveBeenCalledWith("draft");
     expect(held.size).toBe(0);
+  });
+});
+
+describe("backup restore uses the same browser-owned lock", () => {
+  const incoming = () => { const { accountId: _a, ...rest } = durable; return { ...rest, note: "from backup", updatedAt: "2026-10-09T05:00:00.000Z" }; };
+  it("replaces an older device copy for the current account and keeps receipts", async () => {
+    const next = incoming();
+    next.media = [{ ...next.media[0], serverMediaId: null, storageKey: null, uploadedAt: null }];
+    const decision = await restoreFieldObservationFromBackup(next, "observer", false);
+    expect(decision.action).toBe("replace");
+    expect(durable.note).toBe("from backup");
+    expect(durable.media[0].serverMediaId).toBe("media-receipt");
+    expect(held.size).toBe(0);
+  });
+  it("skips while another tab holds the observation and never writes", async () => {
+    held.add("orchid-field-sync:draft");
+    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false)).resolves.toMatchObject({ action: "skip" });
+    expect(saveFieldObservation).not.toHaveBeenCalled();
+  });
+  it("inserts new ids without lock support but refuses to replace device copies", async () => {
+    vi.stubGlobal("navigator", {});
+    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false)).resolves.toMatchObject({ action: "skip" });
+    vi.mocked(getFieldObservation).mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+    await expect(restoreFieldObservationFromBackup(incoming(), "observer", false)).resolves.toMatchObject({ action: "insert" });
+    expect(saveFieldObservation).toHaveBeenCalledTimes(1);
   });
 });

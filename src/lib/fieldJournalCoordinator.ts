@@ -1,5 +1,6 @@
 import { canEditFieldObservation, markFieldObservationFailed, markFieldObservationSyncing, nowIso, type FieldObservation } from "./fieldJournal";
 import { deleteFieldObservation, getFieldObservation, saveFieldObservation } from "./fieldJournalStore";
+import { decideFieldJournalRestore, type FieldJournalRestoreDecision } from "./fieldJournalBackup";
 import { failureForSync, FieldJournalSyncError, syncFieldObservation } from "./fieldJournalSync";
 
 // Browser-owned locks are released when a tab closes/crashes, never on a timer
@@ -84,4 +85,28 @@ export async function discardSavedFieldObservation(observation: FieldObservation
     return true;
   });
   if (!removed) throw new Error("This observation is syncing in another tab. Its local originals were retained.");
+}
+
+/**
+ * Persist one verified backup record for the signed-in account under the same
+ * exclusive lock as sync/edit. Inserting a new id needs no lock; replacing a
+ * device copy fails closed without browser lock support.
+ */
+export async function restoreFieldObservationFromBackup(
+  incoming: Omit<FieldObservation, "accountId">,
+  accountId: string,
+  backupIncludesLocation: boolean,
+): Promise<FieldJournalRestoreDecision> {
+  const apply = async (): Promise<FieldJournalRestoreDecision> => {
+    const decision = decideFieldJournalRestore(await getFieldObservation(incoming.id), incoming, accountId, backupIncludesLocation);
+    if (decision.action === "insert" || decision.action === "replace") await saveFieldObservation(decision.observation);
+    return decision;
+  };
+  if (typeof navigator === "undefined" || !navigator.locks) {
+    const existing = await getFieldObservation(incoming.id);
+    if (existing) return { action: "skip", reason: "replacing a device copy needs browser lock support" };
+    return apply();
+  }
+  const result = await withObservationLock(incoming.id, apply);
+  return result ?? { action: "skip", reason: "busy syncing in another tab" };
 }
