@@ -2,6 +2,7 @@ import { CALYX_BACKEND_BASE_URL } from "./backendConfig";
 import {
   markFieldObservationFailed,
   nowIso,
+  parseServerArchive,
   parseServerDurability,
   sha256Hex,
   uploadFileName,
@@ -22,7 +23,7 @@ export class FieldJournalSyncError extends Error {
 }
 
 type ServerObservation = { id?: unknown };
-type ServerMedia = { id?: unknown; storage_key?: unknown; content_hash?: unknown; durability?: unknown };
+type ServerMedia = { id?: unknown; storage_key?: unknown; content_hash?: unknown; durability?: unknown; archive?: unknown };
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -123,6 +124,7 @@ async function uploadServerMedia(serverObservationId: string, media: FieldMedia)
     serverMediaId: serverMedia.id,
     uploadedAt: nowIso(),
     serverDurability: parseServerDurability(serverMedia.durability),
+    serverArchive: parseServerArchive(serverMedia.archive),
   };
 }
 

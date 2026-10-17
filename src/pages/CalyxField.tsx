@@ -22,7 +22,7 @@ import {
   applyFieldObservationEdit,
   canEditFieldObservation,
   createFieldObservation,
-  fieldMediaUploadLabel,
+  fieldMediaReceiptCaption,
   fieldObservationStatusLabel,
   mediaKindFromType,
   newFieldJournalId,
@@ -667,7 +667,7 @@ export default function CalyxField() {
                         <figure key={media.id} className="overflow-hidden rounded-md border bg-secondary">
                           {url && media.kind === "photo" ? <img src={url} alt={media.name} className="h-20 w-full object-cover" /> : null}
                           {url && media.kind === "video" ? <video src={url} controls className="h-20 w-full object-cover" /> : null}
-                          <figcaption className="truncate px-2 py-1 text-[10px] text-muted-foreground">{media.name} · {fieldMediaUploadLabel(media)}{media.uploadedAt ? " · original kept here" : ""}</figcaption>
+                          <figcaption className="truncate px-2 py-1 text-[10px] text-muted-foreground">{media.name} · {fieldMediaReceiptCaption(media)}</figcaption>
                         </figure>
                       );
                     })}

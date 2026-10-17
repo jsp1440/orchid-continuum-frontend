@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyFieldObservationEdit, canEditFieldObservation, createFieldObservation, fieldMediaUploadLabel, uploadFileName, type FieldMedia, type FieldObservation } from "./fieldJournal";
+import { applyFieldObservationEdit, canEditFieldObservation, createFieldObservation, fieldMediaReceiptCaption, fieldMediaUploadLabel, parseServerArchive, uploadFileName, type FieldMedia, type FieldObservation } from "./fieldJournal";
 import { failureForSync, FIELD_SYNC_REQUEST_TIMEOUT_MS, syncFieldObservation } from "./fieldJournalSync";
 
 const NOW = "2026-10-03T14:00:00.000Z";
@@ -113,6 +113,44 @@ describe("Field Journal media upload contract (backend durability and filename c
     expect(fieldMediaUploadLabel(result.media[0])).toBe(label);
     expect(fieldMediaUploadLabel(result.media[0])).not.toMatch(/safe|backed up/i);
     expect(result.media[0].blob).toBe(observation.media[0].blob);
+  });
+
+  it.each([
+    ["durable", { provider: "google_drive", state: "verified", drive_file_id: "drive-secret-id" }, { provider: "google_drive", state: "verified" }, "Archived in Google Drive (verified) · original kept here"],
+    ["durable", { provider: "google_drive", state: "pending", error_code: "drive_timeout" }, { provider: "google_drive", state: "pending" }, "Server copy (Drive archive pending) · original kept here"],
+    ["not_guaranteed", { provider: "google_drive", state: "pending" }, { provider: "google_drive", state: "pending" }, "Server copy (Drive archive pending) · original kept here"],
+    ["durable", { provider: "google_drive", state: "not_configured", error_code: "not_configured" }, { provider: "google_drive", state: "not_configured" }, "Server copy (durable) · original kept here"],
+    ["not_guaranteed", { provider: "google_drive", state: "verified", drive_file_id: "x" }, { provider: "google_drive", state: "verified" }, "Server copy (not yet durable) · original kept here"],
+    [undefined, { provider: "google_drive", state: "verified" }, { provider: "google_drive", state: "verified" }, "Server copy (durability unknown) · original kept here"],
+    ["durable", undefined, null, "Server copy (durable) · original kept here"],
+    ["durable", { provider: "dropbox", state: "verified" }, null, "Server copy (durable) · original kept here"],
+    ["durable", { provider: "google_drive", state: "archived" }, null, "Server copy (durable) · original kept here"],
+  ])("durability %s with archive %j stores %j and captions truthfully", async (durability, archive, stored, caption) => {
+    const observation = draft();
+    observation.media = [observation.media[0]];
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(json({ id: "fo-1" }))
+      .mockResolvedValueOnce(json({
+        ...receipt("photo-1"),
+        ...(durability === undefined ? {} : { durability }),
+        ...(archive === undefined ? {} : { archive }),
+      }));
+    vi.stubGlobal("fetch", fetch);
+    const result = await syncFieldObservation(observation);
+    expect(result.syncStatus).toBe("synchronized");
+    expect(result.media[0].serverArchive).toEqual(stored);
+    expect(JSON.stringify(result.media[0])).not.toMatch(/drive_file_id|drive-secret-id|error_code|drive_timeout/);
+    expect(fieldMediaReceiptCaption(result.media[0])).toBe(caption);
+    expect(fieldMediaReceiptCaption(result.media[0])).not.toMatch(/safe|backed up/i);
+  });
+
+  it("keeps older receipts without an archive field on the existing durability labels", () => {
+    const base = { uploadedAt: NOW, serverDurability: "durable" as const };
+    expect(fieldMediaUploadLabel(base)).toBe("Server copy (durable)");
+    expect(fieldMediaUploadLabel({ ...base, serverArchive: null })).toBe("Server copy (durable)");
+    expect(fieldMediaReceiptCaption({ uploadedAt: null, serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified" } })).toBe("Original on this device");
+    expect(parseServerArchive(["google_drive", "verified"])).toBeNull();
+    expect(parseServerArchive(null)).toBeNull();
   });
 
   it("labels media without a receipt as an on-device original", () => {
