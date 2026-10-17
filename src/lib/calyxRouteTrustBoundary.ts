@@ -179,6 +179,14 @@ export function governedCalyxGenusTurnContext(
   search: string,
 ): GovernedCalyxGenusTurnContext | null | undefined {
   const params = new URLSearchParams(search);
+  // A carried identity/provenance contract must be unambiguous. Reading only
+  // the first value would accept e.g. context_is_evidence=false followed by
+  // context_is_evidence=true, or two different genus identities.
+  const seen = new Set<string>();
+  for (const key of params.keys()) {
+    if (seen.has(key)) return null;
+    seen.add(key);
+  }
   const origin = params.get('origin')?.trim() ?? '';
 
   if (rejectsQuestionContextForOrigin(params, origin)) return null;
