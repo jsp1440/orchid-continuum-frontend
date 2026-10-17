@@ -2,6 +2,7 @@ import {
   FIELD_JOURNAL_MEDIA_LIMIT,
   FIELD_JOURNAL_SCHEMA_VERSION,
   mediaKindFromType,
+  parseServerDurability,
   validatePrivateLocation,
   type FieldCertainty,
   type FieldIdentificationStatus,
@@ -113,7 +114,8 @@ export async function buildFieldJournalBackup(
       mediaBytes += item.blob.size;
       media.push({
         id: item.id, name: item.name, size: item.blob.size, type: item.type, kind: item.kind, capturedAt: item.capturedAt,
-        sha256: digest.sha256, storageKey: item.storageKey, serverMediaId: item.serverMediaId, uploadedAt: item.uploadedAt, path,
+        sha256: digest.sha256, storageKey: item.storageKey, serverMediaId: item.serverMediaId, uploadedAt: item.uploadedAt,
+        serverDurability: item.serverDurability ?? null, path,
       });
     }
     const { accountId: _accountId, media: _media, privateLocation, ...record } = observation;
@@ -225,6 +227,10 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
         storageKey: text(item.storageKey, "media storageKey", 1000, { nullable: true }),
         serverMediaId: text(item.serverMediaId, "media serverMediaId", 500, { nullable: true }),
         uploadedAt: timestamp(item.uploadedAt, "media uploadedAt", true),
+        serverDurability: (() => {
+          if (item.serverDurability != null && parseServerDurability(item.serverDurability) === null) throw new RecordError("invalid media serverDurability");
+          return parseServerDurability(item.serverDurability);
+        })(),
       },
     };
   });
@@ -433,7 +439,7 @@ export function decideFieldJournalRestore(
   const media = candidate.media.map((item) => {
     const existing = localMedia.get(item.id);
     if (existing && existing.sha256 === item.sha256 && existing.serverMediaId && !item.serverMediaId) {
-      return { ...item, storageKey: existing.storageKey, serverMediaId: existing.serverMediaId, uploadedAt: existing.uploadedAt };
+      return { ...item, storageKey: existing.storageKey, serverMediaId: existing.serverMediaId, uploadedAt: existing.uploadedAt, serverDurability: existing.serverDurability ?? null };
     }
     return item;
   });

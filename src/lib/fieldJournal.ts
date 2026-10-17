@@ -3,6 +3,8 @@ export type FieldSyncStatus = "local_only" | "queued" | "syncing" | "synchronize
 export type FieldMediaKind = "photo" | "video";
 export type FieldCertainty = "CONFIRMED" | "PROBABLE" | "POSSIBLE" | "UNCERTAIN";
 export type FieldIdentificationStatus = "unresolved" | "observer_hint_unresolved";
+/** Backend-reported durability of the server copy; null/absent = unknown (older backend). */
+export type FieldServerDurability = "durable" | "not_guaranteed";
 
 export const FIELD_JOURNAL_SCHEMA_VERSION = 2;
 export const FIELD_JOURNAL_MEDIA_LIMIT = 20;
@@ -28,7 +30,32 @@ export type FieldMedia = {
   storageKey: string | null;
   serverMediaId: string | null;
   uploadedAt: string | null;
+  serverDurability?: FieldServerDurability | null;
 };
+
+/** Backend filename limit for media uploads (longer names are rejected with 422). */
+export const FIELD_MEDIA_UPLOAD_NAME_MAX = 180;
+
+/** Truncate to the backend limit in code points, keeping the extension. The local record keeps the original. */
+export function uploadFileName(name: string): string {
+  const chars = Array.from(name || "field-media");
+  if (chars.length <= FIELD_MEDIA_UPLOAD_NAME_MAX) return chars.join("");
+  const match = /\.[A-Za-z0-9]{1,16}$/.exec(name);
+  const extension = match ? match[0] : "";
+  return chars.slice(0, FIELD_MEDIA_UPLOAD_NAME_MAX - extension.length).join("") + extension;
+}
+
+export function parseServerDurability(value: unknown): FieldServerDurability | null {
+  return value === "durable" || value === "not_guaranteed" ? value : null;
+}
+
+/** Truthful upload label: a server receipt is never presented as a guaranteed backup. */
+export function fieldMediaUploadLabel(media: Pick<FieldMedia, "uploadedAt" | "serverDurability">): string {
+  if (!media.uploadedAt) return "Original on this device";
+  if (media.serverDurability === "durable") return "Server copy (durable)";
+  if (media.serverDurability === "not_guaranteed") return "Server copy (not yet durable)";
+  return "Server copy (durability unknown)";
+}
 
 export type FieldObservation = {
   schemaVersion: typeof FIELD_JOURNAL_SCHEMA_VERSION;

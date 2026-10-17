@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyFieldObservationEdit, canEditFieldObservation, createFieldObservation, type FieldMedia, type FieldObservation } from "./fieldJournal";
+import { applyFieldObservationEdit, canEditFieldObservation, createFieldObservation, fieldMediaUploadLabel, uploadFileName, type FieldMedia, type FieldObservation } from "./fieldJournal";
 import { failureForSync, FIELD_SYNC_REQUEST_TIMEOUT_MS, syncFieldObservation } from "./fieldJournalSync";
 
 const NOW = "2026-10-03T14:00:00.000Z";
@@ -91,5 +91,46 @@ describe("bounded Field Journal network requests", () => {
     expect(observation.media[0].blob.size).toBe(3);
     expect(observation.serverId).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("Field Journal media upload contract (backend durability and filename cap)", () => {
+  it.each([
+    ["durable", "durable", "Server copy (durable)"],
+    ["not_guaranteed", "not_guaranteed", "Server copy (not yet durable)"],
+    [undefined, null, "Server copy (durability unknown)"],
+    ["something-else", null, "Server copy (durability unknown)"],
+  ])("stores durability %s on the receipt and labels it truthfully", async (durability, stored, label) => {
+    const observation = draft();
+    observation.media = [observation.media[0]];
+    const fetch = vi.fn()
+      .mockResolvedValueOnce(json({ id: "fo-1" }))
+      .mockResolvedValueOnce(json({ ...receipt("photo-1"), ...(durability === undefined ? {} : { durability }) }));
+    vi.stubGlobal("fetch", fetch);
+    const result = await syncFieldObservation(observation);
+    expect(result.syncStatus).toBe("synchronized");
+    expect(result.media[0].serverDurability).toBe(stored);
+    expect(fieldMediaUploadLabel(result.media[0])).toBe(label);
+    expect(fieldMediaUploadLabel(result.media[0])).not.toMatch(/safe|backed up/i);
+    expect(result.media[0].blob).toBe(observation.media[0].blob);
+  });
+
+  it("labels media without a receipt as an on-device original", () => {
+    expect(fieldMediaUploadLabel({ uploadedAt: null, serverDurability: "durable" })).toBe("Original on this device");
+  });
+
+  it("sends a filename capped at 180 characters with its extension while the record keeps the original", async () => {
+    const observation = draft();
+    const longName = `${"é".repeat(250)}.jpeg`;
+    observation.media = [{ ...observation.media[0], name: longName }];
+    const fetch = vi.fn().mockResolvedValueOnce(json({ id: "fo-1" })).mockResolvedValueOnce(json({ ...receipt("photo-1"), durability: "durable" }));
+    vi.stubGlobal("fetch", fetch);
+    const result = await syncFieldObservation(observation);
+    const sent = (fetch.mock.calls[1][1].body as FormData).get("file") as File;
+    expect(Array.from(sent.name)).toHaveLength(180);
+    expect(sent.name.endsWith(".jpeg")).toBe(true);
+    expect(result.media[0].name).toBe(longName);
+    expect(uploadFileName("short.mov")).toBe("short.mov");
+    expect(Array.from(uploadFileName("x".repeat(400))).length).toBe(180);
   });
 });

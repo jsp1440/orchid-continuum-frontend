@@ -97,6 +97,10 @@ describe("Field Journal full-media backup", () => {
     const parsed = await parseFieldJournalBackup(blob);
     expect(parsed.observations[0]).toMatchObject({ serverId: "fo-1", syncStatus: "synchronized" });
     expect(parsed.observations[0].media[0]).toMatchObject({ serverMediaId: "srv-media", storageKey: "opaque-key", uploadedAt: NOW });
+    expect(parsed.observations[0].media[0].serverDurability).toBeNull();
+    source.media[0] = { ...source.media[0], serverDurability: "not_guaranteed" };
+    const again = await parseFieldJournalBackup((await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT)).blob);
+    expect(again.observations[0].media[0].serverDurability).toBe("not_guaranteed");
   });
 
   it("stops rather than back up an original that no longer matches its recorded hash", async () => {

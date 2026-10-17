@@ -52,6 +52,7 @@ export function fieldJournalMetadataExport(
         sha256: media.sha256,
         serverMediaId: media.serverMediaId,
         uploadedAt: media.uploadedAt,
+        serverDurability: media.serverDurability ?? null,
       })),
     })),
   };

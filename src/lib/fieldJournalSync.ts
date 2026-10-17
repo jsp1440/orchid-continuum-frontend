@@ -2,7 +2,9 @@ import { CALYX_BACKEND_BASE_URL } from "./backendConfig";
 import {
   markFieldObservationFailed,
   nowIso,
+  parseServerDurability,
   sha256Hex,
+  uploadFileName,
   toFieldObservationUploadPayload,
   type FieldMedia,
   type FieldObservation,
@@ -20,7 +22,7 @@ export class FieldJournalSyncError extends Error {
 }
 
 type ServerObservation = { id?: unknown };
-type ServerMedia = { id?: unknown; storage_key?: unknown; content_hash?: unknown };
+type ServerMedia = { id?: unknown; storage_key?: unknown; content_hash?: unknown; durability?: unknown };
 
 async function readJson(response: Response): Promise<Record<string, unknown>> {
   const contentType = response.headers.get("content-type") ?? "";
@@ -91,7 +93,8 @@ async function createServerObservation(observation: FieldObservation): Promise<s
 async function uploadServerMedia(serverObservationId: string, media: FieldMedia): Promise<FieldMedia> {
   const contentHash = media.sha256 ?? await sha256Hex(media.blob);
   const form = new FormData();
-  form.set("file", media.blob, media.name);
+  // The backend caps filenames at 180 characters; the local record keeps the original name.
+  form.set("file", media.blob, uploadFileName(media.name));
   form.set("captured_at", media.capturedAt);
   form.set("media_kind", media.kind);
   form.set("client_media_id", media.id);
@@ -119,6 +122,7 @@ async function uploadServerMedia(serverObservationId: string, media: FieldMedia)
     storageKey: serverMedia.storage_key,
     serverMediaId: serverMedia.id,
     uploadedAt: nowIso(),
+    serverDurability: parseServerDurability(serverMedia.durability),
   };
 }
 
