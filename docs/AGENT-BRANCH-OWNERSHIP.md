@@ -38,13 +38,21 @@ The same sessions have kept running on other `claude/*` branches. Workflows trig
 
 The check runs `scripts/agent_branch_ownership.py`. It always uses the default branch's copy of that script, so a foreign push cannot change what the check enforces.
 
+- If the default branch cannot be fetched, the job fails.
+- The checked-out copy is used only while a successful fetch shows that the default branch does not have the script yet.
+
 The check fails when either of these holds:
 
 - a commit in the PR's `base..head` range does not meet all three conditions:
   - git author is exactly `Claude <noreply@anthropic.com>`;
   - git committer is exactly `Claude <noreply@anthropic.com>`;
   - GitHub has verified the commit's signature;
-- `github.actor` is not the Claude push identity (`jsp1440`; see above).
+- `github.actor` is not the Claude push identity (`jsp1440`; see above). This is checked only for events that moved the head: a push, or a pull_request `synchronize`. On `opened` and `reopened`, the actor is whoever performed that action on the PR, so only the commits are judged.
+
+How the commit range is built:
+
+- **Complete enumeration.** The range is listed through the compare API, page by page, and must match GitHub's `total_commits` with no duplicate SHAs. A range that cannot be fully listed fails the check. The pull-request commits endpoint is not used, because it stops at 250 commits.
+- **The base is always the PR's real base.** That is the PR's base SHA on `pull_request`, or the open PR's base branch on a push. A push with no open PR, including the push that creates a branch, has no known base. For that push only the actor is checked, and the range is checked when the PR event supplies the base. Commits that are only on an integration base, such as `oc-autonomous-integration`, therefore never count as foreign.
 
 When Claude merges the PR's own base, the merged parents are already in the base. They never appear in `base..head`, so the check allows those merges. A merge of anything else brings foreign commits into the range, and the check flags them.
 

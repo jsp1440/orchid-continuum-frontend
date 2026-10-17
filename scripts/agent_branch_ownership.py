@@ -7,13 +7,16 @@ an "Update branch" click, a hand-made commit) replaces the head an independent
 checker verified, so exact-commit verification no longer describes the branch.
 See docs/AGENT-BRANCH-OWNERSHIP.md.
 
-This module only reads. It is fed GitHub API commit objects (from
-``GET /repos/{repo}/pulls/{n}/commits`` or ``.commits`` of a compare) and the
-push actor, and reports which commits and which actor are foreign. The calling
+This module only reads. It is fed the complete base..head range as GitHub API
+commit objects (``.commits`` of ``GET /repos/{repo}/compare/{base}...{head}``,
+every page) together with GitHub's ``total_commits`` for it, and the push
+actor. It refuses a range that does not match the total, and reports which
+commits and which actor are foreign. The calling
 workflow labels and comments; nothing here, or there, pushes, reverts or
 rewrites a branch.
 
-Exit codes: 0 no violation (or branch not owned), 1 violation, 2 bad input.
+Exit codes: 0 no violation (or branch not owned), 1 violation, 2 bad or
+incomplete input (including a commit range shorter than GitHub's total).
 """
 
 from __future__ import annotations
@@ -153,7 +156,15 @@ def evaluate(
     head_repo: str | None = None,
     base_repo: str | None = None,
     allowed_actors: Iterable[str] = ALLOWED_PUSH_ACTORS,
+    check_actor: bool = True,
 ) -> OwnershipReport:
+    """Check ``commits`` (the complete base..head range) and the push actor.
+
+    ``check_actor`` is True only for events that moved the head (a push, or
+    pull_request ``synchronize``). On ``opened``/``reopened`` the actor is
+    whoever performed that PR action, not whoever pushed, so only the commit
+    identities are judged.
+    """
     report = OwnershipReport(
         head_ref=head_ref, owned=is_owned_ref(head_ref), actor=actor
     )
@@ -164,7 +175,7 @@ def evaluate(
             f"head repository {head_repo} is not {base_repo}; owned branch names"
             " are only valid in the repository itself"
         )
-    if actor not in set(allowed_actors):
+    if check_actor and actor not in set(allowed_actors):
         report.actor_violation = (
             f"push actor `{actor or '(missing)'}` is not the Claude push identity"
         )
@@ -238,12 +249,36 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--run-url", default="")
     parser.add_argument("--markdown-out", type=Path)
     parser.add_argument("--json-out", type=Path)
+    parser.add_argument(
+        "--expected-count",
+        type=int,
+        required=True,
+        help="total_commits GitHub reports for base...head; the range must match it",
+    )
+    parser.add_argument(
+        "--skip-actor-check",
+        action="store_true",
+        help="the event did not move the head (pull_request opened/reopened)",
+    )
     args = parser.parse_args(argv)
 
     try:
         commits = load_commits(args.commits)
     except (OSError, ValueError) as exc:
         print(f"::error::cannot read commits: {exc}", file=sys.stderr)
+        return 2
+    shas = {str(c.get("sha") or "") for c in commits} - {""}
+    if args.expected_count < 0 or not (
+        len(commits) == len(shas) == args.expected_count
+    ):
+        # Fail closed: a partial range proves nothing about the commits that
+        # were not listed.
+        print(
+            f"::error::commit range not fully enumerated: got {len(commits)}"
+            f" ({len(shas)} distinct SHAs),"
+            f" GitHub reports {args.expected_count}",
+            file=sys.stderr,
+        )
         return 2
 
     report = evaluate(
@@ -252,6 +287,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         commits=commits,
         head_repo=args.head_repo or None,
         base_repo=args.base_repo or None,
+        check_actor=not args.skip_actor_check,
     )
     if args.json_out:
         args.json_out.write_text(

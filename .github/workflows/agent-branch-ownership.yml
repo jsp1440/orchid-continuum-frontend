@@ -41,14 +41,19 @@ jobs:
 
       - name: Use the detector from the default branch
         # A foreign push could edit the detector on its own branch, so the
-        # default branch's copy is authoritative once it exists there.
+        # default branch's copy is authoritative once it exists there. A failed
+        # fetch fails the job; the checked-out copy is used only when a
+        # successful fetch shows the default branch has no detector yet.
         env:
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
           set -euo pipefail
           detector="scripts/agent_branch_ownership.py"
-          if git fetch --no-tags --depth=1 origin "$DEFAULT_BRANCH" \
-             && git cat-file -e "FETCH_HEAD:$detector" 2>/dev/null; then
+          if ! git fetch --no-tags --depth=1 origin "$DEFAULT_BRANCH"; then
+            echo "::error::Could not fetch $DEFAULT_BRANCH to load the trusted detector."
+            exit 1
+          fi
+          if git cat-file -e "FETCH_HEAD:$detector" 2>/dev/null; then
             git show "FETCH_HEAD:$detector" > "$RUNNER_TEMP/agent_branch_ownership.py"
             echo "Using $detector from $DEFAULT_BRANCH."
           else
@@ -56,43 +61,62 @@ jobs:
             echo "::notice::Bootstrap: $detector is not on $DEFAULT_BRANCH yet; using the checked-out copy."
           fi
 
-      - name: Collect pull requests and commits
+      - name: Collect complete commit ranges
+        # Ranges come from the compare API, page by page, and are checked against
+        # its total_commits; the pull-request commits endpoint stops at 250.
+        # The base is always the pull request's real base, so commits that are
+        # only on an integration base never count as foreign. A push with no
+        # open pull request (including branch creation) has no known base:
+        # its range is checked when the pull request event supplies one, and
+        # only the push actor is checked here.
         env:
           GH_TOKEN: ${{ github.token }}
           EVENT_NAME: ${{ github.event_name }}
+          EVENT_ACTION: ${{ github.event.action }}
           REPOSITORY: ${{ github.repository }}
           OWNER: ${{ github.repository_owner }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
           PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PUSH_REF: ${{ github.ref_name }}
-          PUSH_BEFORE: ${{ github.event.before }}
           PUSH_AFTER: ${{ github.event.after }}
         run: |
           set -euo pipefail
           work="$RUNNER_TEMP/ownership"
           mkdir -p "$work"
           : > "$work/targets.tsv"
+          # Only events that moved the head say who pushed it.
+          actor_check=check
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$EVENT_ACTION" != "synchronize" ]; then
+            actor_check=skip
+          fi
+          collect() { # number ref head_repo base head
+            local out="$work/range-$1.jsonl" total
+            total=$(gh api "repos/$REPOSITORY/compare/$4...$5?per_page=1" --jq '.total_commits')
+            : > "$out"
+            # Explicit pages rather than --paginate: the page count follows
+            # from total_commits, and the detector refuses any shortfall.
+            for ((page = 1; page <= (total + 99) / 100; page++)); do
+              gh api "repos/$REPOSITORY/compare/$4...$5?per_page=100&page=$page" --jq '.commits[]' >> "$out"
+            done
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$out" "$total" "$actor_check" >> "$work/targets.tsv"
+          }
           if [ "$EVENT_NAME" = "pull_request" ]; then
-            gh api --paginate "repos/$REPOSITORY/pulls/$PR_NUMBER/commits?per_page=100" --jq '.[]' > "$work/pr-$PR_NUMBER.jsonl"
-            printf '%s\t%s\t%s\t%s\n' "$PR_NUMBER" "$PR_HEAD_REF" "$PR_HEAD_REPO" "$work/pr-$PR_NUMBER.jsonl" >> "$work/targets.tsv"
+            collect "$PR_NUMBER" "$PR_HEAD_REF" "$PR_HEAD_REPO" "$PR_BASE_SHA" "$PR_HEAD_SHA"
           else
-            gh api "repos/$REPOSITORY/pulls?state=open&head=$OWNER:$PUSH_REF&per_page=100" --jq '.[].number' > "$work/prs.txt"
-            while read -r number; do
+            gh api "repos/$REPOSITORY/pulls?state=open&head=$OWNER:$PUSH_REF&per_page=100" \
+              --jq '.[] | [.number, .base.ref] | @tsv' > "$work/prs.tsv"
+            while IFS=$'\t' read -r number base_ref; do
               [ -n "$number" ] || continue
-              gh api --paginate "repos/$REPOSITORY/pulls/$number/commits?per_page=100" --jq '.[]' > "$work/pr-$number.jsonl"
-              printf '%s\t%s\t%s\t%s\n' "$number" "$PUSH_REF" "$REPOSITORY" "$work/pr-$number.jsonl" >> "$work/targets.tsv"
-            done < "$work/prs.txt"
+              base_sha=$(gh api "repos/$REPOSITORY/git/ref/heads/$base_ref" --jq '.object.sha')
+              collect "$number" "$PUSH_REF" "$REPOSITORY" "$base_sha" "$PUSH_AFTER"
+            done < "$work/prs.tsv"
             if [ ! -s "$work/targets.tsv" ]; then
-              # No open PR: check what this push added relative to its parent
-              # state, or to the default branch for a new branch.
-              base="$PUSH_BEFORE"
-              if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
-                base="$DEFAULT_BRANCH"
-              fi
-              gh api "repos/$REPOSITORY/compare/$base...$PUSH_AFTER" --jq '.commits[]' > "$work/push.jsonl"
-              printf '%s\t%s\t%s\t%s\n' "-" "$PUSH_REF" "$REPOSITORY" "$work/push.jsonl" >> "$work/targets.tsv"
+              echo "::notice::No open pull request for $PUSH_REF: commit range deferred to the pull request event; checking the push actor only."
+              : > "$work/range--.jsonl"
+              printf '%s\t%s\t%s\t%s\t%s\t%s\n' "-" "$PUSH_REF" "$REPOSITORY" "$work/range--.jsonl" 0 "$actor_check" >> "$work/targets.tsv"
             fi
           fi
           cat "$work/targets.tsv"
@@ -108,10 +132,13 @@ jobs:
           work="$RUNNER_TEMP/ownership"
           : > "$work/violations.txt"
           status=0
-          while IFS=$'\t' read -r number ref head_repo commits; do
+          while IFS=$'\t' read -r number ref head_repo commits total actor_check; do
             [ -n "$ref" ] || continue
+            extra=()
+            [ "$actor_check" = "skip" ] && extra+=(--skip-actor-check)
             python3 "$RUNNER_TEMP/agent_branch_ownership.py" \
               --head-ref "$ref" --actor "$ACTOR" --commits "$commits" \
+              --expected-count "$total" "${extra[@]}" \
               --head-repo "$head_repo" --base-repo "$REPOSITORY" \
               --run-url "$RUN_URL" \
               --markdown-out "$work/comment-$number.md" --json-out "$work/report-$number.json"
