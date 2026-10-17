@@ -198,6 +198,28 @@ export function mediaKindFromType(type: string): FieldMediaKind {
   throw new Error("Only image or video files can be attached to a field observation.");
 }
 
+/** Mirrors the backend default (DEFAULT_FIELD_MEDIA_MAX_BYTES): larger originals get HTTP 413 on upload. */
+export const FIELD_MEDIA_UPLOAD_MAX_BYTES = 200 * 1024 * 1024;
+
+/** Shown wherever originals are chosen. Originals are never altered, so embedded location travels with them. */
+export const FIELD_MEDIA_EXIF_UPLOAD_NOTICE =
+  "Photos and videos are uploaded unchanged when you sync, and a photo can carry its own embedded location (EXIF/GPS). The server keeps originals private, but remove location from a file first if you do not want the server to hold it.";
+
+/**
+ * Device-side intake check so an original the server will refuse is rejected before it is
+ * saved, rather than becoming a record that can never finish syncing.
+ */
+export function validateFieldMediaFile(file: { name: string; type: string; size: number }): FieldMediaKind {
+  const kind = mediaKindFromType(file.type);
+  const label = file.name || "This file";
+  if (file.size <= 0) throw new Error(`${label} is empty, so it was not attached.`);
+  if (file.size > FIELD_MEDIA_UPLOAD_MAX_BYTES) {
+    const megabytes = Math.round(file.size / (1024 * 1024));
+    throw new Error(`${label} is ${megabytes} MB. The Field Journal server accepts originals up to ${FIELD_MEDIA_UPLOAD_MAX_BYTES / (1024 * 1024)} MB. Shorten or compress it on the device, then attach it again.`);
+  }
+  return kind;
+}
+
 export async function sha256Hex(blob: Blob): Promise<string> {
   if (!globalThis.crypto?.subtle) {
     throw new Error("This browser cannot hash original media, so the observation cannot be safely synchronized.");
