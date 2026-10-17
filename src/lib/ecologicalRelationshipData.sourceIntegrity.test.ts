@@ -28,7 +28,13 @@ describe('ecological relationship data source integrity', () => {
     );
 
     expect(continuum).toContain(".from('species')");
-    expect(continuum).toContain(".from('atlas_occurrences')");
+    // Occurrence rows come from the locality-protected view, or the base table
+    // before the owner applies the migration; never from any other relation.
+    const atlasSource = source('lib/atlasOccurrenceSource.ts');
+    expect(continuum).toContain('.from(relation)');
+    expect(continuum).toContain('queryAtlasRelation(');
+    expect(atlasSource).toContain("ATLAS_BASE_TABLE = 'atlas_occurrences'");
+    expect(atlasSource).toContain("ATLAS_PUBLIC_VIEW = 'atlas_occurrences_public'");
     expect(aggregates).toContain('await loadSpeciesRows()');
     expect(aggregates).toContain('await loadAtlasRows()');
     expect(aggregates).toContain('if (!Array.isArray(row.pollinators)) continue');

@@ -72,4 +72,36 @@ describe('atlasLocalitySafety', () => {
     expect(uncertaintyToCellDeg(5_000)).toBe(0.1);
     expect(uncertaintyToCellDeg(30_000)).toBe(0.5);
   });
+  it('applies the CITES Appendix I floor even to an assessed, non-threatened record', () => {
+    const displayed = resolveAtlasLocation({
+      lat: -41.23457,
+      lng: -115.67891,
+      genus: 'Paphiopedilum',
+      species: 'syntheticum',
+      iucnCode: 'LC',
+      assessmentResolved: true,
+    });
+    expect(displayed.policy.cellDeg).toBe(0.1);
+    expect(displayed.policy.reason).toBe('conservation-status');
+    expect(displayed.policy.notice).toMatch(/CITES Appendix I/);
+    expect(displayed.policy.localityTextAllowed).toBe(false);
+    // Research access sees through the CITES floor, as it does threat tiers.
+    expect(resolveAtlasLocation({ lat: -41.2, lng: -115.6, genus: 'Paphiopedilum', assessmentResolved: true }, 'research').policy.cellDeg).toBe(0);
+  });
+
+  it('treats a source-published cell as a floor that no access level can refine', () => {
+    const point = {
+      lat: -41.225,
+      lng: -115.675,
+      assessmentResolved: true,
+      publishedCellDeg: 0.05,
+      publishedPrecisionReason: 'unresolved-assessment',
+      localityWithheldAtSource: true,
+    };
+    for (const access of ['public', 'research'] as const) {
+      const displayed = resolveAtlasLocation(point, access);
+      expect(displayed.policy.cellDeg).toBe(0.05);
+      expect(displayed.policy.localityTextAllowed).toBe(false);
+    }
+  });
 });
