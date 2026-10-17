@@ -18,7 +18,6 @@ Engineering rules:
 - Preserve server-authoritative scientific state and fail closed when contracts are missing or a governed route violates its trust boundary.
 - Reuse canonical API clients/contracts instead of introducing conflicting endpoint conventions.
 - Add focused tests for changed behavior.
-- Never push to `claude/**` or `field-journal/**` (Claude-owned), including merging `main` into them or "Update branch". Work on your own branch and PR. Never add commits to a head under independent review. See `docs/AGENT-BRANCH-OWNERSHIP.md`.
 - Run focused Vitest/build/lint first, then required repository CI.
 - Distinguish CI/runner infrastructure failure from code failure. A job with no runner and zero executed steps is infrastructure-blocked, not code-failed and not green validation.
 - After three unsuccessful repair iterations on the same deterministic failure class, stop speculative repair commits and diagnose the exact failing command/output before continuing.
