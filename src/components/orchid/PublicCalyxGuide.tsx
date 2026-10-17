@@ -3,42 +3,19 @@ import { Link } from 'react-router-dom';
 import { Bot, Bug, FlaskConical, Globe2, MessageCircle, Sprout } from 'lucide-react';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { featuredTaxonCalyxHref } from '@/lib/featuredTaxonNavigation';
+import {
+  buildPublicCalyxGuideModel,
+  buildPublicCalyxPrompts,
+  evidenceStatusLabel,
+  relationshipStatusLabel,
+} from '@/lib/publicCalyxContext';
 
 const PublicCalyxGuide: React.FC = () => {
-  const { genus, continuum } = useDailyGenus();
-  const relationships = continuum?.relationships ?? null;
+  const { genus, continuum, continuumStatus } = useDailyGenus();
+  const context = buildPublicCalyxGuideModel({ genus, continuum, continuumStatus });
   const calyxHref = featuredTaxonCalyxHref(genus);
-
-  const prompts = [
-    {
-      label: 'Pollination',
-      icon: Bug,
-      question: relationships?.pollinators.hasData
-        ? `What does the documented pollinator evidence for ${genus} actually show?`
-        : `Why is missing pollinator evidence for ${genus} scientifically useful?`,
-    },
-    {
-      label: 'Fungi',
-      icon: Sprout,
-      question: relationships?.fungi.hasData
-        ? `What do the documented fungal partnerships tell us about ${genus}?`
-        : `What would researchers need to document the fungal partners of ${genus}?`,
-    },
-    {
-      label: 'Place',
-      icon: Globe2,
-      question: relationships?.geography.hasData
-        ? `What can the occurrence evidence tell us about where ${genus} is known?`
-        : `What does it mean when geographic evidence is not yet linked for ${genus}?`,
-    },
-    {
-      label: 'Evidence',
-      icon: FlaskConical,
-      question: continuum?.gaps.length
-        ? `Which evidence gaps for ${genus} would be most valuable to close next?`
-        : `Which sources support what the Continuum currently shows for ${genus}?`,
-    },
-  ];
+  const prompts = buildPublicCalyxPrompts(context);
+  const promptIcons = { Pollination: Bug, Fungi: Sprout, Place: Globe2, Evidence: FlaskConical } as const;
 
   return (
     <section id="ask-calyx" className="relative overflow-hidden border-y border-white/[0.08] bg-[#0a170f] text-[#f5f0e8]">
@@ -71,16 +48,43 @@ const PublicCalyxGuide: React.FC = () => {
               <div>
                 <div className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#d4b34a]">Context now</div>
                 <p className="mt-2 text-sm leading-6 text-[#d8cfbd]/82">
-                  Featured taxon: <span className="italic">{genus}</span>. {continuum?.gaps.length
-                    ? `${continuum.gaps.length} graph domain${continuum.gaps.length === 1 ? '' : 's'} currently show knowledge gaps.`
-                    : continuum ? 'No zero-coverage graph domains were returned in this traversal.' : 'Continuum context is still loading or unavailable.'}
+                  Featured taxon: <span className="italic">{genus}</span>. {evidenceStatusLabel(context)}.
                 </p>
               </div>
             </div>
 
+            <div className="mt-3 grid gap-2 sm:grid-cols-2" data-testid="public-calyx-page-context">
+              <div className="rounded-2xl border border-white/[0.08] bg-black/15 p-3">
+                <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">Page context</div>
+                <p className="mt-2 text-[12px] leading-5 text-[#d8cfbd]/78">
+                  Featured genus: <span className="italic">{context.genus}</span><br />
+                  Homepage Atlas theme: {context.atlasTheme.label}.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/[0.08] bg-black/15 p-3">
+                <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">Provenance</div>
+                <p className="mt-2 text-[12px] leading-5 text-[#d8cfbd]/78">
+                  {context.provenance === 'canonical-continuum'
+                    ? 'Relationship state is read from the canonical Continuum graph.'
+                    : 'Canonical graph state is not available; no scientific fallback is shown.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-2 sm:grid-cols-3" data-testid="public-calyx-relationship-context">
+              {context.relationships.map((relationship) => (
+                <div key={relationship.id} className="rounded-2xl border border-white/[0.08] bg-black/15 p-3">
+                  <div className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">{relationship.label}</div>
+                  <p className="mt-2 text-[12px] leading-5 text-[#d8cfbd]/78">
+                    {relationshipStatusLabel(relationship)}
+                  </p>
+                </div>
+              ))}
+            </div>
+
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {prompts.map((item) => {
-                const Icon = item.icon;
+                const Icon = promptIcons[item.label as keyof typeof promptIcons];
                 return (
                   <article key={item.label} className="rounded-2xl border border-white/[0.08] bg-black/15 p-3">
                     <div className="flex items-center gap-2 font-mono text-[9px] uppercase tracking-[0.18em] text-[#d4b34a]">
