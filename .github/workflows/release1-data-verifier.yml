@@ -1,0 +1,99 @@
+name: Release 1 data verifier
+
+# Read-only verification of the data planes behind J3 (species search and taxon
+# pages) and J9 (Atlas): the public species API and the Supabase tables
+# `species`, `atlas_occurrences` and `species_mycorrhizal`.
+#
+# Manual dispatch only. No schedule, no push/pull_request trigger, no repository
+# secrets, and a read-only token. Every request the script makes is a GET.
+#
+# This is kept separate from render-release-probe.yml on purpose: that job has
+# no checkout or Node step, a 3-minute budget sized for release-identity curls,
+# and probes the Calyx backend rather than the public species API. A data
+# outage here should not turn the release-identity probe red.
+
+on:
+  workflow_dispatch:
+    inputs:
+      species_api_url:
+        description: 'Public species API origin (VITE_API_BASE_URL)'
+        required: false
+        type: string
+        default: 'https://orchid-continuum-public-api.onrender.com'
+      supabase_url:
+        description: 'Supabase origin (VITE_SUPABASE_URL). Empty = the default shipped in src/lib/supabase.ts'
+        required: false
+        type: string
+        default: ''
+      supabase_anon_key:
+        description: 'PUBLIC anon key only, never a service-role key. Empty = the public key shipped in src/lib/supabase.ts'
+        required: false
+        type: string
+        default: ''
+      taxa:
+        description: 'Comma-separated genera the search must know'
+        required: false
+        type: string
+        default: 'Cattleya,Dracula'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '20'
+
+      - name: Verify Release 1 data (read-only GETs)
+        env:
+          INPUT_SPECIES_API_URL: ${{ inputs.species_api_url }}
+          INPUT_SUPABASE_URL: ${{ inputs.supabase_url }}
+          INPUT_SUPABASE_ANON_KEY: ${{ inputs.supabase_anon_key }}
+          INPUT_TAXA: ${{ inputs.taxa }}
+        run: |
+          set -euo pipefail
+          # The anon key and origin are public by design: both ship in the
+          # client bundle. When no input is given they are read from the same
+          # source file rather than restated in CI config. Masked either way.
+          SUPA_URL="$INPUT_SUPABASE_URL"
+          if [ -z "$SUPA_URL" ]; then
+            SUPA_URL=$(grep -oE "DEFAULT_SUPABASE_URL = '[^']+'" src/lib/supabase.ts | sed -E "s/.*'([^']+)'/\1/" || true)
+          fi
+          ANON_KEY="$INPUT_SUPABASE_ANON_KEY"
+          if [ -z "$ANON_KEY" ]; then
+            ANON_KEY=$(grep -oE "eyJ[A-Za-z0-9_.-]+" src/lib/supabase.ts | head -n 1 || true)
+          fi
+          if [ -n "$ANON_KEY" ]; then echo "::add-mask::$ANON_KEY"; fi
+          status=0
+          # The script writes the report and the step summary itself, from
+          # report fields only; no response text is ever recorded.
+          VITE_API_BASE_URL="$INPUT_SPECIES_API_URL" \
+          VITE_SUPABASE_URL="$SUPA_URL" \
+          VITE_SUPABASE_ANON_KEY="$ANON_KEY" \
+            node scripts/verify-release1-data.mjs --taxa "$INPUT_TAXA" \
+              --out release1-data-report.json --summary "$GITHUB_STEP_SUMMARY" > /dev/null || status=$?
+          if [ ! -f release1-data-report.json ]; then
+            echo "verifier produced no report (exit $status)"
+            exit "$status"
+          fi
+          cat release1-data-report.json
+          # A warning (e.g. an empty or RLS-hidden table) must not pass silently.
+          node -e "for (const c of require('./release1-data-report.json').checks) if (c.status === 'warn') console.log('::warning title=release1-data::' + c.id + ' ' + c.observation)"
+          exit "$status"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release1-data-report
+          path: release1-data-report.json
+          if-no-files-found: warn
+          retention-days: 14
