@@ -64,7 +64,7 @@ Original media bytes then upload once per observation to `/api/field-observation
 ## Offline and sync behavior
 
 - Offline create/edit/save uses IndexedDB (`src/lib/fieldJournalStore.ts`), including original media blobs.
-- The production app registers `public/field-journal-sw.js`, which caches the app shell and hashed static assets after the first online load so `/field` can reopen without a network.
+- The production app registers `public/field-journal-sw.js`. On install it precaches `/`, `/field` and every same-origin asset the shell HTML references (hashed JS/CSS, icons, manifest), so `/field` can reopen without a network after the first online load. Navigations are network-first with a 4-second fallback to the cached shell and are stored only under the fixed keys `/` and `/field` (never one-time query URLs such as `?code=`).
 - Closing/reopening the app reloads observations and media from IndexedDB.
 - Save while offline → `local_only`; save while online → `queued`, then a sync attempt.
 - Retry uses the same `client_draft_id`; backend `POST /api/field-observations` returns the existing record instead of duplicating it.
@@ -88,14 +88,16 @@ Only select **Include private capture GPS and locality notes in this backup or m
 
 **Back up with photos/videos (.zip)** writes one uncompressed (STORE) `.zip` built by an in-repo writer (`src/lib/fieldJournalZip.ts`, CRC-32, no dependency):
 
-- `manifest.json` — schema `orchid-continuum-field-journal-backup/v1`: every saved observation record for the signed-in device account (notes, ecology, identification state, sync state, server id and media receipts), plus for each photo/video its SHA-256, size, type and path. Account identity is never written.
+- `manifest.json` — schema `orchid-continuum-field-journal-backup/v1`: every saved observation record for the signed-in device account (notes, ecology, identification state, sync state, server id and media receipts), plus for each photo/video its SHA-256, size, type and path. Media receipts include the opaque server storage key, because sync treats an upload as complete only when server media id, storage key, SHA-256 and upload time are all present; without it a restore would re-upload. The account id itself is never written; instead `accountBinding` holds a non-secret SHA-256 of a fixed app string plus the account id.
 - `media/<n>/<m>.<ext>` — the original photo/video bytes, byte-for-byte (the stored Blob is a ZIP part, not re-encoded or copied into one buffer).
 
-Captured GPS/locality notes follow the same unchecked-by-default option as the metadata download. Every backup is a private working copy: notes and filenames may be sensitive.
+Captured GPS/locality notes follow the same unchecked-by-default option as the metadata download; that option controls only the structured capture GPS and locality-note fields. **Original photos and videos are copied unchanged and may contain embedded location (EXIF/GPS metadata) whether or not the option is chosen.** Every backup is a private working copy: notes and filenames may be sensitive too.
 
 On iPad Safari the file is handed to the share sheet (`navigator.share` with files) — choose **Save to Files**; other browsers download it. The backup file is the real safety copy. Browser storage can be cleared by the system or by clearing website data; `/field` asks once for persistent storage after the first durable save and shows whether the browser agreed plus current usage/quota. On iPad, adding the Field Journal to the Home Screen improves storage durability but is not a substitute for the backup file.
 
 **Restore from backup** only accepts this app's own manifest schema in a STORE ZIP (no compression/encryption/ZIP64/extra fields, contiguous entries, bounded entry count and sizes, no unlisted files). Every media file is verified by CRC-32 and SHA-256; an observation with any failing file is rejected and reported. Restored records are bound to the account currently signed in and merged under the same exclusive lock as sync/edit:
+
+- if the backup's `accountBinding` is missing or belongs to another account, only records never sent to the server are restored; any record with a server id, sync time or media receipt is rejected as "belongs to another account" (it is never shown or retried under this session);
 
 - new id → restored;
 - device copy with the same or later `updatedAt` → kept (skipped);
@@ -104,6 +106,8 @@ On iPad Safari the file is handed to the share sheet (`navigator.share` with fil
 - a record backed up mid-sync restores as **Sync failed** (retryable with its receipts).
 
 The UI reports restored / skipped / rejected counts.
+
+Known limitation — memory: making a backup reads each original once (to hash it) and restore reads each media file once to verify CRC-32 and SHA-256, so one very large video must fit in browser memory at a time. Back up regularly, and use per-observation sync/backup habits for long videos. Backups are limited to 4 GB (no ZIP64).
 
 ## Locality protection
 
