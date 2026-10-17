@@ -1,5 +1,6 @@
 import { CALYX_BACKEND_BASE_URL } from "./backendConfig";
 import {
+  hasCompleteMediaReceipt,
   markFieldObservationFailed,
   nowIso,
   parseServerArchive,
@@ -152,7 +153,7 @@ export async function syncFieldObservation(
     const uploadedMedia = [...observation.media];
     for (let index = 0; index < uploadedMedia.length; index += 1) {
       const media = uploadedMedia[index];
-      if (media.serverMediaId && media.storageKey && media.sha256 && media.uploadedAt) continue;
+      if (hasCompleteMediaReceipt(media)) continue;
       uploadedMedia[index] = await uploadServerMedia(serverId, media);
       progress = { ...progress, media: [...uploadedMedia] };
       await persistCheckpoint(progress);

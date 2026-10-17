@@ -2,6 +2,7 @@ import {
   FIELD_JOURNAL_MEDIA_LIMIT,
   FIELD_JOURNAL_SCHEMA_VERSION,
   mediaKindFromType,
+  hasCompleteMediaReceipt,
   parseServerArchive,
   parseServerDurability,
   validatePrivateLocation,
@@ -219,6 +220,14 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
     if (!MEDIA_PATH.test(path)) throw new RecordError("invalid media path");
     const size = item.size;
     if (typeof size !== "number" || !Number.isInteger(size) || size < 0 || size > ZIP32_MEDIA_MAX) throw new RecordError("invalid media size");
+    const storageKey = text(item.storageKey, "media storageKey", 1000, { nullable: true });
+    const serverMediaId = text(item.serverMediaId, "media serverMediaId", 500, { nullable: true });
+    const uploadedAt = timestamp(item.uploadedAt, "media uploadedAt", true);
+    // Upload/durability/archive claims are only accepted alongside a complete server receipt.
+    if ((uploadedAt != null || item.serverDurability != null || item.serverArchive != null) &&
+        !hasCompleteMediaReceipt({ serverMediaId, storageKey, sha256, uploadedAt })) {
+      throw new RecordError("media upload state without a complete server receipt");
+    }
     return {
       path, sha256, size,
       media: {
@@ -226,9 +235,9 @@ function parseBackupObservation(raw: unknown, includesLocation: boolean): { reco
         name: text(item.name, "media name", 500) as string,
         size, type, kind, sha256,
         capturedAt: timestamp(item.capturedAt, "media capturedAt") as string,
-        storageKey: text(item.storageKey, "media storageKey", 1000, { nullable: true }),
-        serverMediaId: text(item.serverMediaId, "media serverMediaId", 500, { nullable: true }),
-        uploadedAt: timestamp(item.uploadedAt, "media uploadedAt", true),
+        storageKey,
+        serverMediaId,
+        uploadedAt,
         serverDurability: (() => {
           if (item.serverDurability != null && parseServerDurability(item.serverDurability) === null) throw new RecordError("invalid media serverDurability");
           return parseServerDurability(item.serverDurability);

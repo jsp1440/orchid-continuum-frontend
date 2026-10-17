@@ -145,16 +145,33 @@ describe("Field Journal media upload contract (backend durability and filename c
   });
 
   it("keeps older receipts without an archive field on the existing durability labels", () => {
-    const base = { uploadedAt: NOW, serverDurability: "durable" as const };
+    const base = { serverMediaId: "photo-1", storageKey: "opaque", sha256: HASH, uploadedAt: NOW, serverDurability: "durable" as const };
     expect(fieldMediaUploadLabel(base)).toBe("Server copy (durable)");
     expect(fieldMediaUploadLabel({ ...base, serverArchive: null })).toBe("Server copy (durable)");
-    expect(fieldMediaReceiptCaption({ uploadedAt: null, serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified" } })).toBe("Original on this device");
+    expect(fieldMediaReceiptCaption({ ...base, uploadedAt: null, serverArchive: { provider: "google_drive", state: "verified" } })).toBe("Original on this device");
     expect(parseServerArchive(["google_drive", "verified"])).toBeNull();
     expect(parseServerArchive(null)).toBeNull();
   });
 
   it("labels media without a receipt as an on-device original", () => {
-    expect(fieldMediaUploadLabel({ uploadedAt: null, serverDurability: "durable" })).toBe("Original on this device");
+    expect(fieldMediaUploadLabel({ serverMediaId: null, storageKey: null, sha256: null, uploadedAt: null, serverDurability: "durable" })).toBe("Original on this device");
+  });
+
+  it.each([
+    ["serverMediaId", { serverMediaId: null }],
+    ["storageKey", { storageKey: null }],
+    ["sha256", { sha256: null }],
+    ["uploadedAt", { uploadedAt: null }],
+  ])("shows no server, durability or archive label when the receipt lacks %s", (_field, missing) => {
+    const complete = {
+      serverMediaId: "photo-1", storageKey: "opaque", sha256: HASH, uploadedAt: NOW,
+      serverDurability: "durable" as const, serverArchive: { provider: "google_drive" as const, state: "verified" as const },
+    };
+    expect(fieldMediaReceiptCaption(complete)).toBe("Archived in Google Drive (verified) · original kept here");
+    expect(fieldMediaUploadLabel({ ...complete, ...missing })).toBe("Original on this device");
+    expect(fieldMediaReceiptCaption({ ...complete, ...missing })).toBe("Original on this device");
+    // Pre-existing gap: a durability claim alone must not produce "Server copy (durable)".
+    expect(fieldMediaUploadLabel({ ...complete, serverArchive: null, ...missing })).toBe("Original on this device");
   });
 
   it("sends a filename capped at 180 characters with its extension while the record keeps the original", async () => {

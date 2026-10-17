@@ -118,6 +118,29 @@ describe("Field Journal full-media backup", () => {
   });
 
   it.each([
+    ["archive verified (crafted)", { uploadedAt: NOW, serverDurability: "durable", serverArchive: { provider: "google_drive", state: "verified" } }],
+    ["durable only (pre-existing gap)", { uploadedAt: NOW, serverDurability: "durable" }],
+    ["uploadedAt only", { uploadedAt: NOW }],
+    ["durability without uploadedAt", { serverDurability: "durable" }],
+    ["archive without uploadedAt", { serverArchive: { provider: "google_drive", state: "pending" } }],
+    ["receipt missing storageKey", { uploadedAt: NOW, serverMediaId: "srv-media", serverDurability: "durable" }],
+    ["receipt missing serverMediaId", { uploadedAt: NOW, storageKey: "opaque-key", serverDurability: "durable" }],
+  ])("rejects a restored local-only media claiming upload state without a complete receipt: %s", async (_name, claim) => {
+    const { blob } = await buildFieldJournalBackup([await observation()], NOW, "metadata", ACCOUNT);
+    const manifest = await manifestOf(blob);
+    const entries = await readStoreZip(blob, () => true, { maxEntrySize: () => Number.MAX_SAFE_INTEGER });
+    expect(manifest.observations[0]).toMatchObject({ serverId: null, syncStatus: "local_only" });
+    Object.assign(manifest.observations[0].media[0], claim);
+    const tampered = await buildStoreZip([
+      { name: "manifest.json", data: new Blob([JSON.stringify(manifest)]) },
+      ...entries.slice(1).map((entry) => ({ name: entry.name, data: entry.data })),
+    ], NOW);
+    const parsed = await parseFieldJournalBackup(tampered);
+    expect(parsed.observations).toEqual([]);
+    expect(parsed.rejected[0].reason).toContain("without a complete server receipt");
+  });
+
+  it.each([
     [{ provider: "google_drive", state: "archived" }],
     [{ provider: "dropbox", state: "verified" }],
     [{ provider: "google_drive", state: "verified", drive_file_id: "drive-secret-id" }],
@@ -125,7 +148,11 @@ describe("Field Journal full-media backup", () => {
     ["verified"],
     [["google_drive", "verified"]],
   ])("rejects a restored media serverArchive of %j", async (serverArchive) => {
-    const { blob } = await buildFieldJournalBackup([await observation()], NOW, "metadata", ACCOUNT);
+    const source = await observation();
+    source.serverId = "fo-1";
+    source.syncStatus = "synchronized";
+    source.media[0] = { ...(await media("receipted", "a.jpg", "image/jpeg", bytes(10, 1), true)), serverDurability: "durable" };
+    const { blob } = await buildFieldJournalBackup([source], NOW, "metadata", ACCOUNT);
     const manifest = await manifestOf(blob);
     const entries = await readStoreZip(blob, () => true, { maxEntrySize: () => Number.MAX_SAFE_INTEGER });
     manifest.observations[0].media[0].serverArchive = serverArchive;

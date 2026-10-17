@@ -69,9 +69,19 @@ export function parseServerArchive(value: unknown): FieldServerArchive | null {
   return { provider, state: state as FieldServerArchiveState };
 }
 
-/** Truthful upload label: a server receipt is never presented as a guaranteed backup. */
-export function fieldMediaUploadLabel(media: Pick<FieldMedia, "uploadedAt" | "serverDurability" | "serverArchive">): string {
-  if (!media.uploadedAt) return "Original on this device";
+/** The sync completeness check: only a full server receipt counts as uploaded. */
+export function hasCompleteMediaReceipt(media: Pick<FieldMedia, "serverMediaId" | "storageKey" | "sha256" | "uploadedAt">): boolean {
+  return Boolean(media.serverMediaId && media.storageKey && media.sha256 && media.uploadedAt);
+}
+
+type FieldMediaLabelInput = Pick<FieldMedia, "serverMediaId" | "storageKey" | "sha256" | "uploadedAt" | "serverDurability" | "serverArchive">;
+
+/**
+ * Truthful upload label: a server receipt is never presented as a guaranteed backup, and no
+ * server, durability or archive label is shown unless the receipt is complete.
+ */
+export function fieldMediaUploadLabel(media: FieldMediaLabelInput): string {
+  if (!hasCompleteMediaReceipt(media)) return "Original on this device";
   const archiveState = media.serverArchive?.provider === "google_drive" ? media.serverArchive.state : null;
   if (archiveState === "verified" && media.serverDurability === "durable") return "Archived in Google Drive (verified)";
   if (archiveState === "pending") return "Server copy (Drive archive pending)";
@@ -81,9 +91,9 @@ export function fieldMediaUploadLabel(media: Pick<FieldMedia, "uploadedAt" | "se
 }
 
 /** Card caption: the upload label plus the reminder that the device original is retained. */
-export function fieldMediaReceiptCaption(media: Pick<FieldMedia, "uploadedAt" | "serverDurability" | "serverArchive">): string {
+export function fieldMediaReceiptCaption(media: FieldMediaLabelInput): string {
   const label = fieldMediaUploadLabel(media);
-  return media.uploadedAt ? `${label} · original kept here` : label;
+  return hasCompleteMediaReceipt(media) ? `${label} · original kept here` : label;
 }
 
 export type FieldObservation = {
