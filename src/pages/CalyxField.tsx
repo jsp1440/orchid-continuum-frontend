@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   Camera,
@@ -92,6 +92,8 @@ export default function CalyxField() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [syncingIds, setSyncingIds] = useState<Set<string>>(new Set());
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [includePrivateExportLocation, setIncludePrivateExportLocation] = useState(false);
@@ -289,6 +291,11 @@ export default function CalyxField() {
   }
 
   async function saveObservation() {
+    // Hashing original media and IndexedDB writes can take time on an iPad.
+    // Fence rapid taps synchronously, before React disables the form.
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     setError(null);
     setNotice(null);
     try {
@@ -333,6 +340,9 @@ export default function CalyxField() {
       if (navigator.onLine) void syncOne(saved);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The observation could not be saved.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -367,6 +377,7 @@ export default function CalyxField() {
       setError("A synchronized observation is not deleted locally merely because sync succeeded. Discard is disabled for synced records in this MVP.");
       return;
     }
+    if (!window.confirm("Discard this observation and its original photos/videos from this device? This cannot be undone. Save a full backup first if you need to keep them.")) return;
     try {
       await discardSavedFieldObservation(observation);
       setObservations((current) => current.filter((item) => item.id !== observation.id));
@@ -510,6 +521,7 @@ export default function CalyxField() {
             </div>
           </div>
 
+          <fieldset disabled={saving} aria-busy={saving}>
           <ol className="mt-6 space-y-6">
             <li className="rounded-lg border border-quiet p-4">
               <h3 className="font-semibold">1. Photos and video</h3>
@@ -590,12 +602,13 @@ export default function CalyxField() {
               {notice ? <p role="status" className="mt-4 rounded-md border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 aria-hidden="true" className="mr-1 inline h-4 w-4" />{notice}</p> : null}
               <div className="mt-4 flex gap-3">
                 <button type="button" onClick={() => void saveObservation()} className="flex-1 rounded-md bg-primary px-4 py-3 font-semibold text-primary-foreground">
-                  {editingId ? "Save edit on this device" : "Save observation"}
+                  {saving ? "Saving on this device…" : editingId ? "Save edit on this device" : "Save observation"}
                 </button>
                 {editingId ? <button type="button" onClick={resetForm} className="rounded-md border px-4 py-3">Cancel</button> : null}
               </div>
             </li>
           </ol>
+          </fieldset>
         </section>
 
         <section aria-labelledby="drafts-heading">
@@ -681,14 +694,14 @@ export default function CalyxField() {
                       {observation.syncStatus === "failed" ? "Retry sync" : "Sync"}
                     </button>
                   ) : <span className="text-xs text-emerald-700">Server accepted exactly once; local original retained.</span>}
-                  <button type="button" onClick={() => startEdit(observation)} disabled={!canEditFieldObservation(observation)} className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs disabled:opacity-50">
+                  <button type="button" onClick={() => startEdit(observation)} disabled={saving || !canEditFieldObservation(observation)} className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs disabled:opacity-50">
                     <Edit3 aria-hidden="true" className="h-3.5 w-3.5" /> Edit
                   </button>
                   <button type="button" onClick={() => exportMetadata([observation])} className="flex items-center gap-2 rounded-md border px-3 py-2 text-xs">
                     <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export metadata
                   </button>
                   {observation.syncStatus !== "synchronized" ? (
-                    <button type="button" aria-label="Discard observation" onClick={() => void discard(observation)} disabled={observation.syncStatus === "syncing"} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50">
+                    <button type="button" aria-label="Discard observation" onClick={() => void discard(observation)} disabled={saving || !canEditFieldObservation(observation)} className="flex min-h-11 min-w-11 items-center justify-center rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-50">
                       <Trash2 aria-hidden="true" className="h-4 w-4" />
                     </button>
                   ) : null}
