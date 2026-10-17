@@ -21,6 +21,7 @@ import HeroCarousel from '@/components/orchid/HeroCarousel';
 import ImageSourceIndicator from '@/components/orchid/ImageSourceIndicator';
 import GenusOccurrenceMap from '@/components/orchid/GenusOccurrenceMap';
 import NeighborGeneraSection from '@/components/orchid/NeighborGeneraSection';
+import GenusScientificProfile from '@/components/orchid/GenusScientificProfile';
 import useSpeciesFavorites from '@/hooks/useSpeciesFavorites';
 import { supabase } from '@/lib/supabase';
 import {
@@ -510,6 +511,16 @@ const GenusDetail: React.FC = () => {
               is fully dynamic (occurrence Atlas + cache) and works for ANY
               genus name — so we still render the explorable neighbour map. */}
           {name && <NeighborGeneraSection genus={name} />}
+          {/* The canonical featured-genus-profile/v1 exhibit is fully dynamic
+              too: verified taxonomy, media, and knowledge-graph coverage are
+              composed by the backend for ANY accepted genus, curated entry or
+              not. The component itself fails closed on a non-canonical name
+              and renders nothing when the backbone rejects the genus. */}
+          {name && (
+            <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-12">
+              <GenusScientificProfile genus={name} />
+            </section>
+          )}
         </main>
       ) : (
         <main className="pt-28 pb-24">
@@ -659,6 +670,17 @@ const GenusDetail: React.FC = () => {
                 />
               </div>
             </div>
+          </section>
+
+          {/* Scientific profile — the canonical featured-genus-profile/v1
+              exhibit. Verified taxonomy and recorded species count, habitat
+              and elevation evidence, knowledge-graph domain coverage, and
+              continuation links into Atlas, Species dossiers, Matrix, and
+              Research — composed by the Calyx backend. Evidence states
+              distinguish "not yet linked" from "service unavailable"; nothing
+              here is ever presented as confirmed absence. */}
+          <section className="max-w-[1200px] mx-auto px-6 lg:px-10 mt-12">
+            <GenusScientificProfile genus={entry.genus} />
           </section>
 
           {/* Species plates */}
