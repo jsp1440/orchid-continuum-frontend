@@ -1,8 +1,9 @@
-import { Activity, Database, Gauge, Inbox, Layers3, MessageSquareWarning, ShieldCheck } from 'lucide-react';
+import { Activity, Database, Gauge, Gavel, Inbox, Layers3, MessageSquareWarning, ShieldCheck } from 'lucide-react';
 import { Link, useSearchParams } from 'react-router-dom';
 import FeedbackReview from './FeedbackReview';
 import IntakeReview from './IntakeReview';
 import IntelligenceCenter from './IntelligenceCenter';
+import JudgeAdminConsole from './JudgeAdminConsole';
 import LiveCompletionLedger from './LiveCompletionLedger';
 import MissionControl from './MissionControl';
 import TaxonomyOperations from './TaxonomyOperations';
@@ -46,6 +47,10 @@ export default function MissionControlEntry() {
     return <FeedbackReview />;
   }
 
+  if (view === 'judging') {
+    return <JudgeAdminConsole />;
+  }
+
   return (
     <>
       <MissionControl />
@@ -81,6 +86,14 @@ export default function MissionControlEntry() {
           data-testid="mission-control-feedback-review-link"
         >
           <MessageSquareWarning className="h-4 w-4" /> Feedback Review
+        </Link>
+        <Link
+          to="/mission-control/judging"
+          className="inline-flex items-center gap-2 rounded-full border border-[#d4b34a]/50 bg-[#102819] px-5 py-3 font-mono text-[10px] uppercase tracking-[0.18em] text-[#f6dc82] shadow-2xl transition hover:bg-[#173823]"
+          aria-label="Open Show Judging"
+          data-testid="mission-control-judging-link"
+        >
+          <Gavel className="h-4 w-4" /> Show Judging
         </Link>
         <Link
           to="/mission-control?view=taxonomy-operations"
