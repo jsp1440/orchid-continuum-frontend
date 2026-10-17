@@ -11,13 +11,27 @@ import AuthModal from './AuthModal';
  * botanical "members-only" notice with a Sign In CTA that opens the
  * AuthModal in-place — no redirect, so the deep link is preserved.
  */
-const ProtectedRoute: React.FC<{ children: React.ReactNode; title?: string; description?: string }> = ({
+const ProtectedRoute: React.FC<{
+  children: React.ReactNode;
+  title?: string;
+  description?: string;
+  /**
+   * Let a device that is still signed in, but offline with an expired access
+   * token, open this route. Only for routes that work on device-local data.
+   */
+  allowOfflineSession?: boolean;
+}> = ({
   children,
   title = 'Members-only area',
   description = 'Sign in to your Orchid Continuum account to access this section.',
+  allowOfflineSession = false,
 }) => {
-  const { user, loading } = useAuth();
+  const { user, offlineUser, loading } = useAuth();
   const [showAuth, setShowAuth] = useState(false);
+
+  if (!user && allowOfflineSession && offlineUser) {
+    return <>{children}</>;
+  }
 
   if (loading) {
     return (
