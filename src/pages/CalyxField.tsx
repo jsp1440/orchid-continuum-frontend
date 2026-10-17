@@ -5,6 +5,8 @@ import {
   CheckCircle2,
   Edit3,
   Download,
+  HardDrive,
+  ArchiveRestore,
   LocateFixed,
   MapPin,
   RefreshCw,
@@ -38,7 +40,9 @@ import {
   saveFieldObservation,
 } from "@/lib/fieldJournalStore";
 import { fieldJournalMetadataExport } from "@/lib/fieldJournalExport";
-import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, syncSavedFieldObservation } from "@/lib/fieldJournalCoordinator";
+import { buildFieldJournalBackup, parseFieldJournalBackup } from "@/lib/fieldJournalBackup";
+import { formatBytes, handOffBackupFile, readFieldStorageStatus, requestPersistentFieldStorage, type FieldStorageStatus } from "@/lib/fieldJournalDevice";
+import { discardSavedFieldObservation, editSavedFieldObservation, recoverSavedFieldObservation, restoreFieldObservationFromBackup, syncSavedFieldObservation } from "@/lib/fieldJournalCoordinator";
 
 const localityLabels: Record<FieldLocalityVisibility, string> = {
   private: "Private",
@@ -88,6 +92,9 @@ export default function CalyxField() {
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [includePrivateExportLocation, setIncludePrivateExportLocation] = useState(false);
+  const [backupBusy, setBackupBusy] = useState<"idle" | "backing_up" | "restoring">("idle");
+  const [restoreReport, setRestoreReport] = useState<string | null>(null);
+  const [storageStatus, setStorageStatus] = useState<FieldStorageStatus | null>(null);
   const [note, setNote] = useState("");
   const [taxonLabel, setTaxonLabel] = useState("");
   const [certainty, setCertainty] = useState<FieldCertainty>("POSSIBLE");
@@ -148,6 +155,14 @@ export default function CalyxField() {
       window.removeEventListener("pageshow", refresh);
     };
   }, [accountId]);
+
+  function refreshStorageStatus() {
+    void readFieldStorageStatus().then(setStorageStatus).catch(() => setStorageStatus(null));
+  }
+
+  useEffect(() => {
+    refreshStorageStatus();
+  }, []);
 
   const mediaUrls = useMemo(() => {
     const urls = new Map<string, string>();
@@ -302,6 +317,8 @@ export default function CalyxField() {
         ? await editSavedFieldObservation(existing, observation)
         : await saveFieldObservation(observation);
       setObservations((current) => [saved, ...current.filter((row) => row.id !== saved.id)]);
+      // Ask the browser to keep this origin's storage once data is durably saved.
+      void requestPersistentFieldStorage().finally(refreshStorageStatus);
       resetForm();
       setNotice(navigator.onLine ? "Observation saved and queued for sync." : "Observation saved offline on this iPad.");
       if (navigator.onLine) void syncOne(saved);
@@ -386,6 +403,59 @@ export default function CalyxField() {
     // Give iPad Safari time to start the download before releasing its URL.
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     setNotice("Metadata download requested. Original photos and videos remain on this device; this is not a media backup.");
+  }
+
+  async function exportBackup(rows: FieldObservation[]) {
+    setError(null);
+    setNotice(null);
+    setRestoreReport(null);
+    setBackupBusy("backing_up");
+    try {
+      const mode = includePrivateExportLocation ? "private_backup" : "metadata";
+      const { blob, manifest, fileName } = await buildFieldJournalBackup(rows, nowIso(), mode);
+      const outcome = await handOffBackupFile(blob, fileName, "Orchid Continuum Field Journal backup");
+      const summary = `${manifest.observationCount} observation${manifest.observationCount === 1 ? "" : "s"}, ${manifest.mediaCount} original photo/video file${manifest.mediaCount === 1 ? "" : "s"} (${formatBytes(blob.size)})`;
+      setNotice(outcome === "cancelled"
+        ? "Backup was not saved (share sheet cancelled). Nothing on this device changed."
+        : outcome === "shared"
+          ? `Backup ready: ${summary}. Choose "Save to Files" (or another private location) to keep it off this browser.`
+          : `Backup download requested: ${summary}. Keep the .zip somewhere other than this browser's storage.`);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The backup could not be created. Nothing on this device changed.");
+    } finally {
+      setBackupBusy("idle");
+    }
+  }
+
+  async function restoreBackup(file: File | undefined, input: HTMLInputElement) {
+    input.value = "";
+    if (!file || !accountId) return;
+    setError(null);
+    setNotice(null);
+    setRestoreReport(null);
+    setBackupBusy("restoring");
+    try {
+      const parsed = await parseFieldJournalBackup(file);
+      let restored = 0;
+      let skipped = 0;
+      let rejected = parsed.rejected.length;
+      const reasons = parsed.rejected.map((item) => `${item.id ?? "unknown"}: ${item.reason}`);
+      for (const observation of parsed.observations) {
+        const decision = await restoreFieldObservationFromBackup(observation, accountId, parsed.manifest.includesPrivateCaptureLocation);
+        if (decision.action === "insert" || decision.action === "replace") restored += 1;
+        else if (decision.action === "skip") skipped += 1;
+        else { rejected += 1; reasons.push(`${observation.id}: ${decision.reason}`); }
+      }
+      const rows = await listFieldObservations(accountId);
+      setObservations(rows);
+      refreshStorageStatus();
+      setRestoreReport(`Restore finished: ${restored} restored, ${skipped} skipped (device copy kept), ${rejected} rejected.` +
+        (reasons.length ? ` Rejected: ${reasons.slice(0, 5).join("; ")}${reasons.length > 5 ? "; …" : ""}` : ""));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The backup could not be restored. Nothing on this device changed.");
+    } finally {
+      setBackupBusy("idle");
+    }
   }
 
   async function syncAll() {
@@ -522,15 +592,38 @@ export default function CalyxField() {
             <div><p className="label-eyebrow">On this device</p><h2 id="drafts-heading" className="mt-1 text-2xl">Observations</h2></div>
             <span className="text-sm text-muted-foreground">{storeReady ? `${observations.length} saved` : "opening storage…"}</span>
           </div>
-          <div className="mt-4 rounded-md border bg-secondary p-3">
-            <p className="text-xs">Download a private working copy of observation and media metadata. Captured GPS and locality notes are excluded by default. Free-text notes and filenames may still be sensitive; this is not a public-safe export. Original photo/video bytes and EXIF are not included or changed.</p>
-            <label className="mt-3 flex items-start gap-2 text-xs">
+          <div className="mt-4 space-y-3 rounded-md border bg-secondary p-3">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-semibold"><HardDrive aria-hidden="true" className="h-4 w-4" /> Device backup</h3>
+              <p className="mt-1 text-xs">
+                <strong>Back up with photos/videos</strong> saves one .zip containing every observation and its original photo/video files byte-for-byte, each checked by SHA-256. On iPad choose “Save to Files”. This backup file is the real safety copy: browser storage can be cleared by the system or by clearing website data.
+              </p>
+              <p className="mt-1 text-xs" data-testid="field-storage-status">
+                {storageStatus?.supported
+                  ? <>Browser storage: {storageStatus.persisted ? "persistent (the browser agreed to keep it)" : "not marked persistent"} · using {formatBytes(storageStatus.usageBytes)} of {formatBytes(storageStatus.quotaBytes)}.</>
+                  : "Browser storage durability cannot be checked in this browser."}
+                {" "}On iPad, adding the Field Journal to the Home Screen improves storage durability.
+              </p>
+            </div>
+            <label className="flex items-start gap-2 text-xs">
               <input type="checkbox" checked={includePrivateExportLocation} onChange={(event) => setIncludePrivateExportLocation(event.target.checked)} />
-              Include private capture GPS and locality notes in this metadata backup
+              Include private capture GPS and locality notes in this backup or metadata download
             </label>
-            <button type="button" onClick={() => exportMetadata(observations)} disabled={!storeReady || observations.length === 0} className="mt-3 flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
-              <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export all saved metadata
-            </button>
+            <p className="text-xs">Captured GPS and locality notes are excluded unless the box above is checked. Free-text notes and filenames may still be sensitive; treat every backup as a private working copy, not a public-safe export.</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => void exportBackup(observations)} disabled={!storeReady || observations.length === 0 || backupBusy !== "idle"} className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold disabled:opacity-50">
+                <HardDrive aria-hidden="true" className="h-3.5 w-3.5" /> {backupBusy === "backing_up" ? "Preparing backup…" : "Back up with photos/videos (.zip)"}
+              </button>
+              <label className={`flex cursor-pointer items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs font-semibold ${!storeReady || backupBusy !== "idle" ? "pointer-events-none opacity-50" : ""}`}>
+                <ArchiveRestore aria-hidden="true" className="h-3.5 w-3.5" /> {backupBusy === "restoring" ? "Restoring…" : "Restore from backup"}
+                <input className="sr-only" type="file" accept=".zip,application/zip" disabled={!storeReady || backupBusy !== "idle"} onChange={(event) => void restoreBackup(event.target.files?.[0], event.currentTarget)} />
+              </label>
+              <button type="button" onClick={() => exportMetadata(observations)} disabled={!storeReady || observations.length === 0} className="flex items-center gap-2 rounded-md border bg-white px-3 py-2 text-xs disabled:opacity-50">
+                <Download aria-hidden="true" className="h-3.5 w-3.5" /> Export all saved metadata (no media)
+              </button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Restore adds records to this signed-in account. A device copy that is newer, or already accepted by the server, is kept; damaged or foreign files are rejected.</p>
+            {restoreReport ? <p role="status" data-testid="field-restore-report" className="rounded-md border border-emerald-300 bg-emerald-50 p-2 text-xs text-emerald-800">{restoreReport}</p> : null}
           </div>
           <div className="mt-4 flex gap-2">
             <label className="relative flex-1"><span className="sr-only">Search observations</span><Search aria-hidden="true" className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="w-full rounded-md border bg-white py-2 pl-9 pr-3" placeholder="Search observations" /></label>

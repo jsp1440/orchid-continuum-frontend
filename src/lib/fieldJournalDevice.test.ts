@@ -33,7 +33,7 @@ describe("Field Journal device storage", () => {
 
 describe("Field Journal backup hand-off", () => {
   it("uses the share sheet with the ZIP file when file sharing is supported", async () => {
-    const share = vi.fn(async () => undefined);
+    const share = vi.fn(async (_data: ShareData) => undefined);
     vi.stubGlobal("navigator", { canShare: () => true, share });
     await expect(handOffBackupFile(new Blob(["zip"]), "backup.zip", "Backup")).resolves.toBe("shared");
     const shared = share.mock.calls[0][0] as { files: File[] };

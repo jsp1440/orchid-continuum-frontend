@@ -67,7 +67,7 @@ export async function buildStoreZip(entries: readonly FieldZipInput[], modifiedA
   if (entries.length > FIELD_ZIP_MAX_ENTRIES) throw new FieldZipError("Too many files for one Field Journal backup.");
   const { time, date } = dosDateTime(modifiedAt);
   const parts: BlobPart[] = [];
-  const central: Uint8Array[] = [];
+  const central: Uint8Array<ArrayBuffer>[] = [];
   const seen = new Set<string>();
   let offset = 0;
   for (const entry of entries) {
@@ -106,7 +106,7 @@ export async function buildStoreZip(entries: readonly FieldZipInput[], modifiedA
     header.setUint32(24, size, true);
     header.setUint16(28, name.length, true);
     header.setUint32(42, offset, true);
-    const record = new Uint8Array(46 + name.length);
+    const record = new Uint8Array(new ArrayBuffer(46 + name.length));
     record.set(new Uint8Array(header.buffer), 0);
     record.set(name, 46);
     central.push(record);

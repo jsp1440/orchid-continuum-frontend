@@ -11,13 +11,13 @@ import { buildStoreZip, crc32, readStoreZip } from "./fieldJournalZip";
 const NOW = "2026-10-17T15:00:00.000Z";
 const LATER = "2026-10-17T16:00:00.000Z";
 
-function bytes(length: number, seed: number): Uint8Array {
-  const out = new Uint8Array(length);
+function bytes(length: number, seed: number): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(new ArrayBuffer(length));
   for (let i = 0; i < length; i += 1) out[i] = (i * 31 + seed) & 0xff;
   return out;
 }
 
-async function media(id: string, name: string, type: string, data: Uint8Array, receipt = false): Promise<FieldMedia> {
+async function media(id: string, name: string, type: string, data: Uint8Array<ArrayBuffer>, receipt = false): Promise<FieldMedia> {
   const blob = new Blob([data], { type });
   return {
     id, name, size: blob.size, type, kind: type.startsWith("video/") ? "video" : "photo", blob, capturedAt: NOW,
