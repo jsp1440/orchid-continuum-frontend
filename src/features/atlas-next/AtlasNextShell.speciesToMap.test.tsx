@@ -9,6 +9,8 @@ import { AtlasFilterProvider } from '@/contexts/AtlasFilterContext';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import AtlasNextShell from './AtlasNextShell';
 import type { GlobeMark } from './AtlasGlobe';
+import { UNRESOLVED_FLOOR_DEG } from './sensitivity';
+import { SCALES } from './types';
 
 /**
  * ATLAS-001 acceptance: species arrival -> data reader -> locality policy -> map marks.
@@ -126,8 +128,10 @@ async function openCountryScale() {
   });
 }
 
-const markAt = (lat: number, lng: number) =>
-  drawn.marks.some((m) => m.lat === lat && m.lng === lng);
+const EXACT = 1e-6;
+/** A mark within `tolerance` degrees of a point; never an exact-coordinate claim. */
+const markNear = (lat: number, lng: number, tolerance: number) =>
+  drawn.marks.some((m) => Math.abs(m.lat - lat) <= tolerance && Math.abs(m.lng - lng) <= tolerance);
 
 describe('Atlas Next species-to-map journey (synthetic fixture, real component stack)', () => {
   it('draws only the arriving species and never its congener', async () => {
@@ -147,9 +151,11 @@ describe('Atlas Next species-to-map journey (synthetic fixture, real component s
     expect(drawn.marks.every((m) => m.lat > 0 && m.lng > 0)).toBe(true);
   });
 
-  it('control: an assessed, not-threatened record IS drawn at its coordinate at an individual scale', async () => {
+  it('control: an assessed, not-threatened record is drawn near its coordinate, with no locality generalisation', async () => {
     // Guards the privacy assertions below against vacuity: if nothing is ever
-    // drawn precisely, "not drawn precisely" would prove nothing.
+    // drawn near its true position, "not drawn precisely" would prove nothing.
+    // The scale contract lets a scale coarsen a record to its aggregationDeg, so
+    // this asserts proximity within that bound, not an exact coordinate.
     await arriveAt('/atlas-next?species=Cattleya%20purpurata', [
       synthetic('ok', 'Cattleya purpurata', PRECISE.lat, PRECISE.lng, {
         assessmentResolved: true,
@@ -158,7 +164,9 @@ describe('Atlas Next species-to-map journey (synthetic fixture, real component s
     await openCountryScale();
 
     expect(drawn.marks.length).toBe(1);
-    expect(markAt(PRECISE.lat, PRECISE.lng)).toBe(true);
+    expect(markNear(PRECISE.lat, PRECISE.lng, SCALES.country.aggregationDeg)).toBe(true);
+    // No locality-protection halo: nothing was withheld for this record.
+    expect(drawn.marks[0].haloDeg ?? 0).toBe(0);
   });
 
   it('never draws the precise coordinate of a threatened record', async () => {
@@ -171,7 +179,10 @@ describe('Atlas Next species-to-map journey (synthetic fixture, real component s
     await openCountryScale();
 
     expect(drawn.marks.length).toBe(1);
-    expect(markAt(PRECISE.lat, PRECISE.lng)).toBe(false);
+    expect(markNear(PRECISE.lat, PRECISE.lng, EXACT)).toBe(false);
+    // Policy applied: the CR tier's 1 degree cell (sensitivity.ts TIER_CELL_DEG.CR),
+    // independent of any scale floor.
+    expect(drawn.marks[0].haloDeg).toBeGreaterThanOrEqual(1);
     expect(container.textContent).toContain('precise site');
     expect(container.textContent).toContain('withheld');
   });
@@ -185,7 +196,9 @@ describe('Atlas Next species-to-map journey (synthetic fixture, real component s
     await openCountryScale();
 
     expect(drawn.marks.length).toBe(1);
-    expect(markAt(PRECISE.lat, PRECISE.lng)).toBe(false);
+    expect(markNear(PRECISE.lat, PRECISE.lng, EXACT)).toBe(false);
+    // Policy applied: at least the precautionary cell for an unreachable assessment.
+    expect(drawn.marks[0].haloDeg).toBeGreaterThanOrEqual(UNRESOLVED_FLOOR_DEG);
   });
 
   it('says so, and draws nothing, when the store holds only a congener', async () => {
