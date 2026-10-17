@@ -82,8 +82,10 @@ function splitOrganisms(value: string): string[] {
 }
 
 export default function CalyxField() {
-  const { user } = useAuth();
-  const accountId = user?.id ?? "";
+  // Offline with an expired access token, the device is still signed in as
+  // offlineUser; its local journal stays usable and sync waits for the network.
+  const { user, offlineUser } = useAuth();
+  const accountId = (user ?? offlineUser)?.id ?? "";
   const [online, setOnline] = useState(() => typeof navigator === "undefined" ? true : navigator.onLine);
   const [observations, setObservations] = useState<FieldObservation[]>([]);
   const [storeReady, setStoreReady] = useState(false);

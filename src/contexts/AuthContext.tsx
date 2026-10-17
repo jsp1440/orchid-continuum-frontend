@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import {
+  browserIsOnline,
+  browserLocalStorage,
+  readPersistedAuthUser,
+  sessionMissingBecauseOffline,
+} from '@/lib/offlineAuthSession';
 
 /**
  * Authentication context for the Orchid Continuum.
@@ -25,6 +31,13 @@ export interface AuthResult {
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
+  /**
+   * The account this device is still signed in as while the network is
+   * unavailable and the access token could not be refreshed. Local-only: it
+   * carries no token and grants no server access. Only routes that work on
+   * device-local data (the Field Journal) should honour it.
+   */
+  offlineUser: User | null;
   loading: boolean;
   signUp: (email: string, password: string, displayName?: string) => Promise<AuthResult>;
   signIn: (email: string, password: string) => Promise<AuthResult>;
@@ -39,25 +52,45 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
+  const [offlineUser, setOfflineUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Hydrate session on mount + subscribe to auth changes.
   useEffect(() => {
     let mounted = true;
+    const persistedUser = () => readPersistedAuthUser(browserLocalStorage(), supabaseAuthStorageKey());
 
-    supabase.auth.getSession().then(({ data }) => {
+    // Opened with no network (e.g. from the Home Screen in the field): do not
+    // wait ~30 s for supabase-js to give up retrying the token refresh before
+    // showing the device's local journal.
+    if (!browserIsOnline()) {
+      const stored = persistedUser();
+      if (stored) {
+        setOfflineUser(stored);
+        setLoading(false);
+      }
+    }
+
+    supabase.auth.getSession().then(({ data, error }) => {
       if (!mounted) return;
       setSession(data.session ?? null);
       setUser(data.session?.user ?? null);
+      if (data.session) setOfflineUser(null);
+      else setOfflineUser(sessionMissingBecauseOffline(error, browserIsOnline()) ? persistedUser() : null);
       setLoading(false);
-    }).catch(() => {
+    }).catch((error: unknown) => {
       if (!mounted) return;
+      setOfflineUser(sessionMissingBecauseOffline(error, browserIsOnline()) ? persistedUser() : null);
       setLoading(false);
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession ?? null);
       setUser(newSession?.user ?? null);
+      // A real session replaces the offline identity; an explicit sign-out (or
+      // supabase-js discarding a revoked session) ends it. A null
+      // INITIAL_SESSION while offline does neither.
+      if (newSession || event === 'SIGNED_OUT') setOfflineUser(null);
     });
 
     return () => {
@@ -104,6 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setSession(null);
       setUser(null);
+      setOfflineUser(null);
     }
   }, []);
 
@@ -138,12 +172,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, signUp, signIn, signOut, resetPassword, updatePassword, refresh }}
+      value={{ user, session, offlineUser, loading, signUp, signIn, signOut, resetPassword, updatePassword, refresh }}
     >
       {children}
     </AuthContext.Provider>
   );
 };
+
+function supabaseAuthStorageKey(): string | null {
+  const key = (supabase.auth as unknown as { storageKey?: unknown }).storageKey;
+  return typeof key === 'string' && key ? key : null;
+}
 
 export function useAuth(): AuthContextValue {
   const ctx = useContext(AuthContext);
