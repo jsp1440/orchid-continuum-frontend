@@ -2,7 +2,7 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SpeciesDossierEnvelope, DossierSection, EvidenceReceipt } from '@/lib/speciesDossier';
 
@@ -785,4 +785,76 @@ describe('dossier subject identity across id spaces', () => {
     expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
     expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
   });
+});
+
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+function NavigateSpecies() {
+  const navigate = useNavigate();
+  return <button onClick={() => navigate('/species/new-id?name=Dracula%20simia')}>Next species</button>;
+}
+
+it('ignores late taxonomy and fungal responses after navigation to another species', async () => {
+  const oldSpecies = deferred<{ taxonomy_id: string; canonical_name: string }>();
+  const oldFungi = deferred<{ status: number; partners: Array<{ fungal_taxon: string }> }>();
+  mocks.fetchSpeciesById.mockImplementation((id: string) => id === 'old-id'
+    ? oldSpecies.promise : Promise.resolve({ taxonomy_id: 'new-id', canonical_name: 'Dracula simia' }));
+  mocks.fetchMycorrhizal.mockImplementation((id: string) => id === 'old-id'
+    ? oldFungi.promise : Promise.resolve({ status: 200, partners: [{ fungal_taxon: 'New species fungus' }] }));
+  mocks.fetchSpeciesDossier.mockRejectedValue(new Error('Unavailable fixture'));
+  act(() => root.render(
+    <MemoryRouter initialEntries={['/species/old-id']}>
+      <NavigateSpecies />
+      <Routes><Route path="/species/:slug" element={<SpeciesDossier />} /></Routes>
+    </MemoryRouter>,
+  ));
+  await flush();
+  act(() => (container.querySelector('button') as HTMLButtonElement).click());
+  await flush();
+  expect(container.textContent).toContain('Dracula simia');
+  expect(container.textContent).toContain('New species fungus');
+  const callsBeforeStaleResponse = mocks.fetchSpeciesDossier.mock.calls.length;
+  await act(async () => {
+    oldSpecies.resolve({ taxonomy_id: 'old-id', canonical_name: 'Cattleya labiata' });
+    oldFungi.resolve({ status: 200, partners: [{ fungal_taxon: 'Wrong species fungus' }] });
+  });
+  await flush();
+  expect(container.textContent).toContain('Dracula simia');
+  expect(container.textContent).toContain('New species fungus');
+  expect(container.textContent).not.toContain('Cattleya labiata');
+  expect(container.textContent).not.toContain('Wrong species fungus');
+  expect(mocks.fetchSpeciesDossier).toHaveBeenCalledTimes(callsBeforeStaleResponse);
+});
+
+it('keeps a late federated partner response bound to its original species', async () => {
+  const oldFederation = deferred<Awaited<ReturnType<typeof import('@/lib/speciesDossier').resolveFederatedSpecies>>>();
+  mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+  mocks.resolveFederatedSpecies.mockReturnValueOnce(oldFederation.promise);
+  act(() => root.render(
+    <MemoryRouter initialEntries={['/species/cattleya-labiata']}>
+      <NavigateSpecies />
+      <Routes><Route path="/species/:slug" element={<SpeciesDossier />} /></Routes>
+    </MemoryRouter>,
+  ));
+  await flush();
+  expect(mocks.resolveFederatedSpecies).toHaveBeenCalledTimes(1);
+  mocks.fetchSpeciesById.mockResolvedValue({ taxonomy_id: 'new-id', canonical_name: 'Dracula simia' });
+  mocks.fetchSpeciesDossier.mockRejectedValue(new Error('Unavailable fixture'));
+  act(() => (container.querySelector('button') as HTMLButtonElement).click());
+  await flush();
+  await act(async () => oldFederation.resolve({
+    status: 'resolved', incoming_name: null, matched_name: 'Cattleya labiata',
+    match_state: 'accepted_name', taxon_id: 'cattleya-labiata',
+    canonical_dossier_url: null, candidates: [], partner_slug: 'old-partner',
+    reciprocal_source_url: 'https://example.org/old-species', explanation: 'Old species attribution',
+  }));
+  await flush();
+  expect(container.textContent).toContain('Dracula simia');
+  expect(container.textContent).not.toContain('Old species attribution');
+  expect(container.querySelector('a[href="https://example.org/old-species"]')).toBeNull();
 });

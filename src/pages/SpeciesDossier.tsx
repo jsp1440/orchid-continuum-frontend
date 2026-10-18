@@ -121,18 +121,34 @@ const SpeciesDossier: React.FC = () => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
     setLoading(true);
+    setData(null);
+    setPartners([]);
+    setMycoStatus(0);
     const speciesRequest = fetchSpeciesById(taxonomyId, ctrl.signal).catch(() => null);
     speciesRequest
-      .then((d) => setData(d))
-      .finally(() => setLoading(false));
+      .then((d) => {
+        if (!ctrl.signal.aborted) setData(d);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
 
     setMycoLoading(true);
     fetchMycorrhizal(taxonomyId, ctrl.signal)
       .then(({ status, partners }) => {
+        if (ctrl.signal.aborted) return;
         setMycoStatus(status);
         setPartners(partners);
       })
-      .finally(() => setMycoLoading(false));
+      .catch(() => {
+        if (!ctrl.signal.aborted) {
+          setMycoStatus(0);
+          setPartners([]);
+        }
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setMycoLoading(false);
+      });
 
     // The dossier is shown only when its identity is this page's subject; the
     // route id alone may belong to another id space (see resolveDossierForSubject).
@@ -146,6 +162,7 @@ const SpeciesDossier: React.FC = () => {
     setFederation(null);
     speciesRequest
       .then((d) => {
+        if (ctrl.signal.aborted) return { state: 'unavailable' } as DossierSubjectResolution;
         const publicName =
           d?.canonical_name ||
           d?.scientific_name ||
@@ -177,7 +194,9 @@ const SpeciesDossier: React.FC = () => {
           { taxonId: resolution.dossier.identity?.taxon_id || taxonomyId },
           ctrl.signal,
         )
-          .then((result) => setFederation(result))
+          .then((result) => {
+            if (!ctrl.signal.aborted) setFederation(result);
+          })
           .catch(() => {
             if (!ctrl.signal.aborted) setFederationError(true);
           });
