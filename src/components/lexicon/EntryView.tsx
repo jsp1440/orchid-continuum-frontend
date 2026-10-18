@@ -5,6 +5,7 @@ import { ConnectedKnowledge } from './ConnectedKnowledge';
 import { EntryHero, type Depth } from './EntryHero';
 import { ResupinateComparison, ResupinationSequence } from './Schematics';
 import { RecoveredScientificSections } from './RecoveredScientificSections';
+import { LiteratureEvidence } from './LiteratureEvidence';
 import { VisionEvidenceSummary } from './VisionEvidenceSummary';
 import { Disclosure, MaturityChecklist, PendingNote, SectionHeading } from './ui';
 import { getLastSource } from '@/lib/lexiconService';
@@ -146,15 +147,7 @@ export const EntryView: React.FC<{ entry: LexiconEntry; onOpen: (slug: string) =
               <SectionHeading eyebrow="Evidence" title="Literature and provenance" />
               <div className="mt-5 space-y-5">
                 {entry.literature?.length ? (
-                  <ul className="space-y-3">
-                    {entry.literature.map((record) => (
-                      <li key={record.id} className="rounded-sm border border-stone-200 p-4">
-                        <p className="font-medium text-stone-900">{record.title ?? 'Untitled literature record'}</p>
-                        {record.authors?.length ? <p className="mt-1 text-sm text-stone-600">{record.authors.join(', ')}{record.year ? ` (${record.year})` : ''}</p> : null}
-                        {record.summary ? <p className="mt-2 text-sm leading-relaxed text-stone-600">{record.summary}</p> : null}
-                      </li>
-                    ))}
-                  </ul>
+                  <LiteratureEvidence records={entry.literature} />
                 ) : <PendingNote label={entry.literature_status ?? 'Verified literature links awaiting enrichment'} />}
                 <div className="rounded-sm bg-stone-50 p-4 text-sm text-stone-600">
                   <strong className="text-stone-800">Provenance:</strong> {entry.provenance?.source ?? entry.source_system ?? 'No provenance statement supplied yet.'}
