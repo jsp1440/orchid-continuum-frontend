@@ -249,7 +249,7 @@ describe('session profiles and site templates', () => {
     const b = saveSiteTemplate(a.state, 'Valley', { site: 'Valley' }, null, d);
     const first = applyTemplate(b.state, { kind: 'site_template', id: a.site.id }, [g.plant.id], d);
     const second = applyTemplate(first.state, { kind: 'site_template', id: b.site.id }, [g.plant.id], d);
-    expect(second.conflicts).toEqual([{ plantId: g.plant.id, field: 'site', current: 'Ridge', proposed: 'Valley' }]);
+    expect(second.conflicts).toEqual([{ plantId: g.plant.id, field: 'siteTemplate', current: 'Ridge', proposed: 'Valley' }]);
     expect(second.state.plants[g.plant.id].siteTemplateId).toBe(a.site.id);
     expect(second.state.plants[g.plant.id].fields.site?.value).toBe('Ridge');
   });
@@ -272,8 +272,8 @@ describe('privacy by policy', () => {
     const view = publicPlantView(s, g.plant.id);
     const text = JSON.stringify(view);
     expect(text).not.toMatch(/3\.41|78\.52|Secret ridge|Km 23|2400|IMG_|2026-10-17/);
-    expect(view).toMatchObject({ label: 'Plant 0001', taxonHint: 'Masdevallia veitchiana', mediaCount: 2 });
-    expect(view.fields).toEqual({ habitat: 'cloud forest', eventDate: '2026-10' });
+    expect(view).toMatchObject({ label: 'Plant 0001', taxonHint: 'Masdevallia veitchiana', mediaCount: 2, eventMonth: '2026-10' });
+    expect(text).not.toMatch(/cloud forest/); // free text never leaves in the public view
     expect(view.relationships).toEqual([{ type: 'habitat_context', confidence: 'certain', evidenceCount: 1 }]);
   });
 });
@@ -320,5 +320,115 @@ describe('the owner acceptance scenario, end to end', () => {
     expect(Object.values(s.relationships)).toHaveLength(5);
     expect(s.audit.map((a) => a.action)).toContain('split_plant');
     expect(s.audit.every((a) => typeof a.at === 'string')).toBe(true);
+  });
+});
+
+
+describe('checker round 1 (#936)', () => {
+  it('a plant whose observer typed a different site is not linked to a site template', () => {
+    const { d, state, ids } = setup(2);
+    const g = groupAsNewPlant(state, ids, {}, d);
+    const s = setPlantField(g.state, g.plant.id, 'site', 'Valley', d);
+    const ridge = saveSiteTemplate(s, 'Ridge', { site: 'Ridge', locality: 'Ridge road', elevation: '2400 m' }, { latitude: -3.4, longitude: -78.5, accuracyM: 5 }, d);
+    const out = applyTemplate(ridge.state, { kind: 'site_template', id: ridge.site.id }, [g.plant.id], d);
+    expect(out.conflicts).toEqual([{ plantId: g.plant.id, field: 'site', current: 'Valley', proposed: 'Ridge' }]);
+    const plant = out.state.plants[g.plant.id];
+    expect(plant.siteTemplateId).toBeNull();
+    expect(Object.keys(plant.fields)).toEqual(['site']);
+    expect(JSON.parse(out.state.audit.at(-1)!.detail!).conflicts_left_for_observer).toHaveLength(1);
+  });
+
+  it('changing a linked plant\'s site detaches the template and everything it filled', () => {
+    const { d, state, ids } = setup(1);
+    const g = groupAsNewPlant(state, ids, {}, d);
+    const ridge = saveSiteTemplate(g.state, 'Ridge', { site: 'Ridge', locality: 'Ridge road' }, { latitude: -3.4, longitude: -78.5, accuracyM: 5 }, d);
+    let s = applyTemplate(ridge.state, { kind: 'site_template', id: ridge.site.id }, [g.plant.id], d).state;
+    s = setPlantField(s, g.plant.id, 'habitat', 'cloud forest', d);
+    s = setPlantField(s, g.plant.id, 'site', 'Valley', d);
+    const plant = s.plants[g.plant.id];
+    expect(plant.siteTemplateId).toBeNull();
+    expect(Object.keys(plant.fields).sort()).toEqual(['habitat', 'site']);
+    expect(plant.fields.site?.value).toBe('Valley');
+    const cleared = setPlantField(s, g.plant.id, 'locality', '', d);
+    expect(cleared).toBe(s); // clearing an empty field changes nothing and writes no audit entry
+  });
+
+  it('merging keeps the source species hint, never upgrades identity certainty, and records conflicts durably', () => {
+    const { d, state, ids } = setup(4);
+    const a = groupAsNewPlant(state, ids.slice(0, 2), {}, d);
+    const b = groupAsNewPlant(a.state, ids.slice(2), { identityCertainty: 'possibly_same_individual', taxonHint: 'Masdevallia veitchiana' }, d);
+    let s = setPlantField(b.state, a.plant.id, 'habitat', 'cloud forest', d);
+    s = setPlantField(s, b.plant.id, 'habitat', 'roadside', d);
+    const merged = mergePlants(s, a.plant.id, b.plant.id, d);
+    const plant = merged.state.plants[a.plant.id];
+    expect(plant.taxonHint).toBe('Masdevallia veitchiana');
+    expect(plant.identityCertainty).toBe('possibly_same_individual');
+    const detail = JSON.parse(merged.state.audit.at(-1)!.detail!);
+    expect(detail.conflicts_kept_target).toEqual([{ plantId: a.plant.id, field: 'habitat', current: 'cloud forest', proposed: 'roadside' }]);
+  });
+
+  it('two differing species hints are a conflict, not a silent drop', () => {
+    const { d, state, ids } = setup(2);
+    const a = groupAsNewPlant(state, [ids[0]], { taxonHint: 'Dracula vampira' }, d);
+    const b = groupAsNewPlant(a.state, [ids[1]], { taxonHint: 'Dracula chimaera' }, d);
+    const merged = mergePlants(b.state, a.plant.id, b.plant.id, d);
+    expect(merged.conflicts).toEqual([{ plantId: a.plant.id, field: 'taxonHint', current: 'Dracula vampira', proposed: 'Dracula chimaera' }]);
+  });
+
+  it('plants recorded at different sites cannot be merged', () => {
+    const { d, state, ids } = setup(2);
+    const a = groupAsNewPlant(state, [ids[0]], {}, d);
+    const b = groupAsNewPlant(a.state, [ids[1]], {}, d);
+    const ridge = saveSiteTemplate(b.state, 'Ridge', { site: 'Ridge' }, null, d);
+    const valley = saveSiteTemplate(ridge.state, 'Valley', { site: 'Valley' }, null, d);
+    let s = applyTemplate(valley.state, { kind: 'site_template', id: ridge.site.id }, [a.plant.id], d).state;
+    s = applyTemplate(s, { kind: 'site_template', id: valley.site.id }, [b.plant.id], d).state;
+    expect(() => mergePlants(s, a.plant.id, b.plant.id, d)).toThrow(/different sites/);
+    const typed = setPlantField(setPlantField(b.state, a.plant.id, 'site', 'Ridge', d), b.plant.id, 'site', 'Valley', d);
+    expect(() => mergePlants(typed, a.plant.id, b.plant.id, d)).toThrow(/different sites/);
+  });
+
+  it('a merge records dropped self-links and duplicate relationships', () => {
+    const { d, state, ids } = setup(4);
+    const a = groupAsNewPlant(state, [ids[0]], {}, d);
+    const b = groupAsNewPlant(a.state, [ids[1]], {}, d);
+    let s = relate(b.state, { type: 'observed_nearby', subject: { kind: 'plant', id: b.plant.id }, plantId: a.plant.id, confidence: 'possible' }, d).state;
+    s = relate(s, { type: 'habitat_context', subject: { kind: 'media', id: ids[3] }, plantId: a.plant.id, confidence: 'certain' }, d).state;
+    s = relate(s, { type: 'habitat_context', subject: { kind: 'media', id: ids[3] }, plantId: b.plant.id, confidence: 'probable' }, d).state;
+    const merged = mergePlants(s, a.plant.id, b.plant.id, d);
+    const detail = JSON.parse(merged.state.audit.at(-1)!.detail!);
+    expect(detail.relationships_dropped_as_self_links).toHaveLength(1);
+    expect(detail.relationships_dropped_as_duplicates).toHaveLength(1);
+    expect(Object.values(merged.state.relationships)).toHaveLength(1);
+  });
+
+  it('re-asserting a link updates its confidence and audits it; unknown enums are refused at run time', () => {
+    const { d, state, ids } = setup(2);
+    const a = groupAsNewPlant(state, [ids[0]], {}, d);
+    const first = relate(a.state, { type: 'habitat_context', subject: { kind: 'media', id: ids[1] }, plantId: a.plant.id, confidence: 'possible' }, d);
+    const again = relate(first.state, { type: 'habitat_context', subject: { kind: 'media', id: ids[1] }, plantId: a.plant.id, confidence: 'certain' }, d);
+    expect(again.relationship.id).toBe(first.relationship.id);
+    expect(again.relationship.confidence).toBe('certain');
+    expect(again.state.audit.at(-1)?.action).toBe('relate_update');
+    expect(() => relate(a.state, { type: 'habitat_context', subject: { kind: 'media', id: ids[1] }, plantId: a.plant.id, confidence: 'sure' as never }, d)).toThrow(/Unknown confidence/);
+    expect(() => groupAsNewPlant(a.state, [ids[1]], { identityCertainty: 'twins' as never }, d)).toThrow(/Unknown identity certainty/);
+  });
+
+  it('the public view publishes no free text: renamed labels, hints with numbers, non-ISO dates, observer names', () => {
+    const { d, state, ids } = setup(1);
+    const g = groupAsNewPlant(state, ids, { taxonHint: 'Dracula sp. at -3.4012, -78.5531' }, d);
+    let s = renamePlant(g.state, g.plant.id, 'Km 12 Banos road ridge', d);
+    s = setPlantField(s, g.plant.id, 'eventDate', 'Oct 17, 2026', d);
+    s = setPlantField(s, g.plant.id, 'observer', 'Jane Q. Observer', d);
+    s = setPlantField(s, g.plant.id, 'habitat', 'below Cerro X summit trail', d);
+    const view = publicPlantView(s, g.plant.id);
+    expect(view.label).toBe('Plant 0001');
+    expect(view.taxonHint).toBeNull();
+    expect(view.eventMonth).toBeNull();
+    expect(JSON.stringify(view)).not.toMatch(/Km 12|3\.40|78\.55|Oct 17|Jane|Cerro/);
+    for (const hint of ['Dracula sp.', 'Dracula vampira', 'Cattleya × hardyana', 'Masdevallia cf. veitchiana']) {
+      const h = groupAsNewPlant(state, ids, { taxonHint: hint }, d);
+      expect(publicPlantView(h.state, h.plant.id).taxonHint).toBe(hint);
+    }
   });
 });

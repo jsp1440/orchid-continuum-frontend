@@ -30,27 +30,72 @@ export interface WorkbenchStorage {
 
 export class WorkbenchStoreError extends Error {}
 
-/** Validate a stored record before trusting it; a corrupt record is never half-loaded. */
+const PLANT_LABEL = /^Plant (\d+)$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * Validate a stored record before trusting it; a corrupt record is never
+ * half-loaded. Every reference must resolve: plants to media, relationships to
+ * plants and media, plants to site templates; a media item is in at most one
+ * plant; keys match ids; and the plant counter is past every issued label.
+ */
 export function restoreWorkbench(raw: unknown, accountId: string): WorkbenchState | null {
   if (raw == null) return null;
-  if (typeof raw !== "object") throw new WorkbenchStoreError("Stored workbench is not an object.");
+  const fail = (message: string): never => {
+    throw new WorkbenchStoreError(message);
+  };
+  if (!isRecord(raw)) fail("Stored workbench is not an object.");
   const s = raw as Partial<WorkbenchState>;
   if (s.schemaVersion !== FIELD_WORKBENCH_SCHEMA_VERSION) {
-    throw new WorkbenchStoreError(`Stored workbench schema ${String(s.schemaVersion)} is not supported.`);
+    fail(`Stored workbench schema ${String(s.schemaVersion)} is not supported.`);
   }
-  if (s.accountId !== accountId) throw new WorkbenchStoreError("Stored workbench belongs to another account.");
+  if (s.accountId !== accountId) fail("Stored workbench belongs to another account.");
   for (const key of ["media", "plants", "relationships", "sessionProfiles", "siteTemplates"] as const) {
-    if (!s[key] || typeof s[key] !== "object" || Array.isArray(s[key])) {
-      throw new WorkbenchStoreError(`Stored workbench is missing ${key}.`);
+    if (!isRecord(s[key])) fail(`Stored workbench is missing ${key}.`);
+  }
+  if (!Array.isArray(s.audit) || typeof s.nextPlantNumber !== "number" || !Number.isInteger(s.nextPlantNumber)) {
+    fail("Stored workbench is missing its audit trail or plant counter.");
+  }
+  const media = s.media as Record<string, unknown>;
+  for (const [key, item] of Object.entries(media)) {
+    if (!isRecord(item) || item.id !== key || typeof item.name !== "string") fail(`Stored media ${key} is malformed.`);
+  }
+  const owner = new Map<string, string>();
+  let highest = 0;
+  for (const [key, plant] of Object.entries(s.plants as Record<string, unknown>)) {
+    if (!isRecord(plant) || plant.id !== key || !Array.isArray(plant.mediaIds) || typeof plant.label !== "string") {
+      fail(`Stored plant ${key} is malformed.`);
+    }
+    const p = plant as Record<string, unknown> & { mediaIds: unknown[]; label: string };
+    for (const id of p.mediaIds) {
+      if (typeof id !== "string" || !media[id]) fail(`Plant ${p.label} refers to missing media ${String(id)}.`);
+      const other = owner.get(id as string);
+      if (other) fail(`Media ${String(id)} is in two plants (${other}, ${p.label}).`);
+      owner.set(id as string, p.label);
+    }
+    if (p.siteTemplateId != null && !(s.siteTemplates as Record<string, unknown>)[p.siteTemplateId as string]) {
+      fail(`Plant ${p.label} refers to missing site template ${String(p.siteTemplateId)}.`);
+    }
+    for (const label of [p.label, p.sequenceLabel]) {
+      const n = typeof label === "string" ? label.match(PLANT_LABEL) : null;
+      if (n) highest = Math.max(highest, Number(n[1]));
     }
   }
-  if (!Array.isArray(s.audit) || typeof s.nextPlantNumber !== "number") {
-    throw new WorkbenchStoreError("Stored workbench is missing its audit trail or plant counter.");
-  }
-  const media = s.media as WorkbenchState["media"];
-  for (const plant of Object.values(s.plants as WorkbenchState["plants"])) {
-    for (const id of plant.mediaIds) {
-      if (!media[id]) throw new WorkbenchStoreError(`Plant ${plant.label} refers to missing media ${id}.`);
+  if ((s.nextPlantNumber as number) <= highest) fail("Stored plant counter is behind an issued plant label.");
+  const plants = s.plants as Record<string, unknown>;
+  for (const [key, rel] of Object.entries(s.relationships as Record<string, unknown>)) {
+    if (!isRecord(rel) || rel.id !== key || !isRecord(rel.subject) || !Array.isArray(rel.evidenceMediaIds)) {
+      fail(`Stored relationship ${key} is malformed.`);
+    }
+    const r = rel as Record<string, unknown> & { subject: Record<string, unknown>; evidenceMediaIds: unknown[] };
+    if (!plants[r.plantId as string]) fail(`Relationship ${key} refers to missing plant ${String(r.plantId)}.`);
+    const subjectExists = r.subject.kind === "media" ? media[r.subject.id as string] : r.subject.kind === "plant" ? plants[r.subject.id as string] : undefined;
+    if (!subjectExists) fail(`Relationship ${key} refers to a missing ${String(r.subject.kind)}.`);
+    for (const id of r.evidenceMediaIds) {
+      if (!media[id as string]) fail(`Relationship ${key} cites missing media ${String(id)}.`);
     }
   }
   return s as WorkbenchState;
@@ -72,10 +117,9 @@ export async function importAndPersist(
   deps: WorkbenchDeps = defaultDeps,
 ): Promise<{ state: WorkbenchState; importedIds: string[]; rejected: ImportFile[] }> {
   const result = importMedia(state, files.map((f) => f.file), deps);
-  const blobFor = new Map(files.map((f) => [f.file, f.blob]));
-  const byOrder = files.map((f) => f.file).filter((f) => !result.rejected.includes(f));
+  // Pair by position, never by object identity: the same File may be passed twice.
   for (const [i, media] of result.imported.entries()) {
-    const blob = blobFor.get(byOrder[i]);
+    const blob = files[result.sourceIndices[i]]?.blob;
     if (!blob) throw new WorkbenchStoreError(`No original bytes for ${media.name}.`);
     await storage.putBlob(media.id, blob);
   }

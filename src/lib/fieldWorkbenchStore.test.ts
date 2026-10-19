@@ -90,4 +90,35 @@ describe('workbench persistence', () => {
     expect(() => restoreWorkbench(dangling, 'owner')).toThrow(/missing media gone/);
     expect(restoreWorkbench(null, 'owner')).toBeNull();
   });
+
+  it('pairs by position when the same File object is passed twice', async () => {
+    const storage = new MemoryWorkbenchStorage();
+    const file = { name: 'IMG_1.JPG', type: 'image/jpeg', size: 4, lastModified: 1 };
+    const result = await importAndPersist(storage, createWorkbench('owner'), [
+      { file, blob: new Blob(['first']) },
+      { file: { ...file, name: 'IMG_2.JPG', lastModified: 2 }, blob: new Blob(['second']) },
+      { file, blob: new Blob(['duplicate']) },
+    ], deps());
+    const bytes = await Promise.all(result.importedIds.map(async (id) => (await storage.getBlob(id))?.text()));
+    expect(bytes).toEqual(['first', 'second', 'duplicate']);
+  });
+
+  it('refuses dangling relationships, shared media, mismatched keys and a stale plant counter', () => {
+    const base = createWorkbench('owner');
+    const media = {
+      m1: { id: 'm1', name: 'a.jpg' },
+      m2: { id: 'm2', name: 'b.jpg' },
+    };
+    const plant = (id: string, label: string, mediaIds: string[]) => ({ id, label, sequenceLabel: label, mediaIds, identityCertainty: 'same_individual', taxonHint: null, fields: {}, siteTemplateId: null, createdAt: '', updatedAt: '' });
+    const ok = { ...base, media, plants: { p1: plant('p1', 'Plant 0001', ['m1']) }, nextPlantNumber: 2 };
+    expect(restoreWorkbench(ok, 'owner')).not.toBeNull();
+    expect(() => restoreWorkbench({ ...ok, plants: { p1: plant('p1', 'Plant 0001', ['m1']), p2: plant('p2', 'Plant 0002', ['m1']) }, nextPlantNumber: 3 }, 'owner')).toThrow(/in two plants/);
+    expect(() => restoreWorkbench({ ...ok, plants: { other: plant('p1', 'Plant 0001', ['m1']) } }, 'owner')).toThrow(/malformed/);
+    expect(() => restoreWorkbench({ ...ok, nextPlantNumber: 1 }, 'owner')).toThrow(/counter is behind/);
+    expect(() => restoreWorkbench({ ...ok, plants: { p1: { ...plant('p1', 'Plant 0001', ['m1']), siteTemplateId: 'nowhere' } } }, 'owner')).toThrow(/missing site template/);
+    const rel = { id: 'r1', type: 'habitat_context', subject: { kind: 'media', id: 'm2' }, plantId: 'gone', evidenceMediaIds: [], confidence: 'possible', note: null, createdAt: '' };
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: rel } }, 'owner')).toThrow(/missing plant gone/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, plantId: 'p1', subject: { kind: 'media', id: 'nope' } } } }, 'owner')).toThrow(/missing media/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, plantId: 'p1', evidenceMediaIds: ['nope'] } } }, 'owner')).toThrow(/cites missing media/);
+  });
 });
