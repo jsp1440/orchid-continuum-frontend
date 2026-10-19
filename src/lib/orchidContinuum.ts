@@ -35,6 +35,7 @@
 
 
 import { supabase } from './supabase';
+import { hasThreatAssessment } from './atlasLocalitySafety';
 
 // ---------------------------------------------------------------------------
 // Public record shapes
@@ -604,7 +605,7 @@ function curatedOccurrenceToPoint(
     iucnCode: row.iucn_code ?? undefined,
     // A curated point comes from a species row, so the assessment was reachable
     // whether or not that row carries one.
-    assessmentResolved: Boolean(row.conservation_status || row.iucn_code),
+    assessmentResolved: hasThreatAssessment(row.iucn_code, row.conservation_status),
     imageUrl: row.image_url ?? undefined,
     taxonomyId: row.slug ?? row.id,
     locality: occ.locality,
@@ -659,8 +660,9 @@ function atlasRowToPoint(
     tribe: linkedSpecies?.tribe ?? undefined,
     conservationStatus: linkedSpecies?.conservation_status ?? conservation?.status,
     iucnCode: linkedSpecies?.iucn_code ?? conservation?.iucn,
-    assessmentResolved: Boolean(
-      linkedSpecies?.conservation_status || linkedSpecies?.iucn_code || conservation,
+    assessmentResolved: hasThreatAssessment(
+      linkedSpecies?.iucn_code ?? conservation?.iucn,
+      linkedSpecies?.conservation_status ?? conservation?.status,
     ),
     imageUrl: linkedSpecies?.image_url ?? row.media_url ?? undefined,
     taxonomyId: linkedSpecies?.slug ?? undefined,

@@ -155,3 +155,43 @@ export function atlasSensitivityResolution(
   if (point.assessmentResolved === false) return 'unresolved';
   return 'assessed-not-threatened';
 }
+
+/**
+ * Conservation values that are not an assessment of threat. "Not Evaluated",
+ * "Data Deficient" and placeholders say nothing about collection risk, so a point
+ * carrying only these is treated as unresolved (precaution cell), never as
+ * "assessed, not threatened" with precise coordinates.
+ */
+const NON_ASSESSMENT_VALUES = new Set([
+  'ne', 'dd', 'not evaluated', 'not assessed', 'data deficient', 'unknown', 'unassessed',
+  'n/a', 'na', 'none', 'null', '-', '?',
+]);
+
+export function hasThreatAssessment(iucnCode?: string | null, conservationStatus?: string | null): boolean {
+  return [iucnCode, conservationStatus].some((value) => {
+    const v = (value ?? '').trim().toLowerCase();
+    return v !== '' && !NON_ASSESSMENT_VALUES.has(v);
+  });
+}
+
+/** Keys that carry coordinates or place text in occurrence-shaped payloads. */
+export const LOCALITY_KEY_PATTERN =
+  /^(lat|lng|lon|long|latitude|longitude|decimal_?latitude|decimal_?longitude|decimallatitude|decimallongitude|coordinates?|geometry|geom|point|location|locality|verbatim_?locality|verbatimlocality|georeference.*|footprint.*|x|y)$/i;
+
+/**
+ * Deep copy of a payload with every coordinate/locality field replaced by a
+ * marker, for surfaces that print raw responses (diagnostics). Counts, names and
+ * key structure stay visible.
+ */
+export function redactLocality(value: unknown, depth = 0): unknown {
+  if (depth > 8) return '[depth limit]';
+  if (Array.isArray(value)) return value.map((item) => redactLocality(item, depth + 1));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = LOCALITY_KEY_PATTERN.test(key) ? '[withheld: locality]' : redactLocality(inner, depth + 1);
+    }
+    return out;
+  }
+  return value;
+}

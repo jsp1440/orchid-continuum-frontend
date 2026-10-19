@@ -1,4 +1,5 @@
-import { resolveAtlasLocation } from './atlasLocalitySafety';
+import type { AtlasLayer } from './atlas';
+import { hasThreatAssessment, redactLocality, resolveAtlasLocation } from './atlasLocalitySafety';
 
 const env = import.meta.env as Record<string, string | undefined>;
 
@@ -59,39 +60,79 @@ function extractRows<T = BackendOccurrence>(payload: unknown): T[] {
   }
   return [];
 }
+function geometryLngLat(r: Record<string, unknown>): [number | undefined, number | undefined] {
+  // GeoJSON Feature: geometry.coordinates is [lng, lat].
+  const g = r.geometry as { coordinates?: unknown } | undefined;
+  const c = g && typeof g === 'object' && Array.isArray(g.coordinates) ? g.coordinates : null;
+  return c ? [numOf(c[0]), numOf(c[1])] : [undefined, undefined];
+}
+
+/** One backend row as a locality-safe public point, or null when it has no coordinates. */
+function normalizeRow(r: BackendOccurrence, i: number): OccurrencePoint | null {
+  const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
+  const [gLng, gLat] = geometryLngLat(r as Record<string, unknown>);
+  const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
+    ?? numOf(p.decimal_latitude) ?? numOf(p.latitude) ?? numOf(p.lat) ?? gLat;
+  const lng = numOf(r.decimal_longitude) ?? numOf(r.decimalLongitude) ?? numOf(r.longitude) ?? numOf(r.lng) ?? numOf(r.lon) ?? numOf(r.x)
+    ?? numOf(p.decimal_longitude) ?? numOf(p.longitude) ?? numOf(p.lng) ?? gLng;
+  if (lat === undefined || lng === undefined) return null;
+  const species = r.species || r.canonical_name || r.scientific_name
+    || (p.species as string) || (p.canonical_name as string) || (p.scientific_name as string) || 'Orchidaceae';
+  const country = (r.country ?? (p.country as string | undefined) ?? null) as string | null;
+  // These points reach public maps (genus page, neighbours, badges), so they get
+  // the same fail-closed projection as the Atlas: threatened taxa snap to their
+  // tier cell, stated uncertainty to its cell, and a point with no threat
+  // assessment (none, NE, DD, unknown) to the unresolved-precaution cell. Never jittered.
+  const iucnCode = strOf(r.iucn_code) ?? strOf(p.iucn_code);
+  const conservationStatus = strOf(r.conservation_status) ?? strOf(p.conservation_status);
+  const shown = resolveAtlasLocation(
+    {
+      lat,
+      lng,
+      iucnCode,
+      conservationStatus,
+      coordinateUncertaintyM: numOf(r.coordinate_uncertainty_in_meters) ?? numOf(r.coordinateUncertaintyInMeters)
+        ?? numOf(p.coordinate_uncertainty_in_meters),
+      assessmentResolved: hasThreatAssessment(iucnCode, conservationStatus),
+    },
+    'public',
+  );
+  return { id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat: shown.lat, lng: shown.lng, species, country, source: 'continuum' };
+}
+
 function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
-  const out: OccurrencePoint[] = [];
-  rows.forEach((r, i) => {
-    const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
-    const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
-      ?? numOf(p.decimal_latitude) ?? numOf(p.latitude) ?? numOf(p.lat);
-    const lng = numOf(r.decimal_longitude) ?? numOf(r.decimalLongitude) ?? numOf(r.longitude) ?? numOf(r.lng) ?? numOf(r.lon) ?? numOf(r.x)
-      ?? numOf(p.decimal_longitude) ?? numOf(p.longitude) ?? numOf(p.lng);
-    if (lat === undefined || lng === undefined) return;
-    const species = r.species || r.canonical_name || r.scientific_name
-      || (p.species as string) || (p.canonical_name as string) || (p.scientific_name as string) || 'Orchidaceae';
-    const country = (r.country ?? (p.country as string | undefined) ?? null) as string | null;
-    // These points reach public maps (genus page, neighbours, badges), so they get
-    // the same fail-closed projection as the Atlas: threatened taxa snap to their
-    // tier cell, stated uncertainty to its cell, and a point with no conservation
-    // assessment to the unresolved-precaution cell. Never jittered.
-    const iucnCode = strOf(r.iucn_code) ?? strOf(p.iucn_code);
-    const conservationStatus = strOf(r.conservation_status) ?? strOf(p.conservation_status);
-    const shown = resolveAtlasLocation(
-      {
-        lat,
-        lng,
-        iucnCode,
-        conservationStatus,
-        coordinateUncertaintyM: numOf(r.coordinate_uncertainty_in_meters) ?? numOf(r.coordinateUncertaintyInMeters)
-          ?? numOf(p.coordinate_uncertainty_in_meters),
-        assessmentResolved: Boolean(iucnCode || conservationStatus),
-      },
-      'public',
-    );
-    out.push({ id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat: shown.lat, lng: shown.lng, species, country, source: 'continuum' });
+  return rows.flatMap((r, i) => {
+    const point = normalizeRow(r, i);
+    return point ? [point] : [];
   });
-  return out;
+}
+
+const ROW_CONTAINER_KEYS = ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points'];
+
+/**
+ * The /api/atlas/occurrences payload as an AtlasLayer for `atlasApi.occurrences`
+ * consumers, whatever row container the API uses. Coordinates are the projected
+ * public ones and coordinate/locality fields are removed from `properties`.
+ * Returns null for a payload that is not an occurrence list, so callers report
+ * "not available" instead of reading `features` from the wrong shape.
+ */
+export function occurrencePayloadToAtlasLayer(payload: unknown): AtlasLayer | null {
+  const recognised = Array.isArray(payload)
+    || (!!payload && typeof payload === 'object'
+      && ROW_CONTAINER_KEYS.some((k) => Array.isArray((payload as Record<string, unknown>)[k])));
+  if (!recognised) return null;
+  const features = extractRows<BackendOccurrence>(payload).flatMap((row, i) => {
+    const point = normalizeRow(row, i);
+    if (!point) return [];
+    const nested = row.properties && typeof row.properties === 'object' ? row.properties : {};
+    const { properties: _drop, ...flat } = row as Record<string, unknown>;
+    const properties = redactLocality({ ...nested, ...flat }) as Record<string, unknown>;
+    for (const key of Object.keys(properties)) {
+      if (properties[key] === '[withheld: locality]') delete properties[key];
+    }
+    return [{ id: point.id, kind: 'occurrence' as const, lat: point.lat, lng: point.lng, properties }];
+  });
+  return { kind: 'occurrence', features, meta: { count: features.length } };
 }
 
 export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {

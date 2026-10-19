@@ -4,6 +4,7 @@ import { featuredGenusName } from '@/lib/featuredGenus';
 import { supabase } from '@/lib/supabase';
 import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import { OC_BACKEND_BASE, ATLAS_OCCURRENCES_URL } from '@/lib/ocBackend';
+import { redactLocality } from '@/lib/atlasLocalitySafety';
 
 type CheckStatus = 'pending' | 'ok' | 'empty' | 'error';
 
@@ -41,6 +42,11 @@ function countRows(payload: unknown): number | undefined {
 }
 
 function samplePayload(payload: unknown): unknown {
+  // Printed verbatim in a <pre>: coordinates and place text never are (#931).
+  return redactLocality(truncatedSample(payload));
+}
+
+function truncatedSample(payload: unknown): unknown {
   if (Array.isArray(payload)) return payload.slice(0, 3);
   if (!payload || typeof payload !== 'object') return payload;
   const o = payload as Record<string, unknown>;
