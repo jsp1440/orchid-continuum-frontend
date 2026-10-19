@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
 
 export interface FallbackImageProps {
   urls: string[];
@@ -25,7 +26,10 @@ const FallbackImage: React.FC<FallbackImageProps> = ({
   onSettled,
 }) => {
   const cleanUrls = useMemo(
-    () => Array.from(new Set((urls || []).map((u) => u?.trim()).filter((u): u is string => Boolean(u) && !NON_PHOTO_URL_RE.test(u)))),
+    () => Array.from(new Set((urls || []).map((u) => u?.trim()).filter(
+        (u): u is string =>
+          Boolean(u) && isBrowserEmbeddableImageUrl(u) && !NON_PHOTO_URL_RE.test(u),
+      ))),
     [urls],
   );
 
