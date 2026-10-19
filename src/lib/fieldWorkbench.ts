@@ -154,6 +154,7 @@ export type WorkbenchState = {
 
 export class WorkbenchError extends Error {}
 
+/** Ordered from the strongest to the weakest claim that the media show one individual. */
 const IDENTITY_CERTAINTIES: readonly PlantIdentityCertainty[] = [
   "same_individual",
   "possibly_same_individual",
@@ -421,6 +422,19 @@ export function splitPlant(
 }
 
 /**
+ * The site a plant is recorded at: the observer's own value, else the linked
+ * site template's site (its ``site`` value, else its name). Every site check
+ * compares this, so a template's name and a typed site are the same kind of
+ * claim.
+ */
+function effectiveSite(state: WorkbenchState, plant: PlantRecord): string | null {
+  const typed = plant.fields.site?.value;
+  if (typed) return typed;
+  const template = plant.siteTemplateId ? state.siteTemplates[plant.siteTemplateId] : undefined;
+  return template ? (template.values.site ?? template.name) : null;
+}
+
+/**
  * Merge ``sourceId`` into ``targetId``. Media and relationships move to the
  * target. Fields the target already has win; a differing source value is
  * returned as a conflict rather than silently dropped or applied.
@@ -435,8 +449,8 @@ export function mergePlants(
   const target = requirePlant(state, targetId);
   const source = requirePlant(state, sourceId);
   // Distinct sites are never conflated: resolve the site first, then merge.
-  const targetSite = target.fields.site?.value;
-  const sourceSite = source.fields.site?.value;
+  const targetSite = effectiveSite(state, target);
+  const sourceSite = effectiveSite(state, source);
   if (
     (target.siteTemplateId && source.siteTemplateId && target.siteTemplateId !== source.siteTemplateId) ||
     (targetSite && sourceSite && targetSite !== sourceSite)
@@ -477,8 +491,9 @@ export function mergePlants(
     updatedAt: now,
   };
   const relationships: Record<string, WorkbenchRelationship> = {};
-  const droppedSelf: string[] = [];
-  const droppedDuplicate: string[] = [];
+  // Dropped links are kept in full in the audit trail: confidence, note and evidence are provenance.
+  const droppedSelf: WorkbenchRelationship[] = [];
+  const droppedDuplicate: WorkbenchRelationship[] = [];
   const seen = new Map<string, string>();
   const ordered = Object.values(state.relationships).sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id));
   for (const rel of ordered) {
@@ -486,12 +501,16 @@ export function mergePlants(
     const subject =
       moved.subject.kind === "plant" && moved.subject.id === sourceId ? { kind: "plant" as const, id: targetId } : moved.subject;
     if (subject.kind === "plant" && subject.id === moved.plantId) {
-      droppedSelf.push(rel.id); // the two plants were one; a link between them no longer applies
+      droppedSelf.push(rel); // the two plants were one; a link between them no longer applies
       continue;
     }
     const key = `${moved.type}|${subject.kind}:${subject.id}|${moved.plantId}`;
-    if (seen.has(key)) {
-      droppedDuplicate.push(rel.id);
+    const keptId = seen.get(key);
+    if (keptId) {
+      // The earlier link stays; its evidence gains the later link's media.
+      const kept = relationships[keptId];
+      relationships[keptId] = { ...kept, evidenceMediaIds: [...new Set([...kept.evidenceMediaIds, ...rel.evidenceMediaIds])] };
+      droppedDuplicate.push(rel);
       continue;
     }
     seen.set(key, rel.id);
@@ -580,12 +599,18 @@ export function relate(
   );
   const note = input.note?.trim() || null;
   if (duplicate) {
-    if (duplicate.confidence === input.confidence && (input.note === undefined || duplicate.note === note)) {
+    const added = evidence.filter((id) => !duplicate.evidenceMediaIds.includes(id));
+    if (duplicate.confidence === input.confidence && (input.note === undefined || duplicate.note === note) && added.length === 0) {
       return { state, relationship: duplicate };
     }
-    // Re-asserting a link updates the observer's confidence/note, audited.
+    // Re-asserting a link updates the observer's confidence/note and adds new evidence, audited.
     const at = deps.now();
-    const updated = { ...duplicate, confidence: input.confidence, note: input.note === undefined ? duplicate.note : note };
+    const updated = {
+      ...duplicate,
+      confidence: input.confidence,
+      note: input.note === undefined ? duplicate.note : note,
+      evidenceMediaIds: [...duplicate.evidenceMediaIds, ...added],
+    };
     return {
       relationship: updated,
       state: {
@@ -595,8 +620,13 @@ export function relate(
           at,
           action: "relate_update",
           plantIds: [input.plantId],
-          mediaIds: [],
-          detail: `${duplicate.type}: ${duplicate.confidence} -> ${updated.confidence}`,
+          mediaIds: added,
+          detail: JSON.stringify({
+            type: duplicate.type,
+            confidence: [duplicate.confidence, updated.confidence],
+            note: [duplicate.note, updated.note],
+            evidence_added: added,
+          }),
         }),
       },
     };
@@ -732,27 +762,25 @@ export function applyTemplate(
   const plants = { ...state.plants };
   const conflicts: FieldConflict[] = [];
   let applied = 0;
-  for (const plantId of plantIds) {
+  const proposedSite = template.kind === "site_template" ? (source.values.site ?? (source as SiteTemplate).name) : source.values.site;
+  for (const plantId of [...new Set(plantIds)]) {
     const plant = requirePlant(state, plantId);
     const fields = { ...plant.fields };
     let siteTemplateId = plant.siteTemplateId;
-    if (template.kind === "site_template") {
-      const siteName = source.values.site ?? (source as SiteTemplate).name;
-      if (siteTemplateId && siteTemplateId !== template.id) {
-        const current = state.siteTemplates[siteTemplateId]?.name ?? siteTemplateId;
-        conflicts.push({ plantId, field: "siteTemplate", current, proposed: (source as SiteTemplate).name });
-        continue;
-      }
-      // A site the observer typed is a site too: a different one means a different
-      // place, so the plant is not linked (nor given this site's locality,
-      // elevation or private coordinates).
-      const typedSite = fields.site?.value;
-      if (!siteTemplateId && typedSite && typedSite !== siteName) {
-        conflicts.push({ plantId, field: "site", current: typedSite, proposed: siteName });
-        continue;
-      }
-      siteTemplateId = template.id;
+    if (template.kind === "site_template" && siteTemplateId && siteTemplateId !== template.id) {
+      const current = state.siteTemplates[siteTemplateId]?.name ?? siteTemplateId;
+      conflicts.push({ plantId, field: "siteTemplate", current, proposed: (source as SiteTemplate).name });
+      continue;
     }
+    // A different site already on the plant (typed, or from a linked template)
+    // means a different place: the plant is skipped whole, so it gets neither
+    // this site's name nor its locality, elevation or private coordinates.
+    const currentSite = effectiveSite(state, plant);
+    if (proposedSite && currentSite && currentSite !== proposedSite) {
+      conflicts.push({ plantId, field: "site", current: currentSite, proposed: proposedSite });
+      continue;
+    }
+    if (template.kind === "site_template") siteTemplateId = template.id;
     for (const [field, value] of Object.entries(source.values) as [ProfileField, string][]) {
       const existing = fields[field];
       if (!existing) {
@@ -773,7 +801,7 @@ export function applyTemplate(
       audit: audit(state, {
         at: now,
         action: `apply_${template.kind}`,
-        plantIds,
+        plantIds: [...new Set(plantIds)],
         mediaIds: [],
         detail: JSON.stringify({ template_id: template.id, fields_filled: applied, conflicts_left_for_observer: conflicts }),
       }),
@@ -844,8 +872,6 @@ export type PublicPlantView = {
   id: string;
   /** The immutable creation label ("Plant 0042"); an observer's rename may name a place. */
   label: string;
-  /** Only a plain scientific name; anything else (free text, numbers) is withheld. */
-  taxonHint: string | null;
   identityCertainty: PlantIdentityCertainty;
   mediaCount: number;
   /** Year and month of an ISO event date only. */
@@ -853,25 +879,22 @@ export type PublicPlantView = {
   relationships: { type: RelationshipType; confidence: RelationshipConfidence; evidenceCount: number }[];
 };
 
-const PUBLIC_TAXON = /^(×\s?)?[A-Z][a-z]+(\s(×\s?)?[a-z][a-z-]+)?(\s(sp|spp|cf|aff)\.(\s[a-z][a-z-]+)?)?$/;
-const ISO_DATE = /^(\d{4})-(\d{2})-\d{2}(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
+const ISO_DATE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
 
 /**
  * What may leave the device for a public or shared view. Structured values only:
  * no coordinates; no free text at all (locality, site, habitat, substrate,
  * project and notes can name a place, an observer's name is personal data, and
- * a renamed label can be either); a taxon hint only when it is a plain
- * scientific name; the event date reduced to year-month and only when it is an
- * ISO date. Precise data stays in the private record for authorised uses.
+ * a renamed label can be either); no taxon hint, which is unreviewed free text
+ * that no shape check can tell from a place or person's name; the event date
+ * reduced to year-month and only when it is a valid ISO date. Precise data stays in the private record for authorised uses.
  */
 export function publicPlantView(state: WorkbenchState, plantId: string): PublicPlantView {
   const plant = requirePlant(state, plantId);
   const date = plant.fields.eventDate?.value.match(ISO_DATE);
-  const hint = plant.taxonHint?.trim() ?? "";
   return {
     id: plant.id,
     label: plant.sequenceLabel,
-    taxonHint: PUBLIC_TAXON.test(hint) ? hint : null,
     identityCertainty: plant.identityCertainty,
     mediaCount: plant.mediaIds.length,
     eventMonth: date ? `${date[1]}-${date[2]}` : null,

@@ -15,6 +15,7 @@ import {
   type ImportFile,
   type WorkbenchDeps,
   type WorkbenchState,
+  RELATIONSHIP_TYPES,
   createWorkbench,
   defaultDeps,
   importMedia,
@@ -31,16 +32,24 @@ export interface WorkbenchStorage {
 export class WorkbenchStoreError extends Error {}
 
 const PLANT_LABEL = /^Plant (\d+)$/;
+const IDENTITY_CERTAINTIES = new Set(["same_individual", "possibly_same_individual", "same_patch_or_colony"]);
+const CONFIDENCES = new Set(["certain", "probable", "possible"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/** An own key only: ``constructor`` or ``__proto__`` never count as a stored id. */
+function has(map: Record<string, unknown>, id: unknown): boolean {
+  return typeof id === "string" && Object.prototype.hasOwnProperty.call(map, id);
 }
 
 /**
  * Validate a stored record before trusting it; a corrupt record is never
  * half-loaded. Every reference must resolve: plants to media, relationships to
  * plants and media, plants to site templates; a media item is in at most one
- * plant; keys match ids; and the plant counter is past every issued label.
+ * plant; keys match ids; and the plant counter is past every issued sequence
+ * label (an observer's rename is free text and is not counted).
  */
 export function restoreWorkbench(raw: unknown, accountId: string): WorkbenchState | null {
   if (raw == null) return null;
@@ -60,42 +69,66 @@ export function restoreWorkbench(raw: unknown, accountId: string): WorkbenchStat
     fail("Stored workbench is missing its audit trail or plant counter.");
   }
   const media = s.media as Record<string, unknown>;
+  const plants = s.plants as Record<string, unknown>;
+  const siteTemplates = s.siteTemplates as Record<string, unknown>;
   for (const [key, item] of Object.entries(media)) {
     if (!isRecord(item) || item.id !== key || typeof item.name !== "string") fail(`Stored media ${key} is malformed.`);
   }
+  for (const [kind, map] of [["site template", siteTemplates], ["session profile", s.sessionProfiles]] as const) {
+    for (const [key, item] of Object.entries(map as Record<string, unknown>)) {
+      if (!isRecord(item) || item.id !== key || typeof item.name !== "string" || !isRecord(item.values)) {
+        fail(`Stored ${kind} ${key} is malformed.`);
+      }
+    }
+  }
   const owner = new Map<string, string>();
   let highest = 0;
-  for (const [key, plant] of Object.entries(s.plants as Record<string, unknown>)) {
-    if (!isRecord(plant) || plant.id !== key || !Array.isArray(plant.mediaIds) || typeof plant.label !== "string") {
+  for (const [key, plant] of Object.entries(plants)) {
+    if (
+      !isRecord(plant) ||
+      plant.id !== key ||
+      !Array.isArray(plant.mediaIds) ||
+      typeof plant.label !== "string" ||
+      typeof plant.sequenceLabel !== "string" ||
+      !(plant.taxonHint === null || typeof plant.taxonHint === "string") ||
+      !IDENTITY_CERTAINTIES.has(plant.identityCertainty as string) ||
+      !isRecord(plant.fields)
+    ) {
       fail(`Stored plant ${key} is malformed.`);
     }
-    const p = plant as Record<string, unknown> & { mediaIds: unknown[]; label: string };
+    const p = plant as Record<string, unknown> & { mediaIds: unknown[]; label: string; sequenceLabel: string };
     for (const id of p.mediaIds) {
-      if (typeof id !== "string" || !media[id]) fail(`Plant ${p.label} refers to missing media ${String(id)}.`);
+      if (!has(media, id)) fail(`Plant ${p.label} refers to missing media ${String(id)}.`);
       const other = owner.get(id as string);
       if (other) fail(`Media ${String(id)} is in two plants (${other}, ${p.label}).`);
       owner.set(id as string, p.label);
     }
-    if (p.siteTemplateId != null && !(s.siteTemplates as Record<string, unknown>)[p.siteTemplateId as string]) {
+    if (p.siteTemplateId != null && !has(siteTemplates, p.siteTemplateId)) {
       fail(`Plant ${p.label} refers to missing site template ${String(p.siteTemplateId)}.`);
     }
-    for (const label of [p.label, p.sequenceLabel]) {
-      const n = typeof label === "string" ? label.match(PLANT_LABEL) : null;
-      if (n) highest = Math.max(highest, Number(n[1]));
-    }
+    const n = p.sequenceLabel.match(PLANT_LABEL);
+    if (n) highest = Math.max(highest, Number(n[1]));
   }
   if ((s.nextPlantNumber as number) <= highest) fail("Stored plant counter is behind an issued plant label.");
-  const plants = s.plants as Record<string, unknown>;
   for (const [key, rel] of Object.entries(s.relationships as Record<string, unknown>)) {
-    if (!isRecord(rel) || rel.id !== key || !isRecord(rel.subject) || !Array.isArray(rel.evidenceMediaIds)) {
+    if (
+      !isRecord(rel) ||
+      rel.id !== key ||
+      !isRecord(rel.subject) ||
+      !Array.isArray(rel.evidenceMediaIds) ||
+      !(RELATIONSHIP_TYPES as readonly string[]).includes(rel.type as string) ||
+      !CONFIDENCES.has(rel.confidence as string)
+    ) {
       fail(`Stored relationship ${key} is malformed.`);
     }
     const r = rel as Record<string, unknown> & { subject: Record<string, unknown>; evidenceMediaIds: unknown[] };
-    if (!plants[r.plantId as string]) fail(`Relationship ${key} refers to missing plant ${String(r.plantId)}.`);
-    const subjectExists = r.subject.kind === "media" ? media[r.subject.id as string] : r.subject.kind === "plant" ? plants[r.subject.id as string] : undefined;
+    if (!has(plants, r.plantId)) fail(`Relationship ${key} refers to missing plant ${String(r.plantId)}.`);
+    const subjectExists =
+      r.subject.kind === "media" ? has(media, r.subject.id) : r.subject.kind === "plant" ? has(plants, r.subject.id) : false;
     if (!subjectExists) fail(`Relationship ${key} refers to a missing ${String(r.subject.kind)}.`);
+    if (r.subject.kind === "plant" && r.subject.id === r.plantId) fail(`Relationship ${key} links a plant to itself.`);
     for (const id of r.evidenceMediaIds) {
-      if (!media[id as string]) fail(`Relationship ${key} cites missing media ${String(id)}.`);
+      if (!has(media, id)) fail(`Relationship ${key} cites missing media ${String(id)}.`);
     }
   }
   return s as WorkbenchState;
@@ -123,6 +156,7 @@ export async function importAndPersist(
     if (!blob) throw new WorkbenchStoreError(`No original bytes for ${media.name}.`);
     await storage.putBlob(media.id, blob);
   }
+  restoreWorkbench(result.state, result.state.accountId); // never save a record that could not be reopened
   await storage.saveState(result.state);
   return { state: result.state, importedIds: result.imported.map((m) => m.id), rejected: result.rejected };
 }

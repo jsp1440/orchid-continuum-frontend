@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createWorkbench, groupAsNewPlant, saveSiteTemplate, type WorkbenchDeps } from './fieldWorkbench';
+import { createWorkbench, groupAsNewPlant, renamePlant, saveSiteTemplate, type WorkbenchDeps } from './fieldWorkbench';
 import {
   importAndPersist,
   MemoryWorkbenchStorage,
@@ -85,7 +85,8 @@ describe('workbench persistence', () => {
     expect(() => restoreWorkbench({ ...good, plants: undefined }, 'owner')).toThrow(/missing plants/);
     const dangling = {
       ...good,
-      plants: { p: { id: 'p', label: 'Plant 0001', mediaIds: ['gone'], identityCertainty: 'same_individual', taxonHint: null, fields: {}, siteTemplateId: null, createdAt: '', updatedAt: '' } },
+      nextPlantNumber: 2,
+      plants: { p: { id: 'p', label: 'Plant 0001', sequenceLabel: 'Plant 0001', mediaIds: ['gone'], identityCertainty: 'same_individual', taxonHint: null, fields: {}, siteTemplateId: null, createdAt: '', updatedAt: '' } },
     };
     expect(() => restoreWorkbench(dangling, 'owner')).toThrow(/missing media gone/);
     expect(restoreWorkbench(null, 'owner')).toBeNull();
@@ -120,5 +121,33 @@ describe('workbench persistence', () => {
     expect(() => restoreWorkbench({ ...ok, relationships: { r1: rel } }, 'owner')).toThrow(/missing plant gone/);
     expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, plantId: 'p1', subject: { kind: 'media', id: 'nope' } } } }, 'owner')).toThrow(/missing media/);
     expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, plantId: 'p1', evidenceMediaIds: ['nope'] } } }, 'owner')).toThrow(/cites missing media/);
+  });
+
+  it('an observer may rename a plant to any label without locking the workbench', async () => {
+    const storage = new MemoryWorkbenchStorage();
+    const d = deps();
+    const first = await importAndPersist(storage, createWorkbench('owner'), files(2), d);
+    const grouped = groupAsNewPlant(first.state, first.importedIds, {}, d);
+    await persist(storage, renamePlant(grouped.state, grouped.plant.id, 'Plant 0050', d));
+    const reopened = await openWorkbench(storage, 'owner');
+    expect(reopened.plants[grouped.plant.id].label).toBe('Plant 0050');
+    expect(reopened.nextPlantNumber).toBe(2); // the next issued label is still Plant 0002
+  });
+
+  it('inherited object keys never count as stored ids', () => {
+    const base = createWorkbench('owner');
+    const plant = { id: 'p1', label: 'Plant 0001', sequenceLabel: 'Plant 0001', mediaIds: ['m1'], identityCertainty: 'same_individual', taxonHint: null, fields: {}, siteTemplateId: null, createdAt: '', updatedAt: '' };
+    const ok = { ...base, media: { m1: { id: 'm1', name: 'a.jpg' } }, plants: { p1: plant }, nextPlantNumber: 2 };
+    const rel = { id: 'r1', type: 'habitat_context', subject: { kind: 'media', id: 'm1' }, plantId: 'p1', evidenceMediaIds: ['m1'], confidence: 'possible', note: null, createdAt: '' };
+    expect(restoreWorkbench({ ...ok, relationships: { r1: rel } }, 'owner')).not.toBeNull();
+    expect(() => restoreWorkbench({ ...ok, plants: { p1: { ...plant, mediaIds: ['constructor'] } } }, 'owner')).toThrow(/missing media constructor/);
+    expect(() => restoreWorkbench({ ...ok, plants: { p1: { ...plant, siteTemplateId: 'toString' } } }, 'owner')).toThrow(/missing site template/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, plantId: 'valueOf' } } }, 'owner')).toThrow(/missing plant valueOf/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, subject: { kind: 'media', id: 'hasOwnProperty' } } } }, 'owner')).toThrow(/missing media/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, evidenceMediaIds: ['__proto__'] } } }, 'owner')).toThrow(/cites missing media/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, type: 'bogus' } } }, 'owner')).toThrow(/malformed/);
+    expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, subject: { kind: 'plant', id: 'p1' } } } }, 'owner')).toThrow(/to itself/);
+    expect(() => restoreWorkbench({ ...ok, plants: { p1: { ...plant, taxonHint: 7 } } }, 'owner')).toThrow(/malformed/);
+    expect(() => restoreWorkbench({ ...ok, siteTemplates: { s1: { id: 's2', name: 'x', values: {} } } }, 'owner')).toThrow(/site template s1 is malformed/);
   });
 });
