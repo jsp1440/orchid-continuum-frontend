@@ -507,3 +507,42 @@ describe('checker round 2 (#936)', () => {
     expect(JSON.parse(entry.detail!).evidence_added).toEqual([ids[1]]);
   });
 });
+
+describe('checker round 3 notes (#936)', () => {
+  it('clearing a site that comes only from a linked template detaches the template and its details', () => {
+    const { d, state, ids } = setup(1);
+    const g = groupAsNewPlant(state, ids, {}, d);
+    const cerro = saveSiteTemplate(g.state, 'Cerro  Azul', { locality: 'Ridge' }, { latitude: -3.4, longitude: -78.5, accuracyM: 5 }, d);
+    expect(cerro.site.name).toBe('Cerro Azul');
+    const linked = applyTemplate(cerro.state, { kind: 'site_template', id: cerro.site.id }, [g.plant.id], d).state;
+    const cleared = setPlantField(linked, g.plant.id, 'site', '', d);
+    expect(cleared.plants[g.plant.id].siteTemplateId).toBeNull();
+    expect(cleared.plants[g.plant.id].fields).toEqual({});
+    expect(cleared.audit.at(-1)?.detail).toMatch(/site template detached with locality/);
+  });
+
+  it('unrelating keeps the removed link in full in the audit trail', () => {
+    const { d, state, ids } = setup(3);
+    const g = groupAsNewPlant(state, [ids[0]], {}, d);
+    const r = relate(g.state, { type: 'observed_pollination', subject: { kind: 'media', id: ids[1] }, plantId: g.plant.id, confidence: 'certain', evidenceMediaIds: [ids[1], ids[2]], note: 'euglossine bee' }, d);
+    const s = unrelate(r.state, r.relationship.id, d);
+    const entry = s.audit.at(-1)!;
+    expect(entry.mediaIds).toEqual([ids[1], ids[2]]);
+    expect(JSON.parse(entry.detail!)).toEqual(r.relationship);
+  });
+
+  it('an out-of-range file time falls back to import time instead of aborting the batch', () => {
+    const d = deps();
+    const out = importMedia(createWorkbench('owner'), [{ name: 'a.jpg', type: 'image/jpeg', size: 1, lastModified: 1e17 }, ...photos(2)], d);
+    expect(out.imported).toHaveLength(3);
+    expect(out.imported[0].capturedAtSource).toBe('import_time');
+  });
+
+  it('an impossible calendar date publishes no month', () => {
+    const { d, state, ids } = setup(1);
+    const g = groupAsNewPlant(state, ids, {}, d);
+    for (const [date, month] of [['2026-02-31', null], ['2024-02-29', '2024-02'], ['2026-04-31T10:00Z', null]] as const) {
+      expect(publicPlantView(setPlantField(g.state, g.plant.id, 'eventDate', date, d), g.plant.id).eventMonth).toBe(month);
+    }
+  });
+});

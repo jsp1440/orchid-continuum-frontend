@@ -149,5 +149,6 @@ describe('workbench persistence', () => {
     expect(() => restoreWorkbench({ ...ok, relationships: { r1: { ...rel, subject: { kind: 'plant', id: 'p1' } } } }, 'owner')).toThrow(/to itself/);
     expect(() => restoreWorkbench({ ...ok, plants: { p1: { ...plant, taxonHint: 7 } } }, 'owner')).toThrow(/malformed/);
     expect(() => restoreWorkbench({ ...ok, siteTemplates: { s1: { id: 's2', name: 'x', values: {} } } }, 'owner')).toThrow(/site template s1 is malformed/);
+    expect(() => restoreWorkbench({ ...ok, plants: { p1: { ...plant, sequenceLabel: 'Finca Lagunas orchid' } } }, 'owner')).toThrow(/malformed/);
   });
 });

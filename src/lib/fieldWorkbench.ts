@@ -154,6 +154,9 @@ export type WorkbenchState = {
 
 export class WorkbenchError extends Error {}
 
+/** The largest millisecond value a JavaScript Date can hold. */
+const MAX_DATE_MS = 8.64e15;
+
 /** Ordered from the strongest to the weakest claim that the media show one individual. */
 const IDENTITY_CERTAINTIES: readonly PlantIdentityCertainty[] = [
   "same_individual",
@@ -275,7 +278,8 @@ export function importMedia(
     if (file.exifCapturedAt && !Number.isNaN(Date.parse(file.exifCapturedAt))) {
       capturedAt = new Date(file.exifCapturedAt).toISOString();
       capturedAtSource = "exif";
-    } else if (typeof file.lastModified === "number" && Number.isFinite(file.lastModified) && file.lastModified > 0) {
+    } else if (typeof file.lastModified === "number" && file.lastModified > 0 && file.lastModified <= MAX_DATE_MS) {
+      // Out of the Date range (a synthesised file) falls back to import time rather than aborting the batch.
       capturedAt = new Date(file.lastModified).toISOString();
       capturedAtSource = "file_last_modified";
     }
@@ -668,7 +672,14 @@ export function unrelate(state: WorkbenchState, relationshipId: string, deps: Wo
   return {
     ...state,
     relationships,
-    audit: audit(state, { at: now, action: "unrelate", plantIds: [rel.plantId], mediaIds: [], detail: rel.type }),
+    // The removed link is kept in full: confidence, note and evidence are provenance.
+    audit: audit(state, {
+      at: now,
+      action: "unrelate",
+      plantIds: [rel.plantId, ...(rel.subject.kind === "plant" ? [rel.subject.id] : [])],
+      mediaIds: rel.evidenceMediaIds,
+      detail: JSON.stringify(rel),
+    }),
   };
 }
 
@@ -719,7 +730,7 @@ export function saveSiteTemplate(
   const now = deps.now();
   const site: SiteTemplate = {
     id: deps.newId(),
-    name: name.trim() || "Site",
+    name: name.replace(/\s+/g, " ").trim().slice(0, 240) || "Site", // compared with typed sites, so normalised alike
     values: cleanValues(values),
     privateCoordinates,
     createdAt: now,
@@ -826,7 +837,8 @@ export function setPlantField(
   const clean = value.replace(/\s+/g, " ").trim().slice(0, 240);
   const previous = plant.fields[field]?.value ?? null;
   if ((previous ?? "") === clean && plant.fields[field]?.source === "observer") return state;
-  if (!previous && !clean) return state;
+  // Clearing a site that comes only from a linked template still detaches it.
+  if (!previous && !clean && !(field === "site" && plant.siteTemplateId)) return state;
   const now = deps.now();
   let fields = { ...plant.fields };
   let siteTemplateId = plant.siteTemplateId;
@@ -881,6 +893,15 @@ export type PublicPlantView = {
 
 const ISO_DATE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(T[\d:.]+(Z|[+-]\d{2}:\d{2})?)?$/;
 
+/** A real calendar date (2026-02-31 is not), else null. */
+function realIsoDate(value: unknown): RegExpMatchArray | null {
+  const match = typeof value === "string" ? value.match(ISO_DATE) : null;
+  if (!match) return null;
+  const [y, m, d] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const day = new Date(Date.UTC(y, m - 1, d));
+  return day.getUTCFullYear() === y && day.getUTCMonth() === m - 1 && day.getUTCDate() === d ? match : null;
+}
+
 /**
  * What may leave the device for a public or shared view. Structured values only:
  * no coordinates; no free text at all (locality, site, habitat, substrate,
@@ -891,7 +912,7 @@ const ISO_DATE = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])(T[\d:.]+(Z|[+-]
  */
 export function publicPlantView(state: WorkbenchState, plantId: string): PublicPlantView {
   const plant = requirePlant(state, plantId);
-  const date = plant.fields.eventDate?.value.match(ISO_DATE);
+  const date = realIsoDate(plant.fields.eventDate?.value);
   return {
     id: plant.id,
     label: plant.sequenceLabel,

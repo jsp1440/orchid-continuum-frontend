@@ -90,6 +90,7 @@ export function restoreWorkbench(raw: unknown, accountId: string): WorkbenchStat
       !Array.isArray(plant.mediaIds) ||
       typeof plant.label !== "string" ||
       typeof plant.sequenceLabel !== "string" ||
+      !PLANT_LABEL.test(plant.sequenceLabel) ||
       !(plant.taxonHint === null || typeof plant.taxonHint === "string") ||
       !IDENTITY_CERTAINTIES.has(plant.identityCertainty as string) ||
       !isRecord(plant.fields)
@@ -106,8 +107,7 @@ export function restoreWorkbench(raw: unknown, accountId: string): WorkbenchStat
     if (p.siteTemplateId != null && !has(siteTemplates, p.siteTemplateId)) {
       fail(`Plant ${p.label} refers to missing site template ${String(p.siteTemplateId)}.`);
     }
-    const n = p.sequenceLabel.match(PLANT_LABEL);
-    if (n) highest = Math.max(highest, Number(n[1]));
+    highest = Math.max(highest, Number(p.sequenceLabel.match(PLANT_LABEL)![1]));
   }
   if ((s.nextPlantNumber as number) <= highest) fail("Stored plant counter is behind an issued plant label.");
   for (const [key, rel] of Object.entries(s.relationships as Record<string, unknown>)) {
