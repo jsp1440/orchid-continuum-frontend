@@ -8,6 +8,15 @@ React + TypeScript + Vite single-page application.
 Netlify, or other hosting configuration in this repository, and none should be
 added without changing this document first.
 
+The one exception is `vercel.json`, which is a kill switch, not configuration.
+Its only permitted content is `{"git": {"deploymentEnabled": false}}` (plus an
+optional `$schema`), which turns off Vercel's automatic Git deployments for
+every branch while a Vercel GitHub App may still be connected to the repository
+([Vercel docs](https://vercel.com/docs/project-configuration/git-configuration#turning-off-all-automatic-deployments)).
+`npm run validate:deployment` and `src/lib/renderDeploymentContract.test.ts`
+fail if the file is missing, gains any other key, or enables any branch, and if
+any other Vercel file (`vercel.ts`, `now.json`, `.vercel`, ...) appears.
+
 | Service | Render origin |
 | --- | --- |
 | Frontend (this repo) | `https://orchid-continuum-frontend-vof6.onrender.com` |
