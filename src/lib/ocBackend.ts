@@ -1,3 +1,5 @@
+import { resolveAtlasLocation } from './atlasLocalitySafety';
+
 const env = import.meta.env as Record<string, string | undefined>;
 
 /**
@@ -14,8 +16,8 @@ export const OC_BACKEND_BASE = (
   'https://orchid-continuum-public-api.onrender.com'
 ).replace(/\/$/, '');
 
-/** Atlas occurrences data endpoint. */
-export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/atlas/occurrences`;
+/** Atlas occurrences data endpoint (`/atlas/occurrences` without `/api` 404s, #931). */
+export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/api/atlas/occurrences`;
 
 const DEFAULT_TIMEOUT = 12_000;
 async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT): Promise<{ ok: boolean; status: number; data: T | null }> {
@@ -38,7 +40,10 @@ export async function fetchGenusOfDay(signal?: AbortSignal): Promise<GenusDaily 
 }
 
 export interface OccurrencePoint { id: string; lat: number; lng: number; species: string; country: string | null; source: 'continuum'; }
-interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; decimalLatitude?: number; decimalLongitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; lon?: number; x?: number; y?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; properties?: Record<string, unknown>; }
+interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; decimalLatitude?: number; decimalLongitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; lon?: number; x?: number; y?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; iucn_code?: string; conservation_status?: string; coordinate_uncertainty_in_meters?: number; coordinateUncertaintyInMeters?: number; properties?: Record<string, unknown>; }
+function strOf(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
 function numOf(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
@@ -66,7 +71,25 @@ function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
     const species = r.species || r.canonical_name || r.scientific_name
       || (p.species as string) || (p.canonical_name as string) || (p.scientific_name as string) || 'Orchidaceae';
     const country = (r.country ?? (p.country as string | undefined) ?? null) as string | null;
-    out.push({ id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat, lng, species, country, source: 'continuum' });
+    // These points reach public maps (genus page, neighbours, badges), so they get
+    // the same fail-closed projection as the Atlas: threatened taxa snap to their
+    // tier cell, stated uncertainty to its cell, and a point with no conservation
+    // assessment to the unresolved-precaution cell. Never jittered.
+    const iucnCode = strOf(r.iucn_code) ?? strOf(p.iucn_code);
+    const conservationStatus = strOf(r.conservation_status) ?? strOf(p.conservation_status);
+    const shown = resolveAtlasLocation(
+      {
+        lat,
+        lng,
+        iucnCode,
+        conservationStatus,
+        coordinateUncertaintyM: numOf(r.coordinate_uncertainty_in_meters) ?? numOf(r.coordinateUncertaintyInMeters)
+          ?? numOf(p.coordinate_uncertainty_in_meters),
+        assessmentResolved: Boolean(iucnCode || conservationStatus),
+      },
+      'public',
+    );
+    out.push({ id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat: shown.lat, lng: shown.lng, species, country, source: 'continuum' });
   });
   return out;
 }
