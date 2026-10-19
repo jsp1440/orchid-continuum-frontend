@@ -1635,6 +1635,12 @@ export async function fetchGenusImages(
  *                    use this to stop retrying a doomed CORS request and fall
  *                    straight through to the iNaturalist fallback.
  */
+// Matches library asset URLs that are care-condition icons rather than
+// photographs (e.g. orchidspecies.com/orphotdir/partialshade.jpg,
+// deepshade.jpg, tempcool.jpg). Kept narrow on purpose — this only rejects
+// the icon directory, not the host's real photo pages.
+const NON_PHOTOGRAPH_URL_RE = /\/(?:or)?photdir\//i;
+
 async function fetchGenusImagesOnce(
   g: string,
   signal?: AbortSignal,
@@ -1743,6 +1749,9 @@ async function fetchGenusImagesOnce(
         'name',
       ]);
     // Collect every URL-bearing field on the record, in preference order.
+    // Care-condition icons (orchidspecies.com/orphotdir/partialshade.jpg &
+    // friends) are ingested as species "images" by the library; they are not
+    // photographs and must never win the featured-photograph slot.
     const urls = [
       pick(r, ['image_url']),
       pick(r, ['imageUrl']),
@@ -1751,7 +1760,7 @@ async function fetchGenusImagesOnce(
       pick(r, ['image']),
       pick(r, ['medium_url']),
       pick(r, ['original_url']),
-    ].filter((u): u is string => Boolean(u));
+    ].filter((u): u is string => Boolean(u) && !NON_PHOTOGRAPH_URL_RE.test(u));
     if (!name || urls.length === 0) continue;
     const key = name.toLowerCase();
     const existing = byName.get(key);

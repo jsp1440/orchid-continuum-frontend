@@ -44,6 +44,8 @@ function scientificNameOf(record: Record<string, unknown>): string | undefined {
 function cleanUrl(value: unknown, record: Record<string, unknown>): string | undefined {
   const text = asText(value);
   if (!text || !/^https?:\/\//i.test(text)) return undefined;
+  // Care-condition icons (orchidspecies.com/orphotdir/*) are not photographs.
+  if (/\/(?:or)?photdir\//i.test(text)) return undefined;
 
   const haystack = [
     text,
