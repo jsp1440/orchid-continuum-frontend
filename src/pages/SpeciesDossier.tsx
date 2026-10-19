@@ -16,11 +16,11 @@ import {
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import {
-  fetchSpeciesById,
   fetchMycorrhizal,
   type SpeciesDossierData,
   type MycorrhizalPartner,
 } from '@/lib/ocBackend';
+import { fetchSpeciesPublicRecord } from '@/lib/speciesPublicRecord';
 import {
   fetchSpeciesDossier,
   pageSubject,
@@ -116,12 +116,52 @@ const SpeciesDossier: React.FC = () => {
   const [federation, setFederation] = useState<FederationResolveResult | null>(null);
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
+  const [candidateBusyId, setCandidateBusyId] = useState<string | null>(null);
+
+  // A person resolving a federation ambiguity: re-run the same governed
+  // resolution chain, but with the candidate's canonical taxon id as the route
+  // id. The withheld-state contract is unchanged — a dossier is only shown
+  // when its identity still matches this page's subject name.
+  const selectDossierCandidate = async (candidateTaxonId: string, subjectName: string) => {
+    if (candidateBusyId) return;
+    setCandidateBusyId(candidateTaxonId);
+    setDossierError(false);
+    try {
+      const resolution = await resolveDossierForSubject(
+        candidateTaxonId,
+        subjectName,
+        { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
+      );
+      if (resolution.state === 'resolved') {
+        setDossier(resolution.dossier);
+        setDossierAmbiguity(null);
+        setFederationLoading(true);
+        resolveFederatedSpecies(
+          { taxonId: resolution.dossier.identity?.taxon_id || candidateTaxonId },
+        )
+          .then((result) => setFederation(result))
+          .catch(() => setFederationError(true))
+          .finally(() => setFederationLoading(false));
+      } else if (resolution.state === 'ambiguous') {
+        setDossierAmbiguity(resolution);
+        setDossierError(true);
+      } else {
+        setDossierError(true);
+      }
+    } catch {
+      setDossierError(true);
+    } finally {
+      setCandidateBusyId(null);
+    }
+  };
 
   useEffect(() => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
     setLoading(true);
-    const speciesRequest = fetchSpeciesById(taxonomyId, ctrl.signal).catch(() => null);
+    const speciesRequest = fetchSpeciesPublicRecord(taxonomyId, linkedName, ctrl.signal).catch(
+      () => null,
+    );
     speciesRequest
       .then((d) => setData(d))
       .finally(() => setLoading(false));
@@ -503,7 +543,20 @@ const SpeciesDossier: React.FC = () => {
                         <ul className="mt-2 space-y-1 font-mono text-[10px] tracking-[0.1em] text-[#cfc8b8]/70">
                           {dossierAmbiguity.candidates.map((candidate) => (
                             <li key={candidate.taxon_id}>
-                              {candidate.accepted_name} · canonical taxon {candidate.taxon_id}
+                              <button
+                                type="button"
+                                disabled={candidateBusyId !== null}
+                                onClick={() =>
+                                  selectDossierCandidate(
+                                    String(candidate.taxon_id),
+                                    dossierAmbiguity.subjectName,
+                                  )
+                                }
+                                className="text-left underline decoration-dotted underline-offset-4 transition-colors hover:text-[#f0e9d8] disabled:opacity-50"
+                              >
+                                {candidate.accepted_name} · canonical taxon {candidate.taxon_id}
+                                {candidateBusyId === String(candidate.taxon_id) ? ' — resolving…' : ''}
+                              </button>
                             </li>
                           ))}
                         </ul>

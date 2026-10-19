@@ -40,6 +40,15 @@ vi.mock('@/lib/ocBackend', async () => {
   };
 });
 
+// The page hydrates via fetchSpeciesPublicRecord, which falls back to the
+// species-search index when the missing /api/species/{id} endpoint 404s.
+// Tests delegate it to the fetchSpeciesById mock so both the happy path and
+// the null-record paths keep their existing behavior without extra stubs.
+vi.mock('@/lib/speciesPublicRecord', () => ({
+  fetchSpeciesPublicRecord: (taxonomyId: string, _hintName: string | null, signal?: AbortSignal) =>
+    mocks.fetchSpeciesById(taxonomyId, signal),
+}));
+
 vi.mock('@/lib/speciesDossier', async () => {
   const actual = await vi.importActual<typeof import('@/lib/speciesDossier')>('@/lib/speciesDossier');
   return {
