@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowDown } from 'lucide-react';
-import {
-  fetchDailyGenus,
-  fetchGenusSpecies,
-  genusForToday,
-  type GenusEntry,
-} from '@/lib/genusData';
+import { fetchDailyGenus, genusForToday, type GenusEntry } from '@/lib/genusData';
+import { fetchPublicGenusImages } from '@/lib/publicImageSource';
 
 /**
  * GenusTeaser — a compact "featured specimen" banner shown directly below
@@ -31,9 +27,15 @@ const GenusTeaser: React.FC = () => {
     const ctrl = new AbortController();
     setLoading(true);
     setImage(null);
-    fetchGenusSpecies(entry.genus, ctrl.signal, 5)
-      .then((s) => {
-        if (s[0]?.image) setImage(s[0].image);
+    // fetchGenusSpecies targeted /api/genus/{genus}/photos, which does not
+    // exist on either backend (404 verified) — the specimen photo could never
+    // load and the teaser always fell back to the flat gradient. The public
+    // image resolver uses the live /images/genus/{genus} contract with its own
+    // guarded fallbacks.
+    fetchPublicGenusImages(entry.genus, ctrl.signal, 5)
+      .then(({ images }) => {
+        const url = images[0]?.image_url;
+        if (url) setImage(url);
       })
       .finally(() => setLoading(false));
     return () => ctrl.abort();
