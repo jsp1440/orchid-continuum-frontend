@@ -48,7 +48,7 @@ describe('Atlas occurrences route (#931)', () => {
   });
 
   it('the map fetch calls the /api route and returns its rows', async () => {
-    const fetchMock = vi.fn(async () =>
+    const fetchMock = vi.fn(async (_url: string) =>
       jsonResponse({ results: [{ id: 1, decimal_latitude: 10.01, decimal_longitude: -75.01, scientific_name: 'Phragmipedium kovachii', iucn_code: 'LC' }] }),
     );
     vi.stubGlobal('fetch', fetchMock);
