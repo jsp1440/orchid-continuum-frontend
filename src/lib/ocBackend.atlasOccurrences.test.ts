@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ATLAS_OCCURRENCES_PROBE_URL, ATLAS_OCCURRENCES_URL as CONFIG_URL } from './backendConfig';
 import { atlasLayerToEducationalRows } from './appliedAiDataScience';
 import { adaptOccurrenceResult, ATLAS_OCCURRENCES_PATH } from './atlas';
-import { hasThreatAssessment, redactLocality } from './atlasLocalitySafety';
+import { describePayloadShape, hasThreatAssessment } from './atlasLocalitySafety';
 import {
   ATLAS_OCCURRENCES_URL,
   fetchAtlasOccurrences,
@@ -181,7 +181,7 @@ describe('checker round 10 (#931)', () => {
   });
 
   it('F1: diagnostics samples withhold coordinates and place text, keep the rest', () => {
-    const sample = redactLocality({
+    const sample = describePayloadShape({
       count: 2,
       results: [{ id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, locality: 'secret valley',
         geometry: { coordinates: [-77.6543, 12.3456] }, scientific_name: 'Masdevallia veitchiana' }],
@@ -194,7 +194,7 @@ describe('checker round 10 (#931)', () => {
 
   it('F1: the diagnostics page redacts every printed sample', () => {
     const page = readFileSync(resolve(process.cwd(), 'src/pages/DailyGenusDiagnostics.tsx'), 'utf8');
-    expect(page).toMatch(/function samplePayload\(payload: unknown\): unknown \{\s*\/\/[^\n]*\n\s*return redactLocality\(/);
+    expect(page).toMatch(/function samplePayload\(payload: unknown\): unknown \{(\s*\/\/[^\n]*\n)+\s*return describePayloadShape\(/);
   });
 });
 
@@ -236,7 +236,7 @@ describe('checker round 11 (#931)', () => {
   const LEAKS = /Village X|waterfall|12\.34|77\.65|20 44N|POINT\(|inner|loc-1/;
 
   it('F1: diagnostics samples withhold every Darwin Core / iNaturalist place or coordinate key', () => {
-    const text = JSON.stringify(redactLocality({ count: 1, results: [LEAKY_ROW] }));
+    const text = JSON.stringify(describePayloadShape({ count: 1, results: [LEAKY_ROW] }));
     expect(text).not.toMatch(LEAKS);
     expect(text).toContain('Masdevallia veitchiana');
     expect(text).toContain('"country":"PE"');
@@ -268,5 +268,53 @@ describe('checker round 11 (#931)', () => {
     expect(layer?.features).toHaveLength(1);
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([null, { lat: 1.01, lng: 2.02 }])));
     await expect(fetchAtlasOccurrences(2)).resolves.toHaveLength(1);
+  });
+});
+
+
+describe('checker round 12 (#931): diagnostics print structure, not values', () => {
+  it.each([
+    ['12.3456°N, 76.5432°W'],
+    ['N12.3456 W76.5432'],
+    ['Lat: 12.3456 Lon: -76.5432'],
+    ['12.34/-76.54'],
+    ['-12,3456; -76,5432'],
+    ["76°32'35\"W"],
+    ['12.345678'],
+    ['lat 12.3456'],
+    ['2 km N of Doi Inthanon summit'],
+    ['near Kinabalu park HQ'],
+    ['{"lat":12.3}'],
+    ['Lake X'],
+  ])('a value under an ordinary key is never printed: %s', (value) => {
+    for (const key of ['notes', 'description', 'fieldNotes', 'dynamicProperties', 'waterBody', 'name', 'state']) {
+      const text = JSON.stringify(describePayloadShape({ results: [{ [key]: value }] }));
+      expect(text).not.toContain(value.slice(0, 6));
+      expect(text).toContain('<string>');
+    }
+  });
+
+  it('a nested numeric pair under an ordinary key is replaced by types', () => {
+    expect(describePayloadShape({ c: { d: [12.3456, -76.5432] } })).toEqual({ c: { d: ['<number>', '<number>'] } });
+  });
+
+  it('allowlisted descriptive values, counts and structure remain', () => {
+    const shape = describePayloadShape({
+      count: 120,
+      results: [1, 2, 3, 4, 5].map(() => ({ scientific_name: 'Masdevallia veitchiana', country: 'PE', year: 2019, notes: 'x' })),
+    }) as { count: number; results: unknown[] };
+    expect(shape.count).toBe(120);
+    expect(shape.results).toHaveLength(4);
+    expect(shape.results[0]).toEqual({ scientific_name: 'Masdevallia veitchiana', country: 'PE', year: 2019, notes: '<string>' });
+    expect(shape.results[3]).toBe('<2 more>');
+  });
+
+  it('an allowlisted key still cannot carry digits-bearing text', () => {
+    expect(describePayloadShape({ species: 'Masdevallia 12.3456, -76.5432' })).toEqual({ species: '<string>' });
+  });
+
+  it('the lab layer keeps coarse region fields and withholds elevation by design', () => {
+    const layer = occurrencePayloadToAtlasLayer([{ lat: 1.01, lng: 2.02, scientific_name: 'Vanilla planifolia', region: 'Andes', elevation_m: 2400 }]);
+    expect(layer?.features[0].properties).toEqual({ scientific_name: 'Vanilla planifolia', region: 'Andes' });
   });
 });

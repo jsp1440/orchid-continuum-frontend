@@ -181,34 +181,39 @@ export function hasThreatAssessment(iucnCode?: string | null, conservationStatus
 }
 
 /**
- * Key fragments that mark coordinates, geometry or place text in occurrence-like
- * payloads (Darwin Core, iNaturalist, GBIF, GeoJSON, WKT). Matched anywhere in a
- * key, case-insensitively, so it over-withholds rather than leaks.
+ * Keys whose values a diagnostics surface may print verbatim: names, ranks,
+ * counts and status fields. Every other value is replaced by its type, because
+ * no blocklist of key names or coordinate formats can be complete (coordinates
+ * and place text also arrive as prose, JSON strings and nested number pairs).
  */
-export const LOCALITY_KEY_PATTERN =
-  /lat|lon|lng|coord|geo|wkt|place|locat|local|verbatim|private|obscur|position|municip|county|island|habitat|remark|elev|altitud|depth|footprint|point|address|site|^x$|^y$/i;
-
-/** A coordinate pair written as text ("12.3456, -77.6543" or "12 20 44N 76 32 35W"). */
-const COORDINATE_TEXT =
-  /-?\d{1,3}\.\d{2,}\s*[,; ]\s*-?\d{1,3}\.\d{2,}|\d{1,3}[°\s]\d{1,2}['\s]\d{1,2}(\.\d+)?["\s]?\s*[NS]\b/i;
-
-export const LOCALITY_WITHHELD = '[withheld: locality]';
+const DIAGNOSTIC_VALUE_KEYS = new Set([
+  'scientific_name', 'scientificName', 'canonical_name', 'canonicalName', 'species', 'genus', 'family',
+  'subfamily', 'tribe', 'rank', 'taxon_rank', 'taxonRank', 'common_name',
+  'count', 'total', 'limit', 'offset', 'page', 'species_count', 'status', 'ok', 'source',
+  'license', 'rights', 'basis_of_record', 'basisOfRecord', 'year', 'month', 'country', 'country_code',
+  'iucn_code', 'conservation_status', 'is_demo', 'error', 'message', 'detail',
+]);
 
 /**
- * Deep copy of a payload for surfaces that print raw responses (diagnostics):
- * every value under a coordinate/place-like key, and any string that reads as a
- * coordinate pair, is replaced by a marker. Counts, names and key structure stay.
+ * A printable sample of an API payload for diagnostics: the full key structure
+ * and array lengths, values only for DIAGNOSTIC_VALUE_KEYS (and only when they
+ * are short scalars), and `<type>` placeholders for everything else.
  */
-export function redactLocality(value: unknown, depth = 0): unknown {
-  if (depth > 8) return '[depth limit]';
-  if (typeof value === 'string') return COORDINATE_TEXT.test(value) ? LOCALITY_WITHHELD : value;
-  if (Array.isArray(value)) return value.map((item) => redactLocality(item, depth + 1));
+export function describePayloadShape(value: unknown, key?: string, depth = 0): unknown {
+  if (depth > 8) return '<depth limit>';
+  if (Array.isArray(value)) {
+    return value.length === 0 ? [] : [...value.slice(0, 3).map((item) => describePayloadShape(item, key, depth + 1)),
+      ...(value.length > 3 ? [`<${value.length - 3} more>`] : [])];
+  }
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
-    for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = LOCALITY_KEY_PATTERN.test(key) ? LOCALITY_WITHHELD : redactLocality(inner, depth + 1);
+    for (const [k, inner] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = describePayloadShape(inner, k, depth + 1);
     }
     return out;
   }
-  return value;
+  if (value === null || value === undefined) return value ?? null;
+  const shown = key !== undefined && DIAGNOSTIC_VALUE_KEYS.has(key)
+    && (typeof value !== 'string' || (value.length <= 80 && !/\d{2}/.test(value)));
+  return shown ? value : `<${typeof value}>`;
 }

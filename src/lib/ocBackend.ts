@@ -108,11 +108,15 @@ function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
   });
 }
 
-/** Descriptive fields an Atlas feature may carry (what the lab and maps read). */
+/**
+ * Descriptive fields an Atlas feature may carry (what the lab and maps read).
+ * Elevation is deliberately absent: with a country or region it narrows a
+ * threatened taxon's site, and the Atlas withholds it on public surfaces.
+ */
 const SAFE_FEATURE_PROPERTIES = [
   'scientific_name', 'scientificName', 'species', 'canonical_name', 'name', 'genus', 'family',
   'taxon_id', 'taxonId', 'taxonomy_id', 'taxonomyId',
-  'country', 'country_code', 'countryCode', 'state_province', 'stateProvince',
+  'country', 'country_code', 'countryCode', 'state_province', 'stateProvince', 'state', 'province', 'region',
   'year', 'event_year', 'eventYear', 'month', 'event_month', 'eventMonth',
   'source', 'provider', 'dataset', 'source_name', 'license', 'rights',
   'basis_of_record', 'basisOfRecord', 'iucn_code', 'conservation_status',
