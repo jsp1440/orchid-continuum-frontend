@@ -197,3 +197,76 @@ describe('checker round 10 (#931)', () => {
     expect(page).toMatch(/function samplePayload\(payload: unknown\): unknown \{\s*\/\/[^\n]*\n\s*return redactLocality\(/);
   });
 });
+
+describe('checker round 11 (#931)', () => {
+  const LEAKY_ROW = {
+    id: 9,
+    decimal_latitude: 12.3456,
+    decimal_longitude: -77.6543,
+    scientific_name: 'Masdevallia veitchiana',
+    country: 'PE',
+    verbatimCoordinates: '12 20 44N 76 32 35W',
+    verbatimLatitude: '12.3456',
+    verbatimLongitude: '-77.6543',
+    verbatim_coordinates: 'x',
+    private_latitude: 12.34567,
+    private_longitude: -77.65432,
+    obscured_latitude: 12.3,
+    latlng: '12.3456,-77.6543',
+    lat_lng: 'x',
+    latLong: 'x',
+    coords: [12.3456, -77.6543],
+    position: { a: 1 },
+    the_geom: 'POINT(-77.6543 12.3456)',
+    geom_wkt: 'x',
+    wkt: 'x',
+    geojson: { type: 'Point', note: 'inner' },
+    place_guess: 'Near Village X',
+    placeGuess: 'Near Village X',
+    locationRemarks: 'by the waterfall',
+    location_text: 'Village X',
+    locationID: 'loc-1',
+    municipality: 'Village X',
+    county: 'Village X',
+    island: 'Village X',
+    habitat: 'cloud forest above Village X',
+    occurrenceRemarks: 'Village X',
+    notes: 'seen at 12.3456, -77.6543',
+  };
+  const LEAKS = /Village X|waterfall|12\.34|77\.65|20 44N|POINT\(|inner|loc-1/;
+
+  it('F1: diagnostics samples withhold every Darwin Core / iNaturalist place or coordinate key', () => {
+    const text = JSON.stringify(redactLocality({ count: 1, results: [LEAKY_ROW] }));
+    expect(text).not.toMatch(LEAKS);
+    expect(text).toContain('Masdevallia veitchiana');
+    expect(text).toContain('"country":"PE"');
+  });
+
+  it('F1: Atlas feature properties are an allowlist, so none of those keys travel', () => {
+    const layer = occurrencePayloadToAtlasLayer([LEAKY_ROW]);
+    const [f] = layer!.features;
+    expect(JSON.stringify(f.properties)).not.toMatch(LEAKS);
+    expect(Object.keys(f.properties ?? {}).sort()).toEqual(['country', 'scientific_name']);
+  });
+
+  it.each([
+    ['Data deficient (DD)', false],
+    ['IUCN: NE', false],
+    ['Not yet assessed', false],
+    ['CITES Appendix II', false],
+    ['some text', false],
+    ['Endangered (EN)', true],
+    ['IUCN Red List: Vulnerable', true],
+    ['Least Concern', true],
+    ['CR', true],
+  ])('F3: %s counts as a threat assessment: %s', (status, expected) => {
+    expect(hasThreatAssessment(undefined, status)).toBe(expected);
+  });
+
+  it('F2: null and non-object rows are skipped, not thrown on', async () => {
+    const layer = occurrencePayloadToAtlasLayer({ data: [null, 1, 'a', [1, 2], { lat: 1.01, lng: 2.02, scientific_name: 'Vanilla planifolia' }] });
+    expect(layer?.features).toHaveLength(1);
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([null, { lat: 1.01, lng: 2.02 }])));
+    await expect(fetchAtlasOccurrences(2)).resolves.toHaveLength(1);
+  });
+});

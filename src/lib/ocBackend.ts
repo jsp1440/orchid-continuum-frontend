@@ -1,5 +1,5 @@
 import type { AtlasLayer } from './atlas';
-import { hasThreatAssessment, redactLocality, resolveAtlasLocation } from './atlasLocalitySafety';
+import { hasThreatAssessment, resolveAtlasLocation } from './atlasLocalitySafety';
 
 const env = import.meta.env as Record<string, string | undefined>;
 
@@ -69,6 +69,7 @@ function geometryLngLat(r: Record<string, unknown>): [number | undefined, number
 
 /** One backend row as a locality-safe public point, or null when it has no coordinates. */
 function normalizeRow(r: BackendOccurrence, i: number): OccurrencePoint | null {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
   const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
   const [gLng, gLat] = geometryLngLat(r as Record<string, unknown>);
   const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
@@ -107,6 +108,17 @@ function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
   });
 }
 
+/** Descriptive fields an Atlas feature may carry (what the lab and maps read). */
+const SAFE_FEATURE_PROPERTIES = [
+  'scientific_name', 'scientificName', 'species', 'canonical_name', 'name', 'genus', 'family',
+  'taxon_id', 'taxonId', 'taxonomy_id', 'taxonomyId',
+  'country', 'country_code', 'countryCode', 'state_province', 'stateProvince',
+  'year', 'event_year', 'eventYear', 'month', 'event_month', 'eventMonth',
+  'source', 'provider', 'dataset', 'source_name', 'license', 'rights',
+  'basis_of_record', 'basisOfRecord', 'iucn_code', 'conservation_status',
+];
+const COORDINATE_LIKE = /-?\d{1,3}\.\d{2,}\s*[,; ]\s*-?\d{1,3}\.\d{2,}/;
+
 const ROW_CONTAINER_KEYS = ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points'];
 
 /**
@@ -125,10 +137,15 @@ export function occurrencePayloadToAtlasLayer(payload: unknown): AtlasLayer | nu
     const point = normalizeRow(row, i);
     if (!point) return [];
     const nested = row.properties && typeof row.properties === 'object' ? row.properties : {};
-    const { properties: _drop, ...flat } = row as Record<string, unknown>;
-    const properties = redactLocality({ ...nested, ...flat }) as Record<string, unknown>;
-    for (const key of Object.keys(properties)) {
-      if (properties[key] === '[withheld: locality]') delete properties[key];
+    const merged: Record<string, unknown> = { ...nested, ...(row as Record<string, unknown>) };
+    // Allowlist, not a blocklist: only these descriptive fields travel with the
+    // feature; coordinates live only in the projected lat/lng above.
+    const properties: Record<string, unknown> = {};
+    for (const key of SAFE_FEATURE_PROPERTIES) {
+      const value = merged[key];
+      if (value !== undefined && value !== null && (typeof value !== 'string' || !COORDINATE_LIKE.test(value))) {
+        properties[key] = value;
+      }
     }
     return [{ id: point.id, kind: 'occurrence' as const, lat: point.lat, lng: point.lng, properties }];
   });

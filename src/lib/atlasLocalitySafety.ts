@@ -157,39 +157,56 @@ export function atlasSensitivityResolution(
 }
 
 /**
- * Conservation values that are not an assessment of threat. "Not Evaluated",
- * "Data Deficient" and placeholders say nothing about collection risk, so a point
- * carrying only these is treated as unresolved (precaution cell), never as
- * "assessed, not threatened" with precise coordinates.
+ * Only a recognised IUCN assessment counts. Anything else (none, NE, DD, "not yet
+ * assessed", a CITES appendix, free text) leaves the point unresolved, so it gets
+ * the precaution cell rather than precise coordinates: the rule fails closed.
  */
-const NON_ASSESSMENT_VALUES = new Set([
-  'ne', 'dd', 'not evaluated', 'not assessed', 'data deficient', 'unknown', 'unassessed',
-  'n/a', 'na', 'none', 'null', '-', '?',
-]);
+const IUCN_CODES = /\b(LC|NT|VU|EN|CR|EX|EW|LR\/(lc|nt|cd)|CR\(PE\)|CR\(PEW\))\b/;
+const IUCN_CATEGORY_NAMES = [
+  'least concern', 'near threatened', 'vulnerable', 'endangered', 'critically endangered',
+  'extinct in the wild', 'extinct', 'lower risk', 'conservation dependent',
+];
+const NOT_AN_ASSESSMENT = /data[\s_-]*deficient|not[\s_-]*(yet[\s_-]*)?(evaluated|assessed)|\b(NE|DD)\b/i;
 
-export function hasThreatAssessment(iucnCode?: string | null, conservationStatus?: string | null): boolean {
-  return [iucnCode, conservationStatus].some((value) => {
-    const v = (value ?? '').trim().toLowerCase();
-    return v !== '' && !NON_ASSESSMENT_VALUES.has(v);
-  });
+function isRecognisedAssessment(value?: string | null): boolean {
+  const text = (value ?? '').trim();
+  if (!text || NOT_AN_ASSESSMENT.test(text)) return false;
+  if (IUCN_CODES.test(text)) return true;
+  const lower = text.toLowerCase();
+  return IUCN_CATEGORY_NAMES.some((name) => lower.includes(name));
 }
 
-/** Keys that carry coordinates or place text in occurrence-shaped payloads. */
-export const LOCALITY_KEY_PATTERN =
-  /^(lat|lng|lon|long|latitude|longitude|decimal_?latitude|decimal_?longitude|decimallatitude|decimallongitude|coordinates?|geometry|geom|point|location|locality|verbatim_?locality|verbatimlocality|georeference.*|footprint.*|x|y)$/i;
+export function hasThreatAssessment(iucnCode?: string | null, conservationStatus?: string | null): boolean {
+  return isRecognisedAssessment(iucnCode) || isRecognisedAssessment(conservationStatus);
+}
 
 /**
- * Deep copy of a payload with every coordinate/locality field replaced by a
- * marker, for surfaces that print raw responses (diagnostics). Counts, names and
- * key structure stay visible.
+ * Key fragments that mark coordinates, geometry or place text in occurrence-like
+ * payloads (Darwin Core, iNaturalist, GBIF, GeoJSON, WKT). Matched anywhere in a
+ * key, case-insensitively, so it over-withholds rather than leaks.
+ */
+export const LOCALITY_KEY_PATTERN =
+  /lat|lon|lng|coord|geo|wkt|place|locat|local|verbatim|private|obscur|position|municip|county|island|habitat|remark|elev|altitud|depth|footprint|point|address|site|^x$|^y$/i;
+
+/** A coordinate pair written as text ("12.3456, -77.6543" or "12 20 44N 76 32 35W"). */
+const COORDINATE_TEXT =
+  /-?\d{1,3}\.\d{2,}\s*[,; ]\s*-?\d{1,3}\.\d{2,}|\d{1,3}[°\s]\d{1,2}['\s]\d{1,2}(\.\d+)?["\s]?\s*[NS]\b/i;
+
+export const LOCALITY_WITHHELD = '[withheld: locality]';
+
+/**
+ * Deep copy of a payload for surfaces that print raw responses (diagnostics):
+ * every value under a coordinate/place-like key, and any string that reads as a
+ * coordinate pair, is replaced by a marker. Counts, names and key structure stay.
  */
 export function redactLocality(value: unknown, depth = 0): unknown {
   if (depth > 8) return '[depth limit]';
+  if (typeof value === 'string') return COORDINATE_TEXT.test(value) ? LOCALITY_WITHHELD : value;
   if (Array.isArray(value)) return value.map((item) => redactLocality(item, depth + 1));
   if (value && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
-      out[key] = LOCALITY_KEY_PATTERN.test(key) ? '[withheld: locality]' : redactLocality(inner, depth + 1);
+      out[key] = LOCALITY_KEY_PATTERN.test(key) ? LOCALITY_WITHHELD : redactLocality(inner, depth + 1);
     }
     return out;
   }
