@@ -1637,9 +1637,9 @@ export async function fetchGenusImages(
  */
 // Matches library asset URLs that are care-condition icons rather than
 // photographs (e.g. orchidspecies.com/orphotdir/partialshade.jpg,
-// deepshade.jpg, tempcool.jpg). Kept narrow on purpose — this only rejects
-// the icon directory, not the host's real photo pages.
-const NON_PHOTOGRAPH_URL_RE = /\/(?:or)?photdir\//i;
+// deepshade.jpg, tempcool.jpg). The directory also contains real orchid
+// photographs: reject only these known icon filenames, preserving photographs.
+const NON_PHOTOGRAPH_URL_RE = /\/(?:or)?photdir\/(?:partialshade|deepshade|tempcool)\.jpg(?=[?#\s]|$)/i;
 
 async function fetchGenusImagesOnce(
   g: string,
