@@ -1093,8 +1093,12 @@ const calyxConversationalReasoningGate: CompletionNode = {
     { kind: 'test', ref: 'src/lib/calyxService.test.ts' },
     { kind: 'test', ref: 'src/lib/calyxService.questionContext.test.ts' },
     { kind: 'test', ref: 'src/lib/calyxConversation.headerCollision.test.ts' },
+    { kind: 'file', ref: 'src/lib/calyxPdfText.ts', note: 'Bounded local PDF text extraction; this is not server-side document ingestion.' },
+    { kind: 'test', ref: 'src/lib/calyxPdfText.test.ts' },
+    { kind: 'test', ref: 'src/pages/CalyxWorkspace.test.tsx', note: 'Covers local PDF text selection and adding the selected excerpt to the next CALYX message.' },
+    { kind: 'test', ref: 'e2e/calyx-scientific-demonstration.spec.ts', note: 'Chromium browser pass uses a local synthetic reference backend; it does not establish live backend or authenticated acceptance.' },
   ],
-  nextAction: 'Confirm speech input/output and document-upload workspace paths against a live backend, then run a browser pass (3 of 6 gate categories evaluated, ~60% weight coverage).',
+  nextAction: 'Live acceptance remains unverified: restore read-only backend contract access and a reachable deployment; define/deploy the canonical authenticated project-scoped document ingestion/retrieval contract; then verify speech input/output, upload/retrieval, and authenticated browser turns. Local PDF selection and synthetic-backend browser evidence do not satisfy the live gate.',
   lastUpdated: CENSUS_DATE,
   children: [],
 };
