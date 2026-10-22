@@ -95,6 +95,10 @@ export function isCalyxTextWorkspaceFile(file: Pick<File, "name" | "type">) {
   return TEXT_WORKSPACE_MIME_TYPES.has(file.type) || /\.(txt|md|csv|tsv|json)$/i.test(file.name);
 }
 
+export function isCalyxPdfWorkspaceFile(file: Pick<File, "name" | "type">) {
+  return file.type === "application/pdf" || /\.pdf$/i.test(file.name);
+}
+
 export function buildCalyxDocumentContextPrompt(fileName: string, text: string) {
   const trimmed = text.trim();
   if (!trimmed) return "";

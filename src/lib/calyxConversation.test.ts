@@ -8,6 +8,7 @@ import {
   buildStructuredWorkspacePreview,
   DEFAULT_PROJECT_ID,
   formatUploadedFileSize,
+  isCalyxPdfWorkspaceFile,
   isCalyxTextWorkspaceFile,
   normalizeProjectId,
   parseCalyxRouteContext,
@@ -62,6 +63,12 @@ describe("calyxConversation helpers", () => {
   it("recognizes text-friendly workspace attachments", () => {
     expect(isCalyxTextWorkspaceFile({ name: "paper.md", type: "" } as File)).toBe(true);
     expect(isCalyxTextWorkspaceFile({ name: "figure.png", type: "image/png" } as File)).toBe(false);
+  });
+
+  it("recognizes PDFs by their media type or file extension", () => {
+    expect(isCalyxPdfWorkspaceFile({ name: "paper.PDF", type: "" } as File)).toBe(true);
+    expect(isCalyxPdfWorkspaceFile({ name: "paper.bin", type: "application/pdf" } as File)).toBe(true);
+    expect(isCalyxPdfWorkspaceFile({ name: "notes.txt", type: "text/plain" } as File)).toBe(false);
   });
 
   it("builds a bounded document context prompt", () => {
