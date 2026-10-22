@@ -214,4 +214,3 @@ describe('GenusScientificProfile unavailable state', () => {
     expect(container.textContent).not.toContain('Not yet linked');
   });
 });
-

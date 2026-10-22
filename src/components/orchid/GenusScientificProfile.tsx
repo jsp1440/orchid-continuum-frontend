@@ -483,4 +483,3 @@ const GenusScientificProfile: React.FC<{ genus: string }> = ({ genus }) => {
 };
 
 export default GenusScientificProfile;
-
