@@ -214,7 +214,7 @@ const GenusScientificProfile: React.FC<{ genus: string }> = ({ genus }) => {
   const documentedDomains = domains.filter(([, d]) => d.state === 'known').length;
   const elevation = elevationText(profile);
   const synonymNote =
-    profile.requestedGenus !== profile.acceptedGenus
+    profile.requestedGenus.toLowerCase() !== profile.acceptedGenus.toLowerCase()
       ? `Requested as ${profile.requestedGenus} — accepted name ${profile.acceptedGenus}`
       : null;
 
@@ -483,3 +483,4 @@ const GenusScientificProfile: React.FC<{ genus: string }> = ({ genus }) => {
 };
 
 export default GenusScientificProfile;
+

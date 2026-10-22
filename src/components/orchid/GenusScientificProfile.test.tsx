@@ -122,6 +122,22 @@ describe('GenusScientificProfile exhibit', () => {
     expect(container.textContent).toContain('Requested as Broughtonia — accepted name Cattleya');
   });
 
+  it.each(['CATTLEYA', 'cattleya'])(
+    'does not describe a capitalization-only request (%s) as a synonym',
+    async (requestedGenus) => {
+      mocks.fetchFeaturedGenusProfile.mockResolvedValue({
+        status: 'ok',
+        profile: profileFixture({ requestedGenus }),
+      });
+      await render('Cattleya');
+
+      expect(container.querySelector('[data-testid="genus-scientific-profile"]')).not.toBeNull();
+      expect(container.textContent).toContain('Scientific Profile');
+      expect(container.textContent).toContain('Cattleya');
+      expect(container.textContent).not.toContain('Requested as');
+    },
+  );
+
   it('keeps research details collapsed until the toggle is pressed', async () => {
     mocks.fetchFeaturedGenusProfile.mockResolvedValue({ status: 'ok', profile: profileFixture() });
     await render('Cattleya');
@@ -198,3 +214,4 @@ describe('GenusScientificProfile unavailable state', () => {
     expect(container.textContent).not.toContain('Not yet linked');
   });
 });
+
