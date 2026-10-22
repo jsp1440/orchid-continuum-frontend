@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -117,6 +117,7 @@ const SpeciesDossier: React.FC = () => {
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
   const [candidateBusyId, setCandidateBusyId] = useState<string | null>(null);
+  const candidateRequest = useRef<AbortController | null>(null);
 
   // A person resolving a federation ambiguity: re-run the same governed
   // resolution chain, but with the candidate's canonical taxon id as the route
@@ -124,6 +125,9 @@ const SpeciesDossier: React.FC = () => {
   // when its identity still matches this page's subject name.
   const selectDossierCandidate = async (candidateTaxonId: string, subjectName: string) => {
     if (candidateBusyId) return;
+    const ctrl = new AbortController();
+    candidateRequest.current?.abort();
+    candidateRequest.current = ctrl;
     setCandidateBusyId(candidateTaxonId);
     setDossierError(false);
     try {
@@ -131,17 +135,24 @@ const SpeciesDossier: React.FC = () => {
         candidateTaxonId,
         subjectName,
         { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
+        ctrl.signal,
       );
+      if (ctrl.signal.aborted) return;
       if (resolution.state === 'resolved') {
         setDossier(resolution.dossier);
         setDossierAmbiguity(null);
         setFederationLoading(true);
-        resolveFederatedSpecies(
-          { taxonId: resolution.dossier.identity?.taxon_id || candidateTaxonId },
-        )
-          .then((result) => setFederation(result))
-          .catch(() => setFederationError(true))
-          .finally(() => setFederationLoading(false));
+        try {
+          const result = await resolveFederatedSpecies(
+            { taxonId: resolution.dossier.identity?.taxon_id || candidateTaxonId },
+            ctrl.signal,
+          );
+          if (!ctrl.signal.aborted) setFederation(result);
+        } catch {
+          if (!ctrl.signal.aborted) setFederationError(true);
+        } finally {
+          if (!ctrl.signal.aborted) setFederationLoading(false);
+        }
       } else if (resolution.state === 'ambiguous') {
         setDossierAmbiguity(resolution);
         setDossierError(true);
@@ -149,13 +160,19 @@ const SpeciesDossier: React.FC = () => {
         setDossierError(true);
       }
     } catch {
-      setDossierError(true);
+      if (!ctrl.signal.aborted) setDossierError(true);
     } finally {
-      setCandidateBusyId(null);
+      if (!ctrl.signal.aborted) {
+        candidateRequest.current = null;
+        setCandidateBusyId(null);
+      }
     }
   };
 
   useEffect(() => {
+    candidateRequest.current?.abort();
+    candidateRequest.current = null;
+    setCandidateBusyId(null);
     if (!taxonomyId) return;
     const ctrl = new AbortController();
     setLoading(true);
@@ -232,7 +249,11 @@ const SpeciesDossier: React.FC = () => {
         }
       });
 
-    return () => ctrl.abort();
+    return () => {
+      ctrl.abort();
+      candidateRequest.current?.abort();
+      candidateRequest.current = null;
+    };
   }, [taxonomyId, linkedName]);
 
   // On a subject conflict the id-keyed public record may be another species,
