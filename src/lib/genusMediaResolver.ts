@@ -125,10 +125,10 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
         ? payload.summary
         : { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
     };
-    if (result.status === 'ok' && publicGenusMediaItems(result.items).length === 0) {
+    if ((result.status === 'ok' || result.status === 'no_approved_media') && publicGenusMediaItems(result.items).length === 0) {
       const photographs = await exhibitPhotographs(requested, signal);
       if (photographs.length) return {
-        ...result, requested_genus: requested, accepted_genus: requested, items: photographs,
+        ...result, status: 'ok', requested_genus: requested, accepted_genus: requested, items: photographs,
         summary: { eligible_count: photographs.length, returned_count: photographs.length, exclusion_counts: {} },
       };
     }
