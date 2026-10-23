@@ -34,10 +34,14 @@ const GenusTeaser: React.FC = () => {
     // guarded fallbacks.
     fetchPublicGenusImages(entry.genus, ctrl.signal, 5)
       .then(({ images }) => {
+        // Cache and response-body fallbacks may finish after this effect ends.
+        if (ctrl.signal.aborted) return;
         const url = images[0]?.image_url;
         if (url) setImage(url);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
     return () => ctrl.abort();
   }, [entry.genus]);
 
