@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ATLAS_OCCURRENCES_PROBE_URL, ATLAS_OCCURRENCES_URL as CONFIG_URL } from './backendConfig';
 import { atlasLayerToEducationalRows } from './appliedAiDataScience';
 import { adaptOccurrenceResult, ATLAS_OCCURRENCES_PATH } from './atlas';
-import { describePayloadShape, hasThreatAssessment } from './atlasLocalitySafety';
+import { describePayloadShape, hasThreatAssessment, resolveAtlasLocation } from './atlasLocalitySafety';
 import {
   ATLAS_OCCURRENCES_URL,
   fetchAtlasOccurrences,
@@ -316,5 +316,80 @@ describe('checker round 12 (#931): diagnostics print structure, not values', () 
   it('the lab layer keeps coarse region fields and withholds elevation by design', () => {
     const layer = occurrencePayloadToAtlasLayer([{ lat: 1.01, lng: 2.02, scientific_name: 'Vanilla planifolia', region: 'Andes', elevation_m: 2400 }]);
     expect(layer?.features[0].properties).toEqual({ scientific_name: 'Vanilla planifolia', region: 'Andes' });
+  });
+});
+
+describe('owner review 5624340140 (#934): one assessment reading for recognition and tier', () => {
+  const EXACT = { lat: 12.3456, lng: -77.6543 };
+  const rowWith = (row: Record<string, unknown>) => [{ id: 1, decimal_latitude: EXACT.lat, decimal_longitude: EXACT.lng, ...row }];
+
+  it.each([
+    [{ conservation_status: 'CR' }, 1],
+    [{ conservation_status: 'EN' }, 0.5],
+    [{ conservation_status: 'VU' }, 0.25],
+    [{ iucn_code: 'IUCN: CR' }, 1],
+    [{ iucn_code: 'cr' }, 1],
+    [{ conservation_status: 'Least Concern', iucn_code: 'EN' }, 0.5],
+  ])('%j is recognised and generalised to its tier cell', async (row, cellDeg) => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(rowWith(row))));
+    const [p] = await fetchAtlasOccurrences(1);
+    const centre = (v: number) => (Math.floor(v / cellDeg) + 0.5) * cellDeg;
+    expect(p.lat).toBeCloseTo(centre(EXACT.lat), 6);
+    expect(p.lng).toBeCloseTo(centre(EXACT.lng), 6);
+    expect(p.lat).not.toBeCloseTo(EXACT.lat, 3);
+  });
+
+  it('the original genus fetch consumer generalises conservation_status "CR"', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(rowWith({ conservation_status: 'CR' }))));
+    const [p] = await fetchGenusOccurrences('Masdevallia', 1);
+    expect(p.lat).toBeCloseTo(12.5, 6);
+    expect(p.lng).toBeCloseTo(-77.5, 6);
+  });
+
+  it('every value recognised as an assessment that names a threatened category yields a tier', () => {
+    for (const value of ['CR', 'EN', 'VU', 'IUCN: CR', 'IUCN EN', 'vu', 'CR(PE)', 'Critically Endangered', 'Endangered', 'Vulnerable']) {
+      expect(hasThreatAssessment(value, null)).toBe(true);
+      expect(hasThreatAssessment(null, value)).toBe(true);
+      expect(resolveAtlasLocation({ lat: EXACT.lat, lng: EXACT.lng, iucnCode: value, assessmentResolved: true }).policy.generalised).toBe(true);
+      expect(resolveAtlasLocation({ lat: EXACT.lat, lng: EXACT.lng, conservationStatus: value, assessmentResolved: true }).policy.generalised).toBe(true);
+    }
+  });
+
+  it('prose that merely contains a lowercase non-threat code is not an assessment', () => {
+    expect(hasThreatAssessment(null, 'ex situ collection')).toBe(false);
+    expect(hasThreatAssessment(null, 'Least Concern')).toBe(true);
+  });
+});
+
+describe('owner review 5624340140 (#934): allowed properties carry only public primitives', () => {
+  const PRIVATE = { private_latitude: 12.3456, private_longitude: -77.6543, locality: 'synthetic-private-site-marker' };
+
+  it('an allowed key holding an object does not travel', () => {
+    const layer = occurrencePayloadToAtlasLayer([
+      { id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, iucn_code: 'CR', source: { name: 'x', ...PRIVATE }, genus: 'Masdevallia' },
+    ]);
+    const props = layer!.features[0].properties as Record<string, unknown>;
+    expect(props.source).toBeUndefined();
+    expect(props.genus).toBe('Masdevallia');
+    expect(JSON.stringify(layer)).not.toMatch(/12\.3456|77\.6543|synthetic-private-site-marker/);
+  });
+
+  it('a nested properties.dataset array does not travel', () => {
+    const layer = occurrencePayloadToAtlasLayer([
+      { id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, iucn_code: 'CR', properties: { dataset: [{ coordinates: [-77.6543, 12.3456], ...PRIVATE }] } },
+    ]);
+    const props = layer!.features[0].properties as Record<string, unknown>;
+    expect(props.dataset).toBeUndefined();
+    expect(JSON.stringify(layer)).not.toMatch(/12\.3456|77\.6543|synthetic-private-site-marker/);
+  });
+
+  it('ordinary primitive metadata still travels', () => {
+    const layer = occurrencePayloadToAtlasLayer([
+      { id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, iucn_code: 'LC', year: 2019, dataset: 'GBIF', country: 'Peru', elevation: 2500, locality: 'x' },
+    ]);
+    const props = layer!.features[0].properties as Record<string, unknown>;
+    expect(props).toMatchObject({ year: 2019, dataset: 'GBIF', country: 'Peru' });
+    expect(props.elevation).toBeUndefined();
+    expect(props.locality).toBeUndefined();
   });
 });

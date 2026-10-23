@@ -17,8 +17,8 @@ export type SensitivityResolution =
 
 export const UNRESOLVED_FLOOR_DEG = 0.05;
 
-const THREATENED_CODES = new Set(['CR', 'EN', 'VU']);
 const TIER_CELL_DEG: Record<string, number> = { CR: 1, EN: 0.5, VU: 0.25 };
+const TIER_SEVERITY = ['CR', 'EN', 'VU'];
 
 export type SensitivityReason =
   | 'iucn-threatened'
@@ -44,15 +44,11 @@ export interface DisplayedLocation {
 function threatTier(
   point: Pick<AtlasOccurrencePoint, 'iucnCode' | 'conservationStatus'>,
 ): string | null {
-  const code = (point.iucnCode ?? '').trim().toUpperCase();
-  if (THREATENED_CODES.has(code)) return code;
-
-  const status = (point.conservationStatus ?? '').trim().toLowerCase();
-  if (!status) return null;
-  if (status.includes('critically endangered')) return 'CR';
-  if (status.includes('endangered')) return 'EN';
-  if (status.includes('vulnerable')) return 'VU';
-  return null;
+  // The most severe tier either field states. Both fields go through the same
+  // parser hasThreatAssessment uses, so a value recognised as an assessment
+  // ("CR", "IUCN: CR", "Critically Endangered") always yields its tier.
+  const tiers = [parseAssessment(point.iucnCode).tier, parseAssessment(point.conservationStatus).tier];
+  return TIER_SEVERITY.find((tier) => tiers.includes(tier)) ?? null;
 }
 
 export function uncertaintyToCellDeg(uncertaintyM: number | undefined): number {
@@ -98,7 +94,7 @@ export function resolveAtlasLocation(
   let reason: SensitivityReason = 'none';
   let notice = '';
   if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
-    reason = point.iucnCode ? 'iucn-threatened' : 'conservation-status';
+    reason = parseAssessment(point.iucnCode).tier ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km because this taxon is assessed as threatened (${tier}); precise sites are withheld to reduce collection risk.`;
   } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
     reason = 'coordinate-uncertainty';
@@ -168,12 +164,36 @@ const IUCN_CATEGORY_NAMES = [
 ];
 const NOT_AN_ASSESSMENT = /data[\s_-]*deficient|not[\s_-]*(yet[\s_-]*)?(evaluated|assessed)|\b(NE|DD)\b/i;
 
-function isRecognisedAssessment(value?: string | null): boolean {
+interface ParsedAssessment {
+  recognised: boolean;
+  tier: string | null;
+}
+
+/**
+ * The single parser for an assessment field. Recognition and tier come from the
+ * same reading, so no value can count as resolved while yielding no tier when it
+ * names a threatened category. Threatened codes match case-insensitively and
+ * inside decorations such as "IUCN: CR" (erring toward protection); the
+ * non-threatened codes stay case-sensitive so prose such as "ex situ" is not
+ * read as an assessment that would release precise coordinates. The most severe
+ * threatened mention wins.
+ */
+function parseAssessment(value?: string | null): ParsedAssessment {
   const text = (value ?? '').trim();
-  if (!text || NOT_AN_ASSESSMENT.test(text)) return false;
-  if (IUCN_CODES.test(text)) return true;
+  if (!text || NOT_AN_ASSESSMENT.test(text)) return { recognised: false, tier: null };
+  const upper = text.toUpperCase();
   const lower = text.toLowerCase();
-  return IUCN_CATEGORY_NAMES.some((name) => lower.includes(name));
+  const codes = new Set((upper.match(/\b(CR|EN|VU)\b/g) ?? []));
+  if (lower.includes('critically endangered')) codes.add('CR');
+  if (lower.replace('critically endangered', '').includes('endangered')) codes.add('EN');
+  if (lower.includes('vulnerable')) codes.add('VU');
+  const tier = TIER_SEVERITY.find((code) => codes.has(code)) ?? null;
+  const recognised = tier !== null || IUCN_CODES.test(text) || IUCN_CATEGORY_NAMES.some((name) => lower.includes(name));
+  return { recognised, tier };
+}
+
+function isRecognisedAssessment(value?: string | null): boolean {
+  return parseAssessment(value).recognised;
 }
 
 export function hasThreatAssessment(iucnCode?: string | null, conservationStatus?: string | null): boolean {

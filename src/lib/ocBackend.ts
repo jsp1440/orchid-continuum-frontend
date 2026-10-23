@@ -123,6 +123,20 @@ const SAFE_FEATURE_PROPERTIES = [
 ];
 const COORDINATE_LIKE = /-?\d{1,3}\.\d{2,}\s*[,; ]\s*-?\d{1,3}\.\d{2,}/;
 
+/**
+ * An allowed key's value as a public primitive, or undefined. Objects and arrays
+ * never travel (an allowed key such as `source` or `dataset` can hold a nested
+ * record carrying private coordinates or locality), nor do non-finite numbers,
+ * long strings or strings that look like coordinates.
+ */
+function safePropertyValue(value: unknown): string | number | boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim();
+  return text && text.length <= 200 && !COORDINATE_LIKE.test(text) ? text : undefined;
+}
+
 const ROW_CONTAINER_KEYS = ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points'];
 
 /**
@@ -146,10 +160,8 @@ export function occurrencePayloadToAtlasLayer(payload: unknown): AtlasLayer | nu
     // feature; coordinates live only in the projected lat/lng above.
     const properties: Record<string, unknown> = {};
     for (const key of SAFE_FEATURE_PROPERTIES) {
-      const value = merged[key];
-      if (value !== undefined && value !== null && (typeof value !== 'string' || !COORDINATE_LIKE.test(value))) {
-        properties[key] = value;
-      }
+      const value = safePropertyValue(merged[key]);
+      if (value !== undefined) properties[key] = value;
     }
     return [{ id: point.id, kind: 'occurrence' as const, lat: point.lat, lng: point.lng, properties }];
   });
