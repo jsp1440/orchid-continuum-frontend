@@ -15,7 +15,9 @@ export function isBrowserEmbeddableImageUrl(value: unknown): value is string {
   if (!/^https?:\/\//i.test(text)) return false;
   let host: string;
   try {
-    host = new URL(text).hostname.toLowerCase();
+    // A terminal dot is the DNS root presentation form of the same host.
+    // Normalize it only for policy comparison; do not rewrite image URLs.
+    host = new URL(text).hostname.toLowerCase().replace(/\.$/, '');
   } catch {
     return false;
   }
