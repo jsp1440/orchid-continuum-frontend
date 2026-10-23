@@ -1,0 +1,38 @@
+// @vitest-environment jsdom
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, expect, it, vi } from 'vitest';
+import { AtlasFilterProvider } from '@/contexts/AtlasFilterContext';
+import Atlas from './Atlas';
+vi.mock('@/components/orchid/Navbar', () => ({ default: () => null }));
+vi.mock('@/components/orchid/Footer', () => ({ default: () => null }));
+vi.mock('@/components/atlas/LiveAtlasMap', () => ({ default: ({ points }: { points: unknown[] }) => <div role="application" aria-label="Fixture map">{points.length} map records</div> }));
+vi.mock('@/components/atlas/AtlasDebugPanel', () => ({ default: () => null }));
+vi.mock('@/components/atlas/GrandTour', () => ({ default: () => null }));
+vi.mock('@/lib/orchidContinuum', async (original) => ({ ...await original<typeof import('@/lib/orchidContinuum')>(), fetchAtlasOccurrencePoints: async () => Array.from({length:51}, (_,i) => ({id:String(i), canonicalName:`Masdevallia fixture${i}`, genus:'Masdevallia',species:`fixture${i}`,lat:1,lng:2,country:i%2?'Peru':'Colombia',countries:[],pollinators:[],dataset:'Fixture',verified:false,assessmentResolved:false})), fetchAtlasFacets: async () => ({genera:['Masdevallia'],tribes:[],countries:['Peru','Colombia'],growthForms:[],habitats:[],iucnCodes:[],pollinatorTaxa:[],datasets:[],totals:{}}) }));
+(globalThis as typeof globalThis & {IS_REACT_ACT_ENVIRONMENT?:boolean}).IS_REACT_ACT_ENVIRONMENT=true;
+let root: ReturnType<typeof createRoot> | undefined;
+afterEach(() => { if(root) act(() => root!.unmount()); document.body.innerHTML=''; vi.unstubAllGlobals(); });
+it('puts the map before tour panels, reports its own counts, filters records and pages results', async () => {
+ vi.stubGlobal('fetch',vi.fn(() => {throw new Error('Unexpected network');}));
+ const host=document.createElement('div');document.body.append(host);root=createRoot(host);
+ await act(async()=>root!.render(<MemoryRouter initialEntries={['/atlas?genera=Masdevallia']}><AtlasFilterProvider><Atlas/></AtlasFilterProvider></MemoryRouter>));
+ expect(host.textContent).toContain('51 map records');
+ expect(host.querySelector('[aria-label="Atlas record completeness"]')?.textContent).toContain('51 matching records of 51 loaded');
+ expect(host.textContent).not.toContain('Welcome to the Atlas');
+ const map=host.querySelector('[role="application"]')!;
+ const layers=[...host.querySelectorAll('button')].find(b=>b.textContent==='Orchid occurrences')!;
+ expect(map.compareDocumentPosition(layers)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ expect(host.querySelectorAll('ul li')).toHaveLength(50);
+ const next=[...host.querySelectorAll('button')].find(b=>b.textContent==='Next records')!;
+ act(()=>next.click());expect(host.querySelectorAll('ul li')).toHaveLength(1);
+ const country=[...host.querySelectorAll('button')].find(b=>b.textContent==='Peru')!;
+ await act(async()=>country.click());
+ expect(host.textContent).toContain('25 map records');
+ expect(host.querySelector('[aria-label="Atlas record completeness"]')?.textContent).toContain('25 matching records of 51 loaded');
+ expect(host.querySelectorAll('ul li')).toHaveLength(25);
+ act(()=>[...host.querySelectorAll('button')].find(b=>b.textContent==='How to use the Atlas')!.click());
+ expect(host.textContent).toContain('Welcome to the Atlas');
+ expect(host.textContent).not.toContain('580,000');
+});

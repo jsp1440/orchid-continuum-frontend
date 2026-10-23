@@ -91,7 +91,7 @@ const AppLayout: React.FC = () => {
 
             <SafeSection name="Continuum relationships"><ContinuumWeb /></SafeSection>
 
-            <div id="home-atlas">
+            <div>
               <SafeSection name="Atlas"><HomeAtlasContinuum /></SafeSection>
             </div>
 
