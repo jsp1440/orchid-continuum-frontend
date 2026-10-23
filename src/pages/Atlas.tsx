@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -314,11 +314,15 @@ function ResultList({ points, onSelect, layerMatch }: { points: AtlasOccurrenceP
   useEffect(() => setPage(0), [points]);
   const pageCount = Math.max(1, Math.ceil(points.length / 50));
   const currentPage = Math.min(page, pageCount - 1);
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [currentPage, points]);
   if (points.length === 0) return <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 p-8 text-center font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">Awaiting Orchid Continuum Records · adjust filters</div>;
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between border-b border-white/[0.06]"><div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Records · {points.length}</div><div className="font-mono text-[9px] tracking-[0.22em] uppercase text-[#7a7466]">Click row → species/habitat card</div></div>
-      <ul className="divide-y divide-white/[0.04] max-h-[480px] overflow-y-auto">
+      <ul ref={listRef} className="divide-y divide-white/[0.04] max-h-[480px] overflow-y-auto">
         {points.slice(currentPage * 50, (currentPage + 1) * 50).map((p) => { const m = layerMatch(p); return (
           <li key={p.id}><button type="button" onClick={() => onSelect(p)} className="w-full flex items-center gap-4 px-5 py-3 text-left hover:bg-white/[0.03] transition-colors">
             <div className="w-12 h-12 flex-shrink-0 rounded-sm bg-[#06091a] border border-[#c9a24a]/20 overflow-hidden flex items-center justify-center">{p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" /> : <ImageOff className="h-4 w-4 text-[#c9a24a]/40" strokeWidth={1.2} />}</div>
