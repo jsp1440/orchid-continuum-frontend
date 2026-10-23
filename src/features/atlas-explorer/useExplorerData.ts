@@ -16,6 +16,7 @@ import {
   fromCanonicalPoint,
   matchesFilters,
   queryBackend,
+  queryUrl,
   type BackendSource,
   type ExplorerFilters,
   type ExplorerOccurrence,
@@ -137,16 +138,19 @@ export function useExplorerData(view: Viewport | null, filters: ExplorerFilters)
   const [calyx, setCalyx] = useState<CalyxState>({ kind: 'probing' });
   const [canonical, setCanonical] = useState<CanonicalState>({ kind: 'idle' });
   const [canonicalRecords, setCanonicalRecords] = useState<ExplorerOccurrence[] | null>(null);
-  const [backendView, setBackendView] = useState<ViewData | null>(null);
+  const [backendView, setBackendView] = useState<{ queryKey: string; data: ViewData } | null>(null);
+  const [failedQueryKey, setFailedQueryKey] = useState<string | null>(null);
   const calyxRef = useRef(calyx);
   calyxRef.current = calyx;
 
   const useBackend = calyx.kind === 'probing' || calyx.kind === 'available';
+  const queryKey = view ? queryUrl(CALYX_BACKEND_BASE_URL, view, filters) : null;
 
   // Backend viewport query (with cancellation).
   useEffect(() => {
-    if (!view || !useBackend) return;
+    if (!view || !useBackend || !queryKey) return;
     const controller = new AbortController();
+    setFailedQueryKey(null);
     queryBackend(view, filters, controller.signal, { base: CALYX_BACKEND_BASE_URL })
       .then((outcome) => {
         if (controller.signal.aborted) return;
@@ -155,32 +159,40 @@ export function useExplorerData(view: Viewport | null, filters: ExplorerFilters)
           setCalyx({ kind: 'available' });
           const records = r.points.map(fromBackendPoint).filter((p): p is ExplorerOccurrence => p !== null);
           setBackendView({
-            status: 'ready',
-            provider: 'calyx-viewport',
-            mode: r.mode,
-            cellDeg: r.cell_deg,
-            records,
-            clusters: r.clusters.map(fromBackendCluster),
-            totalInView: r.total_in_view,
-            totalIsExact: r.total_is_exact,
-            truncated: r.truncated,
-            truncationReason: r.truncation_reason,
+            queryKey,
+            data: {
+              status: 'ready',
+              provider: 'calyx-viewport',
+              mode: r.mode,
+              cellDeg: r.cell_deg,
+              records,
+              clusters: r.clusters.map(fromBackendCluster),
+              totalInView: r.total_in_view,
+              totalIsExact: r.total_is_exact,
+              truncated: r.truncated,
+              truncationReason: r.truncation_reason,
+            },
           });
         } else if (outcome.kind === 'source-unavailable') {
           setCalyx({ kind: 'source-unavailable', source: outcome.source });
-        } else if (calyxRef.current.kind !== 'available') {
-          // A transient failure after the service has answered once keeps the
-          // last good view; a failure before it ever answered falls back.
-          setCalyx({ kind: 'unreachable', detail: outcome.detail });
+        } else {
+          // Retain last-good data only for the same request identity. A failed
+          // different viewport/filter must not present old evidence as current.
+          setFailedQueryKey(queryKey);
+          if (calyxRef.current.kind !== 'available') {
+            setCalyx({ kind: 'unreachable', detail: outcome.detail });
+          }
         }
       })
       .catch((error) => {
+        if (controller.signal.aborted) return;
         if ((error as { name?: string })?.name !== 'AbortError') {
+          setFailedQueryKey(queryKey);
           setCalyx({ kind: 'unreachable', detail: 'The Calyx Atlas service could not be reached.' });
         }
       });
     return () => controller.abort();
-  }, [view, filters, useBackend]);
+  }, [view, filters, useBackend, queryKey]);
 
   // Canonical store fallback (loaded once). The start guard is a ref, not
   // state: if the effect depended on its own loading state, setting it would
@@ -218,11 +230,16 @@ export function useExplorerData(view: Viewport | null, filters: ExplorerFilters)
   }, [useBackend]);
 
   const viewData: ViewData = useMemo(() => {
-    if (useBackend) return backendView ?? EMPTY_VIEW;
+    if (useBackend) {
+      if (backendView?.queryKey === queryKey) return backendView.data;
+      return failedQueryKey !== null && failedQueryKey === queryKey
+        ? { ...EMPTY_VIEW, status: 'unavailable' }
+        : EMPTY_VIEW;
+    }
     if (canonical.kind === 'unavailable') return { ...EMPTY_VIEW, status: 'unavailable' };
     if (!canonicalRecords || !view) return EMPTY_VIEW;
     return viewFromRecords(canonicalRecords, view, filters);
-  }, [useBackend, backendView, canonical.kind, canonicalRecords, view, filters]);
+  }, [useBackend, backendView, queryKey, failedQueryKey, canonical.kind, canonicalRecords, view, filters]);
 
   return { calyx, canonical, canonicalRecords, viewData };
 }
