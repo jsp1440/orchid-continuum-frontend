@@ -51,13 +51,11 @@ process.stdout.write('[]');
     chmodSync(fakeGh, 0o755);
 
     try {
-      const runner = fileURLToPath(
-        new URL('../node_modules/tsx/dist/cli.mjs', import.meta.url),
-      );
       const result = spawnSync(
         process.execPath,
         [
-          runner,
+          '--import',
+          'tsx',
           fileURLToPath(new URL('./oc-done-guard.ts', import.meta.url)),
           '--repo',
           'acme/widgets',
