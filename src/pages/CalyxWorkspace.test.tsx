@@ -176,6 +176,12 @@ function getButton(container: HTMLElement, text: string) {
   return button;
 }
 
+function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 describe("CalyxWorkspace conversation lifecycle", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -655,6 +661,108 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       epistemic_policy: { continuum_first: true },
     });
     await flush(4);
+  });
+
+  it("clears prior-project files and drafts and ignores late voice input after a project switch", async () => {
+    mocks.speechInputState = "idle";
+    mocks.createCalyxConversation.mockResolvedValue({
+      ...buildConversation("field-study-thread"),
+      project_id: "field-study",
+    });
+    mocks.sendCalyxTurn.mockResolvedValue(buildTurnResult("field-study-thread", "New project answer"));
+    mocks.getCalyxConversation.mockResolvedValue({
+      ...buildConversation("field-study-thread", [
+        {
+          message_id: "field-study-operator",
+          conversation_id: "field-study-thread",
+          role: "operator",
+          content: "New project question",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "field-study-calyx",
+          conversation_id: "field-study-thread",
+          role: "calyx",
+          content: "New project answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+      project_id: "field-study",
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [new File(["private notes"], "previous-project.txt", { type: "text/plain" })],
+    });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush(2);
+    expect(container.textContent).toContain("previous-project.txt");
+
+    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+    await act(async () => {
+      setInputValue(textarea, "Draft that belongs to the previous project");
+      getButton(container, "Voice").click();
+    });
+
+    const projectInput = container.querySelector("#calyx-project") as HTMLInputElement;
+    await act(async () => {
+      setInputValue(projectInput, "field-study");
+    });
+    await flush(2);
+
+    expect(textarea.value).toBe("");
+    expect(container.textContent).not.toContain("previous-project.txt");
+    expect(container.textContent).toContain("local files, excerpts, and the unsent draft were cleared");
+    expect(mocks.stopListening).toHaveBeenCalled();
+
+    await act(async () => {
+      mocks.pushTranscript("Late speech from the previous project");
+    });
+    expect(textarea.value).toBe("");
+
+    await act(async () => {
+      setInputValue(textarea, "New project question");
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(5);
+
+    expect(mocks.createCalyxConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_id: "field-study",
+        context: expect.objectContaining({
+          project_id: "field-study",
+          workspace: expect.objectContaining({
+            attachment_count: 0,
+            attachments: [],
+            selected_attachment: undefined,
+            draft_document_context: undefined,
+          }),
+        }),
+      }),
+    );
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledWith(
+      "field-study-thread",
+      expect.objectContaining({
+        message: "New project question",
+        project_id: "field-study",
+        context: expect.objectContaining({
+          workspace: expect.objectContaining({ attachment_count: 0, attachments: [] }),
+        }),
+      }),
+    );
+    expect(container.textContent).toContain("New project answer");
   });
 
   it("stops active speech input before starting the network turn, in addition to speech output", async () => {

@@ -460,6 +460,9 @@ export default function CalyxWorkspace() {
   const submissionLockRef = useRef<number | null>(null);
   const conversationIdRef = useRef<string | null>(null);
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
+  const previousProjectIdRef = useRef(DEFAULT_PROJECT_ID);
+  const speechContextEpochRef = useRef(0);
+  const speechStartEpochRef = useRef(0);
   const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
 
   const cancelAutoRetry = useCallback(() => {
@@ -474,10 +477,18 @@ export default function CalyxWorkspace() {
   const { speak, cancel: cancelSpeech, supported: ttsSupported } = useCalyxSpeechOutput();
   const { state: micState, interimTranscript, error: speechInputError, startListening, stopListening } = useCalyxSpeechInput(
     useCallback((transcript: string) => {
+      if (speechStartEpochRef.current !== speechContextEpochRef.current) return;
       cancelAutoRetry();
       setMessage((current) => (current ? `${current} ${transcript}`.trim() : transcript));
     }, [cancelAutoRetry]),
   );
+  const startVoiceInput = useCallback(() => {
+    speechStartEpochRef.current = speechContextEpochRef.current;
+    startListening();
+  }, [startListening]);
+  const stopVoiceInput = useCallback(() => {
+    stopListening();
+  }, [stopListening]);
 
   const normalizedProjectId = normalizeProjectId(projectId);
   const projectMismatch = Boolean(conversation && !shouldReuseConversation(conversation, normalizedProjectId));
@@ -497,16 +508,53 @@ export default function CalyxWorkspace() {
     [fileTextContent, selectedAttachment],
   );
 
-  useEffect(() => { activeProjectIdRef.current = normalizedProjectId; }, [normalizedProjectId]);
+  useEffect(() => {
+    activeProjectIdRef.current = normalizedProjectId;
+    if (previousProjectIdRef.current === normalizedProjectId) return;
+    previousProjectIdRef.current = normalizedProjectId;
+    speechContextEpochRef.current += 1;
+    cancelAutoRetry();
+    cancelSpeech();
+    stopListening();
+
+    const hadLocalContext = Boolean(
+      uploadedFiles.length ||
+      fileTextContent ||
+      documentContext.trim() ||
+      selectedDocumentText.trim() ||
+      message.trim(),
+    );
+    setMessage("");
+    setUploadedFiles([]);
+    setSelectedAttachmentIndex(null);
+    setFileTextContent(null);
+    setDocumentContext("");
+    setSelectedDocumentText("");
+    setConversationError(null);
+    setAuthRequired(false);
+    if (hadLocalContext) {
+      setWorkspaceStatus("Project changed; local files, excerpts, and the unsent draft were cleared.");
+    }
+  }, [
+    cancelAutoRetry,
+    cancelSpeech,
+    documentContext,
+    fileTextContent,
+    message,
+    normalizedProjectId,
+    selectedDocumentText,
+    stopListening,
+    uploadedFiles.length,
+  ]);
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
       cancelSpeech();
-      stopListening();
+      stopVoiceInput();
     };
-  }, [cancelSpeech, stopListening]);
+  }, [cancelSpeech, stopVoiceInput]);
 
   useEffect(() => {
     if (!loading && !submitting) focusMessageInput();
@@ -645,7 +693,7 @@ export default function CalyxWorkspace() {
     setWorkspaceStatus(null);
     setMessage((current) => (current.trim() === text ? "" : current));
     cancelSpeech();
-    stopListening();
+    stopVoiceInput();
     let targetConversationId: string | null = null;
     let turnCommitted = false;
     try {
@@ -690,7 +738,7 @@ export default function CalyxWorkspace() {
       if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
-  }, [cancelAutoRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, message, projectId, refreshConversationHistory, selectedAttachment, selectedDocumentText, speak, speakReplies, stopListening, uploadedFiles]);
+  }, [cancelAutoRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, message, projectId, refreshConversationHistory, selectedAttachment, selectedDocumentText, speak, speakReplies, stopVoiceInput, uploadedFiles]);
 
   useEffect(() => {
     if (autoRetryCountdown === null) return;
@@ -714,11 +762,23 @@ export default function CalyxWorkspace() {
 
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); await sendMessage(); }
 
+  function handleProjectChange(value: string) {
+    const nextProjectId = normalizeProjectId(value);
+    if (nextProjectId !== activeProjectIdRef.current) {
+      activeProjectIdRef.current = nextProjectId;
+      speechContextEpochRef.current += 1;
+      cancelAutoRetry();
+      cancelSpeech();
+      stopVoiceInput();
+    }
+    setProjectId(value);
+  }
+
   function newConversation() {
     requestIdRef.current += 1;
     cancelAutoRetry();
     cancelSpeech();
-    stopListening();
+    stopVoiceInput();
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
@@ -771,7 +831,7 @@ export default function CalyxWorkspace() {
     const requestId = requestIdRef.current;
     cancelAutoRetry();
     cancelSpeech();
-    stopListening();
+    stopVoiceInput();
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
@@ -866,9 +926,9 @@ export default function CalyxWorkspace() {
                   <details className="text-xs text-muted-foreground">
                     <summary className="cursor-pointer">Conversation settings</summary>
                     <label className="mt-2 block font-medium" htmlFor="calyx-project">Research project ID</label>
-                    <input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" disabled={submitting} id="calyx-project" maxLength={200} onChange={(event) => { cancelAutoRetry(); setProjectId(event.target.value); }} value={projectId} />
+                    <input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" disabled={submitting} id="calyx-project" maxLength={200} onChange={(event) => handleProjectChange(event.target.value)} value={projectId} />
                   </details>
-                  {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} disabled={submitting && micState !== "listening"} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
+                  {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} disabled={submitting && micState !== "listening"} onClick={micState === "listening" ? stopVoiceInput : startVoiceInput} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
                   <button className="rounded-full border px-3 py-1 text-xs hover:bg-muted disabled:opacity-50" disabled={submitting} onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button>
                   <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
