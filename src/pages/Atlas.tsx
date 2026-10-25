@@ -166,10 +166,16 @@ const Atlas: React.FC = () => {
     return () => { cancelled = true; };
   }, []);
 
+  // Clear route-owned selection when history removes the occurrence. Keep
+  // manual map selection when unrelated filters change on an unbound route.
   useEffect(() => {
-    if (!initialOccurrenceId || allPoints.length === 0) return;
+    if (!initialOccurrenceId) setSelected(null);
+  }, [initialOccurrenceId]);
+
+  useEffect(() => {
+    if (!initialOccurrenceId) return;
     const match = allPoints.find((p) => p.id === initialOccurrenceId);
-    if (match) setSelected(toPublicAtlasOccurrence(match));
+    setSelected(match ? toPublicAtlasOccurrence(match) : null);
   }, [initialOccurrenceId, allPoints]);
 
   useEffect(() => {
