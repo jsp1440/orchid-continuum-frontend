@@ -486,9 +486,14 @@ export default function CalyxWorkspace() {
     speechStartEpochRef.current = speechContextEpochRef.current;
     startListening();
   }, [startListening]);
-  const stopVoiceInput = useCallback(() => {
+  const invalidateVoiceInput = useCallback(() => {
+    speechContextEpochRef.current += 1;
     stopListening();
   }, [stopListening]);
+  const stopVoiceInput = useCallback(() => {
+    if (micState === "listening") speechContextEpochRef.current += 1;
+    stopListening();
+  }, [micState, stopListening]);
 
   const normalizedProjectId = normalizeProjectId(projectId);
   const projectMismatch = Boolean(conversation && !shouldReuseConversation(conversation, normalizedProjectId));
@@ -512,10 +517,9 @@ export default function CalyxWorkspace() {
     activeProjectIdRef.current = normalizedProjectId;
     if (previousProjectIdRef.current === normalizedProjectId) return;
     previousProjectIdRef.current = normalizedProjectId;
-    speechContextEpochRef.current += 1;
     cancelAutoRetry();
     cancelSpeech();
-    stopListening();
+    invalidateVoiceInput();
 
     const hadLocalContext = Boolean(
       uploadedFiles.length ||
@@ -543,7 +547,7 @@ export default function CalyxWorkspace() {
     message,
     normalizedProjectId,
     selectedDocumentText,
-    stopListening,
+    invalidateVoiceInput,
     uploadedFiles.length,
   ]);
 
@@ -552,9 +556,9 @@ export default function CalyxWorkspace() {
     return () => {
       mountedRef.current = false;
       cancelSpeech();
-      stopVoiceInput();
+      stopListening();
     };
-  }, [cancelSpeech, stopVoiceInput]);
+  }, [cancelSpeech, stopListening]);
 
   useEffect(() => {
     if (!loading && !submitting) focusMessageInput();
@@ -738,7 +742,7 @@ export default function CalyxWorkspace() {
       if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
-  }, [cancelAutoRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, message, projectId, refreshConversationHistory, selectedAttachment, selectedDocumentText, speak, speakReplies, stopVoiceInput, uploadedFiles]);
+  }, [cancelAutoRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, stopVoiceInput, message, projectId, refreshConversationHistory, selectedAttachment, selectedDocumentText, speak, speakReplies, uploadedFiles]);
 
   useEffect(() => {
     if (autoRetryCountdown === null) return;
@@ -766,7 +770,6 @@ export default function CalyxWorkspace() {
     const nextProjectId = normalizeProjectId(value);
     if (nextProjectId !== activeProjectIdRef.current) {
       activeProjectIdRef.current = nextProjectId;
-      speechContextEpochRef.current += 1;
       cancelAutoRetry();
       cancelSpeech();
       stopVoiceInput();
@@ -831,7 +834,7 @@ export default function CalyxWorkspace() {
     const requestId = requestIdRef.current;
     cancelAutoRetry();
     cancelSpeech();
-    stopVoiceInput();
+    invalidateVoiceInput();
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
