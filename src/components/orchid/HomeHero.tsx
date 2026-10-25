@@ -56,7 +56,7 @@ const HomeHero: React.FC = () => {
         aria-hidden="true"
         style={{
           backgroundImage:
-            'url("https://raw.githubusercontent.com/jsp1440/OrchidContinuumHarvester/main/attached_assets/orchid_continuum_logo.png")',
+            'url("/original-logo.webp")',
           backgroundRepeat: 'no-repeat',
           backgroundPosition: 'center',
           backgroundSize: 'min(90%, 1100px)',
@@ -151,7 +151,7 @@ const HomeHero: React.FC = () => {
               </div>
               <div className="relative flex items-center justify-center">
                 <img
-                  src="https://d64gsuwffb70l.cloudfront.net/685ce481a881cc69fa33814c_1780636186272_bb5ee54d.png"
+                  src="/original-logo.webp"
                   alt="Orchid Continuum — The Global Orchid Experience"
                   className="w-full h-auto max-w-sm mx-auto drop-shadow-[0_8px_30px_rgba(0,0,0,0.35)]"
                   loading="eager"
@@ -172,3 +172,4 @@ const HomeHero: React.FC = () => {
 };
 
 export default HomeHero;
+
