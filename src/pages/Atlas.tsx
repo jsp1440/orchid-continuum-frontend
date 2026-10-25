@@ -123,7 +123,14 @@ const Atlas: React.FC = () => {
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set(['occurrence']));
   const [intersectionMode, setIntersectionMode] = useState(false);
   const [selected, setSelected] = useState<AtlasOccurrencePoint | null>(null);
-  const [record, setRecord] = useState<AtlasSpeciesRecord | null>(null);
+  const [detailResult, setDetailResult] = useState<{
+    occurrenceId: string;
+    record: AtlasSpeciesRecord | null;
+  } | null>(null);
+  // Never render a previous occurrence's evidence while this selection loads.
+  const record = detailResult && detailResult.occurrenceId === selected?.id
+    ? detailResult.record
+    : null;
   const [focusBounds, setFocusBounds] = useState<{ south: number; west: number; north: number; east: number } | null>(null);
   const [focusView, setFocusView] = useState<{ lat: number; lng: number; zoom: number } | null>(null);
   const [grandTourOpen, setGrandTourOpen] = useState(false);
@@ -166,7 +173,8 @@ const Atlas: React.FC = () => {
   }, [initialOccurrenceId, allPoints]);
 
   useEffect(() => {
-    if (!selected) { setRecord(null); return; }
+    setDetailResult(null);
+    if (!selected) return;
     let cancelled = false;
     fetchAtlasOccurrence(selected.id, {
       genus: selected.genus,
@@ -174,7 +182,7 @@ const Atlas: React.FC = () => {
       country: selected.country,
       region: selected.region,
       elevation_m: selected.elevation_m,
-    }).then((r) => { if (!cancelled) setRecord(r); });
+    }).then((r) => { if (!cancelled) setDetailResult({ occurrenceId: selected.id, record: r }); });
     return () => { cancelled = true; };
   }, [selected]);
 
