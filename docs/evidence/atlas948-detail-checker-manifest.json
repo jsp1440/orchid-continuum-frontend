@@ -1,0 +1,82 @@
+[
+  {
+    "path": "src/pages/Atlas.tsx",
+    "sha": "d62119f48d6f70dfb67540c5736f065e04e23a11"
+  },
+  {
+    "path": "src/pages/Atlas.selectionIdentity.test.tsx",
+    "sha": "d0aaad4b7aaf56b9e85be0d64b0dde0aa2f8ccf0"
+  },
+  {
+    "path": "src/contexts/AtlasFilterContext.tsx",
+    "sha": "5c910653035dc0a4564cce56db519d3ddb68da8c"
+  },
+  {
+    "path": "vite.config.ts",
+    "sha": "28def83b4301553629ad42daa42984b25dadbfa9"
+  },
+  {
+    "path": "package.json",
+    "sha": "e1bb5be2106505288cb7a3b25d06e0efe3b14880"
+  },
+  {
+    "path": "package-lock.json",
+    "sha": "a0289854c12f9197261cdabcdc3ef446343ad64f"
+  },
+  {
+    "path": "tsconfig.json",
+    "sha": "129b1a30fdbe84d753a2526f13a20e0857f420ba"
+  },
+  {
+    "path": "tsconfig.app.json",
+    "sha": "3793e017d602fc9208dc0278b5dba63b90379939"
+  },
+  {
+    "path": "tsconfig.node.json",
+    "sha": "3133162c20350e1741b94b8d2ff77b811bec8363"
+  },
+  {
+    "path": "src/components/orchid/Navbar.tsx",
+    "sha": "05acd34865e81bc36f75b62178c6b44b567221e3"
+  },
+  {
+    "path": "src/components/orchid/Footer.tsx",
+    "sha": "e04ad9ed9bb965462b000d07e88503663e20dac7"
+  },
+  {
+    "path": "src/components/atlas/LiveAtlasMap.tsx",
+    "sha": "5e9292225efef9828c8eb30a0b580592b7092dee"
+  },
+  {
+    "path": "src/components/atlas/AtlasDebugPanel.tsx",
+    "sha": "46d7e9b9a1c8d11deeb136f0fa95fae270846f8c"
+  },
+  {
+    "path": "src/components/atlas/AtlasCompletenessBadge.tsx",
+    "sha": "9966287ede9d822558102e654a038e5c60972da3"
+  },
+  {
+    "path": "src/components/atlas/AtlasTour.tsx",
+    "sha": "9a7f6e71ded04b31809387447125a0386afce6ec"
+  },
+  {
+    "path": "src/components/atlas/GrandTour.tsx",
+    "sha": "3e71d27fe92db1fe791c4c2b854243dcd1c8d769"
+  },
+  {
+    "path": "src/lib/grandTour.ts",
+    "sha": "10f14fcb13a565e914e6b6e9e8b32c02d872b00a"
+  },
+  {
+    "path": "src/components/orchid/SourceBadges.tsx",
+    "sha": "ef22e5216f92cfca9ce90ea26642952a43dc3231"
+  },
+  {
+    "path": "src/lib/atlasLocalitySafety.ts",
+    "sha": "32255e7bf391d6b36ba06995058fbe65ffe6f8f3"
+  },
+  {
+    "path": "src/lib/orchidContinuum.ts",
+    "sha": "5d1cb1c80cbcc3b3a205f69e7952cb12a8e36c1d"
+  }
+]
