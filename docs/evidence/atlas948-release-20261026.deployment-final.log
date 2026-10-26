@@ -1,0 +1,6 @@
+
+> vite_react_shadcn_ts@0.0.0 validate:deployment
+> node scripts/verify-deployment-contract.mjs
+
+Render deployment contract valid.
+Verified 5 critical client routes, 1 static rewrite(s), the SPA fallback, and the ordered fail-closed prepublication validation gate.
