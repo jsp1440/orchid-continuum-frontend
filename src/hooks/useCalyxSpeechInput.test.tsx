@@ -228,4 +228,40 @@ describe("useCalyxSpeechInput", () => {
     });
     expect(onResultSpy).not.toHaveBeenCalled();
   });
+
+  it("startListening reports whether a recognizer was actually created", () => {
+    let first: boolean | undefined;
+    let second: boolean | undefined;
+    act(() => {
+      first = latest!.startListening();
+    });
+    act(() => {
+      second = latest!.startListening();
+    });
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect(instances).toHaveLength(1);
+  });
+
+  it("startListening returns false when the recognizer refuses to start", () => {
+    let result: boolean | undefined;
+    const throwingStart = vi.fn(() => {
+      throw new Error("refused");
+    });
+    (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition = class extends FakeSpeechRecognition {
+      start = throwingStart;
+    };
+    act(() => {
+      root!.unmount();
+    });
+    root = createRoot(container!);
+    act(() => {
+      root!.render(<Harness />);
+    });
+    act(() => {
+      result = latest!.startListening();
+    });
+    expect(result).toBe(false);
+    expect(latest!.error).toBe("Voice input could not start.");
+  });
 });
