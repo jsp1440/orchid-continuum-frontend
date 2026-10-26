@@ -1,0 +1,13 @@
+{
+  "base_manifest_commit": "315e491ee7bf6d6fbf1d8194d9dc79bb0b4b5f81",
+  "base_manifest_path": "docs/evidence/atlas948-calyx-20261026.manifest.json",
+  "input_count": 1127,
+  "changes": [
+    {
+      "path": "scripts/oc-done-guard.test.ts",
+      "old_sha": "816c6499ae5294d2159f19384a77d24cf6e840e4",
+      "sha": "63be08089f049a894585795beb7c6a86ea56bdc4"
+    }
+  ],
+  "all_other_inputs_unchanged": true
+}

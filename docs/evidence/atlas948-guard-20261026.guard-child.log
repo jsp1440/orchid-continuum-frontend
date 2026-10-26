@@ -1,0 +1,14 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run scripts/oc-done-guard.test.ts --pool=forks --maxWorkers=1 --minWorkers=1
+
+
+ RUN  v3.2.6 /workspace/scratch/b65d6a995417/cycle24/combined
+
+ ✓ scripts/oc-done-guard.test.ts (2 tests) 187ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  16:49:19
+   Duration  545ms (transform 28ms, setup 0ms, collect 26ms, tests 187ms, environment 0ms, prepare 55ms)
+

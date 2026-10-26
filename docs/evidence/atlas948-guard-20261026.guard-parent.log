@@ -1,0 +1,81 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run scripts/oc-done-guard.test.ts --pool=forks --maxWorkers=1 --minWorkers=1
+
+
+ RUN  v3.2.6 /workspace/scratch/b65d6a995417/cycle24/combined
+
+ ❯ scripts/oc-done-guard.test.ts (2 tests | 1 failed) 63ms
+   ✓ oc-done guard inventory request > pins the paginated issue inventory to GET query semantics 2ms
+   × oc-done guard inventory request > reaches the audit summary in report-only mode 60ms
+     → node:net:2368
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /tmp/tsx-0/69.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:2368:21)
+    at listenInCluster (node:net:2499:12)
+    at Server.listen (node:net:2641:5)
+    at file:///workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:53:31472
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:53:31450)
+    at async file:///workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:55:542 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/tmp/tsx-0/69.pipe',
+  port: -1
+}
+
+Node.js v24.22.1
+: expected 1 to be +0 // Object.is equality
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  scripts/oc-done-guard.test.ts > oc-done guard inventory request > reaches the audit summary in report-only mode
+AssertionError: node:net:2368
+      const error = new UVExceptionWithHostPort(rval, 'listen', address, port);
+                    ^
+
+Error: listen EPERM: operation not permitted /tmp/tsx-0/69.pipe
+    at Server.setupListenHandle [as _listen2] (node:net:2368:21)
+    at listenInCluster (node:net:2499:12)
+    at Server.listen (node:net:2641:5)
+    at file:///workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:53:31472
+    at new Promise (<anonymous>)
+    at createIpcServer (file:///workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:53:31450)
+    at async file:///workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:55:542 {
+  code: 'EPERM',
+  errno: -1,
+  syscall: 'listen',
+  address: '/tmp/tsx-0/69.pipe',
+  port: -1
+}
+
+Node.js v24.22.1
+: expected 1 to be +0 // Object.is equality
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- 0[39m
+[31m+ 1[39m
+
+ ❯ ../../cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:53:31472
+ ❯ createIpcServer ../../cycle15/atlas-detail-review/node_modules/tsx/dist/cli.mjs:53:31450
+ ❯ scripts/oc-done-guard.test.ts:76:44
+     74|       );
+     75| 
+     76|       expect(result.status, result.stderr).toBe(0);
+       |                                            ^
+     77|       expect(result.stdout).toContain('### oc-done guard — acme/widget…
+     78|       expect(result.stdout).toContain('claims audited: 0; refused: 0');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 1 passed (2)
+   Start at  16:49:13
+   Duration  382ms (transform 29ms, setup 0ms, collect 25ms, tests 63ms, environment 0ms, prepare 59ms)
+
