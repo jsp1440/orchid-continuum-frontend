@@ -661,6 +661,34 @@ export default function CalyxWorkspace() {
       });
       turnCommitted = true;
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
+      if (
+        result.conversation_id === thread.conversation_id &&
+        result.operator_message?.role === "operator" &&
+        result.calyx_message?.role === "calyx" &&
+        result.operator_message.conversation_id === thread.conversation_id &&
+        result.calyx_message.conversation_id === thread.conversation_id
+      ) {
+        setConversation((current) => {
+          if (
+            !current ||
+            current.conversation_id !== thread.conversation_id ||
+            !shouldReuseConversation(current, activeProjectId)
+          ) {
+            return current;
+          }
+          const existingMessageIds = new Set(current.messages.map((item) => item.message_id));
+          const committedMessages = [result.operator_message, result.calyx_message].filter(
+            (item) => !existingMessageIds.has(item.message_id),
+          );
+          if (!committedMessages.length) return current;
+          return {
+            ...current,
+            updated_at: result.calyx_message.created_at || current.updated_at,
+            persistence_mode: result.persistence_mode,
+            messages: [...current.messages, ...committedMessages],
+          };
+        });
+      }
       if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
       const refreshed = await getCalyxConversation(thread.conversation_id);
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;

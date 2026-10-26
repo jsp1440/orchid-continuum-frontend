@@ -589,6 +589,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
     expect(textarea.value).toBe("");
+    expect(container.textContent).toContain("Committed question");
+    expect(container.textContent).toContain("Committed answer");
     expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
     expect(container.textContent).toContain("same turn is not sent twice");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
