@@ -95,7 +95,7 @@ function gridFromClusters(clusters: readonly Cluster[]): GridCell[] {
       south: Math.max(-90, i * deg),
       north: Math.min(90, (i + 1) * deg),
       west: Math.max(-180, j * deg),
-      east: Math.min(180, j * deg),
+      east: Math.min(180, (j + 1) * deg),
       records: c.count,
       taxa: c.taxonCount,
     });
@@ -341,7 +341,7 @@ const ExplorerMap = React.forwardRef<ExplorerMapHandle, ExplorerMapProps>(functi
       const cellId = f?.properties?.cellId as string | undefined;
       if (!cellId) return;
       const [deg, i, j] = cellId.split(':').map(Number);
-      map.fitBounds([[j * deg, i * deg], [(j + 1) * deg, (i + 1) * deg]], { padding: 40, duration: 900 });
+      map.fitBounds([[j * deg, i * deg], [(j + 1) * deg]], { padding: 40, duration: 900 });
     });
     map.on('click', 'oc-point', (e) => {
       const id = e.features?.[0]?.properties?.id as string | undefined;
