@@ -4,7 +4,7 @@ import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recha
 import { AlertTriangle, ExternalLink, Info, Lock, MapPin } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
-  LAYER_CATALOG,
+  ALL_LAYERS,
   MODULE_CAPABILITIES,
   isDrawable,
   moduleLinksFor,
@@ -13,6 +13,7 @@ import {
   type ModuleCapability,
 } from './contracts';
 import { PALETTE, type ColorMode } from './palette';
+import { thematicLayerFor } from './thematicLayers';
 import { attributionOf, type ExplorerFilters, type ExplorerOccurrence } from './occurrenceProvider';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -33,8 +34,8 @@ export function LayerPanel({
   active: ReadonlySet<DrawableLayerId>;
   onToggle(id: DrawableLayerId, on: boolean): void;
 }) {
-  const drawable = LAYER_CATALOG.layers.filter(isDrawable);
-  const unavailable = LAYER_CATALOG.layers.filter((l) => !isDrawable(l));
+  const drawable = ALL_LAYERS.filter(isDrawable);
+  const unavailable = ALL_LAYERS.filter((l) => !isDrawable(l));
   return (
     <div className="space-y-5">
       <section aria-labelledby="atlas-layers-operational">
@@ -451,8 +452,23 @@ export function Legend({ colorMode, mode, activeLayers }: { colorMode: ColorMode
     </li>
   );
   let items: React.ReactNode[] = [];
+  const elevationLayer = thematicLayerFor('dem-elevation');
   if (mode === 'clusters') {
     items = [swatch(PALETTE.cluster, 'Cluster of records (count shown); click to zoom')];
+  } else if (colorMode === 'elevation' && elevationLayer) {
+    const legend = elevationLayer.legend;
+    const gradient = `linear-gradient(to right, ${legend.stops.map((s) => s.color).join(', ')})`;
+    items = [
+      <li key="elevation-ramp">
+        <div className="h-2.5 w-40 rounded-full" style={{ background: gradient }} aria-hidden />
+        <div className="mt-0.5 flex w-40 justify-between text-[10px] text-slate-500">
+          <span>{legend.stops[0].label}</span>
+          <span>{legend.stops[Math.floor(legend.stops.length / 2)].label}</span>
+          <span>{legend.stops[legend.stops.length - 1].label}</span>
+        </div>
+      </li>,
+      swatch(PALETTE.elevationUnknown, 'Elevation unavailable'),
+    ];
   } else if (colorMode === 'record-age') {
     items = [
       swatch(PALETTE.age['pre-1950'], 'Before 1950'),
@@ -476,6 +492,9 @@ export function Legend({ colorMode, mode, activeLayers }: { colorMode: ColorMode
       {activeLayers.has('observed-richness') ? <p className="mt-1 text-slate-600">Grid: distinct taxa per cell (observed, lower bound)</p> : null}
       {!activeLayers.has('observed-richness') && activeLayers.has('sampling-gaps') ? <p className="mt-1 text-slate-600">Grid: records per cell; blank cells are unsampled</p> : null}
       {activeLayers.has('occurrence-density') ? <p className="mt-1 text-slate-600">Heat: record density (effort-biased)</p> : null}
+      {colorMode === 'elevation' && elevationLayer && mode === 'points' ? (
+        <p className="mt-1 max-w-56 leading-snug text-slate-600">{elevationLayer.legend.note}</p>
+      ) : null}
     </div>
   );
 }

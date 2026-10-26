@@ -57,6 +57,35 @@ export const MODULE_CAPABILITIES = capabilitiesJson as {
   workflows: ModuleWorkflow[];
 };
 
+/**
+ * Layers derived entirely in the frontend from open, no-key public services.
+ * They are declared here — not in the shared catalog mirror — because the
+ * mirror is managed jointly with backend and Brain; promoting them is a
+ * separate cross-repo step. `operational_external` follows the catalog's own
+ * status vocabulary ("open, no-key public service rendered client-side with
+ * attribution"). Rich legend/provenance metadata lives in thematicLayers.ts.
+ */
+export const FRONTEND_DERIVED_LAYERS: CatalogLayer[] = [
+  {
+    layer_id: 'dem-elevation',
+    title: 'Elevation (DEM at shown position)',
+    group: 'environmental-context',
+    status: 'operational_external',
+    geometry: 'point-colouring',
+    derivation:
+      'Client-side sampling of AWS Open Data Terrain Tiles (terrarium DEM) at each record’s shown, locality-safe position.',
+    source: 'AWS Open Data Terrain Tiles (Mapzen/Joerd)',
+    license: 'Open data, attribution required',
+    caveats: [
+      'For generalised records the sampled position is the grid-cell centre shown on the map, never the withheld collection site.',
+      'DEM vertical accuracy varies by source region; values are context, not surveyed heights.',
+    ],
+  },
+];
+
+/** Catalog mirror plus frontend-derived layers, for listing and legends. */
+export const ALL_LAYERS: CatalogLayer[] = [...LAYER_CATALOG.layers, ...FRONTEND_DERIVED_LAYERS];
+
 /** Layers the Explorer actually knows how to draw. A catalog entry outside this set is listed, never drawn. */
 export const DRAWABLE_LAYER_IDS = [
   'occurrences',
@@ -66,6 +95,7 @@ export const DRAWABLE_LAYER_IDS = [
   'record-age',
   'conservation-assessment',
   'terrain',
+  'dem-elevation',
 ] as const;
 export type DrawableLayerId = (typeof DRAWABLE_LAYER_IDS)[number];
 
