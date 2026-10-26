@@ -5,6 +5,7 @@ import { LABEL_FONT, TERRAIN_SOURCE, basemapById, offlineStyle, type BasemapId }
 import { gridSummary, normaliseViewport, recordAgeClass, type Cluster, type GridCell, type Viewport } from './geo';
 import type { ExplorerOccurrence } from './occurrenceProvider';
 import type { DrawableLayerId } from './contracts';
+import { ELEVATION_RAMP, ElevationSampler, browserTileLoader } from './elevation';
 import type { ColorMode } from './palette';
 export type { ColorMode } from './palette';
 import { PALETTE } from './palette';
@@ -31,28 +32,39 @@ export interface ExplorerMapProps {
   onViewportChange(view: Viewport): void;
   onSelectRecord(id: string | null): void;
   onBasemapDegraded(detail: string | null): void;
+  /** Surfaced when DEM elevation sampling is impossible in this environment. */
+  onElevationNotice?(detail: string | null): void;
 }
 
 const EMPTY_FC = { type: 'FeatureCollection' as const, features: [] as GeoJSON.Feature[] };
 const INITIAL = { center: [-62, 4] as [number, number], zoom: 1.6 };
 
 
-function pointsGeoJson(records: readonly ExplorerOccurrence[]): GeoJSON.FeatureCollection {
+function pointsGeoJson(
+  records: readonly ExplorerOccurrence[],
+  elevations?: ReadonlyMap<string, number | null> | null,
+): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
-    features: records.map((r) => ({
-      type: 'Feature',
-      id: undefined,
-      geometry: { type: 'Point', coordinates: [r.decimalLongitude, r.decimalLatitude] },
-      properties: {
-        id: r.occurrenceID,
-        name: r.scientificName,
-        generalised: r.generalised,
-        age: recordAgeClass(r.year),
-        assessment: r.assessment,
-        weight: 1,
-      },
-    })),
+    features: records.map((r) => {
+      const elevation = elevations?.get(r.occurrenceID);
+      return {
+        type: 'Feature',
+        id: undefined,
+        geometry: { type: 'Point', coordinates: [r.decimalLongitude, r.decimalLatitude] },
+        properties: {
+          id: r.occurrenceID,
+          name: r.scientificName,
+          generalised: r.generalised,
+          age: recordAgeClass(r.year),
+          assessment: r.assessment,
+          weight: 1,
+          // Absent (not null) when unsampled, so the paint expression can
+          // distinguish "no data" with ['has', 'elevation'].
+          ...(elevation != null ? { elevation } : {}),
+        },
+      };
+    }),
   };
 }
 
@@ -83,7 +95,7 @@ function gridFromClusters(clusters: readonly Cluster[]): GridCell[] {
       south: Math.max(-90, i * deg),
       north: Math.min(90, (i + 1) * deg),
       west: Math.max(-180, j * deg),
-      east: Math.min(180, (j + 1) * deg),
+      east: Math.min(180, j * deg),
       records: c.count,
       taxa: c.taxonCount,
     });
@@ -119,6 +131,16 @@ function pointColor(mode: ColorMode): maplibregl.ExpressionSpecification | strin
   }
   if (mode === 'conservation-assessment') {
     return ['match', ['get', 'assessment'], 'threatened', PALETTE.assessment.threatened, 'not-threatened', PALETTE.assessment['not-threatened'], PALETTE.assessment.unresolved];
+  }
+  if (mode === 'elevation') {
+    const stops: (number | string)[] = [];
+    for (const s of ELEVATION_RAMP) stops.push(s.elevation, `rgb(${s.rgb[0]}, ${s.rgb[1]}, ${s.rgb[2]})`);
+    return [
+      'case',
+      ['!', ['has', 'elevation']],
+      PALETTE.elevationUnknown,
+      ['interpolate', ['linear'], ['get', 'elevation'], ...stops],
+    ] as maplibregl.ExpressionSpecification;
   }
   return ['case', ['get', 'generalised'], PALETTE.generalised, PALETTE.point];
 }
@@ -369,15 +391,57 @@ const ExplorerMap = React.forwardRef<ExplorerMapHandle, ExplorerMapProps>(functi
   const gridOn = activeLayers.has('observed-richness') || activeLayers.has('sampling-gaps');
   const gridMetric: 'taxa' | 'records' = activeLayers.has('observed-richness') ? 'taxa' : 'records';
 
+  // DEM elevation sampling for the `dem-elevation` layer. Only the shown,
+  // locality-safe coordinates are ever sent to the tile service — these are
+  // the generalised positions the occurrence provider already exposes.
+  const samplerRef = useRef<ElevationSampler | null>(null);
+  const [elevations, setElevations] = useState<ReadonlyMap<string, number | null> | null>(null);
+  useEffect(() => {
+    if (colorMode !== 'elevation') {
+      setElevations(null);
+      propsRef.current.onElevationNotice?.(null);
+      return;
+    }
+    if (mode !== 'points') return; // cluster circles keep their own colouring
+    if (!samplerRef.current) samplerRef.current = new ElevationSampler({ loader: browserTileLoader() });
+    const sampler = samplerRef.current;
+    const controller = new AbortController();
+    sampler
+      .sampleMany(
+        records.map((r) => ({ lat: r.decimalLatitude, lng: r.decimalLongitude })),
+        controller.signal,
+      )
+      .then((values) => {
+        if (controller.signal.aborted) return;
+        setElevations(new Map(records.map((r, i) => [r.occurrenceID, values[i]])));
+        const any = values.some((v) => v != null);
+        propsRef.current.onElevationNotice?.(
+          any || records.length === 0
+            ? null
+            : 'Elevation could not be sampled (tile service unreachable or no canvas environment); unsampled records are drawn grey.',
+        );
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setElevations(null);
+        propsRef.current.onElevationNotice?.(
+          'Elevation could not be sampled (tile service unreachable or no canvas environment); unsampled records are drawn grey.',
+        );
+      });
+    return () => controller.abort();
+    // records is a new array per viewport/filters change — exactly when
+    // re-sampling is required. eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorMode, mode, records]);
+
   // Data sources: only rewritten when the data itself changes.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !styleVersion || !map.getSource('oc-points')) return;
     (map.getSource('oc-points') as GeoJSONSource).setData(
-      mode === 'points' || density ? pointsGeoJson(records) : EMPTY_FC,
+      mode === 'points' || density ? pointsGeoJson(records, colorMode === 'elevation' ? elevations : null) : EMPTY_FC,
     );
     (map.getSource('oc-clusters') as GeoJSONSource).setData(mode === 'clusters' ? clustersGeoJson(clusters) : EMPTY_FC);
-  }, [records, clusters, mode, density, styleVersion]);
+  }, [records, clusters, mode, density, styleVersion, colorMode, elevations]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -401,7 +465,10 @@ const ExplorerMap = React.forwardRef<ExplorerMapHandle, ExplorerMapProps>(functi
     const map = mapRef.current;
     if (!map || !styleVersion || !map.getLayer('oc-point')) return;
     const showOcc =
-      activeLayers.has('occurrences') || activeLayers.has('record-age') || activeLayers.has('conservation-assessment');
+      activeLayers.has('occurrences') ||
+      activeLayers.has('record-age') ||
+      activeLayers.has('conservation-assessment') ||
+      activeLayers.has('dem-elevation');
     const vis = (id: string, on: boolean) => {
       if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
     };
