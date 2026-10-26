@@ -5,6 +5,8 @@ import { Bar, BarChart, CartesianGrid, Line, LineChart, Scatter, ScatterChart, X
 
 import ScientificSynthesis from "@/components/calyx/ScientificSynthesis";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { WorkspaceOutputPanel } from "@/features/calyx-workspace/WorkspaceOutputPanel";
+import { validateWorkspaceOutput, type WorkspaceOutput } from "@/features/calyx-workspace/workspaceOutputBus";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
 import { useCalyxSpeechOutput } from "@/hooks/useCalyxSpeechOutput";
 import {
@@ -33,6 +35,7 @@ import {
   type CalyxCitation,
   type CalyxSynthesisStructure,
   type CalyxConversation,
+  type CalyxWorkspaceOutput,
   type CalyxWorkspaceSnapshot,
   type MissionEvidence,
   type MissionSource,
@@ -150,6 +153,44 @@ function parseCalyxArtifacts(content: string): { prose: string; artifacts: Calyx
     return block;
   });
   return { prose: prose.trim(), artifacts };
+}
+
+function validateCalyxWorkspaceOutput(value: unknown): WorkspaceOutput | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+
+  const output = value as Partial<CalyxWorkspaceOutput>;
+  const provenance = output.provenance;
+  if (!provenance || typeof provenance !== "object") return null;
+
+  try {
+    return validateWorkspaceOutput({
+      id: output.id,
+      kind: output.kind,
+      title: output.title,
+      subtitle: output.subtitle ?? undefined,
+      provenance: {
+        source_module: provenance.source_module,
+        source_id: provenance.source_id ?? undefined,
+        generated: provenance.generated,
+        evidence_status: provenance.evidence_status,
+      },
+      payload: output.payload,
+      created_at: output.created_at,
+    });
+  } catch {
+    return null;
+  }
+}
+
+function readCalyxWorkspaceOutputs(value: unknown): WorkspaceOutput[] {
+  if (!Array.isArray(value)) return [];
+
+  const outputs = new Map<string, WorkspaceOutput>();
+  for (const candidate of value) {
+    const output = validateCalyxWorkspaceOutput(candidate);
+    if (output) outputs.set(output.id, output);
+  }
+  return Array.from(outputs.values()).slice(-6);
 }
 
 function useElapsedSeconds(active: boolean): number {
@@ -419,12 +460,21 @@ function CalyxArtifactView({ artifact }: { artifact: CalyxArtifact }) {
   );
 }
 
-function CalyxMessageContent({ content }: { content: string }) {
+function CalyxMessageContent({
+  content,
+  outputs,
+  onCloseOutput,
+}: {
+  content: string;
+  outputs?: WorkspaceOutput[];
+  onCloseOutput?: (outputId: string) => void;
+}) {
   const parsed = useMemo(() => parseCalyxArtifacts(content), [content]);
   return (
     <div>
       {parsed.prose ? <div className="calyx-prose text-sm leading-6" dangerouslySetInnerHTML={{ __html: renderCalyxRichText(parsed.prose) }} /> : null}
       {parsed.artifacts.map((artifact, index) => <CalyxArtifactView artifact={artifact} key={`${artifact.kind}-${index}`} />)}
+      {outputs?.map((output) => <WorkspaceOutputPanel key={output.id} onClose={() => onCloseOutput?.(output.id)} output={output} />)}
     </div>
   );
 }
@@ -435,6 +485,7 @@ export default function CalyxWorkspace() {
   const [message, setMessage] = useState("");
   const [projectId, setProjectId] = useState(DEFAULT_PROJECT_ID);
   const [conversation, setConversation] = useState<CalyxConversation | null>(null);
+  const [workspaceOutputsByMessage, setWorkspaceOutputsByMessage] = useState<Record<string, WorkspaceOutput[]>>({});
   const [missions, setMissions] = useState<Record<string, BrainMission>>({});
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
@@ -498,6 +549,7 @@ export default function CalyxWorkspace() {
   );
 
   useEffect(() => { activeProjectIdRef.current = normalizedProjectId; }, [normalizedProjectId]);
+  useEffect(() => { setWorkspaceOutputsByMessage({}); }, [normalizedProjectId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -661,6 +713,10 @@ export default function CalyxWorkspace() {
       });
       turnCommitted = true;
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
+      const workspaceOutputs = readCalyxWorkspaceOutputs(result.workspace_outputs);
+      if (workspaceOutputs.length && result.calyx_message?.message_id) {
+        setWorkspaceOutputsByMessage((current) => ({ ...current, [result.calyx_message.message_id]: workspaceOutputs }));
+      }
       if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
       const refreshed = await getCalyxConversation(thread.conversation_id);
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
@@ -721,6 +777,7 @@ export default function CalyxWorkspace() {
     stopListening();
     conversationIdRef.current = null;
     setConversation(null);
+    setWorkspaceOutputsByMessage({});
     setMissions({});
     missionLookupAttemptsRef.current.clear();
     setMessage("");
@@ -774,6 +831,7 @@ export default function CalyxWorkspace() {
     stopListening();
     conversationIdRef.current = null;
     setConversation(null);
+    setWorkspaceOutputsByMessage({});
     setMissions({});
     missionLookupAttemptsRef.current.clear();
     setMessage("");
@@ -805,6 +863,18 @@ export default function CalyxWorkspace() {
     anchor.download = `calyx-research-${conversation.conversation_id.slice(0, 8)}.md`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function removeWorkspaceOutput(messageId: string, outputId: string) {
+    setWorkspaceOutputsByMessage((current) => {
+      const existing = current[messageId];
+      if (!existing) return current;
+      const remaining = existing.filter((output) => output.id !== outputId);
+      const next = { ...current };
+      if (remaining.length) next[messageId] = remaining;
+      else delete next[messageId];
+      return next;
+    });
   }
 
   function addDocumentContext(text: string, fileName = selectedAttachment?.name ?? "workspace selection") {
@@ -841,7 +911,7 @@ export default function CalyxWorkspace() {
                 return (
                   <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
                     <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                      {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
+                      {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} onCloseOutput={(outputId) => removeWorkspaceOutput(turn.message_id, outputId)} outputs={workspaceOutputsByMessage[turn.message_id]} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
                     </div>
                     {turn.role === "calyx" && ttsSupported ? <button aria-label="Speak this reply" className="mt-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted" onClick={() => speak(turn.content)} type="button">🔊 Speak</button> : null}
                     {turn.role === "calyx" ? <CitationList items={citations} /> : null}
