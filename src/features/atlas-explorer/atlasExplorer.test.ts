@@ -11,7 +11,7 @@ import {
   recordAgeClass,
   viewportContains,
 } from './geo';
-import { DRAWABLE_LAYER_IDS, LAYER_CATALOG, MODULE_CAPABILITIES, isDrawable, moduleLinksFor } from './contracts';
+import { ALL_LAYERS, DRAWABLE_LAYER_IDS, FRONTEND_DERIVED_LAYERS, LAYER_CATALOG, MODULE_CAPABILITIES, isDrawable, moduleLinksFor } from './contracts';
 import {
   EMPTY_FILTERS,
   ResponseCache,
@@ -25,6 +25,21 @@ import {
   type ExplorerOccurrence,
 } from './occurrenceProvider';
 import { toCsv, toGeoJson } from './exporters';
+import {
+  ELEVATION_BANDS,
+  ELEVATION_LAYER_ID,
+  ELEVATION_RAMP,
+  ElevationSampler,
+  TILE_SIZE,
+  decodeTerrarium,
+  elevationBand,
+  elevationColor,
+  elevationCss,
+  tileForPosition,
+  tileUrl,
+  type TileLoader,
+} from './elevation';
+import { DEM_ELEVATION_LAYER, thematicLayerFor } from './thematicLayers';
 
 const point = (over: Partial<AtlasOccurrencePoint> = {}): AtlasOccurrencePoint => ({
   id: 'uuid-1',
@@ -283,8 +298,21 @@ describe('contracts', () => {
       if (isDrawable(layer)) expect(['operational', 'operational_external']).toContain(layer.status);
       if (layer.status === 'planned' || layer.status === 'blocked') expect(layer.blocker).toBeTruthy();
     }
-    const catalogIds = new Set(LAYER_CATALOG.layers.map((l) => l.layer_id));
+    const catalogIds = new Set(ALL_LAYERS.map((l) => l.layer_id));
     for (const id of DRAWABLE_LAYER_IDS) expect(catalogIds.has(id)).toBe(true);
+  });
+
+  it('declares frontend-derived layers drawable, attributed and caveat-bearing without touching the mirror', () => {
+    for (const layer of FRONTEND_DERIVED_LAYERS) {
+      // Frontend-derived layers extend, never duplicate, the shared catalog mirror.
+      expect(LAYER_CATALOG.layers.some((l) => l.layer_id === layer.layer_id)).toBe(false);
+      expect(layer.status).toBe('operational_external');
+      expect(layer.source).toBeTruthy();
+      expect(layer.license).toBeTruthy();
+      expect(layer.caveats?.length).toBeGreaterThan(0);
+      expect(isDrawable(layer)).toBe(true);
+    }
+    expect(ALL_LAYERS.length).toBe(LAYER_CATALOG.layers.length + FRONTEND_DERIVED_LAYERS.length);
   });
 
   it('builds module links from bounded canonical names only', () => {
@@ -314,6 +342,123 @@ describe('contracts', () => {
       const raw = JSON.parse(readFileSync(new URL(`../../../contracts/${name}.json`, import.meta.url), 'utf8'));
       expect(raw.schema).toMatch(/^oc\.atlas-/);
     }
+  });
+});
+
+describe('elevation thematic layer (dem-elevation)', () => {
+  /** Build a flat terrarium tile whose every pixel encodes `elevationM`. */
+  const flatTile = (elevationM: number): Uint8ClampedArray => {
+    const v = elevationM + 32768;
+    const r = Math.floor(v / 256);
+    const g = Math.floor(v % 256);
+    const b = Math.round((v - Math.floor(v)) * 256);
+    const data = new Uint8ClampedArray(TILE_SIZE * TILE_SIZE * 4);
+    for (let i = 0; i < data.length; i += 4) {
+      data[i] = r;
+      data[i + 1] = g;
+      data[i + 2] = b;
+      data[i + 3] = 255;
+    }
+    return data;
+  };
+  const loaderReturning = (data: Uint8ClampedArray | null): TileLoader => vi.fn(async () => data);
+
+  it('decodes the terrarium encoding per the Mapzen/Joerd definition', () => {
+    // elevation = R*256 + G + B/256 − 32768
+    expect(decodeTerrarium(128, 0, 0)).toBe(0);
+    expect(decodeTerrarium(128, 134, 160)).toBeCloseTo(134.625, 3);
+    expect(decodeTerrarium(127, 130, 84)).toBeCloseTo(-125.671875, 3);
+    // Round-trip through a synthetic tile.
+    expect(Math.round(decodeTerrarium(128, 0, 0))).toBe(0);
+  });
+
+  it('classifies elevational bands and rejects unknown values', () => {
+    expect(elevationBand(120)!.id).toBe('lowland');
+    expect(elevationBand(500)!.id).toBe('submontane');
+    expect(elevationBand(1500)!.id).toBe('montane');
+    expect(elevationBand(2500)!.id).toBe('upper-montane');
+    expect(elevationBand(4800)!.id).toBe('alpine');
+    expect(elevationBand(null)).toBeNull();
+    expect(elevationBand(NaN)).toBeNull();
+    // Bands tile the number line with no gaps or overlaps.
+    for (let m = -500; m <= 6000; m += 137) expect(elevationBand(m)).not.toBeNull();
+    expect(ELEVATION_BANDS[0].minM).toBe(-Infinity);
+  });
+
+  it('interpolates the hypsometric ramp and clamps outside it', () => {
+    const at0 = elevationColor(0)!;
+    expect(at0).toEqual([...ELEVATION_RAMP[0].rgb]);
+    const mid = elevationColor(250)!; // halfway between stops 0 m and 500 m
+    expect(mid[1]).toBeGreaterThan(at0[1]); // greener towards the next stop
+    expect(elevationColor(-450)).toEqual(at0); // clamped, not null: terrestrial records below sea level
+    expect(elevationColor(8848)).toEqual([...ELEVATION_RAMP[ELEVATION_RAMP.length - 1].rgb]);
+    expect(elevationColor(null)).toBeNull();
+    expect(elevationCss(1000)).toMatch(/^rgb\(/);
+    expect(elevationCss(null)).toBeNull();
+  });
+
+  it('maps positions to web-mercator tiles and intra-tile pixels', () => {
+    expect(tileForPosition(0, 0, 1)).toMatchObject({ z: 1, x: 1, y: 1, px: 0, py: 0 });
+    const origin = tileForPosition(85.05112878, -180, 0);
+    expect(origin).toMatchObject({ z: 0, x: 0, y: 0, px: 0, py: 0 });
+    // Latitudes beyond the mercator limit clamp into the edge tile.
+    const pole = tileForPosition(89, 0, 2);
+    expect(pole.y).toBe(0);
+    expect(pole.py).toBe(0);
+    const antipole = tileForPosition(-89, 0, 2);
+    expect(antipole.y).toBe(3);
+    // Tile URLs follow the terrain source template.
+    expect(tileUrl('https://t.example/{z}/{x}/{y}.png', 10, 1, 2)).toBe('https://t.example/10/1/2.png');
+  });
+
+  it('samples elevations through an injectable loader and caches tiles', async () => {
+    const loader = loaderReturning(flatTile(1000));
+    const sampler = new ElevationSampler({ loader, template: 'https://t.example/{z}/{x}/{y}.png', zoom: 10 });
+    await expect(sampler.sample(9.15, -83.75)).resolves.toBeCloseTo(1000, 0);
+    const values = await sampler.sampleMany([
+      { lat: 9.15, lng: -83.75 },
+      { lat: 9.16, lng: -83.76 }, // same tile at z10
+      { lat: -0.5, lng: -78.2 },
+    ]);
+    expect(values.every((v) => v !== null && Math.abs(v - 1000) < 1)).toBe(true);
+    // Two distinct tiles loaded once each across both calls (LRU hit + batch dedupe).
+    expect((loader as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+  });
+
+  it('reports null, never throws, when tiles are missing or the loader fails', async () => {
+    const missing = new ElevationSampler({ loader: loaderReturning(null), template: 't', zoom: 10 });
+    await expect(missing.sample(10, -84)).resolves.toBeNull();
+    const failing = new ElevationSampler({
+      loader: async () => {
+        throw new Error('no canvas');
+      },
+      template: 't',
+      zoom: 10,
+    });
+    await expect(failing.sampleMany([{ lat: 10, lng: -84 }])).resolves.toEqual([null]);
+  });
+
+  it('evicts the least-recently-used tile beyond the cache bound', async () => {
+    const loader = loaderReturning(flatTile(0));
+    const sampler = new ElevationSampler({ loader, template: 't', zoom: 4, maxCachedTiles: 1 });
+    await sampler.sample(0, 0); // tile A
+    await sampler.sample(0, 120); // tile B, evicts A
+    await sampler.sample(0, 0); // tile A again → second load
+    expect((loader as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3);
+  });
+
+  it('registers a self-describing thematic layer with legend, provenance and caveats', () => {
+    const layer = thematicLayerFor(ELEVATION_LAYER_ID);
+    expect(layer).toBe(DEM_ELEVATION_LAYER);
+    expect(layer!.colorMode).toBe('elevation');
+    expect(layer!.legend.kind).toBe('continuous');
+    expect(layer!.legend.unit).toContain('m');
+    expect(layer!.legend.stops.length).toBe(ELEVATION_RAMP.length);
+    expect(layer!.legend.note).toContain('grid-cell centre'); // locality-safety caveat is surfaced
+    expect(layer!.provenance).toMatch(/Terrain Tiles/);
+    expect(layer!.attribution).toContain('Mapzen');
+    expect(layer!.caveats.length).toBeGreaterThan(0);
+    expect(thematicLayerFor('no-such-layer')).toBeUndefined();
   });
 });
 
