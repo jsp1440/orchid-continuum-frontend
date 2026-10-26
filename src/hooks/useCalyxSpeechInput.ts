@@ -42,7 +42,7 @@ interface CalyxSpeechInput {
   state: SpeechInputState;
   interimTranscript: string;
   error: string | null;
-  startListening: () => void;
+  startListening: () => boolean;
   stopListening: () => void;
 }
 
@@ -83,12 +83,12 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     recognition.stop();
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((): boolean => {
     // `state` updates asynchronously (only once `onstart` fires), so a rapid
     // second call can race past `state === "listening"` before it settles.
     // `recognitionRef.current` is set synchronously below and is the only
     // reliable guard against creating a second, orphaned recognizer.
-    if (!speechRecognition || state === "listening" || recognitionRef.current) return;
+    if (!speechRecognition || state === "listening" || recognitionRef.current) return false;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;
@@ -153,7 +153,9 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
       if (recognitionRef.current === recognition) recognitionRef.current = null;
       setError("Voice input could not start.");
       setState("idle");
+      return false;
     }
+    return true;
   }, [speechRecognition, state]);
 
   useEffect(() => () => {
