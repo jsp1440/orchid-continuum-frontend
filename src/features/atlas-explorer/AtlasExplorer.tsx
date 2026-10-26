@@ -132,6 +132,7 @@ const AtlasExplorer: React.FC = () => {
   const [tab, setTab] = useState<PanelTab>('details');
   const [panelOpen, setPanelOpen] = useState(true);
   const [basemapNotice, setBasemapNotice] = useState<string | null>(null);
+  const [elevationNotice, setElevationNotice] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -152,7 +153,9 @@ const AtlasExplorer: React.FC = () => {
     ? 'conservation-assessment'
     : activeLayers.has('record-age')
       ? 'record-age'
-      : 'default';
+      : activeLayers.has('dem-elevation')
+        ? 'elevation'
+        : 'default';
 
   const setFilters = useCallback(
     (next: Partial<ExplorerFilters>) => setParams((p) => writeFilters(p, { ...readFilters(p), ...next }), { replace: true }),
@@ -175,8 +178,8 @@ const AtlasExplorer: React.FC = () => {
       if (on) {
         next.add(id);
         // Colour modes are mutually exclusive.
-        if (id === 'record-age') next.delete('conservation-assessment');
-        if (id === 'conservation-assessment') next.delete('record-age');
+        const COLOR_MODE_LAYERS: DrawableLayerId[] = ['record-age', 'conservation-assessment', 'dem-elevation'];
+        if (COLOR_MODE_LAYERS.includes(id)) for (const other of COLOR_MODE_LAYERS) if (other !== id) next.delete(other);
       } else next.delete(id);
       return next;
     });
@@ -582,6 +585,7 @@ const AtlasExplorer: React.FC = () => {
             onViewportChange={setRawView}
             onSelectRecord={setSelectedId}
             onBasemapDegraded={setBasemapNotice}
+            onElevationNotice={setElevationNotice}
           />
 
           <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex flex-col items-start gap-2">
@@ -634,6 +638,7 @@ const AtlasExplorer: React.FC = () => {
             ) : null}
             {viewData.truncated && viewData.truncationReason ? <SourceNotice kind="info">{viewData.truncationReason}</SourceNotice> : null}
             {basemapNotice ? <SourceNotice kind="warning">{basemapNotice}</SourceNotice> : null}
+            {elevationNotice ? <SourceNotice kind="warning">{elevationNotice}</SourceNotice> : null}
             {exportNotice ? <SourceNotice kind="info">{exportNotice}</SourceNotice> : null}
           </div>
 
