@@ -201,6 +201,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     mocks.loadCalyxWorkspace.mockClear();
     mocks.speechInputState = "unsupported";
     mocks.startListening.mockReset();
+    // The real hook returns true only when it actually created a recognizer.
+    mocks.startListening.mockReturnValue(true);
     mocks.stopListening.mockReset();
   });
 
@@ -1010,6 +1012,67 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
   });
+  type MutableTurn = { conversation_id: string; operator_message: Record<string, unknown>; calyx_message: Record<string, unknown> };
+  const invalidCommittedTurnCases: Array<{ name: string; mutate: (turn: MutableTurn) => void }> = [
+    { name: "response for a different conversation", mutate: (t) => { t.conversation_id = "other-thread"; } },
+    { name: "operator message for a different conversation", mutate: (t) => { t.operator_message.conversation_id = "other-thread"; } },
+    { name: "Calyx message for a different conversation", mutate: (t) => { t.calyx_message.conversation_id = "other-thread"; } },
+    { name: "operator message with the wrong role", mutate: (t) => { t.operator_message.role = "calyx"; } },
+    { name: "Calyx message with the wrong role", mutate: (t) => { t.calyx_message.role = "operator"; } },
+    { name: "two messages with the same server ID", mutate: (t) => { t.calyx_message.message_id = t.operator_message.message_id; } },
+    { name: "an empty server message ID", mutate: (t) => { t.operator_message.message_id = "  "; } },
+    { name: "a missing server message ID", mutate: (t) => { delete t.calyx_message.message_id; } },
+    { name: "a non-string server message ID", mutate: (t) => { t.operator_message.message_id = 7; } },
+  ];
+
+  // Ported from the Copilot-owned #954 head 7963c312 (all-or-nothing committed-exchange rule),
+  // with the committed question AND answer both asserted absent.
+  it.each(invalidCommittedTurnCases)("COPILOT954: does not append a $name when the post-turn refresh fails", async ({ mutate }) => {
+    const invalidTurn = JSON.parse(JSON.stringify(buildTurnResult("validated-thread", "Must not render"))) as MutableTurn;
+    invalidTurn.operator_message.content = "Validate this server exchange";
+    mutate(invalidTurn);
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("validated-thread"));
+    mocks.sendCalyxTurn.mockResolvedValue(invalidTurn);
+    mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+    await act(async () => { root.render(<MemoryRouter><CalyxWorkspace /></MemoryRouter>); });
+    await flush(2);
+    await act(async () => { mocks.pushTranscript("Validate this server exchange"); });
+    await act(async () => { container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush(4);
+    expect(container.textContent).not.toContain("Must not render");
+    expect(container.textContent).not.toContain("Validate this server exchange");
+    expect(container.querySelectorAll('[aria-live="polite"] article')).toHaveLength(0);
+    expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not attach workspace outputs to a CALYX message whose id already exists in the transcript", async () => {
+    mocks.createCalyxConversation.mockResolvedValue(
+      buildConversation("c1", [
+        { message_id: "c1-calyx", conversation_id: "c1", role: "calyx", content: "Earlier answer", created_at: "2026-08-10T00:00:01Z" },
+      ]),
+    );
+    mocks.sendCalyxTurn.mockResolvedValue(
+      buildTurnResult("c1", "Replayed answer", [
+        {
+          id: "dup-output", kind: "text", title: "Output for a duplicate id",
+          provenance: { source_module: "brain_mission", generated: false, evidence_status: "unknown" },
+          payload: { body: "must not attach" }, created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+    mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+    await act(async () => { root.render(<MemoryRouter><CalyxWorkspace /></MemoryRouter>); });
+    await flush(2);
+    await act(async () => { mocks.pushTranscript("Question"); });
+    await act(async () => { container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush(4);
+    expect(container.textContent).toContain("Earlier answer");
+    expect(container.textContent).not.toContain("Output for a duplicate id");
+    expect(container.textContent).not.toContain("must not attach");
+  });
+
   describe("committed turn stays visible when the transcript refresh fails", () => {
     type Overrides = {
       conversationId?: string;
@@ -1198,7 +1261,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       expect(articleCount()).toBe(2);
     });
 
-    it("(f) appends only one message when the exchange repeats a message id, with unique React keys", async () => {
+    it("(f) appends nothing when the exchange repeats a message id, and emits no duplicate React keys", async () => {
       const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
       try {
         mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
@@ -1212,7 +1275,9 @@ describe("CalyxWorkspace conversation lifecycle", () => {
         await renderWorkspace();
         await submitDraft("Same-id question");
 
-        expect(articleCount()).toBe(1);
+        expect(container.textContent).not.toContain("Same-id question");
+        expect(container.textContent).not.toContain("Same-id answer");
+        expect(articleCount()).toBe(0);
         const keyWarnings = consoleError.mock.calls.filter((call) => String(call[0]).includes("same key"));
         expect(keyWarnings).toHaveLength(0);
       } finally {
@@ -1220,29 +1285,27 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       }
     });
 
-    it("(f2) skips a committed message whose id is empty or missing", async () => {
+    it.each([
+      ["blank operator id", { operator: { message_id: "   ", content: "Blank-id question" }, calyx: { content: "Blank-id answer" } }, ["Blank-id question", "Blank-id answer"]],
+      ["empty calyx id", { operator: { content: "Empty-id question" }, calyx: { message_id: "", content: "Empty-id answer" } }, ["Empty-id question", "Empty-id answer"]],
+      ["non-string operator id", { operator: { message_id: 7, content: "Numeric-id question" }, calyx: { content: "Numeric-id answer" } }, ["Numeric-id question", "Numeric-id answer"]],
+    ] as Array<[string, Overrides, string[]]>)("(f2) appends nothing for an exchange with a %s", async (_label, overrides, texts) => {
       mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
-      mocks.sendCalyxTurn.mockResolvedValue(
-        committedTurn("c1", {
-          operator: { message_id: "", content: "Anonymous question" },
-          calyx: { message_id: "c1-calyx", content: "Keyed answer" },
-        }),
-      );
+      mocks.sendCalyxTurn.mockResolvedValue(committedTurn("c1", overrides));
       mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
       await renderWorkspace();
-      await submitDraft("Anonymous question");
+      await submitDraft("Committed question");
 
-      expect(container.textContent).not.toContain("Anonymous question");
-      expect(occurrences(container.textContent ?? "", "Keyed answer")).toBe(1);
-      expect(articleCount()).toBe(1);
+      for (const text of texts) expect(container.textContent).not.toContain(text);
+      expect(articleCount()).toBe(0);
     });
 
     it.each([
-      ["operator role missing", { operator: { role: undefined }, calyx: { content: "Roleless operator exchange" } }, "Roleless operator exchange", 0],
-      ["operator_message missing", { operator: null, calyx: { content: "Orphan answer" } }, "Orphan answer", 0],
-      ["calyx_message missing", { calyx: null }, "Committed question", 0],
-      ["calyx message_id missing", { calyx: { message_id: undefined, content: "Headless answer" } }, "Headless answer", 1],
-    ] as Array<[string, Overrides, string, number]>)("(g) does not append or crash on a malformed turn response: %s", async (_label, overrides, forbiddenText, expectedArticles) => {
+      ["operator role missing", { operator: { role: undefined }, calyx: { content: "Roleless exchange answer" } }, "Roleless exchange answer"],
+      ["operator_message missing", { operator: null, calyx: { content: "Orphan answer" } }, "Orphan answer"],
+      ["calyx_message missing", { calyx: null }, "Committed question"],
+      ["calyx message_id missing", { calyx: { message_id: undefined, content: "Headless answer" } }, "Headless answer"],
+    ] as Array<[string, Overrides, string]>)("(g) appends nothing and does not crash on a malformed turn response: %s", async (_label, overrides, forbiddenText) => {
       mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
       mocks.sendCalyxTurn.mockResolvedValue(committedTurn("c1", overrides));
       mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
@@ -1250,9 +1313,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       await submitDraft("Committed question");
 
       expect(container.textContent).not.toContain(forbiddenText);
-      // Structural malformation drops the whole exchange; a message that only
-      // lacks a usable id is skipped on its own.
-      expect(articleCount()).toBe(expectedArticles);
+      expect(container.textContent).not.toContain("Committed answer");
+      expect(articleCount()).toBe(0);
       expect(container.querySelector("#calyx-message")).not.toBeNull();
     });
 
