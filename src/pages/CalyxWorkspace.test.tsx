@@ -490,6 +490,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("the connection may have dropped after CALYX completed the turn");
     expect(container.textContent).toContain("Refresh conversation history and inspect the thread");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    expect((getButton(container, "Send") as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(21_000);
