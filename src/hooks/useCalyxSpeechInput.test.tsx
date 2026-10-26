@@ -157,9 +157,75 @@ describe("useCalyxSpeechInput", () => {
     act(() => {
       latest!.startListening();
     });
+    const recognition = instances[0];
+    const staleResultHandler = recognition.onresult;
     act(() => {
       latest!.stopListening();
     });
-    expect(instances[0].stop).toHaveBeenCalledTimes(1);
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+    expect(latest!.state).toBe("idle");
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "stale stopped transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
+  });
+
+  it("allows a fresh session after stopping and ignores the stopped session's late result", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const stopped = instances[0];
+    const staleResultHandler = stopped.onresult;
+
+    act(() => {
+      latest!.stopListening();
+      latest!.startListening();
+    });
+
+    expect(instances).toHaveLength(2);
+    expect(instances[1].start).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "previous project transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
+  });
+
+  it("stops and detaches the recognizer when the hook unmounts", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const recognition = instances[0];
+    const staleResultHandler = recognition.onresult;
+
+    act(() => {
+      root!.unmount();
+      root = null;
+    });
+
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "late transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
   });
 });
