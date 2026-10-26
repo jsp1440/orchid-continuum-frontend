@@ -193,36 +193,38 @@ function readCalyxWorkspaceOutputs(value: unknown): WorkspaceOutput[] {
   return Array.from(outputs.values()).slice(-6);
 }
 
-function isExchangeMessage(
+function isCommittedTurnMessage(
   value: unknown,
   role: "operator" | "calyx",
   conversationId: string,
 ): value is CalyxServerMessage {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<CalyxServerMessage>;
-  return candidate.role === role && candidate.conversation_id === conversationId;
-}
-
-function isKeyableMessage(message: CalyxServerMessage): boolean {
-  return typeof message.message_id === "string" && message.message_id.trim().length > 0 && typeof message.content === "string";
+  return (
+    candidate.role === role &&
+    candidate.conversation_id === conversationId &&
+    typeof candidate.message_id === "string" &&
+    candidate.message_id.trim().length > 0 &&
+    typeof candidate.content === "string"
+  );
 }
 
 /**
  * The operator/CALYX messages a successful turn response committed.
  *
- * The exchange is trusted only as a whole: the response, the operator message
- * and the CALYX message must all name `conversationId` and carry the expected
- * roles, otherwise nothing is shown (the authoritative transcript refresh is
- * the source of truth). Within a trusted exchange a message without a usable
- * id or content is skipped, because it could not be keyed or rendered.
+ * All-or-nothing: the exchange is accepted only when the response and BOTH
+ * messages name `conversationId`, carry the expected roles, have distinct
+ * non-blank string ids and string content. Anything else yields null and
+ * nothing is shown; the authoritative transcript refresh is the source of truth.
  */
 function readCommittedTurnExchange(
   result: { conversation_id?: unknown; operator_message?: unknown; calyx_message?: unknown },
   conversationId: string,
 ): { operator: CalyxServerMessage; calyx: CalyxServerMessage } | null {
   if (result?.conversation_id !== conversationId) return null;
-  if (!isExchangeMessage(result.operator_message, "operator", conversationId)) return null;
-  if (!isExchangeMessage(result.calyx_message, "calyx", conversationId)) return null;
+  if (!isCommittedTurnMessage(result.operator_message, "operator", conversationId)) return null;
+  if (!isCommittedTurnMessage(result.calyx_message, "calyx", conversationId)) return null;
+  if (result.operator_message.message_id === result.calyx_message.message_id) return null;
   return { operator: result.operator_message, calyx: result.calyx_message };
 }
 
@@ -567,8 +569,8 @@ export default function CalyxWorkspace() {
     }, [clearPendingRetry]),
   );
   const startVoiceInput = useCallback(() => {
-    speechStartEpochRef.current = speechContextEpochRef.current;
-    startListening();
+    // Authorize the current context only if the hook really created a recognizer.
+    if (startListening()) speechStartEpochRef.current = speechContextEpochRef.current;
   }, [startListening]);
   const invalidateVoiceInput = useCallback(() => {
     speechContextEpochRef.current += 1;
@@ -803,7 +805,7 @@ export default function CalyxWorkspace() {
       // authoritative transcript refresh, so a failed refresh cannot hide it.
       // Reached only for the current request, conversation and project.
       const exchange = readCommittedTurnExchange(result, thread.conversation_id);
-      const committedMessages = exchange ? [exchange.operator, exchange.calyx].filter(isKeyableMessage) : [];
+      const committedMessages = exchange ? [exchange.operator, exchange.calyx] : [];
       if (committedMessages.length) {
         setConversation((current) => {
           if (
@@ -833,8 +835,11 @@ export default function CalyxWorkspace() {
       }
       // Validated server workspace outputs belong to the CALYX message that carried them.
       const workspaceOutputs = readCalyxWorkspaceOutputs(result.workspace_outputs);
-      const calyxMessageId = exchange && isKeyableMessage(exchange.calyx) ? exchange.calyx.message_id : undefined;
-      if (workspaceOutputs.length && calyxMessageId) {
+      const calyxMessageId = exchange?.calyx.message_id;
+      const calyxMessageIsNew = Boolean(
+        calyxMessageId && !(Array.isArray(thread.messages) ? thread.messages : []).some((item) => item?.message_id === calyxMessageId),
+      );
+      if (workspaceOutputs.length && calyxMessageId && calyxMessageIsNew) {
         setWorkspaceOutputsByMessage((current) => ({ ...current, [calyxMessageId]: workspaceOutputs }));
       }
       if (result.research?.mission && calyxMessageId) setMissions((current) => ({ ...current, [calyxMessageId]: result.research.mission as BrainMission }));
