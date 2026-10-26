@@ -23,8 +23,10 @@ describe('Calyx answer rendering keeps synthesis primary', () => {
 
   it('renders the answer prose itself as the primary surface', () => {
     // The conversational answer is rendered directly, not decomposed into
-    // per-subsystem panels by the client.
-    expect(workspace).toContain('<CalyxMessageContent content={turn.content} />');
+    // per-subsystem panels by the client; server-owned rich outputs stay attached
+    // to that message rather than replacing its answer.
+    expect(workspace).toContain('<CalyxMessageContent content={turn.content}');
+    expect(workspace).toContain('outputs={workspaceOutputsByMessage[turn.message_id]}');
   });
 
   it('puts the synthesis detail behind progressive disclosure, not inline', () => {
