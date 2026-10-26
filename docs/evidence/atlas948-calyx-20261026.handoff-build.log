@@ -1,0 +1,30 @@
+
+> vite_react_shadcn_ts@0.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+
+warn - The class `duration-[1200ms]` is ambiguous and matches multiple utilities.
+warn - If this is content and not a class, replace it with `duration-&lsqb;1200ms&rsqb;` to silence this warning.
+
+warn - The class `duration-[2000ms]` is ambiguous and matches multiple utilities.
+warn - If this is content and not a class, replace it with `duration-&lsqb;2000ms&rsqb;` to silence this warning.
+✓ 3066 modules transformed.
+rendering chunks...
+[plugin:vite:reporter] [plugin vite:reporter] 
+(!) /workspace/scratch/b65d6a995417/cycle24/combined/src/lib/ocBackend.ts is dynamically imported by /workspace/scratch/b65d6a995417/cycle24/combined/src/lib/genusData.ts, /workspace/scratch/b65d6a995417/cycle24/combined/src/lib/genusData.ts but also statically imported by /workspace/scratch/b65d6a995417/cycle24/combined/src/components/orchid/GenusOccurrenceMap.tsx, /workspace/scratch/b65d6a995417/cycle24/combined/src/components/orchid/HomeAtlasContinuum.tsx, /workspace/scratch/b65d6a995417/cycle24/combined/src/components/orchid/NeighborOverlapMap.tsx, /workspace/scratch/b65d6a995417/cycle24/combined/src/lib/atlas.ts, /workspace/scratch/b65d6a995417/cycle24/combined/src/lib/featuredTaxonContinuum.ts, /workspace/scratch/b65d6a995417/cycle24/combined/src/pages/DailyGenusDiagnostics.tsx, /workspace/scratch/b65d6a995417/cycle24/combined/src/pages/Species.tsx, /workspace/scratch/b65d6a995417/cycle24/combined/src/pages/SpeciesDossier.tsx, dynamic import will not move module into another chunk.
+
+computing gzip size...
+dist/index.html                         2.18 kB │ gzip:   0.93 kB
+dist/assets/mapbox-gl--KYsKQ2R.css     40.85 kB │ gzip:   5.61 kB
+dist/assets/index-0Lc-Mo4X.css        241.26 kB │ gzip:  42.65 kB
+dist/assets/AtlasNext-DwmUNpD8.js   1,765.85 kB │ gzip: 513.90 kB
+dist/assets/mapbox-gl-C8mgbJJQ.js   1,865.42 kB │ gzip: 521.71 kB
+dist/assets/index-BMrDH_pQ.js       3,115.12 kB │ gzip: 837.32 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 20.32s

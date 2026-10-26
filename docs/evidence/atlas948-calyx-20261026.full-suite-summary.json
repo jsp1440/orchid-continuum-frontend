@@ -1,0 +1,18 @@
+{
+  "head": "5b523827028eba74efc4df7a16a39e501f7247e8",
+  "status": "FAIL",
+  "passed": 3766,
+  "failed": 53,
+  "skipped": 2,
+  "duration_seconds": 148.34,
+  "failed_by_file": {
+    "src/dispatchRuntime.test.ts": 1,
+    "src/providerFreeSettlement.test.ts": 46,
+    "src/runtimeBackoffRequeue.test.ts": 3,
+    "scripts/oc-done-guard.test.ts": 1,
+    "src/lib/genusDayContextHandoff.test.ts": 1,
+    "src/lib/provider-governor/noApiSchedulerWorkflow.test.ts": 1
+  },
+  "omitted_historical_screenshots": 16,
+  "git_history_present": false
+}
