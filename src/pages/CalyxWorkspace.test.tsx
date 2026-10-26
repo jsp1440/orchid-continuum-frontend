@@ -114,7 +114,7 @@ function buildConversation(
   };
 }
 
-function buildTurnResult(conversationId: string, answer = "Done.") {
+function buildTurnResult(conversationId: string, answer = "Done.", workspaceOutputs: unknown[] = []) {
   return {
     conversation_id: conversationId,
     operator_message: {
@@ -132,6 +132,7 @@ function buildTurnResult(conversationId: string, answer = "Done.") {
       created_at: "2026-08-10T00:00:03Z",
     },
     answer,
+    workspace_outputs: workspaceOutputs,
     provider: {
       name: "deterministic-governed",
       model: "calyx-governed-summary-v1",
@@ -174,6 +175,12 @@ function getButton(container: HTMLElement, text: string) {
   );
   if (!button) throw new Error(`Missing button ${text}`);
   return button;
+}
+
+function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 describe("CalyxWorkspace conversation lifecycle", () => {
@@ -374,6 +381,86 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(storedWorkspace().conversationId).toBe("new-conversation");
   });
 
+  it("renders validated server workspace outputs with provenance and clears them for a new thread", async () => {
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("rich-thread"));
+    mocks.sendCalyxTurn.mockResolvedValue(
+      buildTurnResult("rich-thread", "Here are the retrieved sources.", [
+        {
+          id: "sources-output",
+          kind: "table",
+          title: "Retrieved canonical sources",
+          subtitle: "1 source",
+          provenance: {
+            source_module: "brain_mission",
+            source_id: "mission-1",
+            generated: false,
+            evidence_status: "evidence",
+          },
+          payload: {
+            columns: [{ key: "title", label: "Title" }],
+            rows: [{ title: "Orchid mycorrhizal symbiosis review" }],
+          },
+          created_at: "2026-08-10T00:00:03Z",
+        },
+        {
+          id: "invalid-output",
+          kind: "table",
+          title: "Invalid output must not render",
+          provenance: { source_module: "brain_mission", evidence_status: "unknown" },
+          payload: { columns: [], rows: [] },
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("rich-thread", [
+        {
+          message_id: "rich-thread-operator",
+          conversation_id: "rich-thread",
+          role: "operator",
+          content: "Find papers about mycorrhizal symbiosis",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "rich-thread-calyx",
+          conversation_id: "rich-thread",
+          role: "calyx",
+          content: "Here are the retrieved sources.",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Find papers about mycorrhizal symbiosis");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(container.textContent).toContain("Retrieved canonical sources");
+    expect(container.textContent).toContain("Orchid mycorrhizal symbiosis review");
+    expect(container.textContent).toContain("evidence");
+    expect(container.textContent).toContain("mission-1");
+    expect(container.textContent).not.toContain("Invalid output must not render");
+
+    await act(async () => {
+      getButton(container, "New conversation").click();
+    });
+    expect(container.textContent).not.toContain("Retrieved canonical sources");
+    expect(container.textContent).not.toContain("Orchid mycorrhizal symbiosis review");
+  });
+
   it("restores a saved conversation normally when no reset occurs", async () => {
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -444,7 +531,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Calyx could not complete that turn.");
   });
 
-  it("offers an immediate retry path during cold-start recovery", async () => {
+  it("does not automatically resend an uncertain turn and requires acknowledgement before retry", async () => {
+    vi.useFakeTimers();
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
     mocks.sendCalyxTurn
       .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
@@ -486,57 +574,32 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    expect(container.textContent).toContain("Automatic retry in 20s.");
+    expect(container.textContent).toContain("the connection may have dropped after CALYX completed the turn");
+    expect(container.textContent).toContain("Refresh conversation history and inspect the thread");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    expect((getButton(container, "Send") as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
-      getButton(container, "Retry now").click();
+      await vi.advanceTimersByTimeAsync(21_000);
+    });
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    const retryButton = getButton(container, "Retry after checking history") as HTMLButtonElement;
+    expect(retryButton.disabled).toBe(true);
+    const retryConfirmation = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => {
+      retryConfirmation.click();
+    });
+    expect(retryButton.disabled).toBe(false);
+
+    await act(async () => {
+      retryButton.click();
     });
     await flush(4);
 
     expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Recovered answer");
-  });
-
-  it("cancels a pending cold-start retry from the retry controls", async () => {
-    vi.useFakeTimers();
-    mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
-    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
-
-    await act(async () => {
-      root.render(
-        <MemoryRouter>
-          <CalyxWorkspace />
-        </MemoryRouter>,
-      );
-    });
-    await flush(2);
-
-    await act(async () => {
-      mocks.pushTranscript("Original retry message");
-    });
-
-    await act(async () => {
-      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-    await flush(4);
-
-    await act(async () => {
-      getButton(container, "Cancel").click();
-    });
-    await flush(2);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(21_000);
-    });
-    await flush(2);
-
-    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Automatic retry in");
-    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
-      "Original retry message",
-    );
   });
 
   it("does not restore a committed message when the post-turn refresh fails", async () => {
@@ -655,6 +718,108 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       epistemic_policy: { continuum_first: true },
     });
     await flush(4);
+  });
+
+  it("clears prior-project files and drafts and ignores late voice input after a project switch", async () => {
+    mocks.speechInputState = "idle";
+    mocks.createCalyxConversation.mockResolvedValue({
+      ...buildConversation("field-study-thread"),
+      project_id: "field-study",
+    });
+    mocks.sendCalyxTurn.mockResolvedValue(buildTurnResult("field-study-thread", "New project answer"));
+    mocks.getCalyxConversation.mockResolvedValue({
+      ...buildConversation("field-study-thread", [
+        {
+          message_id: "field-study-operator",
+          conversation_id: "field-study-thread",
+          role: "operator",
+          content: "New project question",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "field-study-calyx",
+          conversation_id: "field-study-thread",
+          role: "calyx",
+          content: "New project answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+      project_id: "field-study",
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(fileInput, "files", {
+      configurable: true,
+      value: [new File(["private notes"], "previous-project.txt", { type: "text/plain" })],
+    });
+    await act(async () => {
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush(2);
+    expect(container.textContent).toContain("previous-project.txt");
+
+    const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+    await act(async () => {
+      setInputValue(textarea, "Draft that belongs to the previous project");
+      getButton(container, "Voice").click();
+    });
+
+    const projectInput = container.querySelector("#calyx-project") as HTMLInputElement;
+    await act(async () => {
+      setInputValue(projectInput, "field-study");
+    });
+    await flush(2);
+
+    expect(textarea.value).toBe("");
+    expect(container.textContent).not.toContain("previous-project.txt");
+    expect(container.textContent).toContain("local files, excerpts, and the unsent draft were cleared");
+    expect(mocks.stopListening).toHaveBeenCalled();
+
+    await act(async () => {
+      mocks.pushTranscript("Late speech from the previous project");
+    });
+    expect(textarea.value).toBe("");
+
+    await act(async () => {
+      setInputValue(textarea, "New project question");
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(5);
+
+    expect(mocks.createCalyxConversation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        project_id: "field-study",
+        context: expect.objectContaining({
+          project_id: "field-study",
+          workspace: expect.objectContaining({
+            attachment_count: 0,
+            attachments: [],
+            selected_attachment: undefined,
+            draft_document_context: undefined,
+          }),
+        }),
+      }),
+    );
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledWith(
+      "field-study-thread",
+      expect.objectContaining({
+        message: "New project question",
+        project_id: "field-study",
+        context: expect.objectContaining({
+          workspace: expect.objectContaining({ attachment_count: 0, attachments: [] }),
+        }),
+      }),
+    );
+    expect(container.textContent).toContain("New project answer");
   });
 
   it("stops active speech input before starting the network turn, in addition to speech output", async () => {
@@ -844,5 +1009,388 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+  describe("committed turn stays visible when the transcript refresh fails", () => {
+    type Overrides = {
+      conversationId?: string;
+      operator?: Record<string, unknown> | null;
+      calyx?: Record<string, unknown> | null;
+      top?: Record<string, unknown>;
+    };
+
+    function committedTurn(conversationId: string, overrides: Overrides = {}) {
+      const base = buildTurnResult(conversationId, "Committed answer");
+      return {
+        ...base,
+        operator_message:
+          overrides.operator === null
+            ? undefined
+            : { ...base.operator_message, content: "Committed question", ...(overrides.operator ?? {}) },
+        calyx_message:
+          overrides.calyx === null
+            ? undefined
+            : { ...base.calyx_message, content: "Committed answer", ...(overrides.calyx ?? {}) },
+        ...(overrides.top ?? {}),
+      };
+    }
+
+    async function renderWorkspace() {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <CalyxWorkspace />
+          </MemoryRouter>,
+        );
+      });
+      await flush(2);
+    }
+
+    async function submitDraft(text: string) {
+      await act(async () => {
+        mocks.pushTranscript(text);
+      });
+      await act(async () => {
+        container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      await flush(4);
+    }
+
+    function occurrences(haystack: string, needle: string) {
+      return haystack.split(needle).length - 1;
+    }
+
+    function articleCount() {
+      return container.querySelectorAll('[aria-live="polite"] article').length;
+    }
+
+    it("(a) keeps committed operator and CALYX messages visible when the refresh rejects", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(committedTurn("c1"));
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      expect(occurrences(container.textContent ?? "", "Committed question")).toBe(1);
+      expect(occurrences(container.textContent ?? "", "Committed answer")).toBe(1);
+      expect(articleCount()).toBe(2);
+    });
+
+    it("(b) does not restore the committed text to the draft or offer the retry confirmation", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(committedTurn("c1"));
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("");
+      expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
+      expect(container.textContent).not.toContain("Retry after checking history");
+      expect(container.querySelector('form input[type="checkbox"][class*="h-3"]:not([id])')).toBeNull();
+      expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      ["result.conversation_id", { top: { conversation_id: "other-thread" } }],
+      ["operator_message.conversation_id", { operator: { conversation_id: "other-thread" } }],
+      ["calyx_message.conversation_id", { calyx: { conversation_id: "other-thread" } }],
+    ] as Array<[string, Overrides]>)("(c) does not append an exchange whose %s differs from the active conversation", async (_label, overrides) => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(committedTurn("c1", overrides));
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      expect(container.textContent).not.toContain("Committed answer");
+      expect(articleCount()).toBe(0);
+    });
+
+    it("(d1) does not append a response that arrives after a new conversation was started", async () => {
+      const turn = deferred<ReturnType<typeof committedTurn>>();
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockReturnValue(turn.promise);
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      await act(async () => {
+        getButton(container, "New conversation").click();
+      });
+      turn.resolve(committedTurn("c1", { calyx: { content: "Late answer" } }));
+      await flush(4);
+
+      expect(container.textContent).not.toContain("Late answer");
+      expect(articleCount()).toBe(0);
+      expect(getContextValue(container, "Conversation")).toBe("Not started yet");
+    });
+
+    it("(d2) does not append a response that arrives after the project was switched", async () => {
+      const turn = deferred<ReturnType<typeof committedTurn>>();
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockReturnValue(turn.promise);
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      await act(async () => {
+        getButton(container, "New conversation").click();
+      });
+      await act(async () => {
+        setInputValue(container.querySelector("#calyx-project") as HTMLInputElement, "other-project");
+      });
+      turn.resolve(committedTurn("c1", { calyx: { content: "Late answer" } }));
+      await flush(4);
+
+      expect(container.textContent).not.toContain("Late answer");
+      expect(articleCount()).toBe(0);
+    });
+
+    it("(d3) does not append a response that arrives after another conversation was loaded", async () => {
+      const turn = deferred<ReturnType<typeof committedTurn>>();
+      mocks.listCalyxConversations.mockResolvedValue({
+        conversations: [{ conversation_id: "other-thread", title: "Other thread", created_at: "2026-08-10T00:00:00Z", message_count: 1 }],
+        persistence_mode: "postgres",
+      });
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockReturnValue(turn.promise);
+      mocks.getCalyxConversation.mockImplementation(async (id: string) => {
+        if (id === "other-thread") {
+          return buildConversation("other-thread", [
+            { message_id: "o-1", conversation_id: "other-thread", role: "operator", content: "Other thread question", created_at: "2026-08-10T00:00:02Z" },
+          ]);
+        }
+        throw new TypeError("refresh failed");
+      });
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      await act(async () => {
+        getButton(container, "New conversation").click();
+      });
+      await flush(2);
+      await act(async () => {
+        getButton(container, "Other thread").click();
+      });
+      await flush(3);
+      turn.resolve(committedTurn("c1", { calyx: { content: "Late answer" } }));
+      await flush(4);
+
+      expect(container.textContent).toContain("Other thread question");
+      expect(container.textContent).not.toContain("Late answer");
+      expect(getContextValue(container, "Conversation")).toBe("other-thread");
+    });
+
+    it("(e) does not duplicate messages whose ids already exist in the transcript", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(
+        buildConversation("c1", [
+          { message_id: "c1-operator", conversation_id: "c1", role: "operator", content: "Existing operator text", created_at: "2026-08-10T00:00:01Z" },
+        ]),
+      );
+      mocks.sendCalyxTurn.mockResolvedValue(
+        committedTurn("c1", { operator: { content: "Replayed operator text" } }),
+      );
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      expect(occurrences(container.textContent ?? "", "Existing operator text")).toBe(1);
+      expect(container.textContent).not.toContain("Replayed operator text");
+      expect(occurrences(container.textContent ?? "", "Committed answer")).toBe(1);
+      expect(articleCount()).toBe(2);
+    });
+
+    it("(f) appends only one message when the exchange repeats a message id, with unique React keys", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+      try {
+        mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+        mocks.sendCalyxTurn.mockResolvedValue(
+          committedTurn("c1", {
+            operator: { message_id: "same-id", content: "Same-id question" },
+            calyx: { message_id: "same-id", content: "Same-id answer" },
+          }),
+        );
+        mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+        await renderWorkspace();
+        await submitDraft("Same-id question");
+
+        expect(articleCount()).toBe(1);
+        const keyWarnings = consoleError.mock.calls.filter((call) => String(call[0]).includes("same key"));
+        expect(keyWarnings).toHaveLength(0);
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
+    it("(f2) skips a committed message whose id is empty or missing", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(
+        committedTurn("c1", {
+          operator: { message_id: "", content: "Anonymous question" },
+          calyx: { message_id: "c1-calyx", content: "Keyed answer" },
+        }),
+      );
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Anonymous question");
+
+      expect(container.textContent).not.toContain("Anonymous question");
+      expect(occurrences(container.textContent ?? "", "Keyed answer")).toBe(1);
+      expect(articleCount()).toBe(1);
+    });
+
+    it.each([
+      ["operator role missing", { operator: { role: undefined }, calyx: { content: "Roleless operator exchange" } }, "Roleless operator exchange", 0],
+      ["operator_message missing", { operator: null, calyx: { content: "Orphan answer" } }, "Orphan answer", 0],
+      ["calyx_message missing", { calyx: null }, "Committed question", 0],
+      ["calyx message_id missing", { calyx: { message_id: undefined, content: "Headless answer" } }, "Headless answer", 1],
+    ] as Array<[string, Overrides, string, number]>)("(g) does not append or crash on a malformed turn response: %s", async (_label, overrides, forbiddenText, expectedArticles) => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(committedTurn("c1", overrides));
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderWorkspace();
+      await submitDraft("Committed question");
+
+      expect(container.textContent).not.toContain(forbiddenText);
+      // Structural malformation drops the whole exchange; a message that only
+      // lacks a usable id is skipped on its own.
+      expect(articleCount()).toBe(expectedArticles);
+      expect(container.querySelector("#calyx-message")).not.toBeNull();
+    });
+
+    it("(h) replaces the optimistic messages with the server transcript on a successful refresh, without duplicates", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(
+        committedTurn("c1", {
+          operator: { content: "Optimistic question" },
+          calyx: { content: "Optimistic answer" },
+        }),
+      );
+      mocks.getCalyxConversation.mockResolvedValue(
+        buildConversation("c1", [
+          { message_id: "c1-operator", conversation_id: "c1", role: "operator", content: "Server question", created_at: "2026-08-10T00:00:02Z" },
+          { message_id: "c1-calyx", conversation_id: "c1", role: "calyx", content: "Server answer", created_at: "2026-08-10T00:00:03Z" },
+        ]),
+      );
+      await renderWorkspace();
+      await submitDraft("Optimistic question");
+
+      expect(container.textContent).not.toContain("Optimistic");
+      expect(occurrences(container.textContent ?? "", "Server question")).toBe(1);
+      expect(occurrences(container.textContent ?? "", "Server answer")).toBe(1);
+      expect(articleCount()).toBe(2);
+      expect(container.textContent).not.toContain("could not be refreshed");
+    });
+  });
+  describe("combined behaviour across the merged PRs", () => {
+    const tableOutput = (title: string) => ({
+      id: `out-${title}`,
+      kind: "table",
+      title,
+      provenance: { source_module: "brain_mission", source_id: "m-1", generated: false, evidence_status: "evidence" },
+      payload: { columns: [{ key: "t", label: "T" }], rows: [{ t: "row" }] },
+      created_at: "2026-08-10T00:00:03Z",
+    });
+
+    async function renderAndSend(text: string) {
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <CalyxWorkspace />
+          </MemoryRouter>,
+        );
+      });
+      await flush(2);
+      await act(async () => {
+        mocks.pushTranscript(text);
+      });
+      await act(async () => {
+        container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      await flush(4);
+    }
+
+    it("shows committed messages and their workspace outputs together when the transcript refresh fails", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(buildTurnResult("c1", "Committed answer", [tableOutput("Committed output")]));
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderAndSend("Question");
+
+      expect(container.textContent).toContain("Committed answer");
+      expect(container.textContent).toContain("Committed output");
+      expect(container.textContent).toContain("could not be refreshed");
+    });
+
+    it("renders backend-shaped outputs whose subtitle and source_id are null", async () => {
+      // speak_routes._workspace_outputs emits subtitle=None (evidence-gap text) and
+      // source_id=None (external citations); the bus validator itself rejects null.
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockResolvedValue(
+        buildTurnResult("c1", "Answer with gaps", [
+          {
+            id: "c1-calyx:missing-evidence",
+            kind: "text",
+            title: "Evidence gaps for this turn",
+            subtitle: null,
+            provenance: { source_module: "brain_mission", source_id: null, generated: false, evidence_status: "unknown" },
+            payload: { body: "- no pollinator records" },
+            created_at: "2026-08-10T00:00:03Z",
+          },
+        ]),
+      );
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderAndSend("Question");
+
+      expect(container.textContent).toContain("Evidence gaps for this turn");
+      expect(container.textContent).toContain("no pollinator records");
+    });
+
+    it("does not render workspace outputs from a response that is no longer current", async () => {
+      const turn = deferred<ReturnType<typeof buildTurnResult>>();
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn.mockReturnValue(turn.promise);
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+      await renderAndSend("Question");
+      await act(async () => {
+        getButton(container, "New conversation").click();
+      });
+      turn.resolve(buildTurnResult("c1", "Late answer", [tableOutput("Late output")]));
+      await flush(4);
+
+      expect(container.textContent).not.toContain("Late output");
+      expect(container.textContent).not.toContain("Late answer");
+    });
+
+    it("a project switch clears the pending retry confirmation and workspace outputs", async () => {
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("c1"));
+      mocks.sendCalyxTurn
+        .mockResolvedValueOnce(buildTurnResult("c1", "First answer", [tableOutput("First output")]))
+        .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"));
+      mocks.getCalyxConversation.mockResolvedValue(buildConversation("c1", [
+        { message_id: "c1-operator", conversation_id: "c1", role: "operator", content: "Question", created_at: "2026-08-10T00:00:02Z" },
+        { message_id: "c1-calyx", conversation_id: "c1", role: "calyx", content: "First answer", created_at: "2026-08-10T00:00:03Z" },
+      ]));
+      await renderAndSend("Question");
+      expect(container.textContent).toContain("First output");
+
+      await act(async () => {
+        mocks.pushTranscript("Second question");
+      });
+      await act(async () => {
+        container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      await flush(4);
+      expect(container.textContent).toContain("Retry after checking history");
+      await act(async () => {
+        (container.querySelector('input[type="checkbox"][class*="h-3"]') as HTMLInputElement).click();
+      });
+
+      await act(async () => {
+        setInputValue(container.querySelector("#calyx-project") as HTMLInputElement, "other-project");
+      });
+      await flush(2);
+
+      expect(container.textContent).not.toContain("Retry after checking history");
+      expect(container.textContent).not.toContain("First output");
+      expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("");
+    });
   });
 });
