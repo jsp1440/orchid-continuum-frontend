@@ -1,0 +1,42 @@
+
+ RUN  v3.2.6 /workspace/scratch/b65d6a995417/cycle24/combined
+
+stderr | src/pages/Atlas.urlSelection.test.tsx > closes a resolved occurrence card when Back removes occurrence from the URL
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Atlas.urlSelection.test.tsx (4 tests) 541ms
+stderr | src/pages/Atlas.selectionIdentity.test.tsx > withholds A detail/photo/identity when B is selected but B details are pending
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Atlas.selectionIdentity.test.tsx (3 tests) 745ms
+   ✓ withholds A detail/photo/identity when B is selected but B details are pending  448ms
+ ✓ src/components/orchid/HeroOrchid.recovery.test.tsx (6 tests) 619ms
+   ✓ skips blocked first media and preserves that photograph’s identity and source  381ms
+stderr | src/pages/Atlas.recovery.test.tsx > puts the map before tour panels, reports its own counts, filters records and pages results
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Atlas.recovery.test.tsx (1 test) 976ms
+   ✓ puts the map before tour panels, reports its own counts, filters records and pages results  975ms
+stderr | src/components/orchid/HomeAtlasContinuum.recovery.test.tsx > requests the real /api/atlas route and maps only the current genus with public coordinates
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/HomeAtlasContinuum.recovery.test.tsx (2 tests) 191ms
+stderr | src/components/orchid/AtlasMiniMap.basemap.test.tsx > renders geographic tile requests without a retired CARTO key and retains attribution and Atlas handoff
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/AtlasMiniMap.basemap.test.tsx (1 test) 324ms
+   ✓ renders geographic tile requests without a retired CARTO key and retains attribution and Atlas handoff  323ms
+ ✓ src/lib/genusMediaResolver.emptyBatch.test.ts (4 tests) 18ms
+ ✓ src/lib/genusMediaResolver.recovery.test.ts (4 tests) 19ms
+ ✓ src/lib/speciesExhibit.recovery.test.ts (4 tests) 26ms
+
+ Test Files  9 passed (9)
+      Tests  29 passed (29)
+   Start at  04:51:11
+   Duration  24.66s (transform 1.65s, setup 0ms, collect 4.17s, tests 3.46s, environment 12.37s, prepare 1.55s)
+
