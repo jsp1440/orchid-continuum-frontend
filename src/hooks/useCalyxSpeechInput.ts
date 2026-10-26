@@ -52,6 +52,13 @@ function resolveSpeechRecognition(windowValue: Window | undefined) {
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
 }
 
+function detachRecognition(recognition: BrowserSpeechRecognition) {
+  recognition.onstart = null;
+  recognition.onresult = null;
+  recognition.onerror = null;
+  recognition.onend = null;
+}
+
 export function useCalyxSpeechInput(onResult: (transcript: string) => void): CalyxSpeechInput {
   const speechRecognition = useMemo(
     () => resolveSpeechRecognition(typeof window === "undefined" ? undefined : window),
@@ -66,7 +73,14 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   onResultRef.current = onResult;
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+
+    detachRecognition(recognition);
+    setInterimTranscript("");
+    setState("idle");
+    recognition.stop();
   }, []);
 
   const startListening = useCallback(() => {
@@ -143,7 +157,12 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   }, [speechRecognition, state]);
 
   useEffect(() => () => {
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+
+    detachRecognition(recognition);
+    recognition.stop();
   }, []);
 
   return { state, interimTranscript, error, startListening, stopListening };
