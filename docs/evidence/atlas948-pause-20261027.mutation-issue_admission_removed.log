@@ -1,0 +1,45 @@
+
+ RUN  v3.2.6 /tmp/orchid-pause-contract-962wwg77
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (5 tests | 1 failed) 35ms
+   × canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner 28ms
+     → expected undefined to deeply equal { types: [ 'closed', …(3) ] }
+   ✓ canonical scheduler preserves governed provider policy > keeps bounded daily/wave limits and the existing governor at every worker boundary 1ms
+   ✓ canonical scheduler preserves governed provider policy > forwards secrets only through reusable-workflow inheritance, never inline provider keys 1ms
+   ✓ canonical scheduler preserves governed provider policy > requires successful budget admission, a fenced lease, and explicit authorization for the real executor 1ms
+   ✓ canonical scheduler preserves governed provider policy > preserves exact context and per-issue receipts instead of claiming progress from an empty run 0ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  00:45:53
+   Duration  487ms (transform 66ms, setup 0ms, collect 77ms, tests 35ms, environment 0ms, prepare 105ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/provider-governor/noApiSchedulerWorkflow.test.ts > canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner
+AssertionError: expected undefined to deeply equal { types: [ 'closed', …(3) ] }
+
+[32m- Expected:[39m 
+{
+  "types": [
+    "closed",
+    "reopened",
+    "labeled",
+    "unlabeled",
+  ],
+}
+
+[31m+ Received:[39m 
+undefined
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:20:27
+     18|     expect(doc.on).toHaveProperty('workflow_call');
+     19|     expect(doc.on.pull_request).toEqual({ types: ['opened', 'reopened'…
+     20|     expect(doc.on.issues).toEqual({ types: ['closed', 'reopened', 'lab…
+       |                           ^
+     21|     expect(alias).not.toContain('schedule:');
+     22|     expect(alias).toContain('uses: ./.github/workflows/orchid-continuo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -1,0 +1,206 @@
+
+ RUN  v3.2.6 /tmp/orchid-pause-contract-3fkhl9pk
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (5 tests | 1 failed) 293ms
+   × canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner 258ms
+     → expected 'name: Orchid Continuous Completion\n\…' to contain 'Scheduled launches paused pending rec…'
+   ✓ canonical scheduler preserves governed provider policy > keeps bounded daily/wave limits and the existing governor at every worker boundary 1ms
+   ✓ canonical scheduler preserves governed provider policy > forwards secrets only through reusable-workflow inheritance, never inline provider keys 10ms
+   ✓ canonical scheduler preserves governed provider policy > requires successful budget admission, a fenced lease, and explicit authorization for the real executor 11ms
+   ✓ canonical scheduler preserves governed provider policy > preserves exact context and per-issue receipts instead of claiming progress from an empty run 0ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  00:45:49
+   Duration  1.64s (transform 112ms, setup 0ms, collect 160ms, tests 293ms, environment 2ms, prepare 273ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/provider-governor/noApiSchedulerWorkflow.test.ts > canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner
+AssertionError: expected 'name: Orchid Continuous Completion\n\…' to contain 'Scheduled launches paused pending rec…'
+
+[32m- Expected[39m
+[31m+ Received[39m
+
+[32m- [7mSc[27mhedu[7mled launches paused pending recovery from runner nonexecution.[27m[39m
+[31m+ name: Orchid Continuous Completion[39m
+[31m+[39m
+[31m+ # Canonical scheduler. Compatibility entrypoints delegate here; Portfolio[39m
+[31m+ # Steward remains a separate queue-planning role, outside implementation capacity.[39m
+[31m+ on:[39m
+[31m+   # Timer status undocumented.[39m
+[31m+   pull_request:[39m
+[31m+     types: [opened, reopened, synchronize, ready_for_review, closed][39m
+[31m+   issues:[39m
+[31m+     types: [closed, reopened, labeled, unlabeled][39m
+[31m+   workflow_dispatch:[39m
+[31m+   workflow_call:[39m
+[31m+[39m
+[31m+ permissions:[39m
+[31m+   contents: read[39m
+[31m+   issues: read[39m
+[31m+   pull-requests: read[39m
+[31m+   actions: read[39m
+[31m+[39m
+[31m+ env:[39m
+[31m+   MAX_ACTIVE_LANES: 8[39m
+[31m+   PROVIDER_AUTHORIZED: 'true'[39m
+[31m+[39m
+[31m+ jobs:[39m
+[31m+   reconcile:[39m
+[31m+     name: Reconcile expired leases against hosted run evidence[39m
+[31m+     if: github.event_name != 'pull_request'[39m
+[31m+     runs-on: ubuntu-latest[39m
+[31m+     permissions:[39m
+[31m+       contents: write[39m
+[31m+       issues: write[39m
+[31m+       actions: read[39m
+[31m+     concurrency:[39m
+[31m+       group: orchid-lease-reconciliation-${{ github.repository }}[39m
+[31m+       cancel-in-progress: false[39m
+[31m+     steps:[39m
+[31m+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0[39m
+[31m+         with:[39m
+[31m+           ref: ${{ github.sha }}[39m
+[31m+           persist-credentials: false[39m
+[31m+       - run: npm ci --ignore-scripts[39m
+[31m+       - env:[39m
+[31m+           GH_TOKEN: ${{ github.token }}[39m
+[31m+         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts reconcile[39m
+[31m+[39m
+[31m+   supervisor:[39m
+[31m+     name: Discover governed work and refill the bounded reservoir[39m
+[31m+     needs: reconcile[39m
+[31m+     if: always() && github.event_name != 'pull_request' &&[39m
+[31m+       (needs.reconcile.result == 'success' || needs.reconcile.result == 'skipped')[39m
+[31m+     runs-on: ubuntu-latest[39m
+[31m+     permissions:[39m
+[31m+       contents: read[39m
+[31m+       issues: write[39m
+[31m+       pull-requests: read[39m
+[31m+     concurrency:[39m
+[31m+       group: orchid-supervisor-discovery-${{ github.repository }}[39m
+[31m+       cancel-in-progress: false[39m
+[31m+     steps:[39m
+[31m+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0[39m
+[31m+         with:[39m
+[31m+           ref: ${{ github.sha }}[39m
+[31m+           persist-credentials: false[39m
+[31m+       - run: npm ci --ignore-scripts[39m
+[31m+       - name: Scan Brain, backend, frontend, graph, and governed issue state[39m
+[31m+         env:[39m
+[31m+           GH_TOKEN: ${{ github.token }}[39m
+[31m+           PROVIDER_AUTHORIZED: 'false'[39m
+[31m+           # Admit the Calyx evidence-gap reserve plan (GET[39m
+[31m+           # /api/runner/knowledge-gaps/reserve-plan): at most 3 bounded,[39m
+[31m+           # review-required research missions per pass, no publication, no KG or[39m
+[31m+           # taxonomy mutation, locality-gated domains excluded. Fails closed and[39m
+[31m+           # files nothing when the backend plan is unavailable.[39m
+[31m+           OC_ADMIT_BACKEND_RESERVE: '1'[39m
+[31m+         run: npx --no-install tsx scripts/oc-supervisor-discovery.ts[39m
+[31m+ [7m      - name: Preserve t[27mhe[7m [27mdu[7mrable supervisor discovery packet[27m[39m
+[31m+         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2[39m
+[31m+         with:[39m
+[31m+           name: oc-supervisor-${{ github.run_attempt }}[39m
+[31m+           path: .oc-wave/supervisor-discovery.json[39m
+[31m+           include-hidden-files: true[39m
+[31m+           if-no-files-found: error[39m
+[31m+[39m
+[31m+   plan:[39m
+[31m+     needs: [reconcile, supervisor][39m
+[31m+     if: always() &&[39m
+[31m+       (needs.reconcile.result == 'success' || needs.reconcile.result == 'skipped') &&[39m
+[31m+       (needs.supervisor.result == 'success' || needs.supervisor.result == 'skipped')[39m
+[31m+     name: Graph admission and shared wave[39m
+[31m+     runs-on: ubuntu-latest[39m
+[31m+     concurrency:[39m
+[31m+       group: orchid-dispatch-plan-${{ github.repository }}[39m
+[31m+       cancel-in-progress: false[39m
+[31m+     outputs:[39m
+[31m+       issues: ${{ steps.plan.outputs.issues }}[39m
+[31m+       wave_hash: ${{ steps.plan.outputs.wave_hash }}[39m
+[31m+     steps:[39m
+[31m+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0[39m
+[31m+         with:[39m
+[31m+           ref: ${{ github.event.pull_request.head.sha || github.sha }}[39m
+[31m+           persist-credentials: false[39m
+[31m+       - run: npm ci --ignore-scripts[39m
+[31m+       - name: Read complete inventory and rank canonical graph leaves[39m
+[31m+         id: plan[39m
+[31m+         env:[39m
+[31m+           GH_TOKEN: ${{ github.token }}[39m
+[31m+           # The provider policy each lane's budget-preflight applies, mirrored[39m
+[31m+           # (never widened) so the plan admits provider-lane issues only up to[39m
+[31m+           # the slots that policy and the durable ledger can actually grant.[39m
+[31m+           # Pinned equal to orchid-budgeted-completion-lane.yml by test.[39m
+[31m+           OC_PROVIDER_NO_API_MODE: 'false'[39m
+[31m+           OC_PROVIDER_DISABLED: ''[39m
+[31m+           OC_PROVIDER_DAILY_MAX_CALLS: '4'[39m
+[31m+           OC_PROVIDER_WAVE_MAX_CALLS: '1'[39m
+[31m+         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts plan[39m
+[31m+       - name: Preserve hash-addressed shared context[39m
+[31m+         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2[39m
+[31m+         with:[39m
+[31m+           name: oc-wave-${{ github.run_attempt }}[39m
+[31m+           path: .oc-wave/*.json[39m
+[31m+           include-hidden-files: true[39m
+[31m+           if-no-files-found: error[39m
+[31m+[39m
+[31m+   # A pull_request run is plan-only: it proves the admission plan on the PR's[39m
+[31m+   # head, but never reserves leases, relabels issues or runs lanes against the[39m
+[31m+   # live queue and ledger. On 2026-09-25 the PR #821 run executed issue #816[39m
+[31m+   # from unmerged code. Scheduled, issue-event and manual runs dispatch.[39m
+[31m+   dispatch:[39m
+[31m+     needs: plan[39m
+[31m+     if: always() && github.event_name != 'pull_request' &&[39m
+[31m+       needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'[39m
+[31m+     permissions:[39m
+[31m+       contents: write[39m
+[31m+       issues: write[39m
+[31m+       pull-requests: write[39m
+[31m+       actions: write[39m
+[31m+       id-token: write[39m
+[31m+     uses: ./.github/workflows/orchid-deterministic-dispatch.yml[39m
+[31m+     secrets: inherit[39m
+[31m+     with:[39m
+[31m+       issues_json: ${{ needs.plan.outputs.issues }}[39m
+[31m+       wave_hash: ${{ needs.plan.outputs.wave_hash }}[39m
+[31m+       artifact_name: oc-wave-${{ github.run_attempt }}[39m
+[31m+[39m
+[31m+   audit:[39m
+[31m+     name: Reconcile admitted plan with lane receipts[39m
+[31m+     needs: [plan, dispatch][39m
+[31m+     if: always() && github.event_name != 'pull_request' &&[39m
+[31m+       needs.plan.result == 'success' && needs.plan.outputs.issues != '[]'[39m
+[31m+     runs-on: ubuntu-latest[39m
+[31m+     steps:[39m
+[31m+       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0[39m
+[31m+         with:[39m
+[31m+           ref: ${{ github.event.pull_request.head.sha || github.sha }}[39m
+[31m+           persist-credentials: false[39m
+[31m+       - run: npm ci --ignore-scripts[39m
+[31m+       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0[39m
+[31m+         with:[39m
+[31m+           name: oc-wave-${{ github.run_attempt }}[39m
+[31m+           path: .oc-wave[39m
+[31m+       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0[39m
+[31m+         with:[39m
+[31m+           pattern: oc-lane-${{ github.run_attempt }}-*[39m
+[31m+           path: .oc-receipts[39m
+[31m+           merge-multiple: true[39m
+[31m+       - env:[39m
+[31m+           OC_WAVE_HASH: ${{ needs.plan.outputs.wave_hash }}[39m
+[31m+         run: npx --no-install tsx scripts/oc-dispatch-runtime.ts audit[39m
+[31m+[39m
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:16:23
+     14|     const doc = yaml.load(canonical) as { on: Record<string, unknown> …
+     15|     expect(doc.on).not.toHaveProperty('schedule');
+     16|     expect(canonical).toContain('Scheduled launches paused pending rec…
+       |                       ^
+     17|     expect(doc.on).toHaveProperty('workflow_dispatch');
+     18|     expect(doc.on).toHaveProperty('workflow_call');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

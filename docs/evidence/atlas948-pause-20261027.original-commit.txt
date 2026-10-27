@@ -1,0 +1,6 @@
+tree 771dede55c4555e3438dc137109e27030ae674be
+parent 0dc63a28aeed5e2decdc28f78c6d8abcda69301c
+author Jeff Parham <jsp1440@aol.com> 1793087167 -0700
+committer Jeff Parham <jsp1440@aol.com> 1793087167 -0700
+
+test: enforce authorized scheduler pause and retained admission

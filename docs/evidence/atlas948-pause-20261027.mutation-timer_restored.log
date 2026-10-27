@@ -1,0 +1,42 @@
+
+ RUN  v3.2.6 /tmp/orchid-pause-contract-17vate01
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (5 tests | 1 failed) 27ms
+   × canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner 21ms
+     → expected { …(5) } to not have property "schedule"
+   ✓ canonical scheduler preserves governed provider policy > keeps bounded daily/wave limits and the existing governor at every worker boundary 2ms
+   ✓ canonical scheduler preserves governed provider policy > forwards secrets only through reusable-workflow inheritance, never inline provider keys 1ms
+   ✓ canonical scheduler preserves governed provider policy > requires successful budget admission, a fenced lease, and explicit authorization for the real executor 1ms
+   ✓ canonical scheduler preserves governed provider policy > preserves exact context and per-issue receipts instead of claiming progress from an empty run 1ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  00:45:47
+   Duration  650ms (transform 193ms, setup 0ms, collect 157ms, tests 27ms, environment 0ms, prepare 162ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/provider-governor/noApiSchedulerWorkflow.test.ts > canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner
+AssertionError: expected { …(5) } to not have property "schedule"
+
+[32m- Expected:[39m 
+undefined
+
+[31m+ Received:[39m 
+[
+  {
+    "cron": "2/5 * * * *",
+  },
+]
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:15:24
+     13|     // of manual/event admission. Timer recovery requires a separate o…
+     14|     const doc = yaml.load(canonical) as { on: Record<string, unknown> …
+     15|     expect(doc.on).not.toHaveProperty('schedule');
+       |                        ^
+     16|     expect(canonical).toContain('Scheduled launches paused pending rec…
+     17|     expect(doc.on).toHaveProperty('workflow_dispatch');
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

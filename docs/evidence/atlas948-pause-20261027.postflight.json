@@ -1,0 +1,27 @@
+{
+  "candidate": "a54c233c7d2ad775c6608933912e65ec2d0043bf",
+  "tree": "771dede55c4555e3438dc137109e27030ae674be",
+  "source_inputs": 1127,
+  "unchanged_after_full": true,
+  "tracked_clean": true,
+  "full": {
+    "pass": 3818,
+    "fail": 3,
+    "skip": 2,
+    "errors": 1,
+    "files_pass": 354,
+    "files_fail": 2,
+    "files_skip": 1,
+    "duration_seconds": 678.34,
+    "exit_code": 1
+  },
+  "focused": {
+    "pass": 5,
+    "fail": 0
+  },
+  "adverse_fixture_mutations_rejected": 4,
+  "typecheck_exit": 0,
+  "changed_lint_exit": 0,
+  "manifest_sha256": "37cad546a08fe3eb12630e15952836e07ae37f72cb3339e89238a94509bcbb38",
+  "full_log_sha256": "17a06e07286cbf1b986b746ee0b14fc895169430a33c6f9b6b64df1c6a8c2d83"
+}

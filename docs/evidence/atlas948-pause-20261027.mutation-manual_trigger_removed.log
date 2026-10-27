@@ -1,0 +1,31 @@
+
+ RUN  v3.2.6 /tmp/orchid-pause-contract-k2wjh3zv
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (5 tests | 1 failed) 17ms
+   × canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner 14ms
+     → expected { …(3) } to have property "workflow_dispatch"
+   ✓ canonical scheduler preserves governed provider policy > keeps bounded daily/wave limits and the existing governor at every worker boundary 1ms
+   ✓ canonical scheduler preserves governed provider policy > forwards secrets only through reusable-workflow inheritance, never inline provider keys 1ms
+   ✓ canonical scheduler preserves governed provider policy > requires successful budget admission, a fenced lease, and explicit authorization for the real executor 0ms
+   ✓ canonical scheduler preserves governed provider policy > preserves exact context and per-issue receipts instead of claiming progress from an empty run 0ms
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  00:45:52
+   Duration  475ms (transform 93ms, setup 0ms, collect 82ms, tests 17ms, environment 0ms, prepare 116ms)
+
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/provider-governor/noApiSchedulerWorkflow.test.ts > canonical scheduler preserves governed provider policy > preserves the owner-directed timer pause and compatibility alias to the same graph planner
+AssertionError: expected { …(3) } to have property "workflow_dispatch"
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:17:20
+     15|     expect(doc.on).not.toHaveProperty('schedule');
+     16|     expect(canonical).toContain('Scheduled launches paused pending rec…
+     17|     expect(doc.on).toHaveProperty('workflow_dispatch');
+       |                    ^
+     18|     expect(doc.on).toHaveProperty('workflow_call');
+     19|     expect(doc.on.pull_request).toEqual({ types: ['opened', 'reopened'…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+

@@ -1,0 +1,37 @@
+[
+  {
+    "fixture": "baseline",
+    "exit_code": 0,
+    "expected_rejection": false,
+    "actual_test_source_sha1": "950aadb5c472a772d4607becc4420e51e34d8392",
+    "log_sha256": "9ef04b80143149d0399fceea3fb58f4beb6930baf6621ab5ef735ee85f92b2c5"
+  },
+  {
+    "fixture": "timer_restored",
+    "exit_code": 1,
+    "expected_rejection": true,
+    "actual_test_source_sha1": "950aadb5c472a772d4607becc4420e51e34d8392",
+    "log_sha256": "d91a023c4e8765ab4eb2e7c7a0bdd6ff968f0dba55ed2fd7f33975e20cb5e1a0"
+  },
+  {
+    "fixture": "pause_marker_removed",
+    "exit_code": 1,
+    "expected_rejection": true,
+    "actual_test_source_sha1": "950aadb5c472a772d4607becc4420e51e34d8392",
+    "log_sha256": "62965522c54f46d14c3747559131961001e9349e1aed3d5867c7193a0e570f1b"
+  },
+  {
+    "fixture": "manual_trigger_removed",
+    "exit_code": 1,
+    "expected_rejection": true,
+    "actual_test_source_sha1": "950aadb5c472a772d4607becc4420e51e34d8392",
+    "log_sha256": "b8c1235d29728ededfa581dc7e9cf40bca31b6a19ad1b1b769bfb5570dc8d03e"
+  },
+  {
+    "fixture": "issue_admission_removed",
+    "exit_code": 1,
+    "expected_rejection": true,
+    "actual_test_source_sha1": "950aadb5c472a772d4607becc4420e51e34d8392",
+    "log_sha256": "674ff1073add95067f27bf5c1bb208ae8376f0e1f48bd92e77f6deaa858175c1"
+  }
+]

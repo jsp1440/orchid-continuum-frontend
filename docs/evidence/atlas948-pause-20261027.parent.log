@@ -1,0 +1,46 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run src/lib/provider-governor/noApiSchedulerWorkflow.test.ts --pool=forks --maxWorkers=1 --minWorkers=1
+
+
+ RUN  v3.2.6 /workspace/scratch/b65d6a995417/cycle24/combined
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (5 tests | 1 failed) 26ms
+   × canonical scheduler preserves governed provider policy > has a single offset five-minute timer and a compatibility alias to the same graph planner 21ms
+     → expected undefined to deeply equal [ { cron: '2/5 * * * *' } ]
+   ✓ canonical scheduler preserves governed provider policy > keeps bounded daily/wave limits and the existing governor at every worker boundary 1ms
+   ✓ canonical scheduler preserves governed provider policy > forwards secrets only through reusable-workflow inheritance, never inline provider keys 1ms
+   ✓ canonical scheduler preserves governed provider policy > requires successful budget admission, a fenced lease, and explicit authorization for the real executor 0ms
+   ✓ canonical scheduler preserves governed provider policy > preserves exact context and per-issue receipts instead of claiming progress from an empty run 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/provider-governor/noApiSchedulerWorkflow.test.ts > canonical scheduler preserves governed provider policy > has a single offset five-minute timer and a compatibility alias to the same graph planner
+AssertionError: expected undefined to deeply equal [ { cron: '2/5 * * * *' } ]
+
+[32m- Expected:[39m 
+[
+  {
+    "cron": "2/5 * * * *",
+  },
+]
+
+[31m+ Received:[39m 
+undefined
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:13:29
+     11|   it('has a single offset five-minute timer and a compatibility alias …
+     12|     const doc = yaml.load(canonical) as { on: { schedule: Array<{ cron…
+     13|     expect(doc.on.schedule).toEqual([{ cron: '2/5 * * * *' }]);
+       |                             ^
+     14|     expect(alias).not.toContain('schedule:');
+     15|     expect(alias).toContain('uses: ./.github/workflows/orchid-continuo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  1 failed | 4 passed (5)
+   Start at  00:44:57
+   Duration  838ms (transform 88ms, setup 0ms, collect 64ms, tests 26ms, environment 0ms, prepare 125ms)
+
