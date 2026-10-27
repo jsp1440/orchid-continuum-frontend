@@ -55,7 +55,7 @@ const HomeAtlasContinuum: React.FC = () => {
             <summary className="cursor-pointer">Sources and evidence limits</summary>
             <p className="mt-2">Map records come from the Continuum occurrence service. Graph linkage does not measure habitat breadth, climate tolerances, or association strength.</p>
             {geography?.summary && <p className="mt-2">{geography.summary}</p>}
-            <p className="mt-2">Matrix and Calyx retrieve their own governed evidence; only the genus is carried forward.</p>
+            <p className="mt-2">Matrix retrieves its own governed evidence, as does Calyx; only the genus is carried forward.</p>
             <Link to={matrixHref} className="mt-2 inline-block underline">Inspect {genus} relationships</Link>
           </details>
         </div>
