@@ -1,0 +1,6 @@
+6 canonical source blobs SHA1 verified
+PASS pause, admission and alias YAML semantics
+PASS PR plan-only dispatch/audit guard retained
+PASS explicit authorization, budget and fenced lease gates retained
+PASS deterministic lane remains separate from governed provider lane
+PASS plan and per-issue receipt evidence requirements retained

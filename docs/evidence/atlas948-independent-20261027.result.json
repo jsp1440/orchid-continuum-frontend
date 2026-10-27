@@ -1,0 +1,17 @@
+{
+  "candidate": "a54c233c7d2ad775c6608933912e65ec2d0043bf",
+  "parent": "0dc63a28aeed5e2decdc28f78c6d8abcda69301c",
+  "review_id": 5675971155,
+  "verdict": "ACCEPT scoped pause-contract test delta",
+  "reviewer_session": "/root/atlas_final_review_oct27",
+  "shared_authenticated_principal": "jsp1440",
+  "source_blob_checks": 6,
+  "semantic_groups_passed": 5,
+  "python": "3",
+  "pyyaml": "6.0.3",
+  "execution_tool_chunk": "7ced65",
+  "execution_exit_code": 0,
+  "all33_workflow_blobs_equal_parent_and_pinned_main": true,
+  "vitest_rerun": false,
+  "hosted_or_live": false
+}
