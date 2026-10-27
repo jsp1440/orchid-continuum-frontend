@@ -8,9 +8,16 @@ const wrapper = read('orchid-budgeted-completion-lane');
 const paidProviderPattern = /anthropics\/claude-code-action|google-gemini|openai\/|ANTHROPIC_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY|secrets:\s*inherit/i;
 
 describe('canonical scheduler preserves governed provider policy', () => {
-  it('has a single offset five-minute timer and a compatibility alias to the same graph planner', () => {
-    const doc = yaml.load(canonical) as { on: { schedule: Array<{ cron: string }> } };
-    expect(doc.on.schedule).toEqual([{ cron: '2/5 * * * *' }]);
+  it('preserves the owner-directed timer pause and compatibility alias to the same graph planner', () => {
+    // Incident receipts6386784293/6386909302 authorize the pause, not removal
+    // of manual/event admission. Timer recovery requires a separate owner decision.
+    const doc = yaml.load(canonical) as { on: Record<string, unknown> };
+    expect(doc.on).not.toHaveProperty('schedule');
+    expect(canonical).toContain('Scheduled launches paused pending recovery from runner nonexecution.');
+    expect(doc.on).toHaveProperty('workflow_dispatch');
+    expect(doc.on).toHaveProperty('workflow_call');
+    expect(doc.on.pull_request).toEqual({ types: ['opened', 'reopened', 'synchronize', 'ready_for_review', 'closed'] });
+    expect(doc.on.issues).toEqual({ types: ['closed', 'reopened', 'labeled', 'unlabeled'] });
     expect(alias).not.toContain('schedule:');
     expect(alias).toContain('uses: ./.github/workflows/orchid-continuous-completion.yml');
     expect(canonical).toContain('scripts/oc-dispatch-runtime.ts plan');
