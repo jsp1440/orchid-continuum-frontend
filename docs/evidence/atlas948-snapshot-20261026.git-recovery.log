@@ -1,0 +1,46 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run src/providerFreeSettlement.test.ts src/dispatchRuntime.test.ts src/runtimeBackoffRequeue.test.ts --pool=forks --maxWorkers=1 --minWorkers=1
+
+
+ RUN  v3.2.6 /workspace/scratch/b65d6a995417/cycle24/combined
+
+ ✓ src/providerFreeSettlement.test.ts (88 tests) 17071ms
+   ✓ settlement writes the one authoritative receipt > records a run that executed and passed as provider_free_done, never as provider_not_authorized  396ms
+   ✓ settlement writes the one authoritative receipt > moves a passing issue to validation rather than claiming it done  305ms
+   ✓ settlement writes the one authoritative receipt > parks a failed morphology source lookup for repair  319ms
+   ✓ settlement writes the one authoritative receipt > records a run that executed and failed as provider_free_failed, and returns it for repair  326ms
+   ✓ settlement writes the one authoritative receipt > refuses evidence that belongs to another issue  304ms
+   ✓ settlement writes the one authoritative receipt > settles malformed evidence rather than crashing without a receipt  307ms
+   ✓ settlement writes the one authoritative receipt > does not call an empty command list execution: failed  309ms
+   ✓ the ledger records what settlement decided > settles the lease in the ledger, not only the label  362ms
+   ✓ the ledger records what settlement decided > settles a lane that never executed as not-executed, so it can run later  389ms
+   ✓ a lane that cannot produce evidence stops trying > bounds the ledger instead of appending a lease on every pulse for ever  551ms
+   ✓ the receipt is the audit record, so it may not be a self-report > does not call a run done over commands that did not exit zero  313ms
+   ✓ the receipt is the audit record, so it may not be a self-report > never turns a self-reported failure into a pass  320ms
+   ✓ the receipt is the audit record, so it may not be a self-report > leaves an honest pass alone  318ms
+   ✓ the receipt is the audit record, so it may not be a self-report > refuses evidence whose commands carry no exit code at all  370ms
+   ✓ reconciling an expired lease does not bury the issue > returns an expired deterministic issue to the queue instead of blocking it  490ms
+   ✓ reconciling an expired lease does not bury the issue > still blocks an expired provider lease, which was doing something unseen  487ms
+   ✓ reconciling an expired lease does not bury the issue > uses a concurrent deterministic settlement for labels, without claiming product completion  484ms
+   ✓ reconciling an expired lease does not bury the issue > retains an independently applied owner/publication hold during expiry recovery: {"labels":["oc-running","oc-owner-gate"]}  541ms
+   ✓ reconciling an expired lease does not bury the issue > retains an independently applied owner/publication hold during expiry recovery: {"body":"OC-AUTO-HOLD: true"}  501ms
+   ✓ reconciling an expired lease does not bury the issue > clears an oc-running label left behind by a terminal lease whose run completed  567ms
+   ✓ reconciling an expired lease does not bury the issue > keeps an oc-running label that no ledger lease accounts for  625ms
+   ✓ the labels a settlement writes are the ones the selector can act on > returns a lane that never executed to the queue, not to a blocked label  316ms
+   ✓ the labels a settlement writes are the ones the selector can act on > sends a passing run to validation and nothing else  314ms
+   ✓ the labels a settlement writes are the ones the selector can act on > sends a failing run to repair and nothing else  333ms
+   ✓ a lane that hit the ceiling stops arriving > takes the issue out of the queue when the claim is refused at the ceiling  380ms
+ ✓ src/runtimeBackoffRequeue.test.ts (20 tests) 2192ms
+   ✓ reconcile applies the decisions per issue against GitHub > requeues, dead-letters and skips conflicts independently; a failed write stays parked  682ms
+   ✓ reconcile applies the decisions per issue against GitHub > a failed snapshot read leaves every issue parked without failing reconciliation  303ms
+   ✓ reconcile applies the decisions per issue against GitHub > writes nothing when the labels changed between the snapshot and the write  613ms
+   ✓ reconcile applies the decisions per issue against GitHub > records a relabelled dead letter whose comment could not be posted, and says so  561ms
+ ✓ src/dispatchRuntime.test.ts (1 test) 1807ms
+   ✓ executable provider-free workflow adapter > runs the real graph planner, denies all selected workers and verifies their actual receipts without mutations  1806ms
+
+ Test Files  3 passed (3)
+      Tests  109 passed (109)
+   Start at  20:48:21
+   Duration  22.14s (transform 261ms, setup 0ms, collect 369ms, tests 21.07s, environment 1ms, prepare 171ms)
+

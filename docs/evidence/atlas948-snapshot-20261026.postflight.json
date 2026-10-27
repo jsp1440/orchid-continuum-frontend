@@ -1,0 +1,33 @@
+{
+  "child": "0dc63a28aeed5e2decdc28f78c6d8abcda69301c",
+  "tree": "5d2070870dffb843db5d3b5dc9792a4a5ae3890a",
+  "inputs": 1127,
+  "unchanged_after_full_and_build": true,
+  "tracked_tree_clean": true,
+  "dist_index_exact_full_release_id": true,
+  "full_suite": {
+    "passed": 3820,
+    "failed": 1,
+    "skipped": 2,
+    "files_passed": 355,
+    "files_failed": 1,
+    "files_skipped": 1,
+    "seconds": 159.81,
+    "exit_code": 1
+  },
+  "focused": {
+    "passed": 11
+  },
+  "checkout_recovery": {
+    "passed": 109,
+    "seconds": 22.14
+  },
+  "parent4391_full": {
+    "passed": 3819,
+    "failed": 2,
+    "skipped": 2,
+    "seconds": 156.34
+  },
+  "full_log_sha256": "c030136d0910bc7fa17f7d54bd525b2ed92cf8ac2dc6c5c61ae7e141a1f805ec",
+  "child_manifest_sha256": "cdcc1b89ea3ac0669226ad183dae365b8d318661fe8cecbbc4841b0f8ed0aedd"
+}

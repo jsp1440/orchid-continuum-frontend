@@ -1,0 +1,832 @@
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run --pool=forks --maxWorkers=1 --minWorkers=1
+
+
+ RUN  v3.2.6 /workspace/scratch/b65d6a995417/cycle24/combined
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (5 tests | 1 failed) 17ms
+   × canonical scheduler preserves governed provider policy > has a single offset five-minute timer and a compatibility alias to the same graph planner 14ms
+     → expected undefined to deeply equal [ { cron: '2/5 * * * *' } ]
+   ✓ canonical scheduler preserves governed provider policy > keeps bounded daily/wave limits and the existing governor at every worker boundary 1ms
+   ✓ canonical scheduler preserves governed provider policy > forwards secrets only through reusable-workflow inheritance, never inline provider keys 1ms
+   ✓ canonical scheduler preserves governed provider policy > requires successful budget admission, a fenced lease, and explicit authorization for the real executor 0ms
+   ✓ canonical scheduler preserves governed provider policy > preserves exact context and per-issue receipts instead of claiming progress from an empty run 0ms
+ ✓ src/providerFreeSettlement.test.ts (88 tests) 18060ms
+   ✓ settlement writes the one authoritative receipt > records a run that executed and passed as provider_free_done, never as provider_not_authorized  418ms
+   ✓ settlement writes the one authoritative receipt > moves a passing issue to validation rather than claiming it done  419ms
+   ✓ settlement writes the one authoritative receipt > settles a fixed deployed Featured Genus acceptance proof to done  383ms
+   ✓ settlement writes the one authoritative receipt > moves the fixed Research→Matrix browser contract to owner gate, not done  367ms
+   ✓ settlement writes the one authoritative receipt > moves the fixed Conservatory browser contract to owner gate, not done  362ms
+   ✓ settlement writes the one authoritative receipt > does not let the Research browser command bless the wrong graph node  337ms
+   ✓ settlement writes the one authoritative receipt > settles a passing nomenclature evidence lookup to validation, never done  327ms
+   ✓ settlement writes the one authoritative receipt > parks a failed nomenclature lookup for repair rather than an empty success  373ms
+   ✓ settlement writes the one authoritative receipt > settles a passing morphology source lookup to validation, never done  334ms
+   ✓ settlement writes the one authoritative receipt > parks a failed morphology source lookup for repair  331ms
+   ✓ settlement writes the one authoritative receipt > records a run that executed and failed as provider_free_failed, and returns it for repair  354ms
+   ✓ settlement writes the one authoritative receipt > records a lane that never executed as not_executed  355ms
+   ✓ settlement writes the one authoritative receipt > refuses evidence that belongs to another issue  383ms
+   ✓ settlement writes the one authoritative receipt > refuses evidence that belongs to another wave  352ms
+   ✓ settlement writes the one authoritative receipt > refuses evidence that belongs to another run  335ms
+   ✓ settlement writes the one authoritative receipt > settles malformed evidence rather than crashing without a receipt  384ms
+   ✓ settlement writes the one authoritative receipt > does not call an absent provider_calls field a provider call  323ms
+   ✓ settlement writes the one authoritative receipt > does not call an empty command list execution: done  302ms
+   ✓ the ledger records what settlement decided > writes a not_executed receipt when it refuses an unchanged attempt  314ms
+   ✓ the ledger records what settlement decided > settles the lease in the ledger, not only the label  328ms
+   ✓ the ledger records what settlement decided > settles a lane that never executed as not-executed, so it can run later  348ms
+   ✓ a lane that cannot produce evidence stops trying > bounds the ledger instead of appending a lease on every pulse for ever  550ms
+   ✓ the receipt is the audit record, so it may not be a self-report > does not call a run done over commands that did not exit zero  320ms
+   ✓ the receipt is the audit record, so it may not be a self-report > never turns a self-reported failure into a pass  329ms
+   ✓ the receipt is the audit record, so it may not be a self-report > leaves an honest pass alone  340ms
+   ✓ the receipt is the audit record, so it may not be a self-report > refuses evidence whose commands carry no exit code at all  318ms
+   ✓ reconciling an expired lease does not bury the issue > returns an expired deterministic issue to the queue instead of blocking it  472ms
+   ✓ reconciling an expired lease does not bury the issue > still blocks an expired provider lease, which was doing something unseen  538ms
+   ✓ reconciling an expired lease does not bury the issue > uses a concurrent deterministic settlement for labels, without claiming product completion  536ms
+   ✓ reconciling an expired lease does not bury the issue > retains an independently applied owner/publication hold during expiry recovery: {"labels":["oc-running","oc-owner-gate"]}  509ms
+   ✓ reconciling an expired lease does not bury the issue > retains an independently applied owner/publication hold during expiry recovery: {"body":"OC-AUTO-HOLD: true"}  490ms
+   ✓ reconciling an expired lease does not bury the issue > clears an oc-running label left behind by a terminal lease whose run completed  567ms
+   ✓ reconciling an expired lease does not bury the issue > keeps an oc-running label that no ledger lease accounts for  424ms
+   ✓ the labels a settlement writes are the ones the selector can act on > returns a lane that never executed to the queue, not to a blocked label  417ms
+   ✓ the labels a settlement writes are the ones the selector can act on > sends a passing run to validation and nothing else  358ms
+   ✓ the labels a settlement writes are the ones the selector can act on > sends a failing run to repair and nothing else  322ms
+   ✓ a lane that hit the ceiling stops arriving > takes the issue out of the queue when the claim is refused at the ceiling  385ms
+ ✓ src/providerFreeExecutor.test.ts (11 tests) 2123ms
+   ✓ the provider-free executor > calls a run failed when a command did not, and exits non-zero  538ms
+   ✓ the provider-free executor > does not call a run done because one of its commands passed  642ms
+ ✓ src/runtimeBackoffRequeue.test.ts (20 tests) 2177ms
+   ✓ reconcile applies the decisions per issue against GitHub > requeues, dead-letters and skips conflicts independently; a failed write stays parked  704ms
+   ✓ reconcile applies the decisions per issue against GitHub > a failed snapshot read leaves every issue parked without failing reconciliation  300ms
+   ✓ reconcile applies the decisions per issue against GitHub > writes nothing when the labels changed between the snapshot and the write  583ms
+   ✓ reconcile applies the decisions per issue against GitHub > records a relabelled dead letter whose comment could not be posted, and says so  558ms
+ ✓ src/dispatchRuntime.test.ts (1 test) 1851ms
+   ✓ executable provider-free workflow adapter > runs the real graph planner, denies all selected workers and verifies their actual receipts without mutations  1850ms
+ ✓ src/queueGraphBinding.test.ts (73 tests) 574ms
+ ✓ src/autonomousChain.test.ts (12 tests) 509ms
+ ✓ src/providerCapacityAdmission.test.ts (53 tests) 330ms
+ ✓ src/lib/fieldJournalBackup.test.ts (36 tests) 271ms
+ ✓ src/components/orchid/Navbar.palette.test.ts (1 test) 208ms
+ ✓ src/lib/provider-governor/workflowGovernorAdmission.test.ts (7 tests) 192ms
+ ✓ scripts/oc-done-guard.test.ts (2 tests) 203ms
+ ✓ src/lib/mission-control/MissionControlService.test.ts (18 tests) 188ms
+ ✓ src/nomenclatureLookup.test.ts (93 tests) 142ms
+ ✓ src/lib/control-plane/supervisorDiscovery.test.ts (39 tests) 98ms
+ ✓ src/dispatchControl.test.ts (55 tests) 85ms
+ ✓ src/lib/ocBackend.atlasOccurrences.test.ts (64 tests) 62ms
+ ✓ src/morphologySourceLookup.test.ts (119 tests) 57ms
+ ✓ src/graphDispatchPlan.test.ts (3 tests) 58ms
+ ✓ src/lib/supabaseConfig.test.ts (5 tests) 41ms
+ ✓ src/lib/scientific-intelligence/grants/adapter.test.ts (5 tests) 26ms
+ ✓ src/lib/calyxConversation.test.ts (19 tests) 37ms
+ ✓ src/lib/fieldJournalSync.test.ts (31 tests) 33ms
+ ✓ src/lib/routeAccessPolicy.test.ts (6 tests) 29ms
+ ✓ src/lib/scientific-intelligence/pollinators/adapter.test.ts (6 tests) 26ms
+ ✓ src/lib/scientific-intelligence/atlas/adapter.test.ts (6 tests) 25ms
+ ✓ src/lib/scientific-intelligence/literature/adapter.test.ts (6 tests) 24ms
+ ✓ src/lib/scientific-intelligence/vision/adapter.test.ts (5 tests) 26ms
+ ✓ src/features/atlas-next/knowledgeGap.test.ts (13 tests) 17ms
+ ✓ src/lib/scientific-intelligence/knowledge-graph/adapter.test.ts (6 tests) 27ms
+ ✓ src/lib/scientific-intelligence/mycorrhiza/adapter.test.ts (5 tests) 23ms
+ ✓ src/lib/completion-graph/graphDiscovery.test.ts (11 tests) 22ms
+ ✓ src/lib/researchTraits.test.ts (31 tests) 28ms
+ ✓ src/lib/renderDeploymentContract.test.ts (7 tests) 26ms
+ ✓ src/workflows.integrationGate.test.ts (7 tests) 22ms
+ ✓ src/lib/lexiconService.test.ts (17 tests) 17ms
+ ✓ src/lib/control-plane/backendReservePlanClient.test.ts (11 tests) 18ms
+ ✓ src/lib/interactionDiscovery.realBackendContract.test.ts (22 tests) 16ms
+ ✓ src/lib/provider-governor/providerGovernorRuntime.test.ts (10 tests) 19ms
+ ✓ src/lib/continuumJourney.test.ts (16 tests) 19ms
+ ✓ src/workflows.convergenceGuards.test.ts (6 tests) 15ms
+ ✓ src/lib/control-plane/orchestratorQueueBridge.test.ts (16 tests) 14ms
+ ✓ src/lib/provider-governor/routingEvidence.test.ts (54 tests) 24ms
+ ✓ src/lib/control-plane/backendReserveQueueBridge.test.ts (10 tests) 13ms
+ ✓ src/lib/researchStationSynthesis.test.ts (33 tests) 14ms
+ ✓ src/lib/fieldJournalServiceWorker.test.ts (6 tests) 23ms
+ ✓ src/lib/control-plane/portfolioSteward.test.ts (10 tests) 14ms
+ ✓ src/lib/speciesDossierContinuumNavigation.test.ts (8 tests) 5ms
+ ✓ src/lib/provider-governor/providerGovernor.test.ts (14 tests) 13ms
+ ✓ src/lib/evidenceDecisionManifest.test.ts (20 tests) 13ms
+ ✓ src/lib/completion-graph/completionGraphData.test.ts (24 tests) 14ms
+ ✓ src/lib/fieldJournalCoordinator.test.ts (15 tests) 12ms
+ ✓ src/lib/calyxWorkspace.test.ts (11 tests) 11ms
+ ✓ src/lib/scientific-intelligence/shared/normalizers.test.ts (46 tests) 7ms
+ ✓ src/lib/matrixLexicon.test.ts (3 tests) 5ms
+ ✓ src/workflows.autonomousDispatch.test.ts (9 tests) 15ms
+ ✓ src/lib/reasoningLedger.test.ts (16 tests) 12ms
+ ✓ src/lib/matrixMorphologyLayers.test.ts (17 tests) 7ms
+ ✓ src/lib/conservatoryCultivationCalyx.test.ts (34 tests) 16ms
+ ✓ src/lib/ownerControlVerification.test.ts (12 tests) 15ms
+ ✓ src/lib/ownerSessionVerification.test.ts (12 tests) 12ms
+ ✓ src/lib/canonicalContinuumContinuity.test.ts (8 tests) 9ms
+ ✓ src/lib/canonicalScientificJourney.test.ts (3 tests) 11ms
+ ✓ src/hooks/usePrefersReducedMotion.test.tsx (3 tests) 9ms
+ ✓ src/lib/calyxScience.test.ts (4 tests) 14ms
+ ✓ src/lib/evidenceRetrieval.test.ts (14 tests) 16ms
+ ✓ src/lib/literaturePaper.test.ts (17 tests) 12ms
+ ✓ src/lib/researchStation.test.ts (29 tests) 10ms
+ ✓ src/lib/intakeApi.test.ts (5 tests) 12ms
+ ✓ src/workflows.autonomousPortfolio.test.ts (6 tests) 9ms
+ ✓ src/lib/speciesDossierSubject.test.ts (15 tests) 9ms
+ ✓ src/lib/researchEvidenceChain.test.ts (10 tests) 11ms
+ ✓ src/workflows.hiddenArtifactUploads.test.ts (16 tests) 8ms
+ ✓ src/lib/capabilityRouter.test.ts (27 tests) 10ms
+ ✓ src/components/orchid/HomeAtlasContinuum.test.tsx (6 tests) 4ms
+ ✓ src/workflows.frontendE2eReference.test.ts (13 tests) 9ms
+ ✓ src/data/screenOrchids.test.ts (10 tests) 11ms
+ ✓ src/lib/offlineAuthSession.test.ts (8 tests) 4ms
+ ✓ src/lib/knowledgeGraphLayout.test.ts (8 tests) 10ms
+ ✓ src/lib/fieldJournal.test.ts (6 tests) 7ms
+ ✓ src/lib/fieldJournalExport.test.ts (6 tests) 8ms
+ ✓ src/lib/genusMediaResolver.emptyBatch.test.ts (4 tests) 9ms
+ ✓ src/lib/calyxOrigin.test.ts (34 tests) 12ms
+ ✓ src/navigationReachability.test.ts (9 tests) 11ms
+ ✓ src/lib/judgingPractice.test.ts (15 tests) 8ms
+ ✓ src/lib/calyxTurnRequestWire.test.ts (6 tests) 9ms
+ ✓ src/lib/genusMediaResolver.recovery.test.ts (4 tests) 8ms
+ ✓ src/lib/renderRouteVerification.test.ts (3 tests) 8ms
+ ✓ src/lib/completion-graph/journeyContinuityDomain.test.ts (16 tests) 9ms
+ ✓ src/lib/dependency-readiness/dependencyReadinessData.test.ts (22 tests) 9ms
+ ✓ src/lib/researchTraits.pr1611Payload.test.ts (3 tests) 16ms
+ ✓ src/lib/workflowSecurity.test.ts (13 tests) 9ms
+ ✓ src/lib/researchStationActivity.test.ts (5 tests) 9ms
+ ✓ src/lib/genusProfileDataQuality.test.ts (21 tests) 8ms
+ ✓ src/lib/universityApi.test.ts (10 tests) 9ms
+ ✓ src/lib/visionEvidence.test.ts (6 tests) 8ms
+ ✓ src/lib/lexiconCoverageUnavailable.test.ts (2 tests) 8ms
+ ✓ src/lib/featuredTaxonNavigation.test.ts (7 tests) 7ms
+ ✓ src/lib/relationshipMatrixCalyxBoundary.test.ts (7 tests) 4ms
+ ✓ src/lib/missionListSignup.test.ts (8 tests) 9ms
+ ✓ src/lib/matrixIdentification.test.ts (11 tests) 7ms
+ ✓ src/lib/fieldJournalDevice.test.ts (6 tests) 7ms
+ ✓ src/lib/fieldDrafts.test.ts (7 tests) 6ms
+ ✓ src/lib/classroomInvestigationNavigation.test.ts (16 tests) 9ms
+ ✓ src/lib/cultivatedTaxonIdentity.test.ts (33 tests) 12ms
+ ✓ src/lib/calyxGenericGenusNonEvidence.test.ts (4 tests) 7ms
+ ✓ src/lib/localitySafetyCrossCutting.test.ts (29 tests) 10ms
+ ✓ src/features/atlas-next/incomingTaxon.test.ts (85 tests) 9ms
+ ✓ src/lib/researchStationAtlasNextHref.test.ts (22 tests) 8ms
+ ✓ src/lib/completion-graph/gateCoverage.test.ts (14 tests) 6ms
+ ✓ src/lib/scientificObservability.test.ts (13 tests) 5ms
+ ✓ src/lib/universityReviewerApi.test.ts (6 tests) 5ms
+ ✓ src/lib/provider-governor/noApiProviderParking.test.ts (6 tests) 4ms
+ ✓ src/lib/calyxAtlasOccurrenceEvidenceBoundary.current.test.ts (23 tests) 9ms
+ ✓ src/lib/completion-graph/scheduler.test.ts (17 tests) 6ms
+ ✓ src/lib/cultivatedIdentityBackendParity.test.ts (49 tests) 7ms
+ ✓ src/lib/fieldJournalShell.test.ts (4 tests) 7ms
+ ✓ src/lib/provider-governor/deterministicPortfolioRefillWorkflow.test.ts (4 tests) 6ms
+ ✓ src/lib/calyxVerification.test.ts (10 tests) 7ms
+ ✓ src/lib/researchRouteContext.test.ts (10 tests) 6ms
+ ✓ src/lib/governedVerificationContinuity.test.ts (1 test) 5ms
+ ✓ src/lib/featuredTaxonSourceIntegrity.test.ts (13 tests) 5ms
+ ✓ src/lib/literatureDisplayPolicy.test.ts (16 tests) 6ms
+ ✓ src/features/atlas-next/atlasCalyxHandoff.test.ts (11 tests) 6ms
+ ✓ src/lib/canonicalContinuumDemoContinuity.current.test.ts (7 tests) 6ms
+ ✓ src/lib/candidateKnowledgeProposal.test.ts (5 tests) 7ms
+ ✓ src/lib/genusProfileNavigation.test.ts (9 tests) 5ms
+ ✓ src/lib/naoccAtlasNextFanoutJourney.test.ts (2 tests) 5ms
+ ✓ src/lib/matrixReports.test.ts (8 tests) 7ms
+ ✓ src/lib/speciesDossierResearchJourney.test.ts (10 tests) 6ms
+ ✓ src/lib/completion-graph/graphIssueDecision.test.ts (15 tests) 7ms
+ ✓ src/lib/dependency-readiness/readinessOps.test.ts (14 tests) 5ms
+ ✓ src/features/atlas-next/researchHandoff.test.ts (10 tests) 8ms
+ ✓ src/lib/diffHygiene.test.ts (9 tests) 6ms
+ ✓ src/lib/speciesDossierMatrixNavigation.test.ts (5 tests) 5ms
+ ✓ src/lib/plantMeasurementObservation.test.ts (22 tests) 6ms
+ ✓ src/lib/researchExactTaxonTurnContext.test.ts (4 tests) 4ms
+ ✓ src/lib/matrixCandidateEvidence.test.ts (11 tests) 6ms
+ ✓ src/lib/speciesExhibit.recovery.test.ts (4 tests) 6ms
+ ✓ src/features/lexicon/lexiconRouteHandoff.test.ts (5 tests) 5ms
+ ✓ src/lib/legacy-registry/legacyAssetRegistry.test.ts (17 tests) 6ms
+ ✓ src/lib/matrixRegistryReview.test.ts (3 tests) 5ms
+ ✓ src/features/atlas-next/featuredGenusResearchJourney.test.ts (3 tests) 6ms
+ ✓ src/lib/hasslerReleaseLifecycle.test.ts (7 tests) 4ms
+ ✓ src/data/famousExportRecovery.test.ts (5 tests) 6ms
+ ✓ src/lib/completion-graph/evidenceFreshness.test.ts (15 tests) 6ms
+ ✓ src/lib/workflowIntelligence.test.ts (4 tests) 4ms
+ ✓ src/lib/naoccMountedJourneyContinuity.test.ts (5 tests) 5ms
+ ✓ src/lib/featuredTaxonContinuum.test.ts (4 tests) 5ms
+ ✓ src/lib/completion-graph/scoring.test.ts (17 tests) 5ms
+ ✓ src/lib/homepageReadiness.test.ts (2 tests) 4ms
+ ✓ src/lib/atlasWorkspaceCalyxBoundary.test.ts (2 tests) 5ms
+ ✓ src/lib/provider-governor/deterministicPortfolioRefill.test.ts (4 tests) 4ms
+ ✓ src/lib/control-plane/completionHealthContract.test.ts (6 tests) 5ms
+ ✓ src/lib/matrixResearchNavigation.test.ts (4 tests) 4ms
+ ✓ src/lib/dailyGenusRotation.test.ts (9 tests) 5ms
+ ✓ src/lib/visionActivationPreflight.test.ts (2 tests) 4ms
+ ✓ src/features/calyx-workspace/crossModuleContextIntegration.test.ts (1 test) 6ms
+ ✓ src/lib/calyxGenusArrivalDisclosure.test.ts (9 tests) 5ms
+ ✓ src/features/atlas-next/failClosed.test.ts (11 tests) 5ms
+ ✓ src/lib/provider-governor/governorState.test.ts (5 tests) 5ms
+ ✓ src/lib/apiOriginSafety.test.ts (15 tests) 5ms
+ ✓ src/features/atlas-next/continuumActions.test.ts (8 tests) 5ms
+ ✓ src/features/atlas-next/sensitivity.test.ts (20 tests) 5ms
+ ✓ src/lib/claudeRunDiagnosis.test.ts (7 tests) 3ms
+ ✓ src/lib/specialistCouncil.test.ts (6 tests) 4ms
+ ✓ src/lib/featuredTaxonNavigation.matrix.test.ts (9 tests) 5ms
+ ✓ src/lib/speciesDossierCalyxNavigation.test.ts (6 tests) 5ms
+ ✓ src/lib/calyxRouteTrustBoundary.test.ts (18 tests) 5ms
+ ✓ src/features/atlas-next/speciesHandoff.test.ts (4 tests) 4ms
+ ✓ src/features/calyx-workspace/workspaceOutputBus.test.ts (9 tests) 6ms
+ ✓ src/features/calyx-workspace/sessionContext.test.ts (4 tests) 5ms
+ ✓ src/lib/control-plane/ocDoneGuard.test.ts (8 tests) 4ms
+ ✓ src/lib/speciesDossierAtlasNavigation.test.ts (20 tests) 5ms
+ ✓ src/lib/genusProfileResearchNavigation.test.ts (3 tests) 3ms
+ ✓ src/lib/speciesRouteContext.test.ts (19 tests) 4ms
+ ✓ src/features/atlas-next/scale.test.ts (8 tests) 5ms
+ ✓ src/lib/completionReceiptContract.test.ts (5 tests) 5ms
+ ✓ src/lib/atlasWorkspaceMatrixBoundary.test.ts (3 tests) 4ms
+ ✓ src/lib/completion-graph/graphOps.test.ts (8 tests) 5ms
+ ✓ src/lib/calyxGovernedGenusTurnContext.test.ts (16 tests) 5ms
+ ✓ src/lib/speciesExhibit.realBackendContract.test.ts (3 tests) 5ms
+ ✓ src/lib/calyxCitationSource.test.ts (5 tests) 4ms
+ ✓ src/lib/speciesDossierExcerpts.test.ts (5 tests) 4ms
+ ✓ src/lib/calyxCanonicalGenusBoundary.test.ts (12 tests) 4ms
+ ✓ src/lib/featuredTaxonContinuum.boundary.test.ts (10 tests) 4ms
+ ✓ src/lib/atlasLocalitySafety.publicProjection.test.ts (4 tests) 4ms
+ ✓ src/lib/apiConfigWarning.test.ts (3 tests) 5ms
+ ✓ src/lib/atlasWorkspaceResearchHandoff.test.ts (5 tests) 5ms
+ ✓ src/data/famousLexiconSupplement.integrity.test.ts (5 tests) 4ms
+ ✓ src/features/calyx-workspace/identificationContext.dossier.test.ts (3 tests) 4ms
+ ✓ src/lib/calyxSynthesisSurface.test.ts (14 tests) 4ms
+ ✓ src/lib/atlasWorkspaceSpeciesHandoff.test.ts (5 tests) 4ms
+ ✓ src/lib/calyxGenericGenusRouteSmuggling.test.ts (12 tests) 4ms
+ ✓ src/lib/canonicalAtlasResearchJourney.test.ts (3 tests) 5ms
+ ✓ src/lib/calyxGovernedGenusTurnMount.current.test.ts (8 tests) 5ms
+ ✓ src/features/calyx-workspace/identificationContext.test.ts (4 tests) 4ms
+ ✓ src/lib/dailyGenusContext.test.ts (7 tests) 3ms
+ ✓ src/lib/atlasLocalitySafety.test.ts (6 tests) 4ms
+ ✓ src/pages/SpeciesDossier.continuumFanout.test.ts (2 tests) 4ms
+ ✓ src/components/orchid/HomeSpeciesExhibit.test.ts (5 tests) 4ms
+ ✓ src/pages/GenusDetail.researchHandoff.test.ts (2 tests) 4ms
+ ✓ src/features/atlas-next/regionalMap.test.ts (4 tests) 4ms
+ ✓ src/features/atlas-next/evidence.test.ts (10 tests) 4ms
+ ✓ src/lib/fungalPartner.test.ts (8 tests) 4ms
+ ✓ src/budgetGovernor.test.ts (8 tests) 4ms
+ ✓ src/lib/provider-governor/subscriptionWorkerPolicy.test.ts (6 tests) 3ms
+ ✓ src/lib/speciesExhibit.test.ts (5 tests) 4ms
+ ✓ src/features/calyx-workspace/identificationResearchHandoff.test.ts (7 tests) 4ms
+ ✓ src/features/atlas-next/researchWiring.test.ts (6 tests) 4ms
+ ✓ src/lib/evaluationAnswerRetention.test.ts (15 tests) 5ms
+ ✓ src/lib/homepageFeaturedGenusEntrypoint.test.ts (4 tests) 3ms
+ ✓ src/lib/knowledgeGraph.test.ts (5 tests) 3ms
+ ✓ src/lib/researchStationNavigationTaxonRank.test.ts (3 tests) 3ms
+ ✓ src/lib/naoccGenusProfileCalyxContinuity.test.ts (3 tests) 4ms
+ ✓ src/lib/knowledgeGraphNamingContract.test.ts (5 tests) 3ms
+ ✓ src/lib/headingColourInheritance.test.ts (3 tests) 3ms
+ ✓ src/pages/RelationshipMatrixNext.canonicalSource.test.ts (8 tests) 4ms
+ ✓ src/pages/GenusDetail.atlasHandoff.test.ts (2 tests) 3ms
+ ✓ src/components/auth/protectedRouteContextPreservation.test.ts (3 tests) 2ms
+ ✓ src/lib/speciesExhibitMedia.test.ts (4 tests) 5ms
+ ✓ src/lib/typecheckLibContract.test.ts (2 tests) 3ms
+ ✓ src/lib/calyxService.questionContext.test.ts (4 tests) 4ms
+ ✓ src/pages/ResearchCenter.genusProfileOrigin.test.ts (2 tests) 3ms
+ ✓ src/features/atlas-next/calyxHandoff.originBoundary.test.ts (7 tests) 3ms
+ ✓ src/lib/researchCalyxRouteBridge.test.ts (5 tests) 3ms
+ ✓ src/lib/calyxArrivalDisclosureAddresses.test.ts (17 tests) 4ms
+ ✓ src/pages/GenusDetail.speciesHandoff.test.ts (2 tests) 3ms
+ ✓ src/components/university/UniversityMyInvestigations.test.ts (2 tests) 3ms
+ ✓ src/lib/publicGenusMedia.test.ts (4 tests) 3ms
+ ✓ src/lib/matrixRegistryReadiness.test.ts (1 test) 3ms
+ ✓ src/components/calyx/AtlasAwareCalyxRoute.featuredGenus.test.ts (2 tests) 3ms
+ ✓ src/lib/researchStationReviewExport.test.ts (2 tests) 3ms
+ ✓ src/lib/calyxQuestionOriginBoundary.current.test.ts (6 tests) 3ms
+ ✓ src/workflows.providerExecution.test.ts (5 tests) 3ms
+ ✓ scripts/featured-genus-validation-policy.test.mjs (8 tests) 3ms
+ ✓ src/features/atlas-next/conservationLinkage.test.ts (6 tests) 3ms
+stdout | src/openaiRuntimeClassification.test.ts
+OpenAI classification: kind=unknown exit=unknown
+OpenAI redacted stderr diagnostic:
+[no stderr]
+
+ ✓ src/openaiRuntimeClassification.test.ts (5 tests) 4ms
+ ✓ src/lib/universitySessionDiscoveryApi.test.ts (2 tests) 3ms
+ ✓ src/lib/calyxUnknownOriginGenusTrustBoundary.test.ts (7 tests) 4ms
+ ✓ src/waveContext.test.ts (2 tests) 3ms
+ ✓ src/components/orchid/featuredGenusSingleGeneration.test.ts (4 tests) 7ms
+ ✓ src/lib/ecologicalRelationshipData.sourceIntegrity.test.ts (3 tests) 3ms
+ ✓ src/multilaneSelector.test.ts (3 tests) 3ms
+ ✓ src/lib/dailyGenusContext.snapshot.test.ts (4 tests) 4ms
+ ✓ src/lib/plannerProviderPolicy.test.ts (6 tests) 3ms
+ ✓ src/lib/calyxConversation.headerCollision.test.ts (1 test) 3ms
+ ✓ src/lib/backendStatus.test.ts (5 tests) 3ms
+ ✓ src/lib/completion-graph/executableIssue.test.ts (4 tests) 3ms
+ ✓ src/workflows.deterministicDispatch.test.ts (2 tests) 3ms
+ ✓ src/workflows.providerGovernorBoundary.test.ts (5 tests) 3ms
+ ✓ src/pages/ConservationHub.atlasContext.test.ts (3 tests) 3ms
+ ✓ src/lib/scientificReadiness.test.ts (3 tests) 3ms
+ ✓ src/lib/parallelPlatform.test.ts (3 tests) 3ms
+ ✓ src/openaiFallbackWorkflow.test.ts (2 tests) 3ms
+ ✓ src/lib/scientificObservabilityCorrelation.test.ts (4 tests) 2ms
+ ✓ src/features/atlas-next/useAtlasData.publicErrors.test.ts (1 test) 2ms
+ ✓ src/lib/homepagePublicErrorBoundary.test.ts (2 tests) 2ms
+ ✓ src/features/atlas-next/incomingGenus.test.ts (3 tests) 3ms
+ ✓ src/lib/missionControlQueue.test.ts (5 tests) 3ms
+ ✓ src/lib/control-plane/ocDoneGuardWorkflow.test.ts (4 tests) 3ms
+ ✓ src/components/atlas/AtlasMatrixContinuation.mount.test.ts (3 tests) 3ms
+ ✓ src/lib/genusDayContextHandoff.test.ts (3 tests) 2ms
+ ✓ src/features/atlas-next/AtlasNextShell.incomingGenus.test.ts (3 tests) 2ms
+ ✓ src/components/orchid/HeroOrchid.canonicalMedia.test.ts (3 tests) 2ms
+ ✓ src/lib/speciesExhibitMountedTruth.sourceIntegrity.test.ts (2 tests) 3ms
+ ✓ src/lib/calyxBackendRouteContract.test.ts (3 tests) 3ms
+ ✓ src/lib/featuredTaxonFungalEvidence.sourceIntegrity.test.ts (3 tests) 3ms
+ ✓ src/components/calyx/AtlasAwareCalyxRoute.test.ts (2 tests) 3ms
+ ✓ src/lib/explorationContext.literatureRoute.test.ts (1 test) 2ms
+ ✓ src/components/orchid/HomeAtlas.issue93.contract.test.ts (1 test) 5ms
+ ✓ src/components/orchid/HomeAtlas.initialVisibility.test.ts (2 tests) 3ms
+ ✓ src/lib/genusMediaResolver.test.ts (1 test) 2ms
+ ✓ src/components/orchid/HomeAtlas.visibilityImplementation.test.ts (1 test) 3ms
+ ✓ src/browserRouteSweep.test.ts (1 test) 2ms
+ ✓ src/lib/noFabricatedSpeciesApi.test.ts (1 test) 2ms
+ ↓ src/lib/crossRepoScientificConvergence.test.ts (2 tests | 2 skipped)
+stderr | src/pages/MyConservatory.test.tsx > MyConservatory routing > renders the Dashboard with real plant counts at /conservatory
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+stderr | src/pages/MyConservatory.test.tsx > MyConservatory recording a placement > posts the reason the grower chose
+Warning: Each child in a list should have a unique "key" prop.
+
+Check the render method of `CultivationContext`. See https://reactjs.org/link/warning-keys for more information.
+    at li
+    at CultivationContext (/workspace/scratch/b65d6a995417/cycle24/combined/src/pages/MyConservatory.tsx:3614:31)
+    at div
+    at PlantDossier (/workspace/scratch/b65d6a995417/cycle24/combined/src/pages/MyConservatory.tsx:5152:25)
+    at Detail (/workspace/scratch/b65d6a995417/cycle24/combined/src/pages/MyConservatory.tsx:5302:23)
+    at main
+    at div
+    at Shell (/workspace/scratch/b65d6a995417/cycle24/combined/src/pages/MyConservatory.tsx:82:18)
+    at MyConservatory (/workspace/scratch/b65d6a995417/cycle24/combined/src/pages/MyConservatory.tsx:6226:44)
+    at Router (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-router/dist/umd/react-router.development.js:1203:17)
+    at MemoryRouter (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-router/dist/umd/react-router.development.js:1097:7)
+
+ ✓ src/pages/MyConservatory.test.tsx (154 tests) 1406ms
+stderr | src/pages/SpeciesDossier.test.tsx > evidence receipt rendering > renders evidence_state, confidence, license, and attribution for a section the backend covered
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/SpeciesDossier.test.tsx (27 tests) 690ms
+stderr | src/pages/LiteraturePaper.test.tsx > the page routes text through the display gate > shows no source text when the paper has no binding
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/LiteraturePaper.test.tsx (23 tests) 495ms
+stderr | src/components/AppLayout.render.test.tsx > AppLayout renders the public homepage > mounts without throwing
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/AppLayout.render.test.tsx (3 tests) 425ms
+stderr | src/pages/ResearchCenter.subjectHandoff.test.tsx > research center carries the arriving subject onward > names the species it received from the dossier
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/ResearchCenter.subjectHandoff.test.tsx (16 tests) 421ms
+stderr | src/pages/Literature.test.tsx > the literature index shows the corpus > lists the extraction results with their yields
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Literature.test.tsx (22 tests) 453ms
+stderr | src/components/research/ResearchStationWorkbench.manifest.test.tsx > ManifestPanel > shows "Build run manifest" button after synthesis completes
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/research/ResearchStationWorkbench.manifest.test.tsx (14 tests) 392ms
+ ✓ src/components/mission-control/completionFreshnessDisplay.test.tsx (5 tests) 289ms
+stderr | src/pages/CalyxWorkspace.test.tsx > CalyxWorkspace conversation lifecycle > keeps the reset UI clean when new conversation interrupts a pending create
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/CalyxWorkspace.test.tsx (13 tests) 317ms
+stderr | src/pages/Atlas.urlSelection.test.tsx > closes a resolved occurrence card when Back removes occurrence from the URL
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Atlas.urlSelection.test.tsx (4 tests) 283ms
+ ✓ src/components/mission-control/gateEvidenceBreakdown.render.test.tsx (7 tests) 287ms
+stderr | src/pages/Atlas.recovery.test.tsx > puts the map before tour panels, reports its own counts, filters records and pages results
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Atlas.recovery.test.tsx (1 test) 249ms
+stderr | src/pages/CalyxScienceStatus.test.tsx > CalyxScienceStatus per-section fail-closed rendering > renders the captured backend figures with no unavailable banner when every section answers
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/CalyxScienceStatus.test.tsx (5 tests) 244ms
+stderr | src/components/interactions/InteractionDiscoveryPanel.test.tsx > RelationshipExplorer mounts the interaction discovery panel for the page's species > queries discovery with the routed species and renders the panel
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/interactions/InteractionDiscoveryPanel.test.tsx (12 tests) 233ms
+stderr | src/pages/Atlas.selectionIdentity.test.tsx > withholds A detail/photo/identity when B is selected but B details are pending
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Atlas.selectionIdentity.test.tsx (3 tests) 253ms
+stderr | src/pages/JudgingPractice.test.tsx > judging practice sheet > renders every criterion of the default rubric
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/JudgingPractice.test.tsx (6 tests) 216ms
+stderr | src/pages/ScreenOrchids.test.tsx > orchids on screen > renders the whole collection grouped by decade
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/ScreenOrchids.test.tsx (5 tests) 202ms
+stderr | src/features/calyx-workspace/CalyxAdaptiveWorkspace.test.tsx > CalyxAdaptiveWorkspace stale-panel prevention > clears previously opened outputs when the lexicon entry changes
+Warning: The current testing environment is not configured to support act(...)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+Warning: The current testing environment is not configured to support act(...)
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+
+stderr | src/features/calyx-workspace/CalyxAdaptiveWorkspace.test.tsx > CalyxAdaptiveWorkspace stale-panel prevention > clears previously opened outputs when the lexicon entry changes
+Warning: The current testing environment is not configured to support act(...)
+
+stderr | src/features/calyx-workspace/CalyxAdaptiveWorkspace.test.tsx > CalyxAdaptiveWorkspace stale-panel prevention > removes only the outputs from a source module that explicitly clears itself
+Warning: The current testing environment is not configured to support act(...)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+Warning: The current testing environment is not configured to support act(...)
+Warning: The current testing environment is not configured to support act(...)
+    at PanelResizeHandle (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:2127:3)
+    at ResizableHandle (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:18:28)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at PanelWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:40:3)
+    at forwardRef(Panel)
+    at div
+    at PanelGroupWithForwardedRef (/workspace/scratch/b65d6a995417/cycle15/atlas-detail-review/node_modules/react-resizable-panels/dist/react-resizable-panels.development.node.esm.js:1505:3)
+    at forwardRef(PanelGroup)
+    at ResizablePanelGroup (/workspace/scratch/b65d6a995417/cycle24/combined/src/components/ui/resizable.tsx:9:32)
+    at div
+    at section
+    at CalyxAdaptiveWorkspace (/workspace/scratch/b65d6a995417/cycle24/combined/src/features/calyx-workspace/CalyxAdaptiveWorkspace.tsx:51:35)
+Warning: The current testing environment is not configured to support act(...)
+
+stderr | src/features/calyx-workspace/CalyxAdaptiveWorkspace.test.tsx > CalyxAdaptiveWorkspace stale-panel prevention > removes only the outputs from a source module that explicitly clears itself
+Warning: The current testing environment is not configured to support act(...)
+
+ ✓ src/features/calyx-workspace/CalyxAdaptiveWorkspace.test.tsx (2 tests) 202ms
+stderr | src/pages/Explore.test.tsx > marks every planned facet as in development
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/Explore.test.tsx (8 tests) 199ms
+ ✓ src/components/university/UniversityReviewerPanel.test.tsx (9 tests) 226ms
+ ✓ src/components/mission-control/CompletionObservatory.render.test.tsx (3 tests) 188ms
+stderr | src/components/orchid/AtlasMiniMap.basemap.test.tsx > renders geographic tile requests without a retired CARTO key and retains attribution and Atlas handoff
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/AtlasMiniMap.basemap.test.tsx (1 test) 149ms
+ ✓ src/components/research/ResearchTraitExplorer.test.tsx (17 tests) 153ms
+stderr | src/components/research/ResearchStationWorkbench.atlasLink.test.tsx > Research Station workbench → Atlas Next > links a binomial subject to Atlas Next filtered on that species
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/research/ResearchStationWorkbench.atlasLink.test.tsx (6 tests) 206ms
+ ✓ src/components/research/ResearchEvidenceChain.test.tsx (15 tests) 153ms
+stderr | src/features/atlas-next/AtlasNextShell.subjectRank.test.tsx > AtlasNextShell subject rank from a Research Station handoff > applies and names the arriving binomial as the species filter
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/features/atlas-next/AtlasNextShell.subjectRank.test.tsx (6 tests) 100ms
+ ✓ src/components/calyx/ReasoningLedgerInspector.test.tsx (19 tests) 123ms
+ ✓ src/pages/CalyxField.ownerSyncSignIn.test.tsx (4 tests) 136ms
+stderr | src/pages/UniversityLabPrototype.test.tsx > UniversityLabPrototype release-gate rendering > shows a checking state before release readiness resolves
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/UniversityLabPrototype.test.tsx (4 tests) 150ms
+stderr | src/features/atlas-next/AtlasNextShell.drawGuards.test.tsx > Atlas Next draws nothing for a rejected subject, even with records in hand > control: the same synthetic points ARE drawn for a well-formed species subject
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/features/atlas-next/AtlasNextShell.drawGuards.test.tsx (9 tests) 129ms
+ ✓ src/components/orchid/HeroOrchid.recovery.test.tsx (6 tests) 128ms
+stderr | src/pages/ConservationHub.test.tsx > ConservationHub public partner boundary > fails closed when verified organization and project records are unavailable
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/ConservationHub.test.tsx (13 tests) 117ms
+ ✓ src/components/research/ResearchEvidenceChain.aggregate.test.tsx (9 tests) 113ms
+stderr | src/components/orchid/ActiveDevelopmentBanner.test.tsx > ActiveDevelopmentBanner — PUBLIC-LAUNCH-001 (#679) > renders the active-development notice
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/ActiveDevelopmentBanner.test.tsx (10 tests) 109ms
+ ✓ src/components/calyx/GovernedEvidenceSearch.test.tsx (18 tests) 119ms
+stderr | src/pages/Privacy.test.tsx > Privacy page > renders the page container
+Warning: The current testing environment is not configured to support act(...)
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+stderr | src/pages/Privacy.test.tsx > Privacy page > shows effective date notice with role=note
+Warning: The current testing environment is not configured to support act(...)
+
+stderr | src/pages/Privacy.test.tsx > Privacy page > includes epistemic integrity notice
+Warning: The current testing environment is not configured to support act(...)
+
+stderr | src/pages/Privacy.test.tsx > Privacy page > provides a data contact link
+Warning: The current testing environment is not configured to support act(...)
+
+stderr | src/pages/Privacy.test.tsx > Privacy page > mentions sensitive locality data protection
+Warning: The current testing environment is not configured to support act(...)
+
+stderr | src/pages/Privacy.test.tsx > Privacy page > mentions backup safeguards
+Warning: The current testing environment is not configured to support act(...)
+
+ ✓ src/pages/Privacy.test.tsx (6 tests) 136ms
+stderr | src/pages/AppliedAIDataScienceLab.test.tsx > AppliedAIDataScienceLab assessment continuity > resumes a prior lab session, including reflection responses, as if the page had reloaded
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/AppliedAIDataScienceLab.test.tsx (2 tests) 128ms
+stderr | src/components/orchid/DailyGenusFeatureContinuum.test.tsx > DailyGenusFeatureContinuum media integrity > shows each species once and each photograph once in the representative strip
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/DailyGenusFeatureContinuum.test.tsx (6 tests) 106ms
+ ✓ src/lib/backendConfig.test.ts (38 tests) 110ms
+ ✓ src/components/calyx/CalyxVerificationObjections.test.tsx (7 tests) 105ms
+ ✓ src/components/calyx/CalyxVerificationExcerptProvenance.test.tsx (6 tests) 100ms
+stderr | src/pages/OrchidUniversity.test.tsx > OrchidUniversity > mounts without throwing
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/OrchidUniversity.test.tsx (3 tests) 130ms
+ ✓ src/components/calyx/CalyxVerificationLimits.test.tsx (5 tests) 90ms
+stderr | src/components/conservatory/ConservatoryReadiness.test.tsx > ConservatoryReadinessBanner > shows a checking state before the readiness fetch resolves
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/conservatory/ConservatoryReadiness.test.tsx (13 tests) 82ms
+ ✓ src/lib/memberReadAuth.test.ts (79 tests) 72ms
+stderr | src/components/orchid/missionControlDiscoverability.test.tsx > mission control is discoverable to a signed-in owner > offers Mission Control in the account menu
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/missionControlDiscoverability.test.tsx (6 tests) 91ms
+ ✓ src/components/calyx/ScientificSynthesis.test.tsx (24 tests) 82ms
+ ✓ src/components/mission-control/DependencyReadinessMatrix.render.test.tsx (4 tests) 72ms
+ ✓ src/components/mission-control/HasslerReleaseLifecyclePanel.test.tsx (6 tests) 77ms
+stderr | src/pages/ResearcherJefferyParham.test.tsx > public Research Station researcher profile > renders the documented identity and preserves the authenticated workspace boundary
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/ResearcherJefferyParham.test.tsx (3 tests) 78ms
+stderr | src/pages/OrchidIdentificationNext.evidence.test.tsx > guided identification renders the captured backend evidence > shows ranking basis, per-candidate evidence, registry state and Calyx provenance
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/OrchidIdentificationNext.evidence.test.tsx (1 test) 97ms
+stderr | src/components/orchid/HomeAtlasContinuum.calyxHandoff.test.tsx > navigates from homepage Atlas to Calyx carrying only bounded genus context
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/HomeAtlasContinuum.calyxHandoff.test.tsx (2 tests) 79ms
+ ✓ src/components/auth/protectedRouteOfflineSession.test.tsx (11 tests) 91ms
+stderr | src/features/atlas-next/AtlasNextShell.researchHandoff.test.tsx > AtlasNextShell Research Station handoff > renders the governed handoff for one valid incoming genus
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/features/atlas-next/AtlasNextShell.researchHandoff.test.tsx (4 tests) 71ms
+ ✓ src/components/matrix/MatrixMorphologyViewer.test.tsx (4 tests) 70ms
+stderr | src/pages/MyConservatoryPlantContinuum.test.tsx > Conservatory plant -> Continuum species handoff > offers governed Atlas / Research / Calyx actions for a plant with a bounded species
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/MyConservatoryPlantContinuum.test.tsx (4 tests) 39ms
+stderr | src/components/orchid/HomeAtlasContinuum.recovery.test.tsx > requests the real /api/atlas route and maps only the current genus with public coordinates
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/HomeAtlasContinuum.recovery.test.tsx (2 tests) 61ms
+stderr | src/pages/speciesDossierCalyxJourney.test.tsx > species dossier opens Calyx on the exact species > names the species on the mounted Calyx route
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/speciesDossierCalyxJourney.test.tsx (9 tests) 65ms
+stderr | src/components/orchid/SpeciesInFocus.test.tsx > Species-in-Focus card → Atlas action > routes the Atlas action through the canonical guard for a bounded binomial
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/SpeciesInFocus.test.tsx (3 tests) 57ms
+ ✓ src/components/calyx/CalyxVerificationScientificObservability.test.tsx (2 tests) 62ms
+ ✓ src/components/field/FieldSyncOwnerSignIn.test.tsx (4 tests) 53ms
+stderr | src/pages/OrganizationProfile.test.tsx > OrganizationProfile public disclosure boundary > shows an explicit unavailable state without the former unsupported organization claims
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/OrganizationProfile.test.tsx (2 tests) 49ms
+ ✓ src/components/lexicon/VisionEvidenceSummary.test.tsx (3 tests) 59ms
+stderr | src/features/atlas-next/useAtlasData.matched.test.tsx > useAtlasData empty state > reports matched 0 when the species filter matches no record
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/features/atlas-next/useAtlasData.matched.test.tsx (2 tests) 33ms
+stderr | src/components/calyx/AtlasAwareCalyxRoute.guard.test.tsx > a violating genus arrival never reaches the turn sender > refuses to mount the workspace when the declaration is missing
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/calyx/AtlasAwareCalyxRoute.guard.test.tsx (6 tests) 45ms
+stderr | src/pages/GetInvolved.test.tsx > #679 keeps the unverified donation link disabled while participation remains usable
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/pages/GetInvolved.test.tsx (1 test) 53ms
+stderr | src/contexts/AtlasFilterContext.navigation.test.tsx > AtlasFilterProvider route handoff > hydrates canonical genus context when navigation enters the current Atlas
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/contexts/AtlasFilterContext.navigation.test.tsx (2 tests) 54ms
+ ✓ src/components/mission-control/LexiconCoverageDiagnostic.render.test.tsx (3 tests) 47ms
+ ✓ src/components/calyx/ScientificObservabilityAnomalyQueue.test.tsx (2 tests) 37ms
+ ✓ src/components/calyx/CultivationEvaluationFrame.test.tsx (2 tests) 31ms
+stderr | src/components/atlas/AtlasMatrixContinuation.test.tsx > AtlasMatrixContinuation > renders only genus read scope and no Atlas locality/evidence state
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/atlas/AtlasMatrixContinuation.test.tsx (3 tests) 32ms
+ ✓ src/pages/CalyxCitationList.test.tsx (5 tests) 39ms
+ ✓ src/components/matrix/MatrixCandidateEvidence.test.tsx (2 tests) 37ms
+stderr | src/components/orchid/DailyGenusFeature.speciesHandoff.test.tsx > Genus of the Day continuation > mounts bounded Atlas Next, Calyx, Species, and Research handoffs
+⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+
+ ✓ src/components/orchid/DailyGenusFeature.speciesHandoff.test.tsx (1 test) 33ms
+ ✓ src/lib/fieldJournalHead.test.ts (2 tests) 21ms
+ ✓ src/components/mission-control/ScientificReadinessPanel.render.test.tsx (2 tests) 20ms
+ ✓ src/components/mission-control/WorkflowIntelligencePanel.render.test.tsx (2 tests) 21ms
+ ✓ src/hooks/useCalyxSpeechInput.test.tsx (6 tests) 20ms
+ ✓ src/lib/appliedAiDataScience.test.ts (8 tests) 9ms
+ ✓ src/lib/calyxService.test.ts (3 tests) 7ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/provider-governor/noApiSchedulerWorkflow.test.ts > canonical scheduler preserves governed provider policy > has a single offset five-minute timer and a compatibility alias to the same graph planner
+AssertionError: expected undefined to deeply equal [ { cron: '2/5 * * * *' } ]
+
+[32m- Expected:[39m 
+[
+  {
+    "cron": "2/5 * * * *",
+  },
+]
+
+[31m+ Received:[39m 
+undefined
+
+ ❯ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:13:29
+     11|   it('has a single offset five-minute timer and a compatibility alias …
+     12|     const doc = yaml.load(canonical) as { on: { schedule: Array<{ cron…
+     13|     expect(doc.on.schedule).toEqual([{ cron: '2/5 * * * *' }]);
+       |                             ^
+     14|     expect(alias).not.toContain('schedule:');
+     15|     expect(alias).toContain('uses: ./.github/workflows/orchid-continuo…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 355 passed | 1 skipped (357)
+      Tests  1 failed | 3820 passed | 2 skipped (3823)
+   Start at  20:55:19
+   Duration  159.81s (transform 4.95s, setup 0ms, collect 17.55s, tests 41.54s, environment 40.76s, prepare 18.88s)
+
