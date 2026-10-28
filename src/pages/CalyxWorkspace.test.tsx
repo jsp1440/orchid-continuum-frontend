@@ -564,11 +564,10 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
     expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("Original retry message");
 
-    await act(async () => {
-      getButton(container, "Review retry safety").click();
-      (container.querySelector('input[type="checkbox"]') as HTMLInputElement).click();
-      getButton(container, "Retry after checking history").click();
-    });
+    await act(async () => getButton(container, "Review retry safety").click());
+    await flush();
+    await act(async () => (container.querySelector('input[type="checkbox"]') as HTMLInputElement).click());
+    await act(async () => getButton(container, "Retry after checking history").click());
     await flush(4);
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Recovered answer");
