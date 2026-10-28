@@ -184,7 +184,11 @@ async function calyxRequest<T>(path: string, init?: RequestInit): Promise<T> {
     if (response.status === 400 || response.status === 422) throw new CalyxApiError("validation_failed", message ?? "The Calyx request was not valid.", response.status);
     throw new CalyxApiError("server_error", message ?? `Calyx request failed (${response.status}).`, response.status);
   }
-  return response.json() as Promise<T>;
+  try {
+    return await response.json() as T;
+  } catch (error) {
+    throw new CalyxApiError("network_error", error instanceof Error ? error.message : "Calyx response could not be read");
+  }
 }
 
 async function missionRequest(path: string, init?: RequestInit): Promise<BrainMission> {
