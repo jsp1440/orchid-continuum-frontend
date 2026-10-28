@@ -50,7 +50,6 @@ const emptySnapshot: CalyxWorkspaceSnapshot = {
 const MAX_TEXT_WORKSPACE_PREVIEW_BYTES = 512 * 1024;
 const MAX_CALYX_MESSAGE_CHARS = 100000;
 const MAX_HISTORICAL_MISSION_LOOKUPS = 3;
-const NETWORK_RETRY_SECONDS = 20;
 const CALYX_STARTER_QUESTIONS = [
   "What are the most scientifically important open questions in orchid mycorrhizal symbiosis?",
   "Compare epiphytic and terrestrial orchid adaptations using canonical evidence.",
@@ -448,8 +447,9 @@ export default function CalyxWorkspace() {
   const [selectedDocumentText, setSelectedDocumentText] = useState("");
   const [conversations, setConversations] = useState<Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
   const [pendingRetry, setPendingRetry] = useState<{ message: string; projectId: string } | null>(null);
+  const [retryConfirmed, setRetryConfirmed] = useState(false);
+  const [retryNoticeDismissed, setRetryNoticeDismissed] = useState(false);
 
   const submitElapsedSeconds = useElapsedSeconds(submitting);
   const scrollAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -462,9 +462,15 @@ export default function CalyxWorkspace() {
   const activeProjectIdRef = useRef(DEFAULT_PROJECT_ID);
   const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
 
-  const cancelAutoRetry = useCallback(() => {
+  const clearPendingRetry = useCallback(() => {
     setPendingRetry(null);
-    setAutoRetryCountdown(null);
+    setRetryConfirmed(false);
+    setRetryNoticeDismissed(false);
+  }, []);
+  const resetRetryConfirmation = useCallback(() => setRetryConfirmed(false), []);
+  const dismissRetryNotice = useCallback(() => {
+    setRetryConfirmed(false);
+    setRetryNoticeDismissed(true);
   }, []);
 
   const focusMessageInput = useCallback(() => {
@@ -474,9 +480,9 @@ export default function CalyxWorkspace() {
   const { speak, cancel: cancelSpeech, supported: ttsSupported } = useCalyxSpeechOutput();
   const { state: micState, interimTranscript, error: speechInputError, startListening, stopListening } = useCalyxSpeechInput(
     useCallback((transcript: string) => {
-      cancelAutoRetry();
+      resetRetryConfirmation();
       setMessage((current) => (current ? `${current} ${transcript}`.trim() : transcript));
-    }, [cancelAutoRetry]),
+    }, [resetRetryConfirmation]),
   );
 
   const normalizedProjectId = normalizeProjectId(projectId);
@@ -634,8 +640,10 @@ export default function CalyxWorkspace() {
   const sendMessage = useCallback(async (messageOverride?: string) => {
     const text = (messageOverride ?? message).trim();
     if (!text || submissionLockRef.current !== null) return;
-    cancelAutoRetry();
     const activeProjectId = normalizeProjectId(projectId);
+    const retryingUncertainTurn = pendingRetry?.message === text && pendingRetry.projectId === activeProjectId;
+    if (retryingUncertainTurn && !retryConfirmed) return;
+    if (retryingUncertainTurn) clearPendingRetry();
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     submissionLockRef.current = requestId;
@@ -678,45 +686,40 @@ export default function CalyxWorkspace() {
       }
       const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
       const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the CALYX backend may be waking up. Retrying in ${NETWORK_RETRY_SECONDS}s unless you cancel or edit the message.` : error.message) : "Calyx could not complete that turn.";
+      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the connection may have dropped after CALYX received the turn. Refresh conversation history and inspect the thread before deciding whether to send again.` : error.message) : "Calyx could not complete that turn.";
       setAuthRequired(isAuth);
       setConversationError(detail);
       if (isNetwork) {
         setPendingRetry({ message: text, projectId: activeProjectId });
-        setAutoRetryCountdown(NETWORK_RETRY_SECONDS);
+        setRetryConfirmed(false);
+        setRetryNoticeDismissed(false);
+        void refreshConversationHistory();
       }
       setMessage(text);
     } finally {
       if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
-  }, [cancelAutoRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, message, projectId, refreshConversationHistory, selectedAttachment, selectedDocumentText, speak, speakReplies, stopListening, uploadedFiles]);
-
-  useEffect(() => {
-    if (autoRetryCountdown === null) return;
-    if (!pendingRetry) {
-      cancelAutoRetry();
-      return;
-    }
-    if (pendingRetry.projectId !== normalizedProjectId) {
-      cancelAutoRetry();
-      return;
-    }
-    if (autoRetryCountdown <= 0) {
-      void sendMessage(pendingRetry.message);
-      return;
-    }
-    const timeoutId = window.setTimeout(() => {
-      setAutoRetryCountdown((current) => (current === null ? null : current - 1));
-    }, 1000);
-    return () => window.clearTimeout(timeoutId);
-  }, [autoRetryCountdown, cancelAutoRetry, normalizedProjectId, pendingRetry, sendMessage]);
+  }, [clearPendingRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, message, pendingRetry, projectId, refreshConversationHistory, retryConfirmed, selectedAttachment, selectedDocumentText, speak, speakReplies, stopListening, uploadedFiles]);
 
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); await sendMessage(); }
 
+  function handleProjectChange(value: string) {
+    const nextProjectId = normalizeProjectId(value);
+    if (nextProjectId !== activeProjectIdRef.current) {
+      activeProjectIdRef.current = nextProjectId;
+      requestIdRef.current += 1;
+      clearPendingRetry();
+      cancelSpeech();
+      stopListening();
+      if (workspaceStatus === "Loading conversation…") setWorkspaceStatus(null);
+    }
+    setProjectId(value);
+  }
+
   function newConversation() {
     requestIdRef.current += 1;
-    cancelAutoRetry();
+    clearPendingRetry();
     cancelSpeech();
     stopListening();
     conversationIdRef.current = null;
@@ -743,7 +746,7 @@ export default function CalyxWorkspace() {
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    cancelAutoRetry();
+    resetRetryConfirmation();
     const files = Array.from(event.target.files ?? []);
     if (files.length) {
       setUploadedFiles((current) => {
@@ -757,7 +760,7 @@ export default function CalyxWorkspace() {
   }
 
   function removeFile(index: number) {
-    cancelAutoRetry();
+    resetRetryConfirmation();
     setUploadedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
     setSelectedAttachmentIndex((current) => {
       if (current === null) return null;
@@ -769,7 +772,7 @@ export default function CalyxWorkspace() {
   async function loadConversation(conversationId: string) {
     requestIdRef.current += 1;
     const requestId = requestIdRef.current;
-    cancelAutoRetry();
+    clearPendingRetry();
     cancelSpeech();
     stopListening();
     conversationIdRef.current = null;
@@ -810,7 +813,7 @@ export default function CalyxWorkspace() {
   function addDocumentContext(text: string, fileName = selectedAttachment?.name ?? "workspace selection") {
     const prompt = buildCalyxDocumentContextPrompt(fileName, text);
     if (!prompt) return;
-    cancelAutoRetry();
+    resetRetryConfirmation();
     setMessage((current) => (current ? `${current}\n\n${prompt}` : prompt));
     focusMessageInput();
   }
@@ -836,7 +839,7 @@ export default function CalyxWorkspace() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <section className="rounded-xl border bg-card">
             <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
-              {!messages.length ? <div className="mx-auto max-w-3xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p><div className="mt-6 grid gap-3 text-left sm:grid-cols-2">{CALYX_STARTER_QUESTIONS.map((question) => <button className="rounded-2xl border bg-background px-4 py-3 text-sm hover:bg-muted" key={question} onClick={() => { cancelAutoRetry(); setMessage(question); focusMessageInput(); }} type="button"><span className="font-medium">Ask CALYX</span><span className="mt-1 block text-muted-foreground">{question}</span></button>)}</div></div> : messages.map((turn) => {
+              {!messages.length ? <div className="mx-auto max-w-3xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p><div className="mt-6 grid gap-3 text-left sm:grid-cols-2">{CALYX_STARTER_QUESTIONS.map((question) => <button className="rounded-2xl border bg-background px-4 py-3 text-sm hover:bg-muted" key={question} onClick={() => { resetRetryConfirmation(); setMessage(question); focusMessageInput(); }} type="button"><span className="font-medium">Ask CALYX</span><span className="mt-1 block text-muted-foreground">{question}</span></button>)}</div></div> : messages.map((turn) => {
                 const citations = turn.role === "calyx" && Array.isArray(turn.metadata?.citations) ? turn.metadata.citations as CalyxCitation[] : [];
                 return (
                   <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
@@ -859,25 +862,25 @@ export default function CalyxWorkspace() {
             <form className="border-t p-4" onSubmit={submit}>
               {interimTranscript ? <p className="mb-2 text-xs italic text-muted-foreground">{interimTranscript}…</p> : null}
               <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
-              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => { cancelAutoRetry(); setMessage(event.target.value); }} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" ref={messageInputRef} value={message} />
+              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => { resetRetryConfirmation(); setMessage(event.target.value); }} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" ref={messageInputRef} value={message} />
               <div className="mt-1 flex flex-wrap justify-between gap-2"><p className="text-xs text-muted-foreground">No word-count cap; the backend uses model token budgets and preserves long research prompts.</p><p className={`text-xs ${message.length >= MAX_CALYX_MESSAGE_CHARS * 0.9 ? "text-amber-600" : "text-muted-foreground"}`}>{message.length.toLocaleString()} / {MAX_CALYX_MESSAGE_CHARS.toLocaleString()} characters</p></div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <details className="text-xs text-muted-foreground">
                     <summary className="cursor-pointer">Conversation settings</summary>
                     <label className="mt-2 block font-medium" htmlFor="calyx-project">Research project ID</label>
-                    <input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" disabled={submitting} id="calyx-project" maxLength={200} onChange={(event) => { cancelAutoRetry(); setProjectId(event.target.value); }} value={projectId} />
+                    <input className="mt-1 w-72 max-w-full rounded-md border bg-background px-3 py-2 text-foreground" disabled={submitting} id="calyx-project" maxLength={200} onChange={(event) => handleProjectChange(event.target.value)} value={projectId} />
                   </details>
                   {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} disabled={submitting && micState !== "listening"} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
                   <button className="rounded-full border px-3 py-1 text-xs hover:bg-muted disabled:opacity-50" disabled={submitting} onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button>
                   <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
                 </div>
-                <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim()} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
+                <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim() || (pendingRetry?.message === message.trim() && pendingRetry.projectId === normalizedProjectId && !retryConfirmed)} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
               </div>
               {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The visible thread belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean CALYX thread for <strong>{normalizedProjectId}</strong>.</p> : null}
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
-              {conversationError ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{pendingRetry ? <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span>Automatic retry in {autoRetryCountdown ?? NETWORK_RETRY_SECONDS}s.</span><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={() => void sendMessage(pendingRetry.message)} type="button">Retry now</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={cancelAutoRetry} type="button">Cancel</button></div> : null}</div> : null}
+              {conversationError || pendingRetry ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError ?? "The previous message may already have reached CALYX. Refresh conversation history and inspect the thread before resending it."}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{pendingRetry ? retryNoticeDismissed ? <button className="mt-3 rounded-full border border-current px-3 py-1 text-xs hover:bg-background/60" onClick={() => setRetryNoticeDismissed(false)} type="button">Review retry safety</button> : <div className="mt-3 flex flex-wrap items-center gap-3 text-xs"><label className="flex items-center gap-2"><input checked={retryConfirmed} className="h-3 w-3" onChange={(event) => setRetryConfirmed(event.target.checked)} type="checkbox" />I checked history and still want to send this message again.</label><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60 disabled:opacity-50" disabled={!retryConfirmed} onClick={() => void sendMessage(pendingRetry.message)} type="button">Retry after checking history</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={dismissRetryNotice} type="button">Dismiss notice</button></div> : null}</div> : null}
             </form>
           </section>
 
@@ -907,7 +910,7 @@ export default function CalyxWorkspace() {
 
             <section className="rounded-xl border bg-card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p><h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2></div>{fileTextContent ? <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!fileTextContent} onClick={askAboutSelection} type="button">{selectedDocumentText ? "Ask CALYX about selection" : "Ask CALYX about visible text"}</button> : null}</div>
-              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3">{structuredPreview ? <div className="space-y-4 rounded-lg border bg-background p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">Structured data preview</p><p className="text-xs text-muted-foreground">{structuredPreview.summary}</p></div><div className="overflow-auto rounded-md border"><table className="min-w-full text-left text-xs"><thead className="bg-muted/60"><tr>{structuredPreview.columns.map((column) => <th className="px-3 py-2 font-medium" key={column}>{column}</th>)}</tr></thead><tbody>{structuredPreview.rows.map((row, rowIndex) => <tr className="border-t align-top" key={`structured-row-${rowIndex}`}>{structuredPreview.columns.map((column) => <td className="px-3 py-2 text-muted-foreground" key={`${column}-${rowIndex}`}>{row[column] === null ? "—" : String(row[column])}</td>)}</tr>)}</tbody></table></div>{structuredPreview.chart ? <ChartContainer className="h-56 w-full" config={{ value: { label: structuredPreview.chart.valueKey, color: "hsl(var(--primary))" } }}><BarChart accessibilityLayer data={structuredPreview.chart.points}><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="label" minTickGap={24} tickLine={false} /><ChartTooltip content={<ChartTooltipContent hideLabel />} /><Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} /></BarChart></ChartContainer> : null}</div> : null}<pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => { cancelAutoRetry(); setDocumentContext(event.target.value); }} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
+              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3">{structuredPreview ? <div className="space-y-4 rounded-lg border bg-background p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">Structured data preview</p><p className="text-xs text-muted-foreground">{structuredPreview.summary}</p></div><div className="overflow-auto rounded-md border"><table className="min-w-full text-left text-xs"><thead className="bg-muted/60"><tr>{structuredPreview.columns.map((column) => <th className="px-3 py-2 font-medium" key={column}>{column}</th>)}</tr></thead><tbody>{structuredPreview.rows.map((row, rowIndex) => <tr className="border-t align-top" key={`structured-row-${rowIndex}`}>{structuredPreview.columns.map((column) => <td className="px-3 py-2 text-muted-foreground" key={`${column}-${rowIndex}`}>{row[column] === null ? "—" : String(row[column])}</td>)}</tr>)}</tbody></table></div>{structuredPreview.chart ? <ChartContainer className="h-56 w-full" config={{ value: { label: structuredPreview.chart.valueKey, color: "hsl(var(--primary))" } }}><BarChart accessibilityLayer data={structuredPreview.chart.points}><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="label" minTickGap={24} tickLine={false} /><ChartTooltip content={<ChartTooltipContent hideLabel />} /><Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} /></BarChart></ChartContainer> : null}</div> : null}<pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => { resetRetryConfirmation(); setDocumentContext(event.target.value); }} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
               {selectedDocumentText ? <p className="mt-3 text-xs text-muted-foreground">Selected text is ready to append to the next message.</p> : null}
             </section>
           </aside>
