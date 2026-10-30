@@ -1,0 +1,59 @@
+{
+  "candidate": "801c59081bebfff64f6826df532416369e15a3ba",
+  "parent": "7f4b491c2d35772fade1140575440914f030d0aa",
+  "base_main": "57600f246d1b024b37e40851b866722c4a09b58a",
+  "main_executor_blob": "b8c01ce1c718339fd4a982163170630eaf700337",
+  "parent_executor_blob": "b8c01ce1c718339fd4a982163170630eaf700337",
+  "source_inputs": {
+    "scripts/oc-provider-free-execute.mjs": "b8c01ce1c718339fd4a982163170630eaf700337",
+    "scripts/oc-capability-router.mjs": "a35e6e4835b8c9cb8724ed75cf1d5443f2d0fb19",
+    "scripts/oc-reserve-mission-binding.mjs": "0a3fc54061e8afeea44d2899e52e746a48f78e31",
+    "contracts/oc-shared-capabilities.v1.json": "1a89dc3ea5489c6f5709bad718b2ebafc9cb9e10"
+  },
+  "changed": [
+    {
+      "path": "scripts/oc-provider-free-execute.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "4029ffb3171966c2af995e1a6687369dd511127d"
+    },
+    {
+      "path": "scripts/featured-genus-release-binding.node-test.mjs",
+      "mode": "100644",
+      "type": "blob",
+      "sha": "29fd46b5fc5c754c44eaf0e7b3d9858166425270"
+    }
+  ],
+  "maker_node": "24.22.1",
+  "command": "node --test scripts/featured-genus-release-binding.node-test.mjs",
+  "parent_result": {
+    "tests": 7,
+    "pass": 3,
+    "fail": 4,
+    "skip": 0,
+    "duration_ms": 2784.992785
+  },
+  "candidate_result": {
+    "tests": 7,
+    "pass": 7,
+    "fail": 0,
+    "skip": 0,
+    "duration_ms": 3085.323171
+  },
+  "acceptance_scope": "Actual provider-free executor and router/contracts, owned temp no-op npm validator and synthetic report; no browser/network/deployed service or settlement execution",
+  "checks": {
+    "node_syntax": "PASS both changed paths",
+    "whitespace": "PASS",
+    "exact_delta": "PASS",
+    "published_bytes": "PASS",
+    "repository_lint_full_suite": "NOT RUN",
+    "independent_checker": "PENDING",
+    "hosted": "NOT RUN"
+  },
+  "gates": [
+    "independent exact-head checker",
+    "required repository checks",
+    "authorized full visitor/browser/Render release acceptance"
+  ],
+  "spending": "No paidprovider/agents/workflowdispatch/install/subscription/topup/production actions"
+}
