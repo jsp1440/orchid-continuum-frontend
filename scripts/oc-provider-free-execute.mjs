@@ -49,6 +49,8 @@ if (!failed && commands.includes('npm run verify:featured-genus')) {
     const report = JSON.parse(readFileSync('artifacts/featured-genus-report.json', 'utf8'));
     const expectedRun = `${process.env.GITHUB_RUN_ID || ''}:${process.env.GITHUB_RUN_ATTEMPT || ''}`;
     const releaseSha = String(report.release_sha || '');
+    // An observational audit without an independently supplied target remains
+    // execution evidence; its own reported SHA cannot authorize completion.
     const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA || '').trim();
     if (
       report.schema === 'oc.featured-genus-validation.v1' &&
@@ -61,8 +63,9 @@ if (!failed && commands.includes('npm run verify:featured-genus')) {
       report.provider_calls === 0 &&
       report.provider_cost_usd === 0 &&
       /^[a-f0-9]{40}$/.test(releaseSha) &&
-      (!expectedReleaseSha || report.expected_release_sha === expectedReleaseSha) &&
-      (!expectedReleaseSha || releaseSha === expectedReleaseSha)
+      /^[a-f0-9]{40}$/.test(expectedReleaseSha) &&
+      report.expected_release_sha === expectedReleaseSha &&
+      releaseSha === expectedReleaseSha
     ) {
       acceptance = {
         kind: report.validation_kind,
