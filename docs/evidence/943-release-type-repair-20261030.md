@@ -1,0 +1,15 @@
+# Featured Genus completion evidence: checker-driven type repair
+
+October 30, 2026 PDT. Existing PR #943; isolated candidate 4655f53b4cc0a284e2aa2cd7db9ec11a6de8eb98, sole parent801c59081bebfff64f6826df532416369e15a3ba. Branch codex/943-release-type-repair-20261030. No canonical maker branch changed.
+
+Separate checker found inherited report.release_sha array coercion: [validSHA] became a valid string through String(...). Initial binding repair remained effective for independent target matching. This child requires a string before the existing regex/equality guards. Two paths only; executor f699ad1bc8a980c9c2749c0bb42014853b58b8e6; regression77e0bd1f2a581d6e0b2af1c3d300ca671e1fc078. Remote contents verified equal locally tested files.
+
+Maker: node --test scripts/featured-genus-release-binding.node-test.mjs,9PASS0FAIL0SKIP3871.429ms. Identical9 on parent801c:8PASS1FAIL3928.766ms; array acceptance is the failure. Syntax checks both PASS. Node24.22.1.
+
+Separate checker /root/genus_release_checker_oct30: actual executor subprocesses and owned synthetic report/no-op npm validator;13 independent cases. Canonical7f:11PASS2FAIL4807.457ms;801c:12PASS1FAIL5014.868ms;child4655:13PASS0FAIL0SKIP4478.793ms. Checker harness Gitblob9f926bcd671742248f3d3cded1e5f94c525c3da0; source/dependency hashes verified before/after. Parent review5719862220. Exact child review is linked from #943. Separate logical session, shared credential/tooling family, not distinct authenticated release authority.
+
+No package install, network/browser/service test, actual settlement or live false issue closure. Repository lint/Vitest/fullsuite, Node22 and hosted checks UNRUN; no generalized approval or merge readiness. Valid bound report remains positive. Unbound observational health remains execution evidence without product acceptance. Incident47 and924 BODY hold preserved.
+
+Root additionally reconciled backend2254 exact8b37249aaece0b0a2ccb54ac1ccf57c5ad4c8fdc, run41136947820 both executed jobs SUCCESS. Decoded job124341621893:786PASS+5subtests82.18s;124341622317 actual backend/frontend57600f SHAs, wrapper1PASS15.75s. Downloaded artifact13017217994 digest0fbb6b962c50544ca08e14ec4e206a5d91b9acde463b25484d73672390508710 verified; independently parsed application-pytest.xml1PASS and application-browser.xml7PASS0FAIL0ERROR0SKIP. Counts overlap; not additive independent suites. Root review5719857956 is hosted-evidence reconciliation, not new suite replay. Maker code-review receipt6534686223 is separate. Browser checkout blocker resolved only for this head; full productionSPA/IdP, representative privacy corpus and reviewed taxon/partner identity crosswalk scientific acceptance remain open. No merge/deploy/scientific activation.
+
+Next: existing943 steward adopts only after required checks/currentmain convergence;2254 integration steward reconciles2240→2241→2247 dependency/scientific gates. Atlas1802/Genus1803 remain open unmerged and must coexist on authorized integration before combined frontend inventory regeneration.
