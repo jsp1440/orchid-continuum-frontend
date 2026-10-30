@@ -59,6 +59,14 @@ test('a report cannot supply its own independent expected SHA', () => {
 test('full matching independent/report/deployed SHAs permit scoped acceptance', () => {
   assert.equal(execute(sha).acceptance.release_sha, sha);
 });
+test('release SHA arrays cannot coerce into a valid deployed release', () => {
+  assert.equal(execute(sha, { release_sha: [sha] }).acceptance, undefined);
+});
+test('non-string release SHA values fail closed', () => {
+  for (const release_sha of [null, 123, true, { sha }]) {
+    assert.equal(execute(sha, { release_sha }).acceptance, undefined);
+  }
+});
 test('different deployed release or report binding cannot pass', () => {
   assert.equal(execute(sha, { release_sha: 'b'.repeat(40) }).acceptance, undefined);
   assert.equal(execute(sha, { expected_release_sha: 'b'.repeat(40) }).acceptance, undefined);

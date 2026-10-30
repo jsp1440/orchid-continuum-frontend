@@ -48,7 +48,7 @@ if (!failed && commands.includes('npm run verify:featured-genus')) {
   try {
     const report = JSON.parse(readFileSync('artifacts/featured-genus-report.json', 'utf8'));
     const expectedRun = `${process.env.GITHUB_RUN_ID || ''}:${process.env.GITHUB_RUN_ATTEMPT || ''}`;
-    const releaseSha = String(report.release_sha || '');
+    const releaseSha = report.release_sha;
     // An observational audit without an independently supplied target remains
     // execution evidence; its own reported SHA cannot authorize completion.
     const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA || '').trim();
@@ -62,6 +62,7 @@ if (!failed && commands.includes('npm run verify:featured-genus')) {
       report.passed === true &&
       report.provider_calls === 0 &&
       report.provider_cost_usd === 0 &&
+      typeof releaseSha === 'string' &&
       /^[a-f0-9]{40}$/.test(releaseSha) &&
       /^[a-f0-9]{40}$/.test(expectedReleaseSha) &&
       report.expected_release_sha === expectedReleaseSha &&
