@@ -165,7 +165,7 @@ const App = () => (
                   <Route path="/university/applied-ai-data-science" element={<AppliedAIDataScienceLab />} />
                   <Route path="/university/review" element={<UniversityReviewerWorkspace />} />
                   <Route path="/classroom" element={<Classroom />} />
-                  <Route path="/education/judging-practice" element={<ScreenOrchids />} />
+                  <Route path="/education/judging-practice" element={<JudgingPractice />} />
                   <Route path="/culture/orchids-on-screen" element={<ScreenOrchids />} />
                   <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
