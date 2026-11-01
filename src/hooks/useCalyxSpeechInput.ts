@@ -74,7 +74,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
     // second call can race past `state === "listening"` before it settles.
     // `recognitionRef.current` is set synchronously below and is the only
     // reliable guard against creating a second, orphaned recognizer.
-    if (!speechRecognition || state === "listening" || recognitionRef.current) return;
+    if (!speechRecognition || recognitionRef.current) return;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;
@@ -140,7 +140,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
       setError("Voice input could not start.");
       setState("idle");
     }
-  }, [speechRecognition, state]);
+  }, [speechRecognition]);
 
   useEffect(() => () => {
     recognitionRef.current?.stop();
