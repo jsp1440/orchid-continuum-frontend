@@ -647,11 +647,13 @@ export default function CalyxWorkspace() {
     cancelSpeech();
     stopListening();
     let targetConversationId: string | null = null;
+    let activeThread: CalyxConversation | null = null;
     let turnCommitted = false;
     let committedTurn: Awaited<ReturnType<typeof sendCalyxTurn>> | null = null;
     try {
       const thread = await ensureConversation(activeProjectId, requestId);
       if (!thread) return;
+      activeThread = thread;
       targetConversationId = thread.conversation_id;
       const result = await sendCalyxTurn(thread.conversation_id, {
         message: text,
@@ -673,15 +675,12 @@ export default function CalyxWorkspace() {
     } catch (error) {
       if (!isActiveLifecycleRequest(requestId, activeProjectId)) return;
       if (turnCommitted) {
-        const existingMessages = Array.isArray(thread.messages) ? thread.messages : [];
+        const existingMessages = Array.isArray(activeThread?.messages) ? activeThread.messages : [];
         const knownMessageIds = new Set(existingMessages.map((item) => item.message_id));
         const committedMessages = committedTurn
           ? [committedTurn.operator_message, committedTurn.calyx_message].filter((item) => !knownMessageIds.has(item.message_id))
           : [];
-        setConversation({
-          ...thread,
-          messages: [...existingMessages, ...committedMessages],
-        });
+        if (activeThread) setConversation({ ...activeThread, messages: [...existingMessages, ...committedMessages] });
         setAuthRequired(false);
         setConversationError("CALYX completed the turn, but the conversation could not be refreshed. Reload the thread before retrying so the same turn is not sent twice.");
         void refreshConversationHistory();
@@ -697,7 +696,7 @@ export default function CalyxWorkspace() {
         pendingRetryRef.current = uncertainTurn;
         setPendingRetry(uncertainTurn);
       }
-      setMessage(text);
+      setMessage((current) => current.trim() ? current : text);
     } finally {
       if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);

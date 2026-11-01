@@ -491,6 +491,39 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Retry anyway");
   });
 
+  it("preserves a newer draft when an earlier network request fails", async () => {
+    const sendOperation = deferred<unknown>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("draft-preservation-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(sendOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Original request");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      mocks.pushTranscript("New draft");
+      sendOperation.reject(new CalyxApiError("network_error", "Connection lost"));
+    });
+    await flush(4);
+
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("New draft");
+    expect(container.textContent).toContain("Retry anyway");
+  });
+
   it("requires explicit confirmation before retrying an uncertain turn", async () => {
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
     mocks.sendCalyxTurn
