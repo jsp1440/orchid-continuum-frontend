@@ -1,8 +1,9 @@
 # Canonical scheduler trigger contract during the runner incident
 
 Responsible lineage: frontend #301 (graph-driven scheduler), merged #744 (active
-cron syntax), backend #481 (runner incident). University #964 depends on this
-baseline repair; it contains no scheduler changes.
+cron syntax), backend #481 (runner incident). Focused PR #965 owns this baseline
+repair. The owner authorized its test/documentation incorporation into University
+#964's development branch; no runtime scheduler code or workflow changes.
 
 ## Root cause
 
@@ -25,7 +26,7 @@ Issue #481 records the instruction to preserve the incident pauses.
 
 ## Smallest repair
 
-Only the test and this explanatory document change. Runtime workflows, scheduler
+The focused repair changes only the test and this document. Runtime workflows, scheduler
 implementation, provider policy, permissions, leases and cadence remain unchanged.
 
 The test recognizes two valid source configurations:
@@ -61,11 +62,14 @@ the full hosted workflow is the broad-suite evidence.
 
 ## University dependency and owner boundary
 
-This focused repair is based on frontend main, separate from #964. Until it is
-owner-approved and integrated, unchanged University #964 still has the baseline
-CI failure. A successful combined-source validation is compatibility evidence,
-not a merge or an exception to required checks.
+Focused PR #965 is based on frontend main and remains open/unmerged there.
+After exact-head review and passing checks, the owner authorized incorporation
+of its verified test/documentation into the existing University development branch.
+Commit `ddcca6f7b4540e626f549e077de7918a46b0e1e2` records both reviewed parents;
+its tree preserves all other University and workflow files. Subsequent scope
+documentation and EOF-formatting corrections do not change scheduling behavior.
 
-After approved integration of this repair, update #964 from the approved base
-and run its current-head required checks. No merge, deployment, scheduler
-activation or automatic release exception is authorized by this document.
+University #964 must pass its own final-head required checks and independent
+review before owner approval. Incorporation into development does not authorize
+main merge, deployment, scheduler activation or a release exception. The existing
+incident pause remains in force regardless of either PR's review status.

@@ -255,4 +255,3 @@ export const universityApi = {
       { method: 'POST', body: { expected_revision: expectedRevision }, accessToken },
     ),
 };
-

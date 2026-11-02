@@ -241,4 +241,3 @@ const UniversityLabPrototype = () => {
 };
 
 export default UniversityLabPrototype;
-

@@ -79,7 +79,7 @@ This supports code compilation and the text-only learning flow, not a complete
 distributable-asset audit. A broad local test run without git history/binary assets
 has unrelated infrastructure failures and is not an acceptance result.
 
-## Required CI blocker
+## Scheduler dependency and development integration
 
 Frontend CI run 41418854663 at e4d23812b418e83ac1a1075296e48a64ee4ffa3f ran
 3,733 tests: 3,730 passed, two skipped, one failed. The failure is
@@ -87,11 +87,23 @@ Frontend CI run 41418854663 at e4d23812b418e83ac1a1075296e48a64ee4ffa3f ran
 `on.schedule = [{ cron: '2/5 * * * *' }]`, while the canonical timer is paused.
 Reproduction on unchanged main 57600f246d1b024b37e40851b866722c4a09b58a yielded
 the same failure (one failed, four passed in that file).
-This PR changes neither the scheduler nor that test. Preserve the timer pause and
-its controls. Required CI awaits the responsible scheduler/incident lineage's
-baseline reconciliation. Focused scheduler repair PR #965 is the responsible
-dependency; owner-approved integration and fresh University current-head checks
-remain required. No release exception is granted.
+Focused scheduler PR #965 repaired this stale synchronous YAML expectation.
+The owner subsequently authorized incorporation into this University development
+branch, without merging either PR into main. Integration commit
+`ddcca6f7b4540e626f549e077de7918a46b0e1e2` has the previous University head
+`68dcb6760780b695c3a886f6459cc936ba06a80b` and reviewed scheduler head
+`0811fa0ab927ac1c3f51b310919552b4ecce0280` as parents. Independent tree comparison
+confirmed exactly the scheduler test/documentation import and preservation of all
+University and runtime workflow blobs. This PR therefore includes the scheduler
+test repair; runtime scheduling and the intentional pause remain unchanged.
+
+The integrated source passed 152 targeted tests. Hosted CI run 41444591155 passed
+3,756 tests with two skipped, TypeScript, deployment contract, build and lint;
+its final diff-hygiene step identified extra EOF blank lines in two University
+files. Those formatting defects and this outdated scope description were repaired
+in a follow-up commit. Fresh required checks on that final head remain mandatory;
+the current exact SHA and completed results are recorded on PR #964. No release
+exception, main merge, deployment or timer activation is authorized here.
 
 The reference-backend E2E workflow passed on the initial frontend head, but its
 configured backend does not itself prove this University activity. Current-head
@@ -132,8 +144,9 @@ Rollback selects the previous approved Render revisions or reverts the paired
 commits. There is no new persistent learner data to migrate or roll back.
 
 Backend is ready for owner review on its unchanged independently reviewed green
-head. Frontend has repaired code and successful targeted/build/typecheck/lint/local
-integration evidence, but required CI has the baseline blocker above. Neither
+head. Frontend readiness requires completed checks and independent review on the
+final integrated head, as recorded on PR #964. The scheduler repair is incorporated
+in this development branch; its separate PR remains unmerged into main. Neither
 PR authorizes automatic merge, deployment or learner-write activation.
 
 ## Next-stage prerequisites only
@@ -166,5 +179,6 @@ origins explicitly allowed. Seven independent HTTP assertions covered three
 content endpoints on both origins plus denial of an untrusted origin. The
 cross-port browser proof uses that real dependency; no CORS/security change was made.
 
-The University learning implementation is unchanged by this maintenance repair.
-Scheduler code/test changes remain exclusively in focused PR #965.
+The University learning behavior is unchanged by this maintenance repair.
+The test/documentation repair from focused scheduler PR #965 is incorporated
+under owner authorization; no runtime scheduler code or workflow was changed.
