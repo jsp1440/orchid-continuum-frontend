@@ -119,11 +119,11 @@ const UniversityLabPrototype = () => {
           </div>
         )}
 
-        {release.data && !enabled && (
+        {release.data && !release.isError && !capability.isError && !enabled && (
           <div className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] p-8 md:p-10">
             <div className="mb-4 flex items-center gap-3 text-amber-100">
               <LockKeyhole className="h-5 w-5" />
-              <h2 className="font-serif text-2xl md:text-3xl">{summarizeRelease(release.data)}</h2>
+              <h2 className="font-serif text-2xl md:text-3xl">{mode === 'read_only' || mode === 'durable' ? 'University release verification incomplete' : summarizeRelease(release.data)}</h2>
             </div>
             <p className="max-w-3xl text-sm leading-relaxed text-white/75">
               The University remains closed whenever the backend and capability contracts disagree

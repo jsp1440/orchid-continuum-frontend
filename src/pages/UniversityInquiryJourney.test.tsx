@@ -125,6 +125,24 @@ describe('existing flowering lesson to ephemeral inquiry practice', () => {
     expect(container.querySelector('textarea')!.value).toBe('');
   });
 
+  it.each(['disabled capability', 'publication enabled', 'human review disabled'] as const)(
+    'does not claim ready when overall verification is blocked by %s', async (scenario) => {
+    if (scenario === 'disabled capability') {
+      vi.mocked(universityApi.capability).mockResolvedValue({ ...capability, enabled: false });
+    } else {
+      vi.mocked(universityApi.releaseReadiness).mockResolvedValue({
+        ...readiness,
+        ...(scenario === 'publication enabled' ? { publication_enabled: true } : { human_review_required: false }),
+      });
+    }
+    await mount();
+    expect(container.textContent).toContain('University release verification incomplete');
+    expect(container.textContent).not.toContain('Read-only University release ready');
+    expect(container.textContent).not.toContain('Verified durable University workspace ready');
+    expect(container.textContent).not.toContain('Guided inquiry practice');
+    expect(universityApi.catalog).not.toHaveBeenCalled();
+  });
+
   it('keeps practice and content closed when release contracts disagree', async () => {
     vi.mocked(universityApi.capability).mockResolvedValue({ ...capability, session_writes_enabled: true });
     await mount();
@@ -244,7 +262,10 @@ describe('existing flowering lesson to ephemeral inquiry practice', () => {
     expect(container.textContent).toContain('Guided practice is unavailable');
   });
 
-  it('fails closed and discloses clearing notes when safety verification is lost', async () => {
+  it.each([
+    ['releaseReadiness', 'university-release-readiness'],
+    ['capability', 'university-capability'],
+  ] as const)('fails closed without cached ready status when %s verification is lost', async (method, queryKey) => {
     await mount();
     const textarea = container.querySelector('textarea')!;
     const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
@@ -252,13 +273,17 @@ describe('existing flowering lesson to ephemeral inquiry practice', () => {
       setter.call(textarea, 'Unsaved learner note');
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
     });
-    vi.mocked(universityApi.releaseReadiness).mockRejectedValue(new Error('Cannot verify release'));
-    await act(async () => { await client.refetchQueries({ queryKey: ['university-release-readiness'] }); });
+    vi.mocked(universityApi[method]).mockRejectedValue(new Error('Cannot verify release'));
+    await act(async () => { await client.refetchQueries({ queryKey: [queryKey] }); });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    expect(container.textContent).toContain('University service unavailable');
     expect(container.textContent).toContain('losing release verification clears unsaved practice');
+    expect(container.textContent).not.toContain('Read-only University release ready');
+    expect(container.textContent).not.toContain('Verified durable University workspace ready');
     expect(container.querySelector('textarea')).toBeNull();
-    vi.mocked(universityApi.releaseReadiness).mockResolvedValue(readiness);
-    await act(async () => { await client.refetchQueries({ queryKey: ['university-release-readiness'] }); });
+    if (method === 'releaseReadiness') vi.mocked(universityApi.releaseReadiness).mockResolvedValue(readiness);
+    else vi.mocked(universityApi.capability).mockResolvedValue(capability);
+    await act(async () => { await client.refetchQueries({ queryKey: [queryKey] }); });
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
     expect(container.querySelector('textarea')!.value).toBe('');
   });
