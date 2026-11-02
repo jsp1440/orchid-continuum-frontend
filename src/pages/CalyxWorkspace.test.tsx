@@ -205,6 +205,31 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     container.remove();
   });
 
+  it("renders repeated connection failures only once", async () => {
+    mocks.loadCalyxWorkspace.mockResolvedValueOnce({
+      capabilities: null,
+      homepage: null,
+      orchestrator: null,
+      orchestratorState: "unavailable",
+      errors: ["TypeError: Failed to fetch", "TypeError: Failed to fetch"],
+    });
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    const degradedConnections = Array.from(container.querySelectorAll("section")).find(
+      (section) => section.querySelector("h2")?.textContent === "Degraded connections",
+    );
+    expect(degradedConnections?.querySelectorAll("li")).toHaveLength(1);
+    expect(degradedConnections?.textContent).toContain("TypeError: Failed to fetch");
+  });
+
   it("keeps the reset UI clean when new conversation interrupts a pending create", async () => {
     const createOperation = deferred<ConversationFixture>();
     mocks.createCalyxConversation.mockReturnValue(createOperation.promise);
