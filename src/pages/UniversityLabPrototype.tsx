@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Beaker, BookOpenCheck, LockKeyhole, ShieldCheck } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import UniversityLearnerNotebook from '@/components/university/UniversityLearnerNotebook';
+import UniversityInquiryPractice from '@/components/university/UniversityInquiryPractice';
 import { universityApi } from '@/lib/universityApi';
 import {
   releaseBlockers,
@@ -49,7 +50,8 @@ const UniversityLabPrototype = () => {
           capability.data.persistence === 'postgres_durable')),
   );
   const enabled = Boolean(
-    release.data && safeScienceContent(release.data) && capabilityConsistent,
+    !release.isError && !capability.isError &&
+      release.data && safeScienceContent(release.data) && capabilityConsistent,
   );
   const durableWorkspace = enabled && mode === 'durable';
   const blockers = release.data ? releaseBlockers(release.data) : [];
@@ -77,13 +79,13 @@ const UniversityLabPrototype = () => {
   const chapter = useQuery({
     queryKey: ['university-chapter', catalog.data?.chapter.id],
     queryFn: () => universityApi.chapter(catalog.data!.chapter.id),
-    enabled: Boolean(catalog.data?.chapter.id),
+    enabled: enabled && Boolean(catalog.data?.chapter.id),
     retry: false,
   });
   const laboratory = useQuery({
     queryKey: ['university-laboratory', catalog.data?.laboratory.id],
     queryFn: () => universityApi.laboratory(catalog.data!.laboratory.id),
-    enabled: Boolean(catalog.data?.laboratory.id),
+    enabled: enabled && Boolean(catalog.data?.laboratory.id),
     retry: false,
   });
 
@@ -92,7 +94,8 @@ const UniversityLabPrototype = () => {
       eyebrow="Orchid Continuum University"
       title="Scientific inquiry"
       titleAccent="laboratory"
-      intro="Book in the Brain connected to an evidence-labelled orchid investigation. The interface remains read-only unless the backend proves the separately governed durable-session and learner-identity release gates."
+      showDemoBanner={false}
+      intro="Book in the Brain connected to a draft instructional orchid investigation. The interface remains read-only unless the backend proves the separately governed durable-session and learner-identity release gates."
     >
       <section className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
         {(release.isLoading || capability.isLoading) && (
@@ -135,11 +138,17 @@ const UniversityLabPrototype = () => {
 
         {enabled && (catalog.isLoading || chapter.isLoading || laboratory.isLoading) && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/70">
-            Loading the evidence-backed chapter and laboratory…
+            Loading the instructional chapter and laboratory…
           </div>
         )}
 
-        {enabled && chapter.data && laboratory.data && release.data && (
+        {enabled && (catalog.isError || chapter.isError || laboratory.isError) && (
+          <p role="alert" className="rounded-2xl border border-amber-300/30 p-8 text-white">
+            University lesson content is unavailable. Reload to try again; no substitute case has been loaded.
+          </p>
+        )}
+
+        {enabled && !catalog.isError && !chapter.isError && !laboratory.isError && chapter.data && laboratory.data && release.data && (
           <div className="space-y-8">
             <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.045] p-5 text-sm text-emerald-50/80">
               <strong>{summarizeRelease(release.data)}.</strong>{' '}
@@ -182,6 +191,9 @@ const UniversityLabPrototype = () => {
                   <p>
                     Session persistence: {durableWorkspace ? 'verified Postgres durable storage' : 'process-local, non-durable prototype'}.
                   </p>
+                  <p className="my-4 rounded border border-amber-200/40 p-4 text-sm text-amber-50" role="note">
+                    {laboratory.data.provenance?.notice ?? 'Curated instructional case. Live scientific provenance is unavailable; do not treat scenario measurements as verified observations.'}
+                  </p>
                 </div>
               </aside>
             </div>
@@ -210,6 +222,8 @@ const UniversityLabPrototype = () => {
               </div>
             </article>
 
+            <UniversityInquiryPractice key={laboratory.data.laboratory_id + ':' + laboratory.data.inquiry_activity?.version} laboratory={laboratory.data} />
+
             {durableWorkspace && (
               <UniversityLearnerNotebook
                 chapterId={chapter.data.chapter_id}
@@ -224,3 +238,4 @@ const UniversityLabPrototype = () => {
 };
 
 export default UniversityLabPrototype;
+
