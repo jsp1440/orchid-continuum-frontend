@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { universityApi, type UniversityLaboratory } from '@/lib/universityApi';
+import { universityApi, type UniversityChapter, type UniversityLaboratory } from '@/lib/universityApi';
 import type { UniversityReleaseReadiness } from '@/lib/universityRelease';
 import captured from '@/lib/__fixtures__/universityInquiry.backend.json';
 import UniversityLabPrototype from './UniversityLabPrototype';
@@ -45,7 +45,7 @@ beforeEach(() => {
     chapter: { id: captured.chapter.chapter_id, ...captured.chapter },
     laboratory: { id: laboratory.laboratory_id, ...laboratory }, capability,
   });
-  vi.spyOn(universityApi, 'chapter').mockResolvedValue(captured.chapter);
+  vi.spyOn(universityApi, 'chapter').mockResolvedValue(captured.chapter as UniversityChapter);
   vi.spyOn(universityApi, 'laboratory').mockResolvedValue(laboratory);
 });
 afterEach(() => {
