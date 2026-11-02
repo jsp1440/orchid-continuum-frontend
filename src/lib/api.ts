@@ -29,7 +29,7 @@ type RuntimeEnv = Record<string, string | undefined>;
 
 const env: RuntimeEnv =
   typeof import.meta !== 'undefined'
-    ? ((import.meta as ImportMeta & { env?: RuntimeEnv }).env ?? {})
+    ? (import.meta.env ?? {})
     : {};
 
 const errorMessage = (error: unknown, fallback: string): string =>

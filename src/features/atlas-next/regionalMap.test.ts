@@ -1,5 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MAPBOX_TOKEN_ENV_VAR, REGIONAL_LAYERS, mapboxConfig } from './mapboxConfig';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Mapbox configuration contract', () => {
   it('names the one variable a deployment has to set', () => {
@@ -7,13 +11,22 @@ describe('Mapbox configuration contract', () => {
   });
 
   it('reports unconfigured, and names the variable, when nothing is set', () => {
-    // The test environment sets no token, which is the state a fresh
-    // deployment is in — and the state the interface has to explain.
+    vi.stubEnv('VITE_MAPBOX_TOKEN', undefined);
     const cfg = mapboxConfig();
     expect(cfg.configured).toBe(false);
     expect(cfg.token).toBeNull();
     expect(cfg.envVar).toBe('VITE_MAPBOX_TOKEN');
     expect(cfg.reason).toContain('VITE_MAPBOX_TOKEN');
+  });
+
+  it('accepts an explicitly configured public token', () => {
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'pk.offline-test-token');
+    expect(mapboxConfig()).toMatchObject({ configured: true, token: 'pk.offline-test-token', reason: '' });
+  });
+
+  it('refuses a secret token rather than exposing it to the browser', () => {
+    vi.stubEnv('VITE_MAPBOX_TOKEN', 'sk.offline-test-token');
+    expect(mapboxConfig()).toMatchObject({ configured: false, token: null });
   });
 
   it('every declared regional layer states its readiness and a reason', () => {
