@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import React, { act } from 'react';
+import React, { act, StrictMode } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -54,7 +54,7 @@ afterEach(() => {
 });
 async function mount() {
   await act(async () => {
-    root.render(<QueryClientProvider client={client}><UniversityLabPrototype /></QueryClientProvider>);
+    root.render(<StrictMode><QueryClientProvider client={client}><UniversityLabPrototype /></QueryClientProvider></StrictMode>);
   });
   for (let i = 0; i < 10; i++) {
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
@@ -150,5 +150,94 @@ describe('existing flowering lesson to ephemeral inquiry practice', () => {
     vi.mocked(universityApi.laboratory).mockResolvedValue(broken);
     await mount();
     expect(container.textContent).toContain('Guided practice is unavailable');
+  });
+
+  it('does not steal focus on asynchronous initial mount and focuses an explicit stage change', async () => {
+    const sentinel = document.createElement('button');
+    document.body.appendChild(sentinel);
+    sentinel.focus();
+    await mount();
+    expect(document.activeElement).toBe(sentinel);
+    act(() => container.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+    act(() => button('Check reasoning').click());
+    act(() => button('Next stage').click());
+    expect(document.activeElement?.textContent).toBe('Stage 2 of 7: question');
+    sentinel.remove();
+  });
+
+  it('preserves notes and selected reasoning when a background content refresh fails', async () => {
+    await mount();
+    const textarea = container.querySelector('textarea')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    act(() => {
+      setter.call(textarea, 'Keep this learner hypothesis');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      container.querySelector<HTMLInputElement>('input[type="radio"]')!.click();
+    });
+    act(() => button('Check reasoning').click());
+    vi.mocked(universityApi.chapter).mockRejectedValue(new Error('Refresh failed'));
+    await act(async () => { await client.refetchQueries({ queryKey: ['university-chapter'] }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    expect(container.textContent).toContain('lesson refresh failed');
+    expect(container.querySelector('textarea')!.value).toBe('Keep this learner hypothesis');
+    expect(container.querySelector<HTMLInputElement>('input[type="radio"]')!.checked).toBe(true);
+    expect(container.textContent).toContain('Appropriate reasoning.');
+    act(() => button('Next stage').click());
+    for (let stage = 1; stage < 7; stage++) {
+      act(() => container.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+      act(() => button('Check reasoning').click());
+      act(() => button(stage === 6 ? 'Review activity' : 'Next stage').click());
+    }
+    expect(container.textContent).toContain('Your note: Keep this learner hypothesis');
+  });
+
+  it.each([
+    ['missing steps', (value: Record<string, unknown>) => { delete value.steps; }],
+    ['null choices', (value: Record<string, unknown>) => { (value.steps as Record<string, unknown>[])[0].choices = null; }],
+    ['string truth value', (value: Record<string, unknown>) => {
+      const step = (value.steps as Record<string, unknown>[])[0];
+      (step.choices as Record<string, unknown>[])[0].appropriate = 'false';
+    }],
+    ['missing version', (value: Record<string, unknown>) => { delete value.version; }],
+    ['unsupported version', (value: Record<string, unknown>) => { value.version = '999.0.0'; }],
+    ['duplicate choice ids', (value: Record<string, unknown>) => {
+      const choices = ((value.steps as Record<string, unknown>[])[0].choices as Record<string, unknown>[]);
+      choices[1].id = choices[0].id;
+    }],
+  ])('shows unavailable instead of crashing or trusting %s', async (_label, change) => {
+    const broken = structuredClone(laboratory);
+    change(broken.inquiry_activity as unknown as Record<string, unknown>);
+    vi.mocked(universityApi.laboratory).mockResolvedValue(broken);
+    await mount();
+    expect(container.textContent).toContain('Guided practice is unavailable');
+    expect(container.querySelector('input[type="radio"]')).toBeNull();
+  });
+
+  it('rejects jointly corrupted stage sequences', async () => {
+    const broken = structuredClone(laboratory);
+    broken.inquiry_sequence[1] = 'observe';
+    broken.inquiry_activity!.steps[1].stage = 'observe';
+    vi.mocked(universityApi.laboratory).mockResolvedValue(broken);
+    await mount();
+    expect(container.textContent).toContain('Guided practice is unavailable');
+  });
+
+  it('fails closed and discloses clearing notes when safety verification is lost', async () => {
+    await mount();
+    const textarea = container.querySelector('textarea')!;
+    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
+    act(() => {
+      setter.call(textarea, 'Unsaved learner note');
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    vi.mocked(universityApi.releaseReadiness).mockRejectedValue(new Error('Cannot verify release'));
+    await act(async () => { await client.refetchQueries({ queryKey: ['university-release-readiness'] }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    expect(container.textContent).toContain('losing release verification clears unsaved practice');
+    expect(container.querySelector('textarea')).toBeNull();
+    vi.mocked(universityApi.releaseReadiness).mockResolvedValue(readiness);
+    await act(async () => { await client.refetchQueries({ queryKey: ['university-release-readiness'] }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    expect(container.querySelector('textarea')!.value).toBe('');
   });
 });

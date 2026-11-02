@@ -114,6 +114,7 @@ const UniversityLabPrototype = () => {
               The frontend could not verify the Calyx University release contract. No educational
               data has been inferred or substituted. Check the deployed API origin and the
               <code className="mx-1">/api/learning/release-readiness</code> endpoint.
+              For safety, losing release verification clears unsaved practice.
             </p>
           </div>
         )}
@@ -144,11 +145,13 @@ const UniversityLabPrototype = () => {
 
         {enabled && (catalog.isError || chapter.isError || laboratory.isError) && (
           <p role="alert" className="rounded-2xl border border-amber-300/30 p-8 text-white">
-            University lesson content is unavailable. Reload to try again; no substitute case has been loaded.
+            {chapter.data && laboratory.data && catalog.data
+              ? 'University lesson refresh failed. Previously loaded content and your current practice remain available in this page; no substitute data has been loaded.'
+              : 'University lesson content is unavailable. Reload to try again; no substitute case has been loaded.'}
           </p>
         )}
 
-        {enabled && !catalog.isError && !chapter.isError && !laboratory.isError && chapter.data && laboratory.data && release.data && (
+        {enabled && chapter.data && laboratory.data && release.data && (
           <div className="space-y-8">
             <div className="rounded-2xl border border-emerald-300/25 bg-emerald-300/[0.045] p-5 text-sm text-emerald-50/80">
               <strong>{summarizeRelease(release.data)}.</strong>{' '}

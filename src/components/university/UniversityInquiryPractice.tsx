@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { UniversityLaboratory } from '@/lib/universityApi';
+import { inquiryActivity } from '@/lib/universityInquiryContract';
 
 type Response = { choice: string; note: string };
 
@@ -11,15 +12,15 @@ export default function UniversityInquiryPractice({ laboratory }: { laboratory: 
   const [responses, setResponses] = useState<Response[]>([]);
   const [checked, setChecked] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { heading.current?.focus(); }, [position]);
-  const activity = laboratory.inquiry_activity;
-  if (!activity || laboratory.data_origin !== 'simulated_instructional_case' ||
-      activity.assessment_kind !== 'formative_practice' ||
-      activity.mode !== 'ephemeral_read_only' || activity.scientific_authority !== false ||
-      activity.steps.length !== 7 ||
-      activity.steps.some((step, index) => step.stage !== laboratory.inquiry_sequence[index] ||
-        !step.choices.length || step.evidence_ids.some((id) =>
-          !laboratory.evidence_catalog.some((evidence) => evidence.evidence_id === id)))) {
+  const focusRequested = useRef(false);
+  useEffect(() => {
+    if (focusRequested.current) {
+      heading.current?.focus();
+      focusRequested.current = false;
+    }
+  }, [position]);
+  const activity = inquiryActivity(laboratory);
+  if (!activity) {
     return <p role="status">Guided practice is unavailable for this backend content version.</p>;
   }
   const step = activity.steps[position];
@@ -31,7 +32,7 @@ export default function UniversityInquiryPractice({ laboratory }: { laboratory: 
     <section aria-labelledby="inquiry-practice-title" className="rounded-2xl border border-emerald-200/30 p-7 text-white">
       <h2 id="inquiry-practice-title" className="font-serif text-2xl">Guided inquiry practice</h2>
       <p className="my-3 text-sm">Simulated instructional case. Deterministic feedback concerns reasoning, not a verified diagnosis or credential.</p>
-      <p className="mb-5 text-sm">Responses stay in this page's memory and disappear when you leave or reload. Nothing is saved, submitted or published.</p>
+      <p className="mb-5 text-sm">Responses stay in this page's memory. Leaving, reloading, losing release verification, or loading a different content version clears them. Nothing is saved, submitted or published.</p>
       {complete ? (
         <div>
           <h3 className="text-xl" tabIndex={-1} ref={heading}>Review your learning activity</h3>
@@ -50,6 +51,7 @@ export default function UniversityInquiryPractice({ laboratory }: { laboratory: 
             })}
           </ol>
           <button type="button" className={buttonClass} onClick={() => {
+            focusRequested.current = true;
             setPosition(0); setResponses([]); setSelected(''); setNote(''); setChecked(false);
           }}>Start again</button>
         </div>
@@ -79,6 +81,7 @@ export default function UniversityInquiryPractice({ laboratory }: { laboratory: 
             {checked && choice && <p>{choice.appropriate ? 'Appropriate reasoning. ' : 'Consider another approach. '}{choice.feedback}</p>}
           </div>
           {checked && choice && <button type="button" className={buttonClass} onClick={() => {
+            focusRequested.current = true;
             setResponses([...responses, { choice: selected, note }]);
             setPosition(position + 1); setSelected(''); setNote(''); setChecked(false);
           }}>{position === 6 ? 'Review activity' : 'Next stage'}</button>}
