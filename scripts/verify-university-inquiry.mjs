@@ -5,7 +5,8 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-const [frontendOrigin, backendOrigin, evidencePath = 'university-inquiry-evidence.json'] = process.argv.slice(2);
+const [frontendOrigin, backendOrigin, evidencePath = 'university-inquiry-evidence.json', expectedReleaseSha] = process.argv.slice(2);
+const fullSha = /^[0-9a-f]{40}$/;
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const read = async (path) => {
   const response = await fetch(backendOrigin + path);
@@ -15,14 +16,28 @@ const read = async (path) => {
 const evidence = {
   frontend_origin: frontendOrigin, backend_origin: backendOrigin,
   started_at: new Date().toISOString(), response_fixtures: false,
+  expected_release_sha: expectedReleaseSha ?? null, actual_release_sha: null,
   result: 'running', checks: [], learning_requests: [],
 };
 let browser;
+let verificationError;
+let cleanupError;
+let verificationFailed = false;
+let cleanupFailed = false;
+const message = (error) => error instanceof Error ? error.message : String(error);
+const verifyRelease = async (page) => {
+  // Read the served document independently of the authoritative expected input.
+  evidence.actual_release_sha = await page.locator('meta[name="ocu-release-sha"]').getAttribute('content');
+  evidence.frontend_release = evidence.actual_release_sha;
+  check(typeof evidence.actual_release_sha === 'string' && fullSha.test(evidence.actual_release_sha), 'Missing or malformed actual release SHA');
+  check(evidence.actual_release_sha === expectedReleaseSha, 'Actual release SHA does not match expected candidate');
+};
 try {
-  if (!frontendOrigin || !backendOrigin) throw new Error('Usage: node scripts/verify-university-inquiry.mjs <frontend-origin> <backend-origin> [evidence.json]');
+  if (!frontendOrigin || !backendOrigin) throw new Error('Usage: node scripts/verify-university-inquiry.mjs <frontend-origin> <backend-origin> <evidence.json> <expected-release-sha>');
   await mkdir(dirname(evidencePath), { recursive: true });
   // Supersede an earlier PASS before any fallible preflight or browser setup.
   await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
+  check(typeof expectedReleaseSha === 'string' && fullSha.test(expectedReleaseSha), 'Missing or malformed expected release SHA');
   const readiness = await read('/api/learning/release-readiness');
   check(readiness.read_only_ready === true, 'Requires the read-only release');
   for (const name of ['session_writes_enabled', 'durable_sessions_enabled', 'publication_enabled', 'candidate_knowledge_writes_enabled', 'calyx_model_calls_enabled']) {
@@ -46,6 +61,7 @@ try {
     }
   });
   await page.goto(frontendOrigin + '/university', { waitUntil: 'networkidle' });
+  await verifyRelease(page);
   await page.getByRole('link', { name: 'Open flowering inquiry lesson', exact: true }).click();
   await page.getByRole('heading', { name: 'Guided inquiry practice', exact: true }).waitFor();
   check(await page.getByText('Simulated instructional case.', { exact: false }).count() > 0, 'Missing simulation disclosure');
@@ -84,6 +100,7 @@ try {
   await page.getByRole('status').filter({ hasText: reloadChoice.feedback }).waitFor();
   check(await page.getByLabel('Your question or hypothesis', { exact: false }).inputValue() === 'Unsaved note before reload', 'Reload precondition note missing');
   await page.reload({ waitUntil: 'networkidle' });
+  await verifyRelease(page);
   await page.getByRole('heading', { name: 'Stage 1 of 7: observe', exact: true }).waitFor();
   check(await page.getByLabel('Your question or hypothesis', { exact: false }).inputValue() === '', 'Reload retained notes');
   check(await page.getByRole('radio', { checked: true }).count() === 0, 'Reload retained response');
@@ -91,18 +108,21 @@ try {
   check(evidence.learning_requests.every((request) => request.method === 'GET'), 'Unexpected University mutation request during reset/reload');
   check(errors.length === 0, 'Browser runtime errors after reset/reload: ' + errors.join('; '));
   evidence.checks.push('Reset clears practice; populated notes, response and feedback are discarded on reload at narrow viewport');
-  evidence.result = 'pass';
-  evidence.completed_at = new Date().toISOString();
-  evidence.frontend_release = await page.locator('meta[name="ocu-release-sha"]').getAttribute('content');
-  await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
-  console.log(JSON.stringify(evidence, null, 2));
 } catch (error) {
-  evidence.result = 'fail';
-  evidence.error = error instanceof Error ? error.message : String(error);
-  evidence.completed_at = new Date().toISOString();
-  await mkdir(dirname(evidencePath), { recursive: true });
-  await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
-  throw error;
+  verificationFailed = true;
+  verificationError = error;
 } finally {
-  if (browser) await browser.close();
+  if (browser) {
+    try { await browser.close(); } catch (error) { cleanupFailed = true; cleanupError = error; }
+  }
 }
+// Required cleanup is part of verification; never commit PASS before it succeeds.
+evidence.completed_at = new Date().toISOString();
+evidence.result = verificationFailed || cleanupFailed ? 'fail' : 'pass';
+evidence.cleanup_status = browser ? cleanupFailed ? 'failed' : 'passed' : 'not_created';
+if (verificationFailed || cleanupFailed) evidence.error = message(verificationFailed ? verificationError : cleanupError);
+if (cleanupFailed) evidence.cleanup_error = message(cleanupError);
+await mkdir(dirname(evidencePath), { recursive: true });
+await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
+if (verificationFailed || cleanupFailed) throw verificationFailed ? verificationError : cleanupError;
+console.log(JSON.stringify(evidence, null, 2));

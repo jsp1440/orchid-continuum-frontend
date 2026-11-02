@@ -103,6 +103,28 @@ describe('existing flowering lesson to ephemeral inquiry practice', () => {
     expect(container.querySelectorAll('ol li')).toHaveLength(0);
   });
 
+  it('recovers when same-version refreshed content removes a completed response choice', async () => {
+    await mount();
+    for (let stage = 0; stage < 7; stage++) {
+      act(() => container.querySelector<HTMLInputElement>('input[type="radio"]')!.click());
+      act(() => button('Check reasoning').click());
+      act(() => button(stage === 6 ? 'Review activity' : 'Next stage').click());
+    }
+    expect(container.textContent).toContain('Review your learning activity');
+    const refreshed = structuredClone(laboratory);
+    refreshed.inquiry_activity!.steps[0].choices[0].id = 'refreshed-observe-choice';
+    expect(refreshed.inquiry_activity!.version).toBe(laboratory.inquiry_activity!.version);
+    vi.mocked(universityApi.laboratory).mockResolvedValue(refreshed);
+    await act(async () => { await client.refetchQueries({ queryKey: ['university-laboratory'] }); });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); });
+    expect(container.textContent).toContain('response no longer matches');
+    act(() => button('Start again').click());
+    expect(container.textContent).toContain('Stage 1 of 7');
+    expect(container.querySelectorAll('ol li')).toHaveLength(0);
+    expect(container.querySelector<HTMLInputElement>('input[type="radio"]')!.value).toBe('refreshed-observe-choice');
+    expect(container.querySelector('textarea')!.value).toBe('');
+  });
+
   it('keeps practice and content closed when release contracts disagree', async () => {
     vi.mocked(universityApi.capability).mockResolvedValue({ ...capability, session_writes_enabled: true });
     await mount();

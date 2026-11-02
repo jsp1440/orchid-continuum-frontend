@@ -117,11 +117,13 @@ Use the exact paired checkouts and backend Python dependencies. Run three termin
 # Backend source dependencies, real University router; local-only test harness.
 PYTHONPATH=/path/to/orchid-calyx-backend python -m uvicorn university_readonly_app:app --app-dir /path/to/orchid-continuum-frontend/scripts --host 127.0.0.1 --port 8000
 # Frontend checkout: these are local build settings, not production changes.
-VITE_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_CALYX_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_IMAGES_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_RELEASE_SHA=<exact-frontend-head> npm run build
+EXPECTED_RELEASE_SHA="$(git rev-parse HEAD)"
+VITE_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_CALYX_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_IMAGES_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_RELEASE_SHA="$EXPECTED_RELEASE_SHA" npm run build
 npm run preview -- --host 127.0.0.1 --port 5174 --strictPort
 # Frontend checkout, after installing the official test browser:
 npx playwright install chromium
-node scripts/verify-university-inquiry.mjs http://127.0.0.1:5174 http://127.0.0.1:8000 university-inquiry-evidence.json
+EXPECTED_RELEASE_SHA="$(git rev-parse HEAD)"
+node scripts/verify-university-inquiry.mjs http://127.0.0.1:5174 http://127.0.0.1:8000 university-inquiry-evidence.json "$EXPECTED_RELEASE_SHA"
 ```
 
 The test harness clears production credentials, disables session writes/durability/
@@ -129,6 +131,23 @@ publication/models, blocks non-loopback connections, and imports the existing
 canonical router. Bind it only to loopback. It is test scaffolding, not a second
 backend or hosted service. CHROMIUM_EXECUTABLE_PATH can select an installed
 official executable. The verifier performs no learner mutations or response mocking.
+
+The expected SHA is a required explicit input from the checked-out candidate, not
+from the served page or its build environment. In a PR workflow, check out the
+authoritative pull-request head and use its full `git rev-parse HEAD` value for
+both build stamping and verification; for a pinned local source snapshot, use
+the independently fetched GitHub PR head after verifying the source blob hashes.
+Never derive the expected value from the actual page metadata. The verifier reads
+actual metadata independently before the journey and again after reload. Missing,
+malformed, unattested or mismatched IDs fail closed. Evidence records both
+`expected_release_sha` and `actual_release_sha` (null until observed).
+
+PASS is written only after the journey, release validation and browser teardown
+all succeed. Teardown rejection writes FAIL and exits unsuccessfully; simultaneous
+journey/teardown errors preserve both error messages. Subprocess negative controls
+in `scripts/verify-university-inquiry.test.mjs` inject an explicitly fake browser
+to challenge lifecycle and SHA rejection. These are regression controls, separate
+from the real browser/backend integration evidence.
 
 ## Release configuration and rollback
 
@@ -182,3 +201,10 @@ cross-port browser proof uses that real dependency; no CORS/security change was 
 The University learning behavior is unchanged by this maintenance repair.
 The test/documentation repair from focused scheduler PR #965 is incorporated
 under owner authorization; no runtime scheduler code or workflow was changed.
+
+A later review reproduced a final-review render failure when a valid same-version
+refresh replaces a previously selected choice ID. The response lookup now fails
+closed to a recovery message, retains the learner note in review, and keeps the
+existing Start again control usable. A mounted refresh regression first failed
+with the original lookup, then passed with the guard. The evidence lookup remains
+covered by the existing validated activity/catalog identity contract.

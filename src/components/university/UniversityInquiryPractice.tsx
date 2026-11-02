@@ -40,7 +40,14 @@ export default function UniversityInquiryPractice({ laboratory }: { laboratory: 
           <ol className="my-4 space-y-4">
             {activity.steps.map((item, index) => {
               const response = responses[index];
-              const answer = item.choices.find((candidate) => candidate.id === response.choice)!;
+              const answer = item.choices.find((candidate) => candidate.id === response?.choice);
+              if (!answer) {
+                return <li key={item.stage}>
+                  <h4 className="font-semibold">{index + 1}. {item.stage}</h4>
+                  <p role="alert">This response no longer matches the loaded content. Select "Start again" to restart practice.</p>
+                  {response?.note && <p>Your note: {response.note}</p>}
+                </li>;
+              }
               return <li key={item.stage}>
                 <h4 className="font-semibold">{index + 1}. {item.stage}</h4>
                 <p>{answer.label}</p>
