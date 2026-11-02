@@ -53,7 +53,7 @@ describe("PaperBotanica API trust boundary", () => {
   });
 
   it("loads evidence from the backend profile rather than local fixtures", async () => {
-    mockedFetch.mockResolvedValue(new Response(JSON.stringify({ ...species, sources: [{}], organs: [{}] }), { status: 200 }));
+    mockedFetch.mockResolvedValue(new Response(JSON.stringify({ ...species, organ_count: 1, distribution: "UNKNOWN", habitat: "UNKNOWN", botanical_fact: "UNKNOWN", conservation_message: "UNKNOWN", sources: [{source_id:"fna",title:"FNA",url:"https://efloras.org",source_type:"flora",creator:"FNA",license:"Reference only",notes:""}], evidence: [{evidence_id:"e1",source_id:"fna",evidence_class:"OBSERVED",structures:["flower"],view:"UNAVAILABLE",confidence:"PROBABLE",notes:""}], organs: [{organ_id:"DS",kind:"dorsal_sepal",label:"Dorsal sepal",evidence_class:"HYPOTHETICAL",attachment:"flower_center"}] }), { status: 200 }));
     const profile = await fetchPaperBotanicaProfile("calypso-bulbosa");
     expect(profile.sources).toHaveLength(1);
   });
@@ -104,3 +104,4 @@ describe("PaperBotanica GLB reader", () => {
     expect(model.primitives[0].color).toEqual([0.2, 0.4, 0.6, 1]);
   });
 });
+

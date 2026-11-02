@@ -1,0 +1,50 @@
+
+ RUN  v3.2.6 /workspace/scratch/53ed46290739/paperbotanica-frontend
+
+ ✓ src/features/paperbotanica/paperbotanica.test.ts (5 tests) 9ms
+ ❯ src/lib/routeAccessPolicy.test.ts (6 tests | 1 failed) 32ms
+   × route access policy > classifies every App route exactly once 8ms
+     → expected [ '*', '/', '/about', …(74) ] to deeply equal [ '*', '/', '/about', …(75) ]
+   ✓ route access policy > wraps every router-authenticated route before its page mounts 17ms
+   ✓ route access policy > detects an unwrapped router-authenticated route even beside wrapped neighbours 5ms
+   ✓ route access policy > keeps aliases from bypassing operational authentication 0ms
+   ✓ route access policy > gates the literature browser because its backend is owner/API-key only 1ms
+   ✓ route access policy > records intentional internal authorization boundaries 0ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/lib/routeAccessPolicy.test.ts > route access policy > classifies every App route exactly once
+AssertionError: expected [ '*', '/', '/about', …(74) ] to deeply equal [ '*', '/', '/about', …(75) ]
+
+- Expected
++ Received
+
+@@ -53,11 +53,10 @@
+    "/mycorrhizae/:taxa",
+    "/oacs",
+    "/orchid-continuum-mission-control",
+    "/orchid-identification",
+    "/org/:slug",
+-   "/paperbotanica",
+    "/partners",
+    "/pollinators",
+    "/pollinators/:taxa",
+    "/privacy",
+    "/project/:slug",
+
+ ❯ src/lib/routeAccessPolicy.test.ts:82:42
+     80| 
+     81|     expect(new Set(classifiedRoutes).size).toBe(classifiedRoutes.lengt…
+     82|     expect([...classifiedRoutes].sort()).toEqual([...declaredRoutes].s…
+       |                                          ^
+     83|     expect(ROUTE_ACCESS_POLICY.size).toBe(declaredRoutes.length);
+     84|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 10 passed (11)
+   Start at  08:13:49
+   Duration  595ms (transform 183ms, setup 0ms, collect 512ms, tests 41ms, environment 0ms, prepare 125ms)
+
