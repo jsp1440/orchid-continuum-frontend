@@ -89,7 +89,9 @@ Reproduction on unchanged main 57600f246d1b024b37e40851b866722c4a09b58a yielded
 the same failure (one failed, four passed in that file).
 This PR changes neither the scheduler nor that test. Preserve the timer pause and
 its controls. Required CI awaits the responsible scheduler/incident lineage's
-baseline reconciliation or an explicit owner-approved exception.
+baseline reconciliation. Focused scheduler repair PR #965 is the responsible
+dependency; owner-approved integration and fresh University current-head checks
+remain required. No release exception is granted.
 
 The reference-backend E2E workflow passed on the initial frontend head, but its
 configured backend does not itself prove this University activity. Current-head
@@ -147,3 +149,22 @@ Knowledge Graph, MCP, taxonomy, Atlas, Matrix, Lexicon and literature remain the
 existing scientific interfaces described in the backend inventory. Calyx Resolve
 is an engineering-repair interface, not scientific evidence or grading authority.
 No additional development stage or duplicate knowledge system was implemented.
+
+## Verification maintenance after current-head review
+
+The verifier previously ran HTTP preflight and browser launch outside its failure
+handler, allowing an older PASS file to survive setup failure. Three regression
+cases first reproduced that defect, then passed after moving all fallible setup
+inside the handler and replacing prior evidence with RUNNING before preflight.
+Unreachable HTTP, rejected read-only state and browser-launch failure now write
+fresh FAIL evidence with completion time. Browser cleanup runs only if created.
+These three negative tests are script tests, not live integration evidence.
+
+The separate CORS finding was disproved: the real canonical router already
+inherits its credentialed CORS-header dependency, with both documented loopback
+origins explicitly allowed. Seven independent HTTP assertions covered three
+content endpoints on both origins plus denial of an untrusted origin. The
+cross-port browser proof uses that real dependency; no CORS/security change was made.
+
+The University learning implementation is unchanged by this maintenance repair.
+Scheduler code/test changes remain exclusively in focused PR #965.

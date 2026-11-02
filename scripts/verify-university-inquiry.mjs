@@ -6,33 +6,37 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 const [frontendOrigin, backendOrigin, evidencePath = 'university-inquiry-evidence.json'] = process.argv.slice(2);
-if (!frontendOrigin || !backendOrigin) throw new Error('Usage: node scripts/verify-university-inquiry.mjs <frontend-origin> <backend-origin> [evidence.json]');
-await mkdir(dirname(evidencePath), { recursive: true });
 const check = (condition, message) => { if (!condition) throw new Error(message); };
 const read = async (path) => {
   const response = await fetch(backendOrigin + path);
   check(response.ok, path + ' returned ' + response.status);
   return response.json();
 };
-const readiness = await read('/api/learning/release-readiness');
-check(readiness.read_only_ready === true, 'Requires the read-only release');
-for (const name of ['session_writes_enabled', 'durable_sessions_enabled', 'publication_enabled', 'candidate_knowledge_writes_enabled', 'calyx_model_calls_enabled']) {
-  check(readiness[name] === false, name + ' must remain false');
-}
-const catalog = await read('/api/learning/catalog');
-const lab = await read('/api/learning/laboratories/' + encodeURIComponent(catalog.laboratory.id));
-check(lab.data_origin === 'simulated_instructional_case', 'Expected explicit simulated case');
-check(lab.inquiry_activity?.steps?.length === 7, 'Expected seven actual API activity steps');
-const browser = await chromium.launch({
-  executablePath: process.env.CHROMIUM_EXECUTABLE_PATH || undefined,
-});
 const evidence = {
   frontend_origin: frontendOrigin, backend_origin: backendOrigin,
   started_at: new Date().toISOString(), response_fixtures: false,
-  backend_release: readiness.release_contract, activity_version: lab.inquiry_activity.version,
-  checks: [], learning_requests: [],
+  result: 'running', checks: [], learning_requests: [],
 };
+let browser;
 try {
+  if (!frontendOrigin || !backendOrigin) throw new Error('Usage: node scripts/verify-university-inquiry.mjs <frontend-origin> <backend-origin> [evidence.json]');
+  await mkdir(dirname(evidencePath), { recursive: true });
+  // Supersede an earlier PASS before any fallible preflight or browser setup.
+  await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
+  const readiness = await read('/api/learning/release-readiness');
+  check(readiness.read_only_ready === true, 'Requires the read-only release');
+  for (const name of ['session_writes_enabled', 'durable_sessions_enabled', 'publication_enabled', 'candidate_knowledge_writes_enabled', 'calyx_model_calls_enabled']) {
+    check(readiness[name] === false, name + ' must remain false');
+  }
+  const catalog = await read('/api/learning/catalog');
+  const lab = await read('/api/learning/laboratories/' + encodeURIComponent(catalog.laboratory.id));
+  check(lab.data_origin === 'simulated_instructional_case', 'Expected explicit simulated case');
+  check(lab.inquiry_activity?.steps?.length === 7, 'Expected seven actual API activity steps');
+  evidence.backend_release = readiness.release_contract;
+  evidence.activity_version = lab.inquiry_activity.version;
+  browser = await chromium.launch({
+    executablePath: process.env.CHROMIUM_EXECUTABLE_PATH || undefined,
+  });
   const page = await browser.newPage({ viewport: { width: 1280, height: 1000 } });
   const errors = [];
   page.on('pageerror', (error) => errors.push(error.message));
@@ -84,8 +88,10 @@ try {
 } catch (error) {
   evidence.result = 'fail';
   evidence.error = error instanceof Error ? error.message : String(error);
+  evidence.completed_at = new Date().toISOString();
+  await mkdir(dirname(evidencePath), { recursive: true });
   await writeFile(evidencePath, JSON.stringify(evidence, null, 2) + '\n');
   throw error;
 } finally {
-  await browser.close();
+  if (browser) await browser.close();
 }
