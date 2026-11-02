@@ -1,0 +1,26 @@
+{
+  "src/features/paperbotanica/PaperBotanicaPage.tsx": {
+    "sha256": "4e540fe5ca0a419ca1d905b739b008a5f47c62f9c31ec0a4faffcf3953a2d720",
+    "git_blob_sha": "9443b23e6edc3a722e2c0c795bf78eb7ba237f96"
+  },
+  "src/features/paperbotanica/api.ts": {
+    "sha256": "a34456de0c65a5726bbed4c39d703fadb189f8d803fdc2bed478eec92ff57e64",
+    "git_blob_sha": "b9cdf9bdb2475c3b8a86b624255b11e5e283ecb9"
+  },
+  "src/features/paperbotanica/backendCompatibility.test.ts": {
+    "sha256": "cfd418cac500bea340b28ba50470bfa82ae5decff9f3f1f214134ee8a65966e2",
+    "git_blob_sha": "3ab5e2eab19dbc9ec92fc26854231ec31e106a4e"
+  },
+  "src/features/paperbotanica/glb.ts": {
+    "sha256": "9aa77a86dfddea0a52c997421701690fc8d2d99675708df52e0863844ddc6514",
+    "git_blob_sha": "f6d6fa1fcb366da4762a33c6bec20bddded78269"
+  },
+  "src/features/paperbotanica/interaction.test.tsx": {
+    "sha256": "e4bae0eacdaa3724dcd1f2bbc130c6284cb75b231ffe4b14040b373834ed31b1",
+    "git_blob_sha": "c2a40b01dd0f3d48da2e44ac39f8be750630cc7c"
+  },
+  "src/features/paperbotanica/phase2.test.ts": {
+    "sha256": "79725e37c7dd9d7ab1de75e52d17edd540394af39ad3fafaee0bd1d9e69dd18e",
+    "git_blob_sha": "ab9c8420e01fcc2ed8af1ccff50c7038b44928fc"
+  }
+}

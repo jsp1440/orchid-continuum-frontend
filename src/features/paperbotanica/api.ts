@@ -84,8 +84,22 @@ export function requireReviewState(value: unknown): void {
   }
 }
 
+const EVIDENCE_CLASSES = new Set(["MEASURED", "OBSERVED", "INFERRED", "HYPOTHETICAL"]);
+// Producer confidence vocabulary is distinct from scientific claim/review status.
+const EVIDENCE_CONFIDENCE = new Set([
+  "HIGH", "MEDIUM", "LOW", "INDETERMINATE", "LITERATURE_REPORTED_NOT_SPECIMEN_MEASURED",
+  "CONFIRMED", "PROBABLE", "HYPOTHESIZED", "UNKNOWN",
+]);
+const ORGAN_KINDS = new Set([
+  "dorsal_sepal", "lateral_sepal", "lateral_petal", "labellum", "column", "synsepal",
+  "spur", "staminode", "inflorescence", "stem", "leaf", "root", "pseudobulb",
+]);
+function requiredText(value: Record<string, unknown>, fields: string[]): boolean {
+  return fields.every((k) => typeof value[k] === "string" && String(value[k]).trim().length > 0);
+}
+
 function strings(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((x) => typeof x === "string" && x.length > 0);
+  return Array.isArray(value) && value.every((x) => typeof x === "string" && x.trim().length > 0);
 }
 
 function textFields(value: Record<string, unknown>, fields: string[]): boolean {
@@ -95,12 +109,12 @@ function textFields(value: Record<string, unknown>, fields: string[]): boolean {
 function parseSpecies(value: unknown): PaperBotanicaSpecies {
   if (!isRecord(value) || !textFields(value, ["species_id", "scientific_name", "accepted_name", "common_name", "story_name", "readiness"]) ||
       !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(String(value.species_id)) ||
-      !value.scientific_name || !value.accepted_name || !value.common_name) {
+      !requiredText(value, ["scientific_name", "accepted_name", "common_name", "readiness"])) {
     throw new Error("PaperBotanica returned an invalid species record.");
   }
   requireReviewState(value.publication_state);
   if (!Number.isInteger(value.organ_count) || Number(value.organ_count) < 1 || Number(value.organ_count) > 24 ||
-      !strings(value.organ_evidence_classes) || !value.organ_evidence_classes.length || !strings(value.missing_evidence_views)) {
+      !strings(value.organ_evidence_classes) || !value.organ_evidence_classes.length || !value.organ_evidence_classes.every(x => EVIDENCE_CLASSES.has(x)) || !strings(value.missing_evidence_views)) {
     throw new Error("PaperBotanica species record has invalid organ/evidence fields.");
   }
   const base = `/api/paperbotanica/species/${value.species_id}`;
@@ -154,16 +168,24 @@ export async function fetchPaperBotanicaProfile(speciesId: string, signal?: Abor
   const record = payload as unknown as Record<string, unknown>;
   if (payload.species_id !== speciesId || !textFields(record, ["distribution", "habitat", "botanical_fact", "conservation_message"]) ||
       !Array.isArray(record.sources) || !record.sources.length || !record.sources.every((x) => isRecord(x) &&
-        textFields(x,["source_id","title","url","source_type","creator","license","notes"]) && x.source_id && x.title && x.license && /^https?:\/\//.test(String(x.url))) ||
+        textFields(x,["source_id","title","url","source_type","creator","license","notes"]) && requiredText(x, ["source_id", "title", "license", "source_type", "creator"]) && /^https?:\/\//.test(String(x.url))) ||
       !Array.isArray(record.evidence) || !record.evidence.length || !record.evidence.every((x) => isRecord(x) &&
-        textFields(x,["evidence_id","source_id","evidence_class","view","confidence","notes"]) && strings(x.structures)) ||
+        textFields(x,["evidence_id","source_id","evidence_class","view","confidence","notes"]) && requiredText(x, ["evidence_id", "source_id", "evidence_class", "view", "confidence"]) &&
+        EVIDENCE_CLASSES.has(String(x.evidence_class)) && EVIDENCE_CONFIDENCE.has(String(x.confidence)) &&
+        strings(x.structures) && x.structures.length > 0) ||
       !Array.isArray(record.organs) || record.organs.length !== payload.organ_count || !record.organs.every((x) => isRecord(x) &&
-        textFields(x,["organ_id","kind","label","evidence_class","attachment"]) && x.organ_id && x.label)) {
+        textFields(x,["organ_id","kind","label","evidence_class","attachment"]) && requiredText(x, ["organ_id", "kind", "label", "evidence_class", "attachment"]) &&
+        EVIDENCE_CLASSES.has(String(x.evidence_class)) && ORGAN_KINDS.has(String(x.kind)))) {
     throw new Error("PaperBotanica profile is missing valid evidence or organ records.");
   }
   const sourceIds = new Set(record.sources.map((x) => (x as Record<string, unknown>).source_id));
   if (sourceIds.size !== record.sources.length || record.evidence.some((x) => !sourceIds.has((x as Record<string, unknown>).source_id))) {
     throw new Error("PaperBotanica profile has orphan or duplicate provenance.");
+  }
+  for (const [records, key] of [[record.evidence, "evidence_id"], [record.organs, "organ_id"]] as const) {
+    if (new Set(records.map(x => (x as Record<string, unknown>)[key])).size !== records.length) {
+      throw new Error("PaperBotanica profile has duplicate evidence or organ identifiers.");
+    }
   }
   return payload as PaperBotanicaProfile;
 }

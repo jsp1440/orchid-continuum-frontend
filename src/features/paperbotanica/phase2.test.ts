@@ -49,3 +49,54 @@ describe('GLB bounded subset',()=>{
   it('refuses distinct position buffers rather than displaying incorrect organs',()=>expect(()=>parsePaperBotanicaGlb(glb(d=>{d.accessors.push({...d.accessors[0]});d.meshes[0].primitives.push({attributes:{POSITION:2},indices:1});}))).toThrow('separate position'));
   it('refuses truncated binary chunks',()=>{const b=glb();expect(()=>parsePaperBotanicaGlb(b.slice(0,-4))).toThrow('length');});
 });
+
+describe('final review evidence regressions', () => {
+  it.each([
+    ['evidence', 'evidence_id', ''], ['evidence', 'evidence_id', '   '],
+    ['evidence', 'confidence', ''], ['evidence', 'confidence', '   '],
+    ['evidence', 'confidence', 'SCIENCE_APPROVED'],
+    ['evidence', 'evidence_class', ''], ['evidence', 'evidence_class', 'UNKNOWN_CLASS'],
+    ['organs', 'evidence_class', ''], ['organs', 'evidence_class', 'confirmed'],
+    ['organs', 'attachment', '   '], ['organs', 'kind', ''], ['organs', 'organ_id', '   '],
+  ])('rejects incomplete %s.%s (%s)', async (group, field, value) => {
+    const original = group === 'evidence' ? profile.evidence[0] : profile.organs[0];
+    respond({...profile, [group]: [{...original, [field]: value}]});
+    await expect(fetchPaperBotanicaProfile('calypso-bulbosa')).rejects.toThrow();
+  });
+  it('accepts complete records with empty notes', async () => {
+    respond(profile); await expect(fetchPaperBotanicaProfile('calypso-bulbosa')).resolves.toMatchObject({species_id:'calypso-bulbosa'});
+  });
+});
+
+describe('declared GLB buffer boundary', () => {
+  it.each([51, 50, 49, 51.5, undefined, '52'])('rejects geometry outside declared buffer %s', (length) => {
+    const b = glb(d => { (d as TestGlb & {buffers: Array<{byteLength: unknown}>}).buffers[0].byteLength = length; });
+    expect(() => parsePaperBotanicaGlb(b)).toThrow();
+  });
+});
+
+function paddedIndexGlb(declaredLength: number) {
+  const doc = {asset:{version:'2.0'}, buffers:[{byteLength:declaredLength}],
+    meshes:[{primitives:[{attributes:{POSITION:0},indices:1}]}],
+    accessors:[{bufferView:0,componentType:5126,count:3,type:'VEC3'}, {bufferView:1,componentType:5123,count:3,type:'SCALAR'}],
+    bufferViews:[{buffer:0,byteOffset:0,byteLength:36}, {buffer:0,byteOffset:36,byteLength:6}]};
+  const json=new TextEncoder().encode(JSON.stringify(doc));
+  const padded=new Uint8Array(Math.ceil(json.length/4)*4);padded.fill(32);padded.set(json);
+  const buffer=new ArrayBuffer(28+padded.length+44);const view=new DataView(buffer);
+  [0x46546c67,2,buffer.byteLength,padded.length,0x4e4f534a].forEach((v,i)=>view.setUint32(i*4,v,true));
+  new Uint8Array(buffer,20,padded.length).set(padded);
+  const h=20+padded.length;view.setUint32(h,44,true);view.setUint32(h+4,0x004e4942,true);
+  [0,0,0,.01,0,0,0,.01,0].forEach((v,i)=>view.setFloat32(h+8+i*4,v,true));
+  [0,1,2].forEach((v,i)=>view.setUint16(h+44+i*2,v,true));
+  return buffer;
+}
+it('accepts legal BIN padding when accessors end at the declared byte boundary',()=> {
+  expect(parsePaperBotanicaGlb(paddedIndexGlb(42)).primitives[0].indices).toEqual(new Uint32Array([0,1,2]));
+});
+it('rejects the reviewer 41-byte declared buffer with 44-byte padded BIN fixture',()=> {
+  expect(()=>parsePaperBotanicaGlb(paddedIndexGlb(41))).toThrow('bounds');
+});
+it('rejects duplicate evidence identities', async()=> {
+  respond({...profile,evidence:[...profile.evidence,...profile.evidence]});
+  await expect(fetchPaperBotanicaProfile('calypso-bulbosa')).rejects.toThrow('duplicate');
+});

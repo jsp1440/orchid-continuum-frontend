@@ -1,3 +1,5 @@
+> Historical Phase 2 receipt. Subsequent E/F/G findings and new evidence are documented in [PAPERBOTANICA-FINAL-REVIEW.md](PAPERBOTANICA-FINAL-REVIEW.md). Earlier counts are not acceptance of the repaired head.
+
 # PaperBotanica frontend Phase 2
 
 Bounded maker repair child of PR #958 at `08aa8991fe0d6ec239f7e666df29c021319fddfc`; Kimi retains the authoritative branch. Paired backend starting head: `f11e451734747a0cce12d38e2deec6cf46fa853c`. No merge or deployment.

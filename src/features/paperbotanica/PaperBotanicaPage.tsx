@@ -41,6 +41,7 @@ export default function PaperBotanicaPage() {
   const [downloadState, setDownloadState] = useState("");
   const downloadController = useRef<AbortController | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [viewsOpen, setViewsOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -159,10 +160,10 @@ export default function PaperBotanicaPage() {
                 </aside>
               </div>
 
-              <details className="paperbotanica-views">
+              <details className="paperbotanica-views" onToggle={(event) => setViewsOpen(event.currentTarget.open)}>
                 <summary>Inspect four generated orthographic views</summary>
                 <div>
-                  {VIEWS.map((view) => (
+                  {viewsOpen && VIEWS.map((view) => (
                     <DraftView key={`${selected.species_id}-${view}`} speciesId={selected.species_id} speciesName={selected.scientific_name} view={view} />
                   ))}
                 </div>

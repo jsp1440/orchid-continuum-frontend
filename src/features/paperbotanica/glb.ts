@@ -34,6 +34,8 @@ export function parsePaperBotanicaGlb(buffer: ArrayBuffer): GlbModel {
   const binaryLength = view.getUint32(binaryHeader, true);
   if (binaryLength % 4 || binaryStart + binaryLength !== buffer.byteLength) fail("binary chunk bounds");
   if (document.meshes?.length !== 1) fail("expected one mesh");
+  const declaredLength = document.buffers?.[0]?.byteLength;
+  if (!Number.isSafeInteger(declaredLength) || Number(declaredLength) < 1) fail("invalid declared buffer length");
   if (document.extensionsUsed?.length || document.buffers?.length !== 1 || document.buffers[0].uri ||
       document.buffers[0].byteLength > binaryLength || document.buffers[0].byteLength < binaryLength - 3) fail("unsupported buffers or extensions");
   if (document.nodes && (document.nodes.length !== 1 || document.nodes[0].mesh !== 0 ||
@@ -46,14 +48,14 @@ export function parsePaperBotanicaGlb(buffer: ArrayBuffer): GlbModel {
   function accessorBytes(index: number, elementSize: number, type: string) {
     const accessor = accessors[index];
     const sourceView = bufferViews[accessor?.bufferView];
-    if (!Number.isInteger(index) || !accessor || !sourceView || accessor.type !== type || accessor.sparse || accessor.normalized || (sourceView.buffer ?? 0) !== 0) fail("invalid or unsupported accessor");
+    if (!Number.isInteger(index) || !Number.isInteger(accessor?.bufferView) || !accessor || !sourceView || accessor.type !== type || accessor.sparse || accessor.normalized || (sourceView.buffer ?? 0) !== 0) fail("invalid or unsupported accessor");
     const offset = accessor.byteOffset ?? 0;
     const start = sourceView.byteOffset ?? 0;
     const stride = sourceView.byteStride ?? elementSize;
     if (![offset,start,sourceView.byteLength,stride,accessor.count].every((n) => Number.isSafeInteger(n) && n >= 0) ||
         accessor.count < 1 || accessor.count > 200000 || stride < elementSize || stride > 252 ||
         offset + (accessor.count - 1) * stride + elementSize > sourceView.byteLength ||
-        start + sourceView.byteLength > binaryLength) fail("accessor bounds or resource limit");
+        start + sourceView.byteLength > Number(declaredLength)) fail("accessor bounds or resource limit");
     const length = sourceView.byteLength - offset;
     return { bytes: new Uint8Array(buffer, binaryStart+start+offset, length),
       data: new DataView(buffer, binaryStart+start+offset, length), stride,
