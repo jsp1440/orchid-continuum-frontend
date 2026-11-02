@@ -68,6 +68,7 @@ export const PUBLIC_ROUTE_PATTERNS = [
 ] as const;
 
 export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
+  '/paperbotanica',
   '/literature',
   '/literature/:paperId',
   '/mission-control/calyx',
@@ -103,3 +104,4 @@ export const ROUTE_ACCESS_POLICY = new Map<string, RouteAccessKind>([
     (path) => [path, 'component-authorized'] as const,
   ),
 ]);
+

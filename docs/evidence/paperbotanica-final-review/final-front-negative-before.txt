@@ -1,0 +1,266 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> vite_react_shadcn_ts@0.0.0 test
+> vitest run src/features/paperbotanica src/lib/routeAccessPolicy.test.ts
+
+
+ RUN  v3.2.6 /workspace/scratch/53ed46290739/paperbotanica-final-front
+
+ ✓ src/features/paperbotanica/paperbotanica.test.ts (5 tests) 11ms
+ ❯ src/features/paperbotanica/phase2.test.ts (38 tests | 18 failed) 54ms
+   ✓ strict producer/consumer boundaries > rejects missing organ_count 6ms
+   ✓ strict producer/consumer boundaries > rejects missing organ_evidence_classes 1ms
+   ✓ strict producer/consumer boundaries > rejects missing missing_evidence_views 0ms
+   ✓ strict producer/consumer boundaries > rejects missing links 0ms
+   ✓ strict producer/consumer boundaries > rejects malformed profile {"sources":[null]} 1ms
+   ✓ strict producer/consumer boundaries > rejects malformed profile {"sources":[{}]} 1ms
+   ✓ strict producer/consumer boundaries > rejects malformed profile {"organs":[null]} 0ms
+   ✓ strict producer/consumer boundaries > rejects malformed profile {"organs":[{}]} 1ms
+   ✓ strict producer/consumer boundaries > rejects malformed profile {"evidence":[]} 1ms
+   ✓ strict producer/consumer boundaries > rejects malformed profile {"evidence":[{"evidence_id":"e","source_id":"missing","evidence_class":"OBSERVED","structures":["flower"],"view":"UNAVAILABLE","confidence":"PROBABLE","notes":""}]} 1ms
+   ✓ strict producer/consumer boundaries > rejects another species returned by the endpoint 0ms
+   ✓ strict producer/consumer boundaries > rejects a PNG without review headers 1ms
+   ✓ strict producer/consumer boundaries > uses credentialed, cancellable transport for PNGs 2ms
+   ✓ strict producer/consumer boundaries > does not widen malformed dossier identity 1ms
+   ✓ GLB bounded subset > accepts an accessor ending exactly at the view boundary with a nonzero offset 1ms
+   ✓ GLB bounded subset > refuses access into the next view 0ms
+   ✓ GLB bounded subset > refuses fractional or excessive counts 0ms
+   ✓ GLB bounded subset > refuses distinct position buffers rather than displaying incorrect organs 0ms
+   ✓ GLB bounded subset > refuses truncated binary chunks 0ms
+   × final review evidence regressions > rejects incomplete evidence.evidence_id () 12ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete evidence.evidence_id (   ) 2ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete evidence.confidence () 4ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete evidence.confidence (   ) 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete evidence.confidence (SCIENCE_APPROVED) 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete evidence.evidence_class () 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete evidence.evidence_class (UNKNOWN_CLASS) 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete organs.evidence_class () 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete organs.evidence_class (confirmed) 2ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete organs.attachment (   ) 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete organs.kind () 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   × final review evidence regressions > rejects incomplete organs.organ_id (   ) 1ms
+     → promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+   ✓ final review evidence regressions > accepts complete records with empty notes 1ms
+   × declared GLB buffer boundary > rejects geometry outside declared buffer 51 1ms
+     → expected [Function] to throw an error
+   × declared GLB buffer boundary > rejects geometry outside declared buffer 50 1ms
+     → expected [Function] to throw an error
+   × declared GLB buffer boundary > rejects geometry outside declared buffer 49 0ms
+     → expected [Function] to throw an error
+   × declared GLB buffer boundary > rejects geometry outside declared buffer 51.5 1ms
+     → expected [Function] to throw an error
+   × declared GLB buffer boundary > rejects geometry outside declared buffer undefined 0ms
+     → expected [Function] to throw an error
+   × declared GLB buffer boundary > rejects geometry outside declared buffer 52 0ms
+     → expected [Function] to throw an error
+ ✓ src/lib/routeAccessPolicy.test.ts (6 tests) 33ms
+ ❯ src/features/paperbotanica/interaction.test.tsx (2 tests | 1 failed) 56ms
+   ✓ cancels an old download and does not show its result on the next species 40ms
+   × loads optional views only while open and cancels on close or species change 15ms
+     → expected "spy" to not be called at all, but actually been called 4 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/front.png",
+      AbortSignal {},
+    ]
+
+  2nd spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/side.png",
+      AbortSignal {},
+    ]
+
+  3rd spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/rear.png",
+      AbortSignal {},
+    ]
+
+  4th spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/oblique.png",
+      AbortSignal {},
+    ]
+
+
+Number of calls: 4
+
+
+⎯⎯⎯⎯⎯⎯ Failed Tests 19 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/features/paperbotanica/interaction.test.tsx > loads optional views only while open and cancels on close or species change
+AssertionError: expected "spy" to not be called at all, but actually been called 4 times
+
+Received: 
+
+  1st spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/front.png",
+      AbortSignal {},
+    ]
+
+  2nd spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/side.png",
+      AbortSignal {},
+    ]
+
+  3rd spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/rear.png",
+      AbortSignal {},
+    ]
+
+  4th spy call:
+
+    Array [
+      "/api/paperbotanica/species/alpha-orchid/views/oblique.png",
+      AbortSignal {},
+    ]
+
+
+Number of calls: 4
+
+ ❯ src/features/paperbotanica/interaction.test.tsx:38:42
+     36|   vi.mocked(api.fetchPaperBotanicaView).mockImplementation(()=>new Pro…
+     37|   await act(async()=>root.render(<PaperBotanicaPage/>));
+     38|   expect(api.fetchPaperBotanicaView).not.toHaveBeenCalled();
+       |                                          ^
+     39|   const details=host.querySelector<HTMLDetailsElement>('.paperbotanica…
+     40|   await act(async()=>{ details.open=true; details.dispatchEvent(new Ev…
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/19]⎯
+
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.evidence_id ()
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.evidence_id (   )
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.confidence ()
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.confidence (   )
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.confidence (SCIENCE_APPROVED)
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.evidence_class ()
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete evidence.evidence_class (UNKNOWN_CLASS)
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete organs.evidence_class ()
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete organs.evidence_class (confirmed)
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete organs.attachment (   )
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete organs.kind ()
+ FAIL  src/features/paperbotanica/phase2.test.ts > final review evidence regressions > rejects incomplete organs.organ_id (   )
+AssertionError: promise resolved "{ species_id: 'calypso-bulbosa', …(17) }" instead of rejecting
+
+- Expected
++ Received
+
+- Error {
+-   "message": "rejected promise",
++ {
++   "accepted_name": "Calypso bulbosa",
++   "botanical_fact": "UNKNOWN",
++   "common_name": "Fairy Slipper",
++   "conservation_message": "UNKNOWN",
++   "distribution": "UNKNOWN",
++   "evidence": [
++     {
++       "confidence": "PROBABLE",
++       "evidence_class": "OBSERVED",
++       "evidence_id": "",
++       "notes": "",
++       "source_id": "fna",
++       "structures": [
++         "flower",
++       ],
++       "view": "UNAVAILABLE",
++     },
++   ],
++   "habitat": "UNKNOWN",
++   "links": {
++     "canonical_species_resolve": "/api/platform/federation/resolve-species?name=Calypso%20bulbosa",
++     "paperbotanica_evidence": "/api/paperbotanica/species/calypso-bulbosa/evidence",
++     "paperbotanica_model": "/api/paperbotanica/species/calypso-bulbosa/model.glb",
++     "paperbotanica_package": "/api/paperbotanica/species/calypso-bulbosa/package",
++   },
++   "missing_evidence_views": [
++     "frontal",
++   ],
++   "organ_count": 1,
++   "organ_evidence_classes": [
++     "HYPOTHETICAL",
++   ],
++   "organs": [
++     {
++       "attachment": "flower_center",
++       "evidence_class": "HYPOTHETICAL",
++       "kind": "dorsal_sepal",
++       "label": "Dorsal sepal",
++       "organ_id": "DS",
++     },
++   ],
++   "publication_state": "REQUIRES BOTANICAL REVIEW",
++   "readiness": "READY FOR RECONSTRUCTION",
++   "scientific_name": "Calypso bulbosa",
++   "sources": [
++     {
++       "creator": "FNA",
++       "license": "Reference only",
++       "notes": "",
++       "source_id": "fna",
++       "source_type": "flora",
++       "title": "FNA",
++       "url": "https://efloras.org",
++     },
++   ],
++   "species_id": "calypso-bulbosa",
++   "story_name": "",
+  }
+
+ ❯ src/features/paperbotanica/phase2.test.ts:64:44
+     62|     const original = group === 'evidence' ? profile.evidence[0] : prof…
+     63|     respond({...profile, [group]: [{...original, [field]: value}]});
+     64|     await expect(fetchPaperBotanicaProfile('calypso-bulbosa')).rejects…
+       |                                            ^
+     65|   });
+     66|   it('accepts complete records with empty notes', async () => {
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/19]⎯
+
+ FAIL  src/features/paperbotanica/phase2.test.ts > declared GLB buffer boundary > rejects geometry outside declared buffer 51
+ FAIL  src/features/paperbotanica/phase2.test.ts > declared GLB buffer boundary > rejects geometry outside declared buffer 50
+ FAIL  src/features/paperbotanica/phase2.test.ts > declared GLB buffer boundary > rejects geometry outside declared buffer 49
+ FAIL  src/features/paperbotanica/phase2.test.ts > declared GLB buffer boundary > rejects geometry outside declared buffer 51.5
+ FAIL  src/features/paperbotanica/phase2.test.ts > declared GLB buffer boundary > rejects geometry outside declared buffer undefined
+ FAIL  src/features/paperbotanica/phase2.test.ts > declared GLB buffer boundary > rejects geometry outside declared buffer 52
+AssertionError: expected [Function] to throw an error
+ ❯ src/features/paperbotanica/phase2.test.ts:74:44
+     72|   it.each([51, 50, 49, 51.5, undefined, '52'])('rejects geometry outsi…
+     73|     const b = glb(d => { (d as TestGlb & {buffers: Array<{byteLength: …
+     74|     expect(() => parsePaperBotanicaGlb(b)).toThrow();
+       |                                            ^
+     75|   });
+     76| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/19]⎯
+
+
+ Test Files  2 failed | 2 passed (4)
+      Tests  19 failed | 32 passed (51)
+   Start at  20:30:09
+   Duration  1.11s (transform 577ms, setup 0ms, collect 1.22s, tests 154ms, environment 327ms, prepare 281ms)
+

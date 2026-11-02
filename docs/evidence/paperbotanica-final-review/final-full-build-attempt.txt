@@ -1,0 +1,22 @@
+npm warn Unknown env config "http-proxy". This will stop working in the next major version of npm.
+
+> vite_react_shadcn_ts@0.0.0 build
+> vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 2 modules transformed.
+x Build failed in 67ms
+error during build:
+[vite]: Rollup failed to resolve import "/src/main.tsx" from "/workspace/scratch/53ed46290739/paperbotanica-final-front/index.html".
+This is most likely unintended because it can break your application at runtime.
+If you do want to externalize this module explicitly add it to
+`build.rollupOptions.external`
+    at viteWarn (file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65855:17)
+    at onwarn (file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/@vitejs/plugin-react-swc/index.mjs:198:9)
+    at onRollupWarning (file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65885:5)
+    at onwarn (file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/vite/dist/node/chunks/dep-BK3b2jBa.js:65550:7)
+    at file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/rollup/dist/es/shared/node-entry.js:22444:13
+    at Object.logger [as onLog] (file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/rollup/dist/es/shared/node-entry.js:24424:9)
+    at ModuleLoader.handleInvalidResolvedId (file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/rollup/dist/es/shared/node-entry.js:23169:26)
+    at file:///workspace/scratch/53ed46290739/frontend-deps/node_modules/rollup/dist/es/shared/node-entry.js:23127:26

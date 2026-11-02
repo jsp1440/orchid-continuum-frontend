@@ -1,0 +1,53 @@
+// @vitest-environment jsdom
+import React, { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, expect, it, vi } from 'vitest';
+import PaperBotanicaPage from './PaperBotanicaPage';
+import * as api from './api';
+vi.mock('./api',()=>({fetchPaperBotanicaCollection:vi.fn(),fetchPaperBotanicaProfile:vi.fn(),downloadPaperBotanicaPackage:vi.fn(),fetchPaperBotanicaView:vi.fn()}));
+vi.mock('./PaperBotanicaModel',()=>({PaperBotanicaModel:()=> <div>Draft model</div>}));
+const host=document.createElement('div');document.body.appendChild(host);
+const root=createRoot(host);
+Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
+afterEach(async()=>{await act(async()=>root.render(null));vi.clearAllMocks();});
+it('cancels an old download and does not show its result on the next species',async()=>{
+  let finish:()=>void=()=>{};
+  const items=['alpha-orchid','beta-orchid'].map((id)=>({species_id:id,scientific_name:id,accepted_name:id,common_name:id,story_name:'',readiness:'READY FOR RECONSTRUCTION',publication_state:'REQUIRES BOTANICAL REVIEW',organ_count:7,organ_evidence_classes:['HYPOTHETICAL'],missing_evidence_views:[],links:{paperbotanica_model:`/api/paperbotanica/species/${id}/model.glb`,paperbotanica_package:`/api/paperbotanica/species/${id}/package`,paperbotanica_evidence:'',canonical_species_resolve:''}}));
+  vi.mocked(api.fetchPaperBotanicaCollection).mockResolvedValue({schema_version:'paperbotanica-collection-api/v1',algorithm_version:'v2',species_count:2,species:items});
+  vi.mocked(api.fetchPaperBotanicaProfile).mockImplementation(()=>new Promise(()=>{}));
+  vi.mocked(api.fetchPaperBotanicaView).mockImplementation(()=>new Promise(()=>{}));
+  vi.mocked(api.downloadPaperBotanicaPackage).mockImplementation(()=>new Promise<void>((resolve)=>{finish=resolve;}));
+  await act(async()=>root.render(<PaperBotanicaPage/>));
+  const download=host.querySelector<HTMLButtonElement>('.paperbotanica-download')!;
+  await act(async()=>download.click());
+  expect(download.disabled).toBe(true);
+  const signal=vi.mocked(api.downloadPaperBotanicaPackage).mock.calls[0][1]!;
+  await act(async()=>host.querySelectorAll<HTMLButtonElement>('.paperbotanica-species-nav button')[1].click());
+  expect(signal.aborted).toBe(true);
+  await act(async()=>finish());
+  expect(host.textContent).not.toContain('Draft package downloaded');
+  expect(host.querySelector('h3')?.textContent).toBe('beta-orchid');
+});
+
+it('loads optional views only while open and cancels on close or species change', async () => {
+  const items=['alpha-orchid','beta-orchid'].map((id)=>({species_id:id,scientific_name:id,accepted_name:id,common_name:id,story_name:'',readiness:'READY FOR RECONSTRUCTION',publication_state:'REQUIRES BOTANICAL REVIEW',organ_count:7,organ_evidence_classes:['HYPOTHETICAL'],missing_evidence_views:[],links:{paperbotanica_model:`/api/paperbotanica/species/${id}/model.glb`,paperbotanica_package:`/api/paperbotanica/species/${id}/package`,paperbotanica_evidence:'',canonical_species_resolve:''}}));
+  vi.mocked(api.fetchPaperBotanicaCollection).mockResolvedValue({schema_version:'paperbotanica-collection-api/v1',algorithm_version:'v2',species_count:2,species:items});
+  vi.mocked(api.fetchPaperBotanicaProfile).mockImplementation(()=>new Promise(()=>{}));
+  vi.mocked(api.fetchPaperBotanicaView).mockImplementation(()=>new Promise(()=>{}));
+  await act(async()=>root.render(<PaperBotanicaPage/>));
+  expect(api.fetchPaperBotanicaView).not.toHaveBeenCalled();
+  const details=host.querySelector<HTMLDetailsElement>('.paperbotanica-views')!;
+  await act(async()=>{ details.open=true; details.dispatchEvent(new Event('toggle')); });
+  expect(api.fetchPaperBotanicaView).toHaveBeenCalledTimes(4);
+  const firstSignals=vi.mocked(api.fetchPaperBotanicaView).mock.calls.map(c=>c[1]!);
+  await act(async()=>{ details.open=false; details.dispatchEvent(new Event('toggle')); });
+  expect(firstSignals.every(s=>s.aborted)).toBe(true);
+  await act(async()=>host.querySelectorAll<HTMLButtonElement>('.paperbotanica-species-nav button')[1].click());
+  expect(api.fetchPaperBotanicaView).toHaveBeenCalledTimes(4);
+  await act(async()=>{ details.open=true; details.dispatchEvent(new Event('toggle')); });
+  expect(api.fetchPaperBotanicaView).toHaveBeenCalledTimes(8);
+  const secondSignals=vi.mocked(api.fetchPaperBotanicaView).mock.calls.slice(4).map(c=>c[1]!);
+  await act(async()=>host.querySelectorAll<HTMLButtonElement>('.paperbotanica-species-nav button')[0].click());
+  expect(secondSignals.every(s=>s.aborted)).toBe(true);
+  expect(api.fetchPaperBotanicaView).toHaveBeenCalledTimes(12);
+});

@@ -1,0 +1,15 @@
+{
+  "src/features/paperbotanica/PaperBotanicaModel.tsx": "d75db2edbd5942099ddac081bed228ac259323f1",
+  "src/features/paperbotanica/api.ts": "00b3188a68777766d8ab54d8631a426c3ebfd49b",
+  "src/features/paperbotanica/navigation.ts": "3fcdc4d4b42db5867d39d08e1a95863be5d45980",
+  "src/features/paperbotanica/phase2.test.ts": "37f4b34fdf78d18f60c77db6ce270a859aed6982",
+  "src/features/paperbotanica/interaction.test.tsx": "0a1f8a971b29b228b645bc22c87c38bc2cc88dd1",
+  "src/features/paperbotanica/PaperBotanicaPage.tsx": "c89b94b7bc3031313b159e8d8e242e6cb64bf1bc",
+  "src/features/paperbotanica/glb.ts": "7259af58dab546889d5376167d5139c1e9045c4a",
+  "src/features/paperbotanica/paperbotanica.css": "a704773a7b34f620740ee12dc23dd427ee499413",
+  "src/features/paperbotanica/paperbotanica.test.ts": "2f6d2470b273a953889b14875e9275cb74f66576",
+  "src/lib/backendConfig.ts": "50ff42ff33d8e8842f7079bbcad017c0b25c0275",
+  "src/lib/calyxOrigin.ts": "d1bafd668703f31788ec3e793a60d537ec2bf4f4",
+  "src/lib/routeAccessPolicy.ts": "2806fc5723b87fa59730244a355ee0b3a19d195f",
+  "src/pages/SpeciesDossier.tsx": "433789d1f4c8844eac9d55d6c9fab765f5365842"
+}

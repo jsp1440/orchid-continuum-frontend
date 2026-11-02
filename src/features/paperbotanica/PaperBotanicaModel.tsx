@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PAPERBOTANICA_REVIEW_STATE, paperBotanicaRequest } from "./api";
+import { requireArtifact, paperBotanicaRequest } from "./api";
 import { GlbModel, parsePaperBotanicaGlb } from "./glb";
 
 interface ProjectedTriangle {
@@ -24,12 +24,10 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
     void paperBotanicaRequest(url, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(`Reconstruction request failed (${response.status}).`);
-        if (response.headers.get("X-PaperBotanica-Publication-State") !== PAPERBOTANICA_REVIEW_STATE) {
-          throw new Error("Reconstruction is missing its botanical-review state.");
-        }
+        requireArtifact(response, "model/gltf-binary");
         return response.arrayBuffer();
       })
-      .then((buffer) => setModel(parsePaperBotanicaGlb(buffer)))
+      .then((buffer) => { if (!controller.signal.aborted) setModel(parsePaperBotanicaGlb(buffer)); })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Reconstruction could not be loaded.");
       });
@@ -53,7 +51,7 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
     context.clearRect(0, 0, width, height);
     const center = [0, 0, 0];
     for (let index = 0; index < model.vertices.length; index += 1) center[index % 3] += model.vertices[index] / (model.vertices.length / 3);
-    let extent = 1;
+    let extent = 1e-6;
     for (let index = 0; index < model.vertices.length; index += 3) {
       extent = Math.max(extent, ...[0, 1, 2].map((axis) => Math.abs(model.vertices[index + axis] - center[axis])));
     }
@@ -68,11 +66,11 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
       const x = model.vertices[index * 3] - center[0];
       const y = model.vertices[index * 3 + 1] - center[1];
       const z = model.vertices[index * 3 + 2] - center[2];
-      const rotatedX = x * cosYaw - y * sinYaw;
-      const depthYaw = x * sinYaw + y * cosYaw;
+      const rotatedX = x * cosYaw + z * sinYaw;
+      const depthYaw = -x * sinYaw + z * cosYaw;
       screen[index * 3] = width / 2 + rotatedX * scale;
-      screen[index * 3 + 1] = height / 2 - (z * cosPitch - depthYaw * sinPitch) * scale;
-      screen[index * 3 + 2] = z * sinPitch + depthYaw * cosPitch;
+      screen[index * 3 + 1] = height / 2 - (y * cosPitch - depthYaw * sinPitch) * scale;
+      screen[index * 3 + 2] = y * sinPitch + depthYaw * cosPitch;
     }
     const triangles: ProjectedTriangle[] = [];
     for (const primitive of model.primitives) {
@@ -114,7 +112,18 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
         ref={canvasRef}
         className="paperbotanica-canvas"
         role="img"
-        aria-label={`Interactive draft 3D reconstruction of ${speciesName}; drag to rotate`}
+        tabIndex={0}
+        onKeyDown={(event) => {
+          if (!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","+","-","="].includes(event.key)) return;
+          event.preventDefault();
+          if (event.key === "ArrowLeft") setYaw((v) => v - .15);
+          if (event.key === "ArrowRight") setYaw((v) => v + .15);
+          if (event.key === "ArrowUp") setPitch((v) => Math.min(1.2, v + .15));
+          if (event.key === "ArrowDown") setPitch((v) => Math.max(-1.2, v - .15));
+          if (["+","="].includes(event.key)) setZoom((v) => Math.min(2.2, v + .1));
+          if (event.key === "-") setZoom((v) => Math.max(.55, v - .1));
+        }}
+        aria-label={`Interactive draft 3D reconstruction of ${speciesName}; drag or arrow keys to rotate, plus/minus to zoom`}
         onPointerDown={(event) => {
           dragRef.current = { x: event.clientX, y: event.clientY };
           event.currentTarget.setPointerCapture(event.pointerId);
@@ -132,9 +141,10 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
         onWheel={(event) => setZoom((value) => Math.max(0.55, Math.min(2.2, value - event.deltaY * 0.001)))}
       />
       <div className="paperbotanica-viewer-toolbar">
-        <span>Drag to rotate · scroll to zoom</span>
+        <span>Drag or arrow keys to rotate · scroll or +/- to zoom</span>
         <button type="button" onClick={() => { setYaw(0.65); setPitch(-0.18); setZoom(1); }}>Reset view</button>
       </div>
     </div>
   );
 }
+

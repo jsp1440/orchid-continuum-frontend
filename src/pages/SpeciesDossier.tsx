@@ -37,6 +37,7 @@ import {
   type EvidenceState,
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
+import { paperBotanicaDossierHref } from '@/features/paperbotanica/navigation';
 import { speciesDossierContinuumActions } from '@/lib/speciesDossierContinuumNavigation';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
@@ -220,6 +221,12 @@ const SpeciesDossier: React.FC = () => {
     canonicalName: subjectData?.canonical_name,
     scientificName: subjectData?.scientific_name,
   });
+  const paperHref = paperBotanicaDossierHref({
+    acceptedName: dossier?.identity.accepted_name,
+    fullScientificName: dossier?.identity.full_scientific_name,
+    canonicalName: subjectData?.canonical_name,
+    scientificName: subjectData?.scientific_name,
+  });
   const atlasHref = continuumActions?.atlas ?? null;
   const researchHref = continuumActions?.research ?? null;
   const calyxHref = continuumActions?.calyx ?? null;
@@ -317,6 +324,11 @@ const SpeciesDossier: React.FC = () => {
                     className="mt-3 w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-full border border-[#c9a24a]/50 bg-[#c9a24a]/[0.08] text-[#c9a24a] hover:bg-[#c9a24a]/[0.14] transition-colors font-mono text-[11px] tracking-[0.2em] uppercase"
                   >
                     <MessagesSquare className="h-4 w-4" /> Ask Calyx
+                  </Link>
+                )}
+                {paperHref && !subjectConflict && (
+                  <Link to={paperHref} className="mt-3 w-full inline-flex items-center justify-center px-5 py-3 rounded-full border border-[#c9a24a]/50 text-[#c9a24a]">
+                    Inspect PaperBotanica drafts — sign-in and review required
                   </Link>
                 )}
                 {matrixHref && (
@@ -690,3 +702,4 @@ function DossierSectionBlock({
 }
 
 export default SpeciesDossier;
+
