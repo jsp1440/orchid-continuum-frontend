@@ -76,10 +76,21 @@ try {
   check(await page.getByRole('heading', { name: 'Stage 1 of 7: observe', exact: true }).isVisible(), 'Narrow-screen practice not visible');
   const screenshotPath = evidencePath.replace(/\.json$/, '') + '.png';
   await page.screenshot({ path: screenshotPath, fullPage: true });
+  // Reload must discard populated practice, independently of the reset check.
+  const reloadChoice = lab.inquiry_activity.steps[0].choices.find((choice) => choice.appropriate === true);
+  await page.getByLabel('Your question or hypothesis', { exact: false }).fill('Unsaved note before reload');
+  await page.getByRole('radio', { name: reloadChoice.label, exact: true }).check();
+  await page.getByRole('button', { name: 'Check reasoning', exact: true }).click();
+  await page.getByRole('status').filter({ hasText: reloadChoice.feedback }).waitFor();
+  check(await page.getByLabel('Your question or hypothesis', { exact: false }).inputValue() === 'Unsaved note before reload', 'Reload precondition note missing');
   await page.reload({ waitUntil: 'networkidle' });
   await page.getByRole('heading', { name: 'Stage 1 of 7: observe', exact: true }).waitFor();
   check(await page.getByLabel('Your question or hypothesis', { exact: false }).inputValue() === '', 'Reload retained notes');
-  evidence.checks.push('Reset, narrow viewport and reload preserve the ephemeral session contract');
+  check(await page.getByRole('radio', { checked: true }).count() === 0, 'Reload retained response');
+  check(await page.getByRole('status').filter({ hasText: reloadChoice.feedback }).count() === 0, 'Reload retained reasoning feedback');
+  check(evidence.learning_requests.every((request) => request.method === 'GET'), 'Unexpected University mutation request during reset/reload');
+  check(errors.length === 0, 'Browser runtime errors after reset/reload: ' + errors.join('; '));
+  evidence.checks.push('Reset clears practice; populated notes, response and feedback are discarded on reload at narrow viewport');
   evidence.result = 'pass';
   evidence.completed_at = new Date().toISOString();
   evidence.frontend_release = await page.locator('meta[name="ocu-release-sha"]').getAttribute('content');
