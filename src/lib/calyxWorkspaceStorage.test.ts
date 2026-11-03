@@ -21,7 +21,7 @@ describe("CALYX workspace preference storage", () => {
     if (localStorageDescriptor) {
       Object.defineProperty(window, "localStorage", localStorageDescriptor);
     } else {
-      delete (window as Partial<Window>).localStorage;
+      Reflect.deleteProperty(window, "localStorage");
     }
   });
 
