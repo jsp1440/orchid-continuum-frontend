@@ -35,6 +35,8 @@ it('puts the map before tour panels, reports its own counts, filters records and
  const country=[...host.querySelectorAll('button')].find(b=>b.textContent==='Peru')!;
  await act(async()=>country.click());
  expect(host.textContent).toContain('60 map records');
+ const pills=[...host.querySelectorAll('button')].filter(b=>/·\s*Peru$/.test(b.textContent??''));
+ expect(pills).toHaveLength(1);
  expect(host.querySelector('[aria-label="Atlas record completeness"]')?.textContent).toContain('60 matching records of 121 loaded');
  expect(host.querySelectorAll('ul li')).toHaveLength(50);
  expect(list.scrollTop).toBe(0);

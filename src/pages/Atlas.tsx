@@ -279,7 +279,6 @@ const Atlas: React.FC = () => {
             <AtlasCompletenessBadge count={filteredPoints.length} total={allPoints.length} loading={loading} />
             <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/70 px-1"><div className="flex items-center gap-2"><Globe2 className="h-3 w-3 text-[#c9a24a]" />{filteredPoints.length.toLocaleString()} of {allPoints.length.toLocaleString()} live records{loadingMore && <span className="ml-2 inline-flex items-center gap-1 text-[#c9a24a]/80"><Loader2 className="h-3 w-3 animate-spin" /> loading more</span>}</div><div className="text-[#7a7466]">Basemap · OpenStreetMap / CARTO · Data · Orchid Continuum + GBIF</div></div>
             <AtlasDebugPanel />
-            <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <ResultList points={filteredPoints} onSelect={setSelected} layerMatch={pointLayerMatch} />
           </div>
         </section>
