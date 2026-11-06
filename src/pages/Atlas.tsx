@@ -266,6 +266,7 @@ const Atlas: React.FC = () => {
 
           <div className="lg:col-span-9 space-y-4">
             <LiveAtlasMap points={filteredPoints} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={loading} totalLoaded={allPoints.length} focusBounds={focusBounds} focusView={focusView} />
+            {/* One active-filter row, directly under the map it narrows (#948 review: it was rendered twice). */}
             <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 backdrop-blur-md p-4 flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 mr-2"><Layers className="h-4 w-4 text-[#c9a24a]" /><div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#faf7f2]">Layers</div></div>
@@ -279,7 +280,6 @@ const Atlas: React.FC = () => {
             <AtlasCompletenessBadge count={filteredPoints.length} total={allPoints.length} loading={loading} />
             <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/70 px-1"><div className="flex items-center gap-2"><Globe2 className="h-3 w-3 text-[#c9a24a]" />{filteredPoints.length.toLocaleString()} of {allPoints.length.toLocaleString()} live records{loadingMore && <span className="ml-2 inline-flex items-center gap-1 text-[#c9a24a]/80"><Loader2 className="h-3 w-3 animate-spin" /> loading more</span>}</div><div className="text-[#7a7466]">Basemap · OpenStreetMap / CARTO · Data · Orchid Continuum + GBIF</div></div>
             <AtlasDebugPanel />
-            <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <ResultList points={filteredPoints} onSelect={setSelected} layerMatch={pointLayerMatch} />
           </div>
         </section>
@@ -306,7 +306,7 @@ function ActiveFilterPills({ filters, setFilters }: { filters: AtlasFilterState;
   addArr('genera', 'Genus'); addArr('tribes', 'Tribe'); addArr('countries', 'Country'); addArr('growthForms', 'Form'); addArr('habitats', 'Habitat'); addArr('iucnCodes', 'IUCN'); addArr('pollinatorTaxa', 'Pollinator'); addArr('datasets', 'Source');
   if (filters.verifiedOnly) pills.push({ label: 'Verified only', remove: () => setFilters((p) => ({ ...p, verifiedOnly: false })) });
   if (pills.length === 0) return null;
-  return <div className="flex flex-wrap gap-2">{pills.map((p, i) => <button key={i} type="button" onClick={p.remove} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[9px] tracking-[0.18em] uppercase text-[#faf7f2] hover:bg-[#c9a24a]/15">{p.label}<X className="h-3 w-3" /></button>)}</div>;
+  return <div role="group" aria-label="Active Atlas filters" className="flex flex-wrap gap-2">{pills.map((p) => <button key={p.label} type="button" onClick={p.remove} aria-label={`Remove filter ${p.label}`} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[9px] tracking-[0.18em] uppercase text-[#faf7f2] hover:bg-[#c9a24a]/15">{p.label}<X className="h-3 w-3" /></button>)}</div>;
 }
 
 function ResultList({ points, onSelect, layerMatch }: { points: AtlasOccurrencePoint[]; onSelect: (p: AtlasOccurrencePoint) => void; layerMatch: (p: AtlasOccurrencePoint) => Record<LayerKey, boolean> }) {
