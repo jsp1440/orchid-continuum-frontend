@@ -38,6 +38,17 @@ it('puts the map before tour panels, reports its own counts, filters records and
  expect(host.querySelector('[aria-label="Atlas record completeness"]')?.textContent).toContain('60 matching records of 121 loaded');
  expect(host.querySelectorAll('ul li')).toHaveLength(50);
  expect(list.scrollTop).toBe(0);
+ // #948 review: active filters were rendered twice (under the map and above the list).
+ const pillButtons=(label:string)=>[...host.querySelectorAll('button')].filter(b=>b.textContent===label);
+ expect(pillButtons('Genus · Masdevallia')).toHaveLength(1);
+ expect(pillButtons('Country · Peru')).toHaveLength(1);
+ expect(host.querySelectorAll('[aria-label="Active Atlas filters"]')).toHaveLength(1);
+ const pills=host.querySelector('[aria-label="Active Atlas filters"]')!;
+ expect(map.compareDocumentPosition(pills)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+ await act(async()=>pillButtons('Country · Peru')[0].click());
+ expect(host.textContent).toContain('121 map records');
+ expect(pillButtons('Country · Peru')).toHaveLength(0);
+ expect(pillButtons('Genus · Masdevallia')).toHaveLength(1);
  act(()=>[...host.querySelectorAll('button')].find(b=>b.textContent==='How to use the Atlas')!.click());
  expect(host.textContent).toContain('Welcome to the Atlas');
  expect(host.textContent).not.toContain('580,000');
