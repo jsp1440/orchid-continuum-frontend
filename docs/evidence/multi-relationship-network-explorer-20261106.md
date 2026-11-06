@@ -20,7 +20,7 @@ The SVG uses a deterministic bounded spring layout. Multiple node/edge categorie
 
 Base: frontend main `57600f246d1b024b37e40851b866722c4a09b58a`.
 
-- Focused Vitest: **23 passed** (13 model/privacy/bounds tests and 10 mounted HTTP-consumer journeys). Fixtures are explicitly synthetic and isolated. Mounted tests mock the backend base URL and HTTP responses; they do not establish production science or a live backend pass.
+- Focused Vitest: **25 passed** (15 model/privacy/bounds tests and 10 mounted HTTP-consumer journeys). Fixtures are explicitly synthetic and isolated. Mounted tests mock the backend base URL and HTTP responses; they do not establish production science or a live backend pass. Nullable experimental flags retain an explicit unknown value; historical validity intervals retain their projected timestamps and temporal status. Taxonomic-status filtering applies to taxonomic identity nodes while retaining non-taxonomic ecological context.
 - Scoped strict TypeScript check: new model, HTTP client and component plus their actual backend-configuration imports passed. The whole application typecheck was not run.
 - Repository-equivalent ESLint rules: changed/new production and test files passed, including the portable browser acceptance entry.
 - Browser acceptance bundle builds from the same production component. This is a local acceptance harness, not a deployed product build. The complete Vite application build is not claimed.
@@ -40,13 +40,15 @@ Hosted validation, an eligible independent exact-head review, and the combined b
 
 The shared isolated acceptance harness separately executed actual React DOM emulation → HTTP → FastAPI → disposable PostgreSQL/WASM: five interaction checks, eight HTTP calls and zero DOM execution errors, plus four SQL/HTTP endpoint checks. The materialized-graph controls are synthetic; the recorded-source view replays two actual audited fungal-literature records from one shared study, producing six nodes and six edges across source orchid concept, assertion, fungal name and publication. These records are not independent studies or accepted KG relationships. This proof does not establish native psycopg, live Neon, Render or full-application acceptance. Graphical Chromium acceptance remains unavailable after one normal installation attempt received a truncated archive; no network bypass or repeated download was used. The coordinator matched the portable proof's current-asset hashes to the final tested asset.
 
+The final frozen-asset rerun passed the same four SQL/HTTP and five React checks, eight real HTTP calls, zero DOM errors; six source hashes were unchanged throughout. Frontend bundle SHA256: `e931fc5b5301eb0083ad1a2550732781edd5ad0f6cdd4e572170ac4d69cf6cee`. The assembled backend included the nullable experimental-flag and temporal-validity corrections. This binds the replay result to the tested component source, not to a deployed production revision.
+
 Backend draft #2317 contains the portable isolated HTTP/SQL replay harness. Build its frontend asset from this repository's committed test-only entry (the exact production React component is imported):
 
 ```bash
 node node_modules/esbuild/bin/esbuild tests/network-browser-entry.tsx --bundle --format=esm --jsx=automatic --alias:@=./src '--define:import.meta.env={}' --outfile=/tmp/oc-network-browser.js
 ```
 
-Follow backend `tools/kg_network_demo/README.md` to run that asset with its isolated services. This entry is not a replacement route or a static dataset, and does not connect to production. Non-maker same-account bounded source/contract review reproduced all23 tests and found no remaining blocking contract defect; protected independent-principal acceptance is not implied.
+Follow backend `tools/kg_network_demo/README.md` to run that asset with its isolated services. This entry is not a replacement route or a static dataset, and does not connect to production. Non-maker same-account bounded source/contract review independently reproduced all25 final tests and found no remaining blocking contract defect, including temporal tri-state handling and taxonomic filtering; protected independent-principal acceptance is not implied.
 
 ## Rollout, migration and rollback
 

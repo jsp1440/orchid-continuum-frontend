@@ -88,4 +88,15 @@ describe('bounded scientific network projection', () => {
     expect(evidence[0].reviewState).toBe('DISPUTED'); expect(evidence[0].conflict.truncated).toBe(true);
     expect(evidence[1].conflict.withheld).toBe(true); expect(exportScientificNetwork(g)).not.toContain('private:record:99');
   });
+  it('preserves unknown experimental flags and historical validity without treating null as false', () => {
+    const raw = syntheticNetworkPayload(); raw.edges[0].evidence = [{ id: 'study:history', experimental_scope: { germination_confirmed: null, protocorm_confirmed: false, adult_root_confirmed: true }, temporal_context: { temporal_status: 'HISTORICAL', valid_from: { text: '2001-01-01', withheld: false }, valid_to: { text: '2002-01-01', withheld: false } } }] as never[];
+    const evidence = normalizeScientificNetwork(raw)!.edges[0].evidence[0];
+    expect(evidence.experimentalScope).toBe('germination_confirmed=unknown; protocorm_confirmed=false; adult_root_confirmed=true');
+    expect(evidence.temporalStatus).toBe('HISTORICAL'); expect(evidence.validFrom).toBe('2001-01-01'); expect(evidence.validTo).toBe('2002-01-01');
+  });
+  it('filters taxonomic identity status without dropping non-taxonomic ecological context', () => {
+    const raw = syntheticNetworkPayload(); Object.assign(raw.nodes[0], { taxonomic_status: 'accepted' });
+    const g = filterScientificNetwork(normalizeScientificNetwork(raw)!, { ...EMPTY_FILTERS, taxonomicStatus: 'accepted' });
+    expect(g.nodes.map(node => node.type)).toContain('pollinator'); expect(g.edges.some(edge => edge.source === '1' && edge.target === '2')).toBe(true);
+  });
 });

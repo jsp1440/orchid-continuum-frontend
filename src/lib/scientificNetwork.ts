@@ -7,11 +7,12 @@ export type NetworkEvidence = {
   classification: string; status: string; confidence: number | null; license: string | null;
   taxonomicVersion: string | null; originalPredicate: string | null; experimentalScope: string | null; independence: string;
   assertionId: string | null; conflictingAssertionIds: string[]; conflict: { present: boolean; truncated: boolean; withheld: boolean }; reviewState: string; verificationState: string;
+  temporalStatus: string; validFrom: string | null; validTo: string | null; temporalContext: string | null;
 };
 export type NetworkEdge = {
   id: string; source: string; target: string; predicate: string; active: boolean;
   classification: string; status: string; evidenceClass: string; sourceTable: string;
-  confidence: number | null; evidence: NetworkEvidence[]; originalPredicate: string | null; semanticsStatus: string;
+  confidence: number | null; evidence: NetworkEvidence[]; originalPredicate: string | null; semanticsStatus: string; temporalStatus: string;
 };
 export type ScientificNetwork = {
   nodes: NetworkNode[]; edges: NetworkEdge[]; truncated: boolean; warnings: string[];
@@ -50,6 +51,7 @@ function normalizeEvidence(value: unknown): NetworkEvidence | null {
   const e = record(value); if (!e || e.withheld === true) return null;
   const p = record(e.provenance); const c = record(e.citation);
   const conflict = record(e.conflict_declaration);
+  const temporal = record(e.temporal_context);
   const safeEvidenceId = (value: unknown): string | null => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? String(value) : typeof value === 'string' && value.length <= 220 && /^[A-Za-z0-9._:-]+$/.test(value) && !/^withheld/i.test(value) ? value : null;
   return {
     id: typeof e.id === 'number' ? String(e.id) : text(e.id, 'unidentified evidence'), source: text(p?.source_table), sourceRecord: p?.source_pk == null ? null : String(p.source_pk),
@@ -58,12 +60,14 @@ function normalizeEvidence(value: unknown): NetworkEvidence | null {
     license: projectedText(e.license),
     taxonomicVersion: projectedText(e.taxonomic_version),
     originalPredicate: typeof e.original_predicate === 'string' ? text(e.original_predicate) : null,
-    experimentalScope: typeof e.experimental_scope === 'string' ? text(e.experimental_scope) : record(e.experimental_scope) ? ['germination_confirmed', 'protocorm_confirmed', 'adult_root_confirmed'].filter(key => typeof (e.experimental_scope as Record<string, unknown>)[key] === 'boolean').map(key => `${key}=${String((e.experimental_scope as Record<string, unknown>)[key])}`).join('; ') || null : null,
+    experimentalScope: typeof e.experimental_scope === 'string' ? text(e.experimental_scope) : record(e.experimental_scope) ? ['germination_confirmed', 'protocorm_confirmed', 'adult_root_confirmed'].filter(key => key in (e.experimental_scope as Record<string, unknown>)).map(key => `${key}=${typeof (e.experimental_scope as Record<string, unknown>)[key] === 'boolean' ? String((e.experimental_scope as Record<string, unknown>)[key]) : 'unknown'}`).join('; ') || null : null,
     independence: text(e.independence),
     assertionId: safeEvidenceId(e.assertion_id),
     conflictingAssertionIds: conflict?.withheld === true ? [] : Array.isArray(e.conflicting_assertion_ids) ? e.conflicting_assertion_ids.slice(0, 30).map(safeEvidenceId).filter((value): value is string => value !== null) : [],
     conflict: { present: conflict?.present === true, truncated: conflict?.truncated === true, withheld: conflict?.withheld === true },
     reviewState: text(e.review_state), verificationState: text(e.verification_state),
+    temporalStatus: text(e.temporal_status ?? temporal?.temporal_status), validFrom: projectedText(e.valid_from ?? temporal?.valid_from), validTo: projectedText(e.valid_to ?? temporal?.valid_to),
+    temporalContext: projectedText(e.temporal_context),
   };
 }
 
@@ -84,6 +88,7 @@ export function normalizeScientificNetwork(value: unknown): ScientificNetwork | 
       classification: text(e.classification), status: text(e.validation_status), evidenceClass: text(e.evidence_class),
       sourceTable: text(p?.source_table), confidence: confidence(e.confidence),
       originalPredicate: typeof e.original_predicate === 'string' ? text(e.original_predicate) : null, semanticsStatus: text(e.semantics_status, 'STORED_GRAPH_CLASSIFICATION_UNVALIDATED'),
+      temporalStatus: text(e.temporal_status),
       evidence: Array.isArray(e.evidence) ? e.evidence.map(normalizeEvidence).filter((x): x is NetworkEvidence => x !== null) : [],
     });
   }
@@ -109,7 +114,8 @@ export function mergeScientificNetworks(previous: ScientificNetwork, next: Scien
 export type NetworkFilters = { relationship: string; evidence: string; status: string; source: string; taxonomicStatus: string };
 export const EMPTY_FILTERS: NetworkFilters = { relationship: '', evidence: '', status: '', source: '', taxonomicStatus: '' };
 export function filterScientificNetwork(g: ScientificNetwork, f: NetworkFilters): ScientificNetwork {
-  const allowedNodes = new Set(g.nodes.filter(n => !f.taxonomicStatus || n.status === f.taxonomicStatus).map(n => n.id));
+  const taxonomyTypes = new Set(['taxon', 'species', 'genus', 'source_taxon_concept']);
+  const allowedNodes = new Set(g.nodes.filter(n => !f.taxonomicStatus || !taxonomyTypes.has(n.type) || n.status === f.taxonomicStatus).map(n => n.id));
   const edges = g.edges.filter(e => (!f.relationship || e.predicate === f.relationship) && (!f.evidence || e.evidenceClass === f.evidence)
     && (!f.status || e.status === f.status) && (!f.source || e.sourceTable === f.source) && allowedNodes.has(e.source) && allowedNodes.has(e.target));
   const touched = new Set(edges.flatMap(e => [e.source, e.target]));
