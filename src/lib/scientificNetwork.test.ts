@@ -66,7 +66,26 @@ describe('bounded scientific network projection', () => {
     for (const position of first.values()) { expect(Number.isFinite(position.x)).toBe(true); expect(position.x).toBeGreaterThanOrEqual(55); expect(position.y).toBeLessThanOrEqual(545); }
   });
   it('preserves namespaced source-only identities without conflating them with KG nodes', () => {
-    const g = normalizeScientificNetwork({ nodes: [{ id: 'source:fungal:3', node_type: 'assertion', label: 'Synthetic source record' }], edges: [], pagination: { truncated: false } })!;
-    expect(g.nodes[0].id).toBe('source:fungal:3');
+    const source = 'source_assertion:oc_mycorrhiza.orchid_fungal_associations:3';
+    const g = normalizeScientificNetwork({ nodes: [{ id: source, node_type: 'assertion', label: 'Synthetic source record' }], edges: [], pagination: { truncated: false } })!;
+    expect(g.nodes[0].id).toBe(source);
+    const article = normalizeScientificNetwork({ nodes: [{ id: 'publication:doi:10.1016/S0304-4238(00)00100-0', node_type: 'publication', label: 'Synthetic DOI namespace' }], edges: [], pagination: { truncated: false } });
+    expect(article?.nodes[0].id).toBe('publication:doi:10.1016/S0304-4238(00)00100-0');
+  });
+  it('preserves privacy-projected license and taxonomy text while honoring withheld fields', () => {
+    const raw = syntheticNetworkPayload(); Object.assign(raw.nodes[0], { taxonomic_version: { text: 'Synthetic release v1', withheld: false } });
+    raw.edges[0].evidence = [{ id: 'study:fixture', license: { text: 'CC-BY-4.0', withheld: false }, taxonomic_version: { text: 'Private version', withheld: true } }] as never[];
+    const g = normalizeScientificNetwork(raw)!; expect(g.nodes[0].taxonomicVersion).toBe('Synthetic release v1');
+    expect(g.edges[0].evidence[0].license).toBe('CC-BY-4.0'); expect(g.edges[0].evidence[0].taxonomicVersion).toBeNull();
+  });
+  it('retains disputed assertion linkage and review state while withholding restricted conflict IDs', () => {
+    const raw = syntheticNetworkPayload(); raw.edges[0].evidence = [
+      { id: 'evidence:fixture', assertion_id: 'assertion:fixture', conflicting_assertion_ids: ['assertion:other'], conflict_declaration: { present: true, truncated: true, withheld: false }, review_state: 'DISPUTED', verification_state: 'UNVERIFIED' },
+      { id: 'evidence:restricted', conflicting_assertion_ids: ['private:record:99'], conflict_declaration: { present: true, withheld: true } },
+    ] as never[];
+    const g = normalizeScientificNetwork(raw)!; const evidence = g.edges[0].evidence;
+    expect(evidence[0].conflictingAssertionIds).toEqual(['assertion:other']); expect(evidence[0].assertionId).toBe('assertion:fixture');
+    expect(evidence[0].reviewState).toBe('DISPUTED'); expect(evidence[0].conflict.truncated).toBe(true);
+    expect(evidence[1].conflict.withheld).toBe(true); expect(exportScientificNetwork(g)).not.toContain('private:record:99');
   });
 });

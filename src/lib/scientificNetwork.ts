@@ -5,7 +5,8 @@ export type NetworkNode = {
 export type NetworkEvidence = {
   id: string; source: string; sourceRecord: string | null; citation: string | null;
   classification: string; status: string; confidence: number | null; license: string | null;
-  taxonomicVersion: string | null;
+  taxonomicVersion: string | null; originalPredicate: string | null; experimentalScope: string | null; independence: string;
+  assertionId: string | null; conflictingAssertionIds: string[]; conflict: { present: boolean; truncated: boolean; withheld: boolean }; reviewState: string; verificationState: string;
 };
 export type NetworkEdge = {
   id: string; source: string; target: string; predicate: string; active: boolean;
@@ -24,9 +25,15 @@ const record = (v: unknown): Record<string, unknown> | null =>
   v !== null && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : null;
 const text = (v: unknown, fallback = 'unknown'): string =>
   typeof v === 'string' && v.trim() ? v.trim().slice(0, 2000) : fallback;
+const projectedText = (v: unknown): string | null => {
+  if (typeof v === 'string') return v.trim() ? text(v) : null;
+  const projection = record(v);
+  return projection?.withheld !== true && typeof projection?.text === 'string' && projection.text.trim() ? text(projection.text) : null;
+};
+const SOURCE_ID = /^(?:source_concept:oc_mycorrhiza\.orchid_fungal_associations:(?:orchid_name|fungal_name):[a-f0-9]{64}|source_assertion:oc_mycorrhiza\.orchid_fungal_associations:[1-9][0-9]*(?::(?:subject|object|citation))?|publication:doi:10\.[0-9]{4,9}\/[-._;()/:A-Za-z0-9]+)$/;
 const id = (v: unknown): string | null =>
   (typeof v === 'number' && Number.isSafeInteger(v) && v > 0) || (typeof v === 'string' && /^\d+$/.test(v) && Number(v) > 0)
-    ? String(v) : typeof v === 'string' && v.length <= 200 && /^[a-zA-Z][a-zA-Z0-9._:-]*$/.test(v) ? v : null;
+    ? String(v) : typeof v === 'string' && v.length <= 220 && SOURCE_ID.test(v) ? v : null;
 const confidence = (v: unknown): number | null => {
   const n = record(v)?.score ?? v;
   return typeof n === 'number' && Number.isFinite(n) && n >= 0 && n <= 1 ? n : null;
@@ -36,18 +43,27 @@ const count = (v: unknown): number => typeof v === 'number' && Number.isInteger(
 export function normalizeNetworkNode(value: unknown): NetworkNode | null {
   const n = record(value); const key = id(n?.id);
   if (!n || !key || typeof n.label !== 'string' || !n.label.trim() || typeof n.node_type !== 'string') return null;
-  return { id: key, label: text(n.label), type: text(n.node_type), status: text(n.taxonomic_status), canonicalKey: typeof n.canonical_key === 'string' ? text(n.canonical_key) : null, taxonomicVersion: typeof n.taxonomic_version === 'string' ? text(n.taxonomic_version) : null };
+  return { id: key, label: text(n.label), type: text(n.node_type), status: text(n.taxonomic_status), canonicalKey: typeof n.canonical_key === 'string' ? text(n.canonical_key) : null, taxonomicVersion: projectedText(n.taxonomic_version) };
 }
 
 function normalizeEvidence(value: unknown): NetworkEvidence | null {
   const e = record(value); if (!e || e.withheld === true) return null;
   const p = record(e.provenance); const c = record(e.citation);
+  const conflict = record(e.conflict_declaration);
+  const safeEvidenceId = (value: unknown): string | null => typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? String(value) : typeof value === 'string' && value.length <= 220 && /^[A-Za-z0-9._:-]+$/.test(value) && !/^withheld/i.test(value) ? value : null;
   return {
     id: typeof e.id === 'number' ? String(e.id) : text(e.id, 'unidentified evidence'), source: text(p?.source_table), sourceRecord: p?.source_pk == null ? null : String(p.source_pk),
     citation: c?.withheld === true ? null : typeof c?.text === 'string' ? text(c.text) : null,
     classification: text(e.classification), status: text(e.validation_status), confidence: confidence(e.confidence),
-    license: typeof e.license === 'string' ? text(e.license) : null,
-    taxonomicVersion: typeof e.taxonomic_version === 'string' ? text(e.taxonomic_version) : null,
+    license: projectedText(e.license),
+    taxonomicVersion: projectedText(e.taxonomic_version),
+    originalPredicate: typeof e.original_predicate === 'string' ? text(e.original_predicate) : null,
+    experimentalScope: typeof e.experimental_scope === 'string' ? text(e.experimental_scope) : record(e.experimental_scope) ? ['germination_confirmed', 'protocorm_confirmed', 'adult_root_confirmed'].filter(key => typeof (e.experimental_scope as Record<string, unknown>)[key] === 'boolean').map(key => `${key}=${String((e.experimental_scope as Record<string, unknown>)[key])}`).join('; ') || null : null,
+    independence: text(e.independence),
+    assertionId: safeEvidenceId(e.assertion_id),
+    conflictingAssertionIds: conflict?.withheld === true ? [] : Array.isArray(e.conflicting_assertion_ids) ? e.conflicting_assertion_ids.slice(0, 30).map(safeEvidenceId).filter((value): value is string => value !== null) : [],
+    conflict: { present: conflict?.present === true, truncated: conflict?.truncated === true, withheld: conflict?.withheld === true },
+    reviewState: text(e.review_state), verificationState: text(e.verification_state),
   };
 }
 

@@ -5,7 +5,7 @@ import {
   layoutScientificNetwork, mergeScientificNetworks, networkComponents,
   type NetworkEdge, type NetworkNode, type ScientificNetwork,
 } from '@/lib/scientificNetwork';
-import { createScientificNetworkClient, type NetworkSourceRecord, type ScientificNetworkClient } from '@/lib/scientificNetworkApi';
+import { createScientificNetworkClient, type NetworkExplanation, type NetworkSourceRecord, type ScientificNetworkClient } from '@/lib/scientificNetworkApi';
 
 const DEFAULT_CLIENT = createScientificNetworkClient(CALYX_BACKEND_BASE_URL);
 const COLORS: Record<string, string> = {
@@ -25,6 +25,7 @@ export default function ScientificNetworkExplorer({ initialQuery = '', client = 
   const [query, setQuery] = useState(initialQuery); const [matches, setMatches] = useState<NetworkNode[]>([]);
   const [mode, setMode] = useState<'materialized' | 'source'>('materialized');
   const [sourceMatches, setSourceMatches] = useState<NetworkSourceRecord[]>([]);
+  const [evidenceRoot, setEvidenceRoot] = useState<number | null>(null); const [explanation, setExplanation] = useState<NetworkExplanation | null>(null);
   const [searchTruncated, setSearchTruncated] = useState(false); const [searched, setSearched] = useState(false);
   const [graph, setGraph] = useState<ScientificNetwork>(EMPTY_NETWORK); const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [selectedNode, setSelectedNode] = useState<string | null>(null); const [selectedEdge, setSelectedEdge] = useState<string | null>(null);
@@ -55,15 +56,22 @@ export default function ScientificNetworkExplorer({ initialQuery = '', client = 
     const { controller, sequence } = startRequest(); setSelectedNode(node.id); setSelectedEdge(null);
     try {
       const result = await client.neighborhood(node.id, controller.signal, includeInactive);
-      if (current(sequence, controller)) { setGraph(previous => replace ? result : mergeScientificNetworks(previous, result)); setIsolate(false); }
+      if (current(sequence, controller)) { setGraph(previous => replace ? result : mergeScientificNetworks(previous, result)); setIsolate(false); setEvidenceRoot(Number(node.id)); setExplanation(null); }
     } catch (e) { if (current(sequence, controller)) setError(e instanceof Error ? e.message : 'Neighborhood unavailable.'); }
     finally { if (current(sequence, controller)) setBusy(false); }
   }
 
   async function openSource(sourceId: number) {
     const { controller, sequence } = startRequest();
-    try { const result = await client.sourceNetwork(sourceId, controller.signal); if (current(sequence, controller)) { setGraph(result); setSelectedNode(null); setSelectedEdge(null); setIsolate(false); } }
+    try { const result = await client.sourceNetwork(sourceId, controller.signal); if (current(sequence, controller)) { setGraph(result); setSelectedNode(null); setSelectedEdge(null); setIsolate(false); setEvidenceRoot(sourceId); setExplanation(null); } }
     catch (e) { if (current(sequence, controller)) setError(e instanceof Error ? e.message : 'Source network unavailable.'); }
+    finally { if (current(sequence, controller)) setBusy(false); }
+  }
+
+  async function explain() {
+    if (evidenceRoot === null) return; const { controller, sequence } = startRequest(); setExplanation(null);
+    try { const result = await client.explain(mode, evidenceRoot, controller.signal); if (current(sequence, controller)) setExplanation(result); }
+    catch (e) { if (current(sequence, controller)) setError(e instanceof Error ? e.message : 'Brain evidence retrieval unavailable.'); }
     finally { if (current(sequence, controller)) setBusy(false); }
   }
 
@@ -96,7 +104,7 @@ export default function ScientificNetworkExplorer({ initialQuery = '', client = 
     const blob = new Blob([exportScientificNetwork(displayed, mode)], { type: 'application/json' });
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'orchid-scientific-subgraph.json'; a.click(); URL.revokeObjectURL(url);
   }
-  function reset() { request.current?.abort(); generation.current += 1; setBusy(false); setGraph(EMPTY_NETWORK); setFilters(EMPTY_FILTERS); setSelectedNode(null); setSelectedEdge(null); setPathFrom(''); setPathTo(''); setView({ x: 0, y: 0, zoom: 1 }); setIsolate(false); setError(''); }
+  function reset() { request.current?.abort(); generation.current += 1; setBusy(false); setGraph(EMPTY_NETWORK); setFilters(EMPTY_FILTERS); setSelectedNode(null); setSelectedEdge(null); setPathFrom(''); setPathTo(''); setView({ x: 0, y: 0, zoom: 1 }); setIsolate(false); setError(''); setEvidenceRoot(null); setExplanation(null); }
   function submit(event: FormEvent) { event.preventDefault(); void search(query); }
 
   return <section aria-label="Scientific relationship network" className="rounded-3xl border border-emerald-200 bg-white p-4 text-slate-900 shadow-sm sm:p-6">
@@ -126,7 +134,8 @@ export default function ScientificNetworkExplorer({ initialQuery = '', client = 
       ] as const).map(([key, label, values]) => <label key={key} className="flex flex-col gap-1 text-xs">{label}<select className={fieldClass} aria-label={label} value={filters[key]} onChange={e => { setFilters(previous => ({ ...previous, [key]: e.target.value })); setPathIndex(0); }}><option value="">All loaded</option>{values.map(v => <option value={v} key={v}>{v}</option>)}</select></label>)}</div>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-sm"><button className={buttonClass} aria-label="Zoom in" onClick={() => setView(v => ({ ...v, zoom: Math.min(3, v.zoom + 0.25) }))}>+</button><button className={buttonClass} aria-label="Zoom out" onClick={() => setView(v => ({ ...v, zoom: Math.max(0.4, v.zoom - 0.25) }))}>−</button>
         <button className={buttonClass} onClick={() => setView({ x: 0, y: 0, zoom: 1 })}>Fit view</button><button className={buttonClass} disabled={!selectedNode} onClick={() => setIsolate(v => !v)}>{isolate ? 'Show loaded view' : 'Isolate selected neighborhood'}</button>
-        <button className={buttonClass} onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</button><button className={buttonClass} onClick={reset}>Reset network</button></div>
+        <button className={buttonClass} onClick={() => setFilters(EMPTY_FILTERS)}>Clear filters</button><button className={buttonClass} onClick={reset}>Reset network</button><button className={buttonClass} disabled={busy || evidenceRoot === null} onClick={() => void explain()}>Explain retrieved paths with Brain</button></div>
+      <p className="mt-2 text-xs text-slate-500">Filters apply to loaded records only. Brain explanation makes a separate authenticated bounded retrieval from the last expanded root, retaining missing evidence and default-off controls.</p>
       <div className="mt-3 flex flex-wrap gap-3 text-xs" aria-label="Node category legend"><span>Stored categories:</span>{unique(displayed.nodes.map(n => n.type)).map(type => <span key={type} className="inline-flex items-center gap-1"><span className="h-3 w-3 rounded-full" style={{ backgroundColor: color(type) }} />{type}</span>)}</div>
       <div className="mt-3 grid gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
         <svg role="img" aria-label="Interactive scientific network. Click nodes to expand and relationships to inspect evidence." viewBox="0 0 1000 600" className="min-h-80 w-full touch-none rounded-2xl border border-slate-200 bg-slate-50"
@@ -149,10 +158,10 @@ export default function ScientificNetworkExplorer({ initialQuery = '', client = 
         </svg>
         <aside aria-label="Graph record details" className="max-h-[36rem] overflow-auto rounded-2xl border border-slate-200 p-4 text-sm">
           {node ? <><h3 className="font-semibold">{node.label}</h3><p>Stored category: {node.type} · #{node.id}</p><p className="mt-2">Taxonomic status: {node.status} · version: {node.taxonomicVersion ?? 'unbound'}</p><p className="break-all text-xs">{node.canonicalKey ?? 'Canonical key unavailable'}</p><p className="mt-2 text-xs">Stored categories have not been independently validated. A pollinator category alone does not establish pollination.</p><button className={`${buttonClass} mt-3`} disabled={busy} onClick={() => void expand(node)}>{mode === 'source' ? 'Show loaded neighborhood' : 'Expand connected neighborhood'}</button></>
-            : edge ? <><h3 className="font-semibold">{edge.predicate}</h3><p>#{edge.id} · {edge.source} → {edge.target}</p><p className="mt-2">{edge.active ? 'Active' : 'Inactive historical assertion'} · {edge.classification} · {edge.status}</p><p>Evidence class: {edge.evidenceClass}</p><p>Confidence: {edge.confidence === null ? 'unknown / uncalibrated' : `${edge.confidence} (stored score, not independently calibrated)`}</p>
+            : edge ? <><h3 className="font-semibold">{edge.predicate}</h3><p>#{edge.id} · {edge.source} → {edge.target}</p><p className="mt-2">{mode === 'source' ? 'Recorded source assertion (not materialized in KG)' : edge.active ? 'Active' : 'Inactive historical assertion'} · {edge.classification} · {edge.status}</p><p>Evidence class: {edge.evidenceClass}</p><p>Confidence: {edge.confidence === null ? 'unknown / uncalibrated' : `${edge.confidence} (stored score, not independently calibrated)`}</p>
               <p className="mt-2">Original source predicate: {edge.originalPredicate ?? 'not resolved'}</p><p className="break-all text-xs">{edge.semanticsStatus}</p><p className="mt-2 text-xs">The stored edge label does not establish verified pollination or a causal association.</p>
               <h4 className="mt-4 font-semibold">Supporting evidence records ({edge.evidence.length})</h4>{edge.evidence.length === 0 && <p>No attributable evidence record was returned. This connection is not established as accepted science.</p>}
-              {edge.evidence.map((e, i) => <article key={`${e.id}-${i}`} className="mt-3 rounded-lg bg-slate-50 p-3"><p className="break-all font-medium">{e.id}</p><p>{e.classification} · {e.status}</p><p className="break-all text-xs">{e.source}{e.sourceRecord ? `:${e.sourceRecord}` : ''}</p><p className="mt-2 whitespace-pre-wrap">{e.citation ?? 'Citation missing or withheld'}</p><p className="mt-2 text-xs">Licence: {e.license ?? 'unknown'} · Taxonomy version: {e.taxonomicVersion ?? 'unbound'}</p></article>)}</>
+              {edge.evidence.map((e, i) => <article key={`${e.id}-${i}`} className="mt-3 rounded-lg bg-slate-50 p-3"><p className="break-all font-medium">{e.id}</p><p>{e.classification} · {e.status}</p><p className="break-all text-xs">{e.source}{e.sourceRecord ? `:${e.sourceRecord}` : ''}</p><p className="mt-2 whitespace-pre-wrap">{e.citation ?? 'Citation missing or withheld'}</p><p className="mt-2 text-xs">Original predicate: {e.originalPredicate ?? 'unresolved'} · Experimental scope: {e.experimentalScope ?? 'unknown'} · Independence: {e.independence}</p><p className="mt-2 text-xs">Review: {e.reviewState} · Verification: {e.verificationState} · Assertion: {e.assertionId ?? 'unavailable'}</p>{(e.conflict.present || e.conflictingAssertionIds.length > 0 || e.conflict.withheld || e.conflict.truncated) && <p className="mt-2 text-xs text-rose-900">Conflict links: {e.conflictingAssertionIds.join(', ') || 'unavailable'}{e.conflict.present ? ' · conflict declared' : ''}{e.conflict.withheld ? ' · identifiers withheld' : ''}{e.conflict.truncated ? ' · list truncated' : ''}</p>}<p className="mt-2 text-xs">Licence: {e.license ?? 'unknown'} · Taxonomy version: {e.taxonomicVersion ?? 'unbound'}</p></article>)}</>
               : <p>Select a node or edge to inspect its identity and evidence. Distinct evidence records remain separate; their number does not establish independence.</p>}
         </aside>
       </div>
@@ -160,7 +169,8 @@ export default function ScientificNetworkExplorer({ initialQuery = '', client = 
       {pathFrom && pathTo && <p className="mt-2 text-sm">{paths.length ? `${paths.length} visual path(s) found in this loaded view (up to 3 paths, 6 edges each).` : 'No connecting path found in this loaded view. The full graph may contain other paths.'}</p>}
       <p className="mt-4 text-xs text-slate-600">Returned view: {components.length} connected component(s), {orphans} singleton(s), {reciprocal} assertions with a reverse assertion, {parallel} additional parallel assertions. These are view diagnostics, not database-wide counts; direction, duplicates and independent evidence are different concepts.</p>
     </>}
-    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">This is a bounded neighborhood, never the complete graph.{graph.truncated ? ' Results are truncated; expand individual nodes or narrow filters.' : ''}{graph.withheld ? ` ${graph.withheld} node(s) withheld by privacy policy.` : ''}{graph.dangling ? ` ${graph.dangling} dangling edge reference(s) omitted.` : ''} Missing links may reflect unavailable, quarantined or unprojected evidence.</p>
+    {explanation && <section aria-label="Brain graph explanation" className="mt-4 rounded-2xl border border-emerald-300 bg-emerald-50 p-4 text-sm"><h3 className="font-semibold">Brain retrieval explanation</h3><p>{explanation.state} · {explanation.coverage}</p><p className="mt-2">{explanation.summary}</p><p className="mt-2 font-medium">Human review required. No publication or Reasoning Ledger write. Retrieved paths are not transitive scientific conclusions.</p><h4 className="mt-3 font-semibold">Traversed paths ({explanation.paths.length})</h4><ol className="max-h-64 list-decimal overflow-auto pl-5">{explanation.paths.map((path, index) => <li key={index} className="mt-2"><span className="break-all">{path.nodes.join(' → ')}</span><ul className="list-disc pl-4">{path.steps.map((step, i) => <li key={i}>{step.predicate} · {step.classification} · {step.status}{step.againstDirection ? ' · traversed against assertion direction' : ''}<span className="break-all"> · evidence: {step.evidenceIds.join(', ') || 'missing'}</span></li>)}</ul></li>)}</ol><h4 className="mt-3 font-semibold">Source citations</h4>{explanation.citations.length ? <ul className="list-disc pl-5">{explanation.citations.map(citation => <li key={citation}>{citation}</li>)}</ul> : <p>No attributable citation was returned.</p>}<h4 className="mt-3 font-semibold">Missing evidence and uncertainty</h4><ul className="list-disc pl-5">{explanation.missing.map(code => <li key={code}>{code}</li>)}</ul></section>}
+    <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950">This is a bounded neighborhood, never the complete graph.{graph.truncated ? ' Results are truncated; expand individual nodes or narrow the loaded view.' : ''}{graph.withheld ? ` ${graph.withheld} node(s) withheld by privacy policy.` : ''}{graph.dangling ? ` ${graph.dangling} dangling edge reference(s) omitted.` : ''} Missing links may reflect unavailable, quarantined or unprojected evidence.</p>
     {graph.warnings.length > 0 && <details className="mt-3 text-sm"><summary>Evidence gaps and query warnings ({graph.warnings.length})</summary><ul className="mt-2 list-disc pl-5">{graph.warnings.map((warning, i) => <li key={`${warning}-${i}`}>{warning}</li>)}</ul></details>}
   </section>;
 }
