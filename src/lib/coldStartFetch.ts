@@ -8,8 +8,10 @@
  * 703 Atlas records at ~25 s. A one-shot timeout turned a slow first response
  * into a permanent "unavailable" state until the next daily rotation.
  *
- * Policy: the first attempt has `timeoutMs`; if it produced no response
- * (network error or timeout) or a gateway status (502/503/504), one retry runs
+ * Policy: the first attempt has `timeoutMs`, covering the headers AND the body
+ * (the body is buffered inside the deadline, so a stalled body counts as a
+ * timeout); if it produced no complete response (network error, timeout or
+ * stalled body) or a gateway status (502/503/504), one retry runs
  * with the longer `retryTimeoutMs`. Other HTTP statuses are returned as-is so
  * callers keep their exact not-found / invalid handling. A caller abort is
  * never retried. After the retry the caller's existing fail-closed handling
@@ -20,6 +22,7 @@ export const COLD_START_TIMEOUT_MS = 12_000;
 export const COLD_START_RETRY_TIMEOUT_MS = 25_000;
 export const COLD_START_RETRY_DELAY_MS = 1_000;
 const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+const NULL_BODY_STATUSES = new Set([101, 204, 205, 304]);
 
 export type ColdStartOptions = {
   timeoutMs?: number;
@@ -63,7 +66,15 @@ async function attempt(
   signal?.addEventListener('abort', onAbort, { once: true });
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    return await fetch(input, { ...init, signal: controller.signal });
+    const response = await fetch(input, { ...init, signal: controller.signal });
+    // fetch() resolves when headers arrive; read the body under the same
+    // deadline and cancellation so a stalled body cannot hang the caller.
+    const body = NULL_BODY_STATUSES.has(response.status) ? null : await response.arrayBuffer();
+    return new Response(body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
   } catch (error) {
     if (signal?.aborted) throw new CallerAbortError();
     // Timeout or network failure: no response was received.

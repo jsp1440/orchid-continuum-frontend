@@ -39,6 +39,7 @@ import {
   applyAtlasFilters,
   canonicalSlug,
   didAtlasLoadFail,
+  didAtlasLoadIncomplete,
   resetOrchidContinuumCaches,
   type AtlasOccurrencePoint,
   type AtlasSpeciesRecord,
@@ -152,7 +153,13 @@ const Atlas: React.FC = () => {
       if (cancelled) return;
       setAllPoints(pts.slice(0, 1000));
       setFacets(fs);
-      setLoadOutcome(didAtlasLoadFail() ? (pts.length ? 'partial' : 'failed') : 'ok');
+      setLoadOutcome(
+        pts.length === 0 && didAtlasLoadFail()
+          ? 'failed'
+          : didAtlasLoadFail() || didAtlasLoadIncomplete()
+            ? 'partial'
+            : 'ok',
+      );
       setLoading(false);
       if (pts.length > 1000) {
         setLoadingMore(true);

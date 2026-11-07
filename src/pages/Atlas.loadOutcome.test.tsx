@@ -17,6 +17,7 @@ vi.mock('@/components/atlas/GrandTour', () => ({ default: () => null }));
 const data = vi.hoisted(() => ({
   points: [] as unknown[],
   failed: false,
+  incomplete: false,
   resets: 0,
 }));
 const point = (i: number) => ({
@@ -32,6 +33,7 @@ vi.mock('@/lib/orchidContinuum', async (original) => ({
     pollinatorTaxa: [], datasets: [], totals: {},
   }),
   didAtlasLoadFail: () => data.failed,
+  didAtlasLoadIncomplete: () => data.incomplete,
   resetOrchidContinuumCaches: () => { data.resets += 1; },
 }));
 
@@ -41,6 +43,7 @@ let root: ReturnType<typeof createRoot> | undefined;
 beforeEach(() => {
   data.points = [];
   data.failed = false;
+  data.incomplete = false;
   data.resets = 0;
   vi.stubGlobal('fetch', vi.fn(() => { throw new Error('Unexpected network'); }));
 });
@@ -94,4 +97,13 @@ it('shows no alert for a complete load', async () => {
   const host = await renderAtlas();
   expect(host.querySelector('[data-testid="atlas-load-outcome"]')).toBeNull();
   expect(host.textContent).toContain('2 map records');
+});
+
+it('marks a load that stopped after a later page failed as incomplete (#973 review)', async () => {
+  data.incomplete = true;
+  data.points = [point(1), point(2)];
+  const host = await renderAtlas();
+  const alert = host.querySelector('[data-testid="atlas-load-outcome"]');
+  expect(alert?.textContent).toContain('map below is incomplete');
+  expect([...host.querySelectorAll('button')].some((b) => b.textContent === 'Retry')).toBe(true);
 });
