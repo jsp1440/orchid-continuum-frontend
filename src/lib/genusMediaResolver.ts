@@ -1,6 +1,7 @@
 import { fetchSpeciesExhibit } from '@/lib/speciesExhibit';
 import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
 import { normalizedMediaKey } from '@/lib/genusProfileDataQuality';
 
@@ -86,10 +87,14 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
   if (!requested) return empty(genus, 'invalid_genus');
 
   try {
-    const response = await fetch(
+    // Bounded, with one retry while the backend wakes; previously this request
+    // had no timeout and could hold the whole featured-taxon read model (#231).
+    const response = await fetchWithColdStartRetry(
       `${CALYX_BACKEND_BASE_URL}/api/media/genus/${encodeURIComponent(requested)}?limit=12`,
-      { signal },
+      {},
+      signal,
     );
+    if (!response) return empty(requested, 'service_error');
     if (response.status === 400 || response.status === 404) return empty(requested, 'invalid_genus');
     if (!response.ok) return empty(requested, 'service_error');
 

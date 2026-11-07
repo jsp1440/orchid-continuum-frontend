@@ -298,10 +298,21 @@ let liveStatus: 'unknown' | 'live' | 'offline' = 'unknown';
 // clear inline "Map data temporarily unavailable — retrying" message instead of
 // a blank map.
 let atlasLoadFailed = false;
+/** True when some atlas pages loaded but a later page exhausted its retries. */
+let atlasLoadIncomplete = false;
 
 /** True when the atlas occurrence load exhausted its retries with no data. */
 export function didAtlasLoadFail(): boolean {
   return atlasLoadFailed;
+}
+
+/**
+ * True when the atlas occurrence load returned SOME rows but stopped early
+ * because a later page exhausted its retries: the map is incomplete, which
+ * must not be presented as a complete record set.
+ */
+export function didAtlasLoadIncomplete(): boolean {
+  return atlasLoadIncomplete;
 }
 
 const ATLAS_PAGE_RETRIES = 2; // up to 2 retries (3 attempts) per page
@@ -387,6 +398,7 @@ async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
     const all: AtlasOccurrenceRow[] = [];
     let from = 0;
     atlasLoadFailed = false;
+    atlasLoadIncomplete = false;
     // safety cap of 100 pages (100k atlas occurrences). Each page is fetched
     // with retry-with-backoff (up to 2 retries) so transient 502s don't blank
     // the map. If a page ultimately fails after all retries, stop paging.
@@ -395,6 +407,12 @@ async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
       if (batch === null) {
         // All retries exhausted for this page. Only flag a hard failure when
         // we have no rows at all — partial loads still render a useful map.
+        if (all.length > 0) {
+          atlasLoadIncomplete = true;
+          console.warn(
+            `[orchidContinuum] atlas load stopped at page @${from} after retries — map is incomplete.`,
+          );
+        }
         if (all.length === 0) {
           atlasLoadFailed = true;
           console.warn(
@@ -1150,6 +1168,7 @@ export function resetOrchidContinuumCaches(): void {
   mycorrhizalCachePromise = null;
   liveStatus = 'unknown';
   atlasLoadFailed = false;
+  atlasLoadIncomplete = false;
 }
 
 

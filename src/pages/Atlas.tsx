@@ -38,6 +38,9 @@ import {
   fetchAtlasFacets,
   applyAtlasFilters,
   canonicalSlug,
+  didAtlasLoadFail,
+  didAtlasLoadIncomplete,
+  resetOrchidContinuumCaches,
   type AtlasOccurrencePoint,
   type AtlasSpeciesRecord,
   type AtlasFacets,
@@ -119,6 +122,11 @@ const Atlas: React.FC = () => {
   const [facets, setFacets] = useState<AtlasFacets | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  // 'failed' = the occurrence service returned nothing after its retries;
+  // 'partial' = some pages failed, so the map is incomplete. Neither may be
+  // shown as "0 records" / a complete map: that would read as absence.
+  const [loadOutcome, setLoadOutcome] = useState<'ok' | 'partial' | 'failed'>('ok');
+  const [reloadKey, setReloadKey] = useState(0);
   const { filters, setFilters } = useAtlasFilters();
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set(['occurrence']));
   const [intersectionMode, setIntersectionMode] = useState(false);
@@ -139,11 +147,19 @@ const Atlas: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadOutcome('ok');
     (async () => {
       const [pts, fs] = await Promise.all([fetchAtlasOccurrencePoints(), fetchAtlasFacets()]);
       if (cancelled) return;
       setAllPoints(pts.slice(0, 1000));
       setFacets(fs);
+      setLoadOutcome(
+        pts.length === 0 && didAtlasLoadFail()
+          ? 'failed'
+          : didAtlasLoadFail() || didAtlasLoadIncomplete()
+            ? 'partial'
+            : 'ok',
+      );
       setLoading(false);
       if (pts.length > 1000) {
         setLoadingMore(true);
@@ -157,6 +173,11 @@ const Atlas: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  const retryAtlasLoad = useCallback(() => {
+    resetOrchidContinuumCaches();
+    setReloadKey((key) => key + 1);
   }, []);
 
   useEffect(() => {
@@ -265,6 +286,16 @@ const Atlas: React.FC = () => {
           </aside>
 
           <div className="lg:col-span-9 space-y-4">
+            {!loading && loadOutcome !== 'ok' && (
+              <div role="alert" data-testid="atlas-load-outcome" className="rounded-2xl border border-[#c9a24a]/45 bg-[#1a1405]/80 p-4 flex flex-wrap items-center justify-between gap-3 text-[13px] leading-relaxed text-[#ead28c]">
+                <span>
+                  {loadOutcome === 'failed'
+                    ? 'Occurrence records could not be loaded from the Orchid Continuum service. This is a connection problem, not evidence that no orchids were recorded.'
+                    : 'Some occurrence records could not be loaded. The map below is incomplete; missing records are a connection gap, not absence.'}
+                </span>
+                <button type="button" onClick={retryAtlasLoad} className="inline-flex items-center gap-2 rounded-full border border-[#c9a24a]/60 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a] hover:bg-[#c9a24a]/10">Retry</button>
+              </div>
+            )}
             <LiveAtlasMap points={filteredPoints} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={loading} totalLoaded={allPoints.length} focusBounds={focusBounds} focusView={focusView} />
             {/* One active-filter row, directly under the map it narrows (#948 review: it was rendered twice). */}
             <ActiveFilterPills filters={filters} setFilters={setFilters} />
