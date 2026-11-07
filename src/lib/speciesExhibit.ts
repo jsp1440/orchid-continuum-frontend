@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 
 export type SpeciesExhibitMedia = {
   id: string | number | null;
@@ -154,10 +155,14 @@ export async function fetchSpeciesExhibit(
   if (!requested || !/^[A-Za-z-]+$/.test(requested)) return empty('invalid_genus');
 
   try {
-    const response = await fetch(
+    // Bounded, with one retry while the backend wakes; without a timeout a
+    // slow first answer left the exhibit on "Loading…" indefinitely (#231).
+    const response = await fetchWithColdStartRetry(
       `${CALYX_BACKEND_BASE_URL}/api/platform/homepage/genus/${encodeURIComponent(requested)}/species-exhibit?limit=9`,
-      { signal, headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json' } },
+      signal,
     );
+    if (!response) return empty('unavailable');
     if (response.status === 400) return empty('invalid_genus');
     if (response.status === 404 || response.status === 503) return empty('unavailable');
     if (!response.ok) return empty('service_error');
