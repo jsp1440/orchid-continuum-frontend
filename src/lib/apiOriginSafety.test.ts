@@ -66,6 +66,18 @@ describe('apiRequest when the origin is unconfigured', () => {
     // against the app's own origin.
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('reads the deployment origin from the live environment, not a snapshot', async () => {
+    // Regression guard for the Render build: if api.ts reads a frozen copy of
+    // the environment, vi.stubEnv cannot override what Render injected and
+    // the unconfigured-path test above fails only on Render. A distinct
+    // stubbed origin must be the one the freshly imported module sees.
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api-origin-probe.invalid');
+    vi.resetModules();
+    const { API_BASE_URL: isolatedBase, API_CONFIGURED } = await import('./api');
+    expect(isolatedBase).toBe('https://api-origin-probe.invalid');
+    expect(API_CONFIGURED).toBe(true);
+  });
 });
 
 describe('isJsonContentType', () => {
