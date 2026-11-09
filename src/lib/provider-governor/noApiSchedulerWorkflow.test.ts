@@ -8,9 +8,10 @@ const wrapper = read('orchid-budgeted-completion-lane');
 const paidProviderPattern = /anthropics\/claude-code-action|google-gemini|openai\/|ANTHROPIC_API_KEY|GEMINI_API_KEY|OPENAI_API_KEY|secrets:\s*inherit/i;
 
 describe('canonical scheduler preserves governed provider policy', () => {
-  it('has a single offset five-minute timer and a compatibility alias to the same graph planner', () => {
-    const doc = yaml.load(canonical) as { on: { schedule: Array<{ cron: string }> } };
-    expect(doc.on.schedule).toEqual([{ cron: '2/5 * * * *' }]);
+  it('keeps the recurring timer paused during runner recovery and preserves the compatibility alias', () => {
+    const doc = yaml.load(canonical) as { on: { schedule?: Array<{ cron: string }> } };
+    expect(doc.on.schedule).toBeUndefined();
+    expect(canonical).toContain('Scheduled launches paused pending recovery from runner nonexecution.');
     expect(alias).not.toContain('schedule:');
     expect(alias).toContain('uses: ./.github/workflows/orchid-continuous-completion.yml');
     expect(canonical).toContain('scripts/oc-dispatch-runtime.ts plan');
