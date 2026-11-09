@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ExternalLink, LockKeyhole, RefreshCw, Search } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
+import ScientificCapabilityPanel from '@/components/command-center/ScientificCapabilityPanel';
 import { validateOwnerSession } from '@/lib/ownerOperationsConsole';
 import {
   dependencyNeighbours,
@@ -142,6 +143,8 @@ const CommandCenter: React.FC = () => {
             <RefreshCw className={`h-4 w-4 ${load.state === 'loading' ? 'animate-spin' : ''}`} /> Refresh
           </button>
         </header>
+
+        <ScientificCapabilityPanel />
 
         {load.state === 'unauthorized' ? (
           <p role="alert" className="mt-5 rounded-lg border border-red-300/25 bg-red-300/10 p-4 text-sm text-red-100">
