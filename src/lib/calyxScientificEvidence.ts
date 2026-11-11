@@ -384,7 +384,7 @@ export function readSavedMessageEvidence(metadata: unknown): CalyxEvidenceView {
   return view;
 }
 
-/** The most evidence sentences the panel renders for one turn. */
+/** How many evidence sentences the panel lists before the rest go behind a disclosure. All stay in the page. */
 export const CALYX_EVIDENCE_SENTENCE_LIMIT = 100;
 
 /** Whether a view puts anything on the page. */

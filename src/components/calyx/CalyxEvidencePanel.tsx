@@ -58,7 +58,9 @@ function Provenance({ provenance, complete }: { provenance: CalyxEvidenceProvena
       <summary className="cursor-pointer text-xs font-medium">Provenance</summary>
       <dl className="mt-2 space-y-1.5 text-xs leading-5">
         <Row label="Mission state" value={provenance.missionState ? words(provenance.missionState) : null} />
-        <Row label="Review status" value={provenance.reviewStatus ? words(provenance.reviewStatus) : null} />
+        {/* The mission's own field, labelled as the backend's report so it cannot
+            read as this page's judgement of the records. */}
+        <Row label="Mission review status (as reported by the backend)" value={provenance.reviewStatus ? words(provenance.reviewStatus) : null} />
         <Row label="Publication" value={eligibility} />
         <Row label="Graph read" value={provenance.graphState ? words(provenance.graphState) : null} />
         <Row label="Graph completeness" value={provenance.graphCompleteness ? words(provenance.graphCompleteness) : null} />
@@ -203,7 +205,9 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
       <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
         {saved
           ? "Evidence records were retrieved when this turn was asked."
-          : "Evidence records were retrieved for this turn. The sentences are the records\u2019 own wording, not Calyx\u2019s interpretation."}
+          : shownSentences.length
+            ? "Evidence records were retrieved for this turn. The sentences are the records\u2019 own wording, not Calyx\u2019s interpretation."
+            : "Evidence records were retrieved for this turn."}
       </p>
 
       <dl className="mt-3 text-sm leading-6">
@@ -231,10 +235,20 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
             <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-6" data-testid="calyx-evidence-sentences">
               {shownSentences.map((sentence, index) => <li className="break-words" key={`${index}-${sentence.slice(0, 24)}`}>{sentence}</li>)}
             </ul>
+            {/* Nothing the backend sent may become unreachable: the answer text
+                above no longer carries these sentences, so the ones past the
+                limit stay in the page, behind a native disclosure. */}
             {hiddenCount > 0 ? (
-              <p className="mt-2 text-xs leading-5 text-muted-foreground" data-testid="calyx-evidence-more">
-                {hiddenCount.toLocaleString("en-US")} more sentence{hiddenCount === 1 ? "" : "s"} not shown.
-              </p>
+              <details className="mt-2" data-testid="calyx-evidence-more">
+                <summary className="cursor-pointer text-xs font-medium">
+                  Show {hiddenCount.toLocaleString("en-US")} more sentence{hiddenCount === 1 ? "" : "s"}
+                </summary>
+                <ul className="mt-2 list-disc space-y-1.5 pl-5 text-sm leading-6" data-testid="calyx-evidence-sentences-more">
+                  {evidence.sentences.slice(CALYX_EVIDENCE_SENTENCE_LIMIT).map((sentence, index) => (
+                    <li className="break-words" key={`${index + CALYX_EVIDENCE_SENTENCE_LIMIT}-${sentence.slice(0, 24)}`}>{sentence}</li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
           </>
         ) : (

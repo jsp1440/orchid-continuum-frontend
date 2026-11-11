@@ -182,6 +182,32 @@ describe("CalyxWorkspace scientific evidence", () => {
     expect(occurrences(container.textContent ?? "", "What the Continuum's evidence records show")).toBe(1);
   });
 
+  it.each([100, 101, 150])("keeps every one of %i backend sentences on the page exactly once", async (count) => {
+    // Synthetic length: no recording has this many sentences. Each sentence is
+    // bracketed so "Sentence 1" cannot match inside "Sentence 10".
+    const reading = Array.from({ length: count }, (_unused, index) => `[Sentence ${index + 1} of ${count}]`);
+    const turn = {
+      ...turns.available,
+      answer: `Body.\n\nWhat the Continuum's evidence records show:\n${reading.map((sentence) => `- ${sentence}`).join("\n")}`,
+      scientific_evidence: { ...turns.available.scientific_evidence, reading },
+    };
+    await ask(turn, true);
+
+    const pageText = container.textContent ?? "";
+    for (const sentence of reading) expect(occurrences(pageText, sentence)).toBe(1);
+    // They are in the panel, as list items, in order; the answer keeps its body.
+    const items = Array.from(panels()[0].querySelectorAll('[data-testid="calyx-evidence-sentences"] li, [data-testid="calyx-evidence-sentences-more"] li')).map((item) => item.textContent);
+    expect(items).toEqual(reading);
+    expect(answerBubble()?.textContent?.trim()).toBe("Body.");
+    const more = panels()[0].querySelector<HTMLElement>('[data-testid="calyx-evidence-more"]');
+    if (count > 100) {
+      expect(more?.tagName).toBe("DETAILS");
+      expect(more?.querySelector("summary")?.textContent).toBe(`Show ${count - 100} more sentence${count - 100 === 1 ? "" : "s"}`);
+    } else {
+      expect(more).toBeNull();
+    }
+  });
+
   it("renders today's production response (no block) exactly as before: whole answer, no panel", async () => {
     await ask(turns.not_applicable_silent, false);
     expect(panels()).toHaveLength(0);

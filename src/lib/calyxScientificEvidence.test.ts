@@ -241,6 +241,14 @@ describe("composeAnswerWithEvidence", () => {
     }
   });
 
+  it.each([100, 101, 150])("hands all %i sentences to the panel when it takes them out of the answer", (count) => {
+    const reading = Array.from({ length: count }, (_unused, index) => `[Sentence ${index + 1} of ${count}]`);
+    const answer = `Body.\n\n${CALYX_EVIDENCE_ANSWER_HEADING}:\n${reading.map((sentence) => `- ${sentence}`).join("\n")}`;
+    const result = composeAnswerWithEvidence(answer, readScientificEvidence({ status: "available", reading }));
+    expect(result.answerText).toBe("Body.");
+    expect(result.evidence.sentences).toEqual(reading);
+  });
+
   it("returns the view it was given, unchanged, in every case", () => {
     const cases = [
       readScientificEvidence(turns.available.scientific_evidence),

@@ -149,28 +149,56 @@ describe("CalyxEvidencePanel: available with gaps", () => {
     expect(panel()?.textContent).not.toMatch(/marks this as a reviewed|is a reviewed conclusion|has been reviewed|\breviewed and\b/i);
   });
 
-  it("renders at most 100 sentences and states exactly how many were left out", () => {
-    const reading = Array.from({ length: 250 }, (_unused, index) => `Sentence ${index + 1}.`);
+  const numbered = (count: number) => Array.from({ length: count }, (_unused, index) => `Sentence ${index + 1}.`);
+  const allSentenceItems = () => Array.from(panel()?.querySelectorAll('[data-testid="calyx-evidence-sentences"] li, [data-testid="calyx-evidence-sentences-more"] li') ?? []).map((item) => item.textContent);
+
+  it("lists the first 100 sentences and keeps the rest in the page behind a native disclosure", () => {
+    const reading = numbered(250);
     render(readScientificEvidence({ status: "available", reading }));
-    const items = Array.from(byTestId("calyx-evidence-sentences")?.querySelectorAll("li") ?? []);
-    expect(items).toHaveLength(100);
-    expect(items[0].textContent).toBe("Sentence 1.");
-    expect(items[99].textContent).toBe("Sentence 100.");
-    expect(byTestId("calyx-evidence-more")?.textContent).toBe("150 more sentences not shown.");
+    const first = Array.from(byTestId("calyx-evidence-sentences")?.querySelectorAll("li") ?? []);
+    expect(first).toHaveLength(100);
+    expect(first[99].textContent).toBe("Sentence 100.");
+    const more = byTestId("calyx-evidence-more") as HTMLDetailsElement;
+    expect(more.tagName).toBe("DETAILS");
+    expect(more.open).toBe(false);
+    expect(more.querySelector("summary")?.textContent).toBe("Show 150 more sentences");
+    expect(byTestId("calyx-evidence-sentences-more")?.tagName).toBe("UL");
+    expect(byTestId("calyx-evidence-sentences-more")?.querySelectorAll("li")).toHaveLength(150);
+    // Every sentence, once, in order.
+    expect(allSentenceItems()).toEqual(reading);
   });
 
-  it("counts a single hidden sentence in the singular and shows no line at the limit", () => {
-    render(readScientificEvidence({ status: "available", reading: Array.from({ length: 101 }, (_unused, index) => `S${index}.`) }));
-    expect(byTestId("calyx-evidence-more")?.textContent).toBe("1 more sentence not shown.");
-    render(readScientificEvidence({ status: "available", reading: Array.from({ length: 100 }, (_unused, index) => `S${index}.`) }));
-    expect(byTestId("calyx-evidence-sentences")?.querySelectorAll("li")).toHaveLength(100);
+  it("counts a single extra sentence in the singular and shows no disclosure at the limit", () => {
+    render(readScientificEvidence({ status: "available", reading: numbered(101) }));
+    expect(byTestId("calyx-evidence-more")?.querySelector("summary")?.textContent).toBe("Show 1 more sentence");
+    expect(allSentenceItems()).toEqual(numbered(101));
+    render(readScientificEvidence({ status: "available", reading: numbered(100) }));
     expect(byTestId("calyx-evidence-more")).toBeNull();
+    expect(allSentenceItems()).toEqual(numbered(100));
   });
 
   it("counts only real sentences when reading holds non-strings", () => {
-    const reading = [...Array.from({ length: 101 }, (_unused, index) => `S${index}.`), 5, null, { text: "x" }, "  "];
-    render(readScientificEvidence({ status: "available", reading }));
-    expect(byTestId("calyx-evidence-more")?.textContent).toBe("1 more sentence not shown.");
+    render(readScientificEvidence({ status: "available", reading: [...numbered(101), 5, null, { text: "x" }, "  "] }));
+    expect(byTestId("calyx-evidence-more")?.querySelector("summary")?.textContent).toBe("Show 1 more sentence");
+  });
+
+  it("does not call the sentences the records' own wording when there are none", () => {
+    render(readScientificEvidence({ ...turns.available.scientific_evidence, reading: [] }));
+    expect(panel()?.textContent).not.toContain("own wording");
+    expect(panel()?.textContent).toContain("Evidence records were retrieved for this turn.");
+    expect(byTestId("calyx-evidence-empty")).not.toBeNull();
+    render(readScientificEvidence(turns.available.scientific_evidence));
+    expect(panel()?.textContent).toContain("own wording");
+  });
+
+  it("labels the mission's review status as the backend's report, next to the unreviewed line", () => {
+    const raw = { ...turns.available.scientific_evidence, mission: { ...turns.available.scientific_evidence.mission, review_status: "REVIEWED" } };
+    render(readScientificEvidence(raw));
+    const rows = Array.from(byTestId("calyx-evidence-provenance")?.querySelectorAll("dl > div") ?? []);
+    const row = rows.find((item) => item.querySelector("dd")?.textContent === "reviewed");
+    expect(row?.querySelector("dt")?.textContent).toBe("Mission review status (as reported by the backend)");
+    expect(rows.some((item) => item.querySelector("dt")?.textContent === "Review status")).toBe(false);
+    expect(byTestId("calyx-evidence-boundary")?.textContent).toContain("Unreviewed. These are records, not a reviewed conclusion.");
   });
 
   it("keeps the sentences, boundary and provenance out of the transcript's live announcement", () => {
