@@ -132,6 +132,10 @@ describe("readScientificEvidence", () => {
     ["a non-string status", { status: 1, reading: ["x"] }],
     ["an empty status", { status: "  ", reading: ["x"] }],
     ["another schema", { ...turns.available.scientific_evidence, schema: "oc.calyx-scientific-evidence-context.v2" }],
+    ["a numeric schema", { ...turns.available.scientific_evidence, schema: 123 }],
+    ["an object schema", { ...turns.available.scientific_evidence, schema: {} }],
+    ["a null schema", { ...turns.available.scientific_evidence, schema: null }],
+    ["a schema with stray whitespace", { ...turns.available.scientific_evidence, schema: " oc.calyx-scientific-evidence-context.v1" }],
     ["available with reading that is not a list", { ...turns.available.scientific_evidence, reading: "Subject: x" }],
   ])("fails closed on a malformed block: %s", (_label, raw) => {
     const view = readScientificEvidence(raw);
@@ -140,6 +144,22 @@ describe("readScientificEvidence", () => {
     expect(view.pollinationVerified).toBeNull();
     expect(view.species).toBeNull();
   });
+
+  it("accepts a block that leaves the schema key out", () => {
+    const { schema: _dropped, ...withoutSchema } = turns.available.scientific_evidence;
+    expect(readScientificEvidence(withoutSchema).kind).toBe("available");
+    expect(readScientificEvidence({ ...withoutSchema, schema: undefined }).kind).toBe("available");
+  });
+
+  it.each([" available ", "available ", "Available", "AVAILABLE", "available\n"])(
+    "does not read %j as the available status",
+    (status) => {
+      const view = readScientificEvidence({ ...turns.available.scientific_evidence, status });
+      expect(view.kind).toBe("unrecognised");
+      expect(view.sentences).toEqual([]);
+      expect(view.pollinationVerified).toBeNull();
+    },
+  );
 
   it("drops non-string and blank entries from reading rather than printing them", () => {
     const view = readScientificEvidence({ status: "available", reading: ["One.", 2, null, "  ", { text: "x" }, " Two. "] });
@@ -201,6 +221,36 @@ describe("composeAnswerWithEvidence", () => {
     expect(composeAnswerWithEvidence(answer, evidence).answerText).toBe(answer);
   });
 
+  it("never lifts text from the answer into the panel when reading is empty", () => {
+    // The reply provider writes the answer; a model can be prompted to write
+    // the heading. Text under it is not the backend's records.
+    const answer = "A\n\nWhat the Continuum's evidence records show:\n- LLM INVENTED: verified pollinator is Bee";
+    const result = composeAnswerWithEvidence(answer, readScientificEvidence({ status: "available", reading: [] }));
+    expect(result.evidence.sentences).toEqual([]);
+    expect(result.answerText).toBe(answer);
+  });
+
+  it("never shows a sentence that was not in reading, whatever the answer says", () => {
+    const answer = `Intro.\n\n${CALYX_EVIDENCE_ANSWER_HEADING}:\n- One.\n- LLM INVENTED.`;
+    for (const reading of [[], ["One."], ["One.", 7, null, { text: "LLM INVENTED." }], [42, null]]) {
+      const result = composeAnswerWithEvidence(answer, readScientificEvidence({ status: "available", reading }));
+      expect(result.evidence.sentences).not.toContain("LLM INVENTED.");
+      expect(result.evidence.sentences.every((sentence) => reading.includes(sentence))).toBe(true);
+      // The invented line is not hidden either: it stays where the provider wrote it.
+      expect(result.answerText).toBe(answer);
+    }
+  });
+
+  it("returns the view it was given, unchanged, in every case", () => {
+    const cases = [
+      readScientificEvidence(turns.available.scientific_evidence),
+      readScientificEvidence({ status: "available", reading: [] }),
+      readSavedMessageEvidence(turns.available.saved_message_metadata),
+      readScientificEvidence(turns.not_resolved.scientific_evidence),
+    ];
+    for (const view of cases) expect(composeAnswerWithEvidence(turns.available.answer, view).evidence).toBe(view);
+  });
+
   it("keeps the answer whole when no block came with it", () => {
     const answer = turns.available.answer;
     const result = composeAnswerWithEvidence(answer, readScientificEvidence(undefined));
@@ -252,10 +302,24 @@ describe("readSavedMessageEvidence", () => {
     expect(view.pollinationVerified).toBeNull();
     expect(view.provenance.reviewStatus).toBeNull();
     expect(view.boundary.isReviewedConclusion).toBeNull();
-    // The sentences come from the answer text.
+    // The sentences are only in the answer text, where they cannot be verified
+    // as the records' wording, so they are neither rebuilt nor removed.
     const result = composeAnswerWithEvidence(turns.available.answer, view);
-    expect(result.evidence.sentences).toEqual(turns.available.scientific_evidence.reading);
-    expect(result.answerText).not.toContain(CALYX_EVIDENCE_ANSWER_HEADING);
+    expect(result.evidence.sentences).toEqual([]);
+    expect(result.answerText).toBe(turns.available.answer);
+  });
+
+  it("does not lift invented text into the panel on reload either", () => {
+    const answer = "A\n\nWhat the Continuum's evidence records show:\n- LLM INVENTED: verified pollinator is Bee";
+    const result = composeAnswerWithEvidence(answer, readSavedMessageEvidence({ scientific_evidence_status: "available" }));
+    expect(result.evidence.sentences).toEqual([]);
+    expect(result.answerText).toBe(answer);
+  });
+
+  it("requires the saved status to match exactly", () => {
+    expect(readSavedMessageEvidence({ scientific_evidence_status: " available " }).kind).toBe("unrecognised");
+    expect(readSavedMessageEvidence({ scientific_evidence_status: "  " }).kind).toBe("absent");
+    expect(readSavedMessageEvidence({ scientific_evidence_status: 1 }).kind).toBe("absent");
   });
 
   it("is quiet for saved turns where the path was off, unasked or did not apply", () => {

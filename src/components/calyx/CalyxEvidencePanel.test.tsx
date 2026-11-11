@@ -126,23 +126,91 @@ describe("CalyxEvidencePanel: available with gaps", () => {
     expect(byTestId("calyx-evidence-empty")?.textContent).toContain("missing evidence, not evidence of absence");
   });
 
-  it("does not claim a boundary the block did not report", () => {
+  it("does not claim a boundary the block did not report, and still says unreviewed", () => {
     render(readScientificEvidence({ status: "available", reading: ["One."] }));
     const text = byTestId("calyx-evidence-boundary")?.textContent ?? "";
-    expect(text).toContain("were not reported");
-    expect(text).not.toContain("Read-only.");
-    expect(text).not.toContain("Nothing was written");
+    expect(text).toBe("Review state not reported; treat these records as unreviewed.");
     expect(byTestId("calyx-evidence-species")?.textContent).toBe("Not reported");
   });
 
-  it("shows a restored saved turn with its sentences and says what was not kept", () => {
-    const { evidence } = composeAnswerWithEvidence(turns.available.answer, readSavedMessageEvidence(turns.available.saved_message_metadata));
+  it.each([
+    ["false", false, "Unreviewed. These are records, not a reviewed conclusion."],
+    ["missing", undefined, "Review state not reported; treat these records as unreviewed."],
+    ["null", null, "Review state not reported; treat these records as unreviewed."],
+    ["a string", "false", "Review state not reported; treat these records as unreviewed."],
+    ["true (never sent by this contract)", true, "Review state could not be confirmed by this page; treat these records as unreviewed."],
+  ])("review line when is_reviewed_conclusion is %s, alongside other reported flags", (_label, value, expected) => {
+    render(readScientificEvidence({ status: "available", reading: ["One."], read_only: true, knowledge_graph_mutation: false, is_reviewed_conclusion: value }));
+    const lines = Array.from(byTestId("calyx-evidence-boundary")?.querySelectorAll("li") ?? []).map((item) => item.textContent);
+    expect(lines[0]).toBe(expected);
+    expect(lines).toContain("Read-only. Retrieving these records changed nothing.");
+    expect(lines.filter((line) => /unreviewed/i.test(line ?? ""))).toHaveLength(1);
+    // Nothing on the panel may read as a statement that review happened.
+    expect(panel()?.textContent).not.toMatch(/marks this as a reviewed|is a reviewed conclusion|has been reviewed|\breviewed and\b/i);
+  });
+
+  it("renders at most 100 sentences and states exactly how many were left out", () => {
+    const reading = Array.from({ length: 250 }, (_unused, index) => `Sentence ${index + 1}.`);
+    render(readScientificEvidence({ status: "available", reading }));
+    const items = Array.from(byTestId("calyx-evidence-sentences")?.querySelectorAll("li") ?? []);
+    expect(items).toHaveLength(100);
+    expect(items[0].textContent).toBe("Sentence 1.");
+    expect(items[99].textContent).toBe("Sentence 100.");
+    expect(byTestId("calyx-evidence-more")?.textContent).toBe("150 more sentences not shown.");
+  });
+
+  it("counts a single hidden sentence in the singular and shows no line at the limit", () => {
+    render(readScientificEvidence({ status: "available", reading: Array.from({ length: 101 }, (_unused, index) => `S${index}.`) }));
+    expect(byTestId("calyx-evidence-more")?.textContent).toBe("1 more sentence not shown.");
+    render(readScientificEvidence({ status: "available", reading: Array.from({ length: 100 }, (_unused, index) => `S${index}.`) }));
+    expect(byTestId("calyx-evidence-sentences")?.querySelectorAll("li")).toHaveLength(100);
+    expect(byTestId("calyx-evidence-more")).toBeNull();
+  });
+
+  it("counts only real sentences when reading holds non-strings", () => {
+    const reading = [...Array.from({ length: 101 }, (_unused, index) => `S${index}.`), 5, null, { text: "x" }, "  "];
+    render(readScientificEvidence({ status: "available", reading }));
+    expect(byTestId("calyx-evidence-more")?.textContent).toBe("1 more sentence not shown.");
+  });
+
+  it("keeps the sentences, boundary and provenance out of the transcript's live announcement", () => {
+    render(readScientificEvidence(turns.available.scientific_evidence));
+    const detail = byTestId("calyx-evidence-detail");
+    expect(detail?.getAttribute("aria-live")).toBe("off");
+    for (const id of ["calyx-evidence-sentences", "calyx-evidence-boundary", "calyx-evidence-provenance"]) {
+      expect(detail?.contains(byTestId(id))).toBe(true);
+    }
+    // The heading and the pollination line are still announced with the turn.
+    expect(detail?.contains(panel()?.querySelector("h3") ?? null)).toBe(false);
+    expect(detail?.contains(byTestId("calyx-evidence-pollination"))).toBe(false);
+  });
+
+  it("shows a reloaded turn with no sentences and says they were not re-verified", () => {
+    const { evidence, answerText } = composeAnswerWithEvidence(turns.available.answer, readSavedMessageEvidence(turns.available.saved_message_metadata));
     render(evidence);
-    expect(byTestId("calyx-evidence-sentences")?.querySelectorAll("li")).toHaveLength(22);
+    expect(answerText).toBe(turns.available.answer);
+    expect(byTestId("calyx-evidence-sentences")).toBeNull();
+    expect(byTestId("calyx-evidence-empty")).toBeNull();
+    expect(byTestId("calyx-evidence-saved-note")?.textContent).toContain("The evidence sentences are in the reply above.");
+    expect(byTestId("calyx-evidence-saved-note")?.textContent).toContain("not re-verified");
+    expect(panel()?.textContent).not.toContain("own wording");
+    expect(panel()?.textContent).not.toContain("Subject: Catasetum barbatum");
     expect(byTestId("calyx-evidence-species")?.textContent).toBe("Not reported in the saved conversation");
     expect(byTestId("calyx-evidence-pollination")?.dataset.pollination).toBe("not-reported");
-    expect(byTestId("calyx-evidence-boundary")?.textContent).toContain("Treat these records as unreviewed.");
-    expect(byTestId("calyx-evidence-provenance")?.textContent).toContain("loaded from a saved conversation");
+    expect(byTestId("calyx-evidence-boundary")?.textContent).toBe("Review state not reported; treat these records as unreviewed.");
+    const provenance = byTestId("calyx-evidence-provenance")?.textContent ?? "";
+    expect(provenance).toContain(turns.available.scientific_evidence.mission.mission_id);
+    expect(provenance).toContain(turns.available.scientific_evidence.evidence_packet_id);
+    expect(provenance).toContain("loaded from a saved conversation");
+  });
+
+  it("does not show text a reply wrote under the evidence heading as records (live or reloaded)", () => {
+    const answer = "A\n\nWhat the Continuum's evidence records show:\n- LLM INVENTED: verified pollinator is Bee";
+    for (const view of [readScientificEvidence({ status: "available", reading: [] }), readSavedMessageEvidence({ scientific_evidence_status: "available" })]) {
+      render(composeAnswerWithEvidence(answer, view).evidence);
+      expect(panel()?.textContent).not.toContain("LLM INVENTED");
+      expect(byTestId("calyx-evidence-sentences")).toBeNull();
+    }
   });
 });
 

@@ -218,17 +218,37 @@ describe("CalyxWorkspace scientific evidence", () => {
     expect(panels()).toHaveLength(0);
   });
 
-  it("rebuilds the panel for a conversation restored from the server", async () => {
+  it("shows status and identifiers, not sentences, for a conversation restored from the server", async () => {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ conversationId: CONVERSATION_ID, projectId: "calyx-speak" }));
     mocks.getCalyxConversation.mockResolvedValue(conversation(turns.available, true));
     await renderPage();
 
     expect(mocks.sendCalyxTurn).not.toHaveBeenCalled();
     expect(panels()).toHaveLength(1);
-    expect(panels()[0].querySelectorAll('[data-testid="calyx-evidence-sentences"] li')).toHaveLength(22);
+    expect(panels()[0].dataset.evidenceKind).toBe("available");
+    // The saved conversation keeps no `reading`, so the sentences stay in the
+    // reply, whole, and the panel does not present them as records.
+    expect(panels()[0].querySelector('[data-testid="calyx-evidence-sentences"]')).toBeNull();
+    expect(panels()[0].textContent).not.toContain(FIRST_SENTENCE);
+    expect(panels()[0].querySelector('[data-testid="calyx-evidence-saved-note"]')?.textContent).toContain("not re-verified");
+    expect(answerBubble()?.textContent).toContain(FIRST_SENTENCE);
     expect(occurrences(container.textContent ?? "", FIRST_SENTENCE)).toBe(1);
+    expect(panels()[0].textContent).toContain(turns.available.scientific_evidence.evidence_packet_id);
     // The saved message does not keep the flag, so nothing is said either way.
     expect(panels()[0].querySelector('[data-testid="calyx-evidence-pollination"]')?.getAttribute("data-pollination")).toBe("not-reported");
+  });
+
+  it("does not move text a reply wrote under the evidence heading into the panel", async () => {
+    const invented = "LLM INVENTED: verified pollinator is Bee";
+    const turn = {
+      ...turns.available,
+      answer: `A reply.\n\nWhat the Continuum's evidence records show:\n- ${invented}`,
+      scientific_evidence: { ...turns.available.scientific_evidence, reading: [] },
+    };
+    await ask(turn, true);
+    expect(panels()).toHaveLength(1);
+    expect(panels()[0].textContent).not.toContain(invented);
+    expect(answerBubble()?.textContent).toContain(invented);
   });
 
   it("forgets a turn's evidence when a new conversation is started", async () => {

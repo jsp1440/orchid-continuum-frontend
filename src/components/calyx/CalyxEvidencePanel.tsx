@@ -2,6 +2,7 @@ import { useId } from "react";
 
 import {
   CALYX_EVIDENCE_ANSWER_HEADING,
+  CALYX_EVIDENCE_SENTENCE_LIMIT,
   evidenceIsVisible,
   type CalyxEvidenceBoundary,
   type CalyxEvidenceProvenance,
@@ -17,7 +18,9 @@ import {
  *   - states that pollination is verified unless the block says so, or that it
  *     is not verified when the block did not report it;
  *   - presents a boundary (read-only, unreviewed, ...) the block did not report;
- *   - shows sentences from a block it could not read.
+ *   - shows sentences from a block it could not read;
+ *   - shows as an evidence sentence anything that did not arrive in the block's
+ *     own `reading` (text in the reply is the reply provider's, not the records').
  *
  * A turn with no block, or a block that says the path was off or did not apply,
  * renders nothing, the same way the citation list does when it is empty.
@@ -72,11 +75,18 @@ function Provenance({ provenance, complete }: { provenance: CalyxEvidenceProvena
   );
 }
 
-/** Each line is printed only for a value the backend actually reported. */
+/**
+ * The review line is always printed and never implies review: only an explicit
+ * `false` is stated as the backend's report, and every other value (missing,
+ * not a boolean, or `true`, which this contract never sends) reads as
+ * "treat as unreviewed". The other lines are printed only for a value the
+ * backend actually reported.
+ */
 function boundaryLines(boundary: CalyxEvidenceBoundary): string[] {
   const lines: string[] = [];
   if (boundary.isReviewedConclusion === false) lines.push("Unreviewed. These are records, not a reviewed conclusion.");
-  if (boundary.isReviewedConclusion === true) lines.push("The backend marks this as a reviewed conclusion.");
+  else if (boundary.isReviewedConclusion === null) lines.push("Review state not reported; treat these records as unreviewed.");
+  else lines.push("Review state could not be confirmed by this page; treat these records as unreviewed.");
   if (boundary.readOnly === true) lines.push("Read-only. Retrieving these records changed nothing.");
   if (boundary.knowledgeGraphMutation === false) lines.push("Nothing was written to the Knowledge Graph.");
   if (boundary.knowledgeGraphMutation === true) lines.push("The backend reports a Knowledge Graph write for this turn.");
@@ -87,17 +97,9 @@ function boundaryLines(boundary: CalyxEvidenceBoundary): string[] {
 }
 
 function Boundary({ boundary }: { boundary: CalyxEvidenceBoundary }) {
-  const lines = boundaryLines(boundary);
-  if (!lines.length) {
-    return (
-      <p className="mt-3 text-xs leading-5 text-muted-foreground" data-testid="calyx-evidence-boundary">
-        Review and write status were not reported for this turn. Treat these records as unreviewed.
-      </p>
-    );
-  }
   return (
     <ul className="mt-3 list-disc space-y-0.5 pl-5 text-xs leading-5 text-muted-foreground" data-testid="calyx-evidence-boundary">
-      {lines.map((line) => <li key={line}>{line}</li>)}
+      {boundaryLines(boundary).map((line) => <li key={line}>{line}</li>)}
     </ul>
   );
 }
@@ -185,6 +187,9 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
     );
   }
 
+  const shownSentences = evidence.sentences.slice(0, CALYX_EVIDENCE_SENTENCE_LIMIT);
+  const hiddenCount = evidence.sentences.length - shownSentences.length;
+
   return (
     <section
       aria-labelledby={headingId}
@@ -194,7 +199,9 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
     >
       <h3 className="text-sm font-semibold" id={headingId}>{CALYX_EVIDENCE_ANSWER_HEADING}</h3>
       <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-        Evidence records were retrieved for this turn. The sentences are the records&rsquo; own wording, not Calyx&rsquo;s interpretation.
+        {saved
+          ? "Evidence records were retrieved when this turn was asked."
+          : "Evidence records were retrieved for this turn. The sentences are the records\u2019 own wording, not Calyx\u2019s interpretation."}
       </p>
 
       <dl className="mt-3 text-sm leading-6">
@@ -208,18 +215,35 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
 
       <div className="mt-2"><PollinationStatus verified={evidence.pollinationVerified} /></div>
 
-      {evidence.sentences.length ? (
-        <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-6" data-testid="calyx-evidence-sentences">
-          {evidence.sentences.map((sentence, index) => <li className="break-words" key={`${index}-${sentence.slice(0, 24)}`}>{sentence}</li>)}
-        </ul>
-      ) : (
-        <p className="mt-3 text-sm leading-6 text-muted-foreground" data-testid="calyx-evidence-empty">
-          The backend returned no evidence sentences for this turn. That is missing evidence, not evidence of absence.
-        </p>
-      )}
+      {/* The transcript is a polite live region. The heading, species and
+          pollination line above are announced with the turn; the detail below
+          is switched off for announcement so a screen reader is not read every
+          sentence after each turn. It stays fully readable by navigation. */}
+      <div aria-live="off" data-testid="calyx-evidence-detail">
+        {saved ? (
+          <p className="mt-3 text-sm leading-6 text-muted-foreground" data-testid="calyx-evidence-saved-note">
+            The evidence sentences are in the reply above. A saved conversation keeps only the status and the two identifiers below, so the sentences were not re-verified against the records on reload and are not repeated here.
+          </p>
+        ) : shownSentences.length ? (
+          <>
+            <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm leading-6" data-testid="calyx-evidence-sentences">
+              {shownSentences.map((sentence, index) => <li className="break-words" key={`${index}-${sentence.slice(0, 24)}`}>{sentence}</li>)}
+            </ul>
+            {hiddenCount > 0 ? (
+              <p className="mt-2 text-xs leading-5 text-muted-foreground" data-testid="calyx-evidence-more">
+                {hiddenCount.toLocaleString("en-US")} more sentence{hiddenCount === 1 ? "" : "s"} not shown.
+              </p>
+            ) : null}
+          </>
+        ) : (
+          <p className="mt-3 text-sm leading-6 text-muted-foreground" data-testid="calyx-evidence-empty">
+            The backend returned no evidence sentences for this turn. That is missing evidence, not evidence of absence.
+          </p>
+        )}
 
-      <Boundary boundary={evidence.boundary} />
-      <Provenance provenance={evidence.provenance} complete={!saved} />
+        <Boundary boundary={evidence.boundary} />
+        <Provenance complete={!saved} provenance={evidence.provenance} />
+      </div>
     </section>
   );
 }

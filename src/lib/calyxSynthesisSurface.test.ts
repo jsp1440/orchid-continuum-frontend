@@ -51,6 +51,8 @@ describe('Calyx answer rendering keeps synthesis primary', () => {
       'Evidence vs inference',
     ]) {
       expect(workspace).not.toContain(inventoryHeading);
+      // The evidence panel sits under the answer, so it is held to the same rule.
+      expect(source('components/calyx/CalyxEvidencePanel.tsx')).not.toContain(inventoryHeading);
     }
   });
 });

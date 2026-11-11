@@ -216,12 +216,16 @@ function boundaryOf(raw: Record<string, unknown>): CalyxEvidenceBoundary {
 export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
   if (raw === undefined || raw === null) return emptyView("absent", "turn");
   if (!isRecord(raw)) return emptyView("malformed", "turn");
-  const status = text(raw.status);
-  if (!status) return emptyView("malformed", "turn");
-  // A different schema is a different contract. Its fields may mean something
-  // else, so nothing is read from it.
-  const schema = text(raw.schema);
-  if (schema !== null && schema !== CALYX_SCIENTIFIC_EVIDENCE_SCHEMA) return emptyView("malformed", "turn", status);
+  // The schema key may be left out, but if it is sent it must be exactly the
+  // v1 string. Any other value (another version, a number, null) is a
+  // different contract whose fields may mean something else.
+  if ("schema" in raw && raw.schema !== undefined && raw.schema !== CALYX_SCIENTIFIC_EVIDENCE_SCHEMA) {
+    return emptyView("malformed", "turn", typeof raw.status === "string" ? raw.status : null);
+  }
+  if (typeof raw.status !== "string" || !raw.status.trim()) return emptyView("malformed", "turn");
+  // Exact match, no trimming or case folding: " available " is not a status
+  // the backend sends, so it is not read as one.
+  const status = raw.status;
   if (!KNOWN_STATUSES.includes(status as CalyxScientificEvidenceStatus)) return emptyView("unrecognised", "turn", status);
 
   const base: CalyxEvidenceView = {
@@ -317,22 +321,32 @@ export type CalyxAnswerWithEvidence = {
  * Decide what the answer prints and what the evidence panel prints, so that the
  * same sentences are not shown twice and none are dropped.
  *
- * Text is removed from the answer only when the panel shows that same text. If
- * the appended section and the structured `reading` disagree, the answer is
- * left whole: printing something twice is better than hiding it.
+ * The panel shows as evidence sentences ONLY the strings that arrived in the
+ * block's own `reading`. Nothing is ever lifted from the answer text into the
+ * panel: the answer is written by the reply provider, and a model can be
+ * prompted to write the evidence heading itself, so text found under that
+ * heading is not known to be the backend's records.
+ *
+ * Text is removed from the answer only on a turn whose block arrived with the
+ * response, and only when every sentence removed is one the panel prints from
+ * `reading`. Otherwise the answer is left whole: printing something twice is
+ * better than hiding it or relabelling it.
+ *
+ * A turn loaded from a saved conversation has no `reading` (the backend keeps
+ * only the status and two identifiers), so its answer is always left whole and
+ * its panel shows no sentences.
  */
 export function composeAnswerWithEvidence(content: string, evidence: CalyxEvidenceView): CalyxAnswerWithEvidence {
-  const parts = splitEvidenceSection(content);
+  const whole: CalyxAnswerWithEvidence = { answerText: content, evidence };
+  if (evidence.origin !== "turn") return whole;
 
   if (evidence.kind === "available") {
-    if (!parts.evidenceSentences.length) return { answerText: content, evidence };
-    if (!evidence.sentences.length) {
-      // The saved-message path: the sentences exist only in the answer text.
-      return { answerText: parts.body, evidence: { ...evidence, sentences: parts.evidenceSentences } };
-    }
+    if (!evidence.sentences.length) return whole;
+    const parts = splitEvidenceSection(content);
+    if (!parts.evidenceSentences.length) return whole;
     const shown = new Set(evidence.sentences);
     const allShown = parts.evidenceSentences.every((sentence) => shown.has(sentence));
-    return { answerText: allShown ? parts.body : content, evidence };
+    return allShown ? { answerText: parts.body, evidence } : whole;
   }
 
   if ((evidence.kind === "not_applicable" || evidence.kind === "not_resolved" || evidence.kind === "unavailable") && evidence.explanation) {
@@ -340,7 +354,7 @@ export function composeAnswerWithEvidence(content: string, evidence: CalyxEviden
     return { answerText: body ?? content, evidence };
   }
 
-  return { answerText: content, evidence };
+  return whole;
 }
 
 /**
@@ -349,14 +363,16 @@ export function composeAnswerWithEvidence(content: string, evidence: CalyxEviden
  *
  * The backend stores three keys on the Calyx message
  * (`scientific_evidence_status`, `scientific_evidence_mission_id`,
- * `scientific_evidence_packet_id`) and the sentences inside the answer text.
- * The species, the pollination flag, the review status and the boundary flags
- * are not stored, so they stay "not reported".
+ * `scientific_evidence_packet_id`). The evidence sentences survive only inside
+ * the answer text, where they cannot be told apart from text the reply provider
+ * wrote, so they are not rebuilt: the panel shows the status and identifiers
+ * and points at the reply. The species, the pollination flag, the review status
+ * and the boundary flags are not stored either, so they stay "not reported".
  */
 export function readSavedMessageEvidence(metadata: unknown): CalyxEvidenceView {
   if (!isRecord(metadata)) return emptyView("absent", "saved_message");
-  const status = text(metadata.scientific_evidence_status);
-  if (!status) return emptyView("absent", "saved_message");
+  const status = typeof metadata.scientific_evidence_status === "string" ? metadata.scientific_evidence_status : "";
+  if (!status.trim()) return emptyView("absent", "saved_message");
   if (!KNOWN_STATUSES.includes(status as CalyxScientificEvidenceStatus)) return emptyView("unrecognised", "saved_message", status);
   const view = emptyView("quiet", "saved_message", status);
   view.provenance = {
@@ -367,6 +383,9 @@ export function readSavedMessageEvidence(metadata: unknown): CalyxEvidenceView {
   if (status === "available" || status === "not_resolved" || status === "unavailable") view.kind = status;
   return view;
 }
+
+/** The most evidence sentences the panel renders for one turn. */
+export const CALYX_EVIDENCE_SENTENCE_LIMIT = 100;
 
 /** Whether a view puts anything on the page. */
 export function evidenceIsVisible(view: CalyxEvidenceView): boolean {
