@@ -234,6 +234,7 @@ describe("CalyxWorkspace scientific evidence", () => {
     expect(answerBubble()?.textContent).toContain(FIRST_SENTENCE);
     expect(occurrences(container.textContent ?? "", FIRST_SENTENCE)).toBe(1);
     expect(panels()[0].textContent).toContain(turns.available.scientific_evidence.evidence_packet_id);
+    expect(occurrences(container.textContent ?? "", "What the Continuum's evidence records show")).toBe(1);
     // The saved message does not keep the flag, so nothing is said either way.
     expect(panels()[0].querySelector('[data-testid="calyx-evidence-pollination"]')?.getAttribute("data-pollination")).toBe("not-reported");
   });

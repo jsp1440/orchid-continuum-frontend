@@ -194,6 +194,7 @@ describe("CalyxEvidencePanel: available with gaps", () => {
     expect(byTestId("calyx-evidence-saved-note")?.textContent).toContain("The evidence sentences are in the reply above.");
     expect(byTestId("calyx-evidence-saved-note")?.textContent).toContain("not re-verified");
     expect(panel()?.textContent).not.toContain("own wording");
+    expect(panel()?.querySelector("h3")?.textContent).toBe("Graph evidence was retrieved for this turn");
     expect(panel()?.textContent).not.toContain("Subject: Catasetum barbatum");
     expect(byTestId("calyx-evidence-species")?.textContent).toBe("Not reported in the saved conversation");
     expect(byTestId("calyx-evidence-pollination")?.dataset.pollination).toBe("not-reported");

@@ -197,7 +197,9 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
       data-evidence-kind="available"
       data-testid="calyx-evidence-panel"
     >
-      <h3 className="text-sm font-semibold" id={headingId}>{CALYX_EVIDENCE_ANSWER_HEADING}</h3>
+      {/* A reloaded turn still carries the backend's heading inside the reply, so
+          the panel uses a different one rather than printing it twice. */}
+      <h3 className="text-sm font-semibold" id={headingId}>{saved ? "Graph evidence was retrieved for this turn" : CALYX_EVIDENCE_ANSWER_HEADING}</h3>
       <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
         {saved
           ? "Evidence records were retrieved when this turn was asked."
