@@ -1,0 +1,200 @@
+{
+  "_source": {
+    "what": "Recorded output of the Calyx Speak turn endpoint (POST /api/calyx/speak/conversations/{id}/turns). Not hand-written and not edited, apart from keeping only the fields listed in 'kept'.",
+    "backend": "jsp1440/orchid-calyx-backend, branch claude/calyx-speak-scientific-evidence, commit 7c50f850 (PR #2369, unmerged draft)",
+    "how": "The branch was run locally with uvicorn on 2026-11-11 with OC_BRAIN_MCP_EVIDENCE_ENABLED=true and the graph read through the deployed backend's public read-only Knowledge Graph API. In-memory conversation store, deterministic reply provider. This is not output of the deployed application.",
+    "kept": [
+      "answer",
+      "research.scientific_evidence",
+      "calyx_message.metadata.scientific_evidence_status",
+      "calyx_message.metadata.scientific_evidence_mission_id",
+      "calyx_message.metadata.scientific_evidence_packet_id"
+    ],
+    "note_unavailable": "The 'unavailable' turn was recorded from the same branch when its evidence server subprocess could not start (the process was launched from the wrong working directory). It is a real failed retrieval, not a simulated one."
+  },
+  "turns": {
+    "available": {
+      "question": "Which insects are recorded for the pollination of Catasetum barbatum?",
+      "answer": "Here is what the linked evidence supports: on which insects are recorded for the pollination of catasetum barbatum: Catasetum is a dimorphic and dioecious genus of orchids with a pollinaria release mechanism triggered by pollinator visitation. The reproductive ecology of Catasetum integerrimum Hook (Orchidaceae) was characterized in Central Veracruz, Mexico. For that, it was determined whether floral senescence and fruit production are resulted of pollination efficiency in the species, and if so, to what extent present reproductive event constraint the investment in subsequent reproductive eve.\n\nSome of what informed that came from published literature that hasn't been through Continuum review yet, so treat it as provisional rather than as settled Continuum evidence.\n\nOne caveat about this particular reply: my generative reasoning path wasn't available, so this is composed directly from the linked evidence rather than reasoned through in full. The evidence and its limits are accurate; the explanation is thinner than it would otherwise be.\n\nWhat the Continuum's evidence records show:\n- Subject: Catasetum barbatum = graph node 35536 (taxon:1744).\n- Graph (observed, stored): 12 interaction edge(s) naming 6 partner(s): Euglossa augaspis, Euglossa cognata, Euglossa cordata, Euglossa liopoda, Euglossa mixta, Eulaema cingulata. By source predicate class: 12 flower visitation; 0 carry a citation.\n- Graph context: publication publication:2 (2017, doi None) via edge 112240; publication publication:3 (1985, doi 10.5962/bhl.title.42485) via edge 112241. These are associations with the taxon, not support for a claim.\n- External candidates (GloBI, exact name, unreviewed): 1 record(s); 1 cited; 0 assert pollination.\n- Species isolation: GloBI also returned records under Catasetum macrocarpum (6); these were excluded.\n- Also reported elsewhere: graph partner Eulaema cingulata is named by GloBI (flowersVisitedBy; 1 cited). Source: Williams, N.H. and Dodson, C.H., 1972. Selective attraction of male euglossine bees to orchid floral fragrances and its importance in long distance pollen flow. Evolution, pp.84-95.\n- Not corroborated today: graph partner(s) Euglossa augaspis, Euglossa cognata, Euglossa cordata, Euglossa liopoda, Euglossa mixta are not among the returned exact-name GloBI rows.\n- Modules: the name maps to 2 module taxonomy record(s) 27177 (with authorship), 46540 (no authorship); treated as one nominal taxon because they share the name and carry at most one authorship.\n- Module living_media (provisional): 11 record(s) from EOL, GBIF, each tagged with the module record it came from.\n- Modules with no assembled evidence for this species: conservation, cultivation, distribution, ecology, historical_media, literature, morphology, mycorrhizae, nomenclature, phenology, pollinators, protologue, research_gaps, type_material. This is a gap in the platform, not biological absence.\n- External reference (GBIF 2803901, ACCEPTED): Catasetum barbatum (Lindl.) Lindl.; 330 occurrence record(s), by country BR 218, GF 42, GY 15, TT 11, BO 5. Country counts only; record counts reflect collecting effort.\n- External records with the orchid as the visited or pollinated party (unreviewed, not attached to any graph taxon): pollination asserted for 0 species and 0 name(s) not at species level; flower visits by 1 species and 0 name(s) not at species level.\n- The source also returned records under Catasetum macrocarpum (6); these are other names and were not used.\n- Second hop: Eulaema cingulata (flower visitation partner) has 86 record(s) with other organisms: 48 flower visitation, 10 food record, 28 pollination assertion. 12 shown, the first the source returned.\n- Second hop: Euglossa augaspis returned no record of the kinds read here.\n- Second hop: Euglossa cognata returned no record of the kinds read here.\n- Second hop: Euglossa cordata (graph partner only partner) has 31 record(s) with other organisms: 2 flower visitation, 18 food record, 11 pollination assertion. 12 shown, the first the source returned.\n- Second hop: Euglossa liopoda returned no record of the kinds read here.\n- Second hop: Euglossa mixta (graph partner only partner) has 2 record(s) with other organisms: 2 flower visitation. 2 shown, the first the source returned.\n- Second-hop records are single source records. None shows that a species depends on another; food and host records state neither a life stage nor that the host is a plant.\n- Species-loss consequences: Only flower visits are recorded for Catasetum barbatum. No consequence of losing a visitor can be stated: a visitor is not shown to be a pollinator. Limits: interaction records are incomplete and biased toward studied places and taxa; unrecorded pollinators and self-pollination are not excluded by these records.\n- Conclusion: verified pollination is NOT established. No returned graph record has a confirmed review approval. Flower visits are not pollination; external records are unreviewed candidates.",
+      "scientific_evidence": {
+        "schema": "oc.calyx-scientific-evidence-context.v1",
+        "status": "available",
+        "reading": [
+          "Subject: Catasetum barbatum = graph node 35536 (taxon:1744).",
+          "Graph (observed, stored): 12 interaction edge(s) naming 6 partner(s): Euglossa augaspis, Euglossa cognata, Euglossa cordata, Euglossa liopoda, Euglossa mixta, Eulaema cingulata. By source predicate class: 12 flower visitation; 0 carry a citation.",
+          "Graph context: publication publication:2 (2017, doi None) via edge 112240; publication publication:3 (1985, doi 10.5962/bhl.title.42485) via edge 112241. These are associations with the taxon, not support for a claim.",
+          "External candidates (GloBI, exact name, unreviewed): 1 record(s); 1 cited; 0 assert pollination.",
+          "Species isolation: GloBI also returned records under Catasetum macrocarpum (6); these were excluded.",
+          "Also reported elsewhere: graph partner Eulaema cingulata is named by GloBI (flowersVisitedBy; 1 cited). Source: Williams, N.H. and Dodson, C.H., 1972. Selective attraction of male euglossine bees to orchid floral fragrances and its importance in long distance pollen flow. Evolution, pp.84-95.",
+          "Not corroborated today: graph partner(s) Euglossa augaspis, Euglossa cognata, Euglossa cordata, Euglossa liopoda, Euglossa mixta are not among the returned exact-name GloBI rows.",
+          "Modules: the name maps to 2 module taxonomy record(s) 27177 (with authorship), 46540 (no authorship); treated as one nominal taxon because they share the name and carry at most one authorship.",
+          "Module living_media (provisional): 11 record(s) from EOL, GBIF, each tagged with the module record it came from.",
+          "Modules with no assembled evidence for this species: conservation, cultivation, distribution, ecology, historical_media, literature, morphology, mycorrhizae, nomenclature, phenology, pollinators, protologue, research_gaps, type_material. This is a gap in the platform, not biological absence.",
+          "External reference (GBIF 2803901, ACCEPTED): Catasetum barbatum (Lindl.) Lindl.; 330 occurrence record(s), by country BR 218, GF 42, GY 15, TT 11, BO 5. Country counts only; record counts reflect collecting effort.",
+          "External records with the orchid as the visited or pollinated party (unreviewed, not attached to any graph taxon): pollination asserted for 0 species and 0 name(s) not at species level; flower visits by 1 species and 0 name(s) not at species level.",
+          "The source also returned records under Catasetum macrocarpum (6); these are other names and were not used.",
+          "Second hop: Eulaema cingulata (flower visitation partner) has 86 record(s) with other organisms: 48 flower visitation, 10 food record, 28 pollination assertion. 12 shown, the first the source returned.",
+          "Second hop: Euglossa augaspis returned no record of the kinds read here.",
+          "Second hop: Euglossa cognata returned no record of the kinds read here.",
+          "Second hop: Euglossa cordata (graph partner only partner) has 31 record(s) with other organisms: 2 flower visitation, 18 food record, 11 pollination assertion. 12 shown, the first the source returned.",
+          "Second hop: Euglossa liopoda returned no record of the kinds read here.",
+          "Second hop: Euglossa mixta (graph partner only partner) has 2 record(s) with other organisms: 2 flower visitation. 2 shown, the first the source returned.",
+          "Second-hop records are single source records. None shows that a species depends on another; food and host records state neither a life stage nor that the host is a plant.",
+          "Species-loss consequences: Only flower visits are recorded for Catasetum barbatum. No consequence of losing a visitor can be stated: a visitor is not shown to be a pollinator. Limits: interaction records are incomplete and biased toward studied places and taxa; unrecorded pollinators and self-pollination are not excluded by these records.",
+          "Conclusion: verified pollination is NOT established. No returned graph record has a confirmed review approval. Flower visits are not pollination; external records are unreviewed candidates."
+        ],
+        "read_only": true,
+        "knowledge_graph_mutation": false,
+        "automatic_publication": false,
+        "durable_mission_record": false,
+        "is_reviewed_conclusion": false,
+        "species": "Catasetum barbatum",
+        "resolution": "RESOLVED",
+        "mission": {
+          "mission_id": "44c917149a435b180100dfde2358315f1e09dc15c07bfbb89af3e43bb3c6d1ea",
+          "state": "EVIDENCE_ONLY",
+          "review_status": "UNAVAILABLE_NO_REASONING_LEDGER",
+          "publication_eligibility": {
+            "eligible": false,
+            "automatic_publication": false,
+            "blockers": [
+              "NO_REASONING_LEDGER_REVIEW_UNAVAILABLE"
+            ]
+          }
+        },
+        "evidence_packet_id": "747cd12d2cde35aec002acacded0528a85bc71d8b498842635c0129bc8ac8507",
+        "graph_state": "EVIDENCE_ONLY",
+        "graph_completeness": "COMPLETE",
+        "pollination_verified": false
+      },
+      "saved_message_metadata": {
+        "scientific_evidence_status": "available",
+        "scientific_evidence_mission_id": "44c917149a435b180100dfde2358315f1e09dc15c07bfbb89af3e43bb3c6d1ea",
+        "scientific_evidence_packet_id": "747cd12d2cde35aec002acacded0528a85bc71d8b498842635c0129bc8ac8507"
+      }
+    },
+    "not_resolved": {
+      "question": "Which insects are recorded for the pollination of Ophrys apifera?",
+      "answer": "Here is what the linked evidence supports: on which insects are recorded for the pollination of ophrys apifera: Knowledge of Algeria's orchid flora has increased considerably over the past two decades; however, certain regions, such as Guelma Province in northeastern Algeria, remain poorly studied. Between 2013 and 2024, survey work was conducted in this region using a subjective sampling approach. A total of 40 stations were inventoried, and ecological variables such as altitude, exposure, and vegetation cover were recorded to interpret the distribution patterns of orchid taxa. In total, 37 t.\n\nSome of what informed that came from published literature that hasn't been through Continuum review yet, so treat it as provisional rather than as settled Continuum evidence.\n\nOne caveat about this particular reply: my generative reasoning path wasn't available, so this is composed directly from the linked evidence rather than reasoned through in full. The evidence and its limits are accurate; the explanation is thinner than it would otherwise be.\n\n'Ophrys apifera' was read as the species this question is about, but it is not a single resolved species in the Continuum graph (AMBIGUOUS). No evidence was attached to a guessed identity.",
+      "scientific_evidence": {
+        "schema": "oc.calyx-scientific-evidence-context.v1",
+        "status": "not_resolved",
+        "reading": [],
+        "read_only": true,
+        "knowledge_graph_mutation": false,
+        "automatic_publication": false,
+        "durable_mission_record": false,
+        "is_reviewed_conclusion": false,
+        "species": "Ophrys apifera",
+        "resolution": "AMBIGUOUS",
+        "mission": {
+          "mission_id": "6cdf370a8a4ebbfbbb6cacd9956ed4428eca28b9d2ecc56629b1921c386ec378",
+          "state": "EVIDENCE_ONLY",
+          "review_status": "UNAVAILABLE_NO_REASONING_LEDGER",
+          "publication_eligibility": {
+            "eligible": false,
+            "automatic_publication": false,
+            "blockers": [
+              "NO_REASONING_LEDGER_REVIEW_UNAVAILABLE"
+            ]
+          }
+        },
+        "explanation": "'Ophrys apifera' was read as the species this question is about, but it is not a single resolved species in the Continuum graph (AMBIGUOUS). No evidence was attached to a guessed identity."
+      },
+      "saved_message_metadata": {
+        "scientific_evidence_status": "not_resolved",
+        "scientific_evidence_mission_id": "6cdf370a8a4ebbfbbb6cacd9956ed4428eca28b9d2ecc56629b1921c386ec378",
+        "scientific_evidence_packet_id": null
+      }
+    },
+    "not_applicable_with_explanation": {
+      "question": "Compare pollination of Catasetum barbatum and Ophrys apifera",
+      "answer": "Here is what the linked evidence supports: on compare pollination of catasetum barbatum and ophrys apifera: <i>Orchidaceae</i> is one of the largest angiosperm families, with extensive floral morphological diversity, complex pollination systems, and frequent hybridization, which complicate species delimitation. Target capture offers a scalable alternative to whole-genome sequencing for phylogenomic and ecological applications, but operational thresholds for reliable species identification, particularly from reduced or degraded single-nucleotide polymorphism (SNP) datasets, remain poorly quanti.\n\nSome of what informed that came from published literature that hasn't been through Continuum review yet, so treat it as provisional rather than as settled Continuum evidence.\n\nOne caveat about this particular reply: my generative reasoning path wasn't available, so this is composed directly from the linked evidence rather than reasoned through in full. The evidence and its limits are accurate; the explanation is thinner than it would otherwise be.\n\nThe graph evidence path currently answers only questions it can read as a pollination question about exactly one named species. This question was not read that way, so no graph evidence was retrieved for it. That is a limit of the path, not a finding that no evidence exists.",
+      "scientific_evidence": {
+        "schema": "oc.calyx-scientific-evidence-context.v1",
+        "status": "not_applicable",
+        "reading": [],
+        "read_only": true,
+        "knowledge_graph_mutation": false,
+        "automatic_publication": false,
+        "durable_mission_record": false,
+        "is_reviewed_conclusion": false,
+        "reason": "MCP_SINGLE_SPECIES_POLLINATION_QUESTION_REQUIRED",
+        "explanation": "The graph evidence path currently answers only questions it can read as a pollination question about exactly one named species. This question was not read that way, so no graph evidence was retrieved for it. That is a limit of the path, not a finding that no evidence exists."
+      },
+      "saved_message_metadata": {
+        "scientific_evidence_status": "not_applicable",
+        "scientific_evidence_mission_id": null,
+        "scientific_evidence_packet_id": null
+      }
+    },
+    "not_applicable_silent": {
+      "question": "How do orchids attract pollinators in general?",
+      "answer": "Here is what the linked evidence supports: on how do orchids attract pollinators in general: Environmental drivers of wild orchid distribution: Soil properties shape habitat preferences in the Po Delta Regional Park (Italy). European terrestrial orchids inhabit a wide range of habitats, including forests, grasslands, wetlands and anthropogenic ecosystems. This study investigates the ecological preferences of seven wild orchid species in the Po Delta Regional Park (Northern Italy), focusing on how environmental gradients of soil properties such as moisture, salinity, pH, and nutrient availabili.\n\nOne caveat about this particular reply: my generative reasoning path wasn't available, so this is composed directly from the linked evidence rather than reasoned through in full. The evidence and its limits are accurate; the explanation is thinner than it would otherwise be.",
+      "scientific_evidence": {
+        "schema": "oc.calyx-scientific-evidence-context.v1",
+        "status": "not_applicable",
+        "reading": [],
+        "read_only": true,
+        "knowledge_graph_mutation": false,
+        "automatic_publication": false,
+        "durable_mission_record": false,
+        "is_reviewed_conclusion": false
+      },
+      "saved_message_metadata": {
+        "scientific_evidence_status": "not_applicable",
+        "scientific_evidence_mission_id": null,
+        "scientific_evidence_packet_id": null
+      }
+    },
+    "not_requested": {
+      "question": "Hello Calyx",
+      "answer": "Hello. I'm Calyx, the Orchid Continuum's scientific collaborator. Ask me an orchid-science question and I'll work through the evidence the Continuum actually holds with you, keeping what's solid, what's contested and what's still missing clearly apart.",
+      "scientific_evidence": {
+        "schema": "oc.calyx-scientific-evidence-context.v1",
+        "status": "not_requested",
+        "reading": []
+      },
+      "saved_message_metadata": {
+        "scientific_evidence_status": "not_requested",
+        "scientific_evidence_mission_id": null,
+        "scientific_evidence_packet_id": null
+      }
+    },
+    "unavailable": {
+      "question": "Which insects are recorded for the pollination of Catasetum barbatum?",
+      "answer": "Here is what the linked evidence supports: on which insects are recorded for the pollination of catasetum barbatum: Catasetum is a dimorphic and dioecious genus of orchids with a pollinaria release mechanism triggered by pollinator visitation. The reproductive ecology of Catasetum integerrimum Hook (Orchidaceae) was characterized in Central Veracruz, Mexico. For that, it was determined whether floral senescence and fruit production are resulted of pollination efficiency in the species, and if so, to what extent present reproductive event constraint the investment in subsequent reproductive eve.\n\nSome of what informed that came from published literature that hasn't been through Continuum review yet, so treat it as provisional rather than as settled Continuum evidence.\n\nOne caveat about this particular reply: my generative reasoning path wasn't available, so this is composed directly from the linked evidence rather than reasoned through in full. The evidence and its limits are accurate; the explanation is thinner than it would otherwise be.\n\nGraph evidence for Catasetum barbatum could not be retrieved this turn. Nothing is concluded from a failed retrieval.",
+      "scientific_evidence": {
+        "schema": "oc.calyx-scientific-evidence-context.v1",
+        "status": "unavailable",
+        "reading": [],
+        "read_only": true,
+        "knowledge_graph_mutation": false,
+        "automatic_publication": false,
+        "durable_mission_record": false,
+        "is_reviewed_conclusion": false,
+        "species": "Catasetum barbatum",
+        "error": "MISSION_BLOCKED",
+        "explanation": "Graph evidence for Catasetum barbatum could not be retrieved this turn. Nothing is concluded from a failed retrieval.",
+        "mission": {
+          "mission_id": "44c917149a435b180100dfde2358315f1e09dc15c07bfbb89af3e43bb3c6d1ea",
+          "state": "BLOCKED",
+          "review_status": "HUMAN_REVIEW_REQUIRED",
+          "publication_eligibility": {
+            "eligible": false,
+            "automatic_publication": false,
+            "blockers": [
+              "RETRIEVE_FAILED",
+              "HUMAN_REVIEW_REQUIRED"
+            ]
+          }
+        }
+      },
+      "saved_message_metadata": {
+        "scientific_evidence_status": "unavailable",
+        "scientific_evidence_mission_id": "44c917149a435b180100dfde2358315f1e09dc15c07bfbb89af3e43bb3c6d1ea",
+        "scientific_evidence_packet_id": null
+      }
+    }
+  }
+}
