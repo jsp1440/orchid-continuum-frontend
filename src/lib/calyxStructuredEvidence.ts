@@ -26,6 +26,8 @@ export type EvidenceItem = {
   doi: string | null;
   state: string | null;
   review: string | null;
+  /** A line about this record that the page derives only from returned fields (for example the year in a citation). */
+  note: string | null;
 };
 
 export type EvidenceStatement = { cls: string | null; text: string };
@@ -39,10 +41,13 @@ export type RecordsSectionKind =
   | "synonymy"
   | "synonym_resolution"
   | "mycorrhiza"
-  | "host_pathogen";
+  | "host_pathogen"
+  | "publication";
 
 export type RecordsSection =
   | { unreadable: true; kind: RecordsSectionKind }
+  /** A key under `evidence` this page does not know: that part could not be displayed. */
+  | { unreadable: true; kind: "unknown"; name: string }
   | {
       unreadable: false;
       kind: RecordsSectionKind;
@@ -55,6 +60,8 @@ export type RecordsSection =
       counts: string | null;
       items: EvidenceItem[];
       statements: EvidenceStatement[];
+      /** For example "No records attached." or "Not checked against the publication."; from returned flags only. */
+      note: string | null;
     };
 
 export type SubjectScope = "subject" | "direct_subtaxon" | "contextual_parent_species";
@@ -145,7 +152,7 @@ function shownOf(shown: unknown, projected: unknown, listed: unknown): string | 
   return `${s} of ${total} shown`;
 }
 
-type Build = { items: EvidenceItem[]; counts: string | null };
+type Build = { items: EvidenceItem[]; counts: string | null; note?: string | null };
 
 function section(kind: RecordsSectionKind, raw: Record<string, unknown>, build: Build): RecordsSection | null {
   const citation = sourceCitation(raw.source);
@@ -153,12 +160,12 @@ function section(kind: RecordsSectionKind, raw: Record<string, unknown>, build: 
   if (citation === undefined || statements === null) return { unreadable: true, kind };
   const state = raw.state === undefined || raw.state === null ? null : str(raw.state);
   const review = raw.review_state === undefined || raw.review_state === null ? null : str(raw.review_state);
-  return { unreadable: false, kind, state, review, citation, counts: build.counts, items: build.items, statements };
+  return { unreadable: false, kind, state, review, citation, counts: build.counts, items: build.items, statements, note: build.note ?? null };
 }
 
 function item(text: string | null, rest: Partial<EvidenceItem> = {}): EvidenceItem | null {
   if (text === null) return null;
-  return { text, detail: null, citation: null, doi: null, state: null, review: null, ...rest };
+  return { text, detail: null, citation: null, doi: null, state: null, review: null, note: null, ...rest };
 }
 
 function all<T>(values: unknown, each: (value: unknown) => T | null): T[] | null {
@@ -214,7 +221,7 @@ function plainSections(evidence: Record<string, unknown>): RecordsSection[] {
     const items = all(raw, each);
     if (items === null) out.push({ unreadable: true, kind });
     else if (items.length) {
-      out.push({ unreadable: false, kind, state: null, review: null, citation: null, counts: null, items, statements: [] });
+      out.push({ unreadable: false, kind, state: null, review: null, citation: null, counts: null, items, statements: [], note: null });
     }
     // An empty list adds nothing: it is not a finding.
   }
@@ -262,8 +269,38 @@ function resolutionSection(raw: unknown): RecordsSection | null {
     return item(str(value.synonym_as_written), { detail: str(value.accepted_label) });
   });
   if (candidates === null) return { unreadable: true, kind: "synonym_resolution" };
-  return section("synonym_resolution", raw, { items: candidates, counts: null });
+  // `records_attached: false` is stated as a plain fact; the returned explanation sits beside it.
+  return section("synonym_resolution", raw, { items: candidates, counts: null, note: raw.records_attached === false ? "No records attached to this name lookup." : null });
 }
+
+function publicationSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "publication" };
+  const places = all(raw.places, (value) => {
+    if (!isRecord(value)) return null;
+    const year = value.year;
+    if (year !== undefined && year !== null && !(typeof year === "number" && Number.isInteger(year))) return null;
+    if (value.withheld_by_privacy_gate !== undefined && typeof value.withheld_by_privacy_gate !== "boolean") return null;
+    // Withheld: nothing else of the record is read.
+    if (value.withheld_by_privacy_gate === true) return item("Place of publication withheld by the privacy gate.");
+    // The citation exactly as the checklist wrote it: no expansion, no link.
+    return item(str(value.as_written_by_source), {
+      detail: str(value.checklist_row_name),
+      note: typeof year === "number" ? `year in parentheses in the citation: ${year}` : "No year is given for this citation (see the statements below).",
+    });
+  });
+  if (places === null) return { unreadable: true, kind: "publication" };
+  return section("publication", raw, {
+    items: places,
+    counts: null,
+    note: raw.is_verified_publication === false ? "Not checked against the publication." : "Whether this was checked against the publication is not reported.",
+  });
+}
+
+const KNOWN_EVIDENCE_KEYS = new Set([
+  "distribution", "conservation", "synonymy", "synonym_resolution", "further_synonym_resolutions",
+  "mycorrhiza", "host_pathogen", "relationships", "held_back", "not_retrieved", "publication",
+]);
 
 function statementsOnlySection(kind: "mycorrhiza" | "host_pathogen", raw: unknown): RecordsSection | null {
   if (raw === undefined || raw === null) return null;
@@ -277,7 +314,7 @@ function statementsOnlySection(kind: "mycorrhiza" | "host_pathogen", raw: unknow
     return item(str(value.statement), { doi: str(doi), detail: str(value.partner), state: str(value.class) });
   });
   if (items === null) return { unreadable: true, kind };
-  return { unreadable: false, kind, state: null, review: null, citation: null, counts: null, items, statements: [] };
+  return { unreadable: false, kind, state: null, review: null, citation: null, counts: null, items, statements: [], note: null };
 }
 
 function sectionsOf(evidence: unknown, resolutionOnSubject: unknown): RecordsSection[] {
@@ -294,9 +331,14 @@ function sectionsOf(evidence: unknown, resolutionOnSubject: unknown): RecordsSec
     if (!Array.isArray(further)) out.push({ unreadable: true, kind: "synonym_resolution" });
     else for (const one of further) push(isRecord(one) ? resolutionSection(one) : { unreadable: true, kind: "synonym_resolution" });
   }
+  push(publicationSection(record.publication));
   push(statementsOnlySection("mycorrhiza", record.mycorrhiza));
   push(statementsOnlySection("host_pathogen", record.host_pathogen));
   out.push(...plainSections(record));
+  // Any other part is one this page does not know: say so for that part only.
+  for (const [key, value] of Object.entries(record)) {
+    if (!KNOWN_EVIDENCE_KEYS.has(key) && value !== undefined && value !== null) out.push({ unreadable: true, kind: "unknown", name: key });
+  }
   return out;
 }
 
