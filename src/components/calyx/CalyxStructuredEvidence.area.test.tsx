@@ -45,7 +45,7 @@ describe("an area turn (taxa one checklist lists for an area name)", () => {
     expect(button.textContent).toBe("Show Taxa this checklist lists for the area \u00b7 2 of 2 shown");
     open(/Taxa this checklist lists for the area/);
     expect(all("calyx-record-text").map((n) => n.textContent)).toEqual(["Angraecum sesquipedale", "Angraecum sesquipedale var. angustifolium"]);
-    expect(all("calyx-record-note")[0].textContent).toBe("Not an occurrence record. Not a flora or a species count. Taxa listed with a marker: 0.");
+    expect(all("calyx-record-note")[0].textContent).toBe("Not an occurrence record. Not a flora or a species count. Taxa with a marker: 0.");
     expect(text()).toContain("documented \u00b7 UNREVIEWED");
     expect(all("calyx-evidence-pollination")).toHaveLength(0);
   });
@@ -54,10 +54,11 @@ describe("an area turn (taxa one checklist lists for an area name)", () => {
     show(evidenceOf("area-taxa-with-marker"));
     open(/Taxa this checklist lists for the area/);
     const lines = Array.from(container.querySelectorAll('[data-kind="area_taxa"] li')).map((li) => li.textContent);
-    expect(lines.find((l) => l?.startsWith("Ophrys sphegodes var. provincialis"))).toContain("marker as written by the source: ?");
+    expect(lines.find((l) => l?.startsWith("Ophrys sphegodes var. provincialis"))).toContain("area as written by the source: ?NW-Italy");
     expect(lines.find((l) => l?.startsWith("Ophrys sphegodes var. garganicoides"))).not.toContain("marker");
     const block = container.querySelector('[data-kind="area_taxa"]')!;
-    expect(block.textContent).toContain("Taxa listed with a marker: 1.");
+    expect(block.textContent).toContain("Taxa with a marker: 1.");
+    expect(block.textContent).not.toContain("marker as written by the source");
     expect(block.innerHTML).not.toMatch(/title=|<svg|<img|text-red|text-green|line-through/);
     // The page's own wording near the taxa (item lines and the note) gives the marker no meaning.
     const own = [...Array.from(block.querySelectorAll("li > span")), ...all("calyx-record-note")].map((n) => n.textContent).join(" ");
@@ -111,6 +112,33 @@ describe("an area turn (taxa one checklist lists for an area name)", () => {
     show(raw2);
     expect(all("calyx-record-unreadable")[0].textContent).toBe("Other writings of this area name (separate statements, not added to the list): could not be displayed.");
     expect(container.querySelector('[data-kind="area_taxa"]')).not.toBeNull();
+  });
+});
+
+describe("area as written by the source (area_as_written_by_source)", () => {
+  it("shows the marked area exactly as that taxon's statement writes it, and the unmarked one without a marker", () => {
+    show(evidenceOf("area-taxa-with-marker"));
+    open(/Taxa this checklist lists for the area/);
+    const lines = Array.from(container.querySelectorAll('[data-kind="area_taxa"] li')).map((li) => li.textContent);
+    expect(lines.find((l) => l?.startsWith("Ophrys sphegodes var. garganicoides"))).toContain("area as written by the source: NW-Italy");
+  });
+  it("(hand-altered copy) when the list is cut it says which marker count belongs to the list shown and which to the whole list", () => {
+    const raw = clone("area-taxa-with-marker");
+    Object.assign(raw.subjects[0].evidence.area_taxa, { all_listed_taxa_shown: false, taxa_listed: 40, taxa_shown: 2, taxa_shown_with_a_marker: 1, taxa_listed_with_a_marker: 6 });
+    show(raw);
+    open(/Taxa this checklist lists for the area/);
+    const note = all("calyx-record-note")[0].textContent ?? "";
+    expect(note).toContain("Taxa with a marker in the list shown: 1.");
+    expect(note).toContain("Taxa with a marker in the whole list: 6.");
+  });
+  it("(hand-altered copy) a null writing is not rebuilt; the separate marker is shown as returned", () => {
+    const raw = clone("area-taxa-with-marker");
+    raw.subjects[0].evidence.area_taxa.taxa[1].area_as_written_by_source = null;
+    show(raw);
+    open(/Taxa this checklist lists for the area/);
+    const text2 = container.querySelector('[data-kind="area_taxa"]')?.textContent ?? "";
+    expect(text2).not.toContain("?NW-Italy");
+    expect(text2).toContain("marker as written by the source: ?");
   });
 });
 
