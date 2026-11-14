@@ -20,6 +20,7 @@ import {
  */
 
 const HEADINGS: Record<RecordsSectionKind, string> = {
+  publication: "Checklist place of publication",
   relationships: "Cited interaction records",
   held_back: "Records held back",
   not_retrieved: "Not retrieved",
@@ -47,10 +48,13 @@ function ItemLine({ kind, item }: { kind: RecordsSectionKind; item: EvidenceItem
   if (kind === "synonymy" && item.detail) main = `${item.text} ${item.detail}`;
   if (kind === "held_back" && item.detail) main = `${item.detail}: ${item.text}`;
   if (kind === "synonym_resolution" && item.detail) main = `${item.text} \u2014 listed under ${item.detail}`;
+  const row = kind === "publication" && item.detail ? `Checklist row: ${item.detail}` : null;
   const meta = [item.state, item.review].filter((part): part is string => part !== null).join(" \u00b7 ");
   return (
     <li className="break-words">
       <span data-testid="calyx-record-text">{main}</span>
+      {row ? <span className="block text-xs text-muted-foreground">{row}</span> : null}
+      {item.note ? <span className="block text-xs text-muted-foreground">{item.note}</span> : null}
       {meta ? <span className="block text-xs text-muted-foreground">{meta}</span> : null}
       {item.citation ? <span className="block text-xs text-muted-foreground">Cited: {item.citation}</span> : null}
       {item.doi ? <span className="block text-xs text-muted-foreground"><Doi doi={item.doi} /></span> : null}
@@ -64,6 +68,7 @@ function SectionBody({ section }: { section: Extract<RecordsSection, { unreadabl
       <p className="text-xs text-muted-foreground" data-testid="calyx-record-state">
         {section.state ?? "evidence state not reported"} {"\u00b7"} {section.review ?? "review state not reported"}
       </p>
+      {section.note ? <p className="text-xs text-muted-foreground" data-testid="calyx-record-note">{section.note}</p> : null}
       {section.citation ? <p className="break-words text-xs text-muted-foreground">Source: {section.citation}</p> : null}
       {section.items.length ? (
         <ul className="mt-1 list-disc space-y-1 pl-5">
@@ -86,10 +91,11 @@ function SectionBody({ section }: { section: Extract<RecordsSection, { unreadabl
 function Section({ section }: { section: RecordsSection }) {
   const [open, setOpen] = useState(false);
   const bodyId = useId();
-  const heading = HEADINGS[section.kind];
   if (section.unreadable) {
-    return <p className="mt-2 text-xs text-muted-foreground" data-testid="calyx-record-unreadable">{heading}: could not be displayed.</p>;
+    const label = section.kind === "unknown" ? `An evidence part this page does not know (${section.name})` : HEADINGS[section.kind];
+    return <p className="mt-2 text-xs text-muted-foreground" data-testid="calyx-record-unreadable">{label}: could not be displayed.</p>;
   }
+  const heading = HEADINGS[section.kind];
   const summary = section.counts ?? `${section.items.length} listed`;
   if (ALWAYS_OPEN.includes(section.kind)) {
     return (

@@ -1,5 +1,7 @@
 // Real responses of POST /api/calyx/speak/conversations/{id}/turns, captured from the backend route on a
-// local database at orchid-calyx-backend commit c2babbb15e22eb9edb089ebc96dd0ab88cb6c411 (draft PR #2420).
+// local database at orchid-calyx-backend commit c2babbb15e22eb9edb089ebc96dd0ab88cb6c411 (draft PR #2420);
+// the publication-*, synonym-beside-variety-notice and the three synonym-* files with `records_attached`
+// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7. The other files are from the earlier capture.
 // EXCERPTS: each file is {question, answer, research:{scientific_evidence}} with fields kept as returned, except
 // that (to keep the repository small) the answer text is omitted, strings are cut at 170 characters, lists of
 // records are cut to 2 entries (the `areas` list to 10), a few identifier-only fields (edge/node ids, dataset
@@ -22,6 +24,11 @@ import nameNotHeld from "./name-not-held.json";
 import notApplicableGeneral from "./not-applicable-general.json";
 import researchModeNever from "./research-mode-never.json";
 import mycorrhizaSpecies from "./mycorrhiza-species.json";
+import publicationSpecies from "./publication-species.json";
+import publicationVariety from "./publication-variety.json";
+import publicationNone from "./publication-none.json";
+import publicationAndDistribution from "./publication-and-distribution.json";
+import synonymBesideVarietyNotice from "./synonym-beside-variety-notice.json";
 
 export type CapturedTurn = { question: string; answer: string; research: { scientific_evidence: unknown } };
 export const fixtures: Record<string, CapturedTurn> = {
@@ -43,5 +50,10 @@ export const fixtures: Record<string, CapturedTurn> = {
   "not-applicable-general": notApplicableGeneral,
   "research-mode-never": researchModeNever,
   "mycorrhiza-species": mycorrhizaSpecies,
+  "publication-species": publicationSpecies,
+  "publication-variety": publicationVariety,
+  "publication-none": publicationNone,
+  "publication-and-distribution": publicationAndDistribution,
+  "synonym-beside-variety-notice": synonymBesideVarietyNotice,
 };
 export const evidenceOf = (name: string): unknown => fixtures[name].research.scientific_evidence;
