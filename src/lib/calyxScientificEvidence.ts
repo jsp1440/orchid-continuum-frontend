@@ -19,6 +19,8 @@
  *   - Sentences are the backend's wording and are passed through unchanged.
  */
 
+import { readStructuredEvidence, type StructuredEvidence } from "@/lib/calyxStructuredEvidence";
+
 export const CALYX_SCIENTIFIC_EVIDENCE_SCHEMA = "oc.calyx-scientific-evidence-context.v1";
 
 /** The heading the backend puts above the sentences it appends to the answer text. */
@@ -122,6 +124,12 @@ export type CalyxEvidenceView = {
   code: string | null;
   provenance: CalyxEvidenceProvenance;
   boundary: CalyxEvidenceBoundary;
+  /**
+   * The topics, per-taxon records, comparison lines and notices the backend
+   * sent beside the sentences. Read part by part (see calyxStructuredEvidence.ts);
+   * null when the block has none or the turn came from a saved conversation.
+   */
+  structured: StructuredEvidence | null;
 };
 
 const EMPTY_PROVENANCE: CalyxEvidenceProvenance = {
@@ -156,6 +164,7 @@ function emptyView(kind: CalyxEvidenceView["kind"], origin: CalyxEvidenceView["o
     code: null,
     provenance: { ...EMPTY_PROVENANCE },
     boundary: { ...EMPTY_BOUNDARY },
+    structured: null,
   };
 }
 
@@ -235,6 +244,7 @@ export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
     code: text(raw.reason) ?? text(raw.error),
     provenance: provenanceOf(raw),
     boundary: boundaryOf(raw),
+    structured: status === "available" || status === "not_resolved" ? readStructuredEvidence(raw) : null,
   };
 
   switch (status as CalyxScientificEvidenceStatus) {
@@ -344,6 +354,9 @@ export function composeAnswerWithEvidence(content: string, evidence: CalyxEviden
     if (!evidence.sentences.length) return whole;
     const parts = splitEvidenceSection(content);
     if (!parts.evidenceSentences.length) return whole;
+    // A subject this page could not read may hold some of these sentences:
+    // leave the answer whole rather than risk dropping them from the screen.
+    if (evidence.structured?.subjects.some((subject) => subject.unreadable)) return whole;
     const shown = new Set(evidence.sentences);
     const allShown = parts.evidenceSentences.every((sentence) => shown.has(sentence));
     return allShown ? { answerText: parts.body, evidence } : whole;

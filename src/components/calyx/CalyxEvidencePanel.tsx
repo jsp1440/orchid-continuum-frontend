@@ -1,5 +1,6 @@
 import { useId } from "react";
 
+import CalyxStructuredEvidence from "@/components/calyx/CalyxStructuredEvidence";
 import {
   CALYX_EVIDENCE_ANSWER_HEADING,
   CALYX_EVIDENCE_SENTENCE_LIMIT,
@@ -184,6 +185,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
         {!notResolved && evidence.code ? (
           <p className="mt-1 text-xs leading-5 text-muted-foreground">Reported cause: <span className={CODE}>{evidence.code}</span></p>
         ) : null}
+        {evidence.structured ? <CalyxStructuredEvidence mainSentences={evidence.sentences} structured={evidence.structured} /> : null}
         {evidence.provenance.missionId ? <Provenance provenance={evidence.provenance} complete={!saved} /> : null}
       </section>
     );
@@ -191,6 +193,16 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
 
   const shownSentences = evidence.sentences.slice(0, CALYX_EVIDENCE_SENTENCE_LIMIT);
   const hiddenCount = evidence.sentences.length - shownSentences.length;
+  const readableSubjects = (evidence.structured?.subjects ?? []).flatMap((subject) => (subject.unreadable ? [] : [subject]));
+  // Sentences or records that sit in the per-taxon entries (a turn about several
+  // taxa has an empty top-level `reading`): the "no sentences" line must not
+  // claim the turn returned nothing when the taxa below hold the evidence.
+  const subjectsHoldEvidence = (evidence.structured?.subjects ?? []).some((subject) => subject.unreadable || subject.sentences.length > 0 || subject.sections.length > 0);
+  const subjectLabels = readableSubjects.flatMap((subject) => (subject.label ? [subject.label] : []));
+  const topics = evidence.structured?.topics ?? [];
+  // A question about another topic carries no pollination flag; a line that
+  // says "not reported" about pollination there is noise, not a finding.
+  const showPollination = evidence.pollinationVerified !== null || topics.length === 0 || topics.includes("pollination");
 
   return (
     <section
@@ -214,12 +226,12 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
         <div className="flex flex-wrap gap-x-2">
           <dt className="text-muted-foreground">Species</dt>
           <dd data-testid="calyx-evidence-species">
-            {evidence.species ? <i>{evidence.species}</i> : <span className="text-muted-foreground">Not reported{saved ? " in the saved conversation" : ""}</span>}
+            {evidence.species ? <i>{evidence.species}</i> : subjectLabels.length ? <i>{subjectLabels.join("; ")}</i> : <span className="text-muted-foreground">Not reported{saved ? " in the saved conversation" : ""}</span>}
           </dd>
         </div>
       </dl>
 
-      <div className="mt-2"><PollinationStatus verified={evidence.pollinationVerified} /></div>
+      {showPollination ? <div className="mt-2"><PollinationStatus verified={evidence.pollinationVerified} /></div> : null}
 
       {/* The transcript is a polite live region. The heading, species and
           pollination line above are announced with the turn; the detail below
@@ -251,12 +263,13 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
               </details>
             ) : null}
           </>
-        ) : (
+        ) : subjectsHoldEvidence ? null : (
           <p className="mt-3 text-sm leading-6 text-muted-foreground" data-testid="calyx-evidence-empty">
             The backend returned no evidence sentences for this turn. That is missing evidence, not evidence of absence.
           </p>
         )}
 
+        {evidence.structured ? <CalyxStructuredEvidence mainSentences={evidence.sentences} structured={evidence.structured} /> : null}
         <Boundary boundary={evidence.boundary} />
         <Provenance complete={!saved} provenance={evidence.provenance} />
       </div>
