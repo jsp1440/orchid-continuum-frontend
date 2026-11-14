@@ -42,7 +42,9 @@ export type RecordsSectionKind =
   | "synonym_resolution"
   | "mycorrhiza"
   | "host_pathogen"
-  | "publication";
+  | "publication"
+  | "area_taxa"
+  | "area_other_writings";
 
 export type RecordsSection =
   | { unreadable: true; kind: RecordsSectionKind }
@@ -64,7 +66,7 @@ export type RecordsSection =
       note: string | null;
     };
 
-export type SubjectScope = "subject" | "direct_subtaxon" | "contextual_parent_species";
+export type SubjectScope = "subject" | "area" | "direct_subtaxon" | "contextual_parent_species";
 
 export type EvidenceSubject =
   | { unreadable: true }
@@ -297,9 +299,59 @@ function publicationSection(raw: unknown): RecordsSection | null {
   });
 }
 
+/**
+ * What one checklist lists for an area name. Never called a flora, a species count or occurrence
+ * records. A marker of the source is carried verbatim; the page gives it no meaning. Other
+ * writings of the area name are separate statements with their own counts, never merged.
+ */
+function areaSections(raw: unknown): RecordsSection[] {
+  if (raw === undefined || raw === null) return [];
+  if (!isRecord(raw)) return [{ unreadable: true, kind: "area_taxa" }];
+  const taxa = all(raw.taxa, (value) => {
+    if (!isRecord(value)) return null;
+    const marker = value.source_marker;
+    if (marker !== undefined && marker !== null && typeof marker !== "string") return null;
+    const tags = value.source_tags === undefined || value.source_tags === null ? [] : strictStrings(value.source_tags);
+    if (tags === null) return null;
+    const written = [
+      typeof marker === "string" && marker !== "" ? `marker as written by the source: ${marker}` : null,
+      tags.length ? `tags as written by the source: ${tags.join(" ")}` : null,
+    ].filter((part): part is string => part !== null).join(" \u00b7 ");
+    return item(str(value.taxon), { detail: str(value.checklist_row_name), note: written || null });
+  });
+  const out: RecordsSection[] = [];
+  if (taxa === null) out.push({ unreadable: true, kind: "area_taxa" });
+  else {
+    const notFound = raw.resolution === "NOT_FOUND";
+    const withMarker = count(raw.taxa_listed_with_a_marker);
+    const note = [
+      raw.is_occurrence_record === false ? "Not an occurrence record." : null,
+      raw.is_a_flora_or_species_count === false ? "Not a flora or a species count." : null,
+      withMarker !== null ? `Taxa listed with a marker: ${withMarker}.` : null,
+    ].filter((part): part is string => part !== null).join(" ");
+    out.push(section("area_taxa", raw, {
+      items: taxa,
+      counts: notFound ? "nothing retrieved under this exact name" : shownOf(raw.taxa_shown, null, raw.taxa_listed),
+      note: note || null,
+    }) ?? { unreadable: true, kind: "area_taxa" });
+  }
+  const other = raw.other_writings;
+  if (other !== undefined && other !== null) {
+    const writings = all(other, (value) => {
+      if (!isRecord(value)) return null;
+      if (value.taxa_listed !== undefined && value.taxa_listed !== null && count(value.taxa_listed) === null) return null;
+      const n = count(value.taxa_listed);
+      return item(str(value.label), { detail: n === null ? null : `${n} taxa listed by the checklist under this writing` });
+    });
+    if (writings === null) out.push({ unreadable: true, kind: "area_other_writings" });
+    else if (writings.length) out.push({ unreadable: false, kind: "area_other_writings", state: null, review: null, citation: null, counts: null, items: writings, statements: [], note: null });
+  }
+  return out;
+}
+
 const KNOWN_EVIDENCE_KEYS = new Set([
   "distribution", "conservation", "synonymy", "synonym_resolution", "further_synonym_resolutions",
-  "mycorrhiza", "host_pathogen", "relationships", "held_back", "not_retrieved", "publication",
+  "mycorrhiza", "host_pathogen", "relationships", "held_back", "not_retrieved", "publication", "area_taxa",
 ]);
 
 function statementsOnlySection(kind: "mycorrhiza" | "host_pathogen", raw: unknown): RecordsSection | null {
@@ -332,6 +384,7 @@ function sectionsOf(evidence: unknown, resolutionOnSubject: unknown): RecordsSec
     else for (const one of further) push(isRecord(one) ? resolutionSection(one) : { unreadable: true, kind: "synonym_resolution" });
   }
   push(publicationSection(record.publication));
+  out.push(...areaSections(record.area_taxa));
   push(statementsOnlySection("mycorrhiza", record.mycorrhiza));
   push(statementsOnlySection("host_pathogen", record.host_pathogen));
   out.push(...plainSections(record));
@@ -347,13 +400,16 @@ function subjectOf(raw: unknown, scope: SubjectScope, contextNote: string | null
   const sentences = raw.reading === undefined ? [] : strictStrings(raw.reading);
   const also = raw.also_asked_as === undefined || raw.also_asked_as === null ? [] : strictStrings(raw.also_asked_as);
   if (sentences === null || also === null) return { unreadable: true };
-  const node = raw.kg_node_id;
+  const area = isRecord(raw.area) ? raw.area : null;
+  const areaLabel = area ? str(area.label) : null;
+  const isArea = areaLabel !== null && str(raw.species) === null;
+  const node = raw.kg_node_id ?? (area ? area.kg_node_id : undefined);
   return {
     unreadable: false,
-    scope,
+    scope: isArea ? "area" : scope,
     // In a subtaxon entry `species` names the PARENT species and `name` the
     // subtaxon itself, so the subtaxon's own label must come from `name`.
-    label: scope === "direct_subtaxon" ? str(raw.name) : str(raw.species) ?? str(raw.name),
+    label: scope === "direct_subtaxon" ? str(raw.name) : str(raw.species) ?? str(raw.name) ?? areaLabel,
     kgNodeId: typeof node === "number" && Number.isInteger(node) ? node : null,
     status: str(raw.status),
     sentences,
@@ -400,6 +456,9 @@ export function readStructuredEvidence(raw: unknown): StructuredEvidence | null 
     if (raw.contextual !== undefined && raw.contextual !== null) subjects.push(subjectOf(raw.contextual, "contextual_parent_species", note));
   } else if (isRecord(raw.evidence)) {
     subjects = [subjectOf(raw, "subject")];
+  } else if (isRecord(raw.area_taxa)) {
+    // An area name that was not found: the block carries the area part at the top level.
+    subjects = [subjectOf({ area: { label: raw.area_asked }, evidence: { area_taxa: raw.area_taxa } }, "subject")];
   }
   return {
     topics: topics.list,
