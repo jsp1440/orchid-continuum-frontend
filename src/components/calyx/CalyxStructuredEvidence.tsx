@@ -21,6 +21,8 @@ import {
 
 const HEADINGS: Record<RecordsSectionKind, string> = {
   publication: "Checklist place of publication",
+  area_taxa: "Taxa this checklist lists for the area",
+  area_other_writings: "Other writings of this area name (separate statements, not added to the list)",
   relationships: "Cited interaction records",
   held_back: "Records held back",
   not_retrieved: "Not retrieved",
@@ -32,7 +34,7 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   host_pathogen: "Host and pathogen records",
 };
 
-const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved"];
+const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings"];
 
 function Doi({ doi }: { doi: string }) {
   const href = doiHref(doi);
@@ -47,8 +49,9 @@ function ItemLine({ kind, item }: { kind: RecordsSectionKind; item: EvidenceItem
   let main = item.text;
   if (kind === "synonymy" && item.detail) main = `${item.text} ${item.detail}`;
   if (kind === "held_back" && item.detail) main = `${item.detail}: ${item.text}`;
+  if (kind === "area_other_writings" && item.detail) main = `${item.text} \u00b7 ${item.detail}`;
   if (kind === "synonym_resolution" && item.detail) main = `${item.text} \u2014 listed under ${item.detail}`;
-  const row = kind === "publication" && item.detail ? `Checklist row: ${item.detail}` : null;
+  const row = (kind === "publication" || kind === "area_taxa") && item.detail ? `Checklist row: ${item.detail}` : null;
   const meta = [item.state, item.review].filter((part): part is string => part !== null).join(" \u00b7 ");
   return (
     <li className="break-words">
@@ -131,7 +134,7 @@ function Subject({ subject, mainSentences }: { subject: EvidenceSubject; mainSen
   return (
     <div className="mt-3 rounded-lg border px-3 py-2" data-scope={subject.scope} data-testid="calyx-subject">
       <h4 className="text-sm font-medium">
-        {contextual ? "Context only, records of the species: " : subject.scope === "direct_subtaxon" ? "Records of this taxon itself: " : ""}
+        {subject.scope === "area" ? "Area: " : contextual ? "Context only, records of the species: " : subject.scope === "direct_subtaxon" ? "Records of this taxon itself: " : ""}
         <i>{label}</i>
         {subject.kgNodeId !== null ? <span className="font-mono text-[11px] text-muted-foreground"> {"\u00b7"} graph node {subject.kgNodeId}</span> : null}
       </h4>

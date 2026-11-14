@@ -158,6 +158,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
 
   if (evidence.kind === "not_resolved" || evidence.kind === "unavailable") {
     const notResolved = evidence.kind === "not_resolved";
+    const areaTurn = evidence.structured?.topics.includes("area_taxa") ?? false;
     return (
       <section
         aria-labelledby={headingId}
@@ -166,7 +167,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
         data-testid="calyx-evidence-panel"
       >
         <h3 className="text-sm font-medium" id={headingId}>
-          {notResolved ? "The name is not a single species in the Continuum graph" : "Graph evidence could not be retrieved this turn"}
+          {areaTurn ? "Nothing was retrieved under that area name" : notResolved ? "The name is not a single species in the Continuum graph" : "Graph evidence could not be retrieved this turn"}
         </h3>
         {evidence.species ? (
           <p className="mt-1 text-sm leading-6">
@@ -200,6 +201,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
   const subjectsHoldEvidence = (evidence.structured?.subjects ?? []).some((subject) => subject.unreadable || subject.sentences.length > 0 || subject.sections.length > 0);
   const subjectLabels = readableSubjects.flatMap((subject) => (subject.label ? [subject.label] : []));
   const topics = evidence.structured?.topics ?? [];
+  const areaTurn = topics.includes("area_taxa");
   // When the backend names the topics read and pollination is not among them,
   // a pollination line is off-topic whatever the flag holds (the backend also
   // sends `pollination_verified: false` on distribution and conservation turns).
@@ -225,7 +227,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
 
       <dl className="mt-3 text-sm leading-6">
         <div className="flex flex-wrap gap-x-2">
-          <dt className="text-muted-foreground">Species</dt>
+          <dt className="text-muted-foreground">{areaTurn ? "Area" : "Species"}</dt>
           <dd data-testid="calyx-evidence-species">
             {evidence.species ? <i>{evidence.species}</i> : subjectLabels.length ? <i>{subjectLabels.join("; ")}</i> : <span className="text-muted-foreground">Not reported{saved ? " in the saved conversation" : ""}</span>}
           </dd>
