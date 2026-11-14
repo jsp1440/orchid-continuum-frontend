@@ -200,9 +200,10 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
   const subjectsHoldEvidence = (evidence.structured?.subjects ?? []).some((subject) => subject.unreadable || subject.sentences.length > 0 || subject.sections.length > 0);
   const subjectLabels = readableSubjects.flatMap((subject) => (subject.label ? [subject.label] : []));
   const topics = evidence.structured?.topics ?? [];
-  // A question about another topic carries no pollination flag; a line that
-  // says "not reported" about pollination there is noise, not a finding.
-  const showPollination = evidence.pollinationVerified !== null || topics.length === 0 || topics.includes("pollination");
+  // When the backend names the topics read and pollination is not among them,
+  // a pollination line is off-topic whatever the flag holds (the backend also
+  // sends `pollination_verified: false` on distribution and conservation turns).
+  const showPollination = topics.length === 0 || topics.includes("pollination");
 
   return (
     <section
