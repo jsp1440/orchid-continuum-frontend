@@ -44,7 +44,15 @@ export type RecordsSectionKind =
   | "host_pathogen"
   | "publication"
   | "area_taxa"
-  | "area_other_writings";
+  | "area_other_writings"
+  | "vernacular_names"
+  | "vernacular_lookup"
+  | "infrageneric_placement"
+  | "group_taxa"
+  | "group_narrower"
+  | "group_other_writings"
+  | "remark_pollinator"
+  | "pollinator_taxa";
 
 export type RecordsSection =
   | { unreadable: true; kind: RecordsSectionKind }
@@ -66,7 +74,7 @@ export type RecordsSection =
       note: string | null;
     };
 
-export type SubjectScope = "subject" | "area" | "direct_subtaxon" | "contextual_parent_species";
+export type SubjectScope = "subject" | "area" | "vernacular" | "group" | "pollinator" | "direct_subtaxon" | "contextual_parent_species";
 
 export type EvidenceSubject =
   | { unreadable: true }
@@ -313,21 +321,34 @@ function areaSections(raw: unknown): RecordsSection[] {
     if (marker !== undefined && marker !== null && typeof marker !== "string") return null;
     const tags = value.source_tags === undefined || value.source_tags === null ? [] : strictStrings(value.source_tags);
     if (tags === null) return null;
-    const written = [
-      typeof marker === "string" && marker !== "" ? `marker as written by the source: ${marker}` : null,
-      tags.length ? `tags as written by the source: ${tags.join(" ")}` : null,
-    ].filter((part): part is string => part !== null).join(" \u00b7 ");
+    const areaWritten = value.area_as_written_by_source;
+    if (areaWritten !== undefined && areaWritten !== null && typeof areaWritten !== "string") return null;
+    // Where the taxon's own writing of the area is present it is shown as written (marker in place);
+    // nothing is rebuilt from the separate fields. Where it is absent or withheld (null), the
+    // separate marker and tags are shown as they were returned.
+    const written = typeof areaWritten === "string" && areaWritten !== ""
+      ? `area as written by the source: ${areaWritten}`
+      : [
+          typeof marker === "string" && marker !== "" ? `marker as written by the source: ${marker}` : null,
+          tags.length ? `tags as written by the source: ${tags.join(" ")}` : null,
+        ].filter((part): part is string => part !== null).join(" \u00b7 ");
     return item(str(value.taxon), { detail: str(value.checklist_row_name), note: written || null });
   });
   const out: RecordsSection[] = [];
   if (taxa === null) out.push({ unreadable: true, kind: "area_taxa" });
   else {
     const notFound = raw.resolution === "NOT_FOUND";
-    const withMarker = count(raw.taxa_listed_with_a_marker);
+    const wholeMarker = count(raw.taxa_listed_with_a_marker);
+    const shownMarker = count(raw.taxa_shown_with_a_marker);
+    const markerLines = shownMarker !== null && wholeMarker !== null
+      ? (raw.all_listed_taxa_shown === true
+        ? [`Taxa with a marker: ${shownMarker}.`]
+        : [`Taxa with a marker in the list shown: ${shownMarker}.`, `Taxa with a marker in the whole list: ${wholeMarker}.`])
+      : wholeMarker !== null ? [`Taxa listed with a marker: ${wholeMarker}.`] : [];
     const note = [
       raw.is_occurrence_record === false ? "Not an occurrence record." : null,
       raw.is_a_flora_or_species_count === false ? "Not a flora or a species count." : null,
-      withMarker !== null ? `Taxa listed with a marker: ${withMarker}.` : null,
+      ...markerLines,
     ].filter((part): part is string => part !== null).join(" ");
     out.push(section("area_taxa", raw, {
       items: taxa,
@@ -349,9 +370,246 @@ function areaSections(raw: unknown): RecordsSection[] {
   return out;
 }
 
+const NOT_FOUND_COUNTS = "nothing retrieved under this exact name";
+
+function optionalString(value: unknown): string | null | undefined {
+  // undefined: present but not text (unreadable); null: not returned.
+  if (value === undefined || value === null) return null;
+  return typeof value === "string" ? str(value) : undefined;
+}
+
+/** "genus + group" as one writing, or null when not given, or undefined when malformed. */
+function groupWriting(value: unknown): string | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (!isRecord(value)) return undefined;
+  const genus = str(value.genus);
+  const group = str(value.group);
+  if (group === null) return undefined;
+  return genus ? `${genus} ${group}` : group;
+}
+
+/** A common name of a taxon, with the parenthesised text after it exactly as written; never a language, country or identification. */
+function vernacularNamesSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "vernacular_names" };
+  const names = all(raw.names, (value) => {
+    if (!isRecord(value)) return null;
+    const tag = optionalString(value.tag_as_written);
+    const later = optionalString(value.later_tag_in_same_group_not_assigned);
+    if (tag === undefined || later === undefined) return null;
+    const given = count(value.given_for_n_taxa);
+    const notes = [
+      later !== null ? `The source writes (${later}) after a later name of the same group and does not say whether it applies to this name; it is not attached.` : null,
+      given !== null && given > 1 ? `The checklist gives this name for ${given} taxa.` : null,
+    ].filter((part): part is string => part !== null);
+    // A name whose text is not in the data is said to be missing here; it is not dropped silently.
+    if (value.name_as_written === null) return item("A name is not shown here (see the statements).", { note: notes.join(" \u00b7 ") || null });
+    const name = str(value.name_as_written);
+    if (name === null) return null;
+    return item(tag !== null ? `${name} (${tag})` : name, { note: notes.join(" \u00b7 ") || null });
+  });
+  if (names === null) return { unreadable: true, kind: "vernacular_names" };
+  return section("vernacular_names", raw, {
+    items: names,
+    counts: names.length ? shownOf(raw.names_shown, raw.names_projected, raw.names_listed) : null,
+    note: raw.is_identification === false ? "A common name is not an identification." : null,
+  });
+}
+
+function vernacularLookupSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "vernacular_lookup" };
+  const taxa = all(raw.taxa, (value) => {
+    if (!isRecord(value)) return null;
+    const name = str(value.name_as_written);
+    const tag = optionalString(value.tag_as_written);
+    if (name === null || tag === undefined) return null;
+    return item(str(value.taxon_label), { note: `name as the source writes it: ${tag !== null ? `${name} (${tag})` : name}` });
+  });
+  if (taxa === null) return { unreadable: true, kind: "vernacular_lookup" };
+  const notFound = raw.state === "NOT_FOUND";
+  const note = [
+    raw.is_identification === false ? "Not an identification." : null,
+    taxa.length > 1 ? "Several taxa are listed; none is marked as the answer." : null,
+  ].filter((part): part is string => part !== null).join(" ");
+  // The statements of this block arrive under `items`.
+  return section("vernacular_lookup", { ...raw, statements: raw.items }, { items: taxa, counts: notFound ? NOT_FOUND_COUNTS : `${taxa.length} listed`, note: note || null });
+}
+
+const TERM_KINDS: Record<string, string> = {
+  rank_as_written: "a rank word as written",
+  informal_grouping_as_written: "an informal grouping as written",
+};
+
+/** What one checklist writes in a remark about a placement below the genus; the words are the source's own. */
+function placementSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "infrageneric_placement" };
+  const placements = all(raw.placements, (value) => {
+    if (!isRecord(value)) return null;
+    const terms = all(value.terms, (term) => {
+      if (!isRecord(term)) return null;
+      const written = str(term.as_written_by_source);
+      const kind = str(term.kind);
+      if (written === null) return null;
+      return `"${written}"${kind !== null ? ` (${TERM_KINDS[kind] ?? `kind as returned: ${kind}`})` : ""}`;
+    });
+    if (terms === null) return null;
+    const more = value.more_text_in_remark === true ? "The remark has further text that was not read." : null;
+    return item(str(value.piece_of_remark_read), {
+      detail: str(value.checklist_row_name),
+      note: [terms.length ? `terms: ${terms.join("; ")}` : null, more].filter((part): part is string => part !== null).join(" \u00b7 ") || null,
+    });
+  });
+  if (placements === null) return { unreadable: true, kind: "infrageneric_placement" };
+  const shown = count(raw.terms_shown);
+  return section("infrageneric_placement", raw, {
+    items: placements,
+    counts: shown !== null ? `${shown} terms shown` : null,
+    note: raw.is_a_classification_by_the_continuum === false ? "What one checklist writes in a remark; not a classification by the Continuum." : "What one checklist writes in a remark.",
+  });
+}
+
+function writingsItems(value: unknown): EvidenceItem[] | null {
+  return all(value, (one) => {
+    if (!isRecord(one)) return null;
+    if (one.taxa_listed !== undefined && one.taxa_listed !== null && count(one.taxa_listed) === null) return null;
+    const n = count(one.taxa_listed);
+    return item(str(one.label), { detail: n === null ? null : `${n} taxa listed by the checklist under this writing` });
+  });
+}
+
+/** The taxa one checklist lists under a group (its remark text); narrower groups and other writings are separate sections. */
+function groupSections(raw: unknown): RecordsSection[] {
+  if (raw === undefined || raw === null) return [];
+  if (!isRecord(raw)) return [{ unreadable: true, kind: "group_taxa" }];
+  const out: RecordsSection[] = [];
+  const asked = groupWriting(raw.asked);
+  const askedAs = groupWriting(raw.asked_as);
+  const taxa = asked === undefined || askedAs === undefined ? null : all(raw.taxa, (value) => {
+    if (!isRecord(value)) return null;
+    const more = value.more_text_in_remark === true ? "The remark has further text that was not read." : null;
+    const piece = str(value.piece_of_remark_read);
+    return item(str(value.taxon), {
+      detail: str(value.checklist_row_name),
+      note: [piece !== null ? `remark as written: ${piece}` : null, more].filter((part): part is string => part !== null).join(" \u00b7 ") || null,
+    });
+  });
+  if (taxa === null) out.push({ unreadable: true, kind: "group_taxa" });
+  else {
+    const notFound = raw.resolution === "NOT_FOUND";
+    const alsoNarrower = count(raw.taxa_listed_also_in_a_narrower_group);
+    const withMore = count(raw.taxa_listed_with_more_text_in_remark);
+    const offset = count(raw.offset);
+    const cut = raw.all_listed_taxa_shown === false && !notFound;
+    const note = [
+      askedAs !== null ? `Asked as "${askedAs}"${asked !== null ? `; the checklist's writing: "${asked}"` : ""}.` : null,
+      raw.is_a_classification_by_the_continuum === false ? "What one checklist writes in a remark; not a classification by the Continuum." : null,
+      raw.is_the_list_of_the_taxa_of_the_group === false ? "This is not the list of the taxa of the group." : null,
+      cut ? `The list is cut${typeof raw.order === "string" ? ` (order returned: ${raw.order}` : ""}${offset !== null ? `, from offset ${offset}` : ""}${typeof raw.order === "string" ? ")" : ""}.` : null,
+      alsoNarrower ? `${alsoNarrower} of the listed taxa are also listed in a narrower group.` : null,
+      withMore ? `${withMore} of the listed taxa have further text in the remark that was not read.` : null,
+    ].filter((part): part is string => part !== null).join(" ");
+    out.push(section("group_taxa", raw, {
+      items: taxa,
+      counts: notFound ? NOT_FOUND_COUNTS : shownOf(raw.taxa_shown, null, raw.taxa_listed),
+      note: note || null,
+    }) ?? { unreadable: true, kind: "group_taxa" });
+  }
+  for (const [key, kind] of [["narrower_groups", "group_narrower"], ["other_writings", "group_other_writings"]] as const) {
+    const value = raw[key];
+    if (value === undefined || value === null) continue;
+    const items = writingsItems(value);
+    if (items === null) out.push({ unreadable: true, kind });
+    else if (items.length) out.push({ unreadable: false, kind, state: null, review: null, citation: null, counts: null, items, statements: [], note: null });
+  }
+  return out;
+}
+
+function remarkLine(piece: string | null, more: boolean): string | null {
+  return piece !== null ? `remark as written: ${piece}${more ? " (the remark has further text that was not read)" : ""}` : null;
+}
+
+/** Pollinators named in a checklist's remark: a compiler's statement, never an observation or a cited record. */
+function remarkPollinatorSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "remark_pollinator" };
+  const pieces: string[] = [];
+  const names = all(raw.pollinator_names, (value) => {
+    if (!isRecord(value)) return null;
+    const hint = optionalString(value.hint_of_source);
+    const qualifier = optionalString(value.qualifier_of_source);
+    const introducer = optionalString(value.introducer_as_written_by_source);
+    const derivation = optionalString(value.name_derivation);
+    const piece = optionalString(value.remark_piece);
+    if (hint === undefined || qualifier === undefined || introducer === undefined || derivation === undefined || piece === undefined) return null;
+    if (piece !== null && !pieces.includes(piece)) pieces.push(piece);
+    return item(str(value.name_as_written_by_source), {
+      note: [
+        introducer !== null ? `introduced in the remark as: ${introducer}` : null,
+        qualifier !== null ? `qualifier as written: ${qualifier}` : null,
+        hint !== null ? `hint as written: ${hint}` : null,
+        derivation !== null && derivation !== "as_written" ? `name derivation (code as returned): ${derivation}` : null,
+      ].filter((part): part is string => part !== null).join(" \u00b7 ") || null,
+    });
+  });
+  if (names === null) return { unreadable: true, kind: "remark_pollinator" };
+  const note = [
+    "A compiler's statement in a checklist remark: not an observation and not a cited record.",
+    raw.establishes_pollination === false ? "It does not establish pollination." : null,
+    ...pieces.map((piece) => remarkLine(piece, raw.remark_has_unread_text === true)),
+  ].filter((part): part is string => part !== null).join(" ");
+  return {
+    unreadable: false,
+    kind: "remark_pollinator",
+    state: null,
+    review: null,
+    citation: str(raw.citation_text),
+    counts: shownOf(raw.names_shown, raw.names_projected, raw.names_listed),
+    items: names,
+    statements: [],
+    note,
+  };
+}
+
+/** Taxa whose checklist remark names an insect: only remarks were read, never the cited interaction records. */
+function pollinatorTaxaSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "pollinator_taxa" };
+  const taxa = all(raw.taxa, (value) => {
+    if (!isRecord(value)) return null;
+    const introducer = optionalString(value.introducer_as_written);
+    const qualifier = optionalString(value.qualifier_as_written);
+    const hint = optionalString(value.source_hint_as_written);
+    const written = optionalString(value.name_as_written);
+    const piece = optionalString(value.remark_piece_as_written);
+    if (introducer === undefined || qualifier === undefined || hint === undefined || written === undefined || piece === undefined) return null;
+    return item(str(value.taxon), {
+      detail: str(value.checklist_row_name),
+      note: [
+        written !== null ? `name as written in the remark: ${written}` : null,
+        introducer !== null ? `introduced as: ${introducer}` : null,
+        qualifier !== null ? `qualifier as written: ${qualifier}` : null,
+        hint !== null ? `hint as written: ${hint}` : null,
+        remarkLine(piece, value.remark_has_unread_text === true),
+      ].filter((part): part is string => part !== null).join(" \u00b7 ") || null,
+    });
+  });
+  if (taxa === null) return { unreadable: true, kind: "pollinator_taxa" };
+  const notFound = raw.resolution === "NOT_FOUND";
+  const note = [
+    raw.cited_interaction_records_searched === false ? "Only the checklist's remarks were read; the cited interaction records were not searched by this insect name." : null,
+    raw.is_observation === false ? "Not an observation." : null,
+    raw.is_pollination_established === false ? "Pollination is not established." : null,
+    raw.is_resolved_animal_taxon === false ? "The insect name is text of the remarks, not a resolved animal taxon." : null,
+  ].filter((part): part is string => part !== null).join(" ");
+  return section("pollinator_taxa", raw, { items: taxa, counts: notFound ? NOT_FOUND_COUNTS : shownOf(raw.taxa_shown, null, raw.taxa_naming), note: note || null });
+}
+
 const KNOWN_EVIDENCE_KEYS = new Set([
   "distribution", "conservation", "synonymy", "synonym_resolution", "further_synonym_resolutions",
   "mycorrhiza", "host_pathogen", "relationships", "held_back", "not_retrieved", "publication", "area_taxa",
+  "vernacular_names", "vernacular_lookup", "infrageneric_placement", "group_taxa", "remark_pollinator", "pollinator_taxa",
 ]);
 
 function statementsOnlySection(kind: "mycorrhiza" | "host_pathogen", raw: unknown): RecordsSection | null {
@@ -385,6 +643,12 @@ function sectionsOf(evidence: unknown, resolutionOnSubject: unknown): RecordsSec
   }
   push(publicationSection(record.publication));
   out.push(...areaSections(record.area_taxa));
+  push(vernacularNamesSection(record.vernacular_names));
+  push(vernacularLookupSection(record.vernacular_lookup));
+  push(placementSection(record.infrageneric_placement));
+  out.push(...groupSections(record.group_taxa));
+  push(remarkPollinatorSection(record.remark_pollinator));
+  push(pollinatorTaxaSection(record.pollinator_taxa));
   push(statementsOnlySection("mycorrhiza", record.mycorrhiza));
   push(statementsOnlySection("host_pathogen", record.host_pathogen));
   out.push(...plainSections(record));
@@ -400,16 +664,26 @@ function subjectOf(raw: unknown, scope: SubjectScope, contextNote: string | null
   const sentences = raw.reading === undefined ? [] : strictStrings(raw.reading);
   const also = raw.also_asked_as === undefined || raw.also_asked_as === null ? [] : strictStrings(raw.also_asked_as);
   if (sentences === null || also === null) return { unreadable: true };
+  // A turn about no taxon is anchored on what it names: an area, a common name, a group or an insect name.
+  const noSpecies = str(raw.species) === null;
   const area = isRecord(raw.area) ? raw.area : null;
+  const group = isRecord(raw.group) ? raw.group : null;
+  const pollinator = isRecord(raw.pollinator_name) ? raw.pollinator_name : null;
+  const vernacular = isRecord(raw.vernacular_name) ? raw.vernacular_name : null;
   const areaLabel = area ? str(area.label) : null;
-  const isArea = areaLabel !== null && str(raw.species) === null;
-  const node = raw.kg_node_id ?? (area ? area.kg_node_id : undefined);
+  const groupLabel = group ? str(group.label) : null;
+  const pollinatorLabel = pollinator ? str(pollinator.label) : null;
+  const vernacularLabel = vernacular ? str(vernacular.asked) : null;
+  const anchorScope: SubjectScope | null = !noSpecies ? null : areaLabel !== null ? "area" : groupLabel !== null ? "group" : pollinatorLabel !== null ? "pollinator" : vernacularLabel !== null ? "vernacular" : null;
+  const anchorLabel = areaLabel ?? groupLabel ?? pollinatorLabel ?? vernacularLabel;
+  const anchor = area ?? group ?? pollinator;
+  const node = raw.kg_node_id ?? (anchor ? anchor.kg_node_id : undefined);
   return {
     unreadable: false,
-    scope: isArea ? "area" : scope,
+    scope: anchorScope ?? scope,
     // In a subtaxon entry `species` names the PARENT species and `name` the
     // subtaxon itself, so the subtaxon's own label must come from `name`.
-    label: scope === "direct_subtaxon" ? str(raw.name) : str(raw.species) ?? str(raw.name) ?? areaLabel,
+    label: scope === "direct_subtaxon" ? str(raw.name) : str(raw.species) ?? str(raw.name) ?? anchorLabel,
     kgNodeId: typeof node === "number" && Number.isInteger(node) ? node : null,
     status: str(raw.status),
     sentences,
@@ -456,6 +730,13 @@ export function readStructuredEvidence(raw: unknown): StructuredEvidence | null 
     if (raw.contextual !== undefined && raw.contextual !== null) subjects.push(subjectOf(raw.contextual, "contextual_parent_species", note));
   } else if (isRecord(raw.evidence)) {
     subjects = [subjectOf(raw, "subject")];
+  } else if (isRecord(raw.vernacular_lookup)) {
+    subjects = [subjectOf({ vernacular_name: { asked: raw.vernacular_name_asked }, evidence: { vernacular_lookup: raw.vernacular_lookup } }, "subject")];
+  } else if (isRecord(raw.group_taxa)) {
+    const written = groupWriting(raw.group_asked);
+    subjects = [subjectOf({ group: { label: written ?? undefined }, evidence: { group_taxa: raw.group_taxa } }, "subject")];
+  } else if (isRecord(raw.pollinator_taxa)) {
+    subjects = [subjectOf({ pollinator_name: { label: raw.pollinator_name_asked }, evidence: { pollinator_taxa: raw.pollinator_taxa } }, "subject")];
   } else if (isRecord(raw.area_taxa)) {
     // An area name that was not found: the block carries the area part at the top level.
     subjects = [subjectOf({ area: { label: raw.area_asked }, evidence: { area_taxa: raw.area_taxa } }, "subject")];
