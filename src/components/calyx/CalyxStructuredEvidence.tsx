@@ -23,6 +23,14 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   publication: "Checklist place of publication",
   area_taxa: "Taxa this checklist lists for the area",
   area_other_writings: "Other writings of this area name (separate statements, not added to the list)",
+  vernacular_names: "Common names this checklist gives for the taxon",
+  vernacular_lookup: "Taxa for which this checklist writes that name",
+  infrageneric_placement: "What this checklist's remark writes below the genus",
+  group_taxa: "Taxa this checklist lists under the group",
+  group_narrower: "Narrower groups (separate statements, not added to the list)",
+  group_other_writings: "Other writings of this group (separate statements, not added to the list)",
+  remark_pollinator: "Pollinators named in a checklist remark (a compiler's statement, not a cited record)",
+  pollinator_taxa: "Taxa whose checklist remark names this insect",
   relationships: "Cited interaction records",
   held_back: "Records held back",
   not_retrieved: "Not retrieved",
@@ -34,7 +42,8 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   host_pathogen: "Host and pathogen records",
 };
 
-const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings"];
+const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings", "group_narrower", "group_other_writings", "remark_pollinator"];
+const ROW_KINDS: RecordsSectionKind[] = ["publication", "area_taxa", "group_taxa", "pollinator_taxa", "infrageneric_placement"];
 
 function Doi({ doi }: { doi: string }) {
   const href = doiHref(doi);
@@ -49,9 +58,9 @@ function ItemLine({ kind, item }: { kind: RecordsSectionKind; item: EvidenceItem
   let main = item.text;
   if (kind === "synonymy" && item.detail) main = `${item.text} ${item.detail}`;
   if (kind === "held_back" && item.detail) main = `${item.detail}: ${item.text}`;
-  if (kind === "area_other_writings" && item.detail) main = `${item.text} \u00b7 ${item.detail}`;
+  if ((kind === "area_other_writings" || kind === "group_narrower" || kind === "group_other_writings") && item.detail) main = `${item.text} \u00b7 ${item.detail}`;
   if (kind === "synonym_resolution" && item.detail) main = `${item.text} \u2014 listed under ${item.detail}`;
-  const row = (kind === "publication" || kind === "area_taxa") && item.detail ? `Checklist row: ${item.detail}` : null;
+  const row = ROW_KINDS.includes(kind) && item.detail ? `Checklist row: ${item.detail}` : null;
   const meta = [item.state, item.review].filter((part): part is string => part !== null).join(" \u00b7 ");
   return (
     <li className="break-words">
@@ -99,7 +108,7 @@ function Section({ section }: { section: RecordsSection }) {
     return <p className="mt-2 text-xs text-muted-foreground" data-testid="calyx-record-unreadable">{label}: could not be displayed.</p>;
   }
   const heading = HEADINGS[section.kind];
-  const summary = section.counts ?? `${section.items.length} listed`;
+  const summary = section.counts ?? (section.items.length ? `${section.items.length} listed` : "nothing retrieved");
   if (ALWAYS_OPEN.includes(section.kind)) {
     return (
       <div className="mt-2" data-kind={section.kind} data-testid="calyx-record-section">
@@ -124,6 +133,13 @@ function Section({ section }: { section: RecordsSection }) {
   );
 }
 
+const SCOPE_PREFIX: Partial<Record<string, string>> = {
+  area: "Area: ",
+  vernacular: "Common name asked: ",
+  group: "Group (as written by the checklist): ",
+  pollinator: "Insect name asked (a name in checklist remarks): ",
+};
+
 function Subject({ subject, mainSentences }: { subject: EvidenceSubject; mainSentences: string[] }) {
   if (subject.unreadable) {
     return <div className="mt-3 rounded-lg border px-3 py-2 text-xs" data-testid="calyx-subject-unreadable">The records of this taxon could not be displayed.</div>;
@@ -134,7 +150,7 @@ function Subject({ subject, mainSentences }: { subject: EvidenceSubject; mainSen
   return (
     <div className="mt-3 rounded-lg border px-3 py-2" data-scope={subject.scope} data-testid="calyx-subject">
       <h4 className="text-sm font-medium">
-        {subject.scope === "area" ? "Area: " : contextual ? "Context only, records of the species: " : subject.scope === "direct_subtaxon" ? "Records of this taxon itself: " : ""}
+        {SCOPE_PREFIX[subject.scope] ?? (contextual ? "Context only, records of the species: " : subject.scope === "direct_subtaxon" ? "Records of this taxon itself: " : "")}
         <i>{label}</i>
         {subject.kgNodeId !== null ? <span className="font-mono text-[11px] text-muted-foreground"> {"\u00b7"} graph node {subject.kgNodeId}</span> : null}
       </h4>
