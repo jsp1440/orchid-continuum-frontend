@@ -1,7 +1,7 @@
 // Real responses of POST /api/calyx/speak/conversations/{id}/turns, captured from the backend route on a
 // local database at orchid-calyx-backend commit c2babbb15e22eb9edb089ebc96dd0ab88cb6c411 (draft PR #2420);
 // the publication-*, synonym-beside-variety-notice and the three synonym-* files with `records_attached`
-// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7. The other files are from the earlier capture.
+// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files at backend claude/wp-area-taxa-20261114 890a173a. The other files are from the earlier capture.
 // EXCERPTS: each file is {question, answer, research:{scientific_evidence}} with fields kept as returned, except
 // that (to keep the repository small) the answer text is omitted, strings are cut at 170 characters, lists of
 // records are cut to 2 entries (the `areas` list to 10), a few identifier-only fields (edge/node ids, dataset
@@ -29,6 +29,12 @@ import publicationVariety from "./publication-variety.json";
 import publicationNone from "./publication-none.json";
 import publicationAndDistribution from "./publication-and-distribution.json";
 import synonymBesideVarietyNotice from "./synonym-beside-variety-notice.json";
+import areaTaxaList from "./area-taxa-list.json";
+import areaTaxaWithOtherWritings from "./area-taxa-with-other-writings.json";
+import areaTaxaWithMarker from "./area-taxa-with-marker.json";
+import areaNotFound from "./area-not-found.json";
+import areaQuestionLeftAloneGenusNamed from "./area-question-left-alone-genus-named.json";
+import speciesQuestionNamingAnArea from "./species-question-naming-an-area.json";
 
 export type CapturedTurn = { question: string; answer: string; research: { scientific_evidence: unknown } };
 export const fixtures: Record<string, CapturedTurn> = {
@@ -55,5 +61,11 @@ export const fixtures: Record<string, CapturedTurn> = {
   "publication-none": publicationNone,
   "publication-and-distribution": publicationAndDistribution,
   "synonym-beside-variety-notice": synonymBesideVarietyNotice,
+  "area-taxa-list": areaTaxaList,
+  "area-taxa-with-other-writings": areaTaxaWithOtherWritings,
+  "area-taxa-with-marker": areaTaxaWithMarker,
+  "area-not-found": areaNotFound,
+  "area-question-left-alone-genus-named": areaQuestionLeftAloneGenusNamed,
+  "species-question-naming-an-area": speciesQuestionNamingAnArea,
 };
 export const evidenceOf = (name: string): unknown => fixtures[name].research.scientific_evidence;
