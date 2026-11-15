@@ -463,29 +463,31 @@ async function searchGenusImageHarvester(genus: string, limit: number, signal?: 
   // CORS; the harvester omits Access-Control-Allow-Origin so browsers cannot
   // read it — it stays as a last-ditch fallback for non-browser callers.
   const limitParam = Math.max(120, limit * 4);
-  const payload =
-    (await fetchOnce(
-      `${BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
-      12000,
-      signal,
-    )) ??
-    (await fetchOnce(
+  const out: FeaturedSpecies[] = [];
+  const seen = new Set<string>();
+  const collect = (payload: unknown | null): void => {
+    for (const row of extractArray(payload)) {
+      const feature = toFeatured(row, g);
+      if (!feature || !feature.image || (feature.imageScore ?? 0) < MIN_GALLERY_SCORE) continue;
+      const key = feature.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(feature);
+    }
+  };
+
+  collect(await fetchOnce(
+    `${BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
+    12000,
+    signal,
+  ));
+  // A valid JSON response can still contain no usable photographs.
+  if (out.length === 0 && !signal?.aborted) {
+    collect(await fetchOnce(
       `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
       12000,
       signal,
     ));
-  if (!payload) return [];
-
-  const out: FeaturedSpecies[] = [];
-  const seen = new Set<string>();
-  for (const row of extractArray(payload)) {
-    const feature = toFeatured(row, g);
-    if (!feature || !feature.image) continue;
-    if ((feature.imageScore ?? 0) < MIN_GALLERY_SCORE) continue;
-    const key = feature.name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(feature);
   }
 
   return out
