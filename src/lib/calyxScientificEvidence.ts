@@ -244,7 +244,7 @@ export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
     code: text(raw.reason) ?? text(raw.error),
     provenance: provenanceOf(raw),
     boundary: boundaryOf(raw),
-    structured: status === "available" || status === "not_resolved" ? readStructuredEvidence(raw) : null,
+    structured: status === "available" || status === "not_resolved" || status === "not_applicable" || status === "unavailable" ? readStructuredEvidence(raw) : null,
   };
 
   switch (status as CalyxScientificEvidenceStatus) {
@@ -253,7 +253,8 @@ export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
       return { ...base, kind: "quiet" };
     case "not_applicable":
       // Without an explanation the backend has nothing to say about this turn.
-      return { ...base, kind: base.explanation ? "not_applicable" : "quiet" };
+      // (a notice that part of the turn was not read is a reason to show it too)
+      return { ...base, kind: base.explanation || base.structured?.notices.length ? "not_applicable" : "quiet" };
     case "not_resolved":
       return { ...base, kind: "not_resolved" };
     case "unavailable":
