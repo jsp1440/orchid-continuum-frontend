@@ -112,7 +112,7 @@ describe("hybrid_formula", () => {
   it("a parent matched to a species-level name the checklist lists only below the species (switch on), and the same parent not matched (switch off)", () => {
     show(evidenceOf("hybrid-formula-parent-matched-to-implied-name-switch-on"));
     openAll();
-    expect(notes("hybrid_formula")).toContain("Parent 1: written \u201cOphrys implicata\u201d \u00b7 matched by name to a species-level name that the checklist lists only through rows below the species (a match by name, not a verified identity)");
+    expect(notes("hybrid_formula")).toContain("Parent 1: written \u201cOphrys implicata\u201d \u00b7 matched by name to a species-level name that the checklist lists only through rows below the species; the graph holds it as an implied species concept derived from those rows, not as a taxon of the checklist (a match by name, not a verified identity, and not a match to any of those subspecies or varieties)");
     show(evidenceOf("hybrid-formula-parent-not-matched-switch-off"));
     openAll();
     expect(notes("hybrid_formula")).toContain("Parent 1: written \u201cOphrys implicata\u201d \u00b7 not matched: only a species-level name that the checklist lists through rows below the species carries that name");
@@ -197,6 +197,13 @@ describe("parent_nothotaxa", () => {
     openAll();
     expect(itemTexts("parent_nothotaxa")).toEqual(["Ophrys x implicatella"]);
     expect(section("parent_entries_not_matched")).toBeNull();
+    // the asked name is itself an implied species concept (taxon.is_implied_species_concept): the section says what that is
+    expect(section("parent_nothotaxa")?.textContent).toContain("implied species concept derived from those rows, not as a taxon of the checklist. None of those subspecies or varieties is meant.");
+  });
+  it("an ordinary asked taxon does not get the implied-concept note", () => {
+    show(evidenceOf("parent-nothotaxa-several"));
+    openAll();
+    expect(section("parent_nothotaxa")?.textContent).not.toContain("implied species concept");
   });
   it("a nothotaxon as the subject: a limit, not a list and not 'no hybrids'", () => {
     show(evidenceOf("parent-nothotaxa-subject-is-a-nothotaxon"));
@@ -217,6 +224,24 @@ describe("parent_nothotaxa", () => {
       show(evidenceOf(name));
       expect(container.textContent).not.toMatch(/no hybrids|does not exist|is not a hybrid/);
     }
+  });
+});
+
+describe("(synthetic) cut lists are said to be cut", () => {
+  it("a remark list the backend marks as not fully shown, and a formula whose parents are not all shown", () => {
+    const raw = clone("remark-shown");
+    raw.subjects[0].evidence.checklist_remark.all_stored_remarks_shown = false;
+    show(raw);
+    openAll();
+    expect(section("remark_text")?.textContent).toContain("Not every stored remark of the checklist is shown here.");
+    show(evidenceOf("remark-shown"));
+    openAll();
+    expect(section("remark_text")?.textContent).not.toContain("Not every stored remark");
+    const f = clone("hybrid-formula-both-parents-matched");
+    f.subjects[0].evidence.hybrid_formula.formulas[0].all_parents_shown = false;
+    show(f);
+    openAll();
+    expect(notes("hybrid_formula")).toContain("Not every parent the formula names is shown here.");
   });
 });
 
