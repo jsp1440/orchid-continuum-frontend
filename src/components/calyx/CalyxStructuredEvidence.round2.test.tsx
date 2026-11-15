@@ -50,6 +50,14 @@ describe("1. a name held back by the privacy gate", () => {
     show(raw);
     expect(container.querySelector('[data-kind="remark_pollinator"] h5')?.textContent).toContain("1 of 1 shown \u00b7 2 held back by the privacy gate");
   });
+  it("(synthetic) a count of zero prints no privacy-gate phrase, as in the backend's own responses where nothing was held back", () => {
+    const raw = clone("vernacular-names-of-a-taxon");
+    raw.subjects[0].evidence.vernacular_names.names_held_back_by_privacy_gate = 0;
+    show(raw);
+    open(/Common names this checklist gives/);
+    expect(button(/Common names this checklist gives/)).toContain("3 of 3 shown");
+    expect(text()).not.toMatch(/privacy gate/);
+  });
 });
 
 describe("2. a group that is not found carries the groups the checklist writes differently", () => {
