@@ -39,7 +39,7 @@ describe("an area turn (taxa one checklist lists for an area name)", () => {
     show(evidenceOf("area-taxa-list"));
     expect(container.querySelector("dt")?.textContent).toBe("Area");
     expect(all("calyx-evidence-species")[0].textContent).toBe("Madagascar");
-    expect(container.querySelector("h4")?.textContent).toBe("Area: Madagascar \u00b7 graph node 82397");
+    expect(container.querySelector("h4")?.textContent).toBe("Area: Madagascar");
     expect(text()).not.toMatch(/Species\b/);
     const button = Array.from(container.querySelectorAll("button")).find((b) => /Taxa this checklist lists for the area/.test(b.textContent ?? ""))!;
     expect(button.textContent).toBe("Show Taxa this checklist lists for the area \u00b7 2 of 2 shown");

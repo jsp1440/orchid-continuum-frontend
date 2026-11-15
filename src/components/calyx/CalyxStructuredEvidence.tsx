@@ -32,6 +32,10 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   group_other_writings: "Other writings of this group (separate statements, not added to the list)",
   remark_pollinator: "Pollinators named in a checklist remark (a compiler's statement, not a cited record)",
   pollinator_taxa: "Taxa whose checklist remark names this insect",
+  remark_text: "Checklist remark on the taxon (the compiler's own words)",
+  hybrid_formula: "Hybrid formula as the checklist's own row writes it",
+  parent_nothotaxa: "Nothotaxa whose checklist formulas name this taxon as a parent",
+  parent_entries_not_matched: "Parent names that read like this name and were not matched to it",
   relationships: "Cited interaction records",
   held_back: "Records held back",
   not_retrieved: "Not retrieved",
@@ -43,8 +47,8 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   host_pathogen: "Host and pathogen records",
 };
 
-const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings", "group_narrower", "group_candidates", "group_other_writings", "remark_pollinator"];
-const ROW_KINDS: RecordsSectionKind[] = ["publication", "area_taxa", "group_taxa", "pollinator_taxa", "infrageneric_placement"];
+const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings", "group_narrower", "group_candidates", "group_other_writings", "remark_pollinator", "parent_entries_not_matched"];
+const ROW_KINDS: RecordsSectionKind[] = ["hybrid_formula", "parent_nothotaxa", "publication", "area_taxa", "group_taxa", "pollinator_taxa", "infrageneric_placement"];
 
 function Doi({ doi }: { doi: string }) {
   const href = doiHref(doi);
@@ -59,7 +63,7 @@ function ItemLine({ kind, item }: { kind: RecordsSectionKind; item: EvidenceItem
   let main = item.text;
   if (kind === "synonymy" && item.detail) main = `${item.text} ${item.detail}`;
   if (kind === "held_back" && item.detail) main = `${item.detail}: ${item.text}`;
-  if ((kind === "area_other_writings" || kind === "group_narrower" || kind === "group_other_writings") && item.detail) main = `${item.text} \u00b7 ${item.detail}`;
+  if ((kind === "parent_entries_not_matched" || kind === "area_other_writings" || kind === "group_narrower" || kind === "group_other_writings") && item.detail) main = `${item.text} \u00b7 ${item.detail}`;
   if (kind === "synonym_resolution" && item.detail) main = `${item.text} \u2014 listed under ${item.detail}`;
   const row = ROW_KINDS.includes(kind) && item.detail ? `Checklist row: ${item.detail}` : null;
   const meta = [item.state, item.review].filter((part): part is string => part !== null).join(" \u00b7 ");
@@ -67,7 +71,7 @@ function ItemLine({ kind, item }: { kind: RecordsSectionKind; item: EvidenceItem
     <li className="break-words">
       <span data-testid="calyx-record-text">{main}</span>
       {row ? <span className="block text-xs text-muted-foreground">{row}</span> : null}
-      {item.note ? <span className="block text-xs text-muted-foreground">{item.note}</span> : null}
+      {item.note ? <span className="block whitespace-pre-line text-xs text-muted-foreground">{item.note}</span> : null}
       {meta ? <span className="block text-xs text-muted-foreground">{meta}</span> : null}
       {item.citation ? <span className="block text-xs text-muted-foreground">Cited: {item.citation}</span> : null}
       {item.doi ? <span className="block text-xs text-muted-foreground"><Doi doi={item.doi} /></span> : null}
@@ -153,7 +157,6 @@ function Subject({ subject, mainSentences }: { subject: EvidenceSubject; mainSen
       <h4 className="text-sm font-medium">
         {SCOPE_PREFIX[subject.scope] ?? (contextual ? "Context only, records of the species: " : subject.scope === "direct_subtaxon" ? "Records of this taxon itself: " : "")}
         <i>{label}</i>
-        {subject.kgNodeId !== null ? <span className="font-mono text-[11px] text-muted-foreground"> {"\u00b7"} graph node {subject.kgNodeId}</span> : null}
       </h4>
       {contextual && subject.contextNote ? <p className="mt-1 text-xs leading-5" data-testid="calyx-subject-context-note">{subject.contextNote}</p> : null}
       {subject.askedAs ? <p className="mt-1 text-xs leading-5" data-testid="calyx-subject-asked-as">Asked as {subject.askedAs}; the records are those of {label}.</p> : null}

@@ -46,12 +46,12 @@ describe("nothing to show", () => {
 });
 
 describe("single taxon, pollination", () => {
-  it("shows the taxon, graph node, the sentences once and the records behind a button", () => {
+  it("shows the taxon (no internal node id), the sentences once and the records behind a button", () => {
     show(evidenceOf("pollination-species"));
     const raw = evidenceOf("pollination-species") as { reading: string[] };
     expect(all("calyx-evidence-sentences")[0].querySelectorAll("li")).toHaveLength(raw.reading.length);
     expect(all("calyx-subject")).toHaveLength(1);
-    expect(all("calyx-subject")[0].textContent).toContain("graph node 52151");
+    expect(all("calyx-subject")[0].textContent).not.toContain("graph node");
     // The sentences are the same as the turn's own, so the subject does not print them again.
     expect(all("calyx-subject-sentences")).toHaveLength(0);
     expect(text().split(raw.reading[0]).length - 1).toBe(1);
