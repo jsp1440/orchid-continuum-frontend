@@ -19,6 +19,7 @@ import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
 const AtlasNext = lazy(() => import("./pages/AtlasNext"));
+const PaperBotanicaPage = lazy(() => import("./features/paperbotanica/PaperBotanicaPage"));
 import OrchidZoo from "./pages/OrchidZoo";
 import OACS from "./pages/OACS";
 import Widgets from "./pages/Widgets";
@@ -94,6 +95,7 @@ const App = () => (
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
                   <Route path="/orchid-identification" element={<OrchidIdentificationContinuum />} />
                   <Route path="/calyx" element={<AtlasAwareCalyxRoute />} />
+                  <Route path="/paperbotanica" element={<ProtectedRoute title="PaperBotanica · authenticated members" description="Sign in to inspect draft botanical reconstructions and download review-only paper models."><Suspense fallback={<div className="flex min-h-screen items-center justify-center text-sm text-muted-foreground">Loading PaperBotanica…</div>}><PaperBotanicaPage /></Suspense></ProtectedRoute>} />
                   <Route path="/speak-with-calyx" element={<CalyxWorkspace />} />
                   <Route path="/calyx-mobile" element={<CalyxMobile />} />
                   <Route path="/mission-control/calyx" element={<ProtectedRoute title="Mission Control Calyx · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxWorkspace /></ProtectedRoute>} />
