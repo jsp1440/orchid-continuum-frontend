@@ -1,0 +1,205 @@
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import {
+  checklistApi,
+  type AreaResponse,
+  type AreasResponse,
+  type CalyxHandoff,
+  type Envelope,
+  type FacetPanel,
+  type TaxonResponse,
+} from './api';
+import { atlasChecklistCalyxHref } from '@/features/atlas-next/calyxHandoff';
+
+/**
+ * Atlas · checklist distribution layer. A list-and-evidence view, not a map: the Continuum holds no geometry for
+ * the checklist's areas, and the page says so. Areas, markers and statuses are shown as the source and the
+ * graph give them; nothing is coloured, counted as a flora or read as an occurrence.
+ */
+
+function Gate({ data }: { data: Envelope | null }) {
+  if (!data) return null;
+  if (data.status === 'not_enabled')
+    return <p role="status">The checklist layer is switched off. Nothing was read, and nothing is said about any taxon or area.</p>;
+  if (data.status === 'unavailable')
+    return <p role="status">The graph could not be read. This is a gap in what could be read, not an absence.</p>;
+  return null;
+}
+
+function AskCalyx({ handoff }: { handoff: CalyxHandoff | null | undefined }) {
+  if (!handoff) return null;
+  const href = handoff.question ? atlasChecklistCalyxHref(handoff.question) : null;
+  if (!href) return <p className="text-xs">{handoff.reason ?? 'No question can be handed to Calyx for this selection.'}</p>;
+  return (
+    <Link to={href} className="underline">
+      Ask Calyx: “{handoff.question}”
+    </Link>
+  );
+}
+
+function Panel({ name, panel }: { name: string; panel: FacetPanel }) {
+  return (
+    <section aria-label={name} className="mb-3">
+      <h4 className="font-medium">
+        {name.replace(/_/g, ' ')} <span className="text-xs">({panel.state}, {panel.rows.length} read{panel.truncated ? ', more exist' : ''})</span>
+      </h4>
+      {panel.gap && <p className="text-xs">{panel.gap}</p>}
+      <ul>
+        {panel.rows.map((r) => (
+          <li key={r.kg_edge_id} className="text-sm">
+            {`${r.to_label ?? ''} `}
+            {r.evidence?.checklist?.source_marker ? <span>[{r.evidence.checklist.source_marker}] </span> : null}
+            {(r.evidence?.checklist?.source_tags ?? []).map((t) => (
+              <span key={t}>[{t}] </span>
+            ))}
+            <span className="text-xs">
+              {r.evidence_status} · review: {r.review_state ?? 'none recorded'} · {r.rule_name ?? r.source_table}
+              {r.citation?.doi ? ` · doi ${r.citation.doi}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export default function AtlasChecklistPage() {
+  const [q, setQ] = useState('');
+  const [areas, setAreas] = useState<AreasResponse | null>(null);
+  const [areaName, setAreaName] = useState<string | null>(null);
+  const [genus, setGenus] = useState('');
+  const [marked, setMarked] = useState<'any' | 'marked' | 'unmarked'>('any');
+  const [offset, setOffset] = useState(0);
+  const [area, setArea] = useState<AreaResponse | null>(null);
+  const [taxonId, setTaxonId] = useState<number | null>(null);
+  const [taxon, setTaxon] = useState<TaxonResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    checklistApi.areas(q.trim(), 0).then((r) => live && setAreas(r)).catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [q]);
+
+  useEffect(() => {
+    if (!areaName) return;
+    let live = true;
+    const flag = marked === 'any' ? undefined : marked === 'marked';
+    checklistApi.area(areaName, offset, genus.trim(), flag).then((r) => live && setArea(r)).catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [areaName, genus, marked, offset]);
+
+  useEffect(() => {
+    if (taxonId === null) return;
+    let live = true;
+    setTaxon(null);
+    checklistApi.taxon(taxonId).then((r) => live && setTaxon(r)).catch((e: Error) => live && setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [taxonId]);
+
+  const gate = areas && areas.status !== 'available' ? areas : null;
+
+  return (
+    <main className="mx-auto max-w-6xl p-6">
+      <h1 className="text-2xl">Atlas · checklist distribution</h1>
+      {areas && <p className="text-sm">{areas.notice}</p>}
+      {areas && <p className="text-sm">Geometry: {areas.geometry.state.replace('_', ' ')}. {areas.geometry.explanation}</p>}
+      {error && <p role="alert">{error}</p>}
+      <Gate data={gate} />
+      {!gate && (
+        <div className="grid gap-6 md:grid-cols-3">
+          <section aria-label="Areas">
+            <label>
+              Area name
+              <input value={q} onChange={(e) => setQ(e.target.value)} className="ml-2 border" />
+            </label>
+            <p className="text-xs">{areas ? `${areas.areas_matching} areas, names as the checklist writes them` : 'Loading…'}</p>
+            <ul>
+              {areas?.areas.map((a) => (
+                <li key={a.kg_node_id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAreaName(a.label);
+                      setOffset(0);
+                      setTaxonId(null);
+                    }}
+                  >
+                    {a.label} <span className="text-xs">({a.taxa_listed} statements)</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+          <section aria-label="Taxa of the area">
+            {!area && <p className="text-sm">Select an area.</p>}
+            {area && (
+              <>
+                <h2 className="text-lg">{area.area?.label ?? areaName}</h2>
+                {area.gap && <p>{area.gap}</p>}
+                {area.area && (
+                  <p className="text-xs">
+                    {area.taxa_listed} statements{area.taxa_listed_with_a_marker ? `, ${area.taxa_listed_with_a_marker} with a sign of the source` : ''}
+                    {area.taxa_matching_filter !== undefined ? `; ${area.taxa_matching_filter} match the filter` : ''}. Statements, not a species count.
+                  </p>
+                )}
+                <label>
+                  Genus
+                  <input value={genus} onChange={(e) => { setGenus(e.target.value); setOffset(0); }} className="ml-2 border" />
+                </label>
+                <label className="ml-3">
+                  Source signs
+                  <select value={marked} onChange={(e) => { setMarked(e.target.value as typeof marked); setOffset(0); }}>
+                    <option value="any">any</option>
+                    <option value="marked">with a sign (?, +, [I], [c])</option>
+                    <option value="unmarked">without</option>
+                  </select>
+                </label>
+                <ul>
+                  {area.taxa.map((t) => (
+                    <li key={t.kg_edge_id}>
+                      <button type="button" onClick={() => setTaxonId(t.taxon.kg_node_id)}>
+                        {t.taxon.label}
+                      </button>{' '}
+                      {t.evidence.checklist?.source_marker ? <span>[{t.evidence.checklist.source_marker}]</span> : null}
+                    </li>
+                  ))}
+                </ul>
+                {offset > 0 && <button type="button" onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</button>}
+                {area.next_offset !== null && <button type="button" onClick={() => setOffset(area.next_offset ?? 0)}>Next</button>}
+                <div><AskCalyx handoff={area.calyx} /></div>
+              </>
+            )}
+          </section>
+          <section aria-label="Evidence for the taxon">
+            {taxonId === null && <p className="text-sm">Select a taxon to see what the graph holds, with its sources and review state.</p>}
+            {taxonId !== null && !taxon && <p>Loading…</p>}
+            {taxon?.status === 'no_such_node' && <p>{taxon.explanation}</p>}
+            {taxon?.identity && (
+              <>
+                <h2 className="text-lg">{taxon.identity.label}</h2>
+                <p className="text-xs">graph node {taxon.identity.kg_node_id} · {taxon.identity.canonical_key}</p>
+                {Object.entries(taxon.panels ?? {}).map(([group, facets]) => (
+                  <div key={group}>
+                    <h3 className="mt-3 uppercase text-xs">{group.replace(/_/g, ' ')}</h3>
+                    {Object.entries(facets).map(([name, panel]) => (
+                      <Panel key={name} name={name} panel={panel} />
+                    ))}
+                  </div>
+                ))}
+                <p className="text-xs">Not served by the Continuum's contract: {(taxon.not_served ?? []).map((n) => n.facet).join(', ')}.</p>
+                <AskCalyx handoff={taxon.calyx} />
+              </>
+            )}
+          </section>
+        </div>
+      )}
+    </main>
+  );
+}
