@@ -44,6 +44,9 @@ function Panel({ name, panel }: { name: string; panel: FacetPanel }) {
         {name.replace(/_/g, ' ')} <span className="text-xs">({panel.state}, {panel.rows.length} read{panel.truncated ? ', more exist' : ''})</span>
       </h4>
       {panel.gap && <p className="text-xs">{panel.gap}</p>}
+      {(panel.statements ?? []).map((line) => (
+        <p key={line} className="text-sm">{line}</p>
+      ))}
       <ul>
         {panel.rows.map((r) => (
           <li key={r.kg_edge_id} className="text-sm">
