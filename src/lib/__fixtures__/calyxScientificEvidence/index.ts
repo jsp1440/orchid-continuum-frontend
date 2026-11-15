@@ -1,7 +1,7 @@
 // Real responses of POST /api/calyx/speak/conversations/{id}/turns, captured from the backend route on a
 // local database at orchid-calyx-backend commit c2babbb15e22eb9edb089ebc96dd0ab88cb6c411 (draft PR #2420);
 // the publication-*, synonym-beside-variety-notice and the three synonym-* files with `records_attached`
-// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files and the sixteen group-*, placement-*, pollination-*remark*, pollinator-*, vernacular-* files at backend claude/wp-checklist-knowledge-2-20261114 a92a4183, except group-not-found-two-writings-named, vernacular-names-unassigned-tag-and-withheld-name, pollinator-taxa-list and the eight files orchid-asked-as-the-pollinator, pollination-remark-later-writing-with-its-own-hint, pollinator-taxa-all-held-back, pollinator-taxa-hedges-per-taxon, two-questions-*, vernacular-lookup-records-held-back, which were captured at 6b3b46b1 (same branch). The other files are from the earlier captures.
+// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files and the sixteen group-*, placement-*, pollination-*remark*, pollinator-*, vernacular-* files at backend claude/wp-checklist-knowledge-2-20261114 a92a4183, except group-not-found-two-writings-named, vernacular-names-unassigned-tag-and-withheld-name, pollinator-taxa-list and the eight files orchid-asked-as-the-pollinator, pollination-remark-later-writing-with-its-own-hint, pollinator-taxa-all-held-back, pollinator-taxa-hedges-per-taxon, two-questions-*, vernacular-lookup-records-held-back, which were captured at 6b3b46b1 (same branch). The 27 remark-, hybrid-formula-, parent-nothotaxa-, older-topic-, hybrid-name- files were captured at backend claude/wp-checklist-knowledge-3-20261114 5fc4cec8 (draft PR #2425; the hybrid-formula ones with the implied-concept switch ON except the two named `switch-off`). The other files are from the earlier captures.
 // EXCERPTS: each file is {question, answer, research:{scientific_evidence}} with fields kept as returned, except
 // that (to keep the repository small) the answer text is omitted, strings are cut at 170 characters, lists of
 // records are cut to 2 entries (the `areas` list to 10), a few identifier-only fields (edge/node ids, dataset
@@ -59,6 +59,33 @@ import twoQuestionsOnlyTheFirstRead from "./two-questions-only-the-first-read.js
 import twoQuestionsTaxonReadGroupQuestionNoticed from "./two-questions-taxon-read-group-question-noticed.json";
 import twoQuestionsTaxonReadNameQuestionNoticed from "./two-questions-taxon-read-name-question-noticed.json";
 import vernacularLookupRecordsHeldBack from "./vernacular-lookup-records-held-back.json";
+import hybridFormulaBothParentsMatched from "./hybrid-formula-both-parents-matched.json";
+import hybridFormulaHedged from "./hybrid-formula-hedged.json";
+import hybridFormulaNoFormulaNothotaxon from "./hybrid-formula-no-formula-nothotaxon.json";
+import hybridFormulaParentIsAQuestionMark from "./hybrid-formula-parent-is-a-question-mark.json";
+import hybridFormulaParentMatchedToImpliedNameSwitchOn from "./hybrid-formula-parent-matched-to-implied-name-switch-on.json";
+import hybridFormulaParentNotMatchedSwitchOff from "./hybrid-formula-parent-not-matched-switch-off.json";
+import hybridFormulaParentsUnknown from "./hybrid-formula-parents-unknown.json";
+import hybridFormulaQualifiedParent from "./hybrid-formula-qualified-parent.json";
+import hybridFormulaSeveralTaxaCarryTheName from "./hybrid-formula-several-taxa-carry-the-name.json";
+import hybridFormulaSpeciesWithoutFormula from "./hybrid-formula-species-without-formula.json";
+import hybridFormulaUnmatchedParentNoTaxon from "./hybrid-formula-unmatched-parent-no-taxon.json";
+import hybridNameGraphDoesNotUse from "./hybrid-name-graph-does-not-use.json";
+import olderTopicDistributionForANothotaxon from "./older-topic-distribution-for-a-nothotaxon.json";
+import parentNothotaxaAmbiguousTaxon from "./parent-nothotaxa-ambiguous-taxon.json";
+import parentNothotaxaImpliedNameSwitchOff from "./parent-nothotaxa-implied-name-switch-off.json";
+import parentNothotaxaImpliedNameSwitchOn from "./parent-nothotaxa-implied-name-switch-on.json";
+import parentNothotaxaLongFirstPage from "./parent-nothotaxa-long-first-page.json";
+import parentNothotaxaNamesReadLikeNotMatched from "./parent-nothotaxa-names-read-like-not-matched.json";
+import parentNothotaxaNothingRetrieved from "./parent-nothotaxa-nothing-retrieved.json";
+import parentNothotaxaSeveral from "./parent-nothotaxa-several.json";
+import parentNothotaxaSubjectIsANothotaxon from "./parent-nothotaxa-subject-is-a-nothotaxon.json";
+import parentNothotaxaTaxonNotInGraph from "./parent-nothotaxa-taxon-not-in-graph.json";
+import remarkNone from "./remark-none.json";
+import remarkOfANothotaxon from "./remark-of-a-nothotaxon.json";
+import remarkSharedBySeveralTaxa from "./remark-shared-by-several-taxa.json";
+import remarkShown from "./remark-shown.json";
+import remarkWithheldByPrivacyGate from "./remark-withheld-by-privacy-gate.json";
 
 export type CapturedTurn = { question: string; answer: string; research: { scientific_evidence: unknown } };
 export const fixtures: Record<string, CapturedTurn> = {
@@ -115,5 +142,32 @@ export const fixtures: Record<string, CapturedTurn> = {
   "two-questions-taxon-read-group-question-noticed": twoQuestionsTaxonReadGroupQuestionNoticed,
   "two-questions-taxon-read-name-question-noticed": twoQuestionsTaxonReadNameQuestionNoticed,
   "vernacular-lookup-records-held-back": vernacularLookupRecordsHeldBack,
+  "hybrid-formula-both-parents-matched": hybridFormulaBothParentsMatched,
+  "hybrid-formula-hedged": hybridFormulaHedged,
+  "hybrid-formula-no-formula-nothotaxon": hybridFormulaNoFormulaNothotaxon,
+  "hybrid-formula-parent-is-a-question-mark": hybridFormulaParentIsAQuestionMark,
+  "hybrid-formula-parent-matched-to-implied-name-switch-on": hybridFormulaParentMatchedToImpliedNameSwitchOn,
+  "hybrid-formula-parent-not-matched-switch-off": hybridFormulaParentNotMatchedSwitchOff,
+  "hybrid-formula-parents-unknown": hybridFormulaParentsUnknown,
+  "hybrid-formula-qualified-parent": hybridFormulaQualifiedParent,
+  "hybrid-formula-several-taxa-carry-the-name": hybridFormulaSeveralTaxaCarryTheName,
+  "hybrid-formula-species-without-formula": hybridFormulaSpeciesWithoutFormula,
+  "hybrid-formula-unmatched-parent-no-taxon": hybridFormulaUnmatchedParentNoTaxon,
+  "hybrid-name-graph-does-not-use": hybridNameGraphDoesNotUse,
+  "older-topic-distribution-for-a-nothotaxon": olderTopicDistributionForANothotaxon,
+  "parent-nothotaxa-ambiguous-taxon": parentNothotaxaAmbiguousTaxon,
+  "parent-nothotaxa-implied-name-switch-off": parentNothotaxaImpliedNameSwitchOff,
+  "parent-nothotaxa-implied-name-switch-on": parentNothotaxaImpliedNameSwitchOn,
+  "parent-nothotaxa-long-first-page": parentNothotaxaLongFirstPage,
+  "parent-nothotaxa-names-read-like-not-matched": parentNothotaxaNamesReadLikeNotMatched,
+  "parent-nothotaxa-nothing-retrieved": parentNothotaxaNothingRetrieved,
+  "parent-nothotaxa-several": parentNothotaxaSeveral,
+  "parent-nothotaxa-subject-is-a-nothotaxon": parentNothotaxaSubjectIsANothotaxon,
+  "parent-nothotaxa-taxon-not-in-graph": parentNothotaxaTaxonNotInGraph,
+  "remark-none": remarkNone,
+  "remark-of-a-nothotaxon": remarkOfANothotaxon,
+  "remark-shared-by-several-taxa": remarkSharedBySeveralTaxa,
+  "remark-shown": remarkShown,
+  "remark-withheld-by-privacy-gate": remarkWithheldByPrivacyGate,
 };
 export const evidenceOf = (name: string): unknown => fixtures[name].research.scientific_evidence;
