@@ -163,4 +163,42 @@ describe('fetchSpeciesPublicRecord', () => {
     expect(record).toBeNull();
     expect(mocks.searchSpecies).not.toHaveBeenCalled();
   });
+  it('skips all record lookups for a route aborted before hydration', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    expect(
+      await fetchSpeciesPublicRecord('19550', 'Masdevallia abbreviata', controller.signal),
+    ).toBeNull();
+    expect(mocks.fetchSpeciesById).not.toHaveBeenCalled();
+    expect(mocks.searchSpecies).not.toHaveBeenCalled();
+  });
+
+  it('does not launch search fallback when route aborts during detail lookup', async () => {
+    const controller = new AbortController();
+    mocks.fetchSpeciesById.mockImplementation(async () => {
+      controller.abort();
+      return null;
+    });
+
+    expect(
+      await fetchSpeciesPublicRecord('19550', 'Masdevallia abbreviata', controller.signal),
+    ).toBeNull();
+    expect(mocks.searchSpecies).not.toHaveBeenCalled();
+  });
+
+  it('does not return a late matching index hit after route cancellation', async () => {
+    const controller = new AbortController();
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.searchSpecies.mockImplementation(async () => {
+      controller.abort();
+      return [{ taxonomy_id: '19550', canonical_name: 'Masdevallia abbreviata' }];
+    });
+
+    expect(
+      await fetchSpeciesPublicRecord('19550', 'Masdevallia abbreviata', controller.signal),
+    ).toBeNull();
+    expect(mocks.searchSpecies).toHaveBeenCalledTimes(1);
+  });
+
 });
