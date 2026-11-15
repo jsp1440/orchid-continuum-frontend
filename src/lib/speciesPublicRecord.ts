@@ -72,13 +72,26 @@ function extractRecordFields(
 ): Partial<SpeciesDossierData> {
   const text = (key: keyof SpeciesDossierData) => {
     const value = row[key];
-    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    // Preserve source text verbatim, including meaningful internal spacing.
+    return typeof value === 'string' && value.trim() ? value : undefined;
   };
+  const nullableText = (key: keyof SpeciesDossierData) =>
+    row[key] === null ? null : text(key);
+
+  // Only project fields modeled by SpeciesDossierData. Do not borrow values
+  // from any other search hit, even when the scientific name is identical.
   return {
     specific_epithet: text('specific_epithet'),
-    common_name: text('common_name'),
-    region: text('region'),
-    habitat: text('habitat'),
-    representative_image_url: text('representative_image_url'),
+    species: text('species'),
+    tribe: nullableText('tribe'),
+    subfamily: nullableText('subfamily'),
+    authority: text('authority'),
+    common_name: nullableText('common_name'),
+    iucn_code: nullableText('iucn_code'),
+    region: nullableText('region'),
+    habitat: nullableText('habitat'),
+    description: nullableText('description'),
+    representative_image_url: nullableText('representative_image_url'),
+    hero_image_url: nullableText('hero_image_url'),
   };
 }
