@@ -666,7 +666,10 @@ function remarkTextSection(raw: unknown): RecordsSection | null {
     });
   });
   if (remarks === null) return { unreadable: true, kind: "remark_text" };
-  const shownText = remarks.length - withheld;
+  // The backend counts a remark whose text it holds back apart from the shown ones (`remarks_shown`). An older backend counted it
+  // as shown: when the field and the per-remark flags do not add up, the flags decide.
+  const reported = count(raw.remarks_shown);
+  const shownText = reported !== null && reported + withheld === remarks.length ? reported : remarks.length - withheld;
   const built = section("remark_text", raw, {
     items: remarks,
     counts: remarks.length ? `${shownText} shown${withheld ? ` \u00b7 ${withheld} held back by the privacy gate` : ""}` : null,
@@ -710,12 +713,17 @@ function hybridFormulaSection(raw: unknown): RecordsSection | null {
       const reason = optionalString(one.not_matched_reason);
       const position = count(one.position);
       const byName = optionalString(one.matched_by_name_to);
-      const implied = optionalString(one.matched_to_implied_species_concept);
-      if (written === undefined || expanded === undefined || rule === undefined || reason === undefined || byName === undefined || implied === undefined) return null;
-      const match = byName !== null
-        ? "matched by name to a taxon of the graph (a match by name, not a verified identity)"
-        : implied !== null
-          ? "matched by name to a species-level name that the checklist lists only through rows below the species; the graph holds it as an implied species concept derived from those rows, not as a taxon of the checklist (a match by name, not a verified identity, and not a match to any of those subspecies or varieties)"
+      const impliedKey = optionalString(one.matched_to_implied_species_concept);
+      const matchedLabel = optionalString(one.matched_taxon_label);
+      if (one.is_implied_species_concept !== undefined && typeof one.is_implied_species_concept !== "boolean") return null;
+      if (written === undefined || expanded === undefined || rule === undefined || reason === undefined || byName === undefined || impliedKey === undefined || matchedLabel === undefined) return null;
+      // The boolean is the backend's own statement that the match is to an implied species concept; an older backend sends only the key.
+      const implied = one.is_implied_species_concept === true || impliedKey !== null;
+      const named = matchedLabel !== null ? ` \u201c${matchedLabel}\u201d` : "";
+      const match = implied
+        ? `matched by name to${named || " a species-level name"}, which the graph holds as an implied species concept (a species-level name derived from rows below the species, not a taxon of the checklist; a match by name, not a verified identity)`
+        : byName !== null
+          ? `matched by name to ${matchedLabel !== null ? `the taxon of the graph labelled${named}` : "a taxon of the graph"} (a match by name, not a verified identity)`
           : reasonText(reason);
       return [
         `Parent ${position ?? "?"}: ${written !== null ? `written \u201c${written}\u201d` : "no name written"}`,
@@ -753,11 +761,15 @@ function hybridFormulaSection(raw: unknown): RecordsSection | null {
 function parentNothotaxaSections(raw: unknown): RecordsSection[] {
   if (raw === undefined || raw === null) return [];
   if (!isRecord(raw)) return [{ unreadable: true, kind: "parent_nothotaxa" }];
-  if (raw.state === "LIST_NOT_BUILT_FOR_A_NOTHOTAXON") {
+  // No list was built for the asked name: the backend's `resolution` says so (an older backend said it in `state`). Which kind of name it
+  // was (a nothotaxon, a genus, text the list is not built for) is in the backend's statement only, so the page does not say it.
+  if (raw.resolution === "NAME_NOT_OF_THE_SHAPE_THE_LIST_IS_BUILT_FOR" || raw.state === "LIST_NOT_BUILT_FOR_A_NOTHOTAXON") {
+    const statements = statementsOf(raw.statements);
+    if (statements === null) return [{ unreadable: true, kind: "parent_nothotaxa" }];
     return [{
       unreadable: false, kind: "parent_nothotaxa", state: null, review: null, citation: null,
-      counts: "no list built: the asked name is a nothotaxon", items: [], statements: [],
-      note: "A list of nothotaxa that name a taxon as a parent is not built for a nothotaxon. That is a limit of the list, not a finding.",
+      counts: "no list built for this name", items: [], statements,
+      note: "No list of nothotaxa that name a taxon as a parent was built for the asked name. That is a limit of the list, not a finding.",
     }];
   }
   const list = all(raw.nothotaxa, (value) => {
@@ -792,8 +804,9 @@ function parentNothotaxaSections(raw: unknown): RecordsSection[] {
     counts: list.length ? shownOf(raw.statements_shown, null, raw.statements_listed) : null,
     note: [
       "Nothotaxa whose checklist formula names this name as a parent, by its exact name. A match by name, not a verified identity. This is not the list of the hybrids of the taxon.",
-      isRecord(raw.taxon) && raw.taxon.is_implied_species_concept === true
-        ? "The asked name is a species-level name that the checklist lists only through rows below the species; the graph holds it as an implied species concept derived from those rows, not as a taxon of the checklist. None of those subspecies or varieties is meant."
+      isRecord(raw.taxon) && raw.taxon.is_implied_species_concept === true ? "The asked name is held by the graph as an implied species concept, not as a taxon of the checklist." : null,
+      raw.all_listed_statements_shown === false && next === null && !(count(raw.statements_shown) !== null && count(raw.statements_listed) !== null && (count(raw.statements_shown) ?? 0) < (count(raw.statements_listed) ?? 0))
+        ? "Not every listed statement is shown here."
         : null,
       offset !== null && offset > 0 ? `This page starts at row ${offset + 1}.` : null,
       next !== null ? `The list continues: the next page starts at row ${next + 1}.` : null,
