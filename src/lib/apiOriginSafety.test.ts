@@ -7,15 +7,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  API_BASE_URL,
-  apiRequest,
   isJsonContentType,
   isUsableApiOrigin,
 } from './api';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.resetModules();
 });
+
+async function apiWithOrigins(primary?: string, fallback?: string) {
+  vi.stubEnv('VITE_API_BASE_URL', primary);
+  vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', fallback);
+  // The client computes its origin at import time, so import after isolation.
+  vi.resetModules();
+  return import('./api');
+}
 
 describe('isUsableApiOrigin', () => {
   it('accepts an absolute Render origin', () => {
@@ -48,8 +56,7 @@ describe('isUsableApiOrigin', () => {
 
 describe('apiRequest when the origin is unconfigured', () => {
   it('reports unconfigured and never invents data', async () => {
-    // The suite runs with no VITE_API_BASE_URL set, so this is the real
-    // unconfigured path rather than a simulated one.
+    const { API_BASE_URL, apiRequest } = await apiWithOrigins();
     expect(API_BASE_URL).toBe('');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
@@ -62,6 +69,25 @@ describe('apiRequest when the origin is unconfigured', () => {
     // Fails closed: it does not even attempt a request that could resolve
     // against the app's own origin.
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('apiRequest with an explicitly configured origin', () => {
+  it.each([
+    ['https://primary.example.test', 'https://fallback.example.test', 'https://primary.example.test'],
+    [undefined, 'https://fallback.example.test', 'https://fallback.example.test'],
+  ])('uses primary %s and fallback %s without ambient deployment configuration', async (primary, fallback, expected) => {
+    const { API_BASE_URL, apiRequest } = await apiWithOrigins(primary, fallback);
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ fixture: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    expect(API_BASE_URL).toBe(expected);
+    const result = await apiRequest('/api/species/featured');
+    expect(result.data).toEqual({ fixture: true });
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toBe(`${expected}/api/species/featured`);
   });
 });
 
