@@ -1,7 +1,7 @@
 // Real responses of POST /api/calyx/speak/conversations/{id}/turns, captured from the backend route on a
 // local database at orchid-calyx-backend commit c2babbb15e22eb9edb089ebc96dd0ab88cb6c411 (draft PR #2420);
 // the publication-*, synonym-beside-variety-notice and the three synonym-* files with `records_attached`
-// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files and the sixteen group-*, placement-*, pollination-*remark*, pollinator-*, vernacular-* files at backend claude/wp-checklist-knowledge-2-20261114 a92a4183, except group-not-found-two-writings-named, vernacular-names-unassigned-tag-and-withheld-name, pollinator-taxa-list and the eight files orchid-asked-as-the-pollinator, pollination-remark-later-writing-with-its-own-hint, pollinator-taxa-all-held-back, pollinator-taxa-hedges-per-taxon, two-questions-*, vernacular-lookup-records-held-back, which were captured at 6b3b46b1 (same branch). The 27 remark-, hybrid-formula-, parent-nothotaxa-, older-topic-, hybrid-name- files were captured at backend claude/wp-checklist-knowledge-3-20261114 5fc4cec8 (draft PR #2425; the hybrid-formula ones with the implied-concept switch ON except the two named `switch-off`). The other files are from the earlier captures.
+// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files and the sixteen group-*, placement-*, pollination-*remark*, pollinator-*, vernacular-* files at backend claude/wp-checklist-knowledge-2-20261114 a92a4183, except group-not-found-two-writings-named, vernacular-names-unassigned-tag-and-withheld-name, pollinator-taxa-list and the eight files orchid-asked-as-the-pollinator, pollination-remark-later-writing-with-its-own-hint, pollinator-taxa-all-held-back, pollinator-taxa-hedges-per-taxon, two-questions-*, vernacular-lookup-records-held-back, which were captured at 6b3b46b1 (same branch). The 27 remark-, hybrid-formula-, parent-nothotaxa-, older-topic-, hybrid-name- files were first captured at backend claude/wp-checklist-knowledge-3-20261114 5fc4cec8 (draft PR #2425) and RE-captured at its head 165716c3 (the same questions on the same kinds of store; the two `switch-off` ones with the implied-concept switch off, the others on); five files were added at 165716c3: hybrid-formula-name-not-in-graph, hybrid-formula-typed-times-before-genus, hybrid-and-reverse-question-one-taxon, parent-nothotaxa-text-cut-at-a-percent-sign, remark-withheld-by-privacy-gate-2. The other files are from the earlier captures.
 // EXCERPTS: each file is {question, answer, research:{scientific_evidence}} with fields kept as returned, except
 // that (to keep the repository small) the answer text is omitted, strings are cut at 170 characters, lists of
 // records are cut to 2 entries (the `areas` list to 10), a few identifier-only fields (edge/node ids, dataset
@@ -86,6 +86,11 @@ import remarkOfANothotaxon from "./remark-of-a-nothotaxon.json";
 import remarkSharedBySeveralTaxa from "./remark-shared-by-several-taxa.json";
 import remarkShown from "./remark-shown.json";
 import remarkWithheldByPrivacyGate from "./remark-withheld-by-privacy-gate.json";
+import hybridFormulaNameNotInGraph from "./hybrid-formula-name-not-in-graph.json";
+import hybridFormulaTypedTimesBeforeGenus from "./hybrid-formula-typed-times-before-genus.json";
+import hybridAndReverseQuestionOneTaxon from "./hybrid-and-reverse-question-one-taxon.json";
+import parentNothotaxaTextCutAtAPercentSign from "./parent-nothotaxa-text-cut-at-a-percent-sign.json";
+import remarkWithheldByPrivacyGate2 from "./remark-withheld-by-privacy-gate-2.json";
 
 export type CapturedTurn = { question: string; answer: string; research: { scientific_evidence: unknown } };
 export const fixtures: Record<string, CapturedTurn> = {
@@ -169,5 +174,10 @@ export const fixtures: Record<string, CapturedTurn> = {
   "remark-shared-by-several-taxa": remarkSharedBySeveralTaxa,
   "remark-shown": remarkShown,
   "remark-withheld-by-privacy-gate": remarkWithheldByPrivacyGate,
+  "hybrid-formula-name-not-in-graph": hybridFormulaNameNotInGraph,
+  "hybrid-formula-typed-times-before-genus": hybridFormulaTypedTimesBeforeGenus,
+  "hybrid-and-reverse-question-one-taxon": hybridAndReverseQuestionOneTaxon,
+  "parent-nothotaxa-text-cut-at-a-percent-sign": parentNothotaxaTextCutAtAPercentSign,
+  "remark-withheld-by-privacy-gate-2": remarkWithheldByPrivacyGate2,
 };
 export const evidenceOf = (name: string): unknown => fixtures[name].research.scientific_evidence;
