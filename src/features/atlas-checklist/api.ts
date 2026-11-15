@@ -55,6 +55,8 @@ export interface FacetPanel {
   rows: ContractRow[];
   truncated?: boolean;
   gap: string | null;
+  /** Sentences of the backend's reader for facets whose rows are aggregates (record_context). */
+  statements?: string[];
 }
 
 export interface Envelope {
