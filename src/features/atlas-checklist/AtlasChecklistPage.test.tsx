@@ -90,4 +90,30 @@ describe('AtlasChecklistPage', () => {
     render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
     await screen.findByText(/gap in what could be read, not an absence/);
   });
+
+  it('says why an implied species concept has no statements, and a shared label hands no question to Calyx', async () => {
+    mockFetch({
+      '/atlas/checklist/areas': AREAS,
+      '/atlas/checklist/area?': AREA,
+      '/atlas/checklist/taxon/66746': { ...env, status: 'no_checklist_row', identity: ID, panels: {}, calyx: null,
+        explanation: 'The checklist has no row of its own for it.' },
+    });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
+    await screen.findByText(/no row of its own/);
+    expect(screen.queryByRole('link', { name: /Where does/ })).toBeNull();
+  });
+
+  it('shows the reason instead of a link when no question can be handed over', async () => {
+    mockFetch({
+      '/atlas/checklist/areas': AREAS,
+      '/atlas/checklist/area?': AREA,
+      '/atlas/checklist/taxon/66746': { ...TAXON, calyx: { question: null, reason: 'Another graph node carries the same label.' } },
+    });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
+    await screen.findByText(/Another graph node carries the same label/);
+  });
 });
