@@ -27,6 +27,16 @@ describe('genus image fallback', () => {
     expect(String(mocks.fetch.mock.calls[1][0])).toContain('/images/genus/Cattleya');
   });
 
+  it('tries the harvester when the public source returns only excluded specimen media', async () => {
+    mocks.fetch
+      .mockResolvedValueOnce(response([{ ...photo, image_url: 'https://example.com/herbarium/specimen.jpg' }]))
+      .mockResolvedValueOnce(response([photo]))
+      .mockResolvedValueOnce(response([]));
+    const result = await fetchGenusSpeciesQueue(12, undefined, 'Cattleya');
+    expect(result.some((species) => species.name === 'Cattleya labiata' && species.image === photo.image_url)).toBe(true);
+    expect(mocks.fetch.mock.calls.filter(([url]) => String(url).includes('/images/genus/'))).toHaveLength(2);
+  });
+
   it('does not call the harvester when the public image source has a usable photograph', async () => {
     mocks.fetch
       .mockResolvedValueOnce(response([photo]))
@@ -42,6 +52,6 @@ describe('genus image fallback', () => {
       return response([]);
     });
     await fetchGenusSpeciesQueue(12, controller.signal, 'Cattleya');
-    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch.mock.calls.filter(([url]) => String(url).includes('/images/genus/'))).toHaveLength(1);
   });
 });
