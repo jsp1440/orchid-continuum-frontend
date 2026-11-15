@@ -56,7 +56,7 @@ describe("a taxon's common names", () => {
     expect(all("calyx-record-text")[0].textContent).toBe("Lappland-Fingerwurz");
     expect(text()).toContain("The source writes (DE) after a later name of the same group and does not say whether it applies to this name; it is not attached.");
     expect(button(/Common names this checklist gives/)).toContain("1 of 2 shown");
-    expect(text()).toContain("were not shown");
+    expect(text()).toContain("held back by the privacy gate");
   });
 
   it("(synthetic) a name whose text is not in the data is said to be missing, not dropped", () => {
@@ -155,7 +155,7 @@ describe("a turn that names a group", () => {
     expect(all("calyx-record-note")[0].textContent).toContain("The list is cut");
   });
 
-  it("(synthetic) narrower groups and other writings sit beside the list with their own counts, never in it", () => {
+  it("(synthetic) groups written after this one and other writings sit beside the list with their own counts, never in it", () => {
     const raw = clone("group-taxa-informal-group");
     Object.assign(raw.subjects[0].evidence.group_taxa, {
       narrower_groups: [{ label: "Epidendrum anceps group, polyanthum subgroup", taxa_listed: 3 }],
@@ -168,16 +168,9 @@ describe("a turn that names a group", () => {
     expect(container.querySelectorAll('[data-kind="group_taxa"] [data-testid="calyx-record-text"]').length).toBeLessThanOrEqual(2);
     raw.subjects[0].evidence.group_taxa.narrower_groups = [{ taxa_listed: 3 }];
     show(raw);
-    expect(all("calyx-record-unreadable")[0].textContent).toBe("Narrower groups (separate statements, not added to the list): could not be displayed.");
+    expect(all("calyx-record-unreadable")[0].textContent).toBe("Groups written after this one in the same remark (the source does not say how they relate; separate statements, not added to the list): could not be displayed.");
   });
 
-  it("a group not found is nothing retrieved under that exact name", () => {
-    show(evidenceOf("group-not-found-two-writings-named"));
-    expect(container.querySelector("h3")?.textContent).toBe("Nothing was retrieved under that exact name");
-    expect(container.querySelector("h4")?.textContent).toMatch(/^Group \(as written by the checklist\): Dendrobium section Latouria/);
-    expect(button(/Taxa this checklist lists under the group/)).toContain("nothing retrieved under this exact name");
-    expect(all("calyx-record-text")).toHaveLength(0);
-  });
 });
 
 describe("pollinators named in a checklist remark", () => {

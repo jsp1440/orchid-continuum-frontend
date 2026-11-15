@@ -1,7 +1,7 @@
 // Real responses of POST /api/calyx/speak/conversations/{id}/turns, captured from the backend route on a
 // local database at orchid-calyx-backend commit c2babbb15e22eb9edb089ebc96dd0ab88cb6c411 (draft PR #2420);
 // the publication-*, synonym-beside-variety-notice and the three synonym-* files with `records_attached`
-// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files and the sixteen group-*, placement-*, pollination-*remark*, pollinator-*, vernacular-* files at backend claude/wp-checklist-knowledge-2-20261114 a92a4183. The other files are from the earlier captures.
+// were re-captured at a4d421f1ed78f46003db175f1f50a1490317cbe7; the six area-* / species-question-naming-an-area files and the sixteen group-*, placement-*, pollination-*remark*, pollinator-*, vernacular-* files at backend claude/wp-checklist-knowledge-2-20261114 a92a4183, except group-not-found-two-writings-named, vernacular-names-unassigned-tag-and-withheld-name, pollinator-taxa-list and the eight files orchid-asked-as-the-pollinator, pollination-remark-later-writing-with-its-own-hint, pollinator-taxa-all-held-back, pollinator-taxa-hedges-per-taxon, two-questions-*, vernacular-lookup-records-held-back, which were captured at 6b3b46b1 (same branch). The other files are from the earlier captures.
 // EXCERPTS: each file is {question, answer, research:{scientific_evidence}} with fields kept as returned, except
 // that (to keep the repository small) the answer text is omitted, strings are cut at 170 characters, lists of
 // records are cut to 2 entries (the `areas` list to 10), a few identifier-only fields (edge/node ids, dataset
@@ -51,6 +51,14 @@ import vernacularLookupTwoWritings from "./vernacular-lookup-two-writings.json";
 import vernacularNamesNone from "./vernacular-names-none.json";
 import vernacularNamesOfATaxon from "./vernacular-names-of-a-taxon.json";
 import vernacularNamesUnassignedTagAndWithheldName from "./vernacular-names-unassigned-tag-and-withheld-name.json";
+import orchidAskedAsThePollinator from "./orchid-asked-as-the-pollinator.json";
+import pollinationRemarkLaterWritingWithItsOwnHint from "./pollination-remark-later-writing-with-its-own-hint.json";
+import pollinatorTaxaAllHeldBack from "./pollinator-taxa-all-held-back.json";
+import pollinatorTaxaHedgesPerTaxon from "./pollinator-taxa-hedges-per-taxon.json";
+import twoQuestionsOnlyTheFirstRead from "./two-questions-only-the-first-read.json";
+import twoQuestionsTaxonReadGroupQuestionNoticed from "./two-questions-taxon-read-group-question-noticed.json";
+import twoQuestionsTaxonReadNameQuestionNoticed from "./two-questions-taxon-read-name-question-noticed.json";
+import vernacularLookupRecordsHeldBack from "./vernacular-lookup-records-held-back.json";
 
 export type CapturedTurn = { question: string; answer: string; research: { scientific_evidence: unknown } };
 export const fixtures: Record<string, CapturedTurn> = {
@@ -99,5 +107,13 @@ export const fixtures: Record<string, CapturedTurn> = {
   "vernacular-names-none": vernacularNamesNone,
   "vernacular-names-of-a-taxon": vernacularNamesOfATaxon,
   "vernacular-names-unassigned-tag-and-withheld-name": vernacularNamesUnassignedTagAndWithheldName,
+  "orchid-asked-as-the-pollinator": orchidAskedAsThePollinator,
+  "pollination-remark-later-writing-with-its-own-hint": pollinationRemarkLaterWritingWithItsOwnHint,
+  "pollinator-taxa-all-held-back": pollinatorTaxaAllHeldBack,
+  "pollinator-taxa-hedges-per-taxon": pollinatorTaxaHedgesPerTaxon,
+  "two-questions-only-the-first-read": twoQuestionsOnlyTheFirstRead,
+  "two-questions-taxon-read-group-question-noticed": twoQuestionsTaxonReadGroupQuestionNoticed,
+  "two-questions-taxon-read-name-question-noticed": twoQuestionsTaxonReadNameQuestionNoticed,
+  "vernacular-lookup-records-held-back": vernacularLookupRecordsHeldBack,
 };
 export const evidenceOf = (name: string): unknown => fixtures[name].research.scientific_evidence;

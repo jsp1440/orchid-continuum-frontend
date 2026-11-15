@@ -239,7 +239,9 @@ describe("fail closed, part by part", () => {
   });
 
   it("no structured part for statuses that carry none", () => {
-    for (const name of ["not-applicable-general", "research-mode-never"]) expect(readScientificEvidence(evidenceOf(name)).structured).toBeNull();
+    // not_requested carries none; not_applicable and unavailable are read only so that their notices stay visible.
+    expect(readScientificEvidence(evidenceOf("research-mode-never")).structured).toBeNull();
+    expect(readScientificEvidence(evidenceOf("not-applicable-general")).structured?.subjects).toEqual([]);
   });
 });
 
