@@ -151,7 +151,8 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
     return (
       <section aria-labelledby={headingId} className={NOTE} data-evidence-kind="not_applicable" data-testid="calyx-evidence-panel">
         <h3 className="text-sm font-medium" id={headingId}>No graph evidence was looked up for this question</h3>
-        <p className="mt-1 text-xs leading-5 text-muted-foreground">{evidence.explanation}</p>
+        {evidence.explanation ? <p className="mt-1 text-xs leading-5 text-muted-foreground">{evidence.explanation}</p> : null}
+        {evidence.structured ? <CalyxStructuredEvidence mainSentences={evidence.sentences} structured={evidence.structured} /> : null}
       </section>
     );
   }
@@ -160,6 +161,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
     const notResolved = evidence.kind === "not_resolved";
     const turnTopics = evidence.structured?.topics ?? [];
     const areaTurn = turnTopics.includes("area_taxa");
+    const heldWithoutList = evidence.structured?.heldWithoutList ?? null;
     const nameTurn = turnTopics.some((topic) => ["vernacular_lookup", "group_taxa", "pollinator_taxa"].includes(topic));
     return (
       <section
@@ -169,8 +171,11 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
         data-testid="calyx-evidence-panel"
       >
         <h3 className="text-sm font-medium" id={headingId}>
-          {areaTurn ? "Nothing was retrieved under that area name" : nameTurn ? "Nothing was retrieved under that exact name" : notResolved ? "The name is not a single species in the Continuum graph" : "Graph evidence could not be retrieved this turn"}
+          {heldWithoutList !== null ? "A list could not be set out for this question" : areaTurn ? "Nothing was retrieved under that area name" : nameTurn ? "Nothing was retrieved under that exact name" : notResolved ? "The name is not a single species in the Continuum graph" : "Graph evidence could not be retrieved this turn"}
         </h3>
+        {heldWithoutList !== null ? (
+          <p className="mt-1 text-sm leading-6" data-testid="calyx-held-without-list">Checklist records are held for {heldWithoutList}, but none could be listed.</p>
+        ) : null}
         {evidence.species ? (
           <p className="mt-1 text-sm leading-6">
             Species named in the question: <i>{evidence.species}</i>

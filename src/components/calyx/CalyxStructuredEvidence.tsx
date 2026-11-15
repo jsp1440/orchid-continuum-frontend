@@ -27,7 +27,8 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   vernacular_lookup: "Taxa for which this checklist writes that name",
   infrageneric_placement: "What this checklist's remark writes below the genus",
   group_taxa: "Taxa this checklist lists under the group",
-  group_narrower: "Narrower groups (separate statements, not added to the list)",
+  group_narrower: "Groups written after this one in the same remark (the source does not say how they relate; separate statements, not added to the list)",
+  group_candidates: "Groups the checklist writes differently (none was read)",
   group_other_writings: "Other writings of this group (separate statements, not added to the list)",
   remark_pollinator: "Pollinators named in a checklist remark (a compiler's statement, not a cited record)",
   pollinator_taxa: "Taxa whose checklist remark names this insect",
@@ -42,7 +43,7 @@ const HEADINGS: Record<RecordsSectionKind, string> = {
   host_pathogen: "Host and pathogen records",
 };
 
-const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings", "group_narrower", "group_other_writings", "remark_pollinator"];
+const ALWAYS_OPEN: RecordsSectionKind[] = ["held_back", "not_retrieved", "area_other_writings", "group_narrower", "group_candidates", "group_other_writings", "remark_pollinator"];
 const ROW_KINDS: RecordsSectionKind[] = ["publication", "area_taxa", "group_taxa", "pollinator_taxa", "infrageneric_placement"];
 
 function Doi({ doi }: { doi: string }) {
