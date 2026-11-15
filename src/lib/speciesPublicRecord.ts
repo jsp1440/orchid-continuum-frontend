@@ -29,7 +29,8 @@ export async function fetchSpeciesPublicRecord(
   if (direct) return direct;
 
   const routeName = subjectNameFromSlug(taxonomyId);
-  const query = (hintName || routeName || taxonomyId).trim();
+  const numericRouteId = /^\d+$/.test(taxonomyId) ? taxonomyId : '';
+  const query = (hintName || routeName || numericRouteId).trim();
   if (!query) return null;
 
   const results = await searchSpecies(query, 10, signal).catch(() => []);

@@ -95,9 +95,10 @@ describe('fetchSpeciesPublicRecord', () => {
     expect(record).toBeNull();
   });
 
-  it('returns null without a network call when there is no usable name', async () => {
+  it.each(['___', '---', '', '19550oops', '1e5'])(
+    'returns null without searching a malformed route ID %j', async (routeId) => {
     mocks.fetchSpeciesById.mockResolvedValue(null);
-    const record = await fetchSpeciesPublicRecord('___', null);
+    const record = await fetchSpeciesPublicRecord(routeId, null);
     expect(record).toBeNull();
     expect(mocks.searchSpecies).not.toHaveBeenCalled();
   });
