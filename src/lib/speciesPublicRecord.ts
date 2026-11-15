@@ -28,13 +28,27 @@ export async function fetchSpeciesPublicRecord(
   const direct = await fetchSpeciesById(taxonomyId, signal).catch(() => null);
   if (direct) return direct;
 
-  const query = (hintName || subjectNameFromSlug(taxonomyId) || '').trim();
+  const routeName = subjectNameFromSlug(taxonomyId);
+  const query = (hintName || routeName || taxonomyId).trim();
   if (!query) return null;
 
   const results = await searchSpecies(query, 10, signal).catch(() => []);
-  const hit = results.find(
-    (row) => String(row.taxonomy_id) === String(taxonomyId),
-  );
+  let hit = results.find((row) => String(row.taxonomy_id) === String(taxonomyId));
+
+  // Name-based routes have no numeric taxonomy ID to match. Only accept an
+  // exact scientific-name match if the index identifies exactly one taxon.
+  // Ambiguous names are not silently promoted into a definitive identity.
+  if (!hit && routeName) {
+    const normalize = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const exact = results.filter((row) =>
+      [row.canonical_name, row.scientific_name].some(
+        (name) => typeof name === 'string' && normalize(name) === normalize(routeName),
+      ),
+    );
+    if (new Set(exact.map((row) => String(row.taxonomy_id))).size === 1) {
+      hit = exact[0];
+    }
+  }
   if (!hit) return null;
 
   return {
