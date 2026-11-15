@@ -45,6 +45,25 @@ describe('genus image fallback', () => {
     expect(mocks.fetch.mock.calls.filter(([url]) => String(url).includes('/images/genus/'))).toHaveLength(1);
   });
 
+  it('does not request images or taxonomy when cancelled before starting', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const result = await fetchGenusSpeciesQueue(12, controller.signal, 'Cattleya');
+    expect(result).toEqual([]);
+    expect(mocks.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not request taxonomy or show a curated fallback after an image request is cancelled', async () => {
+    const controller = new AbortController();
+    mocks.fetch.mockImplementationOnce(async () => {
+      controller.abort();
+      return response([]);
+    });
+    const result = await fetchGenusSpeciesQueue(12, controller.signal, 'Cattleya');
+    expect(result).toEqual([]);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('does not fall back after cancellation', async () => {
     const controller = new AbortController();
     mocks.fetch.mockImplementationOnce(async () => {
