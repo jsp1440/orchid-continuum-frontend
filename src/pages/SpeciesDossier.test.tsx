@@ -843,7 +843,9 @@ describe('dossier subject identity across id spaces', () => {
 
     const candidates = container.querySelectorAll('[data-testid="dossier-ambiguous"] button');
     expect(candidates).toHaveLength(2);
-    act(() => candidates[1].dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    act(() => {
+      candidates[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
     await flush();
     await flush();
 
