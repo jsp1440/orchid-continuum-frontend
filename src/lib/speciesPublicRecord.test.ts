@@ -54,6 +54,67 @@ describe('fetchSpeciesPublicRecord', () => {
     expect(record?.representative_image_url).toBe('https://example.org/img.jpg');
   });
 
+  it('preserves all modeled dossier details from the exact numeric-ID search hit', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.searchSpecies.mockResolvedValue([
+      { taxonomy_id: '99999', canonical_name: 'Masdevallia abbreviata', hero_image_url: 'https://example.org/wrong.jpg' },
+      {
+        taxonomy_id: '19550',
+        canonical_name: 'Masdevallia abbreviata',
+        species: 'abbreviata',
+        specific_epithet: 'abbreviata',
+        tribe: 'Epidendreae',
+        subfamily: 'Epidendroideae',
+        authority: 'Rchb.f.',
+        hero_image_url: 'https://example.org/exact.jpg',
+        description: '  Source-supplied habitat description.  ',
+        iucn_code: 'EN',
+        common_name: null,
+        region: 'Peru',
+      },
+    ]);
+
+    const record = await fetchSpeciesPublicRecord('19550', 'Masdevallia abbreviata');
+    expect(record).toMatchObject({
+      taxonomy_id: '19550',
+      species: 'abbreviata',
+      specific_epithet: 'abbreviata',
+      tribe: 'Epidendreae',
+      subfamily: 'Epidendroideae',
+      authority: 'Rchb.f.',
+      hero_image_url: 'https://example.org/exact.jpg',
+      description: '  Source-supplied habitat description.  ',
+      iucn_code: 'EN',
+      common_name: null,
+      region: 'Peru',
+    });
+    expect(record?.hero_image_url).not.toBe('https://example.org/wrong.jpg');
+  });
+
+  it('retains supplied optional fields for a uniquely matched name route', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.searchSpecies.mockResolvedValue([
+      { taxonomy_id: '99999', canonical_name: 'Masdevallia abbreviata var. other', description: 'Wrong taxon' },
+      {
+        taxonomy_id: '19550',
+        scientific_name: 'Masdevallia abbreviata',
+        hero_image_url: 'https://example.org/name-match.jpg',
+        description: 'Source-supplied notes',
+        tribe: null,
+        subfamily: null,
+        iucn_code: null,
+      },
+    ]);
+
+    const record = await fetchSpeciesPublicRecord('Masdevallia-abbreviata', null);
+    expect(record?.taxonomy_id).toBe('19550');
+    expect(record?.hero_image_url).toBe('https://example.org/name-match.jpg');
+    expect(record?.description).toBe('Source-supplied notes');
+    expect(record?.tribe).toBeNull();
+    expect(record?.subfamily).toBeNull();
+    expect(record?.iucn_code).toBeNull();
+  });
+
   it('resolves a unique exact scientific-name route to its indexed taxon', async () => {
     mocks.fetchSpeciesById.mockResolvedValue(null);
     mocks.searchSpecies.mockResolvedValue([
