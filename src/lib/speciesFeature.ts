@@ -516,6 +516,7 @@ function shuffle<T>(arr: T[]): T[] {
 export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
   const g = normalizeGenus(genus) || 'Cattleya';
   const requested = Math.max(1, limit);
+  if (signal?.aborted) return [];
 
   const taxonomyPool = await searchSpecies(
     `${BACKEND_BASE_URL}/api/species/search?genus=${encodeURIComponent(g)}&limit=50`,
@@ -524,6 +525,7 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
     signal,
     true,
   );
+  if (signal?.aborted) return [];
   if (taxonomyPool.length > 0) return shuffle(taxonomyPool).slice(0, requested);
 
   const legacyPool = await searchSpecies(
@@ -533,12 +535,12 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
     signal,
     false,
   );
+  if (signal?.aborted) return [];
   if (legacyPool.length > 0) return shuffle(legacyPool).slice(0, requested);
 
   const harvesterPool = await searchGenusImageHarvester(g, 50, signal);
-  if (harvesterPool.length > 0) return shuffle(harvesterPool).slice(0, requested);
-
   if (signal?.aborted) return [];
+  if (harvesterPool.length > 0) return shuffle(harvesterPool).slice(0, requested);
   if (g.toLowerCase() === 'cattleya') {
     return shuffle(CATTLEYA_FALLBACK).slice(0, Math.min(requested, CATTLEYA_FALLBACK.length));
   }
