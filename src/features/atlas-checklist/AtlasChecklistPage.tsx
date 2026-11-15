@@ -180,7 +180,7 @@ export default function AtlasChecklistPage() {
           <section aria-label="Evidence for the taxon">
             {taxonId === null && <p className="text-sm">Select a taxon to see what the graph holds, with its sources and review state.</p>}
             {taxonId !== null && !taxon && <p>Loading…</p>}
-            {taxon?.status === 'no_such_node' && <p>{taxon.explanation}</p>}
+            {taxon && taxon.status !== 'available' && <p>{taxon.explanation}</p>}
             {taxon?.identity && (
               <>
                 <h2 className="text-lg">{taxon.identity.label}</h2>
