@@ -53,7 +53,11 @@ export type RecordsSectionKind =
   | "group_candidates"
   | "group_other_writings"
   | "remark_pollinator"
-  | "pollinator_taxa";
+  | "pollinator_taxa"
+  | "remark_text"
+  | "hybrid_formula"
+  | "parent_nothotaxa"
+  | "parent_entries_not_matched";
 
 export type RecordsSection =
   | { unreadable: true; kind: RecordsSectionKind }
@@ -637,10 +641,179 @@ function pollinatorTaxaSection(raw: unknown): RecordsSection | null {
   return section("pollinator_taxa", raw, { items: taxa, counts: notFound ? NOT_FOUND_COUNTS : shownOf(raw.taxa_shown, null, raw.taxa_naming), note: note || null });
 }
 
+const WITHHELD_REMARK = "The checklist has a remark here. Its text is held back by the privacy gate and is not shown.";
+
+/** The whole remark of a checklist row, quoted. A withheld text is said once as held back and nothing of it is read. */
+function remarkTextSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "remark_text" };
+  let withheld = 0;
+  const remarks = all(raw.remarks, (value) => {
+    if (!isRecord(value)) return null;
+    if (value.remark_text_withheld === true) {
+      // Nothing else of a withheld remark is read: no text, no length, no count of taxa.
+      withheld += 1;
+      return item(WITHHELD_REMARK);
+    }
+    const text = str(value.remark_as_written_by_source);
+    const shared = value.taxa_with_this_text === undefined || value.taxa_with_this_text === null ? null : count(value.taxa_with_this_text);
+    if (value.taxa_with_this_text !== undefined && value.taxa_with_this_text !== null && shared === null) return null;
+    return item(text, {
+      note: [
+        value.remark_text_cut === true ? "The text is cut." : null,
+        shared !== null && shared > 1 ? `When the graph was built, ${shared} taxa of the graph carried exactly this text; sharing a text says nothing about those taxa being related.` : null,
+      ].filter((part): part is string => part !== null).join(" ") || null,
+    });
+  });
+  if (remarks === null) return { unreadable: true, kind: "remark_text" };
+  const shownText = remarks.length - withheld;
+  const built = section("remark_text", raw, {
+    items: remarks,
+    counts: remarks.length ? `${shownText} shown${withheld ? ` \u00b7 ${withheld} held back by the privacy gate` : ""}` : null,
+    note: [
+      raw.is_a_finding === false ? "The compiler's own words, quoted as the checklist writes them; not a finding of the Continuum." : null,
+      !remarks.length && raw.is_evidence_of_no_doubt === false ? "A taxon without a remark here is not thereby undisputed." : null,
+    ].filter((part): part is string => part !== null).join(" ") || null,
+  });
+  return built;
+}
+
+const PARENT_REASONS: Record<string, string> = {
+  formula_hedged_by_the_source: "not matched: the source hedges the formula",
+  parent_carries_a_qualifier_of_the_source: "not matched: the source qualifies this parent",
+  no_active_taxon_with_that_label: "not matched: no taxon of the graph carries that name",
+  several_active_taxa_with_that_label: "not matched: several taxa carry that name, none is chosen",
+  only_an_implied_species_concept_has_that_label: "not matched: only a species-level name that the checklist lists through rows below the species carries that name",
+  parent_not_named_by_source: "the source names no parent here",
+};
+
+function reasonText(code: string | null): string {
+  if (code === null) return "not matched";
+  return PARENT_REASONS[code] ?? `not matched (reason code as returned: ${code})`;
+}
+
+/** What a nothotaxon's own row writes as its formula: parents are names with how they were read and matched, never identities. */
+function hybridFormulaSection(raw: unknown): RecordsSection | null {
+  if (raw === undefined || raw === null) return null;
+  if (!isRecord(raw)) return { unreadable: true, kind: "hybrid_formula" };
+  const formulas = all(raw.formulas, (value) => {
+    if (!isRecord(value)) return null;
+    const before = optionalString(value.qualifier_before);
+    const after = optionalString(value.qualifier_after);
+    if (before === undefined || after === undefined) return null;
+    const parents = all(value.parents, (one) => {
+      if (!isRecord(one)) return null;
+      const written = optionalString(one.as_written_by_source);
+      const expanded = optionalString(one.as_expanded);
+      const rule = optionalString(one.expansion_rule);
+      const reason = optionalString(one.not_matched_reason);
+      const position = count(one.position);
+      const byName = optionalString(one.matched_by_name_to);
+      const implied = optionalString(one.matched_to_implied_species_concept);
+      if (written === undefined || expanded === undefined || rule === undefined || reason === undefined || byName === undefined || implied === undefined) return null;
+      const match = byName !== null
+        ? "matched by name to a taxon of the graph (a match by name, not a verified identity)"
+        : implied !== null
+          ? "matched by name to a species-level name that the checklist lists only through rows below the species (a match by name, not a verified identity)"
+          : reasonText(reason);
+      return [
+        `Parent ${position ?? "?"}: ${written !== null ? `written \u201c${written}\u201d` : "no name written"}`,
+        expanded !== null && expanded !== written ? `read as \u201c${expanded}\u201d${rule !== null ? ` (rule, code as returned: ${rule})` : ""}` : null,
+        one.carries_a_qualifier === true ? "the source qualifies this parent; the qualifier is part of the name as written" : null,
+        match,
+      ].filter((part): part is string => part !== null).join(" \u00b7 ");
+    });
+    if (parents === null) return null;
+    const after2 = value.text_after_formula_not_read;
+    return item(str(value.formula_as_written), {
+      detail: str(value.checklist_row_name),
+      note: [
+        value.state === "parents_stated_unknown" ? "The source states that the parents are unknown (its own words, as written)." : null,
+        before !== null ? `the source writes before the formula: ${before}` : null,
+        after !== null ? `the source writes after the formula: ${after}` : null,
+        value.more_text_in_remark === true || (after2 !== undefined && after2 !== null && after2 !== false) ? "The remark has further text that was not read." : null,
+        ...parents,
+      ].filter((part): part is string => part !== null).join("\n") || null,
+    });
+  });
+  if (formulas === null) return { unreadable: true, kind: "hybrid_formula" };
+  return section("hybrid_formula", raw, {
+    items: formulas,
+    counts: formulas.length ? shownOf(raw.formulas_shown, null, null) : null,
+    note: [
+      "What the checklist's own row for this name writes; a compiler's statement, not a finding about the parentage.",
+      formulas.length ? "The parents are in the order of the source's formula; that order does not say which parent bore the seed or the pollen." : null,
+    ].filter((part): part is string => part !== null).join(" "),
+  });
+}
+
+/** The nothotaxa whose formulas name the asked taxon as a parent: not "the hybrids of" it. */
+function parentNothotaxaSections(raw: unknown): RecordsSection[] {
+  if (raw === undefined || raw === null) return [];
+  if (!isRecord(raw)) return [{ unreadable: true, kind: "parent_nothotaxa" }];
+  if (raw.state === "LIST_NOT_BUILT_FOR_A_NOTHOTAXON") {
+    return [{
+      unreadable: false, kind: "parent_nothotaxa", state: null, review: null, citation: null,
+      counts: "no list built: the asked name is a nothotaxon", items: [], statements: [],
+      note: "A list of nothotaxa that name a taxon as a parent is not built for a nothotaxon. That is a limit of the list, not a finding.",
+    }];
+  }
+  const list = all(raw.nothotaxa, (value) => {
+    if (!isRecord(value)) return null;
+    const before = optionalString(value.qualifier_before);
+    const after = optionalString(value.qualifier_after);
+    const written = optionalString(value.parent_as_written);
+    const formula = optionalString(value.formula_as_written);
+    const position = value.parent_position === undefined || value.parent_position === null ? null : count(value.parent_position);
+    if (before === undefined || after === undefined || written === undefined || formula === undefined) return null;
+    return item(str(value.nothotaxon), {
+      detail: str(value.checklist_row_name),
+      note: [
+        formula !== null ? `formula as the source writes it: \u201c${formula}\u201d` : null,
+        written !== null ? `the asked name is written there as \u201c${written}\u201d${position !== null ? ` (parent ${position} of the formula)` : ""}` : null,
+        before !== null ? `the source writes before the formula: ${before}` : null,
+        after !== null ? `the source writes after the formula: ${after}` : null,
+        value.more_text_in_remark === true ? "The remark has further text that was not read." : null,
+      ].filter((part): part is string => part !== null).join("\n") || null,
+    });
+  });
+  const unmatched = raw.parent_entries_not_matched === undefined || raw.parent_entries_not_matched === null ? null : raw.parent_entries_not_matched;
+  let entries: EvidenceItem[] | null = [];
+  if (unmatched !== null) {
+    entries = isRecord(unmatched) ? all(unmatched.entries, (value) => entryItem(value)) : all(unmatched, (value) => entryItem(value));
+  }
+  if (list === null || entries === null) return [{ unreadable: true, kind: "parent_nothotaxa" }];
+  const offset = raw.offset === undefined || raw.offset === null ? 0 : count(raw.offset);
+  const next = raw.next_offset === undefined || raw.next_offset === null ? null : count(raw.next_offset);
+  const main = section("parent_nothotaxa", raw, {
+    items: list,
+    counts: list.length ? shownOf(raw.statements_shown, null, raw.statements_listed) : null,
+    note: [
+      "Nothotaxa whose checklist formula names this name as a parent, by its exact name. A match by name, not a verified identity. This is not the list of the hybrids of the taxon.",
+      offset !== null && offset > 0 ? `This page starts at row ${offset + 1}.` : null,
+      next !== null ? `The list continues: the next page starts at row ${next + 1}.` : null,
+    ].filter((part): part is string => part !== null).join(" "),
+  });
+  const out: RecordsSection[] = main ? [main] : [];
+  if (entries.length && main && !main.unreadable) {
+    out.push({ unreadable: false, kind: "parent_entries_not_matched", state: null, review: null, citation: null, counts: `${entries.length} listed`, items: entries, statements: [], note: "Parent names the checklist writes that read like the asked name and were not matched to it. Separate statements, not added to the list." });
+  }
+  return out;
+}
+
+function entryItem(value: unknown): EvidenceItem | null {
+  if (!isRecord(value)) return null;
+  const n = count(value.statements);
+  const reason = optionalString(value.reason);
+  if (reason === undefined) return null;
+  return item(str(value.label), { detail: n !== null ? `${n} formula${n === 1 ? "" : "s"}` : null, note: reasonText(reason) });
+}
+
 const KNOWN_EVIDENCE_KEYS = new Set([
   "distribution", "conservation", "synonymy", "synonym_resolution", "further_synonym_resolutions",
   "mycorrhiza", "host_pathogen", "relationships", "held_back", "not_retrieved", "publication", "area_taxa",
   "vernacular_names", "vernacular_lookup", "infrageneric_placement", "group_taxa", "remark_pollinator", "pollinator_taxa",
+  "checklist_remark", "hybrid_formula", "parent_nothotaxa",
 ]);
 
 function statementsOnlySection(kind: "mycorrhiza" | "host_pathogen", raw: unknown): RecordsSection | null {
@@ -680,6 +853,9 @@ function sectionsOf(evidence: unknown, resolutionOnSubject: unknown): RecordsSec
   out.push(...groupSections(record.group_taxa));
   push(remarkPollinatorSection(record.remark_pollinator));
   push(pollinatorTaxaSection(record.pollinator_taxa));
+  push(remarkTextSection(record.checklist_remark));
+  push(hybridFormulaSection(record.hybrid_formula));
+  out.push(...parentNothotaxaSections(record.parent_nothotaxa));
   push(statementsOnlySection("mycorrhiza", record.mycorrhiza));
   push(statementsOnlySection("host_pathogen", record.host_pathogen));
   out.push(...plainSections(record));
