@@ -50,6 +50,7 @@ export type RecordsSectionKind =
   | "infrageneric_placement"
   | "group_taxa"
   | "group_narrower"
+  | "group_candidates"
   | "group_other_writings"
   | "remark_pollinator"
   | "pollinator_taxa";
@@ -101,6 +102,8 @@ export type StructuredEvidence = {
   comparisonUnreadable: boolean;
   notices: string[];
   noticesUnreadable: boolean;
+  /** What the backend says it holds records for but could not list (`held_without_list`), as returned. */
+  heldWithoutList: string | null;
   /** True when a subtaxon turn carries a direct scope and a contextual scope. */
   isSubtaxonTurn: boolean;
 };
@@ -372,6 +375,12 @@ function areaSections(raw: unknown): RecordsSection[] {
 
 const NOT_FOUND_COUNTS = "nothing retrieved under this exact name";
 
+/** A row held back by the privacy gate is said as that; it is never counted as unread or as failed. */
+function withHeld(counts: string | null, held: unknown): string | null {
+  const n = count(held);
+  return n !== null && n > 0 ? `${counts ?? "0 shown"} \u00b7 ${n} held back by the privacy gate` : counts;
+}
+
 function optionalString(value: unknown): string | null | undefined {
   // undefined: present but not text (unreadable); null: not returned.
   if (value === undefined || value === null) return null;
@@ -411,7 +420,7 @@ function vernacularNamesSection(raw: unknown): RecordsSection | null {
   if (names === null) return { unreadable: true, kind: "vernacular_names" };
   return section("vernacular_names", raw, {
     items: names,
-    counts: names.length ? shownOf(raw.names_shown, raw.names_projected, raw.names_listed) : null,
+    counts: names.length ? withHeld(shownOf(raw.names_shown, raw.names_projected, raw.names_listed), raw.names_held_back_by_privacy_gate) : null,
     note: raw.is_identification === false ? "A common name is not an identification." : null,
   });
 }
@@ -428,12 +437,13 @@ function vernacularLookupSection(raw: unknown): RecordsSection | null {
   });
   if (taxa === null) return { unreadable: true, kind: "vernacular_lookup" };
   const notFound = raw.state === "NOT_FOUND";
+  const heldWithout = raw.state === "WITHHELD";
   const note = [
     raw.is_identification === false ? "Not an identification." : null,
     taxa.length > 1 ? "Several taxa are listed; none is marked as the answer." : null,
   ].filter((part): part is string => part !== null).join(" ");
   // The statements of this block arrive under `items`.
-  return section("vernacular_lookup", { ...raw, statements: raw.items }, { items: taxa, counts: notFound ? NOT_FOUND_COUNTS : `${taxa.length} listed`, note: note || null });
+  return section("vernacular_lookup", { ...raw, statements: raw.items }, { items: taxa, counts: notFound ? NOT_FOUND_COUNTS : heldWithout ? "records are held; none could be listed" : `${taxa.length} listed`, note: note || null });
 }
 
 const TERM_KINDS: Record<string, string> = {
@@ -507,14 +517,29 @@ function groupSections(raw: unknown): RecordsSection[] {
       raw.is_a_classification_by_the_continuum === false ? "What one checklist writes in a remark; not a classification by the Continuum." : null,
       raw.is_the_list_of_the_taxa_of_the_group === false ? "This is not the list of the taxa of the group." : null,
       cut ? `The list is cut${typeof raw.order === "string" ? ` (order returned: ${raw.order}` : ""}${offset !== null ? `, from offset ${offset}` : ""}${typeof raw.order === "string" ? ")" : ""}.` : null,
-      alsoNarrower ? `${alsoNarrower} of the listed taxa are also listed in a narrower group.` : null,
+      alsoNarrower ? `${alsoNarrower} of the listed taxa also carry a term written after this one in the same remark.` : null,
       withMore ? `${withMore} of the listed taxa have further text in the remark that was not read.` : null,
     ].filter((part): part is string => part !== null).join(" ");
     out.push(section("group_taxa", raw, {
       items: taxa,
-      counts: notFound ? NOT_FOUND_COUNTS : shownOf(raw.taxa_shown, null, raw.taxa_listed),
+      counts: notFound
+        ? (Array.isArray(raw.candidates) && raw.candidates.length ? "not found under this exact writing (see the groups the checklist writes differently)" : NOT_FOUND_COUNTS)
+        : shownOf(raw.taxa_shown, null, raw.taxa_listed),
       note: note || null,
     }) ?? { unreadable: true, kind: "group_taxa" });
+  }
+  // A group not found: the groups the checklist writes differently. None of them was read.
+  const candidates = raw.candidates;
+  if (candidates !== undefined && candidates !== null) {
+    const items = writingsItems(candidates);
+    if (items === null) out.push({ unreadable: true, kind: "group_candidates" });
+    else if (items.length) {
+      const cut = raw.candidates_truncated === true ? " The list of these groups is cut." : "";
+      out.push({
+        unreadable: false, kind: "group_candidates", state: null, review: null, citation: null, counts: null, items, statements: [],
+        note: `Written differently by the source. ${raw.candidates_read === false ? "None of these was read." : "Whether any of these was read is not reported."} They are not a result list.${cut}`,
+      });
+    }
   }
   for (const [key, kind] of [["narrower_groups", "group_narrower"], ["other_writings", "group_other_writings"]] as const) {
     const value = raw[key];
@@ -542,14 +567,17 @@ function remarkPollinatorSection(raw: unknown): RecordsSection | null {
     const introducer = optionalString(value.introducer_as_written_by_source);
     const derivation = optionalString(value.name_derivation);
     const piece = optionalString(value.remark_piece);
-    if (hint === undefined || qualifier === undefined || introducer === undefined || derivation === undefined || piece === undefined) return null;
+    const stored = optionalString(value.stored_name ?? value.name);
+    if (hint === undefined || qualifier === undefined || introducer === undefined || derivation === undefined || piece === undefined || stored === undefined) return null;
     if (piece !== null && !pieces.includes(piece)) pieces.push(piece);
-    return item(str(value.name_as_written_by_source), {
+    const written = str(value.name_as_written_by_source);
+    return item(written, {
       note: [
         introducer !== null ? `introduced in the remark as: ${introducer}` : null,
         qualifier !== null ? `qualifier as written: ${qualifier}` : null,
-        hint !== null ? `hint as written: ${hint}` : null,
-        derivation !== null && derivation !== "as_written" ? `name derivation (code as returned): ${derivation}` : null,
+        hint !== null && !(written ?? "").includes(hint) ? `hint as written: ${hint}` : null,
+        // The stored name is the name it is stored and found under; it is not the source's writing.
+        stored !== null && derivation !== null && derivation !== "as_written" && stored !== written ? `name stored and found under: ${stored} (derivation, code as returned: ${derivation})` : null,
       ].filter((part): part is string => part !== null).join(" \u00b7 ") || null,
     });
   });
@@ -565,7 +593,7 @@ function remarkPollinatorSection(raw: unknown): RecordsSection | null {
     state: null,
     review: null,
     citation: str(raw.citation_text),
-    counts: shownOf(raw.names_shown, raw.names_projected, raw.names_listed),
+    counts: withHeld(shownOf(raw.names_shown, raw.names_projected, raw.names_listed), raw.names_held_back_by_privacy_gate),
     items: names,
     statements: [],
     note,
@@ -583,14 +611,17 @@ function pollinatorTaxaSection(raw: unknown): RecordsSection | null {
     const hint = optionalString(value.source_hint_as_written);
     const written = optionalString(value.name_as_written);
     const piece = optionalString(value.remark_piece_as_written);
-    if (introducer === undefined || qualifier === undefined || hint === undefined || written === undefined || piece === undefined) return null;
+    const later = value.later_writings_as_written === undefined || value.later_writings_as_written === null ? [] : strictStrings(value.later_writings_as_written);
+    if (introducer === undefined || qualifier === undefined || hint === undefined || written === undefined || piece === undefined || later === null) return null;
     return item(str(value.taxon), {
       detail: str(value.checklist_row_name),
       note: [
         written !== null ? `name as written in the remark: ${written}` : null,
         introducer !== null ? `introduced as: ${introducer}` : null,
         qualifier !== null ? `qualifier as written: ${qualifier}` : null,
-        hint !== null ? `hint as written: ${hint}` : null,
+        hint !== null && !(written ?? "").includes(hint) ? `hint as written: ${hint}` : null,
+        later.length ? `the same name is written again in the remark: ${later.join("; ")}` : null,
+        value.source_list_open_ended === true ? "The remark goes on after its list of names." : null,
         remarkLine(piece, value.remark_has_unread_text === true),
       ].filter((part): part is string => part !== null).join(" \u00b7 ") || null,
     });
@@ -705,7 +736,11 @@ function optionalStrings(value: unknown): { list: string[]; unreadable: boolean 
 export function readStructuredEvidence(raw: unknown): StructuredEvidence | null {
   if (!isRecord(raw)) return null;
   const topics = optionalStrings(raw.topics);
-  const notices = optionalStrings(raw.notices);
+  const noticesOnly = optionalStrings(raw.notices);
+  const alsoAsked = optionalStrings(raw.also_asked);
+  // A sentence that says part of the turn was not read must be visible; `also_asked` often repeats a notice.
+  const notices = { list: [...noticesOnly.list, ...alsoAsked.list.filter((line) => !noticesOnly.list.includes(line))], unreadable: noticesOnly.unreadable || alsoAsked.unreadable };
+  const heldWithoutList = str(raw.held_without_list);
   const comparisonRaw = raw.comparison;
   let comparison: string[] = [];
   let comparisonUnreadable = false;
@@ -749,6 +784,7 @@ export function readStructuredEvidence(raw: unknown): StructuredEvidence | null 
     comparisonUnreadable,
     notices: notices.list,
     noticesUnreadable: notices.unreadable,
+    heldWithoutList,
     isSubtaxonTurn,
   };
 }
