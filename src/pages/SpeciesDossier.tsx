@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -117,6 +117,19 @@ const SpeciesDossier: React.FC = () => {
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
   const [candidateBusyId, setCandidateBusyId] = useState<string | null>(null);
+  // A chosen Calyx canonical taxon can differ from the public route's taxon ID.
+  // Keep its dossier separate from route-keyed public fields until a verified
+  // crosswalk exists. The key also stops a prior route's selection carrying over.
+  const routeKey = JSON.stringify([taxonomyId, linkedName]);
+  const currentRouteKey = useRef(routeKey);
+  currentRouteKey.current = routeKey;
+  const candidateRequestVersion = useRef(0);
+  const [selectedCandidate, setSelectedCandidate] = useState<{
+    routeKey: string;
+    taxonId: string;
+  } | null>(null);
+  const selectedCandidateId =
+    selectedCandidate?.routeKey === routeKey ? selectedCandidate.taxonId : null;
 
   // A person resolving a federation ambiguity: re-run the same governed
   // resolution chain, but with the candidate's canonical taxon id as the route
@@ -124,6 +137,12 @@ const SpeciesDossier: React.FC = () => {
   // when its identity still matches this page's subject name.
   const selectDossierCandidate = async (candidateTaxonId: string, subjectName: string) => {
     if (candidateBusyId) return;
+    const requestVersion = ++candidateRequestVersion.current;
+    const originRouteKey = routeKey;
+    const stillCurrent = () =>
+      currentRouteKey.current === originRouteKey &&
+      candidateRequestVersion.current === requestVersion;
+
     setCandidateBusyId(candidateTaxonId);
     setDossierError(false);
     try {
@@ -132,16 +151,29 @@ const SpeciesDossier: React.FC = () => {
         subjectName,
         { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
       );
+      if (!stillCurrent()) return;
+
       if (resolution.state === 'resolved') {
+        // The old route's public image, conservation, and fungal data must not
+        // be presented as evidence for the newly selected canonical taxon.
+        setSelectedCandidate({ routeKey: originRouteKey, taxonId: candidateTaxonId });
         setDossier(resolution.dossier);
         setDossierAmbiguity(null);
+        setFederation(null);
+        setFederationError(false);
         setFederationLoading(true);
         resolveFederatedSpecies(
           { taxonId: resolution.dossier.identity?.taxon_id || candidateTaxonId },
         )
-          .then((result) => setFederation(result))
-          .catch(() => setFederationError(true))
-          .finally(() => setFederationLoading(false));
+          .then((result) => {
+            if (stillCurrent()) setFederation(result);
+          })
+          .catch(() => {
+            if (stillCurrent()) setFederationError(true);
+          })
+          .finally(() => {
+            if (stillCurrent()) setFederationLoading(false);
+          });
       } else if (resolution.state === 'ambiguous') {
         setDossierAmbiguity(resolution);
         setDossierError(true);
@@ -149,15 +181,19 @@ const SpeciesDossier: React.FC = () => {
         setDossierError(true);
       }
     } catch {
-      setDossierError(true);
+      if (stillCurrent()) setDossierError(true);
     } finally {
-      setCandidateBusyId(null);
+      if (stillCurrent()) setCandidateBusyId(null);
     }
   };
 
   useEffect(() => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
+    // Invalidate any candidate selection in flight for the previous route.
+    candidateRequestVersion.current += 1;
+    setSelectedCandidate(null);
+    setCandidateBusyId(null);
     setLoading(true);
     const speciesRequest = fetchSpeciesPublicRecord(taxonomyId, linkedName, ctrl.signal).catch(
       () => null,
@@ -232,12 +268,18 @@ const SpeciesDossier: React.FC = () => {
         }
       });
 
-    return () => ctrl.abort();
+    return () => {
+      ctrl.abort();
+      candidateRequestVersion.current += 1;
+    };
   }, [taxonomyId, linkedName]);
 
   // On a subject conflict the id-keyed public record may be another species,
   // so neither its name nor its fields stand for this page's subject.
-  const subjectData = subjectConflict ? null : data;
+  const subjectData = subjectConflict || selectedCandidateId ? null : data;
+  const visiblePartners = selectedCandidateId ? [] : partners;
+  const visibleMycoLoading = selectedCandidateId ? false : mycoLoading;
+  const visibleMycoStatus = selectedCandidateId ? 0 : mycoStatus;
   const name =
     subjectConflict?.linkedName ||
     subjectData?.canonical_name ||
@@ -381,6 +423,17 @@ const SpeciesDossier: React.FC = () => {
                   </div>
                 )}
 
+                {selectedCandidateId && (
+                  <p
+                    data-testid="candidate-public-fields-withheld"
+                    className="mt-3 font-body text-[12px] text-[#cfc8b8]/70"
+                  >
+                    Public record and fungal-partner fields from the original route are withheld
+                    for selected canonical taxon {selectedCandidateId} until their identities
+                    are independently matched.
+                  </p>
+                )}
+
                 {/* Taxonomy */}
                 <Block icon={GitBranch} title="Taxonomy">
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -449,14 +502,14 @@ const SpeciesDossier: React.FC = () => {
 
                 {/* Mycorrhizal partners */}
                 <Block icon={Network} title="Mycorrhizal partners">
-                  {mycoLoading ? (
+                  {visibleMycoLoading ? (
                     <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
                       <Loader2 className="h-3 w-3 animate-spin" /> Querying fungal
                       associations…
                     </div>
-                  ) : !subjectConflict && partners.length > 0 ? (
+                  ) : !subjectConflict && visiblePartners.length > 0 ? (
                     <ul className="space-y-3">
-                      {partners.map((p, i) => (
+                      {visiblePartners.map((p, i) => (
                         <li
                           key={i}
                           className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/70 p-4"
@@ -478,7 +531,7 @@ const SpeciesDossier: React.FC = () => {
                   ) : (
                     <Empty>
                       Data coming soon
-                      {mycoStatus === 404 ? ' · no record yet' : ''}.
+                      {visibleMycoStatus === 404 ? ' · no record yet' : ''}.
                     </Empty>
                   )}
                 </Block>
