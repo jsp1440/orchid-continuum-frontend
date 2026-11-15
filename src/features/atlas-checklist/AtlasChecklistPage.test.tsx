@@ -1,0 +1,93 @@
+// @vitest-environment jsdom
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import AtlasChecklistPage from './AtlasChecklistPage';
+import { parseAtlasCalyxQuestionContext } from '@/features/atlas-next/calyxHandoff';
+
+const NOTICE = 'Statements of one checklist; areas, not occurrence records.';
+const GEOMETRY = { state: 'not_held', explanation: 'No outline is held.' };
+const env = { schema: 'oc.atlas-checklist-layer.v1', notice: NOTICE, geometry: GEOMETRY };
+const ID = { kg_node_id: 66746, canonical_key: 'taxon:32953', label: 'Angraecum sesquipedale' };
+
+const AREAS = { ...env, status: 'available', areas_matching: 1, next_offset: null,
+  areas: [{ kg_node_id: 1, label: 'Madagascar', name_without_direction_prefix: null, taxa_listed: 2 }] };
+const AREA = { ...env, status: 'available', area: { label: 'Madagascar' }, taxa_listed: 2, taxa_listed_with_a_marker: 1,
+  next_offset: null, calyx: { question: 'Which orchids grow in Madagascar?' },
+  taxa: [{ kg_edge_id: 9, taxon: ID, evidence: { checklist: { source_marker: '?' } }, calyx: { question: 'x' } }] };
+const gapRow = { state: 'NONE_RECORDED', rows: [], gap: 'Nothing retrieved for this facet in this store. That is not evidence that nothing exists.' };
+const TAXON = { ...env, status: 'available', identity: ID, calyx: { question: 'Where does Angraecum sesquipedale grow?' },
+  not_served: [{ facet: 'occurrences' }, { facet: 'environment' }],
+  panels: {
+    names: { synonymy: { state: 'OK', truncated: false, gap: null, rows: [{ kg_edge_id: 5, to_label: 'Aeranthus sesquipedalis',
+      evidence_status: 'CITED_UNREVIEWED_CHECKLIST_STATEMENT', review_state: 'UNREVIEWED', rule_name: 'world_plants_synonymy_v1' }] } },
+    interactions: { pollination_cited: gapRow },
+  } };
+
+function mockFetch(routes: Record<string, unknown>) {
+  const calls: string[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    calls.push(url);
+    const hit = Object.keys(routes).find((k) => url.includes(k));
+    return { ok: true, status: 200, json: async () => routes[hit as string] };
+  }));
+  return calls;
+}
+
+beforeEach(() => vi.unstubAllGlobals());
+afterEach(cleanup);
+
+describe('AtlasChecklistPage', () => {
+  it('walks area → taxa → evidence → Ask Calyx, with source signs verbatim and gaps stated', async () => {
+    const calls = mockFetch({ '/atlas/checklist/areas': AREAS, '/atlas/checklist/area?': AREA, '/atlas/checklist/taxon/66746': TAXON });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    await screen.findByText(/Madagascar/);
+    expect(screen.getByText(/Geometry: not held/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: /Madagascar/ }));
+    const taxonButton = await screen.findByRole('button', { name: 'Angraecum sesquipedale' });
+    expect(screen.getByText('[?]')).toBeTruthy();
+    expect(screen.getByText(/Statements, not a species count/)).toBeTruthy();
+    fireEvent.click(taxonButton);
+    await screen.findByText(/graph node 66746 · taxon:32953/);
+    expect(screen.getByText(/CITED_UNREVIEWED_CHECKLIST_STATEMENT · review: UNREVIEWED/)).toBeTruthy();
+    expect(screen.getByText(/not evidence that nothing exists/)).toBeTruthy();
+    expect(screen.getByText(/Not served by the Continuum's contract: occurrences, environment/)).toBeTruthy();
+    const link = screen.getByRole('link', { name: /Where does Angraecum sesquipedale grow\?/ });
+    const href = link.getAttribute('href') as string;
+    expect(parseAtlasCalyxQuestionContext(href.split('?')[1])?.question).toBe('Where does Angraecum sesquipedale grow?');
+    expect(calls.some((c) => c.includes('/atlas/checklist/taxon/66746'))).toBe(true);
+    expect(calls.every((c) => c.startsWith('https://calyx.test/atlas/checklist/'))).toBe(true);
+  });
+
+  it('sends the genus and sign filters to the backend', async () => {
+    const calls = mockFetch({ '/atlas/checklist/areas': AREAS, '/atlas/checklist/area?': AREA });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    await screen.findByRole('button', { name: 'Angraecum sesquipedale' });
+    fireEvent.change(screen.getByLabelText(/Genus/), { target: { value: 'Angraecum' } });
+    fireEvent.change(screen.getByLabelText(/Source signs/), { target: { value: 'marked' } });
+    await waitFor(() => expect(calls.some((c) => c.includes('genus=Angraecum') && c.includes('marked=true'))).toBe(true));
+  });
+
+  it('says a gap for an area the checklist does not write, not "no orchids"', async () => {
+    mockFetch({ '/atlas/checklist/areas': AREAS, '/atlas/checklist/area?': { ...env, status: 'available', reader_state: 'NOT_FOUND',
+      taxa: [], next_offset: null, calyx: null, gap: 'Nothing retrieved for this facet in this store. That is not evidence that nothing exists.' } });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    await screen.findByText(/not evidence that nothing exists/);
+    expect(screen.queryByText(/no orchids/i)).toBeNull();
+  });
+
+  it('shows the switched-off state the backend returns and offers no controls', async () => {
+    mockFetch({ '/atlas/checklist/areas': { ...env, status: 'not_enabled' } });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    await screen.findByText(/switched off. Nothing was read/);
+    expect(screen.queryByLabelText(/Area name/)).toBeNull();
+  });
+
+  it('says unavailable as a gap, not an absence', async () => {
+    mockFetch({ '/atlas/checklist/areas': { ...env, status: 'unavailable' } });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    await screen.findByText(/gap in what could be read, not an absence/);
+  });
+});
