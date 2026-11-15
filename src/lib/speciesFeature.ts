@@ -556,8 +556,10 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
 export async function fetchGenusSpeciesQueue(limit = 160, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
   const g = normalizeGenus(genus) || 'Cattleya';
   const requested = Math.max(12, limit);
+  if (signal?.aborted) return [];
 
   const imagePool = await searchGenusImageHarvester(g, requested, signal);
+  if (signal?.aborted) return [];
   const seen = new Set(imagePool.map((s) => s.name.toLowerCase()));
   const merged = imagePool.slice();
 
@@ -578,6 +580,9 @@ export async function fetchGenusSpeciesQueue(limit = 160, signal?: AbortSignal, 
     }
   }
 
+  // An aborted queue must neither paint stale data nor fall back to the
+  // curated set after the user has moved to a different genus.
+  if (signal?.aborted) return [];
   if (merged.length === 0 && g.toLowerCase() === 'cattleya') return shuffle(CATTLEYA_FALLBACK);
   return shuffle(merged).slice(0, requested);
 }
