@@ -25,7 +25,10 @@ export async function fetchSpeciesPublicRecord(
   hintName: string | null,
   signal?: AbortSignal,
 ): Promise<SpeciesDossierData | null> {
+  // A stale route must not initiate either lookup or return a late result.
+  if (signal?.aborted) return null;
   const direct = await fetchSpeciesById(taxonomyId, signal).catch(() => null);
+  if (signal?.aborted) return null;
   if (direct) return direct;
 
   const routeName = subjectNameFromSlug(taxonomyId);
@@ -34,6 +37,7 @@ export async function fetchSpeciesPublicRecord(
   if (!query) return null;
 
   const results = await searchSpecies(query, 10, signal).catch(() => []);
+  if (signal?.aborted) return null;
   let hit = results.find((row) => String(row.taxonomy_id) === String(taxonomyId));
 
   // Name-based routes have no numeric taxonomy ID to match. Only accept an
