@@ -116,4 +116,17 @@ describe('AtlasChecklistPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
     await screen.findByText(/Another graph node carries the same label/);
   });
+
+  it('shows the record-summary sentences as given, a derived summary and not a range', async () => {
+    const sentence = 'Derived from GBIF records, unreviewed: the Continuum holds 1 GBIF occurrence record in full. This is a derived summary, not its range.';
+    mockFetch({
+      '/atlas/checklist/areas': AREAS,
+      '/atlas/checklist/area?': AREA,
+      '/atlas/checklist/taxon/66746': { ...TAXON, panels: { record_context: { record_context: { state: 'OK', rows: [], gap: null, statements: [sentence] } } } },
+    });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
+    await screen.findByText(sentence);
+  });
 });
