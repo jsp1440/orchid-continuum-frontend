@@ -672,6 +672,7 @@ function remarkTextSection(raw: unknown): RecordsSection | null {
     counts: remarks.length ? `${shownText} shown${withheld ? ` \u00b7 ${withheld} held back by the privacy gate` : ""}` : null,
     note: [
       raw.is_a_finding === false ? "The compiler's own words, quoted as the checklist writes them; not a finding of the Continuum." : null,
+      remarks.length && withheld === 0 && raw.all_stored_remarks_shown === false ? "Not every stored remark of the checklist is shown here." : null,
       !remarks.length && raw.is_evidence_of_no_doubt === false ? "A taxon without a remark here is not thereby undisputed." : null,
     ].filter((part): part is string => part !== null).join(" ") || null,
   });
@@ -714,7 +715,7 @@ function hybridFormulaSection(raw: unknown): RecordsSection | null {
       const match = byName !== null
         ? "matched by name to a taxon of the graph (a match by name, not a verified identity)"
         : implied !== null
-          ? "matched by name to a species-level name that the checklist lists only through rows below the species (a match by name, not a verified identity)"
+          ? "matched by name to a species-level name that the checklist lists only through rows below the species; the graph holds it as an implied species concept derived from those rows, not as a taxon of the checklist (a match by name, not a verified identity, and not a match to any of those subspecies or varieties)"
           : reasonText(reason);
       return [
         `Parent ${position ?? "?"}: ${written !== null ? `written \u201c${written}\u201d` : "no name written"}`,
@@ -731,6 +732,7 @@ function hybridFormulaSection(raw: unknown): RecordsSection | null {
         value.state === "parents_stated_unknown" ? "The source states that the parents are unknown (its own words, as written)." : null,
         before !== null ? `the source writes before the formula: ${before}` : null,
         after !== null ? `the source writes after the formula: ${after}` : null,
+        value.all_parents_shown === false ? "Not every parent the formula names is shown here." : null,
         value.more_text_in_remark === true || (after2 !== undefined && after2 !== null && after2 !== false) ? "The remark has further text that was not read." : null,
         ...parents,
       ].filter((part): part is string => part !== null).join("\n") || null,
@@ -790,6 +792,9 @@ function parentNothotaxaSections(raw: unknown): RecordsSection[] {
     counts: list.length ? shownOf(raw.statements_shown, null, raw.statements_listed) : null,
     note: [
       "Nothotaxa whose checklist formula names this name as a parent, by its exact name. A match by name, not a verified identity. This is not the list of the hybrids of the taxon.",
+      isRecord(raw.taxon) && raw.taxon.is_implied_species_concept === true
+        ? "The asked name is a species-level name that the checklist lists only through rows below the species; the graph holds it as an implied species concept derived from those rows, not as a taxon of the checklist. None of those subspecies or varieties is meant."
+        : null,
       offset !== null && offset > 0 ? `This page starts at row ${offset + 1}.` : null,
       next !== null ? `The list continues: the next page starts at row ${next + 1}.` : null,
     ].filter((part): part is string => part !== null).join(" "),
