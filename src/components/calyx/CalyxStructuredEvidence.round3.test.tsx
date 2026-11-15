@@ -105,14 +105,15 @@ describe("hybrid_formula", () => {
     openAll();
     expect(itemTexts("hybrid_formula")).toEqual(["Ophrys sicula x speculum"]);
     const n = notes("hybrid_formula");
-    expect(n).toContain("Parent 1: written \u201cOphrys sicula\u201d \u00b7 matched by name to a taxon of the graph (a match by name, not a verified identity)");
+    expect(n).toContain("Parent 1: written \u201cOphrys sicula\u201d \u00b7 matched by name to the taxon of the graph labelled \u201cOphrys sicula\u201d (a match by name, not a verified identity)");
     expect(n).toContain("Parent 2: written \u201cspeculum\u201d \u00b7 read as \u201cOphrys speculum\u201d");
+    expect(n).toContain("matched by name to the taxon of the graph labelled \u201cOphrys speculum\u201d");
     expect(section("hybrid_formula")?.textContent).toContain("does not say which parent bore the seed or the pollen");
   });
   it("a parent matched to a species-level name the checklist lists only below the species (switch on), and the same parent not matched (switch off)", () => {
     show(evidenceOf("hybrid-formula-parent-matched-to-implied-name-switch-on"));
     openAll();
-    expect(notes("hybrid_formula")).toContain("Parent 1: written \u201cOphrys implicata\u201d \u00b7 matched by name to a species-level name that the checklist lists only through rows below the species; the graph holds it as an implied species concept derived from those rows, not as a taxon of the checklist (a match by name, not a verified identity, and not a match to any of those subspecies or varieties)");
+    expect(notes("hybrid_formula")).toContain("Parent 1: written \u201cOphrys implicata\u201d \u00b7 matched by name to \u201cOphrys implicata\u201d, which the graph holds as an implied species concept (a species-level name derived from rows below the species, not a taxon of the checklist; a match by name, not a verified identity)");
     show(evidenceOf("hybrid-formula-parent-not-matched-switch-off"));
     openAll();
     expect(notes("hybrid_formula")).toContain("Parent 1: written \u201cOphrys implicata\u201d \u00b7 not matched: only a species-level name that the checklist lists through rows below the species carries that name");
@@ -198,7 +199,7 @@ describe("parent_nothotaxa", () => {
     expect(itemTexts("parent_nothotaxa")).toEqual(["Ophrys x implicatella"]);
     expect(section("parent_entries_not_matched")).toBeNull();
     // the asked name is itself an implied species concept (taxon.is_implied_species_concept): the section says what that is
-    expect(section("parent_nothotaxa")?.textContent).toContain("implied species concept derived from those rows, not as a taxon of the checklist. None of those subspecies or varieties is meant.");
+    expect(section("parent_nothotaxa")?.textContent).toContain("The asked name is held by the graph as an implied species concept, not as a taxon of the checklist.");
   });
   it("an ordinary asked taxon does not get the implied-concept note", () => {
     show(evidenceOf("parent-nothotaxa-several"));
@@ -208,8 +209,12 @@ describe("parent_nothotaxa", () => {
   it("a nothotaxon as the subject: a limit, not a list and not 'no hybrids'", () => {
     show(evidenceOf("parent-nothotaxa-subject-is-a-nothotaxon"));
     openAll();
-    expect(heading("parent_nothotaxa")).toContain("no list built: the asked name is a nothotaxon");
+    // the backend says in `resolution` that no list was built and in its own statement which kind of name it was: the page words only the first
+    expect(heading("parent_nothotaxa")).toContain("no list built for this name");
     expect(section("parent_nothotaxa")?.textContent).toContain("That is a limit of the list, not a finding.");
+    expect(section("parent_nothotaxa")?.textContent).toContain("is only built for a taxon that is not itself a nothotaxon");
+    const own = Array.from(section("parent_nothotaxa")?.querySelectorAll("button, [data-testid=\"calyx-record-note\"]") ?? []).map((n) => n.textContent).join(" | ");
+    expect(own).not.toMatch(/nothotaxon\b(?!a)/);
     expect(itemTexts("parent_nothotaxa")).toEqual([]);
     expect(container.textContent).not.toMatch(/nothing retrieved|has no hybrids/);
   });
@@ -219,10 +224,107 @@ describe("parent_nothotaxa", () => {
     expect(container.textContent).toContain("not a single resolved species");
     expect(container.querySelector('[data-kind="parent_nothotaxa"]')).toBeNull();
   });
-  it("a name that is not in the graph reads as not applicable with its explanation or nothing", () => {
-    for (const name of ["parent-nothotaxa-taxon-not-in-graph", "hybrid-name-graph-does-not-use"]) {
+  it("a name that is not in the graph: the returned sentence for the two hybrid topics, nothing for another topic", () => {
+    show(evidenceOf("parent-nothotaxa-taxon-not-in-graph"));
+    expect(container.querySelector("section")?.getAttribute("data-evidence-kind")).toBe("not_applicable");
+    expect(container.textContent).toContain('The graph holds no taxon named exactly "Nullus parentus", so no formula or list of hybrids was read for it.');
+    expect(container.textContent).toContain("That is not evidence");
+    show(evidenceOf("hybrid-formula-name-not-in-graph"));
+    expect(container.textContent).toContain('The graph holds no taxon named exactly "Ophrys x nonexistens"');
+    // the same cause for another topic: the backend sends no sentence, so the page shows none (and invents none)
+    show(evidenceOf("hybrid-name-graph-does-not-use"));
+    expect(container.textContent).not.toMatch(/no hybrids|does not exist|is not a hybrid|graph holds no taxon/);
+    for (const name of ["parent-nothotaxa-taxon-not-in-graph", "hybrid-formula-name-not-in-graph", "parent-nothotaxa-text-cut-at-a-percent-sign"]) {
       show(evidenceOf(name));
-      expect(container.textContent).not.toMatch(/no hybrids|does not exist|is not a hybrid/);
+      expect(container.textContent).not.toMatch(/no hybrids|is not a hybrid/);
+    }
+  });
+  it("a text the backend cut at a percent sign is quoted as the backend quotes it (the page does not complete it)", () => {
+    show(evidenceOf("parent-nothotaxa-text-cut-at-a-percent-sign"));
+    expect(container.textContent).toContain('The graph holds no taxon named exactly "Ophrys sic"');
+  });
+  it("(synthetic) an older backend: the 'no list built' code in `state`, no statements, still reads as a limit", () => {
+    const raw = clone("parent-nothotaxa-subject-is-a-nothotaxon");
+    const rec = raw.subjects[0].evidence.parent_nothotaxa;
+    delete rec.resolution; delete rec.statements; rec.state = "LIST_NOT_BUILT_FOR_A_NOTHOTAXON";
+    show(raw); openAll();
+    expect(heading("parent_nothotaxa")).toContain("no list built for this name");
+  });
+  it("(synthetic) `all_listed_statements_shown: false` with nothing else to explain it is said; with a cut it is not said twice", () => {
+    const raw = clone("parent-nothotaxa-several");
+    raw.subjects[0].evidence.parent_nothotaxa.all_listed_statements_shown = false;
+    show(raw); openAll();
+    expect(section("parent_nothotaxa")?.textContent).toContain("Not every listed statement is shown here.");
+    show(evidenceOf("parent-nothotaxa-long-first-page")); openAll();
+    expect(section("parent_nothotaxa")?.textContent).not.toContain("Not every listed statement is shown here.");
+    expect((evidenceOf("parent-nothotaxa-several") as any).subjects[0].evidence.parent_nothotaxa.all_listed_statements_shown).toBe(true);
+  });
+});
+
+describe("the fields of backend #2425 head 165716c3 (real captures)", () => {
+  it("a withheld remark: the page counts 0 shown and 1 held back from the backend's own numbers", () => {
+    for (const name of ["remark-withheld-by-privacy-gate", "remark-withheld-by-privacy-gate-2"]) {
+      const rec = (evidenceOf(name) as any).subjects[0].evidence.checklist_remark;
+      expect(rec.remarks_shown).toBe(0);
+      expect((evidenceOf(name) as any).subjects[0].counts).toMatchObject({ checklist_remarks_shown: 0, checklist_remarks_withheld_text: 1 });
+      show(evidenceOf(name));
+      expect(heading("remark_text")).toContain("0 shown \u00b7 1 held back by the privacy gate");
+    }
+  });
+  it("(synthetic) an older backend counted the withheld remark as shown: the per-remark flag decides", () => {
+    const raw = clone("remark-withheld-by-privacy-gate");
+    raw.subjects[0].evidence.checklist_remark.remarks_shown = 1;
+    show(raw);
+    expect(heading("remark_text")).toContain("0 shown \u00b7 1 held back by the privacy gate");
+  });
+  it("matched_taxon_label and is_implied_species_concept are on every parent, the label only where a match was made", () => {
+    for (const name of ["hybrid-formula-both-parents-matched", "hybrid-formula-hedged", "hybrid-formula-parent-matched-to-implied-name-switch-on", "hybrid-formula-parent-not-matched-switch-off", "hybrid-formula-qualified-parent", "hybrid-formula-unmatched-parent-no-taxon"]) {
+      for (const f of (evidenceOf(name) as any).subjects[0].evidence.hybrid_formula.formulas) {
+        for (const p of f.parents) {
+          expect(typeof p.is_implied_species_concept).toBe("boolean");
+          expect(p.matched_taxon_label === null).toBe(p.matched_by_name_to === null && p.matched_to_implied_species_concept === null);
+          expect(p.is_implied_species_concept).toBe(p.matched_to_implied_species_concept !== null);
+        }
+      }
+    }
+  });
+  it("(synthetic) the boolean alone says implied; a missing label is not invented; an older backend sends neither field", () => {
+    const raw = clone("hybrid-formula-both-parents-matched");
+    const parents = raw.subjects[0].evidence.hybrid_formula.formulas[0].parents;
+    parents[0].is_implied_species_concept = true; parents[0].matched_by_name_to = null; parents[0].matched_taxon_label = null;
+    delete parents[1].matched_taxon_label; delete parents[1].is_implied_species_concept;
+    show(raw); openAll();
+    const n = notes("hybrid_formula");
+    expect(n).toContain("matched by name to a species-level name, which the graph holds as an implied species concept");
+    expect(n).toContain("Parent 2: written \u201cspeculum\u201d \u00b7 read as \u201cOphrys speculum\u201d (rule, code as returned: omitted_genus_same_as_first_parent_in_a_nothospecies) \u00b7 matched by name to a taxon of the graph (a match by name, not a verified identity)");
+    parents[0].matched_taxon_label = 5;
+    show(raw);
+    expect(container.querySelector('[data-testid="calyx-record-unreadable"]')?.textContent).toContain("could not be displayed");
+  });
+  it("a typed multiplication sign before the genus reads the nothotaxon: the same single subject and formula as the plain name", () => {
+    show(evidenceOf("hybrid-formula-typed-times-before-genus")); openAll();
+    expect(container.querySelectorAll('[data-testid="calyx-subject"]')).toHaveLength(1);
+    expect(itemTexts("hybrid_formula")).toEqual(["Ophrys sicula x speculum"]);
+  });
+  it("both questions about one taxon: both sections for the one subject and no pointer to 'the other question'", () => {
+    show(evidenceOf("hybrid-and-reverse-question-one-taxon")); openAll();
+    expect(container.querySelectorAll('[data-testid="calyx-subject"]')).toHaveLength(1);
+    expect(section("hybrid_formula")).not.toBeNull();
+    expect(section("parent_nothotaxa")).not.toBeNull();
+    expect(container.textContent).not.toContain("ask which hybrids have it as a parent");
+  });
+  it("no internal id in any sentence of these hybrid, remark and reverse captures", () => {
+    const names = Object.keys(fixtures).filter((n) => /^(remark-|hybrid-|parent-)/.test(n));
+    for (const name of names) {
+      const se: any = evidenceOf(name);
+      const strings: string[] = [];
+      const walkIt = (v: any, key: string) => {
+        if (typeof v === "string" && ["statement", "explanation"].includes(key)) strings.push(v);
+        else if (Array.isArray(v)) v.forEach((x) => (key === "reading" && typeof x === "string" ? strings.push(x) : walkIt(x, key)));
+        else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => walkIt(x, k));
+      };
+      walkIt(se.subjects ?? se, "");
+      expect(strings.join(" | "), name).not.toMatch(/taxon:|graph node|kg_node|edge \d|implied:/);
     }
   });
 });
