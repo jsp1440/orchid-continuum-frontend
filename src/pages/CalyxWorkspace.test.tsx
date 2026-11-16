@@ -114,7 +114,7 @@ function buildConversation(
   };
 }
 
-function buildTurnResult(conversationId: string, answer = "Done.") {
+function buildTurnResult(conversationId: string, answer = "Done.", workspaceOutputs: unknown[] = []) {
   return {
     conversation_id: conversationId,
     operator_message: {
@@ -132,6 +132,7 @@ function buildTurnResult(conversationId: string, answer = "Done.") {
       created_at: "2026-08-10T00:00:03Z",
     },
     answer,
+    workspace_outputs: workspaceOutputs,
     provider: {
       name: "deterministic-governed",
       model: "calyx-governed-summary-v1",
@@ -372,6 +373,86 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("new-conversation");
     expect(container.textContent).toContain("Study orchid resilience signals.");
     expect(storedWorkspace().conversationId).toBe("new-conversation");
+  });
+
+  it("renders validated server workspace outputs with provenance and clears them for a new thread", async () => {
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("rich-thread"));
+    mocks.sendCalyxTurn.mockResolvedValue(
+      buildTurnResult("rich-thread", "Here are the retrieved sources.", [
+        {
+          id: "sources-output",
+          kind: "table",
+          title: "Retrieved canonical sources",
+          subtitle: "1 source",
+          provenance: {
+            source_module: "brain_mission",
+            source_id: "mission-1",
+            generated: false,
+            evidence_status: "evidence",
+          },
+          payload: {
+            columns: [{ key: "title", label: "Title" }],
+            rows: [{ title: "Orchid mycorrhizal symbiosis review" }],
+          },
+          created_at: "2026-08-10T00:00:03Z",
+        },
+        {
+          id: "invalid-output",
+          kind: "table",
+          title: "Invalid output must not render",
+          provenance: { source_module: "brain_mission", evidence_status: "unknown" },
+          payload: { columns: [], rows: [] },
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("rich-thread", [
+        {
+          message_id: "rich-thread-operator",
+          conversation_id: "rich-thread",
+          role: "operator",
+          content: "Find papers about mycorrhizal symbiosis",
+          created_at: "2026-08-10T00:00:02Z",
+        },
+        {
+          message_id: "rich-thread-calyx",
+          conversation_id: "rich-thread",
+          role: "calyx",
+          content: "Here are the retrieved sources.",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Find papers about mycorrhizal symbiosis");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(container.textContent).toContain("Retrieved canonical sources");
+    expect(container.textContent).toContain("Orchid mycorrhizal symbiosis review");
+    expect(container.textContent).toContain("evidence");
+    expect(container.textContent).toContain("mission-1");
+    expect(container.textContent).not.toContain("Invalid output must not render");
+
+    await act(async () => {
+      getButton(container, "New conversation").click();
+    });
+    expect(container.textContent).not.toContain("Retrieved canonical sources");
+    expect(container.textContent).not.toContain("Orchid mycorrhizal symbiosis review");
   });
 
   it("restores a saved conversation normally when no reset occurs", async () => {
