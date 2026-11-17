@@ -162,4 +162,22 @@ describe("useCalyxSpeechInput", () => {
     });
     expect(instances[0].stop).toHaveBeenCalledTimes(1);
   });
+
+  it("stops and detaches the active recognizer on unmount", () => {
+    act(() => {
+      latest!.startListening();
+    });
+
+    const recognition = instances[0];
+    act(() => {
+      root?.unmount();
+      root = null;
+    });
+
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+  });
 });
