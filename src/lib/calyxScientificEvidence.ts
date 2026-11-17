@@ -32,6 +32,7 @@ export type CalyxScientificEvidenceStatus =
   | "not_applicable"
   | "not_resolved"
   | "unavailable"
+  | "partial"
   | "available";
 
 const KNOWN_STATUSES: readonly CalyxScientificEvidenceStatus[] = [
@@ -40,6 +41,10 @@ const KNOWN_STATUSES: readonly CalyxScientificEvidenceStatus[] = [
   "not_applicable",
   "not_resolved",
   "unavailable",
+  // Something was read and something was not (backend contract
+  // `contracts/oc-scientific-evidence-block.v1.json`): the records are shown
+  // AND what was not read is said. Never "no evidence", never "complete".
+  "partial",
   "available",
 ];
 
@@ -69,6 +74,8 @@ export type CalyxScientificEvidenceContext = {
   reason?: string | null;
   error?: string | null;
   explanation?: string | null;
+  /** On a `partial` (or `unavailable`) block: the parts that were not read, with the backend's closed reason code and its own sentence. */
+  read_gaps?: Array<{ component?: string; reason?: string; statement?: string; detail?: string }>;
   read_only?: boolean;
   knowledge_graph_mutation?: boolean;
   automatic_publication?: boolean;
@@ -97,6 +104,13 @@ export type CalyxEvidenceProvenance = {
   resolution: string | null;
 };
 
+/** One part the backend says it did not read this turn. `statement` is the backend's own sentence, passed through unchanged. */
+export type CalyxEvidenceReadGap = {
+  component: string | null;
+  reason: string | null;
+  statement: string | null;
+};
+
 export type CalyxEvidenceView = {
   /**
    * `absent`: no block at all. `quiet`: a block that says there is nothing to
@@ -122,6 +136,16 @@ export type CalyxEvidenceView = {
   explanation: string | null;
   /** Machine code for why there is no evidence (`reason` or `error`). */
   code: string | null;
+  /**
+   * True when the backend's status was `partial`: part of the evidence was
+   * read and is shown like an available block, and part was NOT read. A part
+   * that was not read is never evidence of absence.
+   */
+  partial: boolean;
+  /** The parts not read, as the backend lists them in `read_gaps`. Empty on a saved turn (not stored). */
+  readGaps: CalyxEvidenceReadGap[];
+  /** `read_gaps` was sent in a shape this page cannot read; the page then says only that part was not read. */
+  readGapsUnreadable: boolean;
   provenance: CalyxEvidenceProvenance;
   boundary: CalyxEvidenceBoundary;
   /**
@@ -162,6 +186,9 @@ function emptyView(kind: CalyxEvidenceView["kind"], origin: CalyxEvidenceView["o
     pollinationVerified: null,
     explanation: null,
     code: null,
+    partial: false,
+    readGaps: [],
+    readGapsUnreadable: false,
     provenance: { ...EMPTY_PROVENANCE },
     boundary: { ...EMPTY_BOUNDARY },
     structured: null,
@@ -188,6 +215,20 @@ function strings(value: unknown): string[] {
     .filter((item): item is string => typeof item === "string")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/** `read_gaps` part by part: an entry that is not an object, or carries none of the three fields as text, makes the list unreadable (fail closed). */
+function readGapsOf(value: unknown): { gaps: CalyxEvidenceReadGap[]; unreadable: boolean } {
+  if (value === undefined || value === null) return { gaps: [], unreadable: false };
+  if (!Array.isArray(value)) return { gaps: [], unreadable: true };
+  const gaps: CalyxEvidenceReadGap[] = [];
+  for (const entry of value) {
+    if (!isRecord(entry)) return { gaps: [], unreadable: true };
+    const gap = { component: text(entry.component), reason: text(entry.reason), statement: text(entry.statement) };
+    if (gap.component === null && gap.reason === null && gap.statement === null) return { gaps: [], unreadable: true };
+    gaps.push(gap);
+  }
+  return { gaps, unreadable: false };
 }
 
 function provenanceOf(raw: Record<string, unknown>): CalyxEvidenceProvenance {
@@ -244,7 +285,7 @@ export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
     code: text(raw.reason) ?? text(raw.error),
     provenance: provenanceOf(raw),
     boundary: boundaryOf(raw),
-    structured: status === "available" || status === "not_resolved" || status === "not_applicable" || status === "unavailable" ? readStructuredEvidence(raw) : null,
+    structured: status === "available" || status === "partial" || status === "not_resolved" || status === "not_applicable" || status === "unavailable" ? readStructuredEvidence(raw) : null,
   };
 
   switch (status as CalyxScientificEvidenceStatus) {
@@ -259,15 +300,22 @@ export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
       return { ...base, kind: "not_resolved" };
     case "unavailable":
       return { ...base, kind: "unavailable" };
+    case "partial":
     case "available": {
       // `reading` must be a list. Anything else is not evidence this page can show.
       if (!Array.isArray(raw.reading)) return emptyView("malformed", "turn", status);
-      return {
+      const view: CalyxEvidenceView = {
         ...base,
         kind: "available",
         sentences: strings(raw.reading),
         pollinationVerified: flag(raw.pollination_verified),
       };
+      if (status !== "partial") return view;
+      // A partial block is shown like an available one for what it holds, and
+      // carries by field that part was not read. The view keeps the backend's
+      // status string, so nothing downstream can mistake it for a complete read.
+      const { gaps, unreadable } = readGapsOf(raw.read_gaps);
+      return { ...view, partial: true, readGaps: gaps, readGapsUnreadable: unreadable };
     }
   }
 }
@@ -395,6 +443,11 @@ export function readSavedMessageEvidence(metadata: unknown): CalyxEvidenceView {
     evidencePacketId: text(metadata.scientific_evidence_packet_id),
   };
   if (status === "available" || status === "not_resolved" || status === "unavailable") view.kind = status;
+  // A saved turn keeps the status only: the page can say that part was not read, not which part.
+  if (status === "partial") {
+    view.kind = "available";
+    view.partial = true;
+  }
   return view;
 }
 
