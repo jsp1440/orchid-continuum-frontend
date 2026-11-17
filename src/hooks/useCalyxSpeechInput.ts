@@ -143,7 +143,20 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   }, [speechRecognition, state]);
 
   useEffect(() => () => {
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+
+    recognition.onstart = null;
+    recognition.onresult = null;
+    recognition.onerror = null;
+    recognition.onend = null;
+
+    try {
+      recognition.stop();
+    } catch {
+      // The recognizer may not have reached its started state before unmount.
+    }
   }, []);
 
   return { state, interimTranscript, error, startListening, stopListening };
