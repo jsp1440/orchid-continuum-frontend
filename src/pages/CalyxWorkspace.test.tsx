@@ -340,7 +340,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     await flush(4);
 
     expect(mocks.createCalyxConversation).toHaveBeenCalledWith({
-      title: "Speak with Calyx",
+      title: "Speak with CALYX",
       project_id: "calyx-speak",
       context: {
         surface: "orchid-continuum-frontend",
@@ -441,25 +441,22 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
     expect(textarea.value).toBe("What does Calyx know about mycorrhizal networks?");
-    expect(container.textContent).toContain("Calyx could not complete that turn.");
+    expect(container.textContent).toContain("CALYX could not complete that turn.");
   });
 
-  it("offers an immediate retry path during cold-start recovery", async () => {
+  it("does not automatically resend a turn with unknown delivery status", async () => {
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
-    mocks.sendCalyxTurn
-      .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
-      .mockResolvedValueOnce(buildTurnResult("retry-thread", "Recovered answer"));
     mocks.getCalyxConversation.mockResolvedValue(
       buildConversation("retry-thread", [
         {
-          message_id: "operator-1",
+          message_id: "operator-committed",
           conversation_id: "retry-thread",
           role: "operator",
           content: "Wake up please",
           created_at: "2026-08-10T00:00:02Z",
         },
         {
-          message_id: "calyx-1",
+          message_id: "calyx-committed",
           conversation_id: "retry-thread",
           role: "calyx",
           content: "Recovered answer",
@@ -467,6 +464,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
         },
       ]),
     );
+    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
 
     await act(async () => {
       root.render(
@@ -486,57 +484,18 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    expect(container.textContent).toContain("Automatic retry in 20s.");
+    expect(container.textContent).toContain("delivery status is unknown");
+    expect(container.textContent).toContain("CALYX may have received this turn");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      getButton(container, "Retry now").click();
+      getButton(container, "Reload conversation").click();
     });
     await flush(4);
 
     expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
-    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
-    expect(container.textContent).toContain("Recovered answer");
-  });
-
-  it("cancels a pending cold-start retry from the retry controls", async () => {
-    vi.useFakeTimers();
-    mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
-    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
-
-    await act(async () => {
-      root.render(
-        <MemoryRouter>
-          <CalyxWorkspace />
-        </MemoryRouter>,
-      );
-    });
-    await flush(2);
-
-    await act(async () => {
-      mocks.pushTranscript("Original retry message");
-    });
-
-    await act(async () => {
-      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-    await flush(4);
-
-    await act(async () => {
-      getButton(container, "Cancel").click();
-    });
-    await flush(2);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(21_000);
-    });
-    await flush(2);
-
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Automatic retry in");
-    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
-      "Original retry message",
-    );
+    expect(container.textContent).toContain("Recovered answer");
   });
 
   it("does not restore a committed message when the post-turn refresh fails", async () => {
