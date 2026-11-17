@@ -662,6 +662,14 @@ export default function CalyxWorkspace() {
       turnCommitted = true;
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
       if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
+      setConversation((current) => {
+        if (!current || current.conversation_id !== thread.conversation_id) return current;
+        const existingMessageIds = new Set(current.messages.map((item) => item.message_id));
+        const committedMessages = [result.operator_message, result.calyx_message].filter(
+          (item) => !existingMessageIds.has(item.message_id),
+        );
+        return { ...current, messages: [...current.messages, ...committedMessages] };
+      });
       const refreshed = await getCalyxConversation(thread.conversation_id);
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
       setConversation(refreshed);
@@ -672,7 +680,7 @@ export default function CalyxWorkspace() {
       if (!isActiveLifecycleRequest(requestId, activeProjectId)) return;
       if (turnCommitted) {
         setAuthRequired(false);
-        setConversationError("CALYX completed the turn, but the conversation could not be refreshed. Reload the thread before retrying so the same turn is not sent twice.");
+        setConversationError("CALYX completed the turn, but the conversation could not be refreshed. The confirmed reply is shown. Reload the thread before retrying so the same turn is not sent twice.");
         void refreshConversationHistory();
         return;
       }
