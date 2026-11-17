@@ -107,7 +107,15 @@ function Boundary({ boundary }: { boundary: CalyxEvidenceBoundary }) {
   );
 }
 
-function PollinationStatus({ verified }: { verified: boolean | null }) {
+function PollinationStatus({ verified, partial }: { verified: boolean | null; partial: boolean }) {
+  // On a partial block "false" covers only the part that was read: it must not read as a finding.
+  if (verified === false && partial) {
+    return (
+      <p className="rounded-lg border px-3 py-2 text-sm leading-6 text-muted-foreground" data-pollination="not-established-partial-read" data-testid="calyx-evidence-pollination">
+        Verified pollination: not established in the part that was read. Part of the evidence was not read, so nothing is implied either way.
+      </p>
+    );
+  }
   if (verified === true) {
     return (
       <p className="rounded-lg border border-emerald-600/40 bg-emerald-500/10 px-3 py-2 text-sm leading-6" data-pollination="verified" data-testid="calyx-evidence-pollination">
@@ -219,18 +227,50 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
       aria-labelledby={headingId}
       className="mt-2 rounded-xl border-2 border-primary/30 bg-background px-4 py-3"
       data-evidence-kind="available"
+      data-evidence-partial={evidence.partial ? "true" : undefined}
       data-testid="calyx-evidence-panel"
     >
       {/* A reloaded turn still carries the backend's heading inside the reply, so
           the panel uses a different one rather than printing it twice. */}
-      <h3 className="text-sm font-semibold" id={headingId}>{saved ? "Graph evidence was retrieved for this turn" : CALYX_EVIDENCE_ANSWER_HEADING}</h3>
+      <h3 className="text-sm font-semibold" id={headingId}>{saved ? (evidence.partial ? "Part of the graph evidence was retrieved for this turn" : "Graph evidence was retrieved for this turn") : CALYX_EVIDENCE_ANSWER_HEADING}</h3>
       <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
-        {saved
-          ? "Evidence records were retrieved when this turn was asked."
-          : shownSentences.length
-            ? "Evidence records were retrieved for this turn. The sentences are the records\u2019 own wording, not Calyx\u2019s interpretation."
-            : "Evidence records were retrieved for this turn."}
+        {evidence.partial
+          ? (saved
+            ? "Part of the evidence records was read when this turn was asked."
+            : shownSentences.length
+              ? "Part of the evidence records was read for this turn. The sentences are the records\u2019 own wording, not Calyx\u2019s interpretation."
+              : "Part of the evidence records was read for this turn.")
+          : saved
+            ? "Evidence records were retrieved when this turn was asked."
+            : shownSentences.length
+              ? "Evidence records were retrieved for this turn. The sentences are the records\u2019 own wording, not Calyx\u2019s interpretation."
+              : "Evidence records were retrieved for this turn."}
       </p>
+
+      {evidence.partial ? (
+        <div className="mt-2 rounded-lg border border-amber-600/50 bg-amber-500/10 px-3 py-2 text-sm leading-6" data-testid="calyx-evidence-partial">
+          <p>
+            <strong>Only part of the evidence was read for this turn.</strong> What is shown below is what was read. A part that was not read says nothing either way: it is not evidence of absence.
+          </p>
+          {evidence.readGaps.some((gap) => gap.statement) ? (
+            <ul className="mt-1 list-disc space-y-0.5 pl-5 text-xs leading-5" data-testid="calyx-evidence-read-gaps">
+              {evidence.readGaps.flatMap((gap, index) => (gap.statement ? [<li className="break-words" key={`${index}-${gap.statement.slice(0, 24)}`}>{gap.statement}</li>] : []))}
+            </ul>
+          ) : null}
+          {evidence.readGaps.some((gap) => !gap.statement && gap.reason) ? (
+            <p className="mt-1 text-xs leading-5 text-muted-foreground" data-testid="calyx-evidence-read-gap-codes">
+              Reported cause: {evidence.readGaps.flatMap((gap) => (!gap.statement && gap.reason ? [gap.reason] : [])).filter((code, index, all) => all.indexOf(code) === index).map((code, index) => (
+                <span key={code}>{index ? ", " : ""}<span className={CODE}>{code}</span></span>
+              ))}
+            </p>
+          ) : null}
+          {evidence.readGapsUnreadable ? (
+            <p className="mt-1 text-xs leading-5 text-muted-foreground" data-testid="calyx-evidence-read-gaps-unreadable">Which part was not read could not be displayed.</p>
+          ) : saved ? (
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">A saved conversation does not keep which part was not read; the reply above states it.</p>
+          ) : null}
+        </div>
+      ) : null}
 
       <dl className="mt-3 text-sm leading-6">
         <div className="flex flex-wrap gap-x-2">
@@ -241,7 +281,7 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
         </div>
       </dl>
 
-      {showPollination ? <div className="mt-2"><PollinationStatus verified={evidence.pollinationVerified} /></div> : null}
+      {showPollination ? <div className="mt-2"><PollinationStatus partial={evidence.partial} verified={evidence.pollinationVerified} /></div> : null}
 
       {/* The transcript is a polite live region. The heading, species and
           pollination line above are announced with the turn; the detail below
