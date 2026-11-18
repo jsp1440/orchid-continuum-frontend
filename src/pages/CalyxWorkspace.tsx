@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Scatter, ScatterChart, XAxis, YAxis } from "recharts";
 
+import OwnerAccessCodeForm from "@/components/auth/OwnerAccessCodeForm";
 import ScientificSynthesis from "@/components/calyx/ScientificSynthesis";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
@@ -439,6 +440,7 @@ export default function CalyxWorkspace() {
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const [ownerNotice, setOwnerNotice] = useState<"kept" | "empty" | null>(null);
   const [speakReplies, setSpeakReplies] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
@@ -642,6 +644,7 @@ export default function CalyxWorkspace() {
     setSubmitting(true);
     setConversationError(null);
     setAuthRequired(false);
+    setOwnerNotice(null);
     setWorkspaceStatus(null);
     setMessage((current) => (current.trim() === text ? "" : current));
     cancelSpeech();
@@ -736,6 +739,17 @@ export default function CalyxWorkspace() {
     setSelectedDocumentText("");
     window.localStorage.removeItem(STORAGE_KEY);
     focusMessageInput();
+  }
+
+  // The owner access code is typed on this page (OwnerAccessCodeForm signs in through the
+  // same createOwnerSession as Mission Control). The question the refused send put back in
+  // the box is left untouched; the owner taps Send again.
+  function handleOwnerSignedIn() {
+    setOwnerNotice(message.trim() ? "kept" : "empty");
+    setAuthRequired(false);
+    setConversationError(null);
+    void refreshConversationHistory();
+    void loadCalyxWorkspace().then((value) => { if (mountedRef.current) setSnapshot(value); }).catch(() => undefined);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -879,6 +893,25 @@ export default function CalyxWorkspace() {
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
               {conversationError ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{pendingRetry ? <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span>Automatic retry in {autoRetryCountdown ?? NETWORK_RETRY_SECONDS}s.</span><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={() => void sendMessage(pendingRetry.message)} type="button">Retry now</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={cancelAutoRetry} type="button">Cancel</button></div> : null}</div> : null}
             </form>
+            {authRequired || snapshot.orchestratorState === "authentication_required" ? (
+              <details className="border-t p-4 text-sm" data-testid="calyx-owner-sign-in" key={authRequired ? "needed" : "offered"} open={authRequired}>
+                <summary className="min-h-11 cursor-pointer py-2 font-medium">Owner sign-in</summary>
+                <OwnerAccessCodeForm
+                  autoComplete="off"
+                  buttonClassName="min-h-11 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50"
+                  buttonLabel="Sign in as owner"
+                  className="mt-2 rounded-lg border bg-background p-4"
+                  description="Enter the owner access code to send questions to Calyx. Your question stays in the box above. The code is used once to sign in and is not stored."
+                  formatFailure={(failure) => failure.replace(/^Calyx backend \d+:\s*/, "")}
+                  heading="Owner access code"
+                  idPrefix="calyx-owner"
+                  inputClassName="min-h-11 min-w-[14rem] flex-1 rounded-md border bg-background px-3 py-2 text-base text-foreground"
+                  onSignedIn={handleOwnerSignedIn}
+                  placeholder="Owner access code"
+                />
+              </details>
+            ) : null}
+            {ownerNotice && !authRequired ? <p className="border-t p-4 text-sm text-muted-foreground" role="status">{ownerNotice === "kept" ? "Signed in as owner. Your question is still in the box; tap Send." : "Signed in as owner. Type your question and tap Send."}</p> : null}
           </section>
 
           <aside className="space-y-4">
