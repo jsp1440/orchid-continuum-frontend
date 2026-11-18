@@ -440,7 +440,7 @@ export default function CalyxWorkspace() {
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
-  const [ownerSignedIn, setOwnerSignedIn] = useState(false);
+  const [ownerNotice, setOwnerNotice] = useState<"kept" | "empty" | null>(null);
   const [speakReplies, setSpeakReplies] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
@@ -644,6 +644,7 @@ export default function CalyxWorkspace() {
     setSubmitting(true);
     setConversationError(null);
     setAuthRequired(false);
+    setOwnerNotice(null);
     setWorkspaceStatus(null);
     setMessage((current) => (current.trim() === text ? "" : current));
     cancelSpeech();
@@ -744,7 +745,7 @@ export default function CalyxWorkspace() {
   // same createOwnerSession as Mission Control). The question the refused send put back in
   // the box is left untouched; the owner taps Send again.
   function handleOwnerSignedIn() {
-    setOwnerSignedIn(true);
+    setOwnerNotice(message.trim() ? "kept" : "empty");
     setAuthRequired(false);
     setConversationError(null);
     void refreshConversationHistory();
@@ -910,7 +911,7 @@ export default function CalyxWorkspace() {
                 />
               </details>
             ) : null}
-            {ownerSignedIn && !authRequired ? <p className="border-t p-4 text-sm text-muted-foreground" role="status">Signed in as owner. Your question is still in the box; tap Send.</p> : null}
+            {ownerNotice && !authRequired ? <p className="border-t p-4 text-sm text-muted-foreground" role="status">{ownerNotice === "kept" ? "Signed in as owner. Your question is still in the box; tap Send." : "Signed in as owner. Type your question and tap Send."}</p> : null}
           </section>
 
           <aside className="space-y-4">
