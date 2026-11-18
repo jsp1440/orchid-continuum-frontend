@@ -148,6 +148,29 @@ describe("CalyxWorkspace owner sign-in on the page", () => {
     expect(JSON.stringify({ ...window.sessionStorage })).not.toContain(CODE);
   });
 
+  it("the success line is gone as soon as the next send starts", async () => {
+    await render();
+    await sendRefused();
+    await signIn(CODE);
+    expect(container.textContent).toContain("Your question is still in the box; tap Send.");
+    mocks.sendCalyxTurn.mockReturnValue(new Promise(() => undefined)); // the send stays in flight
+    await act(async () => { container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })); });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+    expect(container.textContent).not.toContain("Signed in as owner");
+    expect(container.textContent).not.toContain("still in the box");
+  });
+
+  it("signing in through the closed disclosure with an empty box says to type the question", async () => {
+    await render("authentication_required");
+    expect(textarea().value).toBe("");
+    await signIn(CODE);
+    expect(mocks.createOwnerSession).toHaveBeenCalledWith(CODE);
+    expect(container.textContent).toContain("Signed in as owner. Type your question and tap Send.");
+    expect(container.textContent).not.toContain("still in the box");
+    expect(mocks.sendCalyxTurn).not.toHaveBeenCalled();
+  });
+
   it("then Send sends the same question", async () => {
     await render();
     await sendRefused();
