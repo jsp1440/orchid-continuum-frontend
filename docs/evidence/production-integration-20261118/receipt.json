@@ -1,0 +1,39 @@
+{
+  "date": "2026-11-18",
+  "classification": "CONTINUE / CONVERGE",
+  "authoritative_pr": "frontend#974",
+  "base_before_repair": "c651cce75b1f777ec585eadc38f9441b6abc7073",
+  "frontend_main": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
+  "backend_main_and_live": "6e5150fdf69d19bddb308b6be629552b1a1cd9e2",
+  "brain_main": "94a90f34d480dcd12f62a91114c39239f21918eb",
+  "reused_975": "6a63655d6f55e9f2775eea1eb051581f340d81f1",
+  "verified_2451": "4927be936f6bb9401e28dce9f48559bb599c0d61",
+  "verified_979": "39b549355101f4fa69a64c21ad25fe455501e66b",
+  "federation_merge": "4fdf6167371d06ab220b366805cae6c3e73eb504",
+  "test_results": {
+    "render_env_baseline": "2 failed,34 passed at frontend main",
+    "repair_focused_render_env": "37 passed",
+    "repair_focused_unset_env": "37 passed",
+    "repair_full_render_env": "3738 passed,2 skipped; network-enabled local IPC",
+    "2451": "27 passed;2 new cases fail against main;2 instrumented scientific questions reach real local conversation/turn handlers",
+    "979": "428 passed,14 files; real repo dependencies, synthetic/captured fixtures",
+    "federation": "66 passed; offline first run2 records, replay0, preview0 assertions",
+    "backend_current_main_journeys": "29 passed,1 optional trace-output case skipped; disposable PostgreSQL16.2, real MCP, graph slice and Atlas fixture builds; not live science",
+    "current_main_projection_render_env": "3772 passed,2 skipped at frontend main7ce582bd with only the3 intentional source/test file overlays; scheduler unchanged"
+  },
+  "runtime_notes": {
+    "initial_full_run": "49 environment failures under restricted sandbox IPC; actual listen/spawn EPERM, not product failures",
+    "main_projection_initial": "62 environment failures under restricted IPC, not a main regression comparison",
+    "browser": "sandboxed Chromium closed before navigation; no browser-live verification claimed",
+    "live_question_acceptance": "not run; creates conversations and auto mode could call configured providers"
+  },
+  "model_calls": 0,
+  "production_mutations": 0,
+  "spending_limits_changed": false,
+  "changed_file_sha256": {
+    "src/lib/api.ts": "adc5141970de2d7750ef21da019fdf060d269e94f0535dc97e719f6f71c8f3be",
+    "src/lib/apiOriginSafety.test.ts": "fd40b261aeaa996a3826b7ce507c16ca90357c6e3ab7ac024a554c8529c20a17",
+    "src/features/atlas-next/regionalMap.test.ts": "054fbf26c1585324b221ee5e2b25d9e546903176ab458e8b08548522350b941f",
+    "src/lib/provider-governor/noApiSchedulerWorkflow.test.ts": "04f18fd0be7c40d9b8f57403bf801bbb072cc9efc9384faa7f948be05b01a202"
+  }
+}
