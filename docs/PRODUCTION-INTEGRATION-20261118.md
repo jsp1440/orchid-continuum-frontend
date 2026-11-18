@@ -118,7 +118,8 @@ read tools → Brain scientific evidence context → Calyx evidence block → fr
 panel. Preserve ambiguous/unbridged identities and uncited visitation as such.
 Do not equate an ID across namespaces or promote metadata to a scientific claim.
 Current-backend local PostgreSQL16.2 tests executed29 cases successfully with
-1 optional trace-output case skipped. They exercise real graph/MCP/Brain/Calyx
+1 optional trace-output case skipped; that trace-export case passed separately
+when its output directory was configured. They exercise real graph/MCP/Brain/Calyx
 on the repository's24-node/38-edge dev snapshot plus fixture-based Atlas builds.
 Source assertions stay unreviewed and synthetic builds stay test-only. No
 production data or scientific state was changed.

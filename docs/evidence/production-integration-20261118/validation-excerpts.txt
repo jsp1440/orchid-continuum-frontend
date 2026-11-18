@@ -71,4 +71,3 @@ Current-main projection, Render-like environment, local IPC enabled
       Tests  3772 passed | 2 skipped (3774)
    Start at  22:53:41
    Duration  133.31s (transform 9.34s, setup 0ms, collect 30.48s, tests 77.72s, environment 60.45s, prepare 31.24s)
-

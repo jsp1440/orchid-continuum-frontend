@@ -19,7 +19,8 @@
     "979": "428 passed,14 files; real repo dependencies, synthetic/captured fixtures",
     "federation": "66 passed; offline first run2 records, replay0, preview0 assertions",
     "backend_current_main_journeys": "29 passed,1 optional trace-output case skipped; disposable PostgreSQL16.2, real MCP, graph slice and Atlas fixture builds; not live science",
-    "current_main_projection_render_env": "3772 passed,2 skipped at frontend main7ce582bd with only the3 intentional source/test file overlays; scheduler unchanged"
+    "current_main_projection_render_env": "3772 passed,2 skipped at frontend main7ce582bd with only the3 intentional source/test file overlays; scheduler unchanged",
+    "backend_optional_trace": "1 previously skipped trace-export case passed separately with OC_ATLAS_TRACE_DIR set"
   },
   "runtime_notes": {
     "initial_full_run": "49 environment failures under restricted sandbox IPC; actual listen/spawn EPERM, not product failures",
