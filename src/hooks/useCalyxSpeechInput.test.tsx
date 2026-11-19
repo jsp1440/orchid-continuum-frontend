@@ -162,4 +162,31 @@ describe("useCalyxSpeechInput", () => {
     });
     expect(instances[0].stop).toHaveBeenCalledTimes(1);
   });
+
+  it("stops and detaches the recognizer when the hook unmounts", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const recognition = instances[0];
+    const staleResultHandler = recognition.onresult;
+
+    act(() => {
+      root!.unmount();
+      root = null;
+    });
+
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "late transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
+  });
 });
