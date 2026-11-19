@@ -1,0 +1,435 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend oc-autonomous-integration 3db7cecb76f7 via FastAPI TestClient on app.main, GET /api/interactions/discovery (public route, no auth), DATABASE_URL unset, no database. Each entry holds the exact query sent ('request'), the HTTP status and the unmodified body. default_runtime_*: the default semantic-index runtime with no database -- the backend serves an empty in-process index as status ok, count 0, index_state 'memory_unprovisioned'. fixture_ingested_*: a fresh activated MemoryIndexRepository (as tests/test_interaction_discovery_routes.py::_fresh_repository), then three records taken from the backend's OWN TEST FIXTURES ingested through the real ingest paths: (1) tests/test_interaction_discovery_routes.py::_ingest_sample (pollinatedBy, 'Example study 2020') and (2) its hasHost override from test_discover_interactions_filters_by_category, both via ingest_globi_interactions_for_canonical_dataset(dataset_version='globi-2026-08'); (3) the live-API-shaped record from tests/test_interaction_harvester.py::test_globi_document_is_review_bound ('Example study', 'doi:10.1234/example') via ingest_globi_interactions_for_research(query_role='source'). Records (1) and (3) name the same taxon pair from two different studies and the backend returns both -- they pin that separate records are shown separately, not collapsed. fixture_ingested_genus_substring: taxon=Orchis returns species-level records because the backend filter is a case-insensitive substring match -- the reason a genus-level page sends no request. invalid_category: category=not-a-real-category -> 422. ALL taxa, citations and the DOI are backend TEST FIXTURE values, NOT real scientific interaction evidence; they pin the response SHAPE only. No captured body carries a locality or coordinate field; 'locator' is a provenance locator (source, study id, taxon ids, type), not a place, and the client drops it with every other non-allow-listed field.",
+  "default_runtime_pollinator": {
+    "request": {
+      "taxon": "Orchis mascula",
+      "category": "pollinator",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 0,
+      "total_matched": 0,
+      "truncated": false,
+      "category": "pollinator",
+      "taxon_filter": "Orchis mascula",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": []
+    }
+  },
+  "default_runtime_mycorrhizal": {
+    "request": {
+      "taxon": "Orchis mascula",
+      "category": "mycorrhizal",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 0,
+      "total_matched": 0,
+      "truncated": false,
+      "category": "mycorrhizal",
+      "taxon_filter": "Orchis mascula",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": []
+    }
+  },
+  "fixture_ingested_pollinator": {
+    "request": {
+      "taxon": "Orchis mascula",
+      "category": "pollinator",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 2,
+      "total_matched": 2,
+      "truncated": false,
+      "category": "pollinator",
+      "taxon_filter": "Orchis mascula",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": [
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Bombus terrestris",
+          "target_taxon_id": "GBIF:456",
+          "interaction_type": "pollinatedBy",
+          "categories": [
+            "pollinator"
+          ],
+          "study_citation": "Example study 2020",
+          "study_source_citation": "GloBI dataset v1",
+          "study_external_id": null,
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "VERSIONED_STABLE_DATASET",
+          "dataset_version": "globi-2026-08",
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 363807776956648465,
+          "revision_id_str": "363807776956648465",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": null,
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:456",
+            "interaction_type": "pollinatedBy"
+          }
+        },
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Bombus terrestris",
+          "target_taxon_id": "GBIF:456",
+          "interaction_type": "pollinatedBy",
+          "categories": [
+            "pollinator"
+          ],
+          "study_citation": "Example study",
+          "study_source_citation": null,
+          "study_external_id": "doi:10.1234/example",
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "LIVE_EXPLORATORY_API",
+          "dataset_version": null,
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 220721242774023047,
+          "revision_id_str": "220721242774023047",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": "doi:10.1234/example",
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:456",
+            "interaction_type": "pollinatedBy"
+          }
+        }
+      ]
+    }
+  },
+  "fixture_ingested_mycorrhizal": {
+    "request": {
+      "taxon": "Orchis mascula",
+      "category": "mycorrhizal",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 1,
+      "total_matched": 1,
+      "truncated": false,
+      "category": "mycorrhizal",
+      "taxon_filter": "Orchis mascula",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": [
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Rhizoctonia sp.",
+          "target_taxon_id": "GBIF:789",
+          "interaction_type": "hasHost",
+          "categories": [
+            "mycorrhizal"
+          ],
+          "study_citation": "Example study 2020",
+          "study_source_citation": "GloBI dataset v1",
+          "study_external_id": null,
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "VERSIONED_STABLE_DATASET",
+          "dataset_version": "globi-2026-08",
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 990035843569342974,
+          "revision_id_str": "990035843569342974",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": null,
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:789",
+            "interaction_type": "hasHost"
+          }
+        }
+      ]
+    }
+  },
+  "fixture_ingested_all": {
+    "request": {
+      "taxon": "Orchis mascula",
+      "category": "all",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 3,
+      "total_matched": 3,
+      "truncated": false,
+      "category": "all",
+      "taxon_filter": "Orchis mascula",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": [
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Bombus terrestris",
+          "target_taxon_id": "GBIF:456",
+          "interaction_type": "pollinatedBy",
+          "categories": [
+            "pollinator"
+          ],
+          "study_citation": "Example study 2020",
+          "study_source_citation": "GloBI dataset v1",
+          "study_external_id": null,
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "VERSIONED_STABLE_DATASET",
+          "dataset_version": "globi-2026-08",
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 363807776956648465,
+          "revision_id_str": "363807776956648465",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": null,
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:456",
+            "interaction_type": "pollinatedBy"
+          }
+        },
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Bombus terrestris",
+          "target_taxon_id": "GBIF:456",
+          "interaction_type": "pollinatedBy",
+          "categories": [
+            "pollinator"
+          ],
+          "study_citation": "Example study",
+          "study_source_citation": null,
+          "study_external_id": "doi:10.1234/example",
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "LIVE_EXPLORATORY_API",
+          "dataset_version": null,
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 220721242774023047,
+          "revision_id_str": "220721242774023047",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": "doi:10.1234/example",
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:456",
+            "interaction_type": "pollinatedBy"
+          }
+        },
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Rhizoctonia sp.",
+          "target_taxon_id": "GBIF:789",
+          "interaction_type": "hasHost",
+          "categories": [
+            "mycorrhizal"
+          ],
+          "study_citation": "Example study 2020",
+          "study_source_citation": "GloBI dataset v1",
+          "study_external_id": null,
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "VERSIONED_STABLE_DATASET",
+          "dataset_version": "globi-2026-08",
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 990035843569342974,
+          "revision_id_str": "990035843569342974",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": null,
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:789",
+            "interaction_type": "hasHost"
+          }
+        }
+      ]
+    }
+  },
+  "fixture_ingested_genus_substring": {
+    "request": {
+      "taxon": "Orchis",
+      "category": "all",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 3,
+      "total_matched": 3,
+      "truncated": false,
+      "category": "all",
+      "taxon_filter": "Orchis",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": [
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Bombus terrestris",
+          "target_taxon_id": "GBIF:456",
+          "interaction_type": "pollinatedBy",
+          "categories": [
+            "pollinator"
+          ],
+          "study_citation": "Example study 2020",
+          "study_source_citation": "GloBI dataset v1",
+          "study_external_id": null,
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "VERSIONED_STABLE_DATASET",
+          "dataset_version": "globi-2026-08",
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 363807776956648465,
+          "revision_id_str": "363807776956648465",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": null,
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:456",
+            "interaction_type": "pollinatedBy"
+          }
+        },
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Bombus terrestris",
+          "target_taxon_id": "GBIF:456",
+          "interaction_type": "pollinatedBy",
+          "categories": [
+            "pollinator"
+          ],
+          "study_citation": "Example study",
+          "study_source_citation": null,
+          "study_external_id": "doi:10.1234/example",
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "LIVE_EXPLORATORY_API",
+          "dataset_version": null,
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 220721242774023047,
+          "revision_id_str": "220721242774023047",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": "doi:10.1234/example",
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:456",
+            "interaction_type": "pollinatedBy"
+          }
+        },
+        {
+          "source_taxon_name": "Orchis mascula",
+          "source_taxon_id": "GBIF:123",
+          "target_taxon_name": "Rhizoctonia sp.",
+          "target_taxon_id": "GBIF:789",
+          "interaction_type": "hasHost",
+          "categories": [
+            "mycorrhizal"
+          ],
+          "study_citation": "Example study 2020",
+          "study_source_citation": "GloBI dataset v1",
+          "study_external_id": null,
+          "provider": "Global Biotic Interactions",
+          "provider_stability": "VERSIONED_STABLE_DATASET",
+          "dataset_version": "globi-2026-08",
+          "verification_state": "UNVERIFIED",
+          "knowledge_graph_mutation": false,
+          "revision_id": 990035843569342974,
+          "revision_id_str": "990035843569342974",
+          "locator": {
+            "source": "Global Biotic Interactions",
+            "study_external_id": null,
+            "source_taxon_id": "GBIF:123",
+            "target_taxon_id": "GBIF:789",
+            "interaction_type": "hasHost"
+          }
+        }
+      ]
+    }
+  },
+  "fixture_ingested_other_species_empty": {
+    "request": {
+      "taxon": "Dactylorhiza maculata",
+      "category": "pollinator",
+      "limit": 100
+    },
+    "status_code": 200,
+    "body": {
+      "status": "ok",
+      "count": 0,
+      "total_matched": 0,
+      "truncated": false,
+      "category": "pollinator",
+      "taxon_filter": "Dactylorhiza maculata",
+      "index_state": "memory_unprovisioned",
+      "index_note": "No durable interaction index is configured; this result was served from an empty-by-default in-process index. An empty result is not evidence that no interactions are known.",
+      "unreadable_count": 0,
+      "review_bound": true,
+      "knowledge_graph_mutation": false,
+      "note": "These are unverified candidate ecological interactions discovered from Global Biotic Interactions (GloBI), not verified Knowledge Graph edges. Each record carries its source study citation and dataset provenance; promotion to a verified graph edge requires separate scientific review.",
+      "interactions": []
+    }
+  },
+  "invalid_category": {
+    "request": {
+      "taxon": "Orchis mascula",
+      "category": "not-a-real-category",
+      "limit": 100
+    },
+    "status_code": 422,
+    "body": {
+      "detail": [
+        {
+          "type": "literal_error",
+          "loc": [
+            "query",
+            "category"
+          ],
+          "msg": "Input should be 'pollinator', 'mycorrhizal' or 'all'",
+          "input": "not-a-real-category",
+          "ctx": {
+            "expected": "'pollinator', 'mycorrhizal' or 'all'"
+          }
+        }
+      ]
+    }
+  }
+}
