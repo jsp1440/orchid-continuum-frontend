@@ -2,7 +2,7 @@
 
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useNavigate } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SpeciesDossierEnvelope, DossierSection, EvidenceReceipt } from '@/lib/speciesDossier';
 
@@ -801,6 +801,246 @@ describe('dossier subject identity across id spaces', () => {
     expect(container.querySelector('[data-testid="dossier-ambiguous"]')).toBeNull();
     expect(container.textContent).toContain('Labiata relations.');
     expect(container.textContent).not.toContain('Caladenia');
+  });
+
+  it('withholds the original route image, conservation, range and fungal partners after choosing a canonical candidate', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: '6056',
+      canonical_name: 'Cattleya labiata',
+      hero_image_url: 'https://example.org/route-6056.jpg',
+      conservation_status: 'Endangered',
+      region: 'Original route range only',
+    });
+    mocks.fetchMycorrhizal.mockResolvedValue({
+      status: 200,
+      partners: [{ fungal_taxon: 'Wrong route fungus' }],
+    });
+    mocks.fetchSpeciesDossier.mockImplementation(async (id: string) =>
+      id === '6056' ? caladenia() : labiata(),
+    );
+    mocks.resolveFederatedSpecies.mockResolvedValue({
+      status: 'ambiguous',
+      incoming_name: 'Cattleya labiata',
+      matched_name: null,
+      match_state: 'none',
+      taxon_id: null,
+      canonical_dossier_url: null,
+      candidates: [
+        { taxon_id: '7904', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+        { taxon_id: '34325', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+      ],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: 'Human selection required.',
+    });
+
+    renderPage('/species/6056?name=Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    expect(container.querySelector('img[src="https://example.org/route-6056.jpg"]')).not.toBeNull();
+    expect(container.textContent).toContain('Wrong route fungus');
+
+    const candidates = container.querySelectorAll('[data-testid="dossier-ambiguous"] button');
+    expect(candidates).toHaveLength(2);
+    act(() => {
+      candidates[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+    await flush();
+
+    expect(container.textContent).toContain('Labiata relations.');
+    expect(container.querySelector('[data-testid="candidate-public-fields-withheld"]')?.textContent)
+      .toContain('canonical taxon 34325');
+    expect(container.querySelector('img[src="https://example.org/route-6056.jpg"]')).toBeNull();
+    expect(container.textContent).not.toContain('Endangered');
+    expect(container.textContent).not.toContain('Original route range only');
+    expect(container.textContent).not.toContain('Wrong route fungus');
+  });
+
+  it('ignores a late candidate response after navigation to a different species', async () => {
+    let finishCandidate!: (value: SpeciesDossierEnvelope) => void;
+    const pendingCandidate = new Promise<SpeciesDossierEnvelope>((resolve) => {
+      finishCandidate = resolve;
+    });
+    mocks.fetchSpeciesById.mockImplementation(async (id: string) =>
+      id === 'new-id'
+        ? { taxonomy_id: 'new-id', canonical_name: 'Dracula simia' }
+        : null,
+    );
+    mocks.fetchSpeciesDossier.mockImplementation((id: string) => {
+      if (id === '6056') return Promise.resolve(caladenia());
+      if (id === '34325') return pendingCandidate;
+      return Promise.reject(new Error('No dossier fixture for the new species'));
+    });
+    mocks.resolveFederatedSpecies.mockResolvedValue({
+      status: 'ambiguous',
+      incoming_name: 'Cattleya labiata',
+      matched_name: null,
+      match_state: 'none',
+      taxon_id: null,
+      canonical_dossier_url: null,
+      candidates: [
+        { taxon_id: '34325', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+      ],
+      partner_slug: null,
+      reciprocal_source_url: null,
+      explanation: 'Human selection required.',
+    });
+    const Navigate = () => {
+      const navigate = useNavigate();
+      return (
+        <button data-testid="navigate-next" onClick={() => navigate('/species/new-id?name=Dracula%20simia')}>
+          Next species
+        </button>
+      );
+    };
+    act(() => root.render(
+      <MemoryRouter initialEntries={['/species/6056?name=Cattleya%20labiata']}>
+        <Navigate />
+        <Routes><Route path="/species/:slug" element={<SpeciesDossier />} /></Routes>
+      </MemoryRouter>,
+    ));
+    await flush();
+    await flush();
+
+    const choose = container.querySelector<HTMLButtonElement>('[data-testid="dossier-ambiguous"] button');
+    expect(choose).not.toBeNull();
+    act(() => choose?.click());
+    await flush();
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="navigate-next"]')?.click());
+    await flush();
+    expect(container.querySelector('h1')?.textContent).toBe('Dracula simia');
+
+    await act(async () => finishCandidate(labiata()));
+    await flush();
+    expect(container.querySelector('h1')?.textContent).toBe('Dracula simia');
+    expect(container.textContent).not.toContain('Labiata relations.');
+    expect(container.querySelector('[data-testid="candidate-public-fields-withheld"]')).toBeNull();
+  });
+
+  it('does not let old public image or fungal responses replace a new species after navigation', async () => {
+    let finishOldPublic!: (value: {
+      taxonomy_id: string;
+      canonical_name: string;
+      hero_image_url: string;
+    }) => void;
+    let finishOldMyco!: (value: {
+      status: number;
+      partners: Array<{ fungal_taxon: string }>;
+    }) => void;
+    const oldPublic = new Promise<{
+      taxonomy_id: string;
+      canonical_name: string;
+      hero_image_url: string;
+    }>((resolve) => { finishOldPublic = resolve; });
+    const oldMyco = new Promise<{
+      status: number;
+      partners: Array<{ fungal_taxon: string }>;
+    }>((resolve) => { finishOldMyco = resolve; });
+
+    mocks.fetchSpeciesById.mockImplementation((id: string) =>
+      id === 'old-id'
+        ? oldPublic
+        : Promise.resolve({
+            taxonomy_id: 'new-id',
+            canonical_name: 'Dracula simia',
+            hero_image_url: 'https://example.org/new-route.jpg',
+          }),
+    );
+    mocks.fetchMycorrhizal.mockImplementation((id: string) =>
+      id === 'old-id'
+        ? oldMyco
+        : Promise.resolve({
+            status: 200,
+            partners: [{ fungal_taxon: 'New route fungus' }],
+          }),
+    );
+    mocks.fetchSpeciesDossier.mockRejectedValue(new Error('No dossier fixture'));
+    const Navigate = () => {
+      const navigate = useNavigate();
+      return <button data-testid="navigate-next" onClick={() => navigate('/species/new-id?name=Dracula%20simia')}>Next species</button>;
+    };
+    act(() => root.render(
+      <MemoryRouter initialEntries={['/species/old-id']}>
+        <Navigate />
+        <Routes><Route path="/species/:slug" element={<SpeciesDossier />} /></Routes>
+      </MemoryRouter>,
+    ));
+    await flush();
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="navigate-next"]')?.click());
+    await flush();
+    await flush();
+    expect(container.querySelector('h1')?.textContent).toBe('Dracula simia');
+    expect(container.textContent).toContain('New route fungus');
+    const dossierCallsBeforeLateResponse = mocks.fetchSpeciesDossier.mock.calls.length;
+
+    await act(async () => {
+      finishOldPublic({
+        taxonomy_id: 'old-id',
+        canonical_name: 'Cattleya labiata',
+        hero_image_url: 'https://example.org/stale-route.jpg',
+      });
+      finishOldMyco({
+        status: 200,
+        partners: [{ fungal_taxon: 'Wrong old-route fungus' }],
+      });
+    });
+    await flush();
+    expect(container.querySelector('h1')?.textContent).toBe('Dracula simia');
+    expect(container.textContent).toContain('New route fungus');
+    expect(container.textContent).not.toContain('Wrong old-route fungus');
+    expect(container.querySelector('img[src="https://example.org/stale-route.jpg"]')).toBeNull();
+    expect(mocks.fetchSpeciesDossier).toHaveBeenCalledTimes(dossierCallsBeforeLateResponse);
+  });
+
+  it('ignores a delayed federated attribution from the previous species route', async () => {
+    let finishOldFederation!: (value: Awaited<ReturnType<typeof import('@/lib/speciesDossier').resolveFederatedSpecies>>) => void;
+    const oldFederation = new Promise<
+      Awaited<ReturnType<typeof import('@/lib/speciesDossier').resolveFederatedSpecies>>
+    >((resolve) => { finishOldFederation = resolve; });
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+    mocks.resolveFederatedSpecies.mockReturnValueOnce(oldFederation);
+    const Navigate = () => {
+      const navigate = useNavigate();
+      return <button data-testid="navigate-next" onClick={() => navigate('/species/new-id?name=Dracula%20simia')}>Next species</button>;
+    };
+    act(() => root.render(
+      <MemoryRouter initialEntries={['/species/cattleya-labiata']}>
+        <Navigate />
+        <Routes><Route path="/species/:slug" element={<SpeciesDossier />} /></Routes>
+      </MemoryRouter>,
+    ));
+    await flush();
+    await flush();
+    expect(mocks.resolveFederatedSpecies).toHaveBeenCalledTimes(1);
+
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'new-id',
+      canonical_name: 'Dracula simia',
+    });
+    mocks.fetchSpeciesDossier.mockRejectedValue(new Error('No dossier fixture'));
+    act(() => container.querySelector<HTMLButtonElement>('[data-testid="navigate-next"]')?.click());
+    await flush();
+    await flush();
+    expect(container.querySelector('h1')?.textContent).toBe('Dracula simia');
+
+    await act(async () => finishOldFederation({
+      status: 'resolved',
+      incoming_name: null,
+      matched_name: 'Cattleya labiata',
+      match_state: 'accepted_name',
+      taxon_id: 'cattleya-labiata',
+      canonical_dossier_url: null,
+      candidates: [],
+      partner_slug: 'old-partner',
+      reciprocal_source_url: 'https://example.org/stale-evidence',
+      explanation: 'Stale previous-species attribution',
+    }));
+    await flush();
+    expect(container.querySelector('h1')?.textContent).toBe('Dracula simia');
+    expect(container.textContent).not.toContain('Stale previous-species attribution');
+    expect(container.querySelector('a[href="https://example.org/stale-evidence"]')).toBeNull();
   });
 
   it('never shows the species dossier for an infraspecific subject the resolver normalised (checker probe)', async () => {
