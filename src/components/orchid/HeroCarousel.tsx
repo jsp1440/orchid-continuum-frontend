@@ -76,6 +76,17 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({
   }, [status, active, loadedIndices, layerUrls.length]);
 
   // ── Slow crossfade through the LOADED photos only (each fully painted). ──
+  // An image already decoded from the HTTP cache can complete before React
+  // attaches its synthetic onLoad/onError — the load event has already fired
+  // for that element, so status[i] stays unset and the shimmer sticks forever
+  // on warm reloads (observed 3/3 reloads in E2E). The ref callback reads the
+  // already-settled state at commit time so nothing waits on an event that
+  // already happened; uncached images still settle via the handlers below.
+  const noteLayer = (i: number) => (el: HTMLImageElement | null) => {
+    if (!el || !el.complete) return;
+    setStatus((s) => (s[i] ? s : { ...s, [i]: el.naturalWidth > 0 ? 'loaded' : 'failed' }));
+  };
+
   const loadedRef = useRef(loadedIndices);
   loadedRef.current = loadedIndices;
   useEffect(() => {
@@ -115,6 +126,7 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({
             loading="eager"
             decoding="async"
             className="absolute inset-0 h-full w-full object-cover opacity-0"
+            ref={noteLayer(i)}
             onLoad={() => setStatus((s) => ({ ...s, [i]: 'loaded' }))}
             onError={() => setStatus((s) => ({ ...s, [i]: 'failed' }))}
           />
@@ -163,6 +175,7 @@ const HeroCarousel: React.FC<HeroCarouselProps> = ({
             opacity: status[i] === 'loaded' && i === active ? 1 : 0,
             zIndex: i === active ? 2 : 1,
           }}
+          ref={noteLayer(i)}
           onLoad={() => setStatus((s) => ({ ...s, [i]: 'loaded' }))}
           onError={() => setStatus((s) => ({ ...s, [i]: 'failed' }))}
         />
