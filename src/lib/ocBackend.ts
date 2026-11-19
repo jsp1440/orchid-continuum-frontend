@@ -68,7 +68,7 @@ function geometryLngLat(r: Record<string, unknown>): [number | undefined, number
 }
 
 /** One backend row as a locality-safe public point, or null when it has no coordinates. */
-function normalizeRow(r: BackendOccurrence, i: number): OccurrencePoint | null {
+function normalizeRow(r: BackendOccurrence, i: number, floorCellDeg = 0): OccurrencePoint | null {
   if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
   const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
   const [gLng, gLat] = geometryLngLat(r as Record<string, unknown>);
@@ -97,13 +97,14 @@ function normalizeRow(r: BackendOccurrence, i: number): OccurrencePoint | null {
       assessmentResolved: hasThreatAssessment(iucnCode, conservationStatus),
     },
     'public',
+    floorCellDeg,
   );
   return { id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat: shown.lat, lng: shown.lng, species, country, source: 'continuum' };
 }
 
-function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
+function normalizeBackend(rows: BackendOccurrence[], floorCellDeg = 0): OccurrencePoint[] {
   return rows.flatMap((r, i) => {
-    const point = normalizeRow(r, i);
+    const point = normalizeRow(r, i, floorCellDeg);
     return point ? [point] : [];
   });
 }
@@ -173,11 +174,11 @@ export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): 
   if (primary.ok && primary.data) return normalizeBackend(extractRows(primary.data));
   return [];
 }
-export async function fetchGenusOccurrences(genus: string, limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {
+export async function fetchGenusOccurrences(genus: string, limit = 500, signal?: AbortSignal, floorCellDeg = 0): Promise<OccurrencePoint[]> {
   if (!genus) return [];
   const q = encodeURIComponent(genus);
   const res = await getJson<unknown>(`${ATLAS_OCCURRENCES_URL}?genus=${q}&limit=${limit}`, signal);
-  if (res.ok && res.data) return normalizeBackend(extractRows(res.data));
+  if (res.ok && res.data) return normalizeBackend(extractRows(res.data), floorCellDeg);
   return [];
 }
 

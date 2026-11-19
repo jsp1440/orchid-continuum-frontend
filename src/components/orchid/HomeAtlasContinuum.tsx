@@ -8,7 +8,7 @@ import {
   featuredTaxonMatrixHref,
 } from '@/lib/featuredTaxonNavigation';
 import { fetchGenusOccurrences } from '@/lib/ocBackend';
-import { toPublicAtlasOccurrence } from '@/lib/atlasLocalitySafety';
+import { UNRESOLVED_FLOOR_DEG } from '@/lib/atlasLocalitySafety';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import AtlasMiniMap from './AtlasMiniMap';
 
@@ -24,14 +24,14 @@ const HomeAtlasContinuum: React.FC = () => {
   useEffect(() => {
     const controller = new AbortController();
     setView({ genus, points: [], loading: true });
-    void fetchGenusOccurrences(genus, 500, controller.signal).then((rows) => {
+    // Combine the homepage minimum with the source assessment and uncertainty before snapping.
+    void fetchGenusOccurrences(genus, 500, controller.signal, UNRESOLVED_FLOOR_DEG).then((rows) => {
       if (controller.signal.aborted) return;
-      const points = rows.filter((row) => row.species.split(/\s+/)[0].toLowerCase() === genus.toLowerCase()).map((row) => toPublicAtlasOccurrence({
+      const points = rows.filter((row) => row.species.split(/\s+/)[0].toLowerCase() === genus.toLowerCase()).map((row) => ({
         id: row.id, lat: row.lat, lng: row.lng, genus,
         species: row.species.split(/\s+/).slice(1).join(' '), canonicalName: row.species,
         country: row.country ?? '', countries: row.country ? [row.country] : [],
         dataset: 'Orchid Continuum', verified: false, pollinators: [],
-        // This minimal public response does not attest an assessment; retain the precaution floor.
         assessmentResolved: false,
       }));
       setView({ genus, points, loading: false });
