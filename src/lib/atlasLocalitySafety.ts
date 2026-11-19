@@ -180,7 +180,7 @@ interface ParsedAssessment {
  */
 function parseAssessment(value?: string | null): ParsedAssessment {
   const text = (value ?? '').trim();
-  if (!text || NOT_AN_ASSESSMENT.test(text)) return { recognised: false, tier: null };
+  if (!text) return { recognised: false, tier: null };
   const upper = text.toUpperCase();
   const lower = text.toLowerCase();
   const codes = new Set((upper.match(/\b(CR|EN|VU)\b/g) ?? []));
@@ -188,6 +188,9 @@ function parseAssessment(value?: string | null): ParsedAssessment {
   if (lower.replace('critically endangered', '').includes('endangered')) codes.add('EN');
   if (lower.includes('vulnerable')) codes.add('VU');
   const tier = TIER_SEVERITY.find((code) => codes.has(code)) ?? null;
+  // Unassessed wording may qualify another region or assessment. It cannot
+  // cancel an explicit threatened mention or its locality-protection floor.
+  if (tier === null && NOT_AN_ASSESSMENT.test(text)) return { recognised: false, tier: null };
   const recognised = tier !== null || IUCN_CODES.test(text) || IUCN_CATEGORY_NAMES.some((name) => lower.includes(name));
   return { recognised, tier };
 }

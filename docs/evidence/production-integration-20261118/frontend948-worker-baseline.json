@@ -1,5 +1,5 @@
 {
-  "phase": "corrected_awaiting_final_release_checks",
+  "phase": "review_findings_repaired_awaiting_independent_review",
   "frontend_base": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
   "source_refs": {
     "948": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
@@ -74,5 +74,28 @@
       "passed": 11,
       "failed": 0
     }
+  },
+  "review_followup": {
+    "source_head": "7c75ed7c324ce14a56412c340c154a7e3754c240",
+    "findings": [
+      "P1 mixed threatened and DD/NE text loses strongest public-location protection",
+      "P2 area picker cannot reach later result pages"
+    ],
+    "privacy_red": {
+      "failed": 29,
+      "passed": 22
+    },
+    "privacy_focused_passed": 119,
+    "pagination_red": {
+      "failed": 3,
+      "passed": 11
+    },
+    "pagination_fixed_passed": 14,
+    "original_atlas_11_cases_preserved": true,
+    "extended_atlas_test_sha256": "0dfde979c062a5effd01548a90ad48baffaaf1c7ac914693d870b7476a40b73c",
+    "page_sha256": "f09bb23c6352766cab8e4405becfcda140ad154634c3f4f9f6e4d548091efa34",
+    "typecheck": "PASS",
+    "focused_lint": "PASS",
+    "provider_calls": 0
   }
 }

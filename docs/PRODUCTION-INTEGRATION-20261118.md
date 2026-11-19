@@ -287,3 +287,51 @@ worker; one unsafe proposal was rejected. Successful automated validation,
 publication and protected integration have not yet been demonstrated by this
 paid attempt. Raw command output remains private; a future diagnostic repair
 should expose only a safe command identifier and exit status.
+
+
+## Fresh independent review findings and repairs
+
+After7c75ed7 passed4380 unit tests and82 browser journeys locally and in hosted
+CI, Codex GitHub review found two previously uncovered cases. #948 returned to
+draft while these findings were repaired; passing tests were never treated as
+proof of scientific or privacy correctness.
+
+The P1 mixed-assessment bug allowed DD/NE wording to cancel a threatened CR/EN/VU
+mention before public-location protection was calculated. Real projection tests
+with synthetic coordinates reproduced29 failures/22 passing controls. Main
+already mishandled code-only mixed text; this PR additionally regressed mixed
+full category names. The shared parser now extracts the strongest explicit tier
+before treating the remaining text as unassessed. DD/NE-only cases remain
+unresolved; mixed threatened mentions retain the corresponding protection floor
+and withhold sensitive locality text.45 synthetic cases were added;119 focused
+locality/backend/projection tests passed. No production data was read or written.
+
+The P2 area picker used offset0 for every query. Three mounted regressions failed
+while the original11 Atlas cases passed. The picker now follows the server's
+next cursor, keeps a previous-cursor history, resets pagination for a new search,
+and ignores late responses from older searches/pages. All14 cases pass, including
+a non-25 cursor and pending-response control. Existing area/taxon clearing and
+provenance behavior remain intact. Typecheck, focused lint and diff checks pass.
+
+Backend #2455 source615e453e0ede1110bd9ec89a5bfb32cd138d62a5 is now integrated
+asfc406f3a8e7c11df4278ba2405b592840ee3809f after independent review,476 local
+and476 hosted worker tests, PostgreSQL, critical suites and timer checks. The
+five-path mechanical landing verifier passed; source and landing trees are
+identical6b30bbd97fa15eeb0578f5782d2b324be837bc22. No Render deployment is
+claimed for those engineering diagnostics.
+
+Operational continuation was also corrected: existing disabled automation
+6af981660f388191978c95943551c4b3 was resumed as Advance Orchid integration,
+hourly through November25 Pacific with the current standing authority. It must
+consult existing ownership and continue real work without duplicating the
+existing worker or creating another coordination system. A resumed schedule is
+not a claim that its next execution succeeded; inherited execution-environment
+details were unavailable in the scheduling response.
+
+Devin's existing separate GitHub bot authored #939. Official Devin documentation
+now describes an Autoapprover beta capable of a formal approving review, unlike
+a comment-only review. Account beta access and separate Devin-credit budget are
+unverified; no paid Devin analysis, account change or provider activation was
+performed. The owner is checking availability at app.devin.ai/settings/review.
+OpenAI repair credits do not establish a Devin budget. Required GitHub checks,
+complete review coverage and scientific/data safeguards remain in force.

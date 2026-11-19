@@ -243,3 +243,71 @@ it('keeps the current area usable when selecting the same area again', async () 
   expect(screen.queryByText(/graph node 66746 · taxon:32953/)).toBeNull();
   expect(screen.queryByRole('link', { name: /Where does Angraecum sesquipedale grow/ })).toBeNull();
 });
+
+
+it('pages area names forward and back using the server cursor', async () => {
+  const offsets: number[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = new URL(input);
+    const offset = Number(url.searchParams.get('offset'));
+    offsets.push(offset);
+    const body = offset === 0
+      ? { ...AREAS, areas_matching: 2, next_offset: 37 }
+      : { ...AREAS, areas_matching: 2, areas: [{ ...AREAS.areas[0], kg_node_id: 2, label: 'France' }] };
+    return { ok: true, status: 200, json: async () => body };
+  }));
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  await screen.findByRole('button', { name: /Madagascar/ });
+  fireEvent.click(screen.getByRole('button', { name: 'Next areas' }));
+  await screen.findByRole('button', { name: /France/ });
+  expect(screen.queryByRole('button', { name: 'Next areas' })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Previous areas' }));
+  await screen.findByRole('button', { name: /Madagascar/ });
+  expect(offsets).toEqual([0, 37, 0]);
+  expect(screen.queryByRole('button', { name: 'Previous areas' })).toBeNull();
+});
+
+it('resets area pagination when the search changes', async () => {
+  const requests: URL[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = new URL(input);
+    requests.push(url);
+    const first = Number(url.searchParams.get('offset')) === 0 && !url.searchParams.get('q');
+    return { ok: true, status: 200, json: async () => first
+      ? { ...AREAS, next_offset: 37 }
+      : { ...AREAS, areas: [{ ...AREAS.areas[0], kg_node_id: 2, label: 'France' }] } };
+  }));
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  await screen.findByRole('button', { name: /Madagascar/ });
+  fireEvent.click(screen.getByRole('button', { name: 'Next areas' }));
+  await screen.findByRole('button', { name: /France/ });
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'France' } });
+  await waitFor(() => expect(requests[requests.length - 1]?.searchParams.get('q')).toBe('France'));
+  await screen.findByRole('button', { name: /France/ });
+  expect(requests[requests.length - 1]?.searchParams.get('offset')).toBe('0');
+  expect(screen.queryByRole('button', { name: 'Previous areas' })).toBeNull();
+});
+
+it('ignores an old area page after a new search returns', async () => {
+  let finishPage!: (body: unknown) => void;
+  const pendingPage = new Promise((resolve) => { finishPage = resolve; });
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = new URL(input);
+    const isNewSearch = url.searchParams.get('q') === 'France';
+    const body = isNewSearch
+      ? { ...AREAS, areas: [{ ...AREAS.areas[0], kg_node_id: 2, label: 'France' }] }
+      : Number(url.searchParams.get('offset')) === 37 ? null : { ...AREAS, next_offset: 37 };
+    return { ok: true, status: 200, json: async () => body ?? pendingPage };
+  }));
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  await screen.findByRole('button', { name: /Madagascar/ });
+  fireEvent.click(screen.getByRole('button', { name: 'Next areas' }));
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'France' } });
+  await screen.findByRole('button', { name: /France/ });
+  await act(async () => {
+    finishPage({ ...AREAS, areas: [{ ...AREAS.areas[0], label: 'Stale area' }] });
+    await pendingPage;
+  });
+  expect(screen.getByRole('button', { name: /France/ })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: /Stale area/ })).toBeNull();
+});

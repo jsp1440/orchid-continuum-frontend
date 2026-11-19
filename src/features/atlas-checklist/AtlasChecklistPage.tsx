@@ -68,6 +68,9 @@ function Panel({ name, panel }: { name: string; panel: FacetPanel }) {
 
 export default function AtlasChecklistPage() {
   const [q, setQ] = useState('');
+  const [areasOffset, setAreasOffset] = useState(0);
+  const [areasHistory, setAreasHistory] = useState<number[]>([]);
+  const [areasLoading, setAreasLoading] = useState(true);
   const [areas, setAreas] = useState<AreasResponse | null>(null);
   const [areaName, setAreaName] = useState<string | null>(null);
   const [genus, setGenus] = useState('');
@@ -80,11 +83,15 @@ export default function AtlasChecklistPage() {
 
   useEffect(() => {
     let live = true;
-    checklistApi.areas(q.trim(), 0).then((r) => live && setAreas(r)).catch((e: Error) => live && setError(e.message));
+    setAreasLoading(true);
+    checklistApi.areas(q.trim(), areasOffset)
+      .then((r) => live && setAreas(r))
+      .catch((e: Error) => live && setError(e.message))
+      .finally(() => live && setAreasLoading(false));
     return () => {
       live = false;
     };
-  }, [q]);
+  }, [q, areasOffset]);
 
   useEffect(() => {
     if (!areaName) return;
@@ -120,7 +127,13 @@ export default function AtlasChecklistPage() {
           <section aria-label="Areas">
             <label>
               Area name
-              <input value={q} onChange={(e) => setQ(e.target.value)} className="ml-2 border" />
+              <input value={q} onChange={(e) => {
+                setQ(e.target.value);
+                setAreasOffset(0);
+                setAreasHistory([]);
+                setAreas(null);
+                setAreasLoading(true);
+              }} className="ml-2 border" />
             </label>
             <p className="text-xs">{areas ? `${areas.areas_matching} areas, names as the checklist writes them` : 'Loading…'}</p>
             <ul>
@@ -141,6 +154,22 @@ export default function AtlasChecklistPage() {
                 </li>
               ))}
             </ul>
+            {areasHistory.length > 0 && (
+              <button type="button" disabled={areasLoading} onClick={() => {
+                setAreasOffset(areasHistory[areasHistory.length - 1]);
+                setAreasHistory(areasHistory.slice(0, -1));
+                setAreas(null);
+                setAreasLoading(true);
+              }}>Previous areas</button>
+            )}
+            {areas && areas.next_offset !== null && (
+              <button type="button" disabled={areasLoading} onClick={() => {
+                setAreasHistory([...areasHistory, areasOffset]);
+                setAreasOffset(areas.next_offset ?? 0);
+                setAreas(null);
+                setAreasLoading(true);
+              }}>Next areas</button>
+            )}
           </section>
           <section aria-label="Taxa of the area">
             {!area && <p className="text-sm">Select an area.</p>}
