@@ -15,7 +15,6 @@ import {
   buildCalyxDocumentContextPrompt,
   buildStructuredWorkspacePreview,
   DEFAULT_PROJECT_ID,
-  STORAGE_KEY,
   formatUploadedFileSize,
   isCalyxTextWorkspaceFile,
   normalizeProjectId,
@@ -39,6 +38,11 @@ import {
   type MissionEvidence,
   type MissionSource,
 } from "@/lib/calyxWorkspace";
+import {
+  clearCalyxWorkspacePreferences,
+  readCalyxWorkspacePreferences,
+  writeCalyxWorkspacePreferences,
+} from "@/lib/calyxWorkspaceStorage";
 import { citationIdentifierParts } from "@/lib/calyxCitationSource";
 import {
   composeAnswerWithEvidence,
@@ -530,21 +534,25 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     const restoreRequestId = requestIdRef.current;
     const restore = async () => {
       try {
-        const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as { conversationId?: string; projectId?: string; speakReplies?: boolean };
-        if (stored.projectId) setProjectId(stored.projectId);
-        if (typeof stored.speakReplies === "boolean") setSpeakReplies(stored.speakReplies);
-        if (stored.conversationId) {
-          const restored = await getCalyxConversation(stored.conversationId);
-          if (active && mountedRef.current && requestIdRef.current === restoreRequestId && (!stored.projectId || shouldReuseConversation(restored, stored.projectId))) {
-            setConversation(restored);
-            conversationIdRef.current = restored.conversation_id;
-            if (!stored.projectId && restored.project_id) setProjectId(restored.project_id);
-          } else if (active && mountedRef.current && requestIdRef.current === restoreRequestId && stored.projectId) {
-            setWorkspaceStatus(`A saved CALYX thread for another project was skipped so project ${normalizeProjectId(stored.projectId)} stays clean.`);
+        const stored = readCalyxWorkspacePreferences();
+        if (!stored) {
+          clearCalyxWorkspacePreferences();
+        } else {
+          if (stored.projectId) setProjectId(stored.projectId);
+          if (typeof stored.speakReplies === "boolean") setSpeakReplies(stored.speakReplies);
+          if (stored.conversationId) {
+            const restored = await getCalyxConversation(stored.conversationId);
+            if (active && mountedRef.current && requestIdRef.current === restoreRequestId && (!stored.projectId || shouldReuseConversation(restored, stored.projectId))) {
+              setConversation(restored);
+              conversationIdRef.current = restored.conversation_id;
+              if (!stored.projectId && restored.project_id) setProjectId(restored.project_id);
+            } else if (active && mountedRef.current && requestIdRef.current === restoreRequestId && stored.projectId) {
+              setWorkspaceStatus(`A saved CALYX thread for another project was skipped so project ${normalizeProjectId(stored.projectId)} stays clean.`);
+            }
           }
         }
       } catch {
-        if (active && mountedRef.current && requestIdRef.current === restoreRequestId) window.localStorage.removeItem(STORAGE_KEY);
+        if (active && mountedRef.current && requestIdRef.current === restoreRequestId) clearCalyxWorkspacePreferences();
       }
       try {
         const value = await loadCalyxWorkspace();
@@ -558,7 +566,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify({ conversationId: conversation?.conversation_id, projectId: normalizedProjectId, speakReplies }));
+    writeCalyxWorkspacePreferences({ conversationId: conversation?.conversation_id, projectId: normalizedProjectId, speakReplies });
   }, [conversation?.conversation_id, normalizedProjectId, speakReplies]);
 
   useEffect(() => {
@@ -752,7 +760,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     setFileTextContent(null);
     setDocumentContext("");
     setSelectedDocumentText("");
-    window.localStorage.removeItem(STORAGE_KEY);
+    clearCalyxWorkspacePreferences();
     focusMessageInput();
   }
 
