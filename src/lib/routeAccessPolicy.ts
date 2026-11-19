@@ -25,6 +25,7 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/atlas/ecuador',
   '/atlas',
   '/atlas-next',
+  '/atlas/explorer',
   '/atlas/:species',
   '/admin',
   '/control-center',

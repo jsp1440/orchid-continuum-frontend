@@ -231,6 +231,12 @@ const Atlas: React.FC = () => {
                 <p className="mt-4 max-w-2xl text-[14px] text-[#cfc8b8]/80 leading-relaxed">
                   A live geospatial interface backed by the Orchid Continuum database. Filter by taxonomy, geography, ecology, conservation status, pollinator and mycorrhizal data — then enter Intersection mode to find where biological layers overlap.
                 </p>
+                <Link
+                  to="/atlas/explorer"
+                  className="mt-4 inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.22em] uppercase px-4 py-2 rounded-full border border-[#c9a24a]/50 text-[#c9a24a] hover:bg-[#c9a24a]/10 transition-colors"
+                >
+                  Open the Atlas Explorer (preview) — map, globe, layers and exports
+                </Link>
               </div>
               {facets && (
                 <div className="flex flex-wrap gap-3 font-mono text-[10px] tracking-[0.22em] uppercase text-[#cfc8b8]/70">
