@@ -459,11 +459,21 @@ async function searchGenusImageHarvester(genus: string, limit: number, signal?: 
   const g = normalizeGenus(genus);
   if (!g) return [];
 
-  const payload = await fetchOnce(
-    `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${Math.max(120, limit * 4)}`,
-    12000,
-    signal,
-  );
+  // The public API serves the identical /images/genus contract with working
+  // CORS; the harvester omits Access-Control-Allow-Origin so browsers cannot
+  // read it — it stays as a last-ditch fallback for non-browser callers.
+  const limitParam = Math.max(120, limit * 4);
+  const payload =
+    (await fetchOnce(
+      `${BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
+      12000,
+      signal,
+    )) ??
+    (await fetchOnce(
+      `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
+      12000,
+      signal,
+    ));
   if (!payload) return [];
 
   const out: FeaturedSpecies[] = [];

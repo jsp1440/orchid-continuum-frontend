@@ -40,6 +40,15 @@ vi.mock('@/lib/ocBackend', async () => {
   };
 });
 
+// The page hydrates via fetchSpeciesPublicRecord, which falls back to the
+// species-search index when the missing /api/species/{id} endpoint 404s.
+// Tests delegate it to the fetchSpeciesById mock so both the happy path and
+// the null-record paths keep their existing behavior without extra stubs.
+vi.mock('@/lib/speciesPublicRecord', () => ({
+  fetchSpeciesPublicRecord: (taxonomyId: string, _hintName: string | null, signal?: AbortSignal) =>
+    mocks.fetchSpeciesById(taxonomyId, signal),
+}));
+
 vi.mock('@/lib/speciesDossier', async () => {
   const actual = await vi.importActual<typeof import('@/lib/speciesDossier')>('@/lib/speciesDossier');
   return {
@@ -732,6 +741,66 @@ describe('dossier subject identity across id spaces', () => {
     expect(ambiguous?.textContent).toContain('canonical taxon 34325');
     expect(container.textContent).not.toContain('Caladenia');
     expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+  });
+
+  it('lets a person resolve an ambiguous dossier by choosing a candidate', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    // The route id keys a different species; the second candidate's dossier is
+    // the named subject — the same governed contract as the initial resolve.
+    mocks.fetchSpeciesDossier.mockImplementation(async (id: string) =>
+      id === '6056' ? caladenia() : labiata(),
+    );
+    mocks.resolveFederatedSpecies.mockImplementation(async (params: { name?: string }) =>
+      params.name
+        ? {
+            status: 'ambiguous',
+            incoming_name: 'Cattleya labiata',
+            matched_name: null,
+            match_state: 'none',
+            taxon_id: null,
+            canonical_dossier_url: null,
+            candidates: [
+              { taxon_id: '7904', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+              { taxon_id: '34325', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+            ],
+            partner_slug: null,
+            reciprocal_source_url: null,
+            explanation: 'Multiple canonical taxa match the supplied identifier; human selection is required.',
+          }
+        : {
+            status: 'resolved',
+            incoming_name: null,
+            matched_name: 'Cattleya labiata',
+            match_state: 'accepted_name',
+            taxon_id: '7904',
+            canonical_dossier_url: null,
+            candidates: [],
+            partner_slug: null,
+            reciprocal_source_url: null,
+            explanation: '',
+          },
+    );
+
+    renderPage('/species/6056?name=Cattleya%20labiata');
+    await flush();
+    await flush();
+
+    const ambiguous = container.querySelector('[data-testid="dossier-ambiguous"]');
+    const buttons = ambiguous?.querySelectorAll('button') ?? [];
+    expect(buttons).toHaveLength(2);
+
+    act(() => {
+      buttons[1].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+    await flush();
+    await flush();
+
+    // The chosen candidate's canonical taxon id drives a fresh governed resolve.
+    expect(mocks.fetchSpeciesDossier.mock.calls.map((call) => call[0])).toContain('34325');
+    expect(container.querySelector('[data-testid="dossier-ambiguous"]')).toBeNull();
+    expect(container.textContent).toContain('Labiata relations.');
+    expect(container.textContent).not.toContain('Caladenia');
   });
 
   it('never shows the species dossier for an infraspecific subject the resolver normalised (checker probe)', async () => {
