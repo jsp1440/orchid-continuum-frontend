@@ -302,8 +302,9 @@ export function readScientificEvidence(raw: unknown): CalyxEvidenceView {
       return { ...base, kind: "unavailable" };
     case "partial":
     case "available": {
-      // `reading` must be a list. Anything else is not evidence this page can show.
-      if (!Array.isArray(raw.reading)) return emptyView("malformed", "turn", status);
+      if (!Array.isArray(raw.reading) || !raw.reading.every((entry) => typeof entry === "string")) {
+        return emptyView("malformed", "turn", status);
+      }
       const view: CalyxEvidenceView = {
         ...base,
         kind: "available",

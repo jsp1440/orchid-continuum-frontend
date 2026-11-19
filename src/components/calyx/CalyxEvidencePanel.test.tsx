@@ -177,9 +177,12 @@ describe("CalyxEvidencePanel: available with gaps", () => {
     expect(allSentenceItems()).toEqual(numbered(100));
   });
 
-  it("counts only real sentences when reading holds non-strings", () => {
-    render(readScientificEvidence({ status: "available", reading: [...numbered(101), 5, null, { text: "x" }, "  "] }));
-    expect(byTestId("calyx-evidence-more")?.querySelector("summary")?.textContent).toBe("Show 1 more sentence");
+  it("withholds the entire reading when even one entry is malformed", () => {
+    render(readScientificEvidence({ status: "available", reading: [...numbered(101), 5] }));
+    expect(panel()?.dataset.evidenceKind).toBe("malformed");
+    expect(panel()?.textContent).toContain("Evidence records not shown");
+    expect(allSentenceItems()).toEqual([]);
+    expect(byTestId("calyx-evidence-more")).toBeNull();
   });
 
   it("does not call the sentences the records' own wording when there are none", () => {

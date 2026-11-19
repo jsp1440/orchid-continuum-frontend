@@ -161,8 +161,16 @@ describe("readScientificEvidence", () => {
     },
   );
 
-  it("drops non-string and blank entries from reading rather than printing them", () => {
-    const view = readScientificEvidence({ status: "available", reading: ["One.", 2, null, "  ", { text: "x" }, " Two. "] });
+  it.each(["available", "partial"])("rejects a mixed-type %s reading in full", (status) => {
+    for (const entry of [2, null, { text: "x" }]) {
+      const view = readScientificEvidence({ status, reading: ["One.", entry] });
+      expect(view.kind).toBe("malformed");
+      expect(view.sentences).toEqual([]);
+    }
+  });
+
+  it("trims valid reading sentences and omits blank strings", () => {
+    const view = readScientificEvidence({ status: "available", reading: ["One.", "  ", " Two. "] });
     expect(view.kind).toBe("available");
     expect(view.sentences).toEqual(["One.", "Two."]);
   });
