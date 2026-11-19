@@ -67,17 +67,17 @@ export function useDailyGenus(): DailyGenusState {
 }
 
 export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<DailyGenusState>({
-    genus: initialGenus,
+  const [state, setState] = useState<DailyGenusState>(() => ({
+    genus: featuredGenusName(),
     continuum: null,
     continuumStatus: 'loading',
     diagnostic: null,
-  });
+  }));
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestRef = useRef(0);
 
-  const hydrateContinuum = useCallback(async (genus: string, diagnostic: string | null) => {
-    const request = ++requestRef.current;
+  const hydrateContinuum = useCallback(async (genus: string, diagnostic: string | null, request: number) => {
+    if (request !== requestRef.current) return;
     setState({ genus, continuum: null, continuumStatus: 'loading', diagnostic });
     try {
       const continuum = await fetchFeaturedTaxonContinuum(genus);
@@ -97,12 +97,16 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const validateSnapshot = useCallback(async () => {
+    // Fence the whole refresh, including the optional snapshot read. Fencing
+    // only hydration lets an older snapshot that answers last become current.
+    const request = ++requestRef.current;
     const local = featuredGenusName();
     const today = new Date().toISOString().slice(0, 10);
     if (!DAILY_SNAPSHOT_ENABLED) {
       await hydrateContinuum(
         local,
         `[Genus of the Day] Snapshot adapter is disabled for this deployment; using deterministic identity ${local}.`,
+        request,
       );
       return;
     }
@@ -116,7 +120,7 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const rawSnapshotGenus = !error && data ? data.genus : null;
       const snapshotGenus = canonicalDailySnapshotGenus(rawSnapshotGenus);
       if (snapshotGenus) {
-        await hydrateContinuum(snapshotGenus, null);
+        await hydrateContinuum(snapshotGenus, null, request);
         return;
       }
 
@@ -125,16 +129,20 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           ? `[Genus of the Day] Snapshot identity for ${today} was not a bounded canonical genus; using deterministic identity ${local}.`
           : `[Genus of the Day] Snapshot unavailable for ${today}; using deterministic identity ${local}.`;
 
-      await hydrateContinuum(local, invalidSnapshotDiagnostic);
+      await hydrateContinuum(local, invalidSnapshotDiagnostic, request);
     } catch (error) {
       await hydrateContinuum(
         local,
         `[Genus of the Day] Snapshot query unavailable; using deterministic identity ${local}. Error: ${String(error)}`,
+        request,
       );
     }
   }, [hydrateContinuum]);
 
-  useEffect(() => { void validateSnapshot(); }, [validateSnapshot]);
+  useEffect(() => {
+    void validateSnapshot();
+    return () => { requestRef.current += 1; };
+  }, [validateSnapshot]);
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
