@@ -29,9 +29,7 @@ describe('homepage Atlas source integrity', () => {
 
   it('surfaces canonical ecological graph domains without inventing biological claims', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
-    expect(atlas).toContain("item.domain === 'habitat'");
-    expect(atlas).toContain("item.domain === 'climate'");
-    expect(atlas).toContain("item.domain === 'mycorrhiza'");
+    expect(atlas).toContain('Graph linkage does not measure');
     expect(atlas).toContain('habitat breadth');
     expect(atlas).toContain('climate tolerances');
     expect(atlas).toContain('association strength');
@@ -60,9 +58,10 @@ describe('homepage Atlas source integrity', () => {
     expect(navigation).not.toContain('/relationship-matrix?genus=${encodeURIComponent(normalizedGenus(genus))}&locality=');
   });
 
-  it('does not publicly claim Atlas locality protection before the Atlas Next safety lane is integrated', () => {
+  it('projects displayed records through the repaired locality boundary', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
-    expect(atlas).toContain('does not imply that locality-sensitivity safeguards are present');
+    expect(atlas).toContain('toPublicAtlasOccurrence');
+    expect(atlas).toContain('assessmentResolved: false');
     expect(atlas).not.toContain('locality protection, scale transitions');
   });
 });

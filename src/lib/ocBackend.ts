@@ -1,3 +1,7 @@
+import type { AtlasLayer } from './atlas';
+import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
+import { hasThreatAssessment, resolveAtlasLocation } from './atlasLocalitySafety';
+
 const env = import.meta.env as Record<string, string | undefined>;
 
 /**
@@ -14,21 +18,20 @@ export const OC_BACKEND_BASE = (
   'https://orchid-continuum-public-api.onrender.com'
 ).replace(/\/$/, '');
 
-/** Atlas occurrences data endpoint. */
-export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/atlas/occurrences`;
+/** Atlas occurrences data endpoint (`/atlas/occurrences` without `/api` 404s, #931). */
+export const ATLAS_OCCURRENCES_URL = `${OC_BACKEND_BASE}/api/atlas/occurrences`;
 
 const DEFAULT_TIMEOUT = 12_000;
 async function getJson<T>(url: string, signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT): Promise<{ ok: boolean; status: number; data: T | null }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  if (signal) { if (signal.aborted) controller.abort(); else signal.addEventListener('abort', () => controller.abort()); }
   try {
-    const res = await fetch(url, { signal: controller.signal, headers: { Accept: 'application/json' } });
+    // One bounded retry while a Render service wakes from idle (#231): a slow
+    // first answer must not become a permanent empty map or "unavailable".
+    const res = await fetchWithColdStartRetry(url, { headers: { Accept: 'application/json' } }, signal, { timeoutMs });
+    if (!res) return { ok: false, status: 0, data: null };
     if (!res.ok) return { ok: false, status: res.status, data: null };
     const data = (await res.json()) as T;
     return { ok: true, status: res.status, data };
   } catch { return { ok: false, status: 0, data: null }; }
-  finally { clearTimeout(timer); }
 }
 
 export interface GenusDaily { genus: string; species_count: number; common_name: string | null; conservation_status: string | null; image_url: string | null; date: string; is_demo: boolean; }
@@ -38,7 +41,10 @@ export async function fetchGenusOfDay(signal?: AbortSignal): Promise<GenusDaily 
 }
 
 export interface OccurrencePoint { id: string; lat: number; lng: number; species: string; country: string | null; source: 'continuum'; }
-interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; decimalLatitude?: number; decimalLongitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; lon?: number; x?: number; y?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; properties?: Record<string, unknown>; }
+interface BackendOccurrence { id?: string | number; taxonomy_id?: string; decimal_latitude?: number; decimal_longitude?: number; decimalLatitude?: number; decimalLongitude?: number; latitude?: number; longitude?: number; lat?: number; lng?: number; lon?: number; x?: number; y?: number; species?: string; canonical_name?: string; scientific_name?: string; country?: string; iucn_code?: string; conservation_status?: string; coordinate_uncertainty_in_meters?: number; coordinateUncertaintyInMeters?: number; properties?: Record<string, unknown>; }
+function strOf(v: unknown): string | undefined {
+  return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+}
 function numOf(v: unknown): number | undefined {
   if (typeof v === 'number' && Number.isFinite(v)) return v;
   if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
@@ -54,21 +60,112 @@ function extractRows<T = BackendOccurrence>(payload: unknown): T[] {
   }
   return [];
 }
+function geometryLngLat(r: Record<string, unknown>): [number | undefined, number | undefined] {
+  // GeoJSON Feature: geometry.coordinates is [lng, lat].
+  const g = r.geometry as { coordinates?: unknown } | undefined;
+  const c = g && typeof g === 'object' && Array.isArray(g.coordinates) ? g.coordinates : null;
+  return c ? [numOf(c[0]), numOf(c[1])] : [undefined, undefined];
+}
+
+/** One backend row as a locality-safe public point, or null when it has no coordinates. */
+function normalizeRow(r: BackendOccurrence, i: number): OccurrencePoint | null {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
+  const [gLng, gLat] = geometryLngLat(r as Record<string, unknown>);
+  const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
+    ?? numOf(p.decimal_latitude) ?? numOf(p.latitude) ?? numOf(p.lat) ?? gLat;
+  const lng = numOf(r.decimal_longitude) ?? numOf(r.decimalLongitude) ?? numOf(r.longitude) ?? numOf(r.lng) ?? numOf(r.lon) ?? numOf(r.x)
+    ?? numOf(p.decimal_longitude) ?? numOf(p.longitude) ?? numOf(p.lng) ?? gLng;
+  if (lat === undefined || lng === undefined) return null;
+  const species = r.species || r.canonical_name || r.scientific_name
+    || (p.species as string) || (p.canonical_name as string) || (p.scientific_name as string) || 'Orchidaceae';
+  const country = (r.country ?? (p.country as string | undefined) ?? null) as string | null;
+  // These points reach public maps (genus page, neighbours, badges), so they get
+  // the same fail-closed projection as the Atlas: threatened taxa snap to their
+  // tier cell, stated uncertainty to its cell, and a point with no threat
+  // assessment (none, NE, DD, unknown) to the unresolved-precaution cell. Never jittered.
+  const iucnCode = strOf(r.iucn_code) ?? strOf(p.iucn_code);
+  const conservationStatus = strOf(r.conservation_status) ?? strOf(p.conservation_status);
+  const shown = resolveAtlasLocation(
+    {
+      lat,
+      lng,
+      iucnCode,
+      conservationStatus,
+      coordinateUncertaintyM: numOf(r.coordinate_uncertainty_in_meters) ?? numOf(r.coordinateUncertaintyInMeters)
+        ?? numOf(p.coordinate_uncertainty_in_meters),
+      assessmentResolved: hasThreatAssessment(iucnCode, conservationStatus),
+    },
+    'public',
+  );
+  return { id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat: shown.lat, lng: shown.lng, species, country, source: 'continuum' };
+}
+
 function normalizeBackend(rows: BackendOccurrence[]): OccurrencePoint[] {
-  const out: OccurrencePoint[] = [];
-  rows.forEach((r, i) => {
-    const p = (r.properties && typeof r.properties === 'object' ? r.properties : {}) as Record<string, unknown>;
-    const lat = numOf(r.decimal_latitude) ?? numOf(r.decimalLatitude) ?? numOf(r.latitude) ?? numOf(r.lat) ?? numOf(r.y)
-      ?? numOf(p.decimal_latitude) ?? numOf(p.latitude) ?? numOf(p.lat);
-    const lng = numOf(r.decimal_longitude) ?? numOf(r.decimalLongitude) ?? numOf(r.longitude) ?? numOf(r.lng) ?? numOf(r.lon) ?? numOf(r.x)
-      ?? numOf(p.decimal_longitude) ?? numOf(p.longitude) ?? numOf(p.lng);
-    if (lat === undefined || lng === undefined) return;
-    const species = r.species || r.canonical_name || r.scientific_name
-      || (p.species as string) || (p.canonical_name as string) || (p.scientific_name as string) || 'Orchidaceae';
-    const country = (r.country ?? (p.country as string | undefined) ?? null) as string | null;
-    out.push({ id: String(r.id ?? r.taxonomy_id ?? `oc-${i}`), lat, lng, species, country, source: 'continuum' });
+  return rows.flatMap((r, i) => {
+    const point = normalizeRow(r, i);
+    return point ? [point] : [];
   });
-  return out;
+}
+
+/**
+ * Descriptive fields an Atlas feature may carry (what the lab and maps read).
+ * Elevation is deliberately absent: with a country or region it narrows a
+ * threatened taxon's site, and the Atlas withholds it on public surfaces.
+ */
+const SAFE_FEATURE_PROPERTIES = [
+  'scientific_name', 'scientificName', 'species', 'canonical_name', 'name', 'genus', 'family',
+  'taxon_id', 'taxonId', 'taxonomy_id', 'taxonomyId',
+  'country', 'country_code', 'countryCode', 'state_province', 'stateProvince', 'state', 'province', 'region',
+  'year', 'event_year', 'eventYear', 'month', 'event_month', 'eventMonth',
+  'source', 'provider', 'dataset', 'source_name', 'license', 'rights',
+  'basis_of_record', 'basisOfRecord', 'iucn_code', 'conservation_status',
+];
+const COORDINATE_LIKE = /-?\d{1,3}\.\d{2,}\s*[,; ]\s*-?\d{1,3}\.\d{2,}/;
+
+/**
+ * An allowed key's value as a public primitive, or undefined. Objects and arrays
+ * never travel (an allowed key such as `source` or `dataset` can hold a nested
+ * record carrying private coordinates or locality), nor do non-finite numbers,
+ * long strings or strings that look like coordinates.
+ */
+function safePropertyValue(value: unknown): string | number | boolean | undefined {
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  const text = value.trim();
+  return text && text.length <= 200 && !COORDINATE_LIKE.test(text) ? text : undefined;
+}
+
+const ROW_CONTAINER_KEYS = ['results', 'occurrences', 'features', 'data', 'items', 'records', 'rows', 'points'];
+
+/**
+ * The /api/atlas/occurrences payload as an AtlasLayer for `atlasApi.occurrences`
+ * consumers, whatever row container the API uses. Coordinates are the projected
+ * public ones and coordinate/locality fields are removed from `properties`.
+ * Returns null for a payload that is not an occurrence list, so callers report
+ * "not available" instead of reading `features` from the wrong shape.
+ */
+export function occurrencePayloadToAtlasLayer(payload: unknown): AtlasLayer | null {
+  const recognised = Array.isArray(payload)
+    || (!!payload && typeof payload === 'object'
+      && ROW_CONTAINER_KEYS.some((k) => Array.isArray((payload as Record<string, unknown>)[k])));
+  if (!recognised) return null;
+  const features = extractRows<BackendOccurrence>(payload).flatMap((row, i) => {
+    const point = normalizeRow(row, i);
+    if (!point) return [];
+    const nested = row.properties && typeof row.properties === 'object' ? row.properties : {};
+    const merged: Record<string, unknown> = { ...nested, ...(row as Record<string, unknown>) };
+    // Allowlist, not a blocklist: only these descriptive fields travel with the
+    // feature; coordinates live only in the projected lat/lng above.
+    const properties: Record<string, unknown> = {};
+    for (const key of SAFE_FEATURE_PROPERTIES) {
+      const value = safePropertyValue(merged[key]);
+      if (value !== undefined) properties[key] = value;
+    }
+    return [{ id: point.id, kind: 'occurrence' as const, lat: point.lat, lng: point.lng, properties }];
+  });
+  return { kind: 'occurrence', features, meta: { count: features.length } };
 }
 
 export async function fetchAtlasOccurrences(limit = 500, signal?: AbortSignal): Promise<OccurrencePoint[]> {

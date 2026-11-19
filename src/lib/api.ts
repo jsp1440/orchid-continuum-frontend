@@ -27,10 +27,12 @@
 
 type RuntimeEnv = Record<string, string | undefined>;
 
-const env: RuntimeEnv =
-  typeof import.meta !== 'undefined'
-    ? ((import.meta as ImportMeta & { env?: RuntimeEnv }).env ?? {})
-    : {};
+// Read `import.meta.env` directly; Vite always defines it in a build. Do not
+// wrap it in a `typeof import.meta` guard: Vite's SSR transform (used by
+// Vitest) then injects a literal snapshot of the environment taken at server
+// start, so `vi.stubEnv` cannot simulate an unconfigured deployment when the
+// Render build already sets VITE_API_BASE_URL, and `npm run test` fails there.
+const env: RuntimeEnv = (import.meta.env ?? {}) as RuntimeEnv;
 
 const errorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback;

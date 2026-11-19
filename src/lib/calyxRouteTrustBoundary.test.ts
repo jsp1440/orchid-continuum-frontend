@@ -7,6 +7,8 @@ import {
   atlasNextCalyxHref,
 } from '@/features/atlas-next/researchHandoff';
 import { rejectsCalyxNavigationContext } from '@/lib/calyxRouteTrustBoundary';
+import { atlasChecklistCalyxHref, ATLAS_CHECKLIST_LAYER_ORIGIN, MAX_ATLAS_CALYX_QUESTION_CHARACTERS } from '@/features/atlas-next/calyxHandoff';
+import { buildCalyxTurnContext, parseCalyxRouteContext } from '@/lib/calyxConversation';
 import {
   ATLAS_WORKSPACE_ORIGIN,
   FEATURED_TAXON_ORIGIN,
@@ -95,7 +97,7 @@ describe('Calyx governed genus route trust boundary', () => {
     expect(routeSource).toContain('rejectsCalyxNavigationContext(location.search)');
     expect(routeSource).toContain('if (rejectedNavigationContext)');
     expect(routeSource.indexOf('if (rejectedNavigationContext)')).toBeLessThan(
-      routeSource.lastIndexOf('<CalyxWorkspace />'),
+      routeSource.search(/<CalyxWorkspace\b/),
     );
     expect(routeSource).toContain('Open Calyx without carried context');
   });
@@ -103,5 +105,75 @@ describe('Calyx governed genus route trust boundary', () => {
   it('mounts the direct Genus Profile producer on the live cross-Continuum action', () => {
     expect(genusProfileSource).toContain('genusProfileCalyxHref');
     expect(genusProfileSource).toContain("{ label: 'Ask Calyx', to: genusProfileCalyxHref(genus) }");
+  });
+});
+
+
+const CHECKLIST_QUESTION = 'Which orchids grow in the synthetic area?';
+function checklistParams() {
+  return new URL(atlasChecklistCalyxHref(CHECKLIST_QUESTION)!, 'https://orchidcontinuum.org').searchParams;
+}
+
+function expectRejectedChecklist(params: URLSearchParams) {
+  const search = `?${params}`;
+  expect(rejectsCalyxNavigationContext(search)).toBe(true);
+  expect(buildCalyxTurnContext({ projectId: '', uploadedFiles: [], routeSearch: search }).route_context).toBeUndefined();
+}
+
+describe('Atlas checklist question-only route contract', () => {
+  it.each([CHECKLIST_QUESTION, 'Where does Synthetic example grow?', 'q'.repeat(MAX_ATLAS_CALYX_QUESTION_CHARACTERS)])(
+    'admits the actual producer and retains its non-evidence question downstream: %s', (question) => {
+      const search = new URL(atlasChecklistCalyxHref(question)!, 'https://orchidcontinuum.org').search;
+      expect(rejectsCalyxNavigationContext(search)).toBe(false);
+      expect(parseCalyxRouteContext(search)).toEqual({
+        origin: ATLAS_CHECKLIST_LAYER_ORIGIN, featuredTaxon: null,
+        questionContext: { question, question_source: 'user', question_is_evidence: false },
+      });
+      expect(buildCalyxTurnContext({ projectId: '', uploadedFiles: [], routeSearch: search }).route_context).toEqual({
+        origin: ATLAS_CHECKLIST_LAYER_ORIGIN, featured_taxon: undefined,
+        question, question_source: 'user', question_is_evidence: false,
+      });
+    },
+  );
+
+  it.each(['genus', 'taxon', 'species', 'subject_id', 'project_id', 'conversation_id', 'occurrence_id', 'record_id', 'latitude', 'longitude', 'locality', 'evidence', 'confidence', 'conclusion', 'citation', 'provenance', 'context_is_evidence', 'unexpected'])(
+    'rejects an extra %s key, including otherwise valid genus identity', (key) => {
+      const params = checklistParams();
+      params.set(key, key === 'genus' ? 'Phalaenopsis' : 'synthetic-value');
+      expectRejectedChecklist(params);
+    },
+  );
+
+  it.each(['origin', 'question', 'question_source', 'question_is_evidence'])(
+    'rejects duplicate %s even when the values agree', (key) => {
+      const params = checklistParams();
+      params.append(key, params.get(key)!);
+      expectRejectedChecklist(params);
+    },
+  );
+
+  it.each(['origin', 'question', 'question_source', 'question_is_evidence'])(
+    'rejects missing %s instead of admitting partial provenance', (key) => {
+      const params = checklistParams();
+      params.delete(key);
+      expectRejectedChecklist(params);
+    },
+  );
+
+  it.each([
+    ['question', ''], ['question', '   '], ['question', 'q'.repeat(MAX_ATLAS_CALYX_QUESTION_CHARACTERS + 1)],
+    ['question_source', 'backend'], ['question_source', 'USER'],
+    ['question_is_evidence', 'true'], ['question_is_evidence', 'FALSE'],
+  ])('rejects malformed %s=%s', (key, value) => {
+    const params = checklistParams();
+    params.set(key, value);
+    expectRejectedChecklist(params);
+  });
+
+  it.each([true, false])('rejects conflicting origin duplicates regardless of order (%s)', (checklistFirst) => {
+    const params = checklistParams();
+    params.delete('origin');
+    for (const origin of checklistFirst ? [ATLAS_CHECKLIST_LAYER_ORIGIN, 'legacy'] : ['legacy', ATLAS_CHECKLIST_LAYER_ORIGIN]) params.append('origin', origin);
+    expectRejectedChecklist(params);
   });
 });
