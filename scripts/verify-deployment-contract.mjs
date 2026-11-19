@@ -7,9 +7,138 @@
  * of the same route contract, but it is not enough to configure the service.
  *
  * Static-file checks only. It never probes a live deployment.
+ *
+ * Vercel kill switch. The Vercel GitHub App may still be connected to this
+ * repository outside the owner's control of the repo, and while it is, every
+ * push would create a Vercel deployment. The repository therefore carries
+ * exactly one Vercel file, `vercel.json`, whose only permitted content is
+ *
+ *   {"$schema": "https://openapi.vercel.sh/vercel.json",   (optional)
+ *    "git": {"deploymentEnabled": false}}
+ *
+ * which Vercel documents as turning off automatic Git deployments for all
+ * branches: https://vercel.com/docs/project-configuration/git-configuration
+ * Any other key, any `true`, or a per-branch map (which leaves unlisted
+ * branches enabled) is Vercel deployment configuration and fails the contract.
  */
 
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const VERCEL_SCHEMA_URL = 'https://openapi.vercel.sh/vercel.json';
+
+/** The only Vercel file allowed in the repository: the deployment kill switch. */
+export const VERCEL_KILL_SWITCH_PATH = 'vercel.json';
+
+/**
+ * Vercel configuration surfaces that must never exist. `vercel.ts` and its
+ * siblings are Vercel's programmatic configuration; `now.json` is the legacy
+ * name; `.vercel` holds a CLI project link; `.vercelignore` shapes uploads.
+ */
+export const FORBIDDEN_VERCEL_PATHS = Object.freeze([
+  'vercel.ts',
+  'vercel.mts',
+  'vercel.js',
+  'vercel.mjs',
+  'vercel.cjs',
+  'now.json',
+  '.vercel',
+  '.vercelignore',
+]);
+
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function countKey(text, key) {
+  return text.split(`"${key}"`).length - 1;
+}
+
+/**
+ * Validate the text of `vercel.json`. Returns a list of failures; an empty
+ * list means the file does nothing except disable every Git deployment.
+ */
+export function validateVercelKillSwitch(text) {
+  let config;
+  try {
+    config = JSON.parse(text);
+  } catch (error) {
+    return [`vercel.json is not valid JSON: ${error.message}`];
+  }
+
+  if (!isPlainObject(config)) {
+    return ['vercel.json must be a JSON object'];
+  }
+
+  const failures = [];
+
+  // JSON.parse keeps the last of duplicate keys; refuse the ambiguity rather
+  // than guess which one Vercel honours.
+  for (const key of ['$schema', 'git', 'deploymentEnabled']) {
+    if (countKey(text, key) > 1) {
+      failures.push(`vercel.json declares "${key}" more than once`);
+    }
+  }
+
+  for (const key of Object.keys(config)) {
+    if (key !== '$schema' && key !== 'git') {
+      failures.push(
+        `vercel.json may only disable Git deployments; "${key}" is Vercel deployment configuration`,
+      );
+    }
+  }
+
+  if ('$schema' in config && config.$schema !== VERCEL_SCHEMA_URL) {
+    failures.push(`vercel.json "$schema" must be ${VERCEL_SCHEMA_URL}`);
+  }
+
+  const git = config.git;
+  if (!isPlainObject(git)) {
+    failures.push('vercel.json must declare git.deploymentEnabled: false');
+    return failures;
+  }
+
+  for (const key of Object.keys(git)) {
+    if (key !== 'deploymentEnabled') {
+      failures.push(`vercel.json git."${key}" is not permitted; only git.deploymentEnabled is`);
+    }
+  }
+
+  if (git.deploymentEnabled !== false) {
+    failures.push(
+      isPlainObject(git.deploymentEnabled)
+        ? 'vercel.json git.deploymentEnabled must be the boolean false; a per-branch map leaves unlisted branches deploying'
+        : 'vercel.json git.deploymentEnabled must be the boolean false',
+    );
+  }
+
+  return failures;
+}
+
+/** Check the repository root for Vercel files. Returns a list of failures. */
+export async function validateVercelFiles(root = new URL('..', import.meta.url)) {
+  const rootPath = fileURLToPath(root);
+  const at = (path) => `${rootPath.replace(/\/$/, '')}/${path}`;
+  const failures = [];
+
+  for (const path of FORBIDDEN_VERCEL_PATHS) {
+    if (existsSync(at(path))) {
+      failures.push(`${path} is Vercel configuration; Render is the only deployment target`);
+    }
+  }
+
+  if (!existsSync(at(VERCEL_KILL_SWITCH_PATH))) {
+    failures.push(
+      'vercel.json kill switch is missing; without it a connected Vercel GitHub App deploys every push',
+    );
+    return failures;
+  }
+
+  const text = await readFile(at(VERCEL_KILL_SWITCH_PATH), 'utf8');
+  failures.push(...validateVercelKillSwitch(text));
+  return failures;
+}
 
 const requiredRoutes = [
   '/university',
@@ -98,6 +227,8 @@ async function main() {
     failures.push('render.yaml does not declare the Render SPA rewrite');
   }
 
+  failures.push(...(await validateVercelFiles()));
+
   const renderBuildCommand = getRenderBuildCommand(blueprint);
   const publishGateFailure = validateOrderedPublishGate(renderBuildCommand);
   if (publishGateFailure) {
@@ -133,11 +264,14 @@ async function main() {
   console.log(
     `Verified ${requiredRoutes.length} critical client routes, ` +
       `${requiredStaticRewrites.length} static rewrite(s), the SPA fallback, ` +
-      'and the ordered fail-closed prepublication validation gate.',
+      'the ordered fail-closed prepublication validation gate, ' +
+      'and the Vercel Git-deployment kill switch.',
   );
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
