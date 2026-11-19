@@ -463,29 +463,31 @@ async function searchGenusImageHarvester(genus: string, limit: number, signal?: 
   // CORS; the harvester omits Access-Control-Allow-Origin so browsers cannot
   // read it — it stays as a last-ditch fallback for non-browser callers.
   const limitParam = Math.max(120, limit * 4);
-  const payload =
-    (await fetchOnce(
-      `${BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
-      12000,
-      signal,
-    )) ??
-    (await fetchOnce(
+  const out: FeaturedSpecies[] = [];
+  const seen = new Set<string>();
+  const collect = (payload: unknown | null): void => {
+    for (const row of extractArray(payload)) {
+      const feature = toFeatured(row, g);
+      if (!feature || !feature.image || (feature.imageScore ?? 0) < MIN_GALLERY_SCORE) continue;
+      const key = feature.name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(feature);
+    }
+  };
+
+  collect(await fetchOnce(
+    `${BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
+    12000,
+    signal,
+  ));
+  // A valid JSON response can still contain no usable photographs.
+  if (out.length === 0 && !signal?.aborted) {
+    collect(await fetchOnce(
       `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limitParam}`,
       12000,
       signal,
     ));
-  if (!payload) return [];
-
-  const out: FeaturedSpecies[] = [];
-  const seen = new Set<string>();
-  for (const row of extractArray(payload)) {
-    const feature = toFeatured(row, g);
-    if (!feature || !feature.image) continue;
-    if ((feature.imageScore ?? 0) < MIN_GALLERY_SCORE) continue;
-    const key = feature.name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(feature);
   }
 
   return out
@@ -514,6 +516,7 @@ function shuffle<T>(arr: T[]): T[] {
 export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
   const g = normalizeGenus(genus) || 'Cattleya';
   const requested = Math.max(1, limit);
+  if (signal?.aborted) return [];
 
   const taxonomyPool = await searchSpecies(
     `${BACKEND_BASE_URL}/api/species/search?genus=${encodeURIComponent(g)}&limit=50`,
@@ -522,6 +525,7 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
     signal,
     true,
   );
+  if (signal?.aborted) return [];
   if (taxonomyPool.length > 0) return shuffle(taxonomyPool).slice(0, requested);
 
   const legacyPool = await searchSpecies(
@@ -531,12 +535,12 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
     signal,
     false,
   );
+  if (signal?.aborted) return [];
   if (legacyPool.length > 0) return shuffle(legacyPool).slice(0, requested);
 
   const harvesterPool = await searchGenusImageHarvester(g, 50, signal);
-  if (harvesterPool.length > 0) return shuffle(harvesterPool).slice(0, requested);
-
   if (signal?.aborted) return [];
+  if (harvesterPool.length > 0) return shuffle(harvesterPool).slice(0, requested);
   if (g.toLowerCase() === 'cattleya') {
     return shuffle(CATTLEYA_FALLBACK).slice(0, Math.min(requested, CATTLEYA_FALLBACK.length));
   }
@@ -554,8 +558,10 @@ export async function fetchFeaturedSpecies(limit = 4, signal?: AbortSignal, genu
 export async function fetchGenusSpeciesQueue(limit = 160, signal?: AbortSignal, genus = 'Cattleya'): Promise<FeaturedSpecies[]> {
   const g = normalizeGenus(genus) || 'Cattleya';
   const requested = Math.max(12, limit);
+  if (signal?.aborted) return [];
 
   const imagePool = await searchGenusImageHarvester(g, requested, signal);
+  if (signal?.aborted) return [];
   const seen = new Set(imagePool.map((s) => s.name.toLowerCase()));
   const merged = imagePool.slice();
 
@@ -576,6 +582,9 @@ export async function fetchGenusSpeciesQueue(limit = 160, signal?: AbortSignal, 
     }
   }
 
+  // An aborted queue must neither paint stale data nor fall back to the
+  // curated set after the user has moved to a different genus.
+  if (signal?.aborted) return [];
   if (merged.length === 0 && g.toLowerCase() === 'cattleya') return shuffle(CATTLEYA_FALLBACK);
   return shuffle(merged).slice(0, requested);
 }
