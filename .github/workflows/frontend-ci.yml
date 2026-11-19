@@ -44,6 +44,16 @@ jobs:
       - name: Test frontend
         run: npm test
 
+      # render.yaml's buildCommand runs typecheck and the deployment-contract
+      # validator before it will publish. The always-on gate must run the same
+      # steps, or a pull request can be green here and still fail closed on
+      # Render (main did exactly that with a TS2304 in scripts/).
+      - name: Typecheck frontend
+        run: npm run typecheck
+
+      - name: Validate Render deployment contract
+        run: npm run validate:deployment
+
       - name: Build frontend
         run: npm run build
 

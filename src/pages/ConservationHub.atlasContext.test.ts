@@ -23,7 +23,7 @@ describe('ConservationHub Atlas evidence handoff', () => {
 
   it('fails closed for malformed or oversized genus values', () => {
     expect(source).toContain("genus.length > 80");
-    expect(source).toContain("/^[A-Za-z][A-Za-z .'-]*$/");
+    expect(source).toContain('normalizeFeaturedTaxonGenus(genus)');
     expect(source).toContain('fromAtlasEvidence && genus');
   });
 });

@@ -17,14 +17,14 @@ describe('Atlas workspace → Species genus handoff', () => {
   it('mounts the handoff in the shared navbar when Atlas has one active genus', () => {
     expect(navbarSource).toContain('atlasWorkspaceSpeciesHref');
     expect(navbarSource).toContain("l.route === '/species' && atlasGenus");
-    expect(navbarSource).toContain('navigate(atlasWorkspaceSpeciesHref(atlasGenus))');
+    expect(navbarSource).toContain('atlasGenus) return atlasWorkspaceSpeciesHref(atlasGenus)');
   });
 
   it('lands on a receiving surface that immediately acts on the genus', () => {
     expect(speciesSource).toContain("searchParams.get('genus')");
-    expect(speciesSource).toContain('useState(() => genusFilter)');
+    expect(speciesSource).toContain('useState(() => urlQueryParam || genusFilter)');
     expect(speciesSource).toContain('Filtering by');
-    expect(speciesSource).toContain('Genus: {genusFilter}');
+    expect(speciesSource).toContain('Genus: <bdi>{genusFilter}</bdi>');
   });
 
   it('does not carry Atlas locality, record, provenance, or evidence material', () => {

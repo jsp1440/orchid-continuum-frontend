@@ -55,6 +55,7 @@ import Climate from "./pages/Climate";
 import EcuadorExpedition from "./pages/EcuadorExpedition";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
+import Privacy from "./pages/Privacy";
 import Literature from "./pages/Literature";
 import LiteraturePaper from "./pages/LiteraturePaper";
 import SavedOrchids from "./pages/SavedOrchids";
@@ -62,6 +63,7 @@ import DailyGenusDiagnostics from "./pages/DailyGenusDiagnostics";
 import RelationshipExplorer from "./pages/RelationshipExplorer";
 import AdminCenter from "./pages/AdminCenter";
 import MissionControlEntry from "./pages/MissionControlEntry";
+import FeedbackReview from "./pages/FeedbackReview";
 import IntelligenceCenter from "./pages/IntelligenceCenter";
 import AIOrchestration from "./pages/AIOrchestration";
 import CalyxScienceStatus from "./pages/CalyxScienceStatus";
@@ -72,6 +74,10 @@ import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
+import CommunityObservation from "./pages/CommunityObservation";
+import Newsletter from "./pages/Newsletter";
+import Contact from "./pages/Contact";
+import DeceptionLab from "./pages/DeceptionLab";
 
 const queryClient = new QueryClient();
 
@@ -120,6 +126,7 @@ const App = () => (
                   <Route path="/intelligence-center" element={<ProtectedRoute title="Intelligence Center · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><IntelligenceCenter /></ProtectedRoute>} />
                   <Route path="/mission-control/science" element={<ProtectedRoute title="Science operations · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxScienceStatus /></ProtectedRoute>} />
                   <Route path="/calyx-science" element={<ProtectedRoute title="Science operations · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><CalyxScienceStatus /></ProtectedRoute>} />
+                  <Route path="/mission-control/feedback-review" element={<ProtectedRoute title="Feedback review · owner" description="Sign in, then open the owner session at Mission Control. Reviewing submitted feedback is limited to the owner, and decisions never publish to the knowledge graph."><FeedbackReview /></ProtectedRoute>} />
                   <Route path="/mission-control/matrix-registry-review" element={<ProtectedRoute title="Matrix Registry Review · authenticated reviewers" description="Sign in to derive immutable Matrix registry versions from explicit reviewed canonical concept mappings."><MatrixRegistryConceptReview /></ProtectedRoute>} />
                   <Route path="/mission-control/readiness/homepage" element={<ProtectedRoute title="Homepage readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
                   <Route path="/mission-control/knowledge-graph-readiness" element={<ProtectedRoute title="Knowledge graph readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
@@ -137,8 +144,8 @@ const App = () => (
                   <Route path="/climate" element={<Climate />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
-                  <Route path="/literature" element={<Literature />} />
-                  <Route path="/literature/:paperId" element={<LiteraturePaper />} />
+                  <Route path="/literature" element={<ProtectedRoute title="Literature corpus · signed-in access" description="Sign in first. Signed-in members can read the literature paper list; full paper views are limited to owner access, and the page says so rather than showing an empty corpus."><Literature /></ProtectedRoute>} />
+                  <Route path="/literature/:paperId" element={<ProtectedRoute title="Literature extraction · signed-in access" description="Sign in first. Full paper views are limited to owner access; signed-in members can read the paper list, and the page says so rather than showing an empty extraction."><LiteraturePaper /></ProtectedRoute>} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
@@ -167,8 +174,13 @@ const App = () => (
                   <Route path="/classroom/investigation" element={<ScientificMethodLab />} />
                   <Route path="/org/:slug" element={<OrganizationProfile />} />
                   <Route path="/project/:slug" element={<ProjectWorkspace />} />
+                  <Route path="/community" element={<CommunityObservation />} />
+                  <Route path="/newsletter" element={<Newsletter />} />
+                  <Route path="/contact" element={<Contact />} />
+                  <Route path="/deception-lab" element={<DeceptionLab />} />
                   <Route path="/coming-soon/:section" element={<ComingSoon />} />
                   <Route path="/coming-soon" element={<ComingSoon />} />
+                  <Route path="/privacy" element={<Privacy />} />
                   <Route path="*" element={<NotFound />} />
                 </Routes>
               </AtlasFilterProvider>

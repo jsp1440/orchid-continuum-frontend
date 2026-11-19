@@ -1,0 +1,688 @@
+{
+ "_meta": {
+  "corrected_payload_typo": {
+   "id": "SYNTHETIC-synthetic-column",
+   "concept_id": null,
+   "slug": "synthetic-column",
+   "preferred_term": "Column (SYNTHETIC)",
+   "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+   "expanded_definition": null,
+   "review_state": "draft",
+   "provenance": null,
+   "source_system": "SYNTHETIC-capture",
+   "source_record_id": null,
+   "date_revised": null
+  },
+  "what": "REAL responses from orchid-calyx-backend running LOCALLY (uvicorn app.main:app, file store, no DB) - never production.",
+  "backend_sha": "36d0e4c127a64c605153ac286a0d174de35c7ea7",
+  "captured_at": "2026-09-27T00:34:53+00:00",
+  "inputs": "Every object, statement and correction is SYNTHETIC (labelled 'SYNTHETIC'); nothing is a lexicon or scientific claim. The owner code was generated locally for this run and is not a credential.",
+  "script": "maker scratch capture.py: real HTTP calls; every response body below is exactly what the backend emitted. `requests` holds the exact submission bodies sent (the frontend client's field set).",
+  "case_ids": {
+   "typo": "efc-b1dbea7a8fd782cd7aecf098",
+   "format": "efc-36c011894769ee6567d2a285",
+   "not_sure": "efc-dcb0860af7dae35b2e81c299",
+   "matrix": "efc-48d0edb1d720b78395762b9e"
+  }
+ },
+ "requests": {
+  "lexicon_typo": {
+   "object_id": "lexicon:SYNTHETIC-synthetic-column",
+   "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+   "object_type": "lexicon",
+   "page_context": "/SYNTHETIC/lexicon_typo",
+   "feedback_class": "suggest_correction",
+   "statement": "SYNTHETIC: the term is misspelled.",
+   "proposed_replacement": "Column (SYNTHETIC)",
+   "citation": null,
+   "source_partner_id": null,
+   "defect_kind": "typo",
+   "severity": "normal"
+  },
+  "lexicon_format": {
+   "object_id": "lexicon:SYNTHETIC-synthetic-column",
+   "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+   "object_type": "lexicon",
+   "page_context": "/SYNTHETIC/lexicon_format",
+   "feedback_class": "suggest_correction",
+   "statement": "SYNTHETIC: the definition should start with a capital letter.",
+   "proposed_replacement": "SYNTHETIC: The fused reproductive structure of an orchid flower.",
+   "citation": null,
+   "source_partner_id": null,
+   "defect_kind": "format",
+   "severity": "normal"
+  },
+  "lexicon_not_sure": {
+   "object_id": "lexicon:SYNTHETIC-synthetic-column",
+   "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+   "object_type": "lexicon",
+   "page_context": "/SYNTHETIC/lexicon_not_sure",
+   "feedback_class": "suggest_correction",
+   "statement": "SYNTHETIC: this wording seems off.",
+   "proposed_replacement": "Column (SYNTHETIC)",
+   "citation": null,
+   "source_partner_id": null,
+   "defect_kind": null,
+   "severity": "normal"
+  },
+  "matrix_typo_label": {
+   "object_id": "matrix:SYNTHETIC-session",
+   "object_version_hash": "b93d8d27ac5ed69c86838ff020c0c4eef741d1c69d83cfffff2b9623529aa043",
+   "object_type": "matrix_identification",
+   "page_context": "/SYNTHETIC/matrix_typo_label",
+   "feedback_class": "suggest_correction",
+   "statement": "SYNTHETIC: a candidate name is misspelled.",
+   "proposed_replacement": "SYNTHETIC name",
+   "citation": null,
+   "source_partner_id": null,
+   "defect_kind": "typo",
+   "severity": "normal"
+  },
+  "lexicon_control_char": {
+   "object_id": "lexicon:SYNTHETIC-synthetic-column",
+   "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+   "object_type": "lexicon",
+   "page_context": "/SYNTHETIC/lexicon_control_char",
+   "feedback_class": "suggest_correction",
+   "statement": "SYNTHETIC: control character probe.",
+   "proposed_replacement": "Column (SYNTHETIC)",
+   "citation": null,
+   "source_partner_id": null,
+   "defect_kind": "typo\u0007",
+   "severity": "normal"
+  }
+ },
+ "responses": {
+  "register_lexicon_typo": {
+   "status": 201,
+   "body": {
+    "object_id": "lexicon:SYNTHETIC-synthetic-column",
+    "object_type": "lexicon",
+    "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+    "payload": {
+     "id": "SYNTHETIC-synthetic-column",
+     "concept_id": null,
+     "slug": "synthetic-column",
+     "preferred_term": "Colum (SYNTHETIC)",
+     "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+     "expanded_definition": null,
+     "review_state": "draft",
+     "provenance": null,
+     "source_system": "SYNTHETIC-capture",
+     "source_record_id": null,
+     "date_revised": null
+    },
+    "created_at": "2026-09-27T00:34:53.836441+00:00",
+    "previous_version_hash": null
+   }
+  },
+  "submit_lexicon_typo": {
+   "status": 201,
+   "body": {
+    "created": true,
+    "duplicate_of": null,
+    "case": {
+     "case_id": "efc-b1dbea7a8fd782cd7aecf098",
+     "fingerprint": "b1dbea7a8fd782cd7aecf098aa6867f074a1b2e184b5d6e7ffb633d6a7f7680f",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_typo",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: the term is misspelled.",
+     "disposition": "auto_correctable",
+     "status": "pending_review",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-27T00:34:53.846614+00:00",
+     "updated_at": "2026-09-27T00:34:53.846614+00:00",
+     "proposed_replacement": "Column (SYNTHETIC)",
+     "citation": null,
+     "submitter_id": "owner",
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "reviewer_id": null
+    }
+   }
+  },
+  "register_lexicon_format": {
+   "status": 201,
+   "body": {
+    "object_id": "lexicon:SYNTHETIC-synthetic-column",
+    "object_type": "lexicon",
+    "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+    "payload": {
+     "concept_id": null,
+     "date_revised": null,
+     "expanded_definition": null,
+     "id": "SYNTHETIC-synthetic-column",
+     "preferred_term": "Colum (SYNTHETIC)",
+     "provenance": null,
+     "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+     "review_state": "draft",
+     "slug": "synthetic-column",
+     "source_record_id": null,
+     "source_system": "SYNTHETIC-capture"
+    },
+    "created_at": "2026-09-27T00:34:53.836441+00:00",
+    "previous_version_hash": null
+   }
+  },
+  "submit_lexicon_format": {
+   "status": 201,
+   "body": {
+    "created": true,
+    "duplicate_of": null,
+    "case": {
+     "case_id": "efc-36c011894769ee6567d2a285",
+     "fingerprint": "36c011894769ee6567d2a2857477ed3f271952b7511a31a024aa8aabd176c6a3",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_format",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: the definition should start with a capital letter.",
+     "disposition": "auto_correctable",
+     "status": "pending_review",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-27T00:34:53.857904+00:00",
+     "updated_at": "2026-09-27T00:34:53.857904+00:00",
+     "proposed_replacement": "SYNTHETIC: The fused reproductive structure of an orchid flower.",
+     "citation": null,
+     "submitter_id": "owner",
+     "source_partner_id": null,
+     "defect_kind": "format",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "reviewer_id": null
+    }
+   }
+  },
+  "register_lexicon_not_sure": {
+   "status": 201,
+   "body": {
+    "object_id": "lexicon:SYNTHETIC-synthetic-column",
+    "object_type": "lexicon",
+    "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+    "payload": {
+     "concept_id": null,
+     "date_revised": null,
+     "expanded_definition": null,
+     "id": "SYNTHETIC-synthetic-column",
+     "preferred_term": "Colum (SYNTHETIC)",
+     "provenance": null,
+     "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+     "review_state": "draft",
+     "slug": "synthetic-column",
+     "source_record_id": null,
+     "source_system": "SYNTHETIC-capture"
+    },
+    "created_at": "2026-09-27T00:34:53.836441+00:00",
+    "previous_version_hash": null
+   }
+  },
+  "submit_lexicon_not_sure": {
+   "status": 201,
+   "body": {
+    "created": true,
+    "duplicate_of": null,
+    "case": {
+     "case_id": "efc-dcb0860af7dae35b2e81c299",
+     "fingerprint": "dcb0860af7dae35b2e81c2994420c22f31fc657cdc3966e60a1bec0209317c92",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_not_sure",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: this wording seems off.",
+     "disposition": "insufficient_evidence",
+     "status": "pending_review",
+     "review_lane": "scientific",
+     "created_at": "2026-09-27T00:34:53.868556+00:00",
+     "updated_at": "2026-09-27T00:34:53.868556+00:00",
+     "proposed_replacement": "Column (SYNTHETIC)",
+     "citation": null,
+     "submitter_id": "owner",
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "reviewer_id": null
+    }
+   }
+  },
+  "register_matrix_typo_label": {
+   "status": 201,
+   "body": {
+    "object_id": "matrix:SYNTHETIC-session",
+    "object_type": "matrix_identification",
+    "version_hash": "b93d8d27ac5ed69c86838ff020c0c4eef741d1c69d83cfffff2b9623529aa043",
+    "payload": {
+     "schema_version": "matrix-identification-feedback.v1",
+     "session_id": "SYNTHETIC-session",
+     "revision": 1,
+     "ranking": [],
+     "context_is_verified_identification": false,
+     "canonical_taxon_state_mutated": false
+    },
+    "created_at": "2026-09-27T00:34:53.874263+00:00",
+    "previous_version_hash": null
+   }
+  },
+  "submit_matrix_typo_label": {
+   "status": 201,
+   "body": {
+    "created": true,
+    "duplicate_of": null,
+    "case": {
+     "case_id": "efc-48d0edb1d720b78395762b9e",
+     "fingerprint": "48d0edb1d720b78395762b9ea5847687727340b948d0e774d0da6e017a4ae5f3",
+     "object_id": "matrix:SYNTHETIC-session",
+     "object_version_hash": "b93d8d27ac5ed69c86838ff020c0c4eef741d1c69d83cfffff2b9623529aa043",
+     "object_type": "matrix_identification",
+     "page_context": "/SYNTHETIC/matrix_typo_label",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: a candidate name is misspelled.",
+     "disposition": "needs_scientific_review",
+     "status": "pending_review",
+     "review_lane": "scientific",
+     "created_at": "2026-09-27T00:34:53.880440+00:00",
+     "updated_at": "2026-09-27T00:34:53.880440+00:00",
+     "proposed_replacement": "SYNTHETIC name",
+     "citation": null,
+     "submitter_id": "owner",
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "reviewer_id": null
+    }
+   }
+  },
+  "register_lexicon_control_char": {
+   "status": 201,
+   "body": {
+    "object_id": "lexicon:SYNTHETIC-synthetic-column",
+    "object_type": "lexicon",
+    "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+    "payload": {
+     "concept_id": null,
+     "date_revised": null,
+     "expanded_definition": null,
+     "id": "SYNTHETIC-synthetic-column",
+     "preferred_term": "Colum (SYNTHETIC)",
+     "provenance": null,
+     "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+     "review_state": "draft",
+     "slug": "synthetic-column",
+     "source_record_id": null,
+     "source_system": "SYNTHETIC-capture"
+    },
+    "created_at": "2026-09-27T00:34:53.836441+00:00",
+    "previous_version_hash": null
+   }
+  },
+  "submit_lexicon_control_char": {
+   "status": 422,
+   "body": {
+    "detail": {
+     "code": "DEFECT_KIND_INVALID_CHARACTERS"
+    }
+   }
+  },
+  "review_detail_typo": {
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-b1dbea7a8fd782cd7aecf098",
+     "fingerprint": "b1dbea7a8fd782cd7aecf098aa6867f074a1b2e184b5d6e7ffb633d6a7f7680f",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_typo",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: the term is misspelled.",
+     "disposition": "auto_correctable",
+     "status": "pending_review",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-27T00:34:53.846614+00:00",
+     "updated_at": "2026-09-27T00:34:53.846614+00:00",
+     "proposed_replacement": "Column (SYNTHETIC)",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-256215b59bfb4c45b5da28d7",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-27T00:34:53.846614+00:00",
+      "actor_ref": "actor-256215b59bfb4c45b5da28d7",
+      "details": {
+       "disposition": "auto_correctable",
+       "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+       "review_lane": "deterministic"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_type": "lexicon",
+     "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-column",
+      "preferred_term": "Colum (SYNTHETIC)",
+      "provenance": null,
+      "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+      "review_state": "draft",
+      "slug": "synthetic-column",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC-capture"
+     },
+     "created_at": "2026-09-27T00:34:53.836441+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review",
+     "accept_trivial"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "review_detail_not_sure": {
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-dcb0860af7dae35b2e81c299",
+     "fingerprint": "dcb0860af7dae35b2e81c2994420c22f31fc657cdc3966e60a1bec0209317c92",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_not_sure",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: this wording seems off.",
+     "disposition": "insufficient_evidence",
+     "status": "pending_review",
+     "review_lane": "scientific",
+     "created_at": "2026-09-27T00:34:53.868556+00:00",
+     "updated_at": "2026-09-27T00:34:53.868556+00:00",
+     "proposed_replacement": "Column (SYNTHETIC)",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": null,
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-256215b59bfb4c45b5da28d7",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-27T00:34:53.868556+00:00",
+      "actor_ref": "actor-256215b59bfb4c45b5da28d7",
+      "details": {
+       "disposition": "insufficient_evidence",
+       "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+       "review_lane": "scientific"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_type": "lexicon",
+     "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-column",
+      "preferred_term": "Colum (SYNTHETIC)",
+      "provenance": null,
+      "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+      "review_state": "draft",
+      "slug": "synthetic-column",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC-capture"
+     },
+     "created_at": "2026-09-27T00:34:53.836441+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "review_detail_matrix": {
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-48d0edb1d720b78395762b9e",
+     "fingerprint": "48d0edb1d720b78395762b9ea5847687727340b948d0e774d0da6e017a4ae5f3",
+     "object_id": "matrix:SYNTHETIC-session",
+     "object_version_hash": "b93d8d27ac5ed69c86838ff020c0c4eef741d1c69d83cfffff2b9623529aa043",
+     "object_type": "matrix_identification",
+     "page_context": "/SYNTHETIC/matrix_typo_label",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: a candidate name is misspelled.",
+     "disposition": "needs_scientific_review",
+     "status": "pending_review",
+     "review_lane": "scientific",
+     "created_at": "2026-09-27T00:34:53.880440+00:00",
+     "updated_at": "2026-09-27T00:34:53.880440+00:00",
+     "proposed_replacement": "SYNTHETIC name",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": null,
+     "resulting_version_hash": null,
+     "submitter_ref": "actor-256215b59bfb4c45b5da28d7",
+     "reviewer_ref": null
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-27T00:34:53.880440+00:00",
+      "actor_ref": "actor-256215b59bfb4c45b5da28d7",
+      "details": {
+       "disposition": "needs_scientific_review",
+       "object_version_hash": "b93d8d27ac5ed69c86838ff020c0c4eef741d1c69d83cfffff2b9623529aa043",
+       "review_lane": "scientific"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "matrix:SYNTHETIC-session",
+     "object_type": "matrix_identification",
+     "version_hash": "b93d8d27ac5ed69c86838ff020c0c4eef741d1c69d83cfffff2b9623529aa043",
+     "payload": {
+      "canonical_taxon_state_mutated": false,
+      "context_is_verified_identification": false,
+      "ranking": [],
+      "revision": 1,
+      "schema_version": "matrix-identification-feedback.v1",
+      "session_id": "SYNTHETIC-session"
+     },
+     "created_at": "2026-09-27T00:34:53.874263+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": null,
+    "allowed_decisions": [
+     "reject",
+     "needs_governed_review"
+    ],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "decision_accept_trivial_typo": {
+   "status": 200,
+   "body": {
+    "decision": "accept_trivial",
+    "idempotent": false,
+    "case": {
+     "case_id": "efc-b1dbea7a8fd782cd7aecf098",
+     "fingerprint": "b1dbea7a8fd782cd7aecf098aa6867f074a1b2e184b5d6e7ffb633d6a7f7680f",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_typo",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: the term is misspelled.",
+     "disposition": "correction_accepted",
+     "status": "resolved",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-27T00:34:53.846614+00:00",
+     "updated_at": "2026-09-27T00:34:53.910547+00:00",
+     "proposed_replacement": "Column (SYNTHETIC)",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "deterministic trivial correction accepted",
+     "resulting_version_hash": "513014d982ed51dde32dcd495f8dbd775f768e4fc7d10d2c9fbc6f96f5e752e1",
+     "submitter_ref": "actor-256215b59bfb4c45b5da28d7",
+     "reviewer_ref": "actor-256215b59bfb4c45b5da28d7"
+    },
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "review_detail_typo_after": {
+   "status": 200,
+   "body": {
+    "case": {
+     "case_id": "efc-b1dbea7a8fd782cd7aecf098",
+     "fingerprint": "b1dbea7a8fd782cd7aecf098aa6867f074a1b2e184b5d6e7ffb633d6a7f7680f",
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "object_type": "lexicon",
+     "page_context": "/SYNTHETIC/lexicon_typo",
+     "feedback_class": "suggest_correction",
+     "statement": "SYNTHETIC: the term is misspelled.",
+     "disposition": "correction_accepted",
+     "status": "resolved",
+     "review_lane": "deterministic",
+     "created_at": "2026-09-27T00:34:53.846614+00:00",
+     "updated_at": "2026-09-27T00:34:53.910547+00:00",
+     "proposed_replacement": "Column (SYNTHETIC)",
+     "citation": null,
+     "source_partner_id": null,
+     "defect_kind": "typo",
+     "severity": "normal",
+     "related_case_ids": [],
+     "resolution": "deterministic trivial correction accepted",
+     "resulting_version_hash": "513014d982ed51dde32dcd495f8dbd775f768e4fc7d10d2c9fbc6f96f5e752e1",
+     "submitter_ref": "actor-256215b59bfb4c45b5da28d7",
+     "reviewer_ref": "actor-256215b59bfb4c45b5da28d7"
+    },
+    "duplicate_count": 0,
+    "events": [
+     {
+      "event": "case_submitted",
+      "timestamp": "2026-09-27T00:34:53.846614+00:00",
+      "actor_ref": "actor-256215b59bfb4c45b5da28d7",
+      "details": {
+       "disposition": "auto_correctable",
+       "object_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+       "review_lane": "deterministic"
+      }
+     },
+     {
+      "event": "correction_accepted",
+      "timestamp": "2026-09-27T00:34:53.910547+00:00",
+      "actor_ref": "actor-256215b59bfb4c45b5da28d7",
+      "details": {
+       "previous_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+       "resulting_version_hash": "513014d982ed51dde32dcd495f8dbd775f768e4fc7d10d2c9fbc6f96f5e752e1"
+      }
+     }
+    ],
+    "object_version": {
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_type": "lexicon",
+     "version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-column",
+      "preferred_term": "Colum (SYNTHETIC)",
+      "provenance": null,
+      "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+      "review_state": "draft",
+      "slug": "synthetic-column",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC-capture"
+     },
+     "created_at": "2026-09-27T00:34:53.836441+00:00",
+     "previous_version_hash": null
+    },
+    "object_version_available": true,
+    "resulting_object_version": {
+     "object_id": "lexicon:SYNTHETIC-synthetic-column",
+     "object_type": "lexicon",
+     "version_hash": "513014d982ed51dde32dcd495f8dbd775f768e4fc7d10d2c9fbc6f96f5e752e1",
+     "payload": {
+      "concept_id": null,
+      "date_revised": null,
+      "expanded_definition": null,
+      "id": "SYNTHETIC-synthetic-column",
+      "preferred_term": "Column (SYNTHETIC)",
+      "provenance": null,
+      "quick_definition": "SYNTHETIC: the fused reproductive structure of an orchid flower.",
+      "review_state": "draft",
+      "slug": "synthetic-column",
+      "source_record_id": null,
+      "source_system": "SYNTHETIC-capture"
+     },
+     "created_at": "2026-09-27T00:34:53.907839+00:00",
+     "previous_version_hash": "d0788918f5502a37c782dcd01b48235f945b937a6e35d8c17d51be0913546425"
+    },
+    "allowed_decisions": [],
+    "publication_boundary": "Review decisions never publish to the knowledge graph, change taxonomy or apply scientific corrections. Accepted non-trivial corrections remain governed review required; publication is owner-gated outside this service."
+   }
+  },
+  "status_typo_after": {
+   "status": 200,
+   "body": {
+    "case_id": "efc-b1dbea7a8fd782cd7aecf098",
+    "status": "resolved",
+    "disposition": "correction_accepted",
+    "resolution": "deterministic trivial correction accepted",
+    "resulting_version_hash": "513014d982ed51dde32dcd495f8dbd775f768e4fc7d10d2c9fbc6f96f5e752e1"
+   }
+  }
+ }
+}

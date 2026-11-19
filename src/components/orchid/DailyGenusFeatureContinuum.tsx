@@ -40,7 +40,7 @@ function EvidenceBadge({ item }: { item: ContinuumDomainState }) {
 
   return (
     <div className="rounded-lg border border-[#d9caa8] bg-[#fffaf0]/95 p-3">
-      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#8a8062]">
+      <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#6e6547]">
         {DOMAIN_LABELS[item.domain]}
       </p>
       <p className="mt-1 text-sm font-medium text-[#24321f]">
@@ -105,7 +105,7 @@ function RelationshipCard({
           {node?.items?.slice(0, 3).map((item) => <li key={item}>• {item}</li>)}
         </ul>
       ) : null}
-      <p className="mt-3 text-xs leading-5 text-[#747d68]">
+      <p className="mt-3 text-xs leading-5 text-[#5f6854]">
         {evidence.state === 'available'
           ? 'Shown only because the Continuum relationship endpoint returned linked evidence for this featured genus. It describes the genus, not every species within it.'
           : evidence.reason === 'service-unavailable'
@@ -226,7 +226,7 @@ const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> =
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#806c39]">Genus of the Day · Continuum evidence</p>
+            <p className="font-mono text-[10px] uppercase tracking-[0.24em] text-[#735f2c]">Genus of the Day · Continuum evidence</p>
             <h2 id="featured-genus-title" className="mt-2 font-serif text-4xl italic text-[#24321f] sm:text-5xl">
               {genus}
             </h2>
@@ -270,7 +270,7 @@ const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> =
                       name is preserved below as provenance. */}
                   <p className="font-serif text-xl italic text-[#24321f]">{heroDisplayName}</p>
                   {heroAuthoredName !== heroDisplayName && (
-                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#8a8062]">
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.12em] text-[#6e6547]">
                       Recorded as {heroAuthoredName}
                     </p>
                   )}
@@ -313,7 +313,7 @@ const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> =
                 </div>
                 {continuum.gaps.length > 0 && (
                   <div className="mt-4 rounded-lg border border-dashed border-[#bca56e] bg-[#fffaf0] p-4">
-                    <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#806c39]">What we do not know yet</p>
+                    <p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[#735f2c]">What we do not know yet</p>
                     <p className="mt-2 text-sm leading-6 text-[#4d5944]">
                       Current graph gaps: {continuum.gaps.map((domain) => DOMAIN_LABELS[domain]).join(', ')}. These mean “not linked in the current Continuum evidence,” not biological absence.
                     </p>
@@ -329,10 +329,10 @@ const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> =
             dominate the strip. */}
         {representativeMedia.length > 0 && (
           <div className="mt-5 rounded-xl border border-[#d1bd8e] bg-[#fffaf0] p-5">
-            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#806c39]">
+            <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#735f2c]">
               Representative species · approved Continuum media
             </p>
-            <p className="mt-2 text-xs leading-5 text-[#747d68]">
+            <p className="mt-2 text-xs leading-5 text-[#5f6854]">
               One photograph per species from the approved media the Continuum returned for {genus}.
               This is a sample of what is documented, not a complete species list.
             </p>
@@ -351,7 +351,7 @@ const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> =
                       <p className="font-serif text-sm italic leading-tight text-[#24321f]" title={authoredName}>
                         {displayName}
                       </p>
-                      <p className="mt-1 font-mono text-[8px] uppercase leading-4 tracking-[0.1em] text-[#8a8062]">
+                      <p className="mt-1 font-mono text-[8px] uppercase leading-4 tracking-[0.1em] text-[#6e6547]">
                         {item.source_name}
                       </p>
                     </div>

@@ -1,0 +1,11 @@
+{
+  "_capture": {
+    "url": null,
+    "captured_at": null,
+    "method": "NOT CAPTURED. Fixture-only: api.gbif.org, rs.gbif.org and techdocs.gbif.org are denied by the capture sandbox's egress policy (CONNECT 403, 2026-09-26), so no live descriptions body could be recorded.",
+    "note": "GBIF species/{usageKey} name-usage shape (key, nubKey, datasetKey, scientificName, taxonomicStatus, rank) as documented at https://techdocs.gbif.org/en/openapi/v1/species. The usage key and datasetKey are fictional; only datasetKey is read by the executor."
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"key\": 900000102, \"nubKey\": 5310649, \"datasetKey\": \"00000000-0000-4000-8000-000000000002\", \"scientificName\": \"Gastrochilus calceolaris (Buch.-Ham. ex Sm.) D.Don\", \"taxonomicStatus\": \"ACCEPTED\", \"rank\": \"SPECIES\"}"
+}

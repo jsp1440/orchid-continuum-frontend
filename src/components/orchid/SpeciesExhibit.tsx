@@ -37,7 +37,7 @@ function UnavailablePanel({ genus, status }: { genus: string; status: SpeciesExh
       aria-live="polite"
       className="rounded-lg border border-[#d9caa8] bg-[#fffaf0]/95 p-5 shadow-[0_10px_24px_rgba(30,40,20,0.06)]"
     >
-      <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#8a8062]">Species Exhibit</p>
+      <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#6e6547]">Species Exhibit</p>
       <h3 className="mt-1 font-serif text-3xl leading-tight text-[#24321f]">
         {invalid ? 'Species request unavailable' : `${genus} species evidence is unavailable`}
       </h3>
@@ -94,7 +94,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
         aria-busy="true"
         className="rounded-lg border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_10px_24px_rgba(30,40,20,0.06)]"
       >
-        <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#8a8062]">Species Exhibit</p>
+        <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#6e6547]">Species Exhibit</p>
         <p className="mt-2 text-sm text-[#5d684c]">Loading evidence-grounded species cards…</p>
       </section>
     );
@@ -108,7 +108,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
     <section className="rounded-lg border border-[#d9caa8] bg-[#f6f0df]/95 p-5 shadow-[0_10px_24px_rgba(30,40,20,0.06)]">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="max-w-3xl">
-          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#8a8062]">Species Exhibit</p>
+          <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-[#6e6547]">Species Exhibit</p>
           <h3 className="mt-1 font-serif text-3xl leading-tight text-[#24321f]">
             {result.items.length} evidence-grounded species {result.items.length === 1 ? 'story' : 'stories'}
           </h3>
@@ -181,7 +181,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
                 <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#3f4936]">
                   {item.caption ?? 'Species-specific narrative unavailable from connected evidence.'}
                 </p>
-                <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a8062]">
+                <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.14em] text-[#6e6547]">
                   {confidenceLabel(item)}
                 </p>
               </div>

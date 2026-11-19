@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Scatter, ScatterChart, XAxis, YAxis } from "recharts";
 
+import ReasoningMapPanel from "@/components/calyx/ReasoningMapPanel";
 import ScientificSynthesis from "@/components/calyx/ScientificSynthesis";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
@@ -22,6 +23,7 @@ import {
   visibleConversationMessages,
 } from "@/lib/calyxConversation";
 import {
+  CALYX_BACKEND_UNREACHABLE,
   CalyxApiError,
   createCalyxConversation,
   getBrainMission,
@@ -678,7 +680,7 @@ export default function CalyxWorkspace() {
       }
       const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
       const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the CALYX backend may be waking up. Retrying in ${NETWORK_RETRY_SECONDS}s unless you cancel or edit the message.` : error.message) : "Calyx could not complete that turn.";
+      const detail = error instanceof CalyxApiError ? (isNetwork ? `${CALYX_BACKEND_UNREACHABLE} — it may be waking up. Retrying in ${NETWORK_RETRY_SECONDS}s unless you cancel or edit the message.` : error.message) : "Calyx could not complete that turn.";
       setAuthRequired(isAuth);
       setConversationError(detail);
       if (isNetwork) {
@@ -870,7 +872,7 @@ export default function CalyxWorkspace() {
                   </details>
                   {micState !== "unsupported" ? <button aria-label={micState === "listening" ? "Stop voice input" : "Start voice input"} className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:opacity-50 ${micState === "listening" ? "border-destructive bg-destructive/10 text-destructive" : "hover:bg-muted"}`} disabled={submitting && micState !== "listening"} onClick={micState === "listening" ? stopListening : startListening} type="button">{micState === "listening" ? "⏹ Stop" : "🎤 Voice"}</button> : <span className="text-xs text-muted-foreground">Voice input unavailable in this browser.</span>}
                   <button className="rounded-full border px-3 py-1 text-xs hover:bg-muted disabled:opacity-50" disabled={submitting} onClick={() => fileInputRef.current?.click()} type="button">📎 Attach</button>
-                  <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
+                  <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden aria-label="Attach files to this Calyx conversation" className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
                 </div>
                 <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim()} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
@@ -914,6 +916,20 @@ export default function CalyxWorkspace() {
         </div>
 
         {loading ? <p className="text-sm text-muted-foreground">Loading Calyx systems…</p> : null}
+        {/* The worked scientific question. This is the surface where evidence,
+            hypothesis, contradiction, uncertainty and unknown stay apart — the
+            conversation above can summarise, but it must not be the only place
+            a reader sees how an answer was reached. */}
+        <section className="rounded-xl border bg-card p-5" data-testid="calyx-reasoning-section">
+          <h2 className="font-semibold">Worked question</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            One orchid-science question traced from the evidence to the answer, including where the
+            sources disagree and what is still unknown.
+          </p>
+          <div className="mt-4">
+            <ReasoningMapPanel />
+          </div>
+        </section>
         {snapshot.errors.length ? <section className="rounded-xl border p-4"><h2 className="font-semibold">Degraded connections</h2><ul className="mt-2 list-disc pl-5 text-sm text-muted-foreground">{snapshot.errors.map((error) => <li key={error}>{error}</li>)}</ul></section> : null}
         <section className="grid gap-4 md:grid-cols-3"><article className="rounded-xl border p-5"><h2 className="font-semibold">Platform capabilities</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.capabilities ? "Canonical capability contract available." : "Capability service unavailable."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Conversation persistence</h2><p className="mt-2 text-sm text-muted-foreground">{conversation?.persistence_mode ? `${conversation.persistence_mode} conversation state reported by the backend.` : "A server thread will be created when you send the first message."}</p></article><article className="rounded-xl border p-5"><h2 className="font-semibold">Durable orchestrator</h2><p className="mt-2 text-sm text-muted-foreground">{snapshot.orchestratorState === "available" ? "Authenticated orchestrator status available." : snapshot.orchestratorState === "authentication_required" ? <><Link className="underline" to="/mission-control">Sign in at Mission Control</Link> to enable the durable orchestrator.</> : "Orchestrator status unavailable."}</p></article></section>
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4"><Link className="rounded-xl border p-5 hover:bg-muted" to="/relationship-matrix"><h2 className="font-semibold">Relationship Matrix</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/orchid-identification"><h2 className="font-semibold">Orchid Identification</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/continuum-next"><h2 className="font-semibold">Homepage Intelligence</h2></Link><Link className="rounded-xl border p-5 hover:bg-muted" to="/university"><h2 className="font-semibold">Orchid University</h2></Link></section>

@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/match?name=Thrixspermum%20arunachalensis&strict=true",
+    "captured_at": "2026-09-26",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0dd8b-1d41-734c-bfb8-02048933ecb9",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"confidence\":100,\"matchType\":\"NONE\",\"synonym\":false}"
+}

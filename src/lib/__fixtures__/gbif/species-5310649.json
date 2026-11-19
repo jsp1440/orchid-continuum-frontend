@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/5310649",
+    "captured_at": "2026-09-25",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0da13-df84-721a-9a16-5a780cb36be6",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"key\":5310649,\"nubKey\":5310649,\"nameKey\":4609918,\"taxonID\":\"gbif:5310649\",\"kingdom\":\"Plantae\",\"phylum\":\"Tracheophyta\",\"order\":\"Asparagales\",\"family\":\"Orchidaceae\",\"genus\":\"Gastrochilus\",\"species\":\"Gastrochilus calceolaris\",\"kingdomKey\":6,\"phylumKey\":7707728,\"classKey\":196,\"orderKey\":1169,\"familyKey\":7689,\"genusKey\":2804118,\"speciesKey\":5310649,\"datasetKey\":\"d7dddbf4-2cf0-4f39-9b2a-bb099caae36c\",\"constituentKey\":\"7ddf754f-d193-4cc9-b351-99906754a03b\",\"parentKey\":2804118,\"parent\":\"Gastrochilus\",\"basionymKey\":2797637,\"basionym\":\"Aerides calceolaris Buch.-Ham. ex Sm.\",\"scientificName\":\"Gastrochilus calceolaris (Buch.-Ham. ex Sm.) D.Don\",\"canonicalName\":\"Gastrochilus calceolaris\",\"authorship\":\"(Buch.-Ham. ex Sm.) D.Don\",\"nameType\":\"SCIENTIFIC\",\"rank\":\"SPECIES\",\"origin\":\"SOURCE\",\"taxonomicStatus\":\"ACCEPTED\",\"nomenclaturalStatus\":[],\"remarks\":\"\",\"publishedIn\":\"Prodr. Fl. Nepal.: 32 (1825)\",\"numDescendants\":1,\"lastCrawled\":\"2023-08-22T23:20:59.545+00:00\",\"lastInterpreted\":\"2023-08-22T23:17:14.488+00:00\",\"issues\":[],\"class\":\"Liliopsida\"}"
+}

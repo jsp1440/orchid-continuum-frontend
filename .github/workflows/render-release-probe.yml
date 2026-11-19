@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'https://orchid-calyx-backend.onrender.com'
+      calyx_paths:
+        description: 'Space-separated backend GET paths to probe (read-only)'
+        required: false
+        type: string
+        default: '/api/runner/knowledge-gaps/reserve-plan /api/runner/knowledge-gaps/queue'
 
 permissions:
   contents: read
@@ -49,3 +54,18 @@ jobs:
         run: |
           set -x
           curl -s -o /dev/null -w "HTTP_STATUS:%{http_code}\n" "${{ inputs.frontend_url }}/university/lab"
+
+      - name: Probe additional backend paths (read-only GETs)
+        env:
+          CALYX_URL: ${{ inputs.calyx_url }}
+          CALYX_PATHS: ${{ inputs.calyx_paths }}
+        run: |
+          for path in $CALYX_PATHS; do
+            case "$path" in
+              /api/*) ;;
+              *) echo "skipping non-API path: $path"; continue ;;
+            esac
+            echo "=== GET $path"
+            curl -s -m 60 -o /tmp/probe-body -w "HTTP_STATUS:%{http_code} CONTENT_TYPE:%{content_type}\n" "$CALYX_URL$path"
+            head -c 3000 /tmp/probe-body; echo
+          done

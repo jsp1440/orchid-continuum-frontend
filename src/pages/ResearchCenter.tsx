@@ -9,10 +9,12 @@ import {
   Database,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
-import ResearchStationWorkbench from '@/components/research/ResearchStationWorkbench';
+import ResearchStationWorkbench, {
+  type ResearchStationDataState,
+} from '@/components/research/ResearchStationWorkbench';
 import ResearchTraitExplorer from '@/components/research/ResearchTraitExplorer';
 import {
-  researchStationAtlasHref,
+  researchStationAtlasNextLink,
   researchStationCalyxHref,
 } from '@/lib/researchStationNavigation';
 import { ATLAS_NEXT_RESEARCH_ORIGIN } from '@/features/atlas-next/researchHandoff';
@@ -61,6 +63,21 @@ const PILLARS = [
   },
 ] as const;
 
+/**
+ * The hero badge reports what the Research Station actually loaded. The shared
+ * PageShell badge ("Live data · Orchid Continuum + GBIF") is static, and it was
+ * shown to members while every Research Workspace read was refused; nothing on
+ * this page reads GBIF either.
+ */
+const DATA_BADGE: Record<ResearchStationDataState | 'no_project', { label: string; live: boolean }> = {
+  loading: { label: 'Loading research data…', live: false },
+  ready: { label: 'Live data · Research Workspace', live: true },
+  empty: { label: 'No research projects yet', live: false },
+  owner_only: { label: 'Research Workspace · owner access only', live: false },
+  unavailable: { label: 'Research data unavailable', live: false },
+  no_project: { label: 'No investigation loaded', live: false },
+};
+
 const ResearchCenter: React.FC = () => {
   // A project carried in from another module keeps the investigation intact.
   //
@@ -96,14 +113,25 @@ const ResearchCenter: React.FC = () => {
   // precisely the identity loss these handoffs exist to prevent — and the page
   // says the subject is preserved while doing it.
   //
-  // researchStationAtlasHref/CalyxHref classify by name shape rather than
-  // assuming rank: a binomial becomes Atlas's species filter (matched against
-  // the canonical binomial) and reaches Calyx as an exact taxon alongside the
-  // derived genus; a bare genus resolves to the same genus filter as before.
+  // researchStationAtlasNextHref/CalyxHref classify by name shape rather than
+  // assuming rank: a binomial becomes Atlas Next's species filter (matched
+  // against the canonical binomial, and named there as the species) and reaches
+  // Calyx as an exact taxon alongside the derived genus; a bare genus resolves
+  // to the genus filter, which Atlas Next labels as a genus-level fallback.
   // Calyx reads that exact taxon only under the research-station origin, and
   // asserts taxon_is_evidence=false when it does.
+  //
+  // A nothospecies (`Cattleya × hardyana`) has no filterable hybrid identity, so
+  // its link opens the parent genus and is labelled on its face as that
+  // genus-level fallback. Any other name the Atlas Next parser rejects
+  // (including an intergeneric `× Genus` name) yields no Atlas link at all,
+  // never an unlabelled genus link standing in for the subject.
   const onwardContext = { taxon: subjectLabel, projectId };
+  const atlasLink = subjectLabel ? researchStationAtlasNextLink(onwardContext) : null;
   const featuredGenusWithoutProject = Boolean(routeGenus && !projectId);
+  const [stationData, setStationData] = useState<ResearchStationDataState>('loading');
+  const badge = DATA_BADGE[featuredGenusWithoutProject ? 'no_project' : stationData];
+  const stationLive = !featuredGenusWithoutProject && stationData === 'ready';
   const [activeQuery, setActiveQuery] = useState({
     genus: routeGenus,
     country: '',
@@ -122,6 +150,7 @@ const ResearchCenter: React.FC = () => {
       title="Research Center"
       titleAccent="ask the Continuum harder questions."
       intro="Compose queries across taxonomy, traits, ecology, and geography. Trace every result to evidence, then export reproducible bundles for your analysis."
+      dataBadge={badge}
       heroAside={
         <div className="rounded-2xl border border-emerald-300/30 bg-emerald-300/5 p-5">
           <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/80 mb-3 flex items-center gap-2">
@@ -168,12 +197,20 @@ const ResearchCenter: React.FC = () => {
                 ) : null}
               </div>
               <div className="mt-4 flex shrink-0 flex-wrap gap-2 md:mt-0">
-                <Link
-                  to={researchStationAtlasHref(onwardContext)}
-                  className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
-                >
-                  Return to Atlas
-                </Link>
+                {atlasLink ? (
+                  <Link
+                    to={atlasLink.href}
+                    data-atlas-fallback={atlasLink.fallback ? atlasLink.fallback.rank : undefined}
+                    className="rounded-full border border-white/15 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-white/70 hover:border-emerald-300/50"
+                  >
+                    Return to Atlas
+                    {atlasLink.fallback ? (
+                      <span className="ml-1 normal-case tracking-normal text-[#d8b24c]">
+                        · {atlasLink.fallback.label}
+                      </span>
+                    ) : null}
+                  </Link>
+                ) : null}
                 <Link
                   to={researchStationCalyxHref(onwardContext)}
                   className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3 py-2 font-mono text-[9px] uppercase tracking-[0.16em] text-emerald-100 hover:bg-emerald-300/15"
@@ -193,7 +230,7 @@ const ResearchCenter: React.FC = () => {
         <div className="max-w-7xl mx-auto px-6 lg:px-10">
           <div className="mb-6">
             <div className="text-[10px] tracking-[0.25em] uppercase text-emerald-300/70 mb-2">
-              Research Station · live
+              {stationLive ? 'Research Station · live' : 'Research Station'}
             </div>
             <h2 className="font-serif text-2xl md:text-3xl">
               {featuredGenusWithoutProject ? 'No persisted investigation selected' : 'Your current investigation'}
@@ -213,7 +250,7 @@ const ResearchCenter: React.FC = () => {
               </p>
             </div>
           ) : (
-            <ResearchStationWorkbench projectId={projectId} />
+            <ResearchStationWorkbench projectId={projectId} onDataState={setStationData} />
           )}
         </div>
       </section>

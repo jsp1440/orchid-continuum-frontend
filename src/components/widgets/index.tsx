@@ -51,6 +51,8 @@ import {
   OACS_DEMO_SITES,
   type SnapshotReading,
 } from '@/lib/oacs';
+import { warnApiUnconfigured } from '@/lib/apiConfigWarning';
+import { speciesPageHref } from '@/lib/speciesDossier';
 
 // ---------------------------------------------------------------------------
 // Shared shell
@@ -126,6 +128,7 @@ export const SpeciesSnapshotWidget: React.FC<
         if (c.signal.aborted) return;
         setData(r.data);
         setUnconfigured(r.unconfigured);
+        if (r.unconfigured) warnApiUnconfigured('widgets');
       } else {
         const r = await speciesApi.featured(c.signal);
         if (c.signal.aborted) return;
@@ -146,6 +149,7 @@ export const SpeciesSnapshotWidget: React.FC<
           });
         }
         setUnconfigured(r.unconfigured);
+        if (r.unconfigured) warnApiUnconfigured('widgets');
       }
       setLoading(false);
     };
@@ -156,15 +160,14 @@ export const SpeciesSnapshotWidget: React.FC<
   return (
     <Shell
       title="Species Snapshot"
-      href={data ? `/species/${encodeURIComponent(data.taxonomy_id)}` : '/'}
+      href={data ? speciesPageHref(data.taxonomy_id, data.canonical_name) : '/'}
       badge="Continuum API"
       className={className}
     >
       {loading && <SkeletonRow />}
       {!loading && unconfigured && (
         <Empty>
-          API not yet configured. Snapshot will populate once
-          VITE_API_BASE_URL is set.
+          Live species data is not available for this deployment.
         </Empty>
       )}
       {!loading && !unconfigured && !data && (
@@ -235,6 +238,7 @@ export const OrchidOfTheDayWidget: React.FC<WidgetProps> = ({ className }) => {
         setPick(r.data[idx]);
       }
       setUnconfigured(r.unconfigured);
+      if (r.unconfigured) warnApiUnconfigured('widgets');
       setLoading(false);
     });
     return () => c.abort();
@@ -243,14 +247,14 @@ export const OrchidOfTheDayWidget: React.FC<WidgetProps> = ({ className }) => {
   return (
     <Shell
       title="Orchid of the Day"
-      href={pick ? `/species/${encodeURIComponent(pick.taxonomy_id)}` : '/'}
+      href={pick ? speciesPageHref(pick.taxonomy_id, pick.canonical_name) : '/'}
       badge="Daily rotation"
       className={className}
     >
       {loading && <SkeletonRow />}
       {!loading && unconfigured && (
         <Empty>
-          Configure VITE_API_BASE_URL to power the daily rotation.
+          Live species data is not available for this deployment.
         </Empty>
       )}
       {!loading && pick && (
@@ -338,6 +342,7 @@ export const EcologicalInteractionCardWidget: React.FC<
       if (c.signal.aborted) return;
       setPanel(r.data);
       setUnconfigured(r.unconfigured);
+      if (r.unconfigured) warnApiUnconfigured('widgets');
       setLoading(false);
     });
     return () => c.abort();
@@ -408,6 +413,7 @@ export const ZooReviewCardWidget: React.FC<WidgetProps> = ({ className }) => {
       if (c.signal.aborted) return;
       setStatus(r.data);
       setUnconfigured(r.unconfigured);
+      if (r.unconfigured) warnApiUnconfigured('widgets');
       setLoading(false);
     });
     return () => c.abort();

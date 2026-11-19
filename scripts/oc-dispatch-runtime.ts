@@ -1,8 +1,8 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { assertAdmission, assertReceipts, claimLease, isActive, lineageFor, makePlan, reconcileExpired, transitionLease, validateLedger, validatePlan,
-  type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
+import { MAX_ABANDONED_ATTEMPTS, assertAdmission, assertReceipts, claimDeterministicLease, claimLease, isActive, laneOf, lineageFor, makePlan, planWithStarvationRepair, reconcileExpired, terminalIssueLabel, transitionLease, validateLedger, validatePlan,
+  providerCapacityFromEnvironment, providerFreeRepairsReadyForRequeue, reconcileStaleRunningLabels, runtimeBackoffDecisions, type Issue, type Ledger, type LeaseStore, type Plan, type Pull, type Snapshot } from './oc-dispatch-control';
 import { decideBudget } from './oc-budget-governor.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY || '';
@@ -46,10 +46,68 @@ export class GitHubLeaseStore implements LeaseStore {
     }
   }
 }
+/**
+ * A ledger store for the lane that cannot spend.
+ *
+ * `GitHubLeaseStore.read()` throws on a missing ledger deliberately: for the
+ * paid lane, "no accounting file" must never read as "nothing has been spent".
+ * The deterministic lane reserves exactly zero, so an absent ledger is simply an
+ * empty one -- and because the paid lane has refused before reading since the
+ * day it was written, no ledger has ever been created. This is the only lane
+ * permitted to create it.
+ *
+ * The balance refusal below guards CREATION only -- `version !== ''` delegates
+ * straight to the parent. That is deliberate (an existing ledger's balance is
+ * the paid lane's business, and this lane never writes one), but the earlier
+ * wording here said flatly that it "cannot write a non-zero reservation", which
+ * is stronger than the code. `validateLedger` and `transitionLease` are what
+ * actually keep this lane's leases at zero, and both are mutation-pinned.
+ */
+export class DeterministicLeaseStore extends GitHubLeaseStore {
+  async read() {
+    try {
+      return await super.read();
+    } catch (error) {
+      if (!status(error, 404)) throw error;
+      return { version: '', ledger: { schema: 1, programStartedAt: now(), programSpent: 0, dailySpent: {}, leases: [] } as Ledger };
+    }
+  }
+
+  async compareAndSwap(version: string, ledger: Ledger) {
+    if (version !== '') return super.compareAndSwap(version, ledger);
+    if (ledger.programSpent !== 0 || Object.keys(ledger.dailySpent).length > 0) {
+      throw new Error('Refusing to initialize accounting with a non-zero balance');
+    }
+    try { api(`git/ref/heads/${stateBranch}`); }
+    catch (error) {
+      if (!status(error, 404)) throw error;
+      api('git/refs', 'POST', { ref: `refs/heads/${stateBranch}`, sha: process.env.GITHUB_SHA || '' });
+    }
+    try {
+      api(`contents/${statePath}`, 'PUT', { branch: stateBranch,
+        message: 'chore(autonomy): initialize durable dispatch ledger',
+        content: Buffer.from(JSON.stringify(ledger, null, 2) + '\n').toString('base64') });
+      return true;
+    } catch (error) {
+      // Someone else created it first; re-read and retry rather than overwrite.
+      if (status(error, 409) || status(error, 422)) return false;
+      throw error;
+    }
+  }
+}
+
 function snapshot(): Snapshot {
-  const issues = pages<Issue & { pull_request?: unknown }>('issues?state=all').filter(i => !i.pull_request)
-    .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })).sort((a,b) => a.name.localeCompare(b.name)) }));
-  const prs = pages<Pull>('pulls?state=all').map(({ number, state, body, head }) => ({ number, state, body, head: { ref: head.ref, sha: head.sha } })).sort((a,b) => a.number-b.number);
+  // `author` feeds only the legacy reserve-mission derivation, which binds an
+  // issue only when the reserve bot filed it; a missing login derives nothing.
+  const issues = pages<Issue & { pull_request?: unknown; user?: { login?: string } | null }>('issues?state=all').filter(i => !i.pull_request)
+    .map(({ number, state, title, body, labels, user }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })).sort((a,b) => a.name.localeCompare(b.name)),
+      author: user?.login ?? null }));
+  // `merged_at` is what distinguishes a merged PR from a closed one, and the
+  // report needs it: "closed" tells the operator to go and look at something
+  // that is already in. It is not on `Pull` because nothing else consumes it.
+  const prs = pages<Pull & { merged_at: string | null; base?: { ref: string } }>('pulls?state=all')
+    .map(({ number, state, merged_at, body, head, base }) => ({ number, state, merged: Boolean(merged_at), baseRef: base?.ref, body, head: { ref: head.ref, sha: head.sha } }))
+    .sort((a,b) => a.number-b.number);
   const integration = api<{ object: { sha: string } }>('git/ref/heads/oc-autonomous-integration');
   const material = Object.fromEntries(['CLAUDE.md', 'package.json', 'src/lib/completion-graph/scheduler.ts']
     .map(path => [path, readFileSync(path, 'utf8')]));
@@ -66,6 +124,14 @@ function readPlan() {
   if (process.env.OC_WAVE_HASH !== plan.wave.hash) throw new Error('Wrong shared wave artifact');
   return plan;
 }
+/**
+ * Exported ONLY so a test can assert that `providerAuthorized` follows the
+ * environment. It is the authoritative artifact the audit reads, and the field
+ * could be hard-coded `false` with the whole suite green.
+ */
+export function writeReceiptForTest(issue: number, waveHash: string, outcome: string, extra: object = {}) {
+  return receipt(issue, waveHash, outcome, extra);
+}
 function receipt(issue: number, waveHash: string, outcome: string, extra: object = {}) {
   const dir = process.env.OC_RECEIPT_DIR || '.oc-receipts';
   mkdirSync(dir, { recursive: true });
@@ -74,35 +140,320 @@ function receipt(issue: number, waveHash: string, outcome: string, extra: object
     providerCostUsd: 0, ...extra }, null, 2) + '\n');
   output('outcome', outcome);
 }
+/**
+ * Name every pending issue this wave did not admit, once each, with the reason.
+ *
+ * "Once each, with the reason" is the whole contract, and the previous version
+ * broke it three ways -- one of them live on this branch's own summary:
+ *
+ *   * The census/reached shortfall printed a COUNT and three candidate causes
+ *     ("an open PR lineage, an `OC-AUTO-HOLD`, or a lane label"), identifying
+ *     none of them and naming none of the issues. Five queued issues appeared
+ *     nowhere in a report whose docstring promised they would.
+ *   * That line was gated on the wave being idle, so in a wave that admitted
+ *     even one issue the shortfall vanished entirely -- count and all.
+ *   * An issue carrying two refused declarations was named twice; and an issue
+ *     admitted on one declaration while a second was refused got a line reading
+ *     "Binding refused" as the only thing said about it, while the lane was
+ *     executing it.
+ *
+ * A wave that admitted nothing because its lanes are busy is not a failure, and
+ * saying so would train the operator to ignore this.
+ *
+ * Written for GITHUB_STEP_SUMMARY, which renders Markdown with HTML passthrough.
+ * A bare `<node-id>` is stripped there as an unknown tag, which would delete the
+ * one thing the remediation tells an operator to type, and single newlines
+ * collapse into one paragraph. Hence the backticks and the list.
+ */
+/**
+ * What the `plan` step prints and writes to the step summary.
+ *
+ * `provider_authorized` is READ, not asserted. It was a hard-coded `false` in
+ * this template, so the one governance fact the summary states about itself was
+ * the one fact it could not get wrong -- and it would have gone on printing
+ * `false` if the environment ever said otherwise. Two other call sites in this
+ * file already derive it from the environment; so does this one now.
+ */
+export function planSummary(plan: Plan) {
+  const providerAuthorized = process.env.PROVIDER_AUTHORIZED === 'true';
+  const slots = plan.providerCapacity ? `${plan.providerCapacity.slots} (${plan.providerCapacity.reason})` : 'not evaluated';
+  return `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; ` +
+    `capacity=${plan.capacity}; provider_slots=${slots}; provider_admitted=${plan.providerAdmitted ?? 0}; ` +
+    `wave=${plan.wave.hash}; provider_authorized=${providerAuthorized}; ` +
+    `no execution leases acquired.\n` +
+    bindingReport(plan);
+}
+
+export function bindingReport(plan: Plan) {
+  const lines: string[] = [];
+  // Only numbers this report can account for. The label census counts work that
+  // is executing and work that never reached the ranker, so printing it as a
+  // count of pending work states a total the lines below then contradict.
+  const reached = plan.queuedReachingAdmission;
+  const census = plan.inventory.queued + plan.inventory.prepared;
+  // Work held only by provider capacity is named below with its reason; it
+  // is not a starved lane and must not be reported as one.
+  const deferred = plan.providerDeferred ?? [];
+  const idle = plan.capacity > 0 && plan.issues.length === 0
+    && (plan.starved || (census - deferred.length > 0 && plan.inventory.active === 0));
+  if (idle) {
+    lines.push(`- **STARVED**: ${plan.capacity} free lane(s), ${reached} issue(s) reached graph admission, nothing admitted. ` +
+      `${plan.untrackedLeaves.length} admissible graph leaf/leaves carried no pending issue.`);
+  }
+  // Deliberately NOT gated on `idle`. An issue that never reached the ranker is
+  // just as invisible in a wave that admitted one issue as in a wave that
+  // admitted none, and it was the partially-admitting wave that printed nothing.
+  // An issue the wave ADMITTED is being executed, whatever else it declared. A
+  // refusal line about a second declaration would be the only thing this report
+  // says about it, and it would be false.
+  const admitted = new Set(plan.issues);
+  const said = new Set<number>(admitted);
+  const take = (issue: number) => said.has(issue) ? false : (said.add(issue), true);
+
+  const deferredLines = deferred.filter(({ issueNumber }) => take(issueNumber));
+  if (deferredLines.length > 0) {
+    const slots = plan.providerCapacity?.slots ?? 0;
+    lines.push(`- **Provider capacity**: ${slots} provider slot(s) this wave; these provider-lane issues reached admission, stay queued (not relabelled) and were not admitted: ` +
+      deferredLines.map(({ issueNumber, nodeId, reason }) => `#${issueNumber} (\`${nodeId}\`: ${reason})`).join(', ') + '.');
+  }
+  for (const { issueNumber, reason } of plan.pendingNotReachingAdmission) {
+    if (plan.capacity <= 0) break;
+    // Through `take()` like every other line-type. The first version of this
+    // loop consulted neither `said` nor `admitted`, so the one line added to
+    // fix the "once each" promise was the one line that did not keep it: an
+    // issue could be named here and again below, and an ADMITTED issue could be
+    // told it "never reached admission" while the lane was executing it.
+    // `makePlan` happens to keep these sets disjoint today, which is exactly
+    // the reasoning that left the last guard dead and unnoticed.
+    if (!take(issueNumber)) continue;
+    lines.push(`- Issue #${issueNumber} is labelled pending and never reached admission: ${reason}.`);
+  }
+  if (plan.capacity > 0) {
+    const unbound = plan.unboundQueued.filter(take);
+    if (unbound.length > 0) {
+      lines.push(`- No completion-graph node names these issues (bind one with an \`oc-node:<node-id>\` label naming a leaf): ${unbound.join(', ')}.`);
+    }
+    const unreachable = plan.unreachableQueued.filter(({ issueNumber }) => take(issueNumber));
+    if (unreachable.length > 0) {
+      const named = unreachable.map(({ issueNumber, nodeIds }) => `#${issueNumber} (\`${nodeIds.join('`, `')}\`)`);
+      lines.push(`- A node names these issues, and the ranker did not select it this wave -- its status, its dependencies, work already open on it, or another issue took it: ${named.join(', ')}.`);
+    }
+  }
+  // One line per ISSUE, not per declaration, and not per declaration KIND
+  // either. An issue can declare a node that is not in the graph AND a node
+  // that is not a leaf; grouping within each category still gave it a line from
+  // each loop, and the cross-category guard that was supposed to stop that was
+  // consulted nowhere -- both `said.add` calls could be deleted with the full
+  // suite green. Fixing only the half an operator is told about would not admit
+  // the issue, so both halves go in the one line.
+  const refusals = new Map<number, { unknown: string[]; unadmissible: string[] }>();
+  const note = (issueNumber: number, kind: 'unknown' | 'unadmissible', nodeId: string) => {
+    if (admitted.has(issueNumber) || said.has(issueNumber)) return;
+    const entry = refusals.get(issueNumber) ?? { unknown: [], unadmissible: [] };
+    entry[kind].push(nodeId);
+    refusals.set(issueNumber, entry);
+  };
+  for (const { issueNumber, nodeId } of plan.unknownNodeDeclarations) note(issueNumber, 'unknown', nodeId);
+  for (const { issueNumber, nodeId } of plan.unadmissibleNodeDeclarations) note(issueNumber, 'unadmissible', nodeId);
+
+  const list = (nodeIds: string[]) => `\`${nodeIds.join('`, `')}\``;
+  for (const [issueNumber, { unknown, unadmissible }] of [...refusals].sort((a, b) => a[0] - b[0])) {
+    const parts: string[] = [];
+    if (unknown.length > 0) {
+      parts.push(`${unknown.length > 1 ? 'nodes' : 'node'} ${list(unknown)}, which ${unknown.length > 1 ? 'are' : 'is'} not in the completion graph`);
+    }
+    if (unadmissible.length > 0) {
+      parts.push(`${unadmissible.length > 1 ? 'nodes' : 'node'} ${list(unadmissible)}, which ${unadmissible.length > 1 ? 'are' : 'is'} not a leaf, so the ranker can never select ${unadmissible.length > 1 ? 'them' : 'it'}`);
+    }
+    lines.push(`- Issue #${issueNumber} declares ${parts.join('; and ')}. Binding refused; name a leaf that exists.`);
+  }
+  return lines.length > 0 ? `\n${lines.join('\n')}\n` : '';
+}
+
+/**
+ * Apply `runtimeBackoffDecisions`: requeue expired backoffs into ordinary
+ * admission, park exhausted ones as `dead_letter` with a follow-up comment, and
+ * record conflicts. Each issue is applied on its own, so one failed write or
+ * conflicting issue never stops the rest. Nothing here dispatches or spends:
+ * a requeued issue is only relabelled `oc-queued`, and the next plan, provider
+ * slots, `claimLease` and `decideBudget` decide whether it runs.
+ */
+function backoffWarning(message: string) {
+  // An annotation on the run and a line in its summary, not only stdout: a
+  // skipped pass means every backed-off issue stayed parked, and says why.
+  process.stdout.write(`::warning title=runtime backoff::${message.replace(/\r?\n/g, ' ')}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `\n- Runtime backoff: ${message}\n`);
+}
+/** Post a comment; one retry, then say it was not posted rather than lose it. */
+function comment(issue: number, body: string): { commented: true } | { commented: false; commentError: string } {
+  let last = '';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { api(`issues/${issue}/comments`, 'POST', { body }); return { commented: true }; }
+    catch (error) { last = error instanceof Error ? error.message : 'comment failed'; }
+  }
+  backoffWarning(`#${issue} relabelled but its follow-up comment was not posted (${last}); the record below is the only copy`);
+  return { commented: false, commentError: last };
+}
+/**
+ * Apply `runtimeBackoffDecisions`: requeue expired backoffs into ordinary
+ * admission, park exhausted ones as `dead_letter` with a follow-up comment, and
+ * record conflicts. Each issue is applied on its own, so one failed write or
+ * conflicting issue never stops the rest. Nothing here dispatches or spends:
+ * a requeued issue is only relabelled `oc-queued`, and the next plan, provider
+ * slots, `claimLease` and `decideBudget` decide whether it runs.
+ *
+ * Exported for tests. A throw outside the per-issue handling (a malformed
+ * snapshot, a bug) is reported and fails closed: nothing further is relabelled,
+ * every remaining issue stays parked, and reconciliation of leases -- which
+ * already ran -- is not undone or failed by it.
+ */
+export function reconcileRuntimeBackoff(current: Snapshot, ledger: Ledger) {
+  const records: object[] = [];
+  try {
+    for (const decision of runtimeBackoffDecisions(current, ledger.leases, now())) {
+      try {
+        if (decision.action === 'requeue' || decision.action === 'dead_letter') {
+          // Re-read: the issue may have moved since the snapshot. A person or
+          // another pass that relabelled it owns it now.
+          const labels = api<Issue>(`issues/${decision.issue}`).labels.map(l => l.name);
+          if (!labels.includes('oc-runtime-backoff') || labels.includes('oc-queued') || labels.includes('oc-prepared')) {
+            records.push({ ...decision, applied: false, reason: 'labels changed since the snapshot' });
+            continue;
+          }
+          const next = decision.action === 'requeue' ? 'oc-queued' : 'oc-blocked';
+          api(`issues/${decision.issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => l !== 'oc-runtime-backoff').concat(next))] });
+          const posted = comment(decision.issue, decision.action === 'requeue'
+            ? `[OC-AUTO] Runtime backoff attempt ${decision.attempts} elapsed at ${decision.backoffUntil} (automatic requeue stops at ${MAX_ABANDONED_ATTEMPTS}); returned to oc-queued. ` +
+              'It is admitted only through the ordinary graph, provider-slot and budget gates.\n\nOC-RUNTIME-BACKOFF-REQUEUE: ' + `#${decision.issue}`
+            : `[OC-AUTO] Parked as dead_letter: ${decision.followUp}\n\nOC-DEAD-LETTER: #${decision.issue}\nOC-DEAD-LETTER-REASON: dead_letter`);
+          records.push({ ...decision, applied: true, ...posted });
+        } else {
+          records.push(decision);
+        }
+      } catch (error) {
+        records.push({ ...decision, applied: false, reason: error instanceof Error ? error.message : 'write failed' });
+      }
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'unknown failure';
+    records.push({ action: 'failed_closed', reason });
+    backoffWarning(`pass failed closed after ${records.length - 1} record(s); remaining issues stay parked: ${reason}`);
+  }
+  for (const record of records) process.stdout.write(`runtime-backoff ${JSON.stringify(record)}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY && records.length > 0) {
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### Runtime backoff\n\n${records.map(r => `- \`${JSON.stringify(r)}\``).join('\n')}\n`);
+  }
+  return records;
+}
 async function main() {
   const command = process.argv[2];
   const store = new GitHubLeaseStore();
   if (command === 'plan') {
-    const current = snapshot();
-    let leases: Ledger['leases'] = [];
-    try { const { ledger } = await store.read(); validateLedger(ledger); leases = ledger.leases; }
-    catch (error) { if (!status(error, 404)) throw error; }
-    const plan = makePlan(current, leases);
+    // Provider slots are decided once per attempt, from the same policy
+    // environment and ledger the lanes' preflights read, and are hash-bound
+    // into the wave.
+    const buildPlan = async () => {
+      const liveSnapshot = snapshot();
+      let durable: Ledger | null = null;
+      try { const { ledger } = await store.read(); validateLedger(ledger); durable = ledger; }
+      catch (error) { if (!status(error, 404)) throw error; }
+      const at = now();
+      return makePlan(liveSnapshot, durable?.leases ?? [], at, undefined, undefined,
+        providerCapacityFromEnvironment(process.env, durable, at));
+    };
+    // #900: a wave that admits nothing while safe executable queued work and
+    // free capacity exist is never healthy. One bounded reconsideration --
+    // re-reading current GitHub/ledger state and recomputing the same
+    // canonical admission -- is attempted before the cycle may fail closed.
+    // This re-read is the repair for the class of starvation this slice
+    // targets (state that changed between the `reconcile` job's writes and
+    // this read becoming visible). Deeper repair -- reusing `reconcileExpired`
+    // / `reconcileStaleRunningLabels` / provider-free requeue inside this same
+    // pass -- is `#899` scope and intentionally not added here: it needs
+    // mutation authority this read-only job does not hold, and inventing that
+    // here would be the second scheduler this slice is told not to build.
+    const outcome = await planWithStarvationRepair(buildPlan, async () => {});
+    const plan = outcome.plan;
     const dir = process.env.OC_PLAN_DIR || '.oc-wave';
     mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, 'plan.json'), JSON.stringify(plan, null, 2) + '\n');
+    writeFileSync(join(dir, 'plan.json'), JSON.stringify({ ...plan,
+      zeroAdmission: outcome.status === 'admitted' ? null
+        : { status: outcome.status, reason: outcome.reason, strandedIssues: outcome.status === 'starved' ? outcome.strandedIssues : [] } },
+      null, 2) + '\n');
     writeFileSync(join(dir, `wave-${plan.wave.hash}.json`), plan.wave.canonical + '\n');
     output('issues', JSON.stringify(plan.issues));
     output('wave_hash', plan.wave.hash);
-    const summary = `Inventory: ${JSON.stringify(plan.inventory)}; graph plan: ${JSON.stringify(plan.issues)}; capacity=${plan.capacity}; wave=${plan.wave.hash}; provider_authorized=false; no execution leases acquired.\n`;
+    output('zero_admission_status', outcome.status === 'admitted' ? '' : outcome.status);
+    const summary = planSummary(plan) +
+      (outcome.status === 'idle' ? `\n**WAITING**: ${outcome.reason}\n` : '') +
+      (outcome.status === 'starved' ? `\n**STARVATION (fail-closed)**: ${outcome.reason} One bounded reconsideration re-read current GitHub/ledger state and still admitted nothing.\n` : '');
     process.stdout.write(summary);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+    if (outcome.status === 'starved') {
+      console.error(`Starvation: ${outcome.reason}`);
+      process.exitCode = 1;
+    }
     return;
   }
   if (command === 'reconcile') {
     try { await store.read(); } catch (error) { if (status(error, 404)) return; throw error; }
     {
-      await reconcileExpired(store, now(), async run => api<{ status: string }>(`actions/runs/${run}`).status === 'completed', async lease => {
-        const record = api<Issue>(`issues/${lease.issue}`);
-        api(`issues/${lease.issue}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name)
-          .filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat('oc-blocked'))] });
-      });
+      const runCompleted = async (run: string) => api<{ status: string }>(`actions/runs/${run}`).status === 'completed';
+      const relabel = async (issue: number, state: Ledger['leases'][number]['state']) => {
+        const record = api<Issue>(`issues/${issue}`);
+        // Labels follow the final persisted outcome, never the expired snapshot.
+        // Preserve independently applied owner/publication holds during recovery.
+        const labels = record.labels.map(l => l.name);
+        const held = labels.includes('oc-owner-gate') || /^OC-AUTO-HOLD:\s*true\s*$/m.test(record.body || '');
+        const transient = ['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-blocked', 'oc-runtime-backoff', 'oc-done', 'oc-repair'];
+        api(`issues/${issue}`, 'PATCH', { labels: [...new Set(labels
+          .filter(l => !transient.includes(l)).concat(held ? 'oc-owner-gate' : terminalIssueLabel(state)))] });
+      };
+      await reconcileExpired(store, now(), runCompleted, async () => {}, async lease => relabel(lease.issue, lease.state));
+      // A terminal lease whose relabel never landed leaves `oc-running` behind,
+      // and `runningCount` counts it as an occupied lane for ever. Clear it from
+      // the ledger's terminal state plus proven run completion; keep it on any
+      // unknown.
+      const running = pages<Issue & { pull_request?: unknown }>('issues?state=open&labels=oc-running').filter(i => !i.pull_request)
+        .map(({ number, state, title, body, labels }) => ({ number, state, title, body, labels: labels.map(({ name }) => ({ name })) }));
+      const outcomes = await reconcileStaleRunningLabels(store, running, runCompleted, async (issue, lease) => relabel(issue, lease.state));
+      for (const outcome of outcomes) process.stdout.write(`stale oc-running #${outcome.issue}: ${outcome.outcome} (${outcome.reason})\n`);
     }
+    const { ledger } = await store.read();
+    // Avoid a live GitHub snapshot unless the ledger contains a terminal
+    // deterministic failure that could actually be eligible for repair, or an
+    // issue is parked in runtime backoff. This keeps expiry reconciliation
+    // provider-free and avoids turning a missing issue/PR read into a false
+    // failure for ordinary lease expiry.
+    const repairs = ledger.leases.some(lease => laneOf(lease) === 'provider-free' && lease.state === 'provider-free-failed');
+    // The backoff pass is fail-soft: if it cannot read GitHub, every backed-off
+    // issue simply stays parked (the old behaviour), and it says so, instead of
+    // failing reconciliation and with it the supervisor that `needs` it.
+    let backoffs = false;
+    let current: Snapshot | null = null;
+    try {
+      backoffs = ledger.leases.some(lease => lease.state === 'runtime-backoff') ||
+        pages<{ pull_request?: unknown }>('issues?state=open&labels=oc-runtime-backoff').some(i => !i.pull_request);
+      if (!repairs && backoffs) current = snapshot();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'GitHub read failed';
+      process.stdout.write(`runtime-backoff ${JSON.stringify({ action: 'skipped', reason })}\n`);
+      backoffWarning(`pass skipped; every backed-off issue stays parked: ${reason}`);
+      backoffs = false;
+    }
+    if (!repairs && !backoffs) return;
+    current ??= snapshot();
+    if (repairs) {
+      for (const issueNumber of providerFreeRepairsReadyForRequeue(current, ledger.leases)) {
+        const record = current.issues.find(issue => issue.number === issueNumber);
+        if (!record) continue;
+        // A new implementation revision is the only automatic repair signal.
+        // Keep the repair marker as provenance and add the queue marker so the
+        // normal graph/dependency admission path owns the retry.
+        api(`issues/${issueNumber}`, 'PATCH', { labels: [...new Set(record.labels.map(label => label.name).concat('oc-queued'))] });
+      }
+    }
+    if (backoffs) reconcileRuntimeBackoff(current, ledger);
     return;
   }
   const plan = readPlan();
@@ -112,6 +463,202 @@ async function main() {
     assertReceipts(plan, receipts);
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY,
       `All ${plan.issues.length} admitted issues have matching governed lane receipts. Calls/cost: ${receipts.every(r => r.providerCalls === 0 && r.providerCostUsd === 0) ? "0 / $0" : "see reservation and provider receipts"}.\n`);
+    return;
+  }
+  if (command === 'admit-deterministic' || command === 'settle-deterministic') {
+    const number = Number(process.env.ISSUE_NUMBER);
+    if (!Number.isSafeInteger(number) || number <= 0) throw new Error('Invalid issue number');
+    const id = process.env.GITHUB_RUN_ID || '';
+    const attempt = process.env.GITHUB_RUN_ATTEMPT || '';
+    if (command === 'admit-deterministic') {
+      // No provider authorization is consulted, because nothing here can spend.
+      const result = await claimDeterministicLease(new DeterministicLeaseStore(), plan, snapshot(), { issueNumber: number, runId: id, runAttempt: attempt, now: now() });
+      output('allowed', String(result.allowed));
+      output('lease_id', result.lease?.id || '');
+      // A refusal is still a receipt: the audit must see that this issue was
+      // deliberately not executed, and why, rather than nothing at all.
+      if (!result.allowed) receipt(number, plan.wave.hash, 'not_executed', { reason: result.reason });
+      // The ceiling is only a bound if the issue stops arriving. A lane that has
+      // failed to produce evidence NOT_EXECUTED_CEILING times needs a person, so
+      // it leaves the queue and says so on the issue rather than being admitted,
+      // refused and receipted on every pulse for ever.
+      if (!result.allowed && result.reason === 'not_executed_ceiling') {
+        const record = api<Issue>(`issues/${number}`);
+        api(`issues/${number}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name)
+          .filter(l => !['oc-running', 'oc-queued', 'oc-prepared'].includes(l)).concat('oc-blocked'))] });
+      }
+      return;
+    }
+    const leaseId = process.env.OC_LEASE_ID || '';
+    const admitted = plan.leaves.find(leaf => leaf.issueNumber === number);
+    // Verify ownership before any issue mutation. A stale settlement must not
+    // erase a newer lane's running/repair state, even if its evidence looks valid.
+    try {
+      const { ledger } = await new DeterministicLeaseStore().read();
+      validateLedger(ledger);
+      const owned = ledger.leases.find(lease => lease.id === leaseId);
+      if (!leaseId || !owned || !admitted || owned.issue !== number ||
+          owned.nodeId !== admitted.nodeId || owned.fingerprint !== admitted.fingerprint ||
+          owned.waveHash !== plan.wave.hash || owned.runId !== id || owned.runAttempt !== attempt ||
+          laneOf(owned) !== 'provider-free' || !isActive(owned) || owned.expiresAt <= now()) {
+        throw new Error('Deterministic settlement does not own a current fenced lease');
+      }
+    } catch (error) {
+      receipt(number, plan.wave.hash, 'dispatch_refused', { lane: 'provider-free',
+        reason: error instanceof Error ? error.message : 'Lease verification failed' });
+      throw error;
+    }
+    const evidencePath = join(process.env.OC_EVIDENCE_DIR || '.oc-evidence', `${number}.json`);
+    // Absence of evidence is never success. A worker that never ran, or crashed
+    // before writing, settles as `not_executed`, not as a pass.
+    type Acceptance = {
+      kind?: string;
+      node_id?: string;
+      issue?: number;
+      passed?: boolean;
+      release_sha?: string;
+      expected_release_sha?: string | null;
+    };
+    type Evidence = {
+      issue?: number;
+      wave_hash?: string;
+      run?: string;
+      outcome?: string;
+      results?: { command?: string; exit_code?: number }[];
+      provider_calls?: number;
+      provider_cost_usd?: number;
+      acceptance?: Acceptance;
+    };
+    // Malformed evidence is evidence that nothing trustworthy was recorded, not
+    // a reason to crash without a receipt and hold the lane for ninety minutes.
+    let evidence: Evidence | null = null;
+    let rejected = '';
+    if (existsSync(evidencePath)) {
+      try { evidence = JSON.parse(readFileSync(evidencePath, 'utf8')) as Evidence; }
+      catch { rejected = 'evidence was not valid JSON'; }
+    }
+    // The lease is fenced on runId/runAttempt, but the outcome was being decided
+    // before and independently of that fence: settlement accepted an artifact
+    // without checking whose it was, and recorded one issue's pass from another
+    // issue's evidence in another wave.
+    if (evidence && !rejected) {
+      if (evidence.issue !== number) rejected = `evidence belongs to issue #${evidence.issue}`;
+      else if (evidence.wave_hash !== plan.wave.hash) rejected = 'evidence belongs to another wave';
+      else if (evidence.run !== `${id}:${attempt}`) rejected = `evidence belongs to run ${evidence.run}`;
+      else if (evidence.provider_calls === undefined) rejected = 'evidence records no provider_calls';
+      else if (evidence.provider_calls !== 0) throw new Error('Deterministic lane reported a provider call');
+      else if (!Array.isArray(evidence.results)) rejected = 'evidence records no results array';
+      else if (evidence.results.length === 0) rejected = 'evidence records no executed commands';
+      else if (evidence.results.some(r => typeof r?.command !== 'string' || !r.command.trim())) rejected = 'a recorded result has no command';
+      else if (evidence.results.some(r => !Number.isSafeInteger(r?.exit_code))) rejected = 'a recorded command has no exit code';
+    }
+    if (rejected) evidence = null;
+    const executed = !rejected && (evidence?.outcome === 'done' || evidence?.outcome === 'failed');
+    // The receipt the audit consumes was taking `outcome` on the worker's word
+    // while carrying the exit codes that contradicted it. Correctly fenced
+    // evidence claiming `done` over `exit_code: 1` moved the issue to
+    // `oc-validating` and reported the deterministic run as a pass, embedding
+    // the proof that it failed. The exit codes are the harder evidence, so they
+    // decide -- and they can only ever move the verdict towards failure, never
+    // turn a failure into a pass.
+    // Strictly one-directional: a recorded non-zero exit turns a claimed `done`
+    // into a failure, and nothing can turn a claimed `failed` into a pass. An
+    // empty results list was rejected above: no execution cannot be a pass.
+    const failedCommands = (evidence?.results ?? []).filter(r => r.exit_code !== 0);
+    const contradicted = executed && evidence?.outcome === 'done' && failedCommands.length > 0
+      ? `evidence claimed 'done' over ${failedCommands.map(r => `${r.command} (exit ${r.exit_code})`).join(', ')}` : '';
+    const derived = contradicted ? 'failed' : evidence?.outcome;
+    const outcome = !executed ? 'not_executed' : derived === 'done' ? 'provider_free_done' : 'provider_free_failed';
+    // Product completion is a stricter, opt-in transition than execution. Only
+    // the fixed Featured Genus deployed-browser validator may supply it, and
+    // its proof must be fenced to this issue, graph leaf, wave/run and release.
+    // A passing test/lint/build/route command therefore remains validating,
+    // while the real feature acceptance can settle to `done` without consulting
+    // a provider or bypassing the lease fence.
+    const expectedReleaseSha = String(process.env.EXPECTED_RELEASE_SHA || '').trim();
+    const acceptance = evidence?.acceptance;
+    const hasFeaturedGenusCommand = Boolean(evidence?.results?.some(
+      result => result.command === 'npm run verify:featured-genus' && result.exit_code === 0,
+    ));
+    const accepted = outcome === 'provider_free_done' && hasFeaturedGenusCommand &&
+      acceptance?.kind === 'featured-genus-deployed' &&
+      acceptance.node_id === admitted.nodeId &&
+      acceptance.issue === number && acceptance.passed === true &&
+      /^[a-f0-9]{40}$/.test(acceptance.release_sha || '') &&
+      (!expectedReleaseSha || acceptance.expected_release_sha === expectedReleaseSha) &&
+      (!expectedReleaseSha || acceptance.release_sha === expectedReleaseSha);
+
+    // Some fixed browser validators prove the bounded local product contract but
+    // deliberately cannot prove production deployment. Their strongest honest
+    // autonomous transition is therefore OWNER GATE, not done and not an
+    // indefinite validating loop. This mapping is repository-owned and exact:
+    // issue prose cannot select a command or invent a graph node.
+    const ownerGateBrowserContracts: Record<string, string> = {
+      'npm run verify:research-matrix-browser': 'gate-journey-research-matrix',
+      'npm run verify:conservatory-browser': 'cap-conservatory-collection',
+    };
+    const ownerGateCommand = (evidence?.results ?? []).find(result =>
+      result.exit_code === 0 &&
+      typeof result.command === 'string' &&
+      ownerGateBrowserContracts[result.command] === admitted.nodeId,
+    )?.command;
+    const ownerGateAccepted = outcome === 'provider_free_done' && Boolean(ownerGateCommand);
+    const settledOutcome = accepted ? 'done' : outcome;
+    // Written FIRST, before the relabel and before the ledger transition. Both
+    // of those call out, and either can throw: a fencing-token mismatch, ledger
+    // contention, a malformed ledger, any `gh` failure. The workflow's
+    // `if: always()` on the upload promised the audit a receipt in exactly that
+    // case, and `if-no-files-found: ignore` meant it silently uploaded nothing
+    // instead -- the run died between the calls and left precisely the
+    // unexplained gap the comment said it prevented. The outcome is fully
+    // decided by this point, so nothing is lost by recording it here.
+    receipt(number, plan.wave.hash, settledOutcome, {
+      lane: 'provider-free',
+      commands: (evidence?.results ?? []).length,
+      evidence: evidence ?? (rejected || 'absent'),
+      ...(contradicted ? { contradicted } : {}),
+      ...(accepted ? { acceptance } : {}),
+      ...(ownerGateAccepted ? {
+        acceptance: {
+          kind: 'provider-free-browser-contract',
+          node_id: admitted.nodeId,
+          issue: number,
+          passed: true,
+          command: ownerGateCommand,
+          disposition: 'owner-gate',
+        },
+      } : {}),
+    });
+    // Reconciliation releases are deliberately idempotent. Worker settlement
+    // still requires an active fenced lease at the CAS, before changing labels.
+    try {
+      await transitionLease(new DeterministicLeaseStore(), leaseId, id, attempt,
+        outcome === 'provider_free_done' ? 'provider-free-done'
+          : outcome === 'provider_free_failed' ? 'provider-free-failed' : 'not-executed', { requireActive: true });
+    } catch (error) {
+      receipt(number, plan.wave.hash, 'dispatch_refused', { lane: 'provider-free', evidence,
+        reason: error instanceof Error ? error.message : 'Lease transition failed' });
+      throw error;
+    }
+    const record = api<Issue>(`issues/${number}`);
+    const labels = record.labels.map(l => l.name);
+    // A successful deterministic run is evidence, not acceptance: it moves to
+    // validation, never straight to done. A failure parks for repair WITHOUT
+    // `oc-queued`: unchanged failing work must not be retried, and leaving it
+    // queued gave exactly one accidental retry -- the label change altered the
+    // fingerprint -- before stranding it while still claiming it was queued.
+    // A lane that never executed goes back to the queue and, because its lease
+    // records `not-executed`, is genuinely admissible again.
+    //
+    // Reconciliation may restore a failed deterministic issue only when its
+    // implementation changes and all owner/admission holds still permit it.
+    // Same-revision failures remain parked and successful work stays deduped.
+    const next = settledOutcome === 'done' ? ['oc-done']
+      : ownerGateAccepted ? ['oc-owner-gate']
+      : outcome === 'provider_free_done' ? ['oc-validating']
+      : outcome === 'provider_free_failed' ? ['oc-repair'] : ['oc-queued'];
+    api(`issues/${number}`, 'PATCH', { labels: [...new Set(labels
+      .filter(l => !['oc-running', 'oc-queued', 'oc-prepared', 'oc-validating', 'oc-repair'].includes(l)).concat(next))] });
     return;
   }
   const issue = Number(process.env.ISSUE_NUMBER);
@@ -149,7 +696,7 @@ async function main() {
       if (!budget.allowed) throw new Error(`Budget revoked: ${budget.reason}`);
       if (command === 'start') {
         if (process.env.GITHUB_JOB !== 'execute') throw new Error('Only the executable lane can start a lease');
-        await transitionLease(store, lease.id, runId, runAttempt, 'running');
+        await transitionLease(store, lease.id, runId, runAttempt, 'running', { requireActive: true });
         api(`issues/${issue}`, 'PATCH', { labels: [...new Set(record.labels.map(l => l.name).filter(l => l !== 'oc-queued' && l !== 'oc-prepared').concat('oc-running'))] });
         output('execute', 'true');
       }
@@ -181,10 +728,11 @@ async function main() {
     // Labels first: a crash retains the lease conservatively. CAS release cannot
     // erase a successor's lease, and all writes retain unrelated owner holds.
     api(`issues/${issue}`, 'PATCH', { labels: [...new Set(labels.filter(l => !['oc-running','oc-queued','oc-prepared'].includes(l)).concat(`oc-${outcome}`))] });
-    await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome);
+    await transitionLease(store, process.env.OC_LEASE_ID || '', runId, runAttempt, outcome, { requireActive: true, now: now() });
     receipt(issue, plan.wave.hash, outcome, { providerCalls: null, providerCostUsd: null, accounting: 'reservation retained; no unverified billing claims' });
     // Immediate per-lane refill. Does not wait for sibling lanes; planner reads durable capacity.
-    api('actions/workflows/orchid-continuous-completion.yml/dispatches', 'POST', { ref: process.env.GITHUB_REF_NAME });
+    const refillRef = process.env.GITHUB_HEAD_REF || process.env.GITHUB_REF_NAME || 'main';
+    api('actions/workflows/orchid-continuous-completion.yml/dispatches', 'POST', { ref: refillRef });
     return;
   }
   throw new Error('Unknown dispatch command');

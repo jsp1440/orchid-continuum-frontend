@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { load } from 'js-yaml';
 import { evaluateDeterministicPortfolioRefillWorkflow } from './lib/provider-governor/deterministicPortfolioRefillWorkflow';
 
 const scheduler = readFileSync('.github/workflows/orchid-continuous-completion.yml', 'utf8');
@@ -16,6 +17,19 @@ const inventory = {
 // This entrypoint computes refill decisions, not leases or queue writes.
 // Live durable Queue Bridge acceptance remains a separate requirement.
 describe('NO-API portfolio planning', () => {
+  it('requires canonical context validation at the caller revision before dispatch', () => {
+    const dispatch = load(readFileSync('.github/workflows/orchid-deterministic-dispatch.yml', 'utf8')) as {
+      jobs: Record<string, { needs?: string; permissions?: Record<string, string>;
+        steps?: Array<{ uses?: string; run?: string; with?: Record<string, unknown> }> }>;
+    };
+    expect(dispatch.jobs.lane.needs).toBe('context-contract');
+    const context = dispatch.jobs['context-contract'];
+    expect(context.permissions).toEqual({ contents: 'read' });
+    expect(context.steps?.find(step => step.uses?.startsWith('actions/checkout@'))?.with).toEqual({
+      ref: '${{ github.event.pull_request.head.sha || github.sha }}', 'persist-credentials': false,
+    });
+    expect(context.steps?.some(step => step.run === 'node scripts/verify-autonomy-context.mjs')).toBe(true);
+  });
   it('keeps Portfolio Steward outside canonical implementation capacity', () => {
     expect(scheduler).toContain('Portfolio');
     expect(scheduler).toContain('MAX_ACTIVE_LANES: 8');

@@ -9,7 +9,7 @@ Production deployments of the integrated Orchid Continuum application must build
 - build command: `npm ci && npm run build`
 - output directory: `dist`
 
-A separately generated marketing site does not contain the React application routes and must not be treated as the integrated application deployment.
+A separately generated marketing site does not contain the React application routes and must not be treated as the integrated application deployment. Production is hosted on Render (Static Site); the backend and worker are Render services with Neon Postgres.
 
 ## Required environment
 
@@ -32,12 +32,13 @@ This exposes curated chapter and laboratory content while keeping learner sessio
 
 Direct navigation to routes such as `/university/lab`, `/conservatory`, and `/mission-control` must return `index.html` and allow React Router to resolve the route.
 
-The repository contains both:
+The repository contains:
 
-- `public/_redirects` for Netlify-compatible/static hosts;
-- `vercel.json` for Vercel SPA rewrites.
+- `render.yaml`, the canonical Render Static Site service declaration and
+  rewrite configuration;
+- `public/_redirects`, a checked-in mirror of the same static route contract.
 
-Other hosts must configure the equivalent fallback:
+The service must configure the equivalent fallback:
 
 ```text
 /* -> /index.html (HTTP 200 rewrite)

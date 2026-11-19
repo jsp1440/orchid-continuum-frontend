@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { submitMissionListSignup } from '@/lib/missionListSignup';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
@@ -74,6 +75,9 @@ const ComingSoon: React.FC = () => {
 
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // True when the signup service did not accept the address and it was handed
+  // to email instead. The confirmation must say which of the two happened.
+  const [handedOff, setHandedOff] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -85,26 +89,30 @@ const ComingSoon: React.FC = () => {
     }
     setLoading(true);
     setError(null);
+    // Only a delivered outcome may be confirmed as "on the list". Anything else
+    // (rejected, unreachable, or a thrown error) is handed to the team inbox,
+    // and the confirmation says so instead of claiming a subscription.
+    let delivered = false;
     try {
-      await fetch('/api/crm/69fa6c8ae577acf1894f7208/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          source: `orchid-continuum-coming-soon:${copy.name}`,
-        }),
+      const outcome = await submitMissionListSignup({
+        email,
+        source: `orchid-continuum-coming-soon:${copy.name}`,
       });
+      delivered = outcome.kind === 'delivered';
     } catch {
-      /* non-blocking — still confirm + open mailto below */
+      delivered = false;
     }
 
-    // Notify the team via the canonical Orchid Continuum inbox.
-    const subject = encodeURIComponent(
-      `Orchid Continuum — Notify Me: ${copy.name}`,
-    );
-    const body = encodeURIComponent(`Please notify me when ${copy.name} opens.\n\nEmail: ${email}`);
-    window.location.href = `mailto:info@orchidcontinuum.org?subject=${subject}&body=${body}`;
+    if (!delivered) {
+      // Notify the team via the canonical Orchid Continuum inbox.
+      const subject = encodeURIComponent(
+        `Orchid Continuum — Notify Me: ${copy.name}`,
+      );
+      const body = encodeURIComponent(`Please notify me when ${copy.name} opens.\n\nEmail: ${email}`);
+      window.location.href = `mailto:info@orchidcontinuum.org?subject=${subject}&body=${body}`;
+    }
 
+    setHandedOff(!delivered);
     setSubmitted(true);
     setLoading(false);
   };
@@ -145,6 +153,8 @@ const ComingSoon: React.FC = () => {
             >
               Orchid Continuum
             </div>
+
+            <p className="mt-5 inline-flex rounded-full border border-[#C9A84C]/40 px-3 py-1 text-xs text-[#C9A84C]">In development</p>
 
             <h1
               className="cs-serif mt-5"
@@ -247,7 +257,9 @@ const ComingSoon: React.FC = () => {
                   }}
                 >
                   <Check className="h-5 w-5" style={{ color: GOLD }} />
-                  You're on the list.
+                  {handedOff
+                    ? 'Your email app should be opening \u2014 send that message and we\u2019ll let you know.'
+                    : "You're on the list."}
                 </div>
               )}
             </form>

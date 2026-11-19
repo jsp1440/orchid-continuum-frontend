@@ -5,11 +5,13 @@ import { ConnectedKnowledge } from './ConnectedKnowledge';
 import { EntryHero, type Depth } from './EntryHero';
 import { ResupinateComparison, ResupinationSequence } from './Schematics';
 import { RecoveredScientificSections } from './RecoveredScientificSections';
+import { VisionEvidenceSummary } from './VisionEvidenceSummary';
 import { Disclosure, MaturityChecklist, PendingNote, SectionHeading } from './ui';
 import { getLastSource } from '@/lib/lexiconService';
 import { CalyxAdaptiveWorkspace } from '@/features/calyx-workspace/CalyxAdaptiveWorkspace';
 import { matrixHrefForLexiconConcept } from '@/features/calyx-workspace/identificationContext';
 import { recordCalyxSurfaceContext } from '@/features/calyx-workspace/sessionContext';
+import { EvidenceFeedbackControl } from '@/components/evidence-feedback/EvidenceFeedbackControl';
 
 const TextOrPending: React.FC<{ value?: string; label: string }> = ({ value, label }) =>
   value ? <p className="text-[15px] leading-relaxed text-stone-700">{value}</p> : <PendingNote label={`${label} awaiting enrichment`} />;
@@ -163,6 +165,25 @@ export const EntryView: React.FC<{ entry: LexiconEntry; onOpen: (slug: string) =
           </div>
 
           <aside className="space-y-5">
+            <EvidenceFeedbackControl
+              objectId={`lexicon:${entry.concept_id ?? entry.id ?? entry.slug}`}
+              objectType="lexicon"
+              objectLabel={entry.preferred_term}
+              pageContext={typeof window === 'undefined' ? `/lexicon/${entry.slug}` : window.location.href}
+              objectPayload={{
+                id: entry.id,
+                concept_id: entry.concept_id ?? null,
+                slug: entry.slug,
+                preferred_term: entry.preferred_term,
+                quick_definition: entry.quick_definition ?? null,
+                expanded_definition: entry.expanded_definition ?? null,
+                review_state: entry.review_state ?? null,
+                provenance: entry.provenance ?? null,
+                source_system: entry.source_system ?? null,
+                source_record_id: entry.source_record_id ?? null,
+                date_revised: entry.date_revised ?? null,
+              }}
+            />
             <section className="rounded-sm border border-stone-200 bg-white p-5">
               <h2 className="text-[11px] font-semibold uppercase tracking-[.16em] text-[#4A7C59]">Terminology</h2>
               {entry.broader_concept ? <p className="mt-3 text-sm text-stone-700"><strong>Broader:</strong> {entry.broader_concept.label}</p> : null}
@@ -192,7 +213,7 @@ export const EntryView: React.FC<{ entry: LexiconEntry; onOpen: (slug: string) =
 
             <section className="rounded-sm border border-stone-200 bg-white p-5">
               <h2 className="text-[11px] font-semibold uppercase tracking-[.16em] text-[#4A7C59]">Vision Lab</h2>
-              <p className="mt-3 text-sm leading-relaxed text-stone-600">{entry.vision_lab_notes ?? 'Vision-Lexicon analysis, image regions, reference sets and measurement rules can be attached through the canonical Vision service.'}</p>
+              <VisionEvidenceSummary conceptId={entry.concept_id} fallback={<p className="mt-3 text-sm leading-relaxed text-stone-600">{entry.vision_lab_notes ?? 'Vision-Lexicon analysis, image regions, reference sets and measurement rules can be attached through the canonical Vision service.'}</p>} />
             </section>
           </aside>
         </div>

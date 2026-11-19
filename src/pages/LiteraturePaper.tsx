@@ -2,11 +2,13 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, EyeOff, Lock, ShieldCheck } from 'lucide-react';
 
+import LiteratureAccessRequired from '@/components/literature/LiteratureAccessRequired';
 import PageShell from '@/components/orchid/PageShell';
 import {
   LiteraturePaperError,
   classifyClaimEvidence,
   fetchLiteraturePaper,
+  claimStanding,
   isMachineAuthored,
   isReviewed,
   type LiteraturePaperView,
@@ -50,6 +52,11 @@ type State =
   | { status: 'loading' }
   | { status: 'loaded'; view: LiteraturePaperView }
   | { status: 'failed'; error: LiteraturePaperError };
+
+/** Refused rather than broken: rendered as the access state, never as an outage. */
+function isRefusal(kind: LiteraturePaperError['kind']): boolean {
+  return kind === 'unauthorized';
+}
 
 function Withheld({ reason }: { reason: Parameters<typeof describeWithheld>[0] }) {
   return (
@@ -107,6 +114,7 @@ function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperVi
   const machine = isMachineAuthored(claim);
   const reviewed = isReviewed(claim);
   const statement = releaseText(claim.statement, view.binding);
+  const standing = claimStanding(claim, view.paper);
 
   return (
     <li className="rounded-xl border border-white/10 bg-white/[0.03] p-4" data-testid="claim-card">
@@ -130,7 +138,21 @@ function ClaimCard({ claim, view }: { claim: PaperClaim; view: LiteraturePaperVi
         >
           {reviewed ? `Reviewed · ${claim.provenance?.review_status}` : 'Not reviewed'}
         </span>
+        <span
+          className={`rounded-full px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em] ${
+            standing.polarity === 'uncertain' ? 'bg-amber-300/15 text-amber-100' : 'bg-white/10 text-white/60'
+          }`}
+          data-testid="claim-polarity"
+        >
+          {standing.polarity ? `Polarity · ${standing.polarity}` : 'Polarity not recorded'}
+        </span>
       </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-white/50" data-testid="claim-publication">
+        Evidence record review: {standing.recordReviewStatus ?? 'no normalized record'} · Publication:{' '}
+        {standing.publicationStatus
+          ? `${standing.publicationStatus}${standing.publicationReasons.length ? ` (${standing.publicationReasons.join(', ').replaceAll('_', ' ')})` : ''}`
+          : 'no decision recorded — not published'}
+      </p>
 
       {statement.released === true ? (
         <p className="mt-3 text-sm leading-relaxed text-white/80">
@@ -257,16 +279,25 @@ export default function LiteraturePaper() {
             <p className="text-sm text-white/60">Loading this extraction…</p>
           ) : null}
 
-          {state.status === 'failed' ? (
+          {state.status === 'failed' && isRefusal(state.error.kind) ? (
+            // Refused, not missing and not an outage: full paper text is an
+            // owner-only view for members (it can be licence-restricted), so
+            // this is said as such, never as "sign in again".
+            <LiteratureAccessRequired
+              status={state.error.status}
+              code={state.error.code}
+              subject="paper"
+            />
+          ) : null}
+
+          {state.status === 'failed' && !isRefusal(state.error.kind) ? (
             <div
               className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.06] p-5"
               data-testid="paper-error"
             >
               <div className="flex items-center gap-2 text-sm text-amber-100">
                 <AlertTriangle className="h-4 w-4" />
-                {state.error.kind === 'unauthorized'
-                  ? 'Not authorised to read this extraction'
-                  : state.error.kind === 'not_found'
+                {state.error.kind === 'not_found'
                     ? 'No extraction is stored under this identifier'
                     : state.error.kind === 'unavailable'
                       ? 'The literature service is unavailable'

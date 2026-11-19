@@ -6,10 +6,11 @@ import {
   TEST_SPECIES,
 } from "@/lib/relationshipExplorer";
 import {
-  fetchSpeciesEcologicalNeighborhood,
+  fetchSpeciesEcologicalNeighborhoodOutcome,
   type EcologicalNeighborhoodCard as NeighborhoodCard,
 } from "@/lib/ecologicalNeighborhood";
 import EcologicalNeighborhood from "@/components/orchid/EcologicalNeighborhood";
+import InteractionDiscoveryPanel from "@/components/interactions/InteractionDiscoveryPanel";
 
 function valueText(value: unknown, fallback = "Not available") {
   if (value === null || value === undefined || value === "") return fallback;
@@ -20,7 +21,12 @@ function valueText(value: unknown, fallback = "Not available") {
 function numberText(value: unknown) {
   if (typeof value === "number") return value.toLocaleString();
   if (typeof value === "string" && value.trim()) return value;
-  return "0";
+  // A missing count is unknown, never zero.
+  return "Not available";
+}
+
+function sourceText(source: RelationshipExplorerPayload["source"]) {
+  return source === "api" ? "Relationship Explorer API" : "Unavailable";
 }
 
 function Card({
@@ -67,14 +73,15 @@ function StatusPill({ label, active }: { label: string; active: boolean }) {
   );
 }
 
-function countNeighborhoodCards(cards: NeighborhoodCard[]) {
+function countNeighborhoodCards(cards: NeighborhoodCard[], status: 'loading' | 'ok' | 'unavailable') {
+  const countable = status === 'unavailable' ? [] : cards;
   return {
-    total: cards.length,
-    pollinators: cards.filter((card) => card.type === "pollinator").length,
-    fungi: cards.filter((card) => card.type === "fungus" || card.type === "fungal_dependency").length,
-    habitat: cards.filter((card) => card.type === "habitat" || card.type === "host_tree").length,
-    geography: cards.filter((card) => card.type === "geography").length,
-    conservation: cards.filter((card) => card.type === "conservation").length,
+    total: countable.length,
+    pollinators: countable.filter((card) => card.type === "pollinator").length,
+    fungi: countable.filter((card) => card.type === "fungus" || card.type === "fungal_dependency").length,
+    habitat: countable.filter((card) => card.type === "habitat" || card.type === "host_tree").length,
+    geography: countable.filter((card) => card.type === "geography").length,
+    conservation: countable.filter((card) => card.type === "conservation").length,
   };
 }
 
@@ -89,6 +96,7 @@ export default function RelationshipExplorer() {
   const [query, setQuery] = useState(initialSpecies);
   const [payload, setPayload] = useState<RelationshipExplorerPayload | null>(null);
   const [neighborhoodCards, setNeighborhoodCards] = useState<NeighborhoodCard[]>([]);
+  const [neighborhoodStatus, setNeighborhoodStatus] = useState<'loading' | 'ok' | 'unavailable'>('loading');
   const [loading, setLoading] = useState(false);
   const [neighborhoodLoading, setNeighborhoodLoading] = useState(false);
 
@@ -97,6 +105,7 @@ export default function RelationshipExplorer() {
     setQuery(initialSpecies);
     setLoading(true);
     setNeighborhoodLoading(true);
+    setNeighborhoodStatus('loading');
     setNeighborhoodCards([]);
 
     fetchRelationshipExplorerPayload(initialSpecies)
@@ -107,12 +116,18 @@ export default function RelationshipExplorer() {
         if (alive) setLoading(false);
       });
 
-    fetchSpeciesEcologicalNeighborhood(initialSpecies, 12)
-      .then((cards) => {
-        if (alive) setNeighborhoodCards(cards);
+    fetchSpeciesEcologicalNeighborhoodOutcome(initialSpecies, 12)
+      .then((outcome) => {
+        if (alive) {
+          setNeighborhoodCards(outcome.cards);
+          setNeighborhoodStatus(outcome.status);
+        }
       })
       .catch(() => {
-        if (alive) setNeighborhoodCards([]);
+        if (alive) {
+          setNeighborhoodCards([]);
+          setNeighborhoodStatus('unavailable');
+        }
       })
       .finally(() => {
         if (alive) setNeighborhoodLoading(false);
@@ -132,7 +147,7 @@ export default function RelationshipExplorer() {
   const profile = payload?.species_profile;
   const atlas = payload?.atlas_summary;
   const cards = payload?.cards;
-  const neighborhoodCounts = countNeighborhoodCards(neighborhoodCards);
+  const neighborhoodCounts = countNeighborhoodCards(neighborhoodCards, neighborhoodStatus);
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-white px-4 py-10 text-slate-900 sm:px-6 lg:px-10">
@@ -189,6 +204,18 @@ export default function RelationshipExplorer() {
 
         {payload ? (
           <>
+            {payload.source === "unavailable" ? (
+              <div
+                role="status"
+                data-testid="relationship-explorer-unavailable"
+                className="rounded-3xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900"
+              >
+                The Relationship Explorer service did not respond for {payload.scientific_name}. No
+                atlas, interaction, mycorrhizal or reasoning data is shown, and nothing below has been
+                substituted from a local fallback. Any photographs come separately from the Orchid
+                Continuum image library with their own credits.
+              </div>
+            ) : null}
             <section className="grid gap-6 lg:grid-cols-[1.3fr_0.7fr]">
               <Card title={payload.scientific_name} eyebrow="Species profile">
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -206,7 +233,7 @@ export default function RelationshipExplorer() {
                   </div>
                   <div>
                     <div className="text-sm font-semibold text-slate-500">Payload source</div>
-                    <div className="text-lg capitalize">{payload.source}</div>
+                    <div className="text-lg">{sourceText(payload.source)}</div>
                   </div>
                 </div>
                 {profile?.description ? (
@@ -222,7 +249,7 @@ export default function RelationshipExplorer() {
                   <StatusPill label="Interactions" active={!!cards?.interaction_summary} />
                   <StatusPill label="Reasoning" active={!!cards?.reasoning} />
                   <StatusPill label="Mycorrhiza" active={!!cards?.mycorrhiza_claims} />
-                  <StatusPill label="Neighborhood" active={neighborhoodCards.length > 0} />
+                  <StatusPill label="Neighborhood" active={neighborhoodStatus === 'ok' && neighborhoodCounts.total > 0} />
                 </div>
 
                 <div className="mt-5 grid grid-cols-2 gap-2 text-sm">
@@ -309,10 +336,13 @@ export default function RelationshipExplorer() {
               </Card>
             </section>
 
+            <InteractionDiscoveryPanel species={initialSpecies} />
+
             <div className="overflow-hidden rounded-[2rem] border border-emerald-100 shadow-sm">
               <EcologicalNeighborhood
                 scientificName={payload.scientific_name}
                 cards={neighborhoodCards}
+                status={neighborhoodStatus}
                 loading={neighborhoodLoading}
               />
             </div>

@@ -1,8 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import realBackend from "@/lib/__fixtures__/matrixIdentification.realBackend.json";
+
 import {
+  assertSessionEvaluation,
   attachVisionAnalysis,
   coerceObservationValue,
+  createIdentificationSession,
+  evaluateIdentificationSession,
   explanationText,
   getVisionCapabilityStatus,
   reviewVisionSuggestion,
@@ -110,5 +115,36 @@ describe("Vision review API contract", () => {
       revised_value: 300,
       comments: "reviewed measurement",
     });
+  });
+});
+
+describe("guided Matrix session fails closed on malformed responses", () => {
+  function respond(body: () => Promise<unknown>) {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, statusText: "OK", json: body }));
+  }
+
+  it("accepts the captured backend evaluation unchanged", () => {
+    expect(assertSessionEvaluation(realBackend.evaluate_observed)).toBe(realBackend.evaluate_observed);
+    expect(assertSessionEvaluation(realBackend.evaluate_empty)).toBe(realBackend.evaluate_empty);
+  });
+
+  it("rejects an evaluation without a report or with unrenderable candidates", () => {
+    const { report: _report, ...withoutReport } = realBackend.evaluate_observed;
+    expect(() => assertSessionEvaluation(withoutReport)).toThrow(/malformed evaluation/);
+    expect(() => assertSessionEvaluation({
+      ...realBackend.evaluate_observed,
+      report: { ...realBackend.evaluate_observed.report, candidates: [{ taxon_id: "t", scientific_name: "T" }] },
+    })).toThrow(/malformed evaluation/);
+    expect(() => assertSessionEvaluation(null)).toThrow(/malformed evaluation/);
+  });
+
+  it("treats a 2xx non-JSON evaluate body as an error, not an empty session", async () => {
+    respond(async () => { throw new SyntaxError("Unexpected token <"); });
+    await expect(evaluateIdentificationSession("s1")).rejects.toThrow("Matrix API 200: response was not JSON");
+  });
+
+  it("rejects a created session without an identifier", async () => {
+    respond(async () => ({ revision: 0, observations: [] }));
+    await expect(createIdentificationSession({ registry_id: "r", version: "1" })).rejects.toThrow(/without an identifier/);
   });
 });

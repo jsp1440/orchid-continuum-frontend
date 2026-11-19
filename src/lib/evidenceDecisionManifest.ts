@@ -2,7 +2,7 @@
  * evidenceDecisionManifest — TypeScript surface for oc-run-evidence-manifest-v1.
  *
  * The manifest is the immutable, sha256-fingerprinted record produced by one
- * research run via POST /synthesis/run-manifest.  It carries the full
+ * research run via POST /api/scientific-interpretation/synthesis/run-manifest.  It carries the full
  * evidence-to-decision chain with all governance flags enforced — no automatic
  * publication, no canonical knowledge mutation, human review required before
  * any canonical activation.
@@ -53,7 +53,7 @@ export type VerificationPacket = {
 
 /**
  * Immutable, sha256-fingerprinted run evidence manifest.
- * Returned by POST /synthesis/run-manifest as oc-run-evidence-manifest-v1.
+ * Returned by POST /api/scientific-interpretation/synthesis/run-manifest as oc-run-evidence-manifest-v1.
  */
 export type RunEvidenceManifest = {
   contract_version: typeof MANIFEST_VERSION;
@@ -90,7 +90,7 @@ export type RunManifestRequest = {
 };
 
 /**
- * POST /synthesis/run-manifest — build an immutable run evidence manifest.
+ * POST /api/scientific-interpretation/synthesis/run-manifest — build an immutable run evidence manifest.
  *
  * Wraps the deterministic backend endpoint. Throws CalyxApiError on
  * network / HTTP failures so callers can distinguish states cleanly.
@@ -100,7 +100,7 @@ export async function buildRunManifest(
 ): Promise<RunEvidenceManifest> {
   let response: Response;
   try {
-    response = await fetch(`${CALYX_BACKEND_BASE_URL}/synthesis/run-manifest`, {
+    response = await fetch(`${CALYX_BACKEND_BASE_URL}/api/scientific-interpretation/synthesis/run-manifest`, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json", Accept: "application/json" },

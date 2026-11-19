@@ -68,6 +68,8 @@ test("the complete evidence-to-review path is executable without publication or 
       "Which recorded evidence distinguishes cool-growing from warm-growing Phalaenopsis?",
     ).first(),
   ).toBeVisible();
+  // The hero badge claims live data only because the investigation loaded.
+  await expect(page.getByTestId("page-data-badge")).toHaveText("Live data · Research Workspace");
 
   await page.getByRole("button", { name: "Synthesize this investigation" }).click();
 
@@ -124,4 +126,42 @@ test("the complete evidence-to-review path is executable without publication or 
   await expect(proposal).toContainText("No automatic approval");
   await expect(proposal).toContainText("No scientific publication");
   await expect(proposal).toContainText("No canonical or Knowledge Graph mutation");
+});
+
+/*
+ * J8 (Release 1). GET /api/research/projects is owner-only for members
+ * (backend #1643); the reference backend answers it for any caller, so the
+ * refusal is replayed here with the real backend's 401 body
+ * (app/security.py verify_owner_or_api_key). Before this state the member was
+ * told "SIGN-IN REQUIRED / Owner session or API key is required" under a
+ * "Live data · Orchid Continuum + GBIF" badge.
+ */
+test("a signed-in member refused by the owner-only project list is told the view is limited to owner access", async () => {
+  const projectList = /\/api\/research\/projects(\?.*)?$/;
+  await page.route(projectList, (route) => (
+    route.request().method() === "OPTIONS"
+      ? route.fallback()
+      : route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          headers: {
+            "access-control-allow-origin": process.env.E2E_APP_URL || "http://127.0.0.1:4173",
+            "access-control-allow-credentials": "true",
+          },
+          body: JSON.stringify({ detail: "Owner session or API key is required" }),
+        })
+  ));
+  try {
+    await visit("/research");
+    await expect(page.getByText("This view is limited to owner access.")).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByText("Owner access only", { exact: true })).toBeVisible();
+    await expect(page.getByText(/sign-in required/i)).toHaveCount(0);
+    await expect(page.getByText("Owner session or API key is required")).toHaveCount(0);
+    await expect(page.getByTestId("page-data-badge")).toHaveText("Research Workspace · owner access only");
+    await expect(page.getByTestId("page-data-badge")).toHaveAttribute("data-live", "false");
+    await expect(page.getByText(/Live data · Orchid Continuum \+ GBIF/)).toHaveCount(0);
+    await expect(page.getByText("Research Station · live")).toHaveCount(0);
+  } finally {
+    await page.unroute(projectList);
+  }
 });

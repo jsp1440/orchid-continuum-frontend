@@ -13,9 +13,6 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: mocks.useAuth,
 }));
 
-// ConservatoryReadiness.tsx reads VITE_CALYX_API_URL into a module-level
-// constant at import time, so the env var must be stubbed before the module
-// is first imported — a static top-level import would already have run.
 vi.stubEnv("VITE_CALYX_API_URL", "https://calyx.example.test");
 const {
   ConservatoryReadinessBanner,
@@ -31,10 +28,10 @@ const readyReport: ConservatoryReadinessReport = {
   ready_for_collection_entry: true,
   storage_path: "/data/conservatory",
   checked_at: "2026-08-15T00:00:00Z",
-  instruction: "Ready.",
+  instruction: "Operator: verify VITE_CALYX_API_URL before release.",
   gates: [
-    { name: "persistent_storage", passed: true, evidence: "Volume mounted." },
-    { name: "restart_survival", passed: true, evidence: "Survived redeploy." },
+    { name: "persistent_storage", passed: true, evidence: "Volume mounted at /data/conservatory." },
+    { name: "restart_survival", passed: true, evidence: "Probe https://internal.example.test/restart succeeded." },
   ],
 };
 
@@ -42,14 +39,14 @@ const blockedReport: ConservatoryReadinessReport = {
   ready_for_collection_entry: false,
   storage_path: "/data/conservatory",
   checked_at: "2026-08-15T00:00:00Z",
-  instruction: "Restart survival has not been verified yet.",
+  instruction: "Set CONSERVATORY_VOLUME_PATH and redeploy.",
   gates: [
-    { name: "persistent_storage", passed: true, evidence: "Volume mounted." },
+    { name: "persistent_storage", passed: true, evidence: "Volume mounted at /data/conservatory." },
     {
       name: "restart_survival",
       passed: false,
-      evidence: "No verified restart evidence.",
-      blocking_reason: "Deploy and confirm data survives a restart.",
+      evidence: "Probe /api/internal/restart-check returned 503.",
+      blocking_reason: "Deploy and confirm data survives a restart using CONSERVATORY_VOLUME_PATH.",
     },
   ],
 };
@@ -94,7 +91,7 @@ describe("ConservatoryReadinessBanner", () => {
     expect(container.textContent).toContain("Checking deployment…");
   });
 
-  it("renders a ready, green state with every gate marked Verified when the backend reports ready", async () => {
+  it("renders a ready state without exposing backend evidence or instructions", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => readyReport })),
@@ -103,13 +100,17 @@ describe("ConservatoryReadinessBanner", () => {
     await flush();
 
     expect(container.textContent).toContain("Ready for three test plants");
+    expect(container.textContent).toContain("Required readiness checks are verified");
     const section = container.querySelector("section");
     expect(section?.className).toContain("border-emerald-500/40");
     expect(container.textContent).toContain("persistent storage");
     expect(container.querySelectorAll("span")[0]?.textContent).toBe("Verified");
+    expect(container.textContent).not.toContain("/data/conservatory");
+    expect(container.textContent).not.toContain("internal.example.test");
+    expect(container.textContent).not.toContain("VITE_CALYX_API_URL");
   });
 
-  it("renders a blocked, amber state and surfaces the blocking reason when the backend reports not-ready", async () => {
+  it("renders a blocked state using bounded public copy only", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => blockedReport })),
@@ -118,9 +119,13 @@ describe("ConservatoryReadinessBanner", () => {
     await flush();
 
     expect(container.textContent).toContain("Collection entry remains blocked");
+    expect(container.textContent).toContain("One or more readiness checks are not yet verified");
     const section = container.querySelector("section");
     expect(section?.className).toContain("border-amber-500/40");
-    expect(container.textContent).toContain("Deploy and confirm data survives a restart.");
+    expect(container.textContent).not.toContain("CONSERVATORY_VOLUME_PATH");
+    expect(container.textContent).not.toContain("/api/internal/restart-check");
+    expect(container.textContent).not.toContain("503");
+    expect(container.textContent).not.toContain("Deploy and confirm data survives a restart");
   });
 
   it("fails closed on a failed check, without leaking deployment internals", async () => {
@@ -131,14 +136,9 @@ describe("ConservatoryReadinessBanner", () => {
     renderBanner();
     await flush();
 
-    // The banner used to echo the HTTP status. That was deliberately removed so
-    // a public surface cannot report the state of internal infrastructure, and
-    // this test was left asserting the superseded behaviour. What matters is
-    // preserved and asserted below: a failed check must never read as ready.
     expect(container.textContent).toContain("Collection entry remains blocked");
     expect(container.textContent).toContain("Collection entry remains safely blocked");
     expect(container.textContent).not.toContain("Ready for three test plants");
-    // No status codes, URLs or environment variable names reach the user.
     expect(container.textContent).not.toContain("503");
     expect(container.textContent).not.toContain("VITE_CALYX_API_URL");
   });
@@ -159,10 +159,46 @@ describe("ConservatoryReadinessBanner", () => {
     await flush();
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
+
+  it.each([
+    { ...readyReport, gates: [] },
+    { ...readyReport, gates: [null] },
+    { ...readyReport, gates: [{ name: "restart_survival", passed: "true" }] },
+    { ...readyReport, gates: [{ name: "restart_survival", passed: false }] },
+    null,
+  ])("keeps collection entry blocked for missing, malformed or contradictory gates: %j", async report => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => report })));
+    renderBanner();
+    await flush();
+    expect(container.textContent).toContain("Collection entry remains blocked");
+    expect(container.textContent).not.toContain("Ready for three test plants");
+  });
+
+  it("revokes the previous ready state while a new check is pending", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce({ ok: true, json: async () => readyReport })
+      .mockImplementationOnce(() => new Promise(() => {})));
+    renderBanner();
+    await flush();
+    act(() => container.querySelector("button")!.click());
+    expect(container.textContent).not.toContain("Required readiness checks are verified");
+    expect(container.querySelector("section")?.className).toContain("border-amber-500/40");
+  });
 });
 
 describe("ConservatoryReadinessPage", () => {
-  it("lists every gate with its evidence and required-action text when blocked", async () => {
+  it("does not echo an internal probe identifier through a gate heading", async () => {
+    const name = "probe-123 /data/private https://internal.test CONSERVATORY_VOLUME_PATH";
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({
+      ...blockedReport, gates: [{ name, passed: false, evidence: name, blocking_reason: name }],
+    }) })));
+    act(() => root.render(<MemoryRouter><ConservatoryReadinessPage /></MemoryRouter>));
+    await flush();
+    expect(container.textContent).toContain("Readiness check 1");
+    expect(container.textContent).toContain("Blocked");
+    expect(container.innerHTML).not.toMatch(/probe-123|\/data\/private|internal\.test|CONSERVATORY_VOLUME_PATH/);
+  });
+
+  it("lists gate status without exposing raw evidence, paths, URLs, or operator instructions", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({ ok: true, json: async () => blockedReport })),
@@ -178,6 +214,11 @@ describe("ConservatoryReadinessPage", () => {
 
     expect(container.textContent).toContain("Not ready for real collection entry");
     expect(container.textContent).toContain("restart survival");
-    expect(container.textContent).toContain("Required: Deploy and confirm data survives a restart.");
+    expect(container.textContent).toContain("This readiness check is not yet verified");
+    expect(container.textContent).not.toContain("/data/conservatory");
+    expect(container.textContent).not.toContain("/api/internal/restart-check");
+    expect(container.textContent).not.toContain("CONSERVATORY_VOLUME_PATH");
+    expect(container.textContent).not.toContain("503");
+    expect(container.textContent).not.toContain("Deploy and confirm data survives a restart");
   });
 });

@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
+  missionListMailto,
+  submitMissionListSignup,
+} from '@/lib/missionListSignup';
+import {
   PawPrint,
   Microscope,
   Boxes,
@@ -25,6 +29,9 @@ const GetInvolved: React.FC = () => {
   );
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  // True when the signup could not be delivered to the CRM and was handed to
+  // email instead. The confirmation must say which of the two happened.
+  const [handedOff, setHandedOff] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const submit = async (e: React.FormEvent) => {
@@ -35,17 +42,23 @@ const GetInvolved: React.FC = () => {
     }
     setSubmitting(true);
     setError(null);
+    const request = {
+      email,
+      source: 'orchid-continuum-get-involved',
+      role,
+    };
     try {
-      await fetch('/api/crm/69fa6c8ae577acf1894f7208/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email,
-          source: 'orchid-continuum-get-involved',
-          role,
-        }),
-      });
+      const outcome = await submitMissionListSignup(request);
+      if (outcome.kind === 'delivered') {
+        setSubmitted(true);
+        setHandedOff(false);
+        return;
+      }
+      // Undeliverable. Never show the confirmation for an address that went
+      // nowhere; hand the signup to a channel the team actually reads.
+      setHandedOff(true);
       setSubmitted(true);
+      globalThis.location.href = missionListMailto(request);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -185,8 +198,10 @@ const GetInvolved: React.FC = () => {
             </div>
           ) : (
             <div className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-emerald-300/15 border border-emerald-300/40 text-emerald-100 text-sm">
-              <Check className="h-4 w-4" /> You're on the list — welcome to the
-              Continuum.
+              <Check className="h-4 w-4" />{' '}
+              {handedOff
+                ? 'Your email app should be opening — send that message and we\u2019ll add you.'
+                : "You're on the list — welcome to the Continuum."}
             </div>
           )}
           {error && <div className="text-xs text-red-300 mt-3">{error}</div>}

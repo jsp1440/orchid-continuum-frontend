@@ -145,12 +145,53 @@ export type FederationResolveResult = {
   explanation: string;
 };
 
+/** A Calyx request that returned a non-2xx status; `status` keeps "no record" apart from an outage. */
+export class CalyxRequestError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(status: number, body: string) {
+    super(body || `Calyx request failed with ${status}`);
+    this.name = 'CalyxRequestError';
+    this.status = status;
+    this.body = body;
+  }
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || `Calyx request failed with ${response.status}`);
+    const body = await response.text().catch(() => '');
+    throw new CalyxRequestError(response.status, body);
   }
   return (await response.json()) as T;
+}
+
+/**
+ * The exact detail orchid-calyx-backend's dossier handler raises when it holds
+ * no canonical taxon for the identifier (app/species_dossier/routes.py,
+ * `species_dossier`). Nothing else is read as "no record".
+ */
+export const CANONICAL_TAXON_NOT_FOUND_DETAIL =
+  'No canonical taxon record exists for this identifier.';
+
+/**
+ * True only for the Calyx dossier handler's own "no canonical record" answer:
+ * status 404 with exactly that detail. Any other 404 shape (a framework route
+ * miss, a proxy page, `{}`, an empty body, a differently worded detail), a
+ * 5xx or a network failure says nothing about the taxon.
+ */
+export function isCanonicalTaxonNotFound(error: unknown): boolean {
+  if (!(error instanceof CalyxRequestError) || error.status !== 404) return false;
+  try {
+    const parsed = JSON.parse(error.body) as { detail?: unknown } | null;
+    return (
+      !!parsed &&
+      typeof parsed === 'object' &&
+      !Array.isArray(parsed) &&
+      parsed.detail === CANONICAL_TAXON_NOT_FOUND_DETAIL
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchSpeciesDossier(
@@ -198,9 +239,354 @@ export async function resolveFederatedSpecies(
   return readJson<FederationResolveResult>(response);
 }
 
+export type SectionExcerpt = {
+  /** Human label for the kind of evidence, from the backend's evidence_type. */
+  label: string;
+  text: string;
+  truncated: boolean;
+  /** The item's own evidence state, only when it differs from the section's. */
+  evidenceState: string | null;
+};
+
+/** The backend's own truncation marker; the page adds a single, readable one. */
+const BACKEND_TRUNCATION_MARKER = /\s*\[\.\.\.\]$/;
+
+/**
+ * Evidence text a section carries in its `items`, in backend order.
+ *
+ * Only string excerpts are shown; an item without one is provenance-only and
+ * is represented by its receipt. Nothing is inferred or summarised here, and
+ * the section's own state (e.g. provisional) is rendered alongside, so an
+ * excerpt is never presented as verified.
+ */
+export function sectionExcerpts(section: DossierSection): SectionExcerpt[] {
+  const out: SectionExcerpt[] = [];
+  for (const item of section.items ?? []) {
+    const truncated = item.excerpt_truncated === true;
+    const raw = typeof item.excerpt === 'string' ? item.excerpt.trim() : '';
+    const text = truncated ? raw.replace(BACKEND_TRUNCATION_MARKER, '') : raw;
+    if (!text) continue;
+    const kind = typeof item.evidence_type === 'string' ? item.evidence_type : '';
+    const label = kind ? kind.replace(/_/g, ' ') : 'evidence';
+    const itemState = typeof item.evidence_state === 'string' ? item.evidence_state.trim().toLowerCase() : '';
+    out.push({
+      label: label.charAt(0).toUpperCase() + label.slice(1),
+      text,
+      truncated,
+      evidenceState: itemState && itemState !== section.state ? itemState : null,
+    });
+  }
+  return out;
+}
+
 export function sectionMessage(section: DossierSection): string {
   if (section.state === 'unavailable') {
     return section.unavailable_reason || 'Evidence is not currently available.';
   }
   return section.summary || 'Evidence is available in the linked records.';
+}
+
+// ---------------------------------------------------------------------------
+// Atlas envelope presentation (Release-1 journey 7)
+// ---------------------------------------------------------------------------
+
+/** Human labels for the layer ids the governed Atlas envelope may name. */
+export const ATLAS_LAYER_LABELS: Record<string, string> = {
+  occurrences: 'Occurrence points',
+  range: 'Range',
+  countries: 'Countries',
+  elevation: 'Elevation',
+  phenology: 'Phenology',
+  habitat: 'Habitat',
+  climate: 'Climate',
+  pollinators: 'Pollinators',
+  pollinator_routes: 'Pollinator routes',
+  mycorrhizae: 'Mycorrhizae',
+  protected_areas: 'Protected areas',
+  threats: 'Threats',
+  historical_records: 'Historical records',
+  all: 'All layers',
+};
+
+export function atlasLayerLabel(layerId: string): string {
+  return ATLAS_LAYER_LABELS[layerId] ?? layerId.replace(/_/g, ' ');
+}
+
+/**
+ * The species page shows Atlas layers as counts, evidence states and
+ * receipts only. It never draws a coordinate, so a layer that carries points
+ * is described by how many were counted, not by where they are.
+ */
+export const ATLAS_LOCALITY_POLICY =
+  'This page never draws coordinates. Layers appear here only as counts, evidence states and receipts from the governed Atlas envelope; sensitive localities are withheld at the source.';
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+export function atlasLayerMessage(layer: AtlasLayer): string {
+  if (layer.state === 'unavailable') {
+    return layer.unavailable_reason || 'This layer is not published in the governed Atlas envelope.';
+  }
+  const counted: string[] = [];
+  if (layer.point_count !== null) counted.push(plural(layer.point_count, 'point'));
+  if (layer.feature_count !== null) counted.push(plural(layer.feature_count, 'feature'));
+  const summary = counted.length > 0 ? `${counted.join(', ')} counted` : 'Published in the governed Atlas envelope';
+  return `${summary}. Exact localities are never drawn on this page.`;
+}
+
+// ---------------------------------------------------------------------------
+// Which canonical dossier belongs to the species this page is about?
+// ---------------------------------------------------------------------------
+//
+// The /species/:slug route is reached with identifiers from different id
+// spaces: Calyx links carry `public.orchid_taxonomy` ids (the dossier's own
+// canonical_dossier_url), while the public species search links carry the
+// public API's taxonomy_id. The two overlap numerically and name different
+// species: public "Cattleya labiata" is 6056, while Calyx 6056 is
+// "Caladenia x suffusa". Fetching the dossier by the raw route id therefore
+// shows another species' evidence. A dossier is only shown when its identity
+// is the page's subject; otherwise the subject name is resolved through the
+// canonical federation resolver, and an ambiguous name is left for a human.
+
+export type DossierSubjectResolution =
+  | { state: 'resolved'; dossier: SpeciesDossierEnvelope; via: 'route_id' | 'subject_name' }
+  | {
+      state: 'ambiguous';
+      subjectName: string;
+      candidates: FederationResolveResult['candidates'];
+    }
+  // Positive evidence of absence: the dossier handler's exact no-record 404
+  // for the route id AND the canonical resolver found no taxon carrying the
+  // subject name. Only this state may be read as "no record".
+  | { state: 'not_found' }
+  | { state: 'unavailable' };
+
+export type DossierSubjectDeps = {
+  fetchDossier: (taxonId: string, signal?: AbortSignal) => Promise<SpeciesDossierEnvelope>;
+  resolveSpecies: (
+    params: { name?: string; taxonId?: string },
+    signal?: AbortSignal,
+  ) => Promise<FederationResolveResult>;
+};
+
+function comparableName(value: string | null | undefined): string {
+  return (value ?? '').replace(/×/g, 'x').replace(/\s+/g, ' ').trim().toLowerCase();
+}
+
+/** Exact scientific-name equality, ignoring case, spacing and the hybrid sign. */
+export function sameScientificName(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const left = comparableName(a);
+  return left.length > 0 && left === comparableName(b);
+}
+
+function dossierNames(dossier: SpeciesDossierEnvelope): string[] {
+  const identity = dossier.identity;
+  // Synonyms the backend itself records for this taxon are part of its identity;
+  // nothing else is (no rank stripping, no prefix or "close enough" matching).
+  const synonyms = Array.isArray(identity?.synonyms) ? identity.synonyms : [];
+  return [
+    identity?.accepted_name,
+    identity?.display_name,
+    identity?.full_scientific_name,
+    ...synonyms,
+  ].filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+}
+
+function isSubject(dossier: SpeciesDossierEnvelope, subjectName: string): boolean {
+  return dossierNames(dossier).some((name) => sameScientificName(name, subjectName));
+}
+
+/**
+ * The name a route slug carries, when it is a name rather than an opaque id.
+ * `cattleya-labiata` and `Cattleya%20labiata` are names; `6056` is not.
+ */
+export function subjectNameFromSlug(slug: string | null | undefined): string | null {
+  let decoded = '';
+  try {
+    decoded = decodeURIComponent(slug ?? '');
+  } catch {
+    decoded = slug ?? '';
+  }
+  const name = decoded.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!name || /\d/.test(name) || !/\s/.test(name)) return null;
+  return name;
+}
+
+export async function resolveDossierForSubject(
+  routeId: string,
+  subjectName: string | null,
+  deps: DossierSubjectDeps,
+  signal?: AbortSignal,
+): Promise<DossierSubjectResolution> {
+  let byRoute: SpeciesDossierEnvelope | null = null;
+  // Positive evidence of absence, part one: the dossier handler's own exact
+  // "no canonical taxon record" 404 for the route id. A dossier for another
+  // taxon, a route miss or an outage is not that.
+  let routeNoRecord = false;
+  try {
+    byRoute = await deps.fetchDossier(routeId, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    byRoute = null;
+    routeNoRecord = isCanonicalTaxonNotFound(error);
+  }
+
+  const subject = subjectName && subjectName.trim() ? subjectName.trim() : null;
+  if (byRoute && (!subject || isSubject(byRoute, subject))) {
+    return { state: 'resolved', dossier: byRoute, via: 'route_id' };
+  }
+  // A bare id with no name: the only definitive source is a lookup in the
+  // Calyx id space, which may not be the id space of the link. The page can
+  // not confirm absence from that alone.
+  if (!subject) return { state: 'unavailable' };
+
+  let resolution: FederationResolveResult;
+  try {
+    resolution = await deps.resolveSpecies({ name: subject }, signal);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { state: 'unavailable' };
+  }
+
+  // Part two: the canonical resolver answered that no taxon carries the name
+  // (unresolved, or ambiguous with no exact-name candidate). Only both parts
+  // together are read as "no record".
+  const noRecord: DossierSubjectResolution = routeNoRecord
+    ? { state: 'not_found' }
+    : { state: 'unavailable' };
+  // The resolver normalises names before matching (it drops forma, subspecies
+  // and cultivar qualifiers), so its answer is a lead, not an identity. Every
+  // dossier or candidate it leads to is held to the same exact-name check as
+  // the route dossier: a species-level record is never shown for an
+  // infraspecific or cultivar subject.
+  if (resolution.status === 'ambiguous') {
+    const candidates = (resolution.candidates ?? []).filter((candidate) =>
+      sameScientificName(candidate.accepted_name, subject),
+    );
+    // Candidates exist, but none carries the subject name exactly.
+    return candidates.length > 0
+      ? { state: 'ambiguous', subjectName: subject, candidates }
+      : noRecord;
+  }
+  if (resolution.status === 'unresolved') {
+    // The canonical resolver found no taxon by this name.
+    return noRecord;
+  }
+  if (resolution.status !== 'resolved' || !resolution.taxon_id) {
+    return { state: 'unavailable' };
+  }
+  let dossier: SpeciesDossierEnvelope | null =
+    byRoute && byRoute.identity?.taxon_id === resolution.taxon_id ? byRoute : null;
+  if (!dossier) {
+    try {
+      dossier = await deps.fetchDossier(resolution.taxon_id, signal);
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      return { state: 'unavailable' };
+    }
+  }
+  // The resolver's lead is another name (a species for a forma or cultivar
+  // subject): never shown for this subject, and not proof of absence either.
+  return isSubject(dossier, subject)
+    ? { state: 'resolved', dossier, via: 'subject_name' }
+    : { state: 'unavailable' };
+}
+
+export type PageSubject =
+  | { state: 'subject'; name: string | null }
+  | { state: 'conflict'; linkedName: string; publicName: string };
+
+/**
+ * The species a /species/:slug page is about.
+ *
+ * The link's `?name=` ranks first. It is the name on the record the visitor
+ * chose, carried together with the id from that same record. The public detail
+ * name is looked up by the route id alone, and the route id may belong to
+ * another id space (a Calyx orchid_taxonomy id names a different public-API
+ * species), so it is only a fallback. When both are present and disagree, the
+ * page cannot know which species it is about and fails closed instead of
+ * picking one. A binomial slug is the last resort.
+ */
+export function pageSubject(params: {
+  linkedName: string | null | undefined;
+  publicName: string | null | undefined;
+  slug: string | null | undefined;
+}): PageSubject {
+  const linkedName = (params.linkedName ?? '').replace(/\s+/g, ' ').trim();
+  const publicName = (params.publicName ?? '').replace(/\s+/g, ' ').trim();
+  if (linkedName && publicName && !sameScientificName(linkedName, publicName)) {
+    return { state: 'conflict', linkedName, publicName };
+  }
+  return {
+    state: 'subject',
+    name: linkedName || publicName || subjectNameFromSlug(params.slug),
+  };
+}
+
+/**
+ * Link to /species/:id from a surface keyed by the public API's taxonomy_id.
+ * The name travels with the id so the page can confirm the dossier it shows
+ * is this species' and not another taxon's with the same number.
+ */
+export function speciesPageHref(taxonomyId: string, scientificName?: string | null): string {
+  const name = (scientificName ?? '').replace(/\s+/g, ' ').trim();
+  const base = `/species/${encodeURIComponent(taxonomyId)}`;
+  return name ? `${base}?name=${encodeURIComponent(name)}` : base;
+}
+
+export type SpeciesRecordSourceState = 'found' | 'reported_absent' | 'unavailable';
+export type DossierRecordState = 'loading' | 'found' | 'not_found' | 'unavailable';
+
+/**
+ * Whether a /species/:slug page has a taxon to show.
+ *
+ * `found` as soon as any identity source holds a record (the public species
+ * record, or a Calyx dossier / ambiguous candidates / a subject conflict,
+ * which all name real records).
+ *
+ * `not_found` needs two things together. First, positive evidence of absence,
+ * which only the Calyx sources can give (`dossier === 'not_found'`, see
+ * resolveDossierForSubject); the public detail endpoint's 404 is never that
+ * evidence on its own. Second, every source that could still turn the page
+ * into `found` must have answered without a record: a public source that did
+ * not answer (`unavailable`) may be hiding a real taxon, so it blocks
+ * `not_found` (a transient outage never turns a real taxon into "no record").
+ *
+ * Truth table (species × dossier; first matching row wins):
+ *   species found                         → found
+ *   dossier resolved | ambiguous | conflict → found
+ *   species pending or dossier pending    → loading
+ *   species reported_absent, dossier not_found → not_found
+ *   anything else                         → unavailable
+ */
+export function dossierRecordState(params: {
+  species: SpeciesRecordSourceState | null;
+  dossier: DossierSubjectResolution['state'] | 'conflict' | null;
+}): DossierRecordState {
+  const { species, dossier } = params;
+  if (species === 'found') return 'found';
+  if (dossier === 'resolved' || dossier === 'ambiguous' || dossier === 'conflict') return 'found';
+  // The public record could still turn out to be found; wait for it.
+  if (species === null || dossier === null) return 'loading';
+  return species === 'reported_absent' && dossier === 'not_found' ? 'not_found' : 'unavailable';
+}
+
+/** The route's subject exactly as the visitor asked for it: user input, never an accepted name. */
+export function requestedTaxonLabel(
+  linkedName: string | null | undefined,
+  slug: string | null | undefined,
+): string {
+  const linked = (linkedName ?? '').replace(/\s+/g, ' ').trim();
+  if (linked) return linked;
+  let decoded = slug ?? '';
+  try {
+    decoded = decodeURIComponent(decoded);
+  } catch {
+    // keep the raw slug
+  }
+  return decoded.replace(/\s+/g, ' ').trim();
 }

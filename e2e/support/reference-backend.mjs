@@ -17,6 +17,7 @@
  */
 import { createServer } from "node:http";
 import { randomUUID, createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { speciesOfStoredIdentity } from "./species-of-stored-identity.mjs";
 
 const store = {
@@ -112,7 +113,9 @@ function dossierFixture() {
       taxon_id: DOSSIER_FIXTURE_TAXON_ID,
       generated_at: "2026-01-01T00:00:00.000Z",
       layers: [],
-      unavailable_layers: ["all"],
+      // Mirrors orchid-calyx-backend PostgresSpeciesRepository._atlas_envelope:
+      // every layer withheld by name, no coordinates anywhere.
+      unavailable_layers: ["occurrences", "range", "protected_areas", "elevation", "climate"],
       provenance: [],
     },
     related_species: [],
@@ -122,8 +125,51 @@ function dossierFixture() {
   };
 }
 
+/* ---- Unknown-taxon fixtures (R1 journeys 3, 14) ---------------------------
+ * Clearly synthetic identifiers that are not taxa. Every other /api/species/*
+ * id keeps answering with the identity-continuity fixture above.
+ *  - UNKNOWN: both identity sources answer "no record" with the shapes the
+ *    real services use (orchid-calyx-backend species_dossier/routes.py 404).
+ *  - OUTAGE: both sources fail with the dossier route's 503 shape, so the
+ *    page must say it could not load rather than "no record".
+ *  - PUBLIC_DOWN: the public species API fails with 503 while the Calyx
+ *    dossier answers its exact no-record 404; a source that could still find
+ *    the taxon did not answer, so the page must not say "no record".
+ * The federation resolver below already answers `unresolved` for every name.
+ */
+// The long unbroken name exercises wrapping of the requested text at phone width.
+const UNKNOWN_TAXON_IDS = new Set(["Notagenus fakeus", "987654321", `Notagenus${"x".repeat(80)} fakeus`]);
+const OUTAGE_TAXON_IDS = new Set(["Outagenus downus", "503503503"]);
+const PUBLIC_DOWN_TAXON_IDS = new Set(["Publicdown fakeus"]);
+
+function unknownTaxonFixture(path) {
+  const match = /^\/api\/(?:species|platform\/species)\/([^/]+)(\/dossier)?$/.exec(path);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]);
+  const dossierRoute = path.startsWith("/api/platform/");
+  if (dossierRoute && !match[2]) return null;
+  if (PUBLIC_DOWN_TAXON_IDS.has(id)) {
+    return dossierRoute
+      ? { status: 404, body: { detail: "No canonical taxon record exists for this identifier." } }
+      : { status: 503, body: { detail: "Species service is unavailable." } };
+  }
+  if (UNKNOWN_TAXON_IDS.has(id)) {
+    return {
+      status: 404,
+      body: { detail: dossierRoute ? "No canonical taxon record exists for this identifier." : "Species not found." },
+    };
+  }
+  if (OUTAGE_TAXON_IDS.has(id)) {
+    return { status: 503, body: { detail: "Species dossier service is unavailable." } };
+  }
+  return null;
+}
+/* ---- end unknown-taxon fixtures ------------------------------------------ */
+
 async function publicSpeciesRoute(req, res, url) {
   const path = url.pathname;
+  const unknownTaxon = req.method === "GET" ? unknownTaxonFixture(path) : null;
+  if (unknownTaxon) return json(res, unknownTaxon.status, unknownTaxon.body);
   let match = /^\/api\/species\/([^/]+)$/.exec(path);
   if (match && req.method === "GET") {
     return json(res, 200, {
@@ -1206,8 +1252,116 @@ const researchProject = {
   link_counts: { taxa: 1, documents: 2, evidence: 2, notes: 1 },
 };
 
+/* ---------------------------------------- Research Trait Explorer ------ */
+
+/**
+ * `GET /api/research/traits`, answered only with payloads the real backend
+ * returned.
+ *
+ * PROVENANCE. `src/lib/__fixtures__/researchTraits.pr1611.json` holds the
+ * AVAILABLE / UNAVAILABLE / ABSENT bodies captured through FastAPI TestClient
+ * from `app/research_traits/routes.py` (backend #1611), using that suite's
+ * `FakeService` (the real `ResearchTraitsService.get()` pipeline with only the
+ * database boundary replaced) and its `ROWS`. The file's note says the capture
+ * predates the merge; re-capturing from backend `main` 615af698b with the same
+ * harness produced bodies identical to it in every field except
+ * `generated_at`, which is a capture timestamp. They are served verbatim, so
+ * `generated_at` is the capture instant, not the time of this request.
+ *
+ * The rows behind them are the backend test suite's own fixture rows, not
+ * botanical records. A passing browser run proves the frontend renders what
+ * the backend emits; it says nothing about any orchid.
+ *
+ * Only the two subjects the capture covers are answered. Any other valid
+ * subject gets a 503 instead of a borrowed payload, because re-labelling a
+ * captured body with a different name would invent a result for that name.
+ *
+ * Authentication: the real route depends on `verify_owner_or_api_key`, an
+ * owner cookie or API key this stand-in has no equivalent of, so — like the
+ * `/api/research/projects` fixtures above — it does not check one. The
+ * captured 401 is served on request so the signed-out rendering is covered.
+ */
+const CAPTURED_TRAITS = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/researchTraits.pr1611.json", import.meta.url), "utf8"),
+);
+
+/** Both captured genus bodies are for `Cattleya`, so the journey picks one. */
+const TRAIT_GENUS_CAPTURES = new Set(["unavailable_genus", "absent_genus"]);
+
+/**
+ * Failure bodies. `unauthenticated` and `server_error` are what backend `main`
+ * returned through TestClient (the route with no credentials, and an unhandled
+ * service exception). `malformed` is SYNTHETIC — a contract-version the
+ * client must refuse — and exists only to exercise the fail-closed parse.
+ */
+const TRAIT_FAILURES = new Set(["unauthenticated", "server_error", "malformed"]);
+
+const traitsControl = { genus: "unavailable_genus", failure: null };
+
+// Mirrors `_subject` in app/research_traits/routes.py, including its details.
+const TRAIT_GENUS_RE = /^[A-Z][A-Za-z-]{1,79}$/;
+const TRAIT_SPECIES_RE = /^[A-Z][A-Za-z-]{1,79} [a-z][A-Za-z-]{1,79}$/;
+
+function traitSubject(url) {
+  const genus = url.searchParams.get("genus");
+  const species = url.searchParams.get("species");
+  if (Boolean(genus) + Boolean(species) !== 1) return { error: "Supply exactly one of genus or species" };
+  if (genus !== null && genus !== "") {
+    const name = genus.trim();
+    return TRAIT_GENUS_RE.test(name) ? { rank: "genus", name } : { error: "Invalid genus" };
+  }
+  const name = (species || "").trim();
+  return TRAIT_SPECIES_RE.test(name) ? { rank: "species", name } : { error: "Invalid species binomial" };
+}
+
+function researchTraitsRoute(req, res, url) {
+  if (req.method !== "GET") return fail(res, 405, "method_not_allowed", "GET only.");
+  const failure = traitsControl.failure;
+  if (failure === "unauthenticated") return json(res, 401, { detail: "Owner session or API key is required" });
+  if (failure === "server_error") {
+    res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8", ...cors() });
+    return res.end("Internal Server Error");
+  }
+  const subject = traitSubject(url);
+  if (subject.error) return json(res, 422, { detail: subject.error });
+  if (failure === "malformed") {
+    const body = { ...CAPTURED_TRAITS.absent_genus, subject: { rank: subject.rank, name: subject.name } };
+    return json(res, 200, { ...body, contract_version: "oc-research-traits-v0" });
+  }
+  let capture = null;
+  if (subject.rank === "species" && subject.name === CAPTURED_TRAITS.available_species.subject.name) {
+    capture = CAPTURED_TRAITS.available_species;
+  } else if (subject.rank === "genus" && subject.name === CAPTURED_TRAITS[traitsControl.genus].subject.name) {
+    capture = CAPTURED_TRAITS[traitsControl.genus];
+  }
+  if (!capture) {
+    return json(res, 503, {
+      detail: `The reference backend holds no captured trait payload for ${subject.rank} ${subject.name}.`,
+    });
+  }
+  return json(res, 200, capture);
+}
+
+/**
+ * Test-only switch, reachable only from the Playwright runner. It selects
+ * which captured genus body is served and whether a failure replaces it.
+ */
+async function researchTraitsControlRoute(req, res) {
+  if (req.method !== "PUT") return fail(res, 405, "method_not_allowed", "PUT only.");
+  const body = safeJson(await readBody(req)) || {};
+  const genus = body.genus ?? traitsControl.genus;
+  const failure = body.failure ?? null;
+  if (!TRAIT_GENUS_CAPTURES.has(genus) || (failure !== null && !TRAIT_FAILURES.has(failure))) {
+    return fail(res, 400, "invalid_scenario", "Unknown trait scenario.");
+  }
+  traitsControl.genus = genus;
+  traitsControl.failure = failure;
+  return json(res, 200, { ...traitsControl });
+}
+
 async function researchRoute(req, res, url) {
   const path = url.pathname;
+  if (path === "/api/research/traits") return researchTraitsRoute(req, res, url);
   if (path === "/api/research/projects" && req.method === "GET") {
     return json(res, 200, { items: [researchProject] });
   }
@@ -1417,6 +1571,365 @@ const calyxStore = { conversations: new Map(), missions: new Map() };
 /** Module-level, because the fixtures below are built outside any request. */
 const isoNow = () => new Date().toISOString();
 
+/* ------------------------------------------------ scientific synthesis ----- */
+
+/**
+ * Where the backend mounts the scientific-synthesis router: app/scientific_
+ * synthesis/routes.py declares prefix "/synthesis", and app/scientific_
+ * interpretation/routes.py includes it in a router with prefix
+ * "/api/scientific-interpretation" guarded by verify_owner_or_api_key. The
+ * Research Station calls these mounted paths (frontend #814).
+ *
+ * The two handlers below mirror the backend's deterministic derivations
+ * (run_manifest.build_run_evidence_manifest, candidate_proposal.build_
+ * candidate_knowledge_proposal, reasoning_contract_bridge.verification_
+ * packet_to_handoff_request). For the request the browser journey sends, the
+ * responses were compared field by field with FastAPI TestClient output from
+ * backend main and are identical apart from created_at_utc, which is pinned
+ * here so the journey is reproducible.
+ *
+ * Owner authentication is NOT modelled: the deployed routes answer 401 without
+ * an owner session or API key. A passing browser run here says nothing about
+ * whether a given deployed account is authorised.
+ */
+const SYNTHESIS_PREFIX = "/api/scientific-interpretation/synthesis";
+
+const CANDIDATE_DOMAINS = new Set([
+  "taxonomy", "trait", "morphology", "ecology", "geography",
+  "phenology", "conservation", "measurement", "molecular", "cultivation",
+]);
+
+/** Python json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=True). */
+function canonicalJson(value) {
+  const sorted = (v) => {
+    if (Array.isArray(v)) return v.map(sorted);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(Object.keys(v).sort().map((key) => [key, sorted(v[key])]));
+    }
+    return v;
+  };
+  return JSON.stringify(sorted(value)).replace(
+    /[\u007f-￿]/g,
+    (ch) => `\\u${ch.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+}
+
+const sha256Hex = (value) => createHash("sha256").update(canonicalJson(value), "utf8").digest("hex");
+const trimmed = (value) => String(value ?? "").trim();
+const positiveInt = (value) => Number.isInteger(value) && value > 0;
+
+function runEvidenceManifest(input) {
+  const runId = trimmed(input.run_id);
+  const taxonId = trimmed(input.taxon_id);
+  const snapshot = trimmed(input.taxonomy_snapshot_id);
+  if (!runId) return { code: "RUN_ID_REQUIRED" };
+  if (!trimmed(input.research_question)) return { code: "RESEARCH_QUESTION_REQUIRED" };
+  if (!taxonId) return { code: "TAXON_ID_REQUIRED" };
+  if (!snapshot) return { code: "TAXONOMY_SNAPSHOT_REQUIRED" };
+  const packets = Array.isArray(input.verification_packets) ? input.verification_packets : [];
+  if (packets.length === 0) return { code: "VERIFICATION_PACKET_REQUIRED" };
+  const reviewRecords = Array.isArray(input.review_records) ? input.review_records : [];
+  const memoryEntries = Array.isArray(input.epistemic_memory_entries) ? input.epistemic_memory_entries : [];
+
+  let resolved = 0;
+  let missing = 0;
+  let gaps = 0;
+  const contradictions = [];
+  let verificationState = "ready_for_review";
+  for (const packet of packets) {
+    if (packet?.contract_version !== "oc-verification-handoff-v1") return { code: "UNSUPPORTED_VERIFICATION_PACKET" };
+    if (packet.human_review_required !== true || packet.automatic_scientific_publication_allowed !== false) {
+      return { code: "PACKET_GOVERNANCE_INVALID" };
+    }
+    resolved += (packet.resolved_evidence ?? []).length;
+    missing += (packet.missing_evidence ?? []).length;
+    gaps += (packet.knowledge_gaps ?? []).length;
+    contradictions.push(...(packet.contradictions ?? []));
+    const state = packet.verification_state ?? "ready_for_review";
+    if (state === "evidence_incomplete") verificationState = "evidence_incomplete";
+    else if (state === "validation_required" && verificationState !== "evidence_incomplete") {
+      verificationState = "validation_required";
+    }
+  }
+
+  // Only a recorded review decision or reviewed epistemic memory sets these;
+  // nothing is invented for a run that has neither.
+  let reviewDecision = null;
+  for (const record of reviewRecords) {
+    if (record?.contract_version === "oc-review-decision-record-v1") {
+      reviewDecision = trimmed(record.review_decision) || null;
+    }
+  }
+  let epistemicState = null;
+  for (const entry of memoryEntries) {
+    if (entry?.contract_version === "oc-reviewed-epistemic-memory-v1") {
+      epistemicState = trimmed(entry.epistemic_state) || null;
+    }
+  }
+
+  return {
+    manifest: {
+      contract_version: "oc-run-evidence-manifest-v1",
+      run_id: runId,
+      research_question: input.research_question,
+      taxon_id: taxonId,
+      taxonomy_snapshot_id: snapshot,
+      run_fingerprint: sha256Hex({
+        run_id: runId,
+        research_question: input.research_question,
+        taxon_id: taxonId,
+        taxonomy_snapshot_id: snapshot,
+        verification_packets: packets,
+        review_records: reviewRecords,
+        epistemic_memory_entries: memoryEntries,
+      }),
+      created_at_utc: "2026-01-01T00:00:00+00:00",
+      verification_state: verificationState,
+      resolved_evidence_count: resolved,
+      missing_evidence_count: missing,
+      knowledge_gap_count: gaps,
+      contradictions: [...new Set(contradictions)].sort(),
+      review_decision: reviewDecision,
+      epistemic_state: epistemicState,
+      human_review_required: true,
+      automatic_scientific_publication_allowed: false,
+      canonical_knowledge_mutation_allowed: false,
+      canonical_activation_requires_human_authority: true,
+      immutable: true,
+    },
+  };
+}
+
+function candidateKnowledgeProposal(input) {
+  const { manifest, verification_packet: packet, domain } = input;
+  if (!manifest || !packet) return { code: "PROPOSAL_CONTRACT_INCOMPLETE" };
+  if (!CANDIDATE_DOMAINS.has(domain)) return { code: "DOMAIN_INVALID" };
+  if (
+    !trimmed(input.source_object_type) ||
+    !positiveInt(input.source_object_id) ||
+    !positiveInt(input.revision_id) ||
+    !positiveInt(input.extraction_run_id)
+  ) {
+    return { code: "SOURCE_BINDING_INVALID" };
+  }
+  if (
+    manifest.contract_version !== "oc-run-evidence-manifest-v1" ||
+    !/^[0-9a-f]{64}$/.test(String(manifest.run_fingerprint ?? ""))
+  ) {
+    return { code: "MANIFEST_CONTRACT_INVALID" };
+  }
+  if (
+    manifest.human_review_required !== true ||
+    manifest.automatic_scientific_publication_allowed !== false ||
+    manifest.canonical_knowledge_mutation_allowed !== false ||
+    manifest.canonical_activation_requires_human_authority !== true ||
+    manifest.immutable !== true
+  ) {
+    return { code: "MANIFEST_GOVERNANCE_INVALID" };
+  }
+  if (manifest.verification_state !== "ready_for_review") return { code: "MANIFEST_NOT_READY_FOR_REVIEW" };
+
+  const candidate = packet.reasoning?.candidate_knowledge ?? {};
+  const taxonId = trimmed(manifest.taxon_id);
+  if (!taxonId || trimmed(candidate.subject_id) !== taxonId) return { code: "CANDIDATE_SUBJECT_MANIFEST_MISMATCH" };
+
+  if (packet.contract_version !== "oc-verification-handoff-v1") return { code: "UNSUPPORTED_VERIFICATION_PACKET" };
+  if (
+    packet.human_review_required !== true ||
+    packet.automatic_scientific_publication_allowed !== false ||
+    packet.canonical_knowledge_mutation_allowed !== false
+  ) {
+    return { code: "PACKET_GOVERNANCE_INVALID" };
+  }
+  if (packet.verification_state !== "ready_for_review") return { code: "PACKET_NOT_READY_FOR_REVIEW" };
+
+  const candidateId = trimmed(candidate.candidate_id);
+  const subjectId = trimmed(candidate.subject_id);
+  const predicate = trimmed(candidate.predicate);
+  const objectId = trimmed(candidate.object_id);
+  if (!candidateId) return { code: "CANDIDATE_ID_REQUIRED" };
+  if (!predicate) return { code: "PREDICATE_REQUIRED" };
+  if (!objectId) return { code: "OBJECT_ID_REQUIRED" };
+  const resolved = Array.isArray(packet.resolved_evidence) ? packet.resolved_evidence : [];
+  if (resolved.length === 0) return { code: "RESOLVED_EVIDENCE_REQUIRED" };
+  const confidence = Number(candidate.confidence || 0);
+  if (!(confidence >= 0 && confidence <= 1)) return { code: "CONFIDENCE_INVALID" };
+
+  const anchor = (anchor_id, logical_unit, locator) => ({
+    anchor_id, ordered_span: 0, page_number: null, char_start: null, char_end: null,
+    block_id: null, logical_unit, locator,
+  });
+  const statements = [];
+  const anchors = [];
+  for (const evidence of resolved) {
+    const statement = trimmed(evidence?.statement);
+    if (statement) statements.push(statement);
+    for (const item of evidence?.provenance ?? []) {
+      anchors.push(anchor(anchors.length + 1, String(item), {
+        evidence_id: String(evidence?.evidence_id ?? ""),
+        provenance_item: String(item),
+      }));
+    }
+  }
+  if (anchors.length === 0) anchors.push(anchor(1, candidateId, { candidate_id: candidateId }));
+
+  const binding = {
+    source_object_type: input.source_object_type,
+    source_object_id: input.source_object_id,
+    revision_id: input.revision_id,
+    extraction_run_id: input.extraction_run_id,
+  };
+  return {
+    proposal: {
+      contract_version: "oc-candidate-knowledge-proposal-v1",
+      proposal_id: `candidate-proposal:${sha256Hex({
+        run_fingerprint: manifest.run_fingerprint,
+        candidate_id: candidateId,
+        domain,
+        ...binding,
+      })}`,
+      run_id: manifest.run_id ?? null,
+      run_fingerprint: manifest.run_fingerprint,
+      candidate_handoff_request: {
+        reasoning_id: candidateId,
+        domain,
+        subject: subjectId,
+        predicate,
+        object_value: objectId,
+        numeric_value: null,
+        unit: null,
+        confidence,
+        evidence_text: statements.join("\n\n") || objectId,
+        ...binding,
+        source_anchors: anchors,
+        provenance: {
+          contract_version: "oc-verification-handoff-v1",
+          candidate_id: candidateId,
+          contradictions: [...(packet.contradictions ?? [])],
+          knowledge_gap_count: (packet.knowledge_gaps ?? []).length,
+          missing_evidence_count: (packet.missing_evidence ?? []).length,
+        },
+        qualifiers: {
+          human_review_required: true,
+          automatic_scientific_publication_allowed: false,
+          canonical_knowledge_mutation_allowed: false,
+        },
+        display_policy: "UNKNOWN_REQUIRES_REVIEW",
+        internal_use_permission: false,
+        language: "en",
+      },
+      review_required: true,
+      owner_submission_required: true,
+      candidate_persistence_performed: false,
+      automatic_approval: false,
+      automatic_scientific_publication: false,
+      canonical_knowledge_mutation: false,
+      knowledge_graph_mutation: false,
+    },
+  };
+}
+
+/* ------------------------------------- member Matrix identification ----- */
+
+/**
+ * Signed-in member Matrix identification (Release 1 journey 4).
+ *
+ * WHAT THIS IS: a replay of REAL member-shaped responses captured from
+ * orchid-calyx-backend running LOCALLY at the SHA recorded in the fixture's
+ * `_meta` (uvicorn, file store, no DB — never production), for a clearly
+ * SYNTHETIC registry ("Fixture taxon A/B/C"; invented states and provenance,
+ * not claims about any orchid). The fixture lives beside the unit-test
+ * fixtures: src/lib/__fixtures__/matrixIdentification.memberBackend.json.
+ *
+ * It answers ONLY requests that carry a member bearer this server issued, the
+ * way the real backend routes a verified member: the seven member routes get
+ * the captured member view, every other /api/matrix-identification route gets
+ * the captured 403 OWNER_ACCESS_REQUIRED, and a session is private to the
+ * account that created it (another account gets the captured 404). Requests
+ * without a member bearer fall through to the owner-shaped reference handlers
+ * below, unchanged, so the existing owner journeys keep their behaviour.
+ *
+ * The only transformation: each replayed session gets a fresh UUID, substituted
+ * for the captured session id. The replay follows the captured sequence
+ * (observe spur_length_mm = 25 certain, then flower_color = "white" probable);
+ * a request that departs from it gets a SYNTHETIC 409 so a frontend that sent
+ * something else fails loudly instead of rendering a mismatched capture.
+ */
+const MEMBER_MATRIX = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/matrixIdentification.memberBackend.json", import.meta.url), "utf8"),
+);
+const MEMBER_MATRIX_SESSION_ID = MEMBER_MATRIX.create.body.session_id;
+const MEMBER_MATRIX_REGISTRY = MEMBER_MATRIX.registry_detail.body;
+const memberMatrixSessions = new Map(); // session_id -> { userId, observed }
+const MEMBER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function memberMatrixReplay(captured, sessionId) {
+  const text = JSON.stringify(captured.body).replaceAll(MEMBER_MATRIX_SESSION_ID, sessionId);
+  return { status: captured.status, body: JSON.parse(text) };
+}
+
+function memberMatrixNotFound(res, sessionId) {
+  const replay = memberMatrixReplay(MEMBER_MATRIX.other_member_get, sessionId);
+  return json(res, 404, replay.body);
+}
+
+function memberMatrixRoute(req, res, path, userId, input) {
+  const send = (replay) => json(res, replay.status, replay.body);
+  if (path === "/api/matrix-identification/registry" && req.method === "GET") {
+    return send(MEMBER_MATRIX.registry_list);
+  }
+  let match = /^\/api\/matrix-identification\/registry\/([^/]+)\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const [registryId, version] = [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+    if (registryId === MEMBER_MATRIX_REGISTRY.registry_id && version === MEMBER_MATRIX_REGISTRY.version) {
+      return send(MEMBER_MATRIX.registry_detail);
+    }
+    // SYNTHETIC shape (the capture holds one registry).
+    return json(res, 404, { detail: `registry version not found: ${registryId}/${version}` });
+  }
+  if (path === "/api/matrix-identification/sessions" && req.method === "POST") {
+    if (input?.registry_id !== MEMBER_MATRIX_REGISTRY.registry_id || input?.version !== MEMBER_MATRIX_REGISTRY.version) {
+      return json(res, 404, { detail: "registry version not found" }); // SYNTHETIC shape
+    }
+    const sessionId = randomUUID();
+    memberMatrixSessions.set(sessionId, { userId, observed: 0 });
+    return send(memberMatrixReplay(MEMBER_MATRIX.create, sessionId));
+  }
+  match = /^\/api\/matrix-identification\/sessions\/([^/]+)(?:\/(observations|evaluate|explain))?$/.exec(path);
+  const memberRoute = match && MEMBER_UUID.test(match[1]) && (
+    (!match[2] && req.method === "GET") || (match[2] && req.method === "POST")
+  );
+  if (!memberRoute) {
+    // Every other Matrix route is owner-only for a verified member (captured 403).
+    return send(MEMBER_MATRIX.owner_only_reports);
+  }
+  const sessionId = match[1];
+  const session = memberMatrixSessions.get(sessionId);
+  if (!session || session.userId !== userId) return memberMatrixNotFound(res, sessionId);
+  const evaluations = [MEMBER_MATRIX.evaluate0, MEMBER_MATRIX.evaluate1, MEMBER_MATRIX.evaluate2];
+  const observations = [MEMBER_MATRIX.observe1, MEMBER_MATRIX.observe2];
+  if (!match[2]) {
+    return json(res, 200, memberMatrixReplay(evaluations[session.observed], sessionId).body.session);
+  }
+  if (match[2] === "evaluate") return send(memberMatrixReplay(evaluations[session.observed], sessionId));
+  if (match[2] === "observations") {
+    const expected = observations[session.observed]?.request.body;
+    const same = expected
+      && input?.character === expected.character
+      && JSON.stringify(input?.value) === JSON.stringify(expected.value)
+      && input?.certainty === expected.certainty;
+    if (!same) {
+      return json(res, 409, { detail: "SYNTHETIC reference replay: observation departs from the captured sequence", received: input ?? null });
+    }
+    session.observed += 1;
+    return send(memberMatrixReplay(observations[session.observed - 1], sessionId));
+  }
+  if (session.observed !== 2) {
+    return json(res, 409, { detail: "SYNTHETIC reference replay: the explanation was captured after two observations" });
+  }
+  return send(memberMatrixReplay(MEMBER_MATRIX.explain2, sessionId));
+}
+
 async function calyxRoute(req, res, url) {
   const path = url.pathname;
   const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : Buffer.alloc(0);
@@ -1425,6 +1938,10 @@ async function calyxRoute(req, res, url) {
   let match;
 
   /* ------------------------------------------------- Calyx / Brain ----- */
+
+  // A signed-in member's bearer on a Matrix route: the captured member view.
+  const matrixMember = path.startsWith("/api/matrix-identification/") ? bearer(req) : null;
+  if (matrixMember) return memberMatrixRoute(req, res, path, matrixMember, body.length ? asJson() : null);
 
   if (path === "/api/matrix-identification/registry" && req.method === "GET") {
     return json(res, 200, {
@@ -1542,70 +2059,22 @@ async function calyxRoute(req, res, url) {
   }
 
 
-  if (path === "/synthesis/run-manifest" && req.method === "POST") {
-    const input = asJson();
-    const packet = Array.isArray(input.verification_packets) ? input.verification_packets[0] : null;
-    if (
-      !input.run_id ||
-      !input.research_question ||
-      !input.taxon_id ||
-      !input.taxonomy_snapshot_id ||
-      !packet ||
-      packet.human_review_required !== true ||
-      packet.automatic_scientific_publication_allowed !== false ||
-      packet.canonical_knowledge_mutation_allowed !== false
-    ) {
-      return fail(res, 422, "manifest_contract_rejected", "The immutable review manifest contract was incomplete.");
-    }
-    const fingerprint = createHash("sha256")
-      .update(JSON.stringify(input))
-      .digest("hex");
-    return json(res, 200, {
-      contract_version: "oc-run-evidence-manifest-v1",
-      run_id: input.run_id,
-      research_question: input.research_question,
-      taxon_id: input.taxon_id,
-      taxonomy_snapshot_id: input.taxonomy_snapshot_id,
-      run_fingerprint: fingerprint,
-      created_at_utc: "2026-01-01T00:00:00.000Z",
-      verification_state: packet.verification_state,
-      resolved_evidence_count: packet.resolved_evidence.length,
-      missing_evidence_count: packet.missing_evidence.length,
-      knowledge_gap_count: packet.knowledge_gaps.length,
-      contradictions: packet.contradictions,
-      review_decision: null,
-      epistemic_state: "fixture_review_pending",
-      human_review_required: true,
-      automatic_scientific_publication_allowed: false,
-      canonical_knowledge_mutation_allowed: false,
-      canonical_activation_requires_human_authority: true,
-      immutable: true,
-    });
+  // The synthesis router is mounted inside the owner-gated scientific
+  // interpretation router, so the real paths carry both prefixes. A bare
+  // /synthesis/... path is not served by the deployed app (404), and this
+  // stand-in does not answer it either. See SYNTHESIS_PREFIX.
+  if (path === `${SYNTHESIS_PREFIX}/run-manifest` && req.method === "POST") {
+    const result = runEvidenceManifest(asJson());
+    return result.code
+      ? fail(res, 422, result.code, "The immutable review manifest contract was incomplete.")
+      : json(res, 200, result.manifest);
   }
 
-  if (path === "/synthesis/candidate-proposal" && req.method === "POST") {
-    const input = asJson();
-    if (
-      input.manifest?.verification_state !== "ready_for_review" ||
-      input.verification_packet?.verification_state !== "ready_for_review" ||
-      input.verification_packet?.human_review_required !== true
-    ) {
-      return fail(res, 422, "proposal_contract_rejected", "Only a review-ready, human-gated packet may become a proposal.");
-    }
-    return json(res, 200, {
-      contract_version: "oc-candidate-knowledge-proposal-v1",
-      proposal_id: `fixture-proposal-${createHash("sha256").update(JSON.stringify(input)).digest("hex").slice(0, 16)}`,
-      run_id: input.manifest.run_id,
-      run_fingerprint: input.manifest.run_fingerprint,
-      candidate_handoff_request: input.verification_packet.reasoning?.candidate_knowledge ?? {},
-      review_required: true,
-      owner_submission_required: true,
-      candidate_persistence_performed: false,
-      automatic_approval: false,
-      automatic_scientific_publication: false,
-      canonical_knowledge_mutation: false,
-      knowledge_graph_mutation: false,
-    });
+  if (path === `${SYNTHESIS_PREFIX}/candidate-proposal` && req.method === "POST") {
+    const result = candidateKnowledgeProposal(asJson());
+    return result.code
+      ? fail(res, 422, result.code, "Only a review-ready, human-gated packet may become a proposal.")
+      : json(res, 200, result.proposal);
   }
 
   match = /^\/brain\/missions\/([^/]+)$/.exec(path);
@@ -1647,6 +2116,510 @@ async function calyxRoute(req, res, url) {
 let requestOrigin = "*";
 let requestHeaders = "";
 
+
+/* -------------------------------------------------- field journey (J5→J6) --- */
+
+/**
+ * Journey 5 (field observations) and journey 6 (competing hypotheses) in the
+ * shapes `src/lib/fieldObservations.ts` and `src/lib/fieldHypotheses.ts`
+ * declare. Deterministic, provider-free, and — like everything here — a test
+ * double: the hypothesis wording is fixture prose, not the backend library.
+ * Locality is refused on the same key list the real guard uses, so the browser
+ * journey proves the client never sends it.
+ */
+const FIELD_LOCALITY_KEYS = new Set([
+  "lat", "latitude", "lon", "lng", "longitude", "coord", "coords", "coordinate", "coordinates",
+  "locality", "verbatim_locality", "location", "site", "place", "grid", "gps", "elevation_m",
+]);
+function localityKeyIn(value, path = "") {
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) { const hit = localityKeyIn(item, `${path}[${index}]`); if (hit) return hit; }
+    return null;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      const where = path ? `${path}.${key}` : key;
+      if (FIELD_LOCALITY_KEYS.has(key.trim().toLowerCase())) return where;
+      const hit = localityKeyIn(nested, where); if (hit) return hit;
+    }
+  }
+  return null;
+}
+const fieldStore = { observations: new Map(), byDraft: new Map(), sets: new Map(), hypotheses: new Map() };
+const FIELD_KG = "blocked_pending_human_scientific_review";
+
+function fieldObservationOut(record) {
+  return { ...record, photo_count: 0, scientific_status: "observer_report", knowledge_graph_publication: FIELD_KG,
+    hypotheses_path: `/api/field-observations/${record.id}/hypotheses` };
+}
+
+function hypothesisFixture(setId, observationId, template) {
+  return {
+    hypothesis_id: `${setId}-${template.template_id}`, set_id: setId, observation_id: observationId,
+    template_id: template.template_id, hypothesis_class: template.hypothesis_class, ko_0038_strategy: template.strategy,
+    epistemic_status: "HYPOTHESIS", statement: template.statement, predictions: [template.prediction],
+    would_support: [template.support], would_contradict: [template.contradict], cue_matches: template.cues,
+    question_family_ids: ["pollinator-specificity"], status: "PROPOSED", review_state: "machine_assisted", human_review: null,
+    evidence_balance: { supporting: 0, contradicting: 0, unknown: 0 }, evidence_state: "no_evidence", evidence: [],
+    knowledge_graph_publication: FIELD_KG,
+  };
+}
+
+function generateFixtureSet(observationId, snapshot) {
+  const interaction = snapshot.interaction || {};
+  const behaviors = Array.isArray(interaction.visitor_behaviors) ? interaction.visitor_behaviors : [];
+  const templates = [];
+  if (interaction.visitor_observed && behaviors.includes("pseudocopulation_like_contact")) {
+    templates.push({ template_id: "sexual-deception", hypothesis_class: "sexual_deception", strategy: "sexual deception",
+      statement: "Fixture: the flower is pollinated by male insects attempting to mate with the labellum.",
+      prediction: "Only male visitors of one group make column contact.", support: "Pollinarium seen on a male visitor.",
+      contradict: "Nectar found and visitors feed.", cues: ["visitor_observed", "pseudocopulation_like_contact"] });
+  } else {
+    templates.push({ template_id: "food-deception", hypothesis_class: "food_deception", strategy: "generalised food deception",
+      statement: "Fixture: the flower attracts foraging visitors without offering a reward.",
+      prediction: "Visitors probe and leave quickly.", support: "Repeated probing with no nectar found.",
+      contradict: "Nectar present at the spur.", cues: interaction.visitor_observed ? ["visitor_observed"] : [] });
+  }
+  templates.push({ template_id: "non-pollinating-visit", hypothesis_class: "non_pollinating_visit", strategy: "none (visit without pollination)",
+    statement: "Fixture: the visitor observed does not transfer pollen.", prediction: "No pollinia removal after visits.",
+    support: "Visits recorded, pollinia intact.", contradict: "Pollinia removed after the visit.", cues: [] });
+  templates.push({ template_id: "identification-uncertainty", hypothesis_class: "identification_uncertainty", strategy: "not applicable",
+    statement: "Fixture: the orchid or visitor identification is uncertain and the pattern may belong to another taxon.",
+    prediction: "Re-identification changes the candidate set.", support: "Expert confirms a different taxon.",
+    contradict: "Identification confirmed from voucher photographs.", cues: [] });
+  const setId = `set-${createHash("sha256").update(`${observationId}\n${JSON.stringify(snapshot)}`).digest("hex").slice(0, 12)}`;
+  const hypotheses = templates.map((template) => hypothesisFixture(setId, observationId, template));
+  return {
+    set_id: setId, observation_id: observationId, observation_fingerprint: setId.slice(4), created: true,
+    generated_at: new Date().toISOString(),
+    generation: { mode: "deterministic_rule_library", library_version: "reference-fixture/0", contract_version: "field-hypotheses/v1",
+      provider_called: false, basis: "Fixture rule table in e2e/support/reference-backend.mjs.", cues: [] , cue_tokens: [] },
+    observation: { observer_id: snapshot.observer_id, observed_at: snapshot.observed_at, taxon_hint: snapshot.taxon_hint ?? null,
+      epistemic_certainty: snapshot.epistemic_certainty || "POSSIBLE", locality_sensitivity: snapshot.locality_sensitivity || "PRIVATE",
+      media_count: Array.isArray(snapshot.media_content_hashes) ? snapshot.media_content_hashes.length : 0 },
+    minimum_competing_hypotheses: 2, hypotheses,
+    follow_up_protocol: [
+      { step_id: "watch-15", instruction: "Watch the flower for fifteen minutes without touching it and note every visitor.", purpose: "Distinguish visitors that contact the column from those that do not.", non_destructive: true, while_on_site: true, discriminates: ["sexual_deception", "non_pollinating_visit"] },
+      { step_id: "photo-column", instruction: "Photograph the column and pollinia; do not remove anything.", purpose: "Record whether pollinia are present after visits.", non_destructive: true, while_on_site: true, discriminates: ["non_pollinating_visit"] },
+    ],
+    protocol_constraints: ["Never dissect or remove floral parts.", "Record locality only in the Field Journal under its sensitivity class."],
+    review_state: "machine_assisted", knowledge_graph_publication: FIELD_KG,
+  };
+}
+
+function evidenceState(balance) {
+  const { supporting, contradicting, unknown } = balance;
+  if (!supporting && !contradicting && !unknown) return "no_evidence";
+  if (supporting && contradicting) return "conflicting";
+  if (supporting) return "supporting_only";
+  if (contradicting) return "contradicting_only";
+  return "unknown_only";
+}
+
+async function fieldRoute(req, res, url) {
+  const path = url.pathname;
+  const body = req.method === "POST" ? safeJson(await readBody(req)) : {};
+  const leak = req.method === "POST" ? localityKeyIn(body) : null;
+  if (leak) return json(res, 422, { detail: [{ type: "value_error", loc: ["body"], msg: `Value error, SENSITIVE_LOCALITY_FORBIDDEN: ${leak}` }] });
+
+  if (path === "/api/field-observations" && req.method === "POST") {
+    const userId = bearer(req);
+    if (!userId) return json(res, 401, { detail: "Owner session or API key is required" });
+    if (typeof body.note !== "string" || !body.note.trim()) {
+      return json(res, 422, { detail: [{ type: "string_too_short", loc: ["body", "note"], msg: "String should have at least 1 character" }] });
+    }
+    const draftKey = body.client_draft_id ? `${userId}\n${body.client_draft_id}` : null;
+    if (draftKey && fieldStore.byDraft.has(draftKey)) return json(res, 200, fieldObservationOut(fieldStore.byDraft.get(draftKey)));
+    const now = new Date().toISOString();
+    const record = {
+      contract_version: "field-observations/v1",
+      id: `fo-${createHash("sha256").update(draftKey || randomUUID()).digest("hex").slice(0, 24)}`,
+      observer_subject: userId, observed_at: body.observed_at, note: body.note, taxon_hint: body.taxon_hint ?? null,
+      epistemic_certainty: body.epistemic_certainty || "POSSIBLE", curation_state: "PENDING", curation_reason: null,
+      curated_by: null, curated_at: null, locality_visibility: body.locality_visibility || "private",
+      media: Array.isArray(body.media) ? body.media : [], client_draft_id: body.client_draft_id ?? null,
+      created_at: now, updated_at: now,
+    };
+    fieldStore.observations.set(record.id, record);
+    if (draftKey) fieldStore.byDraft.set(draftKey, record);
+    return json(res, 201, fieldObservationOut(record));
+  }
+
+  let match = /^\/api\/field-observations\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = fieldStore.observations.get(decodeURIComponent(match[1]));
+    return record ? json(res, 200, fieldObservationOut(record)) : json(res, 404, { detail: "Observation not found" });
+  }
+
+  match = /^\/api\/field-observations\/([^/]+)\/hypotheses$/.exec(path);
+  if (match) {
+    const observationId = decodeURIComponent(match[1]);
+    if (req.method === "POST") {
+      const set = generateFixtureSet(observationId, body);
+      fieldStore.sets.set(observationId, set);
+      for (const hypothesis of set.hypotheses) fieldStore.hypotheses.set(hypothesis.hypothesis_id, hypothesis);
+      return json(res, 200, set);
+    }
+    if (req.method === "GET") {
+      const set = fieldStore.sets.get(observationId);
+      return set ? json(res, 200, { ...set, created: false }) : json(res, 404, { detail: "No hypothesis set for this observation" });
+    }
+  }
+
+  match = /^\/api\/field-hypotheses\/([^/]+)\/evidence$/.exec(path);
+  if (match && req.method === "POST") {
+    const hypothesis = fieldStore.hypotheses.get(decodeURIComponent(match[1]));
+    if (!hypothesis) return json(res, 404, { detail: "Hypothesis not found" });
+    const stance = String(body.stance || "").toUpperCase();
+    if (!["SUPPORTING", "CONTRADICTING", "UNKNOWN"].includes(stance)) return json(res, 422, { detail: "stance must be SUPPORTING, CONTRADICTING or UNKNOWN" });
+    if (typeof body.recorder_subject === "string" && body.recorder_subject.includes("@")) return json(res, 422, { detail: "recorder_subject must be opaque" });
+    const evidence = { ...body, stance, evidence_id: `ev-${randomUUID().slice(0, 8)}`, hypothesis_id: hypothesis.hypothesis_id, recorded_at: new Date().toISOString(), created: true };
+    hypothesis.evidence.push(evidence);
+    hypothesis.evidence_balance[stance.toLowerCase()] += 1;
+    hypothesis.evidence_state = evidenceState(hypothesis.evidence_balance);
+    hypothesis.status = "UNDER_EVALUATION";
+    return json(res, 200, hypothesis);
+  }
+
+  match = /^\/api\/field-hypotheses\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const hypothesis = fieldStore.hypotheses.get(decodeURIComponent(match[1]));
+    return hypothesis ? json(res, 200, hypothesis) : json(res, 404, { detail: "Hypothesis not found" });
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+
+
+/* ------------------------------------------- public intake (J10, J12, J13) --- */
+
+/**
+ * Community observations (`/api/community/*`, orchid-calyx-backend
+ * app/community_observation) and the constituent platform
+ * (`/api/constituent/*`, app/constituent_platform) in the shapes the public
+ * pages consume. Public writes need no bearer; the moderation view, the
+ * preference centre without a manage token, and the owner routes answer 401,
+ * exactly as the real backend does. Fixture data only.
+ */
+const publicIntake = {
+  communityObservations: new Map(),
+  subscriptions: new Map(),
+  contactMessages: new Map(),
+};
+// One already-approved record so the browse tab has something to list. Its
+// verbatim locality is present in the store and must never appear in a list.
+const SEEDED_APPROVED_ID = "11111111-2222-4333-8444-555555555555";
+publicIntake.communityObservations.set(SEEDED_APPROVED_ID, {
+  id: SEEDED_APPROVED_ID,
+  submitter_auth_subject: "fixture-member",
+  taxon_name_verbatim: "Fixture orchid (approved record)",
+  location_verbatim: "FIXTURE-LOCALITY-MUST-NOT-LEAK",
+  observation_date: "2026-06-01",
+  epistemic_label: "POSSIBLE",
+  moderation_state: "APPROVED",
+  notes: null,
+  evidence_media_ids: [],
+  created_at: "2026-06-02T09:00:00.000Z",
+  moderated_at: "2026-06-03T09:00:00.000Z",
+  moderation_reason: "fixture",
+});
+
+function minimalObservation(record) {
+  return { id: record.id, moderation_state: record.moderation_state, created_at: record.created_at };
+}
+
+function fixtureManageToken(normalizedEmail) {
+  return createHash("sha256").update(`fixture-manage:${normalizedEmail}`).digest("hex").slice(0, 40);
+}
+
+function normalizeEmailFixture(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized || normalized.length > 320 || /\s/.test(normalized) || normalized.split("@").length !== 2) return null;
+  const [local, domain] = normalized.split("@");
+  if (!local || !domain || domain.startsWith(".") || domain.endsWith(".")) return null;
+  return normalized;
+}
+
+async function communityRoute(req, res, url) {
+  const path = url.pathname;
+  if (path === "/api/community/observations" && req.method === "POST") {
+    const body = safeJson(await readBody(req));
+    for (const field of ["taxon_name_verbatim", "location_verbatim", "observation_date", "epistemic_label"]) {
+      if (!body[field]) return json(res, 422, { detail: [{ type: "missing", loc: ["body", field], msg: "Field required" }] });
+    }
+    const record = {
+      id: randomUUID(),
+      submitter_auth_subject: req.headers["x-auth-subject"] || "anonymous",
+      taxon_name_verbatim: String(body.taxon_name_verbatim).slice(0, 500),
+      location_verbatim: String(body.location_verbatim).slice(0, 1000),
+      observation_date: body.observation_date,
+      epistemic_label: body.epistemic_label,
+      moderation_state: "SUBMITTED",
+      notes: body.notes ?? null,
+      evidence_media_ids: Array.isArray(body.evidence_media_ids) ? body.evidence_media_ids : [],
+      created_at: new Date().toISOString(),
+      moderated_at: null,
+      moderation_reason: null,
+    };
+    publicIntake.communityObservations.set(record.id, record);
+    return json(res, 200, minimalObservation(record));
+  }
+  if (path === "/api/community/observations" && req.method === "GET") {
+    const state = url.searchParams.get("moderation_state");
+    const limit = Math.min(Number(url.searchParams.get("limit") || 50), 200);
+    let items = Array.from(publicIntake.communityObservations.values());
+    if (state) items = items.filter((item) => item.moderation_state === state);
+    items.sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
+    return json(res, 200, { items: items.slice(0, limit).map(minimalObservation), total: items.length });
+  }
+  let match = /^\/api\/community\/observations\/([^/]+)\/moderate$/.exec(path);
+  if (match && req.method === "PATCH") {
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = publicIntake.communityObservations.get(decodeURIComponent(match[1]));
+    if (!record) return json(res, 404, { detail: "Observation not found" });
+    const body = safeJson(await readBody(req));
+    record.moderation_state = body.new_state;
+    record.moderated_at = new Date().toISOString();
+    return json(res, 200, minimalObservation(record));
+  }
+  match = /^\/api\/community\/observations\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    // The full record carries verbatim locality: moderation view only.
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = publicIntake.communityObservations.get(decodeURIComponent(match[1]));
+    return record ? json(res, 200, record) : json(res, 404, { detail: "Observation not found" });
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+
+async function constituentRoute(req, res, url) {
+  const path = url.pathname;
+  const body = ["POST", "PATCH"].includes(req.method) ? safeJson(await readBody(req)) : {};
+  const ownerRoutes = new Set(["/api/constituent/contact/messages", "/api/constituent/subscriptions/summary"]);
+  if (ownerRoutes.has(path) || (path === "/api/constituent/newsletter/archive" && req.method === "POST")) {
+    if (!bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+  }
+
+  if (path === "/api/constituent/subscribe" && req.method === "POST") {
+    const normalized = normalizeEmailFixture(body.email);
+    if (!normalized) return json(res, 422, { detail: "INVALID_EMAIL" });
+    const topics = Array.isArray(body.topics) ? body.topics : [];
+    if (!topics.every((t) => /^[a-z0-9][a-z0-9_-]{0,39}$/.test(String(t)))) return json(res, 422, { detail: "invalid topic slug" });
+    if (!["immediate", "daily", "weekly", "monthly", "quarterly"].includes(body.frequency || "weekly")) return json(res, 422, { detail: "invalid frequency" });
+    const record = publicIntake.subscriptions.get(normalized) || { constituent_id: randomUUID(), normalized_email: normalized, suppressions: [] };
+    Object.assign(record, { state: "subscribed", topics: [...new Set(topics)].sort(), frequency: body.frequency || "weekly", format: body.format || "html", updated_at: new Date().toISOString() });
+    record.suppressions = record.suppressions.filter((s) => s !== "unsubscribe");
+    publicIntake.subscriptions.set(normalized, record);
+    return json(res, 200, {
+      constituent_id: record.constituent_id, normalized_email: normalized, state: "subscribed",
+      welcome_email_communication_state: "awaiting_approval", manage_token: fixtureManageToken(normalized),
+      message: "Subscribed. The welcome email is held for human approval before any dispatch (CommunicationState.AWAITING_APPROVAL).",
+    });
+  }
+  if (path === "/api/constituent/unsubscribe" && req.method === "POST") {
+    const normalized = normalizeEmailFixture(body.email);
+    if (!normalized) return json(res, 422, { detail: "INVALID_EMAIL" });
+    const record = publicIntake.subscriptions.get(normalized) || { constituent_id: randomUUID(), normalized_email: normalized, topics: [], frequency: "weekly", format: "html", suppressions: [] };
+    record.state = "unsubscribed";
+    if (!record.suppressions.includes("unsubscribe")) record.suppressions.push("unsubscribe");
+    publicIntake.subscriptions.set(normalized, record);
+    return json(res, 200, { normalized_email: normalized, state: "unsubscribed", message: "Unsubscribed. No further community, fundraising or marketing email will be sent to this address." });
+  }
+  if (path === "/api/constituent/preferences") {
+    // Email alone never unlocks the preference centre: the per-address manage
+    // token issued at subscription or an owner bearer is required.
+    const normalized = normalizeEmailFixture(url.searchParams.get("email"));
+    const token = url.searchParams.get("token");
+    const tokenValid = Boolean(normalized && token && token === fixtureManageToken(normalized));
+    if (!tokenValid && !bearer(req)) return json(res, 401, { detail: "Owner session or API key is required" });
+    const record = normalized ? publicIntake.subscriptions.get(normalized) : null;
+    if (!record) return json(res, 404, { detail: "No subscription record for this address." });
+    if (req.method === "PATCH") Object.assign(record, body, { updated_at: new Date().toISOString() });
+    return json(res, 200, record);
+  }
+  if (path === "/api/constituent/newsletter/archive" && req.method === "GET") {
+    return json(res, 200, { items: [], total: 0, offset: Number(url.searchParams.get("offset") || 0), limit: Number(url.searchParams.get("limit") || 20) });
+  }
+  if (path === "/api/constituent/contact" && req.method === "POST") {
+    const normalized = normalizeEmailFixture(body.email);
+    if (!normalized) return json(res, 422, { detail: "INVALID_EMAIL" });
+    if (!["general", "bug", "suggestion"].includes(body.category || "general")) return json(res, 422, { detail: "invalid category" });
+    const text = String(body.body || "").replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g, "").trim();
+    if (text.length < 10) return json(res, 422, { detail: "body must be at least 10 characters of plain text" });
+    if (text.length > 4000) return json(res, 422, { detail: "body must be at most 4000 characters" });
+    const reference_id = `cm-${createHash("sha256").update(`${normalized}\n${text}\n${body.subject || ""}`).digest("hex").slice(0, 24)}`;
+    if (!publicIntake.contactMessages.has(reference_id)) {
+      publicIntake.contactMessages.set(reference_id, { reference_id, category: body.category || "general", name: body.name ?? null, normalized_email: normalized, subject: body.subject ?? null, body: text, source: body.source ?? null, received_at: new Date().toISOString(), state: "received", review: "human_review_required", agent_exposure: "never_forwarded_to_agents", content_trust: "untrusted_plain_text" });
+    }
+    return json(res, 200, { reference_id, category: body.category || "general", state: "received", review: "human_review_required", agent_exposure: "never_forwarded_to_agents", message: "Received. A person will read this; it is not passed to automated agents." });
+  }
+  if (path === "/api/constituent/subscriptions/summary" && req.method === "GET") {
+    const rows = Array.from(publicIntake.subscriptions.values());
+    const by_state = {};
+    for (const row of rows) by_state[row.state] = (by_state[row.state] || 0) + 1;
+    return json(res, 200, { total: rows.length, by_state, welcome_communications_awaiting_approval: rows.filter((row) => row.state === "subscribed").length });
+  }
+  if (path === "/api/constituent/contact/messages" && req.method === "GET") {
+    const items = Array.from(publicIntake.contactMessages.values()).sort((a, b) => (a.received_at < b.received_at ? 1 : -1));
+    return json(res, 200, { items, total: items.length, offset: 0, limit: 20 });
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+
+/* ==== BEGIN evidence-feedback owner review queue fixture (R1 journey 12) =====
+ *
+ * WHAT THIS IS: a replay of REAL responses captured from orchid-calyx-backend
+ * PR #1663 (owner review queue, merged to backend oc-autonomous-integration as
+ * 95edfe014 with an identical tree) running LOCALLY at the SHA in the
+ * fixture's `_meta` (uvicorn, file store, no DB -- never production). Every
+ * submitted object and statement in it is SYNTHETIC. The fixture lives beside
+ * the unit-test fixtures:
+ * src/lib/__fixtures__/evidenceFeedbackReview.realBackend.json.
+ *
+ * Owner login is a SYNTHETIC stand-in (like the /auth/v1 identity stand-in):
+ * POST /api/mission-control/owner/session-token with the fixture access code
+ * below issues a local token that only this process accepts; the app's own
+ * owner transport stores it and sends it as the owner bearer. The review
+ * routes then answer exactly as the real backend did:
+ *   - owner bearer        -> the captured owner responses
+ *   - member bearer       -> the captured 403 OWNER_ACCESS_REQUIRED
+ *   - X-API-Key           -> the captured 403 OWNER_SESSION_REQUIRED
+ *   - nothing             -> the captured 401
+ * The replay follows the captured sequence (reject A -> route C to governed
+ * review -> accept B's trivial correction); a request that departs from it
+ * gets a SYNTHETIC 409 REPLAY_OUT_OF_SEQUENCE so a frontend that sent
+ * something else fails loudly instead of rendering a mismatched capture.
+ * POST /__reference/evidence-feedback-review/reset restarts the sequence.
+ */
+const FEEDBACK_REVIEW = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/evidenceFeedbackReview.realBackend.json", import.meta.url), "utf8"),
+);
+const FEEDBACK_REVIEW_OWNER_CODE = "reference-owner-code-SYNTHETIC";
+const FEEDBACK_REVIEW_IDS = FEEDBACK_REVIEW._meta.case_ids;
+const FEEDBACK_REVIEW_INPUTS = FEEDBACK_REVIEW._meta.inputs_used;
+const feedbackReviewOwnerTokens = new Set();
+let feedbackReviewStage = 0;
+
+function feedbackReviewCanonical(value) {
+  if (Array.isArray(value)) return value.map(feedbackReviewCanonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, feedbackReviewCanonical(value[key])]));
+  }
+  return value;
+}
+const sameJson = (a, b) => JSON.stringify(feedbackReviewCanonical(a)) === JSON.stringify(feedbackReviewCanonical(b));
+
+function feedbackReviewOutOfSequence(res, what) {
+  // SYNTHETIC: not a backend response.
+  return json(res, 409, { detail: { code: "REPLAY_OUT_OF_SEQUENCE", replay: what, stage: feedbackReviewStage } });
+}
+
+function feedbackReviewOwnerLogin(req, res, path, body) {
+  if (path === "/api/mission-control/owner/session-token" && req.method === "POST") {
+    if (body?.access_code !== FEEDBACK_REVIEW_OWNER_CODE) return json(res, 401, { detail: "Invalid owner access code" });
+    const token = `reference-owner.${randomUUID().replaceAll("-", "")}`;
+    feedbackReviewOwnerTokens.add(token);
+    return json(res, 200, {
+      authenticated: true, status: "authenticated", owner: "owner",
+      expires_at: new Date(Date.now() + 3600_000).toISOString(), token,
+      credential_transport: "httponly_cookie_or_bearer",
+    });
+  }
+  // No owner cookie exists in this stand-in, so a refresh always answers as the real route does without one.
+  return json(res, 401, { detail: "Owner session is required" });
+}
+
+function feedbackReviewListReplay(url) {
+  const lists = FEEDBACK_REVIEW.lists[`stage${feedbackReviewStage}`];
+  const params = url.searchParams;
+  if (params.get("limit") !== "20") return null;
+  const status = params.get("status") || "";
+  const objectType = params.get("object_type") || "";
+  const cursor = params.get("cursor") || "";
+  if (cursor) {
+    if (cursor === lists.page1.body.next_cursor && !status && !objectType) return lists.page2;
+    if (cursor === "not-a-cursor") return FEEDBACK_REVIEW.errors.invalid_cursor;
+    return null;
+  }
+  if (!status && !objectType) return lists.page1;
+  // A captured filtered list for this stage with exactly these filters.
+  return Object.values(lists).find((entry) => {
+    const query = new URL(entry.request.path, "http://reference.invalid").searchParams;
+    return (query.get("status") || "") === status && (query.get("object_type") || "") === objectType && !query.get("cursor");
+  }) || null;
+}
+
+function feedbackReviewDetailReplay(caseId) {
+  const letter = Object.keys(FEEDBACK_REVIEW_IDS).find((key) => FEEDBACK_REVIEW_IDS[key] === caseId);
+  if (!letter) return null;
+  for (let stage = feedbackReviewStage; stage >= 0; stage -= 1) {
+    const captured = FEEDBACK_REVIEW.details[`${letter}_stage${stage}`];
+    if (captured) return captured;
+  }
+  return null;
+}
+
+function feedbackReviewDecisionReplay(caseId, body) {
+  const { A, B, C, E } = FEEDBACK_REVIEW_IDS;
+  const decision = body?.decision;
+  if (caseId === A && decision === "reject" && body.reason === FEEDBACK_REVIEW_INPUTS.REJECT_REASON) {
+    if (feedbackReviewStage === 0) { feedbackReviewStage = 1; return FEEDBACK_REVIEW.decisions.reject_A; }
+    return FEEDBACK_REVIEW.decisions.reject_A_repeat;
+  }
+  if (caseId === A && decision === "reject" && typeof body.reason === "string" && !body.reason.trim()) return FEEDBACK_REVIEW.errors.reject_blank_reason;
+  if (caseId === A && decision === "needs_governed_review" && feedbackReviewStage >= 1) return FEEDBACK_REVIEW.errors.invalid_transition;
+  if (caseId === C && decision === "needs_governed_review" && body.note === FEEDBACK_REVIEW_INPUTS.GOVERNED_NOTE && feedbackReviewStage === 1) {
+    feedbackReviewStage = 2;
+    return FEEDBACK_REVIEW.decisions.governed_C;
+  }
+  if (caseId === B && decision === "accept_trivial" && sameJson(body.corrected_payload, FEEDBACK_REVIEW_INPUTS.corrected_payload_B) && feedbackReviewStage === 2) {
+    feedbackReviewStage = 3;
+    return FEEDBACK_REVIEW.decisions.accept_trivial_B;
+  }
+  if (caseId === E && decision === "accept_trivial") return FEEDBACK_REVIEW.errors.accept_trivial_governed;
+  return null;
+}
+
+async function feedbackReviewRoute(req, res, url) {
+  const path = url.pathname;
+  const body = req.method === "POST" ? safeJson(await readBody(req)) : {};
+  if (path === "/__reference/evidence-feedback-review/reset" && req.method === "POST") {
+    feedbackReviewStage = 0;
+    return json(res, 200, { ok: true, stage: 0 });
+  }
+  if (path.startsWith("/api/mission-control/owner/session-token")) return feedbackReviewOwnerLogin(req, res, path, body);
+
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const send = (captured) => json(res, captured.status, captured.body);
+  if (!feedbackReviewOwnerTokens.has(token)) {
+    if (token && bearer(req)) {
+      return send(req.method === "POST" ? FEEDBACK_REVIEW.auth.member_decision : FEEDBACK_REVIEW.auth.member);
+    }
+    if (req.headers["x-api-key"]) return send(FEEDBACK_REVIEW.auth.api_key);
+    return send(FEEDBACK_REVIEW.auth.anonymous);
+  }
+
+  if (path === "/api/evidence-feedback/review/cases" && req.method === "GET") {
+    const captured = feedbackReviewListReplay(url);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `GET ${url.pathname}${url.search}`);
+  }
+  let match = /^\/api\/evidence-feedback\/review\/cases\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const caseId = decodeURIComponent(match[1]);
+    if (caseId === "efc-000000000000000000000000") return send(FEEDBACK_REVIEW.errors.not_found);
+    const captured = feedbackReviewDetailReplay(caseId);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `GET ${path} (detail not captured)`);
+  }
+  match = /^\/api\/evidence-feedback\/review\/cases\/([^/]+)\/decision$/.exec(path);
+  if (match && req.method === "POST") {
+    const captured = feedbackReviewDecisionReplay(decodeURIComponent(match[1]), body);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `POST ${path}`);
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+/* ==== END evidence-feedback owner review queue fixture ======================= */
+
 const server = createServer(async (req, res) => {
   requestOrigin = req.headers.origin || "*";
   requestHeaders = String(req.headers["access-control-request-headers"] || "");
@@ -1664,6 +2637,19 @@ const server = createServer(async (req, res) => {
     if (url.pathname.startsWith("/auth/v1")) return await identityRoute(req, res, url);
     if (url.pathname.startsWith("/api/conservatory")) return await conservatoryRoute(req, res, url);
     if (url.pathname.startsWith("/api/research/")) return await researchRoute(req, res, url);
+    if (url.pathname.startsWith("/api/field-observations") || url.pathname.startsWith("/api/field-hypotheses")) {
+      return await fieldRoute(req, res, url);
+    }
+    if (url.pathname.startsWith("/api/community/")) return await communityRoute(req, res, url);
+    if (url.pathname.startsWith("/api/constituent/")) return await constituentRoute(req, res, url);
+    // Evidence-feedback owner review queue fixture (see its BEGIN/END block above).
+    if (
+      url.pathname.startsWith("/api/evidence-feedback/review/") ||
+      url.pathname.startsWith("/api/mission-control/owner/session-token") ||
+      url.pathname === "/__reference/evidence-feedback-review/reset"
+    ) {
+      return await feedbackReviewRoute(req, res, url);
+    }
     if (
       url.pathname.startsWith("/api/species/") ||
       url.pathname.startsWith("/api/mycorrhizal/") ||
@@ -1676,11 +2662,12 @@ const server = createServer(async (req, res) => {
       url.pathname.startsWith("/api/matrix-identification/") ||
       url.pathname.startsWith("/brain/") ||
       url.pathname.startsWith("/api/evidence-retrieval/") ||
-      url.pathname.startsWith("/synthesis/")
+      url.pathname.startsWith(`${SYNTHESIS_PREFIX}/`)
     ) {
       return await calyxRoute(req, res, url);
     }
     if (url.pathname === "/__reference/health") return json(res, 200, { ok: true });
+    if (url.pathname === "/__reference/research-traits") return await researchTraitsControlRoute(req, res);
     // The rest of the app reads a handful of tables through PostgREST. None of
     // them belong to the Conservatory journey, but leaving them to 404 fills
     // the console with failures that would mask a real one.

@@ -7,7 +7,9 @@ import { subscribeWorkspaceOutputClears, subscribeWorkspaceOutputs, type Workspa
 import { WorkspaceOutputPanel } from './WorkspaceOutputPanel';
 
 const PanelFrame: React.FC<{ title: string; eyebrow: string; children: React.ReactNode }> = ({ title, eyebrow, children }) => (
-  <section className="h-full overflow-auto rounded-sm border border-stone-200 bg-white p-4">
+  // Focusable so a keyboard user can scroll a panel whose content has no
+  // focusable element of its own (WCAG 2.1.1).
+  <section tabIndex={0} aria-label={title} className="h-full overflow-auto rounded-sm border border-stone-200 bg-white p-4 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#4A7C59]">
     <p className="text-[10px] font-semibold uppercase tracking-[.16em] text-[#4A7C59]">{eyebrow}</p>
     <h3 className="mt-1 font-serif text-lg text-stone-900" style={{ fontFamily: 'Georgia, serif' }}>{title}</h3>
     <div className="mt-3">{children}</div>

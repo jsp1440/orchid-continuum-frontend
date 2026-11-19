@@ -1,0 +1,14 @@
+{
+  "_capture": {
+    "url": "https://api.gbif.org/v1/species/match?name=Oncidium%20flexuosum&strict=true",
+    "captured_at": "2026-09-25",
+    "method": "Firecrawl MCP firecrawl_scrape, formats [\"rawHtml\"], maxAge 0 (live fetch; the sandbox cannot reach api.gbif.org directly)",
+    "firecrawl_scrape_id": "01a0da3b-6d57-75ab-8385-7a5739cc73d6",
+    "upstream_status": 200,
+    "upstream_content_type": "application/json",
+    "note": "body is the exact response text Firecrawl returned; not hand-edited"
+  },
+  "status": 200,
+  "content_type": "application/json",
+  "body": "{\"usageKey\":7689,\"scientificName\":\"Orchidaceae\",\"canonicalName\":\"Orchidaceae\",\"rank\":\"FAMILY\",\"status\":\"ACCEPTED\",\"confidence\":98,\"matchType\":\"HIGHERRANK\",\"kingdom\":\"Plantae\",\"phylum\":\"Tracheophyta\",\"order\":\"Asparagales\",\"family\":\"Orchidaceae\",\"kingdomKey\":6,\"phylumKey\":7707728,\"classKey\":196,\"orderKey\":1169,\"familyKey\":7689,\"class\":\"Liliopsida\"}"
+}

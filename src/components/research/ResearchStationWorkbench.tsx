@@ -16,7 +16,10 @@ import {
 } from 'lucide-react';
 import ScientificSynthesis from '@/components/calyx/ScientificSynthesis';
 import ResearchActivityPanel from '@/components/research/ResearchActivityPanel';
+import ResearchEvidenceChain from '@/components/research/ResearchEvidenceChain';
+import { hasOwnerBearerSession } from '@/lib/backendConfig';
 import { CalyxApiError } from '@/lib/calyxWorkspace';
+import { memberReadRefusal, OWNER_ONLY_MESSAGE } from '@/lib/memberReadAuth';
 import {
   buildResearchDossier,
   getResearchProject,
@@ -29,7 +32,7 @@ import {
   type ResearchStationDossier,
 } from '@/lib/researchStation';
 import {
-  researchStationAtlasHref,
+  researchStationAtlasNextLink,
   researchStationCalyxHref,
   researchStationLexiconHref,
   researchStationMatrixHref,
@@ -80,6 +83,37 @@ type LoadState =
   | { status: 'ready'; dossier: ResearchStationDossier }
   | { status: 'empty' }
   | { status: 'error'; kind: string; message: string };
+
+/** What the page around the workbench may say about the data behind it. */
+export type ResearchStationDataState = 'loading' | 'ready' | 'empty' | 'owner_only' | 'unavailable';
+
+export const OWNER_SESSION_UNVERIFIED_MESSAGE =
+  'Your owner session could not be verified. Sign in again as the owner to open research projects.';
+
+/**
+ * A refused Research Workspace or synthesis request, said as what it is.
+ *
+ * These routes are owner-only for members (backend #1643: only the trait and
+ * literature-list reads accept a member session), and no member token is sent
+ * to them. So a 403, or a 401 without an owner session, means "this view is
+ * limited to owner access" — never "sign-in required", which a signed-in
+ * member cannot act on. Only a 401 while an owner session is held says the
+ * owner session was not accepted. Anything that is not a refusal is null.
+ */
+function refusal(error: CalyxApiError): { kind: 'owner_only' | 'owner_session_unverified'; message: string } | null {
+  const refused = memberReadRefusal(error.status, error.code, { memberScoped: false });
+  if (refused !== 'owner_only') return null;
+  if (error.status === 401 && hasOwnerBearerSession()) {
+    return { kind: 'owner_session_unverified', message: OWNER_SESSION_UNVERIFIED_MESSAGE };
+  }
+  return { kind: 'owner_only', message: OWNER_ONLY_MESSAGE };
+}
+
+function refusalTitle(kind: string, fallback: string): string {
+  if (kind === 'owner_only') return 'Owner access only';
+  if (kind === 'owner_session_unverified') return 'Owner session not verified';
+  return fallback;
+}
 
 const SectionShell: React.FC<{
   icon: React.ReactNode;
@@ -535,7 +569,8 @@ const SynthesisPanel: React.FC<{
         return;
       }
       if (error instanceof CalyxApiError) {
-        setState({ status: 'error', kind: error.kind, message: error.message });
+        const refused = refusal(error);
+        setState({ status: 'error', kind: refused?.kind ?? error.kind, message: refused?.message ?? error.message });
         return;
       }
       setState({
@@ -567,20 +602,22 @@ const SynthesisPanel: React.FC<{
     return (
       <div className="mt-4 rounded-xl border border-amber-300/30 bg-amber-300/5 px-4 py-3" role="status">
         <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-amber-200">
-          {state.kind === 'authentication_required' ? 'Sign-in required' : 'Synthesis unavailable'}
+          {refusalTitle(state.kind, 'Synthesis unavailable')}
         </p>
         <p className="mt-2 text-sm leading-6 text-white/75">{state.message}</p>
         <p className="mt-2 text-xs leading-5 text-white/50">
           No interpretation is shown in its place. This says nothing about the evidence — only
-          that Calyx could not be reached.
+          that Calyx {state.kind === 'owner_only' ? 'did not open it for this account' : 'could not be reached'}.
         </p>
-        <button
-          type="button"
-          onClick={() => void run()}
-          className="mt-3 rounded-full border border-white/20 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-white/5"
-        >
-          Try again
-        </button>
+        {state.kind === 'owner_only' ? null : (
+          <button
+            type="button"
+            onClick={() => void run()}
+            className="mt-3 rounded-full border border-white/20 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-white/5"
+          >
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -939,7 +976,11 @@ const SynthesisPanel: React.FC<{
   );
 };
 
-const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ projectId }) => {
+const ResearchStationWorkbench: React.FC<{
+  projectId?: string | null;
+  /** Told what the workbench actually holds, so the page never claims live data it does not have. */
+  onDataState?: (state: ResearchStationDataState) => void;
+}> = ({ projectId, onDataState }) => {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   // Lifted so every "continue" link carries the thread the synthesis opened.
   // Without it a follow-up asked in Calyx would restart the subject instead of
@@ -981,7 +1022,8 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
       // Fail closed: the station never renders a partial investigation as if it
       // were complete, and never substitutes placeholder scientific content.
       if (error instanceof CalyxApiError) {
-        setState({ status: 'error', kind: error.kind, message: error.message });
+        const refused = refusal(error);
+        setState({ status: 'error', kind: refused?.kind ?? error.kind, message: refused?.message ?? error.message });
         return;
       }
       setState({
@@ -995,6 +1037,14 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
   useEffect(() => {
     void load();
   }, [load]);
+
+  const dataState: ResearchStationDataState =
+    state.status === 'error'
+      ? state.kind === 'owner_only' ? 'owner_only' : 'unavailable'
+      : state.status;
+  useEffect(() => {
+    onDataState?.(dataState);
+  }, [dataState, onDataState]);
 
   if (state.status === 'loading') {
     return (
@@ -1010,9 +1060,7 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
         <div className="flex items-center gap-2 text-amber-200">
           <AlertTriangle className="h-4 w-4" />
           <span className="font-mono text-[10px] uppercase tracking-[0.22em]">
-            {state.kind === 'authentication_required'
-              ? 'Sign-in required'
-              : 'Research Workspace unavailable'}
+            {refusalTitle(state.kind, 'Research Workspace unavailable')}
           </span>
         </div>
         <p className="mt-3 text-sm leading-6 text-white/75">{state.message}</p>
@@ -1020,13 +1068,15 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
           No placeholder investigation is shown in its place. Nothing here is a statement
           about the science — only about what could be retrieved.
         </p>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="mt-4 rounded-full border border-white/20 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-white/5"
-        >
-          Try again
-        </button>
+        {state.kind === 'owner_only' ? null : (
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-4 rounded-full border border-white/20 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white hover:bg-white/5"
+          >
+            Try again
+          </button>
+        )}
       </div>
     );
   }
@@ -1053,6 +1103,12 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
     projectId: dossier.project.project_id,
     conversationId,
   };
+  // Atlas Next filters on a canonical genus or binomial. A nothospecies gets a
+  // genus-level link that is labelled as the fallback it is; a subject the
+  // parser rejects (an opaque taxon id, an authority string, an intergeneric
+  // hybrid) gets no Atlas link rather than an unfiltered or genus-widened Atlas
+  // that looks like this subject's view.
+  const atlasLink = subjectTaxon ? researchStationAtlasNextLink(navContext) : null;
 
   return (
     <div className="grid gap-5">
@@ -1128,19 +1184,11 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
                 </span>
               </li>
             ))}
-            {dossier.evidence.map((item) => (
-              <li
-                key={`${item.evidence_kind}-${item.evidence_id}`}
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-4 py-2.5"
-              >
-                <span className="rounded-full border border-white/20 bg-white/5 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-white/70">
-                  {item.evidence_kind.toLowerCase()}
-                </span>
-                <span className="min-w-0 break-words text-xs leading-5 text-white/75">
-                  {item.evidence_id}
-                </span>
+            {dossier.evidence.length ? (
+              <li className="list-none">
+                <ResearchEvidenceChain projectId={dossier.project.project_id} links={dossier.evidence} />
               </li>
-            ))}
+            ) : null}
           </ul>
         )}
       </SectionShell>
@@ -1188,8 +1236,17 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
         eyebrow="Conflicts"
         title="Where the evidence disagrees"
       >
-        {dossier.conflicts.length ? (
+        {dossier.conflicts.length || dossier.contradictingEvidence.length ? (
           <ul className="grid gap-2">
+            {dossier.contradictingEvidence.map((item) => (
+              <li
+                key={`${item.evidence_kind}-${item.evidence_id}`}
+                data-testid="research-conflict-evidence"
+                className="rounded-xl border border-amber-300/30 bg-amber-300/[0.06] px-4 py-2.5 text-xs leading-5 text-amber-100/90"
+              >
+                {item.evidence_kind.toLowerCase()} #{item.evidence_id} is linked as contradicting — its claim and review standing are shown under Known.
+              </li>
+            ))}
             {dossier.conflicts.map((item) => (
               <li
                 key={item.document_id}
@@ -1247,12 +1304,27 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
       >
         {subjectTaxon ? (
           <div className="grid gap-3 sm:grid-cols-2">
-            <ToolLink
-              to={researchStationAtlasHref(navContext)}
-              icon={<Globe2 className="h-4 w-4" />}
-              label="Atlas"
-              detail="Where this taxon has been recorded."
-            />
+            {atlasLink ? (
+              <ToolLink
+                to={atlasLink.href}
+                icon={<Globe2 className="h-4 w-4" />}
+                label="Atlas"
+                detail={
+                  atlasLink.fallback
+                    ? `${atlasLink.fallback.label}. Every record of the genus is shown, not only ${atlasLink.fallback.hybridName}.`
+                    : 'Where this taxon has been recorded.'
+                }
+              />
+            ) : (
+              <p
+                data-testid="research-station-atlas-withheld"
+                className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-white/55"
+              >
+                <span className="block text-sm font-medium text-white/75">Atlas</span>
+                The subject is not a canonical genus or binomial the Atlas can filter on, so no
+                Atlas link is offered rather than a map that is not this subject.
+              </p>
+            )}
             <ToolLink
               to={researchStationRelationshipsHref(navContext)}
               icon={<Network className="h-4 w-4" />}
