@@ -17,6 +17,7 @@ vi.mock("@/lib/relationshipExplorer", () => ({
 }));
 vi.mock("@/lib/ecologicalNeighborhood", () => ({
   fetchSpeciesEcologicalNeighborhood: async () => [],
+  fetchSpeciesEcologicalNeighborhoodOutcome: async () => ({ status: "ok", cards: [] }),
 }));
 vi.mock("@/components/orchid/EcologicalNeighborhood", () => ({ default: () => null }));
 

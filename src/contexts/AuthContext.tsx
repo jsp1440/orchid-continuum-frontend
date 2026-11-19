@@ -150,3 +150,12 @@ export function useAuth(): AuthContextValue {
   if (!ctx) throw new Error('useAuth must be used inside an <AuthProvider>.');
   return ctx;
 }
+
+/**
+ * The auth context when one is mounted, else null. For surfaces that are
+ * public but change with a session (e.g. Matrix identification, which is open
+ * to signed-in members) and must still render stand-alone.
+ */
+export function useOptionalAuth(): AuthContextValue | null {
+  return useContext(AuthContext) ?? null;
+}

@@ -82,6 +82,7 @@ export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
   '/mission-control/science',
   '/calyx-science',
   '/mission-control/matrix-registry-review',
+  '/mission-control/feedback-review',
   '/mission-control/readiness/homepage',
   '/mission-control/knowledge-graph-readiness',
   '/mission-control/ai-orchestration',

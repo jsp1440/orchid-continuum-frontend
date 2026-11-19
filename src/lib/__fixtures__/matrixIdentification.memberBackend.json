@@ -1,0 +1,1234 @@
+{
+ "_meta": {
+  "what": "REAL member-shaped responses from orchid-calyx-backend running LOCALLY (uvicorn, file store, no DB) - never production.",
+  "backend_sha": "92e381c5a44c2373e6a56bb1d148b9997ab80e08",
+  "captured_at": "2026-09-26T21:55:42Z",
+  "identity": "frontend e2e/support/reference-backend.mjs /auth/v1 stand-in (throwaway local accounts)",
+  "registry": "SYNTHETIC fixture seeded with a local per-run API key; candidate names/states/provenance are invented test shapes, not claims about any orchid. Planted SYNTHETIC-*-MUST-NOT-RENDER tokens prove the member view drops locality.",
+  "script": "scratchpad capture.py (maker harness): real HTTP calls to uvicorn app.main:app; every body below is exactly what the backend emitted",
+  "session_id_note": "member A's session id is the real UUID the backend generated; the reference backend substitutes a fresh UUID per replayed session (the only transformation)."
+ },
+ "fixture_registry": {
+  "registry_id": "r1-synthetic-member-matrix",
+  "version": "1",
+  "title": "SYNTHETIC R1 member Matrix fixture (not a scientific claim)",
+  "scope": {
+   "genus": "Fixturea",
+   "site": "SYNTHETIC-SITE-MUST-NOT-RENDER"
+  },
+  "characters": [
+   {
+    "character": "spur_length_mm",
+    "label": "Spur length",
+    "value_type": "numeric_range",
+    "weight": 3,
+    "description": "Measure the spur from its base to its tip (synthetic fixture character)."
+   },
+   {
+    "character": "elevation_band",
+    "label": "Elevation band",
+    "value_type": "categorical",
+    "weight": 2
+   },
+   {
+    "character": "flower_color",
+    "label": "Flower color",
+    "value_type": "categorical",
+    "weight": 1
+   }
+  ],
+  "candidates": [
+   {
+    "taxon_id": "fixture:taxon-a",
+    "scientific_name": "Fixture taxon A",
+    "states": {
+     "spur_length_mm": {
+      "min": 20,
+      "max": 30
+     },
+     "elevation_band": "lowland",
+     "flower_color": "white"
+    },
+    "provenance": {
+     "source": "SYNTHETIC R1 fixture",
+     "citation": "synthetic-fixture-a",
+     "locality": "SYNTHETIC-LOCALITY-MUST-NOT-RENDER"
+    }
+   },
+   {
+    "taxon_id": "fixture:taxon-b",
+    "scientific_name": "Fixture taxon B",
+    "states": {
+     "spur_length_mm": {
+      "min": 80,
+      "max": 120
+     },
+     "elevation_band": "montane",
+     "flower_color": "white per collector note"
+    },
+    "provenance": {
+     "source": "SYNTHETIC R1 fixture",
+     "citation": "synthetic-fixture-b"
+    }
+   },
+   {
+    "taxon_id": "fixture:taxon-c",
+    "scientific_name": "Fixture taxon C",
+    "states": {
+     "spur_length_mm": {
+      "min": 22,
+      "max": 28
+     },
+     "elevation_band": "montane",
+     "flower_color": "yellow"
+    },
+    "provenance": {
+     "source": "SYNTHETIC R1 fixture",
+     "citation": "synthetic-fixture-c"
+    }
+   }
+  ],
+  "provenance": {
+   "source": "SYNTHETIC local fixture for the R1 J4 frontend member flow"
+  }
+ },
+ "anon_registry_list": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/registry",
+   "body": null
+  },
+  "status": 401,
+  "body": {
+   "detail": "Owner session, member session, or API key is required"
+  }
+ },
+ "member_registry_create_refused": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/registry",
+   "body": "(the fixture_registry payload above)"
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "registry_list": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/registry",
+   "body": null
+  },
+  "status": 200,
+  "body": {
+   "versions": [
+    {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "title": "SYNTHETIC R1 member Matrix fixture (not a scientific claim)",
+     "candidate_count": 3,
+     "character_count": 3,
+     "created_at": "2026-09-26T21:55:42.617965+00:00",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    }
+   ],
+   "read_only_listing": true
+  }
+ },
+ "registry_detail": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/registry/r1-synthetic-member-matrix/1",
+   "body": null
+  },
+  "status": 200,
+  "body": {
+   "schema_version": "matrix-identification-registry/v1",
+   "registry_id": "r1-synthetic-member-matrix",
+   "version": "1",
+   "title": "SYNTHETIC R1 member Matrix fixture (not a scientific claim)",
+   "scope": {
+    "genus": "Fixturea"
+   },
+   "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+   "publication_state": "review_required",
+   "character_count": 3,
+   "candidate_count": 3,
+   "characters": [
+    {
+     "character": "spur_length_mm",
+     "label": "Spur length",
+     "description": "Measure the spur from its base to its tip (synthetic fixture character).",
+     "value_type": "numeric_range",
+     "weight": 3.0,
+     "concept_id": null
+    },
+    {
+     "character": "withheld",
+     "label": "withheld",
+     "description": null,
+     "value_type": "categorical",
+     "weight": 2.0,
+     "concept_id": null
+    },
+    {
+     "character": "flower_color",
+     "label": "Flower color",
+     "description": null,
+     "value_type": "categorical",
+     "weight": 1.0,
+     "concept_id": null
+    }
+   ],
+   "member_view": true
+  }
+ },
+ "create": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions",
+   "body": {
+    "registry_id": "r1-synthetic-member-matrix",
+    "version": "1",
+    "metadata": {
+     "input_mode": "guided",
+     "client": "orchid-continuum-frontend"
+    }
+   }
+  },
+  "status": 200,
+  "body": {
+   "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "schema_version": "matrix-identification-session/v1",
+   "registry": {
+    "registry_id": "r1-synthetic-member-matrix",
+    "version": "1",
+    "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+    "publication_state": "review_required",
+    "scope": {
+     "genus": "Fixturea"
+    }
+   },
+   "observations": [],
+   "revision": 0,
+   "status": "active",
+   "created_at": "2026-09-26T21:55:42.647315+00:00",
+   "updated_at": "2026-09-26T21:55:42.647315+00:00",
+   "next_observation": null,
+   "mine": true
+  }
+ },
+ "evaluate0": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/evaluate",
+   "body": {
+    "limit": 20
+   }
+  },
+  "status": 200,
+  "body": {
+   "session": {
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "schema_version": "matrix-identification-session/v1",
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    },
+    "observations": [],
+    "revision": 0,
+    "status": "active",
+    "created_at": "2026-09-26T21:55:42.647315+00:00",
+    "updated_at": "2026-09-26T21:55:42.652411+00:00",
+    "next_observation": {
+     "character": "spur_length_mm",
+     "label": "Spur length",
+     "description": "Measure the spur from its base to its tip (synthetic fixture character).",
+     "value_type": "numeric_range",
+     "concept_id": null,
+     "matrix_weight": 3.0,
+     "candidate_coverage": 1.0,
+     "distinct_state_count": 3,
+     "candidate_count": 3,
+     "selection_score": 3.0,
+     "reason_code": "highest_deterministic_discrimination",
+     "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+    },
+    "mine": true
+   },
+   "report": {
+    "observation_count": 0,
+    "compared_character_count": 0,
+    "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "revision": 0,
+    "candidates": [
+     {
+      "taxon_id": "fixture:taxon-a",
+      "scientific_name": "Fixture taxon A",
+      "score": 0.0,
+      "coverage": 0.0,
+      "compared_weight": 0.0,
+      "possible_weight": 0,
+      "explanations": [],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-a"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-b",
+      "scientific_name": "Fixture taxon B",
+      "score": 0.0,
+      "coverage": 0.0,
+      "compared_weight": 0.0,
+      "possible_weight": 0,
+      "explanations": [],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-b"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-c",
+      "scientific_name": "Fixture taxon C",
+      "score": 0.0,
+      "coverage": 0.0,
+      "compared_weight": 0.0,
+      "possible_weight": 0,
+      "explanations": [],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-c"
+      }
+     }
+    ],
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    }
+   },
+   "next_observation": {
+    "character": "spur_length_mm",
+    "label": "Spur length",
+    "description": "Measure the spur from its base to its tip (synthetic fixture character).",
+    "value_type": "numeric_range",
+    "concept_id": null,
+    "matrix_weight": 3.0,
+    "candidate_coverage": 1.0,
+    "distinct_state_count": 3,
+    "candidate_count": 3,
+    "selection_score": 3.0,
+    "reason_code": "highest_deterministic_discrimination",
+    "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+   }
+  }
+ },
+ "observe1": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/observations",
+   "body": {
+    "character": "spur_length_mm",
+    "value": 25,
+    "certainty": "certain",
+    "source": {
+     "kind": "user_observation",
+     "interface": "guided-identification"
+    }
+   }
+  },
+  "status": 200,
+  "body": {
+   "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "schema_version": "matrix-identification-session/v1",
+   "registry": {
+    "registry_id": "r1-synthetic-member-matrix",
+    "version": "1",
+    "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+    "publication_state": "review_required",
+    "scope": {
+     "genus": "Fixturea"
+    }
+   },
+   "observations": [
+    {
+     "observation_id": "2a04a924-128e-456d-b96a-b6d80d8428f1",
+     "revision": 1,
+     "character": "spur_length_mm",
+     "value": 25,
+     "certainty": "certain",
+     "weight": null,
+     "review_state": "observed",
+     "created_at": "2026-09-26T21:55:42.658348+00:00",
+     "source": {
+      "kind": "user_observation",
+      "interface": "guided-identification"
+     }
+    }
+   ],
+   "revision": 1,
+   "status": "active",
+   "created_at": "2026-09-26T21:55:42.647315+00:00",
+   "updated_at": "2026-09-26T21:55:42.658362+00:00",
+   "next_observation": {
+    "character": "spur_length_mm",
+    "label": "Spur length",
+    "description": "Measure the spur from its base to its tip (synthetic fixture character).",
+    "value_type": "numeric_range",
+    "concept_id": null,
+    "matrix_weight": 3.0,
+    "candidate_coverage": 1.0,
+    "distinct_state_count": 3,
+    "candidate_count": 3,
+    "selection_score": 3.0,
+    "reason_code": "highest_deterministic_discrimination",
+    "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+   },
+   "mine": true
+  }
+ },
+ "evaluate1": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/evaluate",
+   "body": {
+    "limit": 20
+   }
+  },
+  "status": 200,
+  "body": {
+   "session": {
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "schema_version": "matrix-identification-session/v1",
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    },
+    "observations": [
+     {
+      "observation_id": "2a04a924-128e-456d-b96a-b6d80d8428f1",
+      "revision": 1,
+      "character": "spur_length_mm",
+      "value": 25,
+      "certainty": "certain",
+      "weight": null,
+      "review_state": "observed",
+      "created_at": "2026-09-26T21:55:42.658348+00:00",
+      "source": {
+       "kind": "user_observation",
+       "interface": "guided-identification"
+      }
+     }
+    ],
+    "revision": 1,
+    "status": "active",
+    "created_at": "2026-09-26T21:55:42.647315+00:00",
+    "updated_at": "2026-09-26T21:55:42.663361+00:00",
+    "next_observation": {
+     "character": "withheld",
+     "label": "withheld",
+     "description": null,
+     "value_type": "categorical",
+     "concept_id": null,
+     "matrix_weight": 2.0,
+     "candidate_coverage": 1.0,
+     "distinct_state_count": 2,
+     "candidate_count": 3,
+     "selection_score": 1.0,
+     "reason_code": "highest_deterministic_discrimination",
+     "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+    },
+    "mine": true
+   },
+   "report": {
+    "observation_count": 1,
+    "compared_character_count": 1,
+    "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "revision": 1,
+    "candidates": [
+     {
+      "taxon_id": "fixture:taxon-a",
+      "scientific_name": "Fixture taxon A",
+      "score": 1.0,
+      "coverage": 1.0,
+      "compared_weight": 3.0,
+      "possible_weight": 3.0,
+      "explanations": [
+       {
+        "character": "spur_length_mm",
+        "observation": 25,
+        "candidate_state": {
+         "min": 20,
+         "max": 30
+        },
+        "certainty": "certain",
+        "effective_weight": 3.0,
+        "similarity": 1.0,
+        "contribution": 3.0,
+        "status": "matched"
+       }
+      ],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-a"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-c",
+      "scientific_name": "Fixture taxon C",
+      "score": 1.0,
+      "coverage": 1.0,
+      "compared_weight": 3.0,
+      "possible_weight": 3.0,
+      "explanations": [
+       {
+        "character": "spur_length_mm",
+        "observation": 25,
+        "candidate_state": {
+         "min": 22,
+         "max": 28
+        },
+        "certainty": "certain",
+        "effective_weight": 3.0,
+        "similarity": 1.0,
+        "contribution": 3.0,
+        "status": "matched"
+       }
+      ],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-c"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-b",
+      "scientific_name": "Fixture taxon B",
+      "score": 0.0,
+      "coverage": 1.0,
+      "compared_weight": 3.0,
+      "possible_weight": 3.0,
+      "explanations": [
+       {
+        "character": "spur_length_mm",
+        "observation": 25,
+        "candidate_state": {
+         "min": 80,
+         "max": 120
+        },
+        "certainty": "certain",
+        "effective_weight": 3.0,
+        "similarity": 0.0,
+        "contribution": 0.0,
+        "status": "conflict"
+       }
+      ],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-b"
+      }
+     }
+    ],
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    }
+   },
+   "next_observation": {
+    "character": "withheld",
+    "label": "withheld",
+    "description": null,
+    "value_type": "categorical",
+    "concept_id": null,
+    "matrix_weight": 2.0,
+    "candidate_coverage": 1.0,
+    "distinct_state_count": 2,
+    "candidate_count": 3,
+    "selection_score": 1.0,
+    "reason_code": "highest_deterministic_discrimination",
+    "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+   }
+  }
+ },
+ "observe2": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/observations",
+   "body": {
+    "character": "flower_color",
+    "value": "white",
+    "certainty": "probable",
+    "source": {
+     "kind": "user_observation",
+     "interface": "guided-identification"
+    }
+   }
+  },
+  "status": 200,
+  "body": {
+   "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "schema_version": "matrix-identification-session/v1",
+   "registry": {
+    "registry_id": "r1-synthetic-member-matrix",
+    "version": "1",
+    "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+    "publication_state": "review_required",
+    "scope": {
+     "genus": "Fixturea"
+    }
+   },
+   "observations": [
+    {
+     "observation_id": "2a04a924-128e-456d-b96a-b6d80d8428f1",
+     "revision": 1,
+     "character": "spur_length_mm",
+     "value": 25,
+     "certainty": "certain",
+     "weight": null,
+     "review_state": "observed",
+     "created_at": "2026-09-26T21:55:42.658348+00:00",
+     "source": {
+      "kind": "user_observation",
+      "interface": "guided-identification"
+     }
+    },
+    {
+     "observation_id": "2d0cf4bf-cfa2-4dac-ad00-b868282b77a3",
+     "revision": 2,
+     "character": "flower_color",
+     "value": "white",
+     "certainty": "probable",
+     "weight": null,
+     "review_state": "observed",
+     "created_at": "2026-09-26T21:55:42.668447+00:00",
+     "source": {
+      "kind": "user_observation",
+      "interface": "guided-identification"
+     }
+    }
+   ],
+   "revision": 2,
+   "status": "active",
+   "created_at": "2026-09-26T21:55:42.647315+00:00",
+   "updated_at": "2026-09-26T21:55:42.668458+00:00",
+   "next_observation": {
+    "character": "withheld",
+    "label": "withheld",
+    "description": null,
+    "value_type": "categorical",
+    "concept_id": null,
+    "matrix_weight": 2.0,
+    "candidate_coverage": 1.0,
+    "distinct_state_count": 2,
+    "candidate_count": 3,
+    "selection_score": 1.0,
+    "reason_code": "highest_deterministic_discrimination",
+    "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+   },
+   "mine": true
+  }
+ },
+ "evaluate2": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/evaluate",
+   "body": {
+    "limit": 20
+   }
+  },
+  "status": 200,
+  "body": {
+   "session": {
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "schema_version": "matrix-identification-session/v1",
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    },
+    "observations": [
+     {
+      "observation_id": "2a04a924-128e-456d-b96a-b6d80d8428f1",
+      "revision": 1,
+      "character": "spur_length_mm",
+      "value": 25,
+      "certainty": "certain",
+      "weight": null,
+      "review_state": "observed",
+      "created_at": "2026-09-26T21:55:42.658348+00:00",
+      "source": {
+       "kind": "user_observation",
+       "interface": "guided-identification"
+      }
+     },
+     {
+      "observation_id": "2d0cf4bf-cfa2-4dac-ad00-b868282b77a3",
+      "revision": 2,
+      "character": "flower_color",
+      "value": "white",
+      "certainty": "probable",
+      "weight": null,
+      "review_state": "observed",
+      "created_at": "2026-09-26T21:55:42.668447+00:00",
+      "source": {
+       "kind": "user_observation",
+       "interface": "guided-identification"
+      }
+     }
+    ],
+    "revision": 2,
+    "status": "active",
+    "created_at": "2026-09-26T21:55:42.647315+00:00",
+    "updated_at": "2026-09-26T21:55:42.673112+00:00",
+    "next_observation": {
+     "character": "withheld",
+     "label": "withheld",
+     "description": null,
+     "value_type": "categorical",
+     "concept_id": null,
+     "matrix_weight": 2.0,
+     "candidate_coverage": 1.0,
+     "distinct_state_count": 2,
+     "candidate_count": 3,
+     "selection_score": 1.0,
+     "reason_code": "highest_deterministic_discrimination",
+     "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+    },
+    "mine": true
+   },
+   "report": {
+    "observation_count": 2,
+    "compared_character_count": 2,
+    "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "revision": 2,
+    "candidates": [
+     {
+      "taxon_id": "fixture:taxon-a",
+      "scientific_name": "Fixture taxon A",
+      "score": 1.0,
+      "coverage": 1.0,
+      "compared_weight": 3.75,
+      "possible_weight": 3.75,
+      "explanations": [
+       {
+        "character": "spur_length_mm",
+        "observation": 25,
+        "candidate_state": {
+         "min": 20,
+         "max": 30
+        },
+        "certainty": "certain",
+        "effective_weight": 3.0,
+        "similarity": 1.0,
+        "contribution": 3.0,
+        "status": "matched"
+       },
+       {
+        "character": "flower_color",
+        "observation": "white",
+        "candidate_state": "white",
+        "certainty": "probable",
+        "effective_weight": 0.75,
+        "similarity": 1.0,
+        "contribution": 0.75,
+        "status": "matched"
+       }
+      ],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-a"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-c",
+      "scientific_name": "Fixture taxon C",
+      "score": 0.8,
+      "coverage": 1.0,
+      "compared_weight": 3.75,
+      "possible_weight": 3.75,
+      "explanations": [
+       {
+        "character": "spur_length_mm",
+        "observation": 25,
+        "candidate_state": {
+         "min": 22,
+         "max": 28
+        },
+        "certainty": "certain",
+        "effective_weight": 3.0,
+        "similarity": 1.0,
+        "contribution": 3.0,
+        "status": "matched"
+       },
+       {
+        "character": "flower_color",
+        "observation": "white",
+        "candidate_state": "yellow",
+        "certainty": "probable",
+        "effective_weight": 0.75,
+        "similarity": 0.0,
+        "contribution": 0.0,
+        "status": "conflict"
+       }
+      ],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-c"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-b",
+      "scientific_name": "Fixture taxon B",
+      "score": 0.0,
+      "coverage": 1.0,
+      "compared_weight": 3.75,
+      "possible_weight": 3.75,
+      "explanations": [
+       {
+        "character": "spur_length_mm",
+        "observation": 25,
+        "candidate_state": {
+         "min": 80,
+         "max": 120
+        },
+        "certainty": "certain",
+        "effective_weight": 3.0,
+        "similarity": 0.0,
+        "contribution": 0.0,
+        "status": "conflict"
+       },
+       {
+        "character": "flower_color",
+        "observation": "white",
+        "candidate_state": "withheld",
+        "certainty": "probable",
+        "effective_weight": 0.75,
+        "similarity": 0.0,
+        "contribution": 0.0,
+        "status": "conflict"
+       }
+      ],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-b"
+      }
+     }
+    ],
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    }
+   },
+   "next_observation": {
+    "character": "withheld",
+    "label": "withheld",
+    "description": null,
+    "value_type": "categorical",
+    "concept_id": null,
+    "matrix_weight": 2.0,
+    "candidate_coverage": 1.0,
+    "distinct_state_count": 2,
+    "candidate_count": 3,
+    "selection_score": 1.0,
+    "reason_code": "highest_deterministic_discrimination",
+    "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+   }
+  }
+ },
+ "explain2": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/explain",
+   "body": {
+    "audience": "beginner",
+    "focus": "summary"
+   }
+  },
+  "status": 200,
+  "body": {
+   "schema_version": "matrix-identification-explanation/v1",
+   "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "evidence": {
+    "schema_version": "matrix-identification-explanation/v1",
+    "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+    "session_revision": 2,
+    "registry": {
+     "registry_id": "r1-synthetic-member-matrix",
+     "version": "1",
+     "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+     "publication_state": "review_required",
+     "scope": {
+      "genus": "Fixturea"
+     }
+    },
+    "audience": "beginner",
+    "focus": "summary",
+    "observations": [
+     {
+      "character": "spur_length_mm",
+      "value": 25,
+      "certainty": "certain",
+      "review_state": "observed",
+      "source": {
+       "kind": "user_observation",
+       "interface": "guided-identification"
+      }
+     },
+     {
+      "character": "flower_color",
+      "value": "white",
+      "certainty": "probable",
+      "review_state": "observed",
+      "source": {
+       "kind": "user_observation",
+       "interface": "guided-identification"
+      }
+     }
+    ],
+    "candidate_order": [
+     "fixture:taxon-a",
+     "fixture:taxon-c",
+     "fixture:taxon-b"
+    ],
+    "candidates": [
+     {
+      "taxon_id": "fixture:taxon-a",
+      "scientific_name": "Fixture taxon A",
+      "score": 1.0,
+      "coverage": 1.0,
+      "supporting_characters": [
+       "spur_length_mm",
+       "flower_color"
+      ],
+      "partial_characters": [],
+      "conflicting_characters": [],
+      "missing_characters": [],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-a"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-c",
+      "scientific_name": "Fixture taxon C",
+      "score": 0.8,
+      "coverage": 1.0,
+      "supporting_characters": [
+       "spur_length_mm"
+      ],
+      "partial_characters": [],
+      "conflicting_characters": [
+       "flower_color"
+      ],
+      "missing_characters": [],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-c"
+      }
+     },
+     {
+      "taxon_id": "fixture:taxon-b",
+      "scientific_name": "Fixture taxon B",
+      "score": 0.0,
+      "coverage": 1.0,
+      "supporting_characters": [],
+      "partial_characters": [],
+      "conflicting_characters": [
+       "spur_length_mm",
+       "flower_color"
+      ],
+      "missing_characters": [],
+      "provenance": {
+       "source": "SYNTHETIC R1 fixture",
+       "citation": "synthetic-fixture-b"
+      }
+     }
+    ],
+    "next_observation": {
+     "character": "withheld",
+     "label": "withheld",
+     "description": null,
+     "value_type": "categorical",
+     "concept_id": null,
+     "matrix_weight": 2.0,
+     "candidate_coverage": 1.0,
+     "distinct_state_count": 2,
+     "candidate_count": 3,
+     "selection_score": 1.0,
+     "reason_code": "highest_deterministic_discrimination",
+     "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+    },
+    "disclaimer": "Scores are candidate-ranking evidence, not a taxonomic determination. Missing data are not treated as biological absence.",
+    "authority": {
+     "matrix_scores_are_authoritative_for_this_packet": true,
+     "calyx_may_change_candidate_order": false,
+     "calyx_may_change_scores_or_coverage": false,
+     "calyx_may_change_next_observation": false,
+     "calyx_text_is_scientific_evidence": false,
+     "automatic_identification_publication": false,
+     "canonical_taxonomy_mutation": false
+    },
+    "evidence_digest_sha256": "bd7b8a59f6f2009f39d88885084701d80676d0cfc343a3af9d8653e691ae1deb"
+   },
+   "narrative": {
+    "text": "The current leading candidate is Fixture taxon A based on the supplied Matrix evidence. Its match score is 1.0 with coverage 1.0.\n\nThe strongest alternative is Fixture taxon C with score 0.8 and coverage 1.0.\n\nThe Matrix recommends observing withheld next because it has the strongest deterministic discrimination signal among the remaining unobserved characters.\n\nThis is an explanation of candidate-ranking evidence, not a verified taxonomic identification.",
+    "provider": "matrix-deterministic-governed",
+    "model": "calyx-matrix-explanation-v1",
+    "provider_response_id": null,
+    "request_hash": "ce31b2035c7aa621ac26e06f6b5c8463999b757e16ae914b025122ffbb6c2883",
+    "fallback_error": null,
+    "epistemic_state": "explanation_not_evidence"
+   },
+   "invariants": {
+    "candidate_order_digest": "ac29c9e466f76324c82e9259126c3ca4fc213a4c515c0a8b8d653641858de246",
+    "next_observation_digest": "89adc0fa0524598855d61eedec109c8405b205296d861c17356ffc507ccc59ab",
+    "provider_output_mutates_matrix_state": false
+   }
+  }
+ },
+ "get_own": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "body": null
+  },
+  "status": 200,
+  "body": {
+   "session_id": "f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "schema_version": "matrix-identification-session/v1",
+   "registry": {
+    "registry_id": "r1-synthetic-member-matrix",
+    "version": "1",
+    "checksum_sha256": "ec35308c011a0a6e2aba9ecfd4466bad82db0a4bab584c9503321cc9ab36ef88",
+    "publication_state": "review_required",
+    "scope": {
+     "genus": "Fixturea"
+    }
+   },
+   "observations": [
+    {
+     "observation_id": "2a04a924-128e-456d-b96a-b6d80d8428f1",
+     "revision": 1,
+     "character": "spur_length_mm",
+     "value": 25,
+     "certainty": "certain",
+     "weight": null,
+     "review_state": "observed",
+     "created_at": "2026-09-26T21:55:42.658348+00:00",
+     "source": {
+      "kind": "user_observation",
+      "interface": "guided-identification"
+     }
+    },
+    {
+     "observation_id": "2d0cf4bf-cfa2-4dac-ad00-b868282b77a3",
+     "revision": 2,
+     "character": "flower_color",
+     "value": "white",
+     "certainty": "probable",
+     "weight": null,
+     "review_state": "observed",
+     "created_at": "2026-09-26T21:55:42.668447+00:00",
+     "source": {
+      "kind": "user_observation",
+      "interface": "guided-identification"
+     }
+    }
+   ],
+   "revision": 2,
+   "status": "active",
+   "created_at": "2026-09-26T21:55:42.647315+00:00",
+   "updated_at": "2026-09-26T21:55:42.678642+00:00",
+   "next_observation": {
+    "character": "withheld",
+    "label": "withheld",
+    "description": null,
+    "value_type": "categorical",
+    "concept_id": null,
+    "matrix_weight": 2.0,
+    "candidate_coverage": 1.0,
+    "distinct_state_count": 2,
+    "candidate_count": 3,
+    "selection_score": 1.0,
+    "reason_code": "highest_deterministic_discrimination",
+    "explanation_boundary": "Calyx may explain this recommendation but may not alter the selected character without returning a separately labeled inference."
+   },
+   "mine": true
+  }
+ },
+ "other_member_get": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec",
+   "body": null
+  },
+  "status": 404,
+  "body": {
+   "detail": "identification session not found: f910853f-1ef9-48f6-903e-9dc8752ba5ec"
+  }
+ },
+ "other_member_evaluate": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/evaluate",
+   "body": {
+    "limit": 20
+   }
+  },
+  "status": 404,
+  "body": {
+   "detail": "identification session not found: f910853f-1ef9-48f6-903e-9dc8752ba5ec"
+  }
+ },
+ "anon_create": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/sessions",
+   "body": {
+    "registry_id": "r1-synthetic-member-matrix",
+    "version": "1"
+   }
+  },
+  "status": 401,
+  "body": {
+   "detail": "Owner session, member session, or API key is required"
+  }
+ },
+ "owner_only_reports": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/reports",
+   "body": null
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "owner_only_vision_suggestions": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/sessions/f910853f-1ef9-48f6-903e-9dc8752ba5ec/vision/suggestions",
+   "body": null
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "owner_only_session_persistence": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/sessions/persistence-status",
+   "body": null
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "owner_only_registry_persistence": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/registry/persistence-status",
+   "body": null
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "owner_only_contract": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/contract",
+   "body": null
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "owner_only_stateless_evaluate": {
+  "request": {
+   "method": "POST",
+   "path": "/api/matrix-identification/evaluate",
+   "body": {}
+  },
+  "status": 403,
+  "body": {
+   "detail": {
+    "code": "OWNER_ACCESS_REQUIRED",
+    "message": "This view is limited to owner access"
+   }
+  }
+ },
+ "identity_down_registry_list": {
+  "request": {
+   "method": "GET",
+   "path": "/api/matrix-identification/registry",
+   "body": null
+  },
+  "status": 503,
+  "body": {
+   "detail": {
+    "code": "MEMBER_AUTH_UNAVAILABLE",
+    "message": "Member identity verification is temporarily unavailable"
+   }
+  }
+ }
+}

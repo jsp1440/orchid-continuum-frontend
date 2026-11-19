@@ -110,9 +110,12 @@ describe('mission control is discoverable to a signed-in owner', () => {
     // form of that.
     await mount(SIGNED_IN);
     await openAccountMenu();
-    const button = entry() as HTMLButtonElement;
-    expect(button).not.toBeNull();
-    expect(button.tagName).toBe('BUTTON');
+    // A real link to the route (announced as a link, middle-clickable); the
+    // owner-session gate lives on the other side of it.
+    const link = entry() as HTMLAnchorElement;
+    expect(link).not.toBeNull();
+    expect(link.tagName).toBe('A');
+    expect(link.getAttribute('href')).toBe('/mission-control');
   });
 });
 

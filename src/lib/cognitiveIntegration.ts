@@ -182,11 +182,13 @@ export async function fetchReasoningMap(
       `${base}/api/cognitive-integration/reasoning-map?question=${encodeURIComponent(question)}`,
       { headers: { Accept: "application/json" } },
     );
-  } catch (error) {
+  } catch {
+    // A rejected fetch carries browser transport text ("TypeError: Failed to
+    // fetch"); the visitor is told what happened, not the exception.
     return {
       ok: false,
       kind: "network",
-      message: error instanceof Error ? error.message : "The request did not complete.",
+      message: "Calyx backend is unreachable, so no reasoning map could be loaded. Try again in a moment.",
     };
   }
 

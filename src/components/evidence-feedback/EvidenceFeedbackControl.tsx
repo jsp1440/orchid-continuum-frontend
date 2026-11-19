@@ -1,11 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import {
   EvidenceFeedbackApiError,
+  defectKindApplies,
   fetchEvidenceFeedbackStatus,
   submitEvidenceFeedback,
   type EvidenceFeedbackCase,
   type EvidenceObjectType,
   type FeedbackClass,
+  type TrivialDefectKind,
 } from '@/lib/evidenceFeedback';
 
 interface Props {
@@ -27,6 +29,14 @@ const FEEDBACK_OPTIONS: Array<{ value: FeedbackClass; label: string }> = [
   { value: 'image_identification_problem', label: 'Report an image identification problem' },
 ];
 
+// Exactly the backend's trivial defect kinds (TRIVIAL_DEFECT_KINDS), in plain
+// language. The empty value is "other / not sure" and sends no defect kind.
+const DEFECT_KIND_OPTIONS: Array<{ value: TrivialDefectKind | ''; label: string }> = [
+  { value: '', label: 'Other / not sure' },
+  { value: 'typo', label: 'A spelling mistake or typo' },
+  { value: 'format', label: 'Formatting (capital letters, punctuation or spacing)' },
+];
+
 function errorMessage(error: unknown): string {
   if (!(error instanceof EvidenceFeedbackApiError)) return 'Feedback could not be submitted. Please try again.';
   if (error.status === 401) return 'Sign in is required before feedback can be recorded.';
@@ -38,6 +48,9 @@ function errorMessage(error: unknown): string {
 function statusText(feedbackCase: EvidenceFeedbackCase): string {
   if (feedbackCase.status === 'resolved') {
     return feedbackCase.resolution || 'This case has been resolved.';
+  }
+  if (feedbackCase.status === 'governed_review_required') {
+    return 'Routed to governed review. The displayed scientific content has not been changed while that review is pending.';
   }
   if (feedbackCase.status === 'pending_review') {
     return 'Correction pending review. The displayed scientific content has not been changed.';
@@ -58,10 +71,13 @@ export function EvidenceFeedbackControl({
   const [statement, setStatement] = useState('');
   const [proposedReplacement, setProposedReplacement] = useState('');
   const [citation, setCitation] = useState('');
+  const [defectKind, setDefectKind] = useState<TrivialDefectKind | ''>('');
   const [submitting, setSubmitting] = useState(false);
   const [duplicate, setDuplicate] = useState(false);
   const [feedbackCase, setFeedbackCase] = useState<EvidenceFeedbackCase | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const askDefectKind = defectKindApplies(objectType, feedbackClass);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -78,6 +94,8 @@ export function EvidenceFeedbackControl({
         statement: statement.trim(),
         proposedReplacement,
         citation,
+        // Only where the backend can use it; otherwise no defect kind is sent.
+        defectKind: askDefectKind && defectKind ? defectKind : undefined,
       });
       setFeedbackCase(result.case);
       setDuplicate(!result.created || Boolean(result.duplicate_of));
@@ -161,6 +179,26 @@ export function EvidenceFeedbackControl({
             <div>
               <label htmlFor={`feedback-replacement-${objectId}`} className="block text-sm font-semibold text-stone-950">Proposed wording (optional)</label>
               <textarea id={`feedback-replacement-${objectId}`} rows={3} value={proposedReplacement} onChange={(event) => setProposedReplacement(event.target.value)} className="mt-1 w-full rounded-sm border border-stone-500 bg-white px-3 py-2 text-base leading-6 text-stone-950" />
+            </div>
+          ) : null}
+          {askDefectKind ? (
+            <div>
+              <label htmlFor={`feedback-defect-kind-${objectId}`} className="block text-sm font-semibold text-stone-950">What kind of problem is it? (optional)</label>
+              <select
+                id={`feedback-defect-kind-${objectId}`}
+                data-testid="feedback-defect-kind"
+                value={defectKind}
+                onChange={(event) => setDefectKind(event.target.value as TrivialDefectKind | '')}
+                aria-describedby={`feedback-defect-kind-help-${objectId}`}
+                className="mt-1 min-h-11 w-full rounded-sm border border-stone-500 bg-white px-3 py-2 text-base text-stone-950"
+              >
+                {DEFECT_KIND_OPTIONS.map((option) => <option key={option.value || 'not-sure'} value={option.value}>{option.label}</option>)}
+              </select>
+              <p id={`feedback-defect-kind-help-${objectId}`} className="mt-1 text-sm leading-5 text-stone-700">
+                {defectKind && !proposedReplacement.trim()
+                  ? 'Add the corrected wording above so a reviewer can apply a small fix quickly.'
+                  : 'A reviewer still checks every correction before anything changes.'}
+              </p>
             </div>
           ) : null}
           <div>

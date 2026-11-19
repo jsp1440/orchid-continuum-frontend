@@ -125,8 +125,51 @@ function dossierFixture() {
   };
 }
 
+/* ---- Unknown-taxon fixtures (R1 journeys 3, 14) ---------------------------
+ * Clearly synthetic identifiers that are not taxa. Every other /api/species/*
+ * id keeps answering with the identity-continuity fixture above.
+ *  - UNKNOWN: both identity sources answer "no record" with the shapes the
+ *    real services use (orchid-calyx-backend species_dossier/routes.py 404).
+ *  - OUTAGE: both sources fail with the dossier route's 503 shape, so the
+ *    page must say it could not load rather than "no record".
+ *  - PUBLIC_DOWN: the public species API fails with 503 while the Calyx
+ *    dossier answers its exact no-record 404; a source that could still find
+ *    the taxon did not answer, so the page must not say "no record".
+ * The federation resolver below already answers `unresolved` for every name.
+ */
+// The long unbroken name exercises wrapping of the requested text at phone width.
+const UNKNOWN_TAXON_IDS = new Set(["Notagenus fakeus", "987654321", `Notagenus${"x".repeat(80)} fakeus`]);
+const OUTAGE_TAXON_IDS = new Set(["Outagenus downus", "503503503"]);
+const PUBLIC_DOWN_TAXON_IDS = new Set(["Publicdown fakeus"]);
+
+function unknownTaxonFixture(path) {
+  const match = /^\/api\/(?:species|platform\/species)\/([^/]+)(\/dossier)?$/.exec(path);
+  if (!match) return null;
+  const id = decodeURIComponent(match[1]);
+  const dossierRoute = path.startsWith("/api/platform/");
+  if (dossierRoute && !match[2]) return null;
+  if (PUBLIC_DOWN_TAXON_IDS.has(id)) {
+    return dossierRoute
+      ? { status: 404, body: { detail: "No canonical taxon record exists for this identifier." } }
+      : { status: 503, body: { detail: "Species service is unavailable." } };
+  }
+  if (UNKNOWN_TAXON_IDS.has(id)) {
+    return {
+      status: 404,
+      body: { detail: dossierRoute ? "No canonical taxon record exists for this identifier." : "Species not found." },
+    };
+  }
+  if (OUTAGE_TAXON_IDS.has(id)) {
+    return { status: 503, body: { detail: "Species dossier service is unavailable." } };
+  }
+  return null;
+}
+/* ---- end unknown-taxon fixtures ------------------------------------------ */
+
 async function publicSpeciesRoute(req, res, url) {
   const path = url.pathname;
+  const unknownTaxon = req.method === "GET" ? unknownTaxonFixture(path) : null;
+  if (unknownTaxon) return json(res, unknownTaxon.status, unknownTaxon.body);
   let match = /^\/api\/species\/([^/]+)$/.exec(path);
   if (match && req.method === "GET") {
     return json(res, 200, {
@@ -1786,6 +1829,107 @@ function candidateKnowledgeProposal(input) {
   };
 }
 
+/* ------------------------------------- member Matrix identification ----- */
+
+/**
+ * Signed-in member Matrix identification (Release 1 journey 4).
+ *
+ * WHAT THIS IS: a replay of REAL member-shaped responses captured from
+ * orchid-calyx-backend running LOCALLY at the SHA recorded in the fixture's
+ * `_meta` (uvicorn, file store, no DB — never production), for a clearly
+ * SYNTHETIC registry ("Fixture taxon A/B/C"; invented states and provenance,
+ * not claims about any orchid). The fixture lives beside the unit-test
+ * fixtures: src/lib/__fixtures__/matrixIdentification.memberBackend.json.
+ *
+ * It answers ONLY requests that carry a member bearer this server issued, the
+ * way the real backend routes a verified member: the seven member routes get
+ * the captured member view, every other /api/matrix-identification route gets
+ * the captured 403 OWNER_ACCESS_REQUIRED, and a session is private to the
+ * account that created it (another account gets the captured 404). Requests
+ * without a member bearer fall through to the owner-shaped reference handlers
+ * below, unchanged, so the existing owner journeys keep their behaviour.
+ *
+ * The only transformation: each replayed session gets a fresh UUID, substituted
+ * for the captured session id. The replay follows the captured sequence
+ * (observe spur_length_mm = 25 certain, then flower_color = "white" probable);
+ * a request that departs from it gets a SYNTHETIC 409 so a frontend that sent
+ * something else fails loudly instead of rendering a mismatched capture.
+ */
+const MEMBER_MATRIX = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/matrixIdentification.memberBackend.json", import.meta.url), "utf8"),
+);
+const MEMBER_MATRIX_SESSION_ID = MEMBER_MATRIX.create.body.session_id;
+const MEMBER_MATRIX_REGISTRY = MEMBER_MATRIX.registry_detail.body;
+const memberMatrixSessions = new Map(); // session_id -> { userId, observed }
+const MEMBER_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function memberMatrixReplay(captured, sessionId) {
+  const text = JSON.stringify(captured.body).replaceAll(MEMBER_MATRIX_SESSION_ID, sessionId);
+  return { status: captured.status, body: JSON.parse(text) };
+}
+
+function memberMatrixNotFound(res, sessionId) {
+  const replay = memberMatrixReplay(MEMBER_MATRIX.other_member_get, sessionId);
+  return json(res, 404, replay.body);
+}
+
+function memberMatrixRoute(req, res, path, userId, input) {
+  const send = (replay) => json(res, replay.status, replay.body);
+  if (path === "/api/matrix-identification/registry" && req.method === "GET") {
+    return send(MEMBER_MATRIX.registry_list);
+  }
+  let match = /^\/api\/matrix-identification\/registry\/([^/]+)\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const [registryId, version] = [decodeURIComponent(match[1]), decodeURIComponent(match[2])];
+    if (registryId === MEMBER_MATRIX_REGISTRY.registry_id && version === MEMBER_MATRIX_REGISTRY.version) {
+      return send(MEMBER_MATRIX.registry_detail);
+    }
+    // SYNTHETIC shape (the capture holds one registry).
+    return json(res, 404, { detail: `registry version not found: ${registryId}/${version}` });
+  }
+  if (path === "/api/matrix-identification/sessions" && req.method === "POST") {
+    if (input?.registry_id !== MEMBER_MATRIX_REGISTRY.registry_id || input?.version !== MEMBER_MATRIX_REGISTRY.version) {
+      return json(res, 404, { detail: "registry version not found" }); // SYNTHETIC shape
+    }
+    const sessionId = randomUUID();
+    memberMatrixSessions.set(sessionId, { userId, observed: 0 });
+    return send(memberMatrixReplay(MEMBER_MATRIX.create, sessionId));
+  }
+  match = /^\/api\/matrix-identification\/sessions\/([^/]+)(?:\/(observations|evaluate|explain))?$/.exec(path);
+  const memberRoute = match && MEMBER_UUID.test(match[1]) && (
+    (!match[2] && req.method === "GET") || (match[2] && req.method === "POST")
+  );
+  if (!memberRoute) {
+    // Every other Matrix route is owner-only for a verified member (captured 403).
+    return send(MEMBER_MATRIX.owner_only_reports);
+  }
+  const sessionId = match[1];
+  const session = memberMatrixSessions.get(sessionId);
+  if (!session || session.userId !== userId) return memberMatrixNotFound(res, sessionId);
+  const evaluations = [MEMBER_MATRIX.evaluate0, MEMBER_MATRIX.evaluate1, MEMBER_MATRIX.evaluate2];
+  const observations = [MEMBER_MATRIX.observe1, MEMBER_MATRIX.observe2];
+  if (!match[2]) {
+    return json(res, 200, memberMatrixReplay(evaluations[session.observed], sessionId).body.session);
+  }
+  if (match[2] === "evaluate") return send(memberMatrixReplay(evaluations[session.observed], sessionId));
+  if (match[2] === "observations") {
+    const expected = observations[session.observed]?.request.body;
+    const same = expected
+      && input?.character === expected.character
+      && JSON.stringify(input?.value) === JSON.stringify(expected.value)
+      && input?.certainty === expected.certainty;
+    if (!same) {
+      return json(res, 409, { detail: "SYNTHETIC reference replay: observation departs from the captured sequence", received: input ?? null });
+    }
+    session.observed += 1;
+    return send(memberMatrixReplay(observations[session.observed - 1], sessionId));
+  }
+  if (session.observed !== 2) {
+    return json(res, 409, { detail: "SYNTHETIC reference replay: the explanation was captured after two observations" });
+  }
+  return send(memberMatrixReplay(MEMBER_MATRIX.explain2, sessionId));
+}
+
 async function calyxRoute(req, res, url) {
   const path = url.pathname;
   const body = ["POST", "PUT", "PATCH"].includes(req.method) ? await readBody(req) : Buffer.alloc(0);
@@ -1794,6 +1938,10 @@ async function calyxRoute(req, res, url) {
   let match;
 
   /* ------------------------------------------------- Calyx / Brain ----- */
+
+  // A signed-in member's bearer on a Matrix route: the captured member view.
+  const matrixMember = path.startsWith("/api/matrix-identification/") ? bearer(req) : null;
+  if (matrixMember) return memberMatrixRoute(req, res, path, matrixMember, body.length ? asJson() : null);
 
   if (path === "/api/matrix-identification/registry" && req.method === "GET") {
     return json(res, 200, {
@@ -2318,6 +2466,160 @@ async function constituentRoute(req, res, url) {
   return json(res, 404, { detail: "Not Found" });
 }
 
+/* ==== BEGIN evidence-feedback owner review queue fixture (R1 journey 12) =====
+ *
+ * WHAT THIS IS: a replay of REAL responses captured from orchid-calyx-backend
+ * PR #1663 (owner review queue, merged to backend oc-autonomous-integration as
+ * 95edfe014 with an identical tree) running LOCALLY at the SHA in the
+ * fixture's `_meta` (uvicorn, file store, no DB -- never production). Every
+ * submitted object and statement in it is SYNTHETIC. The fixture lives beside
+ * the unit-test fixtures:
+ * src/lib/__fixtures__/evidenceFeedbackReview.realBackend.json.
+ *
+ * Owner login is a SYNTHETIC stand-in (like the /auth/v1 identity stand-in):
+ * POST /api/mission-control/owner/session-token with the fixture access code
+ * below issues a local token that only this process accepts; the app's own
+ * owner transport stores it and sends it as the owner bearer. The review
+ * routes then answer exactly as the real backend did:
+ *   - owner bearer        -> the captured owner responses
+ *   - member bearer       -> the captured 403 OWNER_ACCESS_REQUIRED
+ *   - X-API-Key           -> the captured 403 OWNER_SESSION_REQUIRED
+ *   - nothing             -> the captured 401
+ * The replay follows the captured sequence (reject A -> route C to governed
+ * review -> accept B's trivial correction); a request that departs from it
+ * gets a SYNTHETIC 409 REPLAY_OUT_OF_SEQUENCE so a frontend that sent
+ * something else fails loudly instead of rendering a mismatched capture.
+ * POST /__reference/evidence-feedback-review/reset restarts the sequence.
+ */
+const FEEDBACK_REVIEW = JSON.parse(
+  readFileSync(new URL("../../src/lib/__fixtures__/evidenceFeedbackReview.realBackend.json", import.meta.url), "utf8"),
+);
+const FEEDBACK_REVIEW_OWNER_CODE = "reference-owner-code-SYNTHETIC";
+const FEEDBACK_REVIEW_IDS = FEEDBACK_REVIEW._meta.case_ids;
+const FEEDBACK_REVIEW_INPUTS = FEEDBACK_REVIEW._meta.inputs_used;
+const feedbackReviewOwnerTokens = new Set();
+let feedbackReviewStage = 0;
+
+function feedbackReviewCanonical(value) {
+  if (Array.isArray(value)) return value.map(feedbackReviewCanonical);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, feedbackReviewCanonical(value[key])]));
+  }
+  return value;
+}
+const sameJson = (a, b) => JSON.stringify(feedbackReviewCanonical(a)) === JSON.stringify(feedbackReviewCanonical(b));
+
+function feedbackReviewOutOfSequence(res, what) {
+  // SYNTHETIC: not a backend response.
+  return json(res, 409, { detail: { code: "REPLAY_OUT_OF_SEQUENCE", replay: what, stage: feedbackReviewStage } });
+}
+
+function feedbackReviewOwnerLogin(req, res, path, body) {
+  if (path === "/api/mission-control/owner/session-token" && req.method === "POST") {
+    if (body?.access_code !== FEEDBACK_REVIEW_OWNER_CODE) return json(res, 401, { detail: "Invalid owner access code" });
+    const token = `reference-owner.${randomUUID().replaceAll("-", "")}`;
+    feedbackReviewOwnerTokens.add(token);
+    return json(res, 200, {
+      authenticated: true, status: "authenticated", owner: "owner",
+      expires_at: new Date(Date.now() + 3600_000).toISOString(), token,
+      credential_transport: "httponly_cookie_or_bearer",
+    });
+  }
+  // No owner cookie exists in this stand-in, so a refresh always answers as the real route does without one.
+  return json(res, 401, { detail: "Owner session is required" });
+}
+
+function feedbackReviewListReplay(url) {
+  const lists = FEEDBACK_REVIEW.lists[`stage${feedbackReviewStage}`];
+  const params = url.searchParams;
+  if (params.get("limit") !== "20") return null;
+  const status = params.get("status") || "";
+  const objectType = params.get("object_type") || "";
+  const cursor = params.get("cursor") || "";
+  if (cursor) {
+    if (cursor === lists.page1.body.next_cursor && !status && !objectType) return lists.page2;
+    if (cursor === "not-a-cursor") return FEEDBACK_REVIEW.errors.invalid_cursor;
+    return null;
+  }
+  if (!status && !objectType) return lists.page1;
+  // A captured filtered list for this stage with exactly these filters.
+  return Object.values(lists).find((entry) => {
+    const query = new URL(entry.request.path, "http://reference.invalid").searchParams;
+    return (query.get("status") || "") === status && (query.get("object_type") || "") === objectType && !query.get("cursor");
+  }) || null;
+}
+
+function feedbackReviewDetailReplay(caseId) {
+  const letter = Object.keys(FEEDBACK_REVIEW_IDS).find((key) => FEEDBACK_REVIEW_IDS[key] === caseId);
+  if (!letter) return null;
+  for (let stage = feedbackReviewStage; stage >= 0; stage -= 1) {
+    const captured = FEEDBACK_REVIEW.details[`${letter}_stage${stage}`];
+    if (captured) return captured;
+  }
+  return null;
+}
+
+function feedbackReviewDecisionReplay(caseId, body) {
+  const { A, B, C, E } = FEEDBACK_REVIEW_IDS;
+  const decision = body?.decision;
+  if (caseId === A && decision === "reject" && body.reason === FEEDBACK_REVIEW_INPUTS.REJECT_REASON) {
+    if (feedbackReviewStage === 0) { feedbackReviewStage = 1; return FEEDBACK_REVIEW.decisions.reject_A; }
+    return FEEDBACK_REVIEW.decisions.reject_A_repeat;
+  }
+  if (caseId === A && decision === "reject" && typeof body.reason === "string" && !body.reason.trim()) return FEEDBACK_REVIEW.errors.reject_blank_reason;
+  if (caseId === A && decision === "needs_governed_review" && feedbackReviewStage >= 1) return FEEDBACK_REVIEW.errors.invalid_transition;
+  if (caseId === C && decision === "needs_governed_review" && body.note === FEEDBACK_REVIEW_INPUTS.GOVERNED_NOTE && feedbackReviewStage === 1) {
+    feedbackReviewStage = 2;
+    return FEEDBACK_REVIEW.decisions.governed_C;
+  }
+  if (caseId === B && decision === "accept_trivial" && sameJson(body.corrected_payload, FEEDBACK_REVIEW_INPUTS.corrected_payload_B) && feedbackReviewStage === 2) {
+    feedbackReviewStage = 3;
+    return FEEDBACK_REVIEW.decisions.accept_trivial_B;
+  }
+  if (caseId === E && decision === "accept_trivial") return FEEDBACK_REVIEW.errors.accept_trivial_governed;
+  return null;
+}
+
+async function feedbackReviewRoute(req, res, url) {
+  const path = url.pathname;
+  const body = req.method === "POST" ? safeJson(await readBody(req)) : {};
+  if (path === "/__reference/evidence-feedback-review/reset" && req.method === "POST") {
+    feedbackReviewStage = 0;
+    return json(res, 200, { ok: true, stage: 0 });
+  }
+  if (path.startsWith("/api/mission-control/owner/session-token")) return feedbackReviewOwnerLogin(req, res, path, body);
+
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  const send = (captured) => json(res, captured.status, captured.body);
+  if (!feedbackReviewOwnerTokens.has(token)) {
+    if (token && bearer(req)) {
+      return send(req.method === "POST" ? FEEDBACK_REVIEW.auth.member_decision : FEEDBACK_REVIEW.auth.member);
+    }
+    if (req.headers["x-api-key"]) return send(FEEDBACK_REVIEW.auth.api_key);
+    return send(FEEDBACK_REVIEW.auth.anonymous);
+  }
+
+  if (path === "/api/evidence-feedback/review/cases" && req.method === "GET") {
+    const captured = feedbackReviewListReplay(url);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `GET ${url.pathname}${url.search}`);
+  }
+  let match = /^\/api\/evidence-feedback\/review\/cases\/([^/]+)$/.exec(path);
+  if (match && req.method === "GET") {
+    const caseId = decodeURIComponent(match[1]);
+    if (caseId === "efc-000000000000000000000000") return send(FEEDBACK_REVIEW.errors.not_found);
+    const captured = feedbackReviewDetailReplay(caseId);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `GET ${path} (detail not captured)`);
+  }
+  match = /^\/api\/evidence-feedback\/review\/cases\/([^/]+)\/decision$/.exec(path);
+  if (match && req.method === "POST") {
+    const captured = feedbackReviewDecisionReplay(decodeURIComponent(match[1]), body);
+    return captured ? send(captured) : feedbackReviewOutOfSequence(res, `POST ${path}`);
+  }
+  return json(res, 404, { detail: "Not Found" });
+}
+/* ==== END evidence-feedback owner review queue fixture ======================= */
+
 const server = createServer(async (req, res) => {
   requestOrigin = req.headers.origin || "*";
   requestHeaders = String(req.headers["access-control-request-headers"] || "");
@@ -2340,6 +2642,14 @@ const server = createServer(async (req, res) => {
     }
     if (url.pathname.startsWith("/api/community/")) return await communityRoute(req, res, url);
     if (url.pathname.startsWith("/api/constituent/")) return await constituentRoute(req, res, url);
+    // Evidence-feedback owner review queue fixture (see its BEGIN/END block above).
+    if (
+      url.pathname.startsWith("/api/evidence-feedback/review/") ||
+      url.pathname.startsWith("/api/mission-control/owner/session-token") ||
+      url.pathname === "/__reference/evidence-feedback-review/reset"
+    ) {
+      return await feedbackReviewRoute(req, res, url);
+    }
     if (
       url.pathname.startsWith("/api/species/") ||
       url.pathname.startsWith("/api/mycorrhizal/") ||

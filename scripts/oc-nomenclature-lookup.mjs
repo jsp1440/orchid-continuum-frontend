@@ -450,7 +450,7 @@ export function safe(value) {
   return String(value)
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .replace(/[<>`|*_[\]\\]/g, ch => `\\${ch}`)
-    .replace(/@/g, '@​')
+    .replace(/@/g, '@\u200B')
     .slice(0, 300);
 }
 

@@ -1,10 +1,10 @@
 /**
  * ZooReviewWorkflow
  * -----------------
- * Reviewer-facing demo workflow for triaging citizen-science image
- * submissions. The PUBLIC frontend is intentionally read-only against
- * the live queue — agree/flag/skip actions in this mock workflow are
- * local-only previews of the reviewer interface that lives at:
+ * Reviewer-facing preview of the workflow for triaging citizen-science image
+ * submissions. The PUBLIC frontend is intentionally read-only against the
+ * live queue — agree/flag/skip actions here are local-only previews of the
+ * reviewer interface that lives at:
  *
  *   POST /api/zoo/queue/{submission_id}/agree
  *   POST /api/zoo/queue/{submission_id}/flag
@@ -13,15 +13,17 @@
  * All real reviewer actions go through authenticated reviewer
  * interfaces (Zooniverse / curator console), never the public frontend.
  *
- * The component:
- *   • Tries `zooApi.queue()` for a real queue
- *   • Falls back to clearly-labeled DEMO submissions
- *   • Shows confidence dial, agree / flag / skip buttons
- *   • Surfaces an "Escalate to expert" placeholder
- *   • Uses educational tooltips on each control
+ * The component shows only what `GET /api/zoo/queue` returns:
+ *   • live submissions, exactly as the API sent them;
+ *   • "no submissions awaiting review" only for a confirmed empty list;
+ *   • "live queue unavailable" for an outage, an unconfigured API or a
+ *     malformed payload.
+ * It never substitutes stand-in submissions, taxa or images. An earlier
+ * version fell back to stock photographs labelled with real taxon names and
+ * presented them as review submissions, which bound unverified images to taxa.
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Check,
   Flag,
@@ -31,50 +33,19 @@ import {
   Loader2,
   ImageIcon,
   ArrowRight,
+  CloudOff,
+  Inbox,
+  RefreshCw,
 } from 'lucide-react';
-import { zooApi, type ZooQueueItem } from '@/lib/zoo';
-
-const DEMO_QUEUE: ZooQueueItem[] = [
-  {
-    submission_id: 'demo-001',
-    proposed_taxon: 'Dracula vampira',
-    submitted_at: new Date(Date.now() - 1000 * 60 * 24).toISOString(),
-    review_state: 'pending',
-    thumbnail_url:
-      'https://images.unsplash.com/photo-1567427018141-0584cfcbf1b8?auto=format&fit=crop&w=900&q=70',
-  },
-  {
-    submission_id: 'demo-002',
-    proposed_taxon: 'Bulbophyllum echinolabium',
-    submitted_at: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    review_state: 'pending',
-    thumbnail_url:
-      'https://images.unsplash.com/photo-1588668214407-6ea9a6d8c272?auto=format&fit=crop&w=900&q=70',
-  },
-  {
-    submission_id: 'demo-003',
-    proposed_taxon: 'Angraecum sesquipedale',
-    submitted_at: new Date(Date.now() - 1000 * 60 * 240).toISOString(),
-    review_state: 'in_review',
-    thumbnail_url:
-      'https://images.unsplash.com/photo-1602094867431-1b59f7d27b35?auto=format&fit=crop&w=900&q=70',
-  },
-  {
-    submission_id: 'demo-004',
-    proposed_taxon: 'Phragmipedium kovachii',
-    submitted_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-    review_state: 'needs_more_data',
-    thumbnail_url:
-      'https://images.unsplash.com/photo-1623910270365-fdf66c0afaaf?auto=format&fit=crop&w=900&q=70',
-  },
-];
+import { loadZooQueue, type ZooQueueItem, type ZooQueueState } from '@/lib/zoo';
 
 type Decision = 'agree' | 'flag' | 'skip' | 'escalate';
 
+type LoadState = { kind: 'loading' } | ZooQueueState;
+
 const ZooReviewWorkflow: React.FC = () => {
-  const [queue, setQueue] = useState<ZooQueueItem[]>([]);
-  const [live, setLive] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [state, setState] = useState<LoadState>({ kind: 'loading' });
+  const [attempt, setAttempt] = useState(0);
   const [index, setIndex] = useState(0);
   const [confidence, setConfidence] = useState(70);
   const [history, setHistory] = useState<
@@ -84,20 +55,24 @@ const ZooReviewWorkflow: React.FC = () => {
 
   useEffect(() => {
     const c = new AbortController();
-    zooApi.queue(c.signal).then(r => {
-      if (c.signal.aborted) return;
-      if (r.data && r.data.length > 0) {
-        setQueue(r.data);
-        setLive(true);
-      } else {
-        setQueue(DEMO_QUEUE);
-        setLive(false);
-      }
-      setLoading(false);
-    });
+    setState({ kind: 'loading' });
+    setIndex(0);
+    loadZooQueue(c.signal)
+      .then(next => {
+        if (!c.signal.aborted) setState(next);
+      })
+      .catch(() => {
+        if (!c.signal.aborted) {
+          setState({ kind: 'unavailable', reason: 'The review queue request failed.' });
+        }
+      });
     return () => c.abort();
-  }, []);
+  }, [attempt]);
 
+  const retry = useCallback(() => setAttempt(a => a + 1), []);
+
+  const loading = state.kind === 'loading';
+  const queue: ZooQueueItem[] = state.kind === 'present' ? state.items : [];
   const current = queue[index];
   const total = queue.length;
   const progress = useMemo(
@@ -120,7 +95,7 @@ const ZooReviewWorkflow: React.FC = () => {
       <div className="flex items-end justify-between flex-wrap gap-3 mb-6">
         <div>
           <div className="text-xs tracking-[0.25em] uppercase text-emerald-300/80 mb-2">
-            Reviewer Workflow · Demo
+            Reviewer Workflow · Preview
           </div>
           <h2 className="font-serif text-3xl md:text-4xl">
             Triage the review queue
@@ -136,12 +111,19 @@ const ZooReviewWorkflow: React.FC = () => {
         <span
           className={
             'text-[10px] tracking-[0.2em] uppercase px-2.5 py-1 rounded-full border ' +
-            (live
+            (state.kind === 'present' || state.kind === 'empty'
               ? 'border-emerald-300/40 text-emerald-200 bg-emerald-300/10'
-              : 'border-white/15 text-white/55 bg-white/5')
+              : state.kind === 'unavailable'
+                ? 'border-amber-300/40 text-amber-100 bg-amber-300/10'
+                : 'border-white/15 text-white/55 bg-white/5')
           }
+          data-testid="zoo-queue-status"
         >
-          {loading ? 'Loading queue…' : live ? 'Live queue' : 'Demo queue'}
+          {loading
+            ? 'Loading queue…'
+            : state.kind === 'unavailable'
+              ? 'Live queue unavailable'
+              : 'Live queue'}
         </span>
       </div>
 
@@ -152,7 +134,44 @@ const ZooReviewWorkflow: React.FC = () => {
         </div>
       )}
 
-      {!loading && current && (
+      {state.kind === 'unavailable' && (
+        <div
+          role="status"
+          data-testid="zoo-queue-unavailable"
+          className="rounded-2xl border border-amber-300/30 bg-[#142a1f] p-10 text-center"
+        >
+          <CloudOff className="h-6 w-6 mx-auto text-amber-200/80 mb-3" />
+          <div className="font-serif text-2xl mb-2">Live queue unavailable</div>
+          <p className="text-sm text-white/60 max-w-xl mx-auto">
+            The review queue could not be loaded from the Orchid Continuum API,
+            so no submissions are shown. Nothing is substituted in their place.
+          </p>
+          <p className="text-xs text-white/45 mt-2">{state.reason}</p>
+          <button
+            onClick={retry}
+            className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-sm hover:bg-white/10 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Try again
+          </button>
+        </div>
+      )}
+
+      {state.kind === 'empty' && (
+        <div
+          role="status"
+          data-testid="zoo-queue-empty"
+          className="rounded-2xl border border-white/10 bg-[#142a1f] p-10 text-center"
+        >
+          <Inbox className="h-6 w-6 mx-auto text-emerald-200/80 mb-3" />
+          <div className="font-serif text-2xl mb-2">No submissions awaiting review</div>
+          <p className="text-sm text-white/60">
+            The live queue responded and is empty right now.
+          </p>
+        </div>
+      )}
+
+      {state.kind === 'present' && current && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Image / submission card */}
           <div className="lg:col-span-7 rounded-2xl overflow-hidden border border-white/10 bg-[#142a1f]">
@@ -277,18 +296,18 @@ const ZooReviewWorkflow: React.FC = () => {
         </div>
       )}
 
-      {!loading && !current && (
+      {state.kind === 'present' && !current && (
         <div className="rounded-2xl border border-white/10 bg-[#142a1f] p-10 text-center">
-          <div className="font-serif text-2xl mb-2">Queue empty</div>
+          <div className="font-serif text-2xl mb-2">All loaded submissions triaged</div>
           <p className="text-sm text-white/60">
-            You have triaged every submission in the demo queue. New
-            submissions will appear once the live API is configured.
+            You have worked through every submission loaded in this session.
+            Your decisions stay local to this preview.
           </p>
           <button
             onClick={() => setIndex(0)}
             className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 text-sm hover:bg-white/10 transition-colors"
           >
-            Restart demo
+            Start over
             <ArrowRight className="h-4 w-4" />
           </button>
         </div>

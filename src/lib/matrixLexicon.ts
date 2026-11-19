@@ -1,5 +1,6 @@
 import type { LexiconEntry } from "@/data/types";
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import { withMemberAuth } from "@/lib/memberReadAuth";
 
 export type CanonicalMatrixLexiconEntry = LexiconEntry & {
   concept_id?: string;
@@ -33,10 +34,14 @@ export type MatrixCharacterLexiconResolution =
     };
 
 async function requestJson<T>(path: string): Promise<{ ok: boolean; status: number; payload: T | null }> {
-  const response = await fetch(`${CALYX_BACKEND_BASE_URL}${path}`, {
+  const url = `${CALYX_BACKEND_BASE_URL}${path}`;
+  // The registry version read is a member Matrix route (R1 J4): a signed-in
+  // member's token rides on it, so the Lexicon guide works in a member session.
+  // memberReadAuth decides; the Lexicon concept read gets nothing from it.
+  const response = await fetch(url, await withMemberAuth(url, {
     credentials: "include",
     headers: { Accept: "application/json" },
-  });
+  }));
   const payload = await response.json().catch(() => null) as T | null;
   return { ok: response.ok, status: response.status, payload };
 }

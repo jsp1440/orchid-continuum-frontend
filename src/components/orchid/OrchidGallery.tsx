@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, ImageOff, ChevronLeft, ChevronRight, Pause, Play } from 'lucide-react';
+import { speciesSearchHref } from '@/lib/speciesRouteContext';
 import {
   fetchLivingGalleryRecords,
   isOrchidContinuumLive,
@@ -246,7 +247,7 @@ const GalleryCard: React.FC<CardProps> = ({ record }) => {
   const hasRealImage = !!record.imageUrl && !record.isPlaceholder && !imageFailed;
   const speciesUrl = record.taxonomyId
     ? `/species/${encodeURIComponent(record.taxonomyId)}`
-    : `/species?q=${encodeURIComponent(record.scientificName)}`;
+    : speciesSearchHref(record.scientificName);
   const atlasUrl = record.atlasOccurrenceId
     ? `/atlas?occurrence=${encodeURIComponent(record.atlasOccurrenceId)}`
     : '/atlas';

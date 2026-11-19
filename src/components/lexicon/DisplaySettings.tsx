@@ -27,7 +27,7 @@ export const DisplaySettings: React.FC = () => {
   }, [open]);
   return (
     <div className="relative">
-      <button ref={buttonRef} type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="dialog" className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[12px] font-medium text-[#F3EEE2] transition-colors hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B7F5]">
+      <button ref={buttonRef} type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="dialog" aria-label="Display settings: theme, text size, contrast and motion" className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3 py-1.5 text-[12px] font-medium text-[#F3EEE2] transition-colors hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#D8B7F5]">
         <svg aria-hidden viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 6h12M4 10h12M4 14h12" strokeLinecap="round" /><circle cx="8" cy="6" r="1.8" fill="currentColor" stroke="none" /><circle cx="13" cy="10" r="1.8" fill="currentColor" stroke="none" /><circle cx="7" cy="14" r="1.8" fill="currentColor" stroke="none" /></svg>
         <span className="hidden sm:inline">Display</span><span className="sr-only">settings: theme, text size, contrast and motion</span>
       </button>

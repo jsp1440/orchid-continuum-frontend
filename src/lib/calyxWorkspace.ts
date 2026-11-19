@@ -216,24 +216,59 @@ export const listCalyxConversations = (limit = 20) =>
 export const sendCalyxTurn = (conversationId: string, payload: { message: string; project_id?: string; context?: Record<string, unknown>; research_mode?: "auto" | "always" | "never"; retrieval_limit?: number }) =>
   calyxRequest<CalyxTurnResponse>(`/api/calyx/speak/conversations/${encodeURIComponent(conversationId)}/turns`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 
-async function getOrchestratorStatus(): Promise<{ data: Record<string, unknown> | null; state: CalyxWorkspaceSnapshot["orchestratorState"]; error?: string }> {
+type WorkspaceSourceFailure = "unreachable" | "unavailable";
+
+async function getOrchestratorStatus(): Promise<{ data: Record<string, unknown> | null; state: CalyxWorkspaceSnapshot["orchestratorState"]; failure?: WorkspaceSourceFailure }> {
   try {
     const response = await fetch(`${CALYX_BACKEND_BASE_URL}/brain/orchestrator/status`, { credentials: "include", headers: { Accept: "application/json" } });
     if (response.status === 401 || response.status === 403) return { data: null, state: "authentication_required" };
-    if (!response.ok) return { data: null, state: "unavailable", error: `Orchestrator status ${response.status}` };
+    if (!response.ok) return { data: null, state: "unavailable", failure: "unavailable" };
     return { data: (await response.json()) as Record<string, unknown>, state: "available" };
-  } catch (error) { return { data: null, state: "unavailable", error: error instanceof Error ? error.message : "Orchestrator request failed" }; }
+  } catch (error) { return { data: null, state: "unavailable", failure: isUnreachable(error) ? "unreachable" : "unavailable" }; }
+}
+
+/** Shown when the browser could not reach the Calyx backend at all. */
+export const CALYX_BACKEND_UNREACHABLE = "Calyx backend is unreachable";
+
+/**
+ * A rejected `fetch` (connection refused, DNS failure, CORS, offline) surfaces
+ * as a TypeError whose text is browser-specific ("Failed to fetch", "Load
+ * failed", "NetworkError when attempting to fetch resource"). That text is a
+ * transport detail, not something a visitor can act on.
+ */
+function isUnreachable(reason: unknown): boolean {
+  return reason instanceof TypeError || (reason instanceof CalyxApiError && reason.kind === "network_error");
+}
+
+/**
+ * Turn per-source load failures into visitor-facing sentences. Raw exception
+ * text, stack fragments and HTTP status lines never reach the page: an
+ * unreachable backend is named once, and any other failure says which part of
+ * the workspace is unavailable without claiming why.
+ */
+export function describeWorkspaceLoadFailures(failures: Array<{ source: string; failure: WorkspaceSourceFailure }>): string[] {
+  const unreachable = [...new Set(failures.filter((item) => item.failure === "unreachable").map((item) => item.source))];
+  const unavailable = [...new Set(failures.filter((item) => item.failure === "unavailable").map((item) => item.source))];
+  const messages: string[] = [];
+  if (unreachable.length) {
+    const parts = unreachable.length === 1 ? unreachable[0] : `${unreachable.slice(0, -1).join(", ")} and ${unreachable[unreachable.length - 1]}`;
+    messages.push(`${CALYX_BACKEND_UNREACHABLE} — ${parts} could not be loaded. Check your connection or try again in a moment.`);
+  }
+  for (const source of unavailable) {
+    messages.push(`${source.charAt(0).toUpperCase()}${source.slice(1)} could not be loaded from the Calyx backend right now.`);
+  }
+  return messages;
 }
 
 export async function loadCalyxWorkspace(): Promise<CalyxWorkspaceSnapshot> {
   const [capabilitiesResult, homepageResult, orchestratorResult] = await Promise.allSettled([getPlatformCapabilities(), getHomepageDocument(), getOrchestratorStatus()]);
-  const errors: string[] = [];
+  const failures: Array<{ source: string; failure: WorkspaceSourceFailure }> = [];
   const capabilities = capabilitiesResult.status === "fulfilled" ? capabilitiesResult.value : null;
   const homepage = homepageResult.status === "fulfilled" ? homepageResult.value : null;
   const orchestrator = orchestratorResult.status === "fulfilled" ? orchestratorResult.value : null;
-  if (capabilitiesResult.status === "rejected") errors.push(String(capabilitiesResult.reason));
-  if (homepageResult.status === "rejected") errors.push(String(homepageResult.reason));
-  if (orchestratorResult.status === "rejected") errors.push(String(orchestratorResult.reason));
-  if (orchestrator?.error) errors.push(orchestrator.error);
-  return { capabilities, homepage, orchestrator: orchestrator?.data ?? null, orchestratorState: orchestrator?.state ?? "unavailable", errors };
+  if (capabilitiesResult.status === "rejected") failures.push({ source: "platform capabilities", failure: isUnreachable(capabilitiesResult.reason) ? "unreachable" : "unavailable" });
+  if (homepageResult.status === "rejected") failures.push({ source: "the homepage document", failure: isUnreachable(homepageResult.reason) ? "unreachable" : "unavailable" });
+  if (orchestratorResult.status === "rejected") failures.push({ source: "orchestrator status", failure: isUnreachable(orchestratorResult.reason) ? "unreachable" : "unavailable" });
+  if (orchestrator?.failure) failures.push({ source: "orchestrator status", failure: orchestrator.failure });
+  return { capabilities, homepage, orchestrator: orchestrator?.data ?? null, orchestratorState: orchestrator?.state ?? "unavailable", errors: describeWorkspaceLoadFailures(failures) };
 }

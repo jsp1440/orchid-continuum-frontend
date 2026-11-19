@@ -86,7 +86,7 @@ function observe(repo: string, issue: GhIssue): Observation {
 
 function main(): number {
   const args = parseArgs(process.argv.slice(2));
-  const issues = (api<GhIssue[]>(`repos/${args.repo}/issues`, '--paginate', '-f', 'state=all', '-f', `labels=${DONE_LABEL}`, '-f', 'per_page=100') ?? [])
+  const issues = (api<GhIssue[]>(`repos/${args.repo}/issues`, '--method', 'GET', '--paginate', '-f', 'state=all', '-f', `labels=${DONE_LABEL}`, '-f', 'per_page=100') ?? [])
     .filter((issue) => !('pull_request' in issue));
   const onTarget = shaOnTarget(args.repo, args.targetBranch);
   const decisions = issues.map((issue) => decide(observe(args.repo, issue), onTarget));

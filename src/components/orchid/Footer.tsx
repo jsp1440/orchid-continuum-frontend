@@ -3,7 +3,14 @@ import { Github, Twitter, Mail, ExternalLink } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import BotanicalLineArt from './BotanicalLineArt';
 
-type Item = { label: string; route?: string; anchor?: string; external?: string };
+/**
+ * `link` renders the item as a real anchor. The Release 1 surfaces use it so a
+ * visitor (and anything that reads hrefs) can discover them from any page.
+ * The older entries are still buttons: converting them adds footer `/atlas`
+ * and "Ask Calyx" anchors to every page, which the subject-leak guards in the
+ * dossier / Research Station suites count; that migration is its own change.
+ */
+type Item = { label: string; route?: string; anchor?: string; external?: string; link?: boolean };
 
 const Footer: React.FC = () => {
   const navigate = useNavigate();
@@ -40,13 +47,15 @@ const Footer: React.FC = () => {
         { label: 'Mycorrhizal fungi', route: '/mycorrhizae' },
         { label: 'Climate Comparison', route: '/climate' },
         { label: 'Species Mapping', route: '/species' },
+        { label: 'Orchid identification', route: '/orchid-identification', link: true },
+        { label: 'Literature', route: '/literature', link: true },
       ],
     },
     {
       title: 'Learn',
       items: [
         { label: 'Orchid University', route: '/university' },
-        { label: 'Glossary', route: '/lexicon' },
+        { label: 'Illustrated Lexicon', route: '/lexicon', link: true },
         { label: 'Classroom', route: '/classroom' },
         { label: 'Judging practice', route: '/education/judging-practice' },
         { label: 'Orchids on screen', route: '/culture/orchids-on-screen' },
@@ -119,12 +128,22 @@ const Footer: React.FC = () => {
               <ul className="space-y-2.5">
                 {c.items.map(it => (
                   <li key={it.label}>
-                    <button
-                      onClick={() => go(it)}
-                      className="font-body text-[14px] text-[#e7dfd1]/85 hover:text-[#d4b34a] transition-colors text-left"
-                    >
-                      {it.label}
-                    </button>
+                    {it.route && it.link ? (
+                      <Link
+                        to={it.route}
+                        className="font-body text-[14px] text-[#e7dfd1]/85 hover:text-[#d4b34a] transition-colors text-left"
+                      >
+                        {it.label}
+                      </Link>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => go(it)}
+                        className="font-body text-[14px] text-[#e7dfd1]/85 hover:text-[#d4b34a] transition-colors text-left"
+                      >
+                        {it.label}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -2,6 +2,15 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Signed-out visitor. The trait read goes through memberReadAuth, which loads
+// supabase-js lazily (#868); without this the test depended on a real Supabase
+// client (pointed at the default hosted project) and on its import timing.
+// Member-token behaviour on this route is pinned in memberReadAuth.test.ts.
+vi.mock('@/lib/supabase', () => ({
+  supabase: { auth: { getSession: async () => ({ data: { session: null }, error: null }) } },
+}));
+
 import ResearchTraitExplorer from './ResearchTraitExplorer';
 
 let container: HTMLDivElement;

@@ -104,7 +104,7 @@ describe('navigation reachability', () => {
   it('keeps the governed journey entry points reachable', () => {
     // The surfaces the Continuum journey starts from. If one drops out of
     // navigation the journey still works but nobody enters it.
-    for (const entry of ['/atlas', '/species', '/calyx', '/research', '/lexicon', '/classroom']) {
+    for (const entry of ['/atlas', '/species', '/calyx', '/research', '/lexicon', '/classroom', '/orchid-identification', '/literature']) {
       expect(NAV_ROUTES, `${entry} is not linked from navigation`).toContain(entry);
     }
   });

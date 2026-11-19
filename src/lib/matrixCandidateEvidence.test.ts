@@ -140,3 +140,27 @@ describe("captured explain payload", () => {
     expect(candidates[1].missing_characters).toEqual(["flower_shape"]);
   });
 });
+
+describe("the member view's withheld marker (R1 J4)", () => {
+  it("is shown as withheld, never as a value, wherever a Matrix value is rendered", async () => {
+    const { characterName, characterStatusLabel, formatMatrixValue, provenanceEntries } = await import("./matrixCandidateEvidence");
+    expect(formatMatrixValue("withheld")).toBe("withheld (not shown in the member view)");
+    expect(formatMatrixValue(["white", "withheld"])).toBe("white, withheld (not shown in the member view)");
+    expect(characterName("withheld")).toBe("character withheld (not shown in the member view)");
+    expect(characterStatusLabel("withheld")).toBe("status withheld (not shown in the member view)");
+    expect(provenanceEntries({ source: "withheld" })).toEqual([["source", "withheld (not shown in the member view)"]]);
+    // Ordinary values are untouched.
+    expect(formatMatrixValue("white")).toBe("white");
+    expect(characterName("flower_color")).toBe("flower color");
+  });
+
+  it("marks a withheld next character as not answerable", async () => {
+    const { isAnswerableCharacter, containsWithheld } = await import("./matrixIdentification");
+    expect(isAnswerableCharacter({ character: "withheld", label: "withheld" })).toBe(false);
+    expect(isAnswerableCharacter({ character: "flower_color", label: "withheld" })).toBe(false);
+    expect(isAnswerableCharacter({ character: "flower_color", label: "Flower color" })).toBe(true);
+    expect(isAnswerableCharacter(null)).toBe(false);
+    expect(containsWithheld("Withheld")).toBe(true);
+    expect(containsWithheld("white")).toBe(false);
+  });
+});

@@ -30,6 +30,12 @@ export interface PageShellProps {
   hero?: boolean;
   /** When true, shows a small demo-mode banner if API is unconfigured. */
   showDemoBanner?: boolean;
+  /**
+   * Replaces the static "Live data" badge with one the page derives from what
+   * actually loaded. `live: false` renders a muted label with no live marker,
+   * so a page whose data did not load never claims live data.
+   */
+  dataBadge?: { label: string; live: boolean };
   /** Feature flag — if set and false, render a "module disabled" notice. */
   requireFeature?: keyof typeof FEATURES;
   children: React.ReactNode;
@@ -43,6 +49,7 @@ const PageShell: React.FC<PageShellProps> = ({
   heroAside,
   hero = true,
   showDemoBanner = true,
+  dataBadge,
   requireFeature,
   children,
 }) => {
@@ -106,7 +113,22 @@ const PageShell: React.FC<PageShellProps> = ({
                 )}
               </div>
 
-              {showDemoBanner && (
+              {dataBadge ? (
+                <div
+                  data-testid="page-data-badge"
+                  data-live={dataBadge.live ? 'true' : 'false'}
+                  className={
+                    dataBadge.live
+                      ? 'mt-10 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-300/40 bg-amber-300/10 text-[10px] tracking-[0.2em] uppercase text-amber-200'
+                      : 'mt-10 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-white/15 bg-white/[0.04] text-[10px] tracking-[0.2em] uppercase text-white/60'
+                  }
+                >
+                  {dataBadge.live ? (
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse" />
+                  ) : null}
+                  {dataBadge.label}
+                </div>
+              ) : showDemoBanner && (
                 <div className="mt-10 inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-amber-300/40 bg-amber-300/10 text-[10px] tracking-[0.2em] uppercase text-amber-200">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse" />
                   Live data · Orchid Continuum + GBIF
