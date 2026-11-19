@@ -79,14 +79,17 @@ export default function AtlasChecklistPage() {
   const [area, setArea] = useState<AreaResponse | null>(null);
   const [taxonId, setTaxonId] = useState<number | null>(null);
   const [taxon, setTaxon] = useState<TaxonResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [areasError, setAreasError] = useState<string | null>(null);
+  const [areaError, setAreaError] = useState<string | null>(null);
+  const [taxonError, setTaxonError] = useState<string | null>(null);
 
   useEffect(() => {
     let live = true;
+    setAreasError(null);
     setAreasLoading(true);
     checklistApi.areas(q.trim(), areasOffset)
       .then((r) => live && setAreas(r))
-      .catch((e: Error) => live && setError(e.message))
+      .catch((e: Error) => live && setAreasError(e.message))
       .finally(() => live && setAreasLoading(false));
     return () => {
       live = false;
@@ -94,20 +97,26 @@ export default function AtlasChecklistPage() {
   }, [q, areasOffset]);
 
   useEffect(() => {
+    setArea(null);
+    setAreaError(null);
+    setTaxonId(null);
+    setTaxon(null);
+    setTaxonError(null);
     if (!areaName) return;
     let live = true;
     const flag = marked === 'any' ? undefined : marked === 'marked';
-    checklistApi.area(areaName, offset, genus.trim(), flag).then((r) => live && setArea(r)).catch((e: Error) => live && setError(e.message));
+    checklistApi.area(areaName, offset, genus.trim(), flag).then((r) => live && setArea(r)).catch((e: Error) => live && setAreaError(e.message));
     return () => {
       live = false;
     };
   }, [areaName, genus, marked, offset]);
 
   useEffect(() => {
+    setTaxon(null);
+    setTaxonError(null);
     if (taxonId === null) return;
     let live = true;
-    setTaxon(null);
-    checklistApi.taxon(taxonId).then((r) => live && setTaxon(r)).catch((e: Error) => live && setError(e.message));
+    checklistApi.taxon(taxonId).then((r) => live && setTaxon(r)).catch((e: Error) => live && setTaxonError(e.message));
     return () => {
       live = false;
     };
@@ -120,7 +129,9 @@ export default function AtlasChecklistPage() {
       <h1 className="text-2xl">Atlas · checklist distribution</h1>
       {areas && <p className="text-sm">{areas.notice}</p>}
       {areas && <p className="text-sm">Geometry: {areas.geometry.state.replace('_', ' ')}. {areas.geometry.explanation}</p>}
-      {error && <p role="alert">{error}</p>}
+      {areasError && <p role="alert">{areasError}</p>}
+      {areaError && <p role="alert">{areaError}</p>}
+      {taxonError && <p role="alert">{taxonError}</p>}
       <Gate data={gate} />
       {!gate && (
         <div className="grid gap-6 md:grid-cols-3">
@@ -135,7 +146,7 @@ export default function AtlasChecklistPage() {
                 setAreasLoading(true);
               }} className="ml-2 border" />
             </label>
-            <p className="text-xs">{areas ? `${areas.areas_matching} areas, names as the checklist writes them` : 'Loading…'}</p>
+            <p className="text-xs">{areas ? `${areas.areas_matching} areas, names as the checklist writes them` : areasError ? 'Area names could not be read.' : 'Loading…'}</p>
             <ul>
               {areas?.areas.map((a) => (
                 <li key={a.kg_node_id}>
@@ -146,6 +157,7 @@ export default function AtlasChecklistPage() {
                       setOffset(0);
                       setTaxonId(null);
                       setTaxon(null);
+                      setTaxonError(null);
                       if (a.label !== areaName) setArea(null);
                     }}
                   >
@@ -172,12 +184,12 @@ export default function AtlasChecklistPage() {
             )}
           </section>
           <section aria-label="Taxa of the area">
-            {!area && <p className="text-sm">Select an area.</p>}
-            {area && (
+            {!areaName && <p className="text-sm">Select an area.</p>}
+            {areaName && (
               <>
-                <h2 className="text-lg">{area.area?.label ?? areaName}</h2>
-                {area.gap && <p>{area.gap}</p>}
-                {area.area && (
+                <h2 className="text-lg">{area?.area?.label ?? areaName}</h2>
+                {area?.gap && <p>{area.gap}</p>}
+                {area?.area && (
                   <p className="text-xs">
                     {area.taxa_listed} statements{area.taxa_listed_with_a_marker ? `, ${area.taxa_listed_with_a_marker} with a sign of the source` : ''}
                     {area.taxa_matching_filter !== undefined ? `; ${area.taxa_matching_filter} match the filter` : ''}. Statements, not a species count.
@@ -195,8 +207,9 @@ export default function AtlasChecklistPage() {
                     <option value="unmarked">without</option>
                   </select>
                 </label>
+                {!area && <p className="text-sm">{areaError ? 'Taxa of this area could not be read.' : 'Loading…'}</p>}
                 <ul>
-                  {area.taxa.map((t) => (
+                  {area?.taxa.map((t) => (
                     <li key={t.kg_edge_id}>
                       <button type="button" onClick={() => setTaxonId(t.taxon.kg_node_id)}>
                         {t.taxon.label}
@@ -206,14 +219,15 @@ export default function AtlasChecklistPage() {
                   ))}
                 </ul>
                 {offset > 0 && <button type="button" onClick={() => setOffset(Math.max(0, offset - 25))}>Previous</button>}
-                {area.next_offset !== null && <button type="button" onClick={() => setOffset(area.next_offset ?? 0)}>Next</button>}
-                <div><AskCalyx handoff={area.calyx} /></div>
+                {area && area.next_offset !== null && <button type="button" onClick={() => setOffset(area.next_offset ?? 0)}>Next</button>}
+                <div><AskCalyx handoff={area?.calyx} /></div>
               </>
             )}
           </section>
           <section aria-label="Evidence for the taxon">
             {taxonId === null && <p className="text-sm">Select a taxon to see what the graph holds, with its sources and review state.</p>}
-            {taxonId !== null && !taxon && <p>Loading…</p>}
+            {taxonId !== null && !taxon && !taxonError && <p>Loading…</p>}
+            {taxonError && <p>Taxon evidence could not be read.</p>}
             {taxon && taxon.status !== 'available' && <p>{taxon.explanation}</p>}
             {taxon?.identity && (
               <>

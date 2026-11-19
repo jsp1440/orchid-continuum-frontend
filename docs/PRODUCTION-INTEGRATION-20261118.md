@@ -335,3 +335,39 @@ unverified; no paid Devin analysis, account change or provider activation was
 performed. The owner is checking availability at app.devin.ai/settings/review.
 OpenAI repair credits do not establish a Devin budget. Required GitHub checks,
 complete review coverage and scientific/data safeguards remain in force.
+
+
+## Request-state follow-up and continuation verification
+
+Exact head `769a1ef5f2c5b9f834e8f3c90ded44b84e56bb51` passed 4428 unit tests
+(2 skipped), build and lint, and all 82 hosted reference-backend browser journeys.
+The next independent review found two further page-state gaps: an old area's
+rows/counts/evidence/question handoff remained while genus/sign/page requests
+changed, and request errors survived unrelated later successful interactions.
+
+Five mounted regressions failed before repair, with 17 controls passing. The page
+now invalidates abandoned area/taxon data before replacement reads, keeps filter
+controls mounted while loading or failing, and tracks areas/area/taxon errors
+separately. A stream resets its own error without hiding another stream's failure;
+late old rejections remain ignored. Additional assertions reproduced two false
+Loading labels after failed area-name/taxon requests; these now show unavailable
+reading states instead. All 22 mounted page cases, typecheck, focused lint and
+whitespace checks pass. The original 14 tests remain an exact prefix. No provider
+request or production-data access was used. Exact-head review and fresh hosted
+checks are required on the resulting revision.
+
+The earlier resumed ChatGPT execution task did not establish continuous delivery:
+its 04:30 UTC scheduled attempt started at 04:34, ended at 04:36 with
+user-action-required and an empty recorded explanation, then was disabled again.
+Available tools could not retrieve the missing explanation or rebind its older
+source chat. Do not repeatedly restart it or infer the cause from missing output.
+
+A single replacement task was attached to this working Codex session, keeping the
+old task paused and preserving the same GitHub control plane, leases and limits.
+Its first scheduled wake-up was delivered here; workspace and authenticated GitHub
+read access were verified. The on-demand run endpoint returned Action not found,
+so timer delivery, rather than that unsupported endpoint, is the observed proof.
+This verifies one wake-up path, not every future execution or unattended promotion.
+The task remains bounded to hourly runs through November 25 Pacific. Source #948
+remains actively owned until this repair's DONE receipt; separate unclaimed work
+is being independently checked without modifying foreign branches.

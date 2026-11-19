@@ -1,5 +1,5 @@
 {
-  "phase": "review_findings_repaired_awaiting_independent_review",
+  "phase": "request_state_followup_repaired_awaiting_exact_head_review",
   "frontend_base": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
   "source_refs": {
     "948": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
@@ -96,6 +96,27 @@
     "page_sha256": "f09bb23c6352766cab8e4405becfcda140ad154634c3f4f9f6e4d548091efa34",
     "typecheck": "PASS",
     "focused_lint": "PASS",
+    "provider_calls": 0
+  },
+  "request_state_followup": {
+    "source_head": "769a1ef5f2c5b9f834e8f3c90ded44b84e56bb51",
+    "source_head_hosted_unit_passed": 4428,
+    "source_head_hosted_skipped": 2,
+    "source_head_hosted_browser_passed": 82,
+    "red": {
+      "failed": 5,
+      "passed": 17
+    },
+    "failed_loading_label_controls": {
+      "failed": 2,
+      "passed": 20
+    },
+    "fixed_page_tests_passed": 22,
+    "original_14_tests_preserved": true,
+    "typecheck": "PASS",
+    "focused_lint": "PASS",
+    "test_sha256": "34a2453d7237a22fd748e906421497aff10bf366feebfc16e4a04549f5b5f54e",
+    "page_sha256": "8276624c6470bcb41fa942931304b41ae54804ec01d7c15f319decd95d0046a4",
     "provider_calls": 0
   }
 }

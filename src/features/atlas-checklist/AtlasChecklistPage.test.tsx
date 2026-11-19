@@ -311,3 +311,142 @@ it('ignores an old area page after a new search returns', async () => {
   expect(screen.getByRole('button', { name: /France/ })).toBeTruthy();
   expect(screen.queryByRole('button', { name: /Stale area/ })).toBeNull();
 });
+
+function deferredResponse() {
+  let resolve!: (body: unknown) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<unknown>((accept, fail) => { resolve = accept; reject = fail; });
+  return { promise, resolve, reject };
+}
+
+function mockRequests(answer: (url: URL) => unknown) {
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => ({
+    ok: true, status: 200, json: async () => answer(new URL(input)),
+  })));
+}
+
+const OTHER_ID = { ...ID, kg_node_id: 66747, canonical_key: 'taxon:other', label: 'Synthetic second taxon' };
+const TWO_TAXA = { ...AREA, next_offset: 25, taxa: [
+  ...AREA.taxa, { ...AREA.taxa[0], kg_edge_id: 10, taxon: OTHER_ID },
+] };
+
+it.each(['genus', 'source signs', 'next taxon page'])('invalidates old area and taxon context during a pending and failed %s request', async (change) => {
+  const pending = deferredResponse();
+  let areaReads = 0;
+  mockRequests((url) => {
+    if (url.pathname.endsWith('/areas')) return AREAS;
+    if (url.pathname.includes('/taxon/')) return TAXON;
+    areaReads += 1;
+    return areaReads === 1 ? TWO_TAXA : areaReads === 2 ? pending.promise : {
+      ...AREA, taxa: [{ ...AREA.taxa[0], taxon: OTHER_ID }],
+      calyx: { question: 'Which orchids grow in the recovered area?' },
+    };
+  });
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+  fireEvent.click(await screen.findByRole('button', { name: ID.label }));
+  await screen.findByText(/graph node 66746/);
+  if (change === 'genus') fireEvent.change(screen.getByLabelText('Genus'), { target: { value: 'New genus' } });
+  else if (change === 'source signs') fireEvent.change(screen.getByLabelText('Source signs'), { target: { value: 'marked' } });
+  else fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+
+  const expectNoAbandonedContext = () => {
+    expect(screen.queryByRole('button', { name: ID.label })).toBeNull();
+    expect(screen.queryByRole('button', { name: OTHER_ID.label })).toBeNull();
+    expect(screen.queryByText(/Statements, not a species count/)).toBeNull();
+    expect(screen.queryByText(/graph node 66746/)).toBeNull();
+    expect(screen.queryByText(/Aeranthus sesquipedalis/)).toBeNull();
+    expect(screen.queryByRole('link', { name: /Ask Calyx/ })).toBeNull();
+    expect((screen.getByLabelText('Genus') as HTMLInputElement).disabled).toBe(false);
+    expect((screen.getByLabelText('Source signs') as HTMLSelectElement).disabled).toBe(false);
+  };
+  expectNoAbandonedContext();
+  await act(async () => { pending.reject(new Error('Area filter request failed')); });
+  expect(screen.getByRole('alert').textContent).toBe('Area filter request failed');
+  expectNoAbandonedContext();
+  // A successful area-name search must not erase the independent area error.
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'Madagascar' } });
+  await screen.findByRole('button', { name: /Madagascar/ });
+  expect(screen.getByRole('alert').textContent).toBe('Area filter request failed');
+  fireEvent.change(screen.getByLabelText('Genus'), { target: { value: 'Recovered genus' } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  await screen.findByRole('button', { name: OTHER_ID.label });
+  expect(screen.queryByRole('alert')).toBeNull();
+  expect(screen.getByRole('link', { name: /recovered area/ })).toBeTruthy();
+});
+
+it('clears the area-name error when a new search starts and recovers successfully', async () => {
+  const first = deferredResponse();
+  const recovered = deferredResponse();
+  mockRequests((url) => url.searchParams.get('q') ? recovered.promise : first.promise);
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  await act(async () => { first.reject(new Error('Area names failed')); });
+  expect(screen.getByRole('alert').textContent).toBe('Area names failed');
+  expect(screen.getByRole('region', { name: 'Areas' }).textContent).not.toContain('Loading…');
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'Recovery' } });
+  expect(screen.queryByRole('alert')).toBeNull();
+  await act(async () => { recovered.resolve(AREAS); });
+  await screen.findByRole('button', { name: /Madagascar/ });
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('recovers taxon and area-name errors independently without clearing the other stream', async () => {
+  const taxonFailure = deferredResponse();
+  const areasFailure = deferredResponse();
+  const taxonRecovery = deferredResponse();
+  mockRequests((url) => {
+    if (url.pathname.endsWith('/areas')) return url.searchParams.get('q') === 'Fail names' ? areasFailure.promise : AREAS;
+    if (url.pathname.endsWith('/area')) return TWO_TAXA;
+    return url.pathname.endsWith('/66746') ? taxonFailure.promise : taxonRecovery.promise;
+  });
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+  fireEvent.click(await screen.findByRole('button', { name: ID.label }));
+  await act(async () => { taxonFailure.reject(new Error('Taxon evidence failed')); });
+  expect(screen.getByRole('alert').textContent).toBe('Taxon evidence failed');
+  expect(screen.getByRole('region', { name: 'Evidence for the taxon' }).textContent).not.toContain('Loading…');
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'Successful names' } });
+  await screen.findByRole('button', { name: /Madagascar/ });
+  expect(screen.getByRole('alert').textContent).toBe('Taxon evidence failed');
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'Fail names' } });
+  await act(async () => { areasFailure.reject(new Error('Area names failed')); });
+  expect(screen.getAllByRole('alert').map((alert) => alert.textContent).sort()).toEqual(['Area names failed', 'Taxon evidence failed']);
+  fireEvent.click(screen.getByRole('button', { name: OTHER_ID.label }));
+  expect(screen.getByRole('alert').textContent).toBe('Area names failed');
+  await act(async () => { taxonRecovery.resolve({ ...TAXON, identity: OTHER_ID }); });
+  await screen.findByRole('heading', { name: OTHER_ID.label });
+  expect(screen.getByRole('alert').textContent).toBe('Area names failed');
+  fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'Recovered names' } });
+  await screen.findByRole('button', { name: /Madagascar/ });
+  expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it.each(['areas', 'area', 'taxon'])('ignores a late old %s rejection after its replacement succeeds', async (stream) => {
+  const old = deferredResponse();
+  mockRequests((url) => {
+    if (url.pathname.endsWith('/areas')) return url.searchParams.get('q') === 'Old' ? old.promise : AREAS;
+    if (url.pathname.endsWith('/area')) return url.searchParams.get('genus') === 'Old' ? old.promise : TWO_TAXA;
+    return url.pathname.endsWith('/66746') ? old.promise : { ...TAXON, identity: OTHER_ID };
+  });
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  await screen.findByRole('button', { name: /Madagascar/ });
+  if (stream === 'areas') {
+    fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'Old' } });
+    fireEvent.change(screen.getByLabelText('Area name'), { target: { value: 'New' } });
+    await screen.findByRole('button', { name: /Madagascar/ });
+  } else {
+    fireEvent.click(screen.getByRole('button', { name: /Madagascar/ }));
+    await screen.findByRole('button', { name: ID.label });
+    if (stream === 'area') {
+      fireEvent.change(screen.getByLabelText('Genus'), { target: { value: 'Old' } });
+      fireEvent.change(screen.getByLabelText('Genus'), { target: { value: 'New' } });
+      await screen.findByRole('button', { name: ID.label });
+    } else {
+      fireEvent.click(screen.getByRole('button', { name: ID.label }));
+      fireEvent.click(screen.getByRole('button', { name: OTHER_ID.label }));
+      await screen.findByRole('heading', { name: OTHER_ID.label });
+    }
+  }
+  await act(async () => { old.reject(new Error('Abandoned request failed')); });
+  expect(screen.queryByRole('alert')).toBeNull();
+});
