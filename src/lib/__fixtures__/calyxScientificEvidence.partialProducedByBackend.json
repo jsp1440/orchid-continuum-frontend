@@ -1,0 +1,117 @@
+{
+  "_source": "Produced by the backend's own code, not captured from a served turn: the block that tests/test_scientific_evidence_block_contract.py::_partial_block builds through app/calyx_conversation/scientific_evidence_context.py at backend head 93f09df5 (pull request jsp1440/orchid-calyx-backend#2439), dumped unchanged on 2026-11-17. It satisfies contracts/oc-scientific-evidence-block.v1.json. The species and node number are that test's own inputs.",
+  "block": {
+    "schema": "oc.calyx-scientific-evidence-context.v1",
+    "status": "partial",
+    "reading": [
+      "Subject: Vanda coerulea = graph node 7 (taxon:7)."
+    ],
+    "read_only": true,
+    "knowledge_graph_mutation": false,
+    "automatic_publication": false,
+    "durable_mission_record": false,
+    "is_reviewed_conclusion": false,
+    "species": "Vanda coerulea",
+    "read_gaps": [
+      {
+        "component": "graph:cited",
+        "reason": "TIMEOUT",
+        "statement": "graph:cited could not be read in time for this turn (TIMEOUT); that is a limit of this service, not a finding."
+      },
+      {
+        "component": "graph:mission",
+        "reason": "TIMEOUT",
+        "statement": "The graph evidence could not be read in time for this turn (mission BLOCKED); that is a limit of this service, not a finding."
+      }
+    ],
+    "resolution": "RESOLVED",
+    "mission": {
+      "blockers": [
+        "MISSION_TIMEOUT"
+      ]
+    },
+    "kg_node_id": 7,
+    "canonical_key": "taxon:7",
+    "evidence_packet_id": null,
+    "graph_state": "BLOCKED",
+    "graph_completeness": "INCOMPLETE",
+    "pollination_verified": false,
+    "evidence": {
+      "relationships": [],
+      "not_retrieved": [
+        {
+          "meaning": "graph:cited",
+          "reason": "TIMEOUT",
+          "is_evidence_of_absence": false,
+          "statement": "graph:cited could not be read in time for this turn (TIMEOUT); that is a limit of this service, not a finding."
+        },
+        {
+          "meaning": "graph:mission",
+          "reason": "TIMEOUT",
+          "is_evidence_of_absence": false,
+          "statement": "The graph evidence could not be read in time for this turn (mission BLOCKED); that is a limit of this service, not a finding."
+        }
+      ],
+      "held_back": []
+    },
+    "counts": {
+      "graph_interaction_edges": 0,
+      "external_first_hop_records": 0
+    },
+    "subjects": [
+      {
+        "species": "Vanda coerulea",
+        "read_gaps": [
+          {
+            "component": "graph:cited",
+            "reason": "TIMEOUT",
+            "statement": "graph:cited could not be read in time for this turn (TIMEOUT); that is a limit of this service, not a finding."
+          },
+          {
+            "component": "graph:mission",
+            "reason": "TIMEOUT",
+            "statement": "The graph evidence could not be read in time for this turn (mission BLOCKED); that is a limit of this service, not a finding."
+          }
+        ],
+        "resolution": "RESOLVED",
+        "mission": {
+          "blockers": [
+            "MISSION_TIMEOUT"
+          ]
+        },
+        "kg_node_id": 7,
+        "canonical_key": "taxon:7",
+        "evidence_packet_id": null,
+        "graph_state": "BLOCKED",
+        "graph_completeness": "INCOMPLETE",
+        "pollination_verified": false,
+        "reading": [
+          "Subject: Vanda coerulea = graph node 7 (taxon:7)."
+        ],
+        "evidence": {
+          "relationships": [],
+          "not_retrieved": [
+            {
+              "meaning": "graph:cited",
+              "reason": "TIMEOUT",
+              "is_evidence_of_absence": false,
+              "statement": "graph:cited could not be read in time for this turn (TIMEOUT); that is a limit of this service, not a finding."
+            },
+            {
+              "meaning": "graph:mission",
+              "reason": "TIMEOUT",
+              "is_evidence_of_absence": false,
+              "statement": "The graph evidence could not be read in time for this turn (mission BLOCKED); that is a limit of this service, not a finding."
+            }
+          ],
+          "held_back": []
+        },
+        "counts": {
+          "graph_interaction_edges": 0,
+          "external_first_hop_records": 0
+        },
+        "status": "partial"
+      }
+    ]
+  }
+}

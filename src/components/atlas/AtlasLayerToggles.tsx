@@ -21,7 +21,7 @@ export const LAYER_TOGGLES: LayerToggleDef[] = [
     kind: 'occurrence',
     label: 'Occurrences',
     icon: Globe2,
-    hint: 'harvester2 /atlas/occurrences',
+    hint: '/api/atlas/occurrences',
   },
   {
     kind: 'genus',

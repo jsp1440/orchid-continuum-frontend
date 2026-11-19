@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { X, ArrowRight, ArrowLeft, Compass, MapPin, MousePointerClick, Sparkles } from 'lucide-react';
 import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
 
@@ -22,7 +22,7 @@ interface Step {
 const STEPS: Step[] = [
   {
     title: 'Welcome to the Atlas',
-    body: 'Explore 580,000+ orchid occurrence records drawn from 130+ global sources — a living map of where Orchidaceae has been observed.',
+    body: 'Explore the occurrence records currently loaded on this map. Filters narrow those records; an empty result does not establish biological absence.',
     icon: Compass,
   },
   {
@@ -51,13 +51,6 @@ const AtlasTour: React.FC<{ onZoomEcuador?: (bounds: typeof ECUADOR_BOUNDS) => v
   const [step, setStep] = useState(0);
   const { setFilters } = useAtlasFilters();
 
-  useEffect(() => {
-    try {
-      if (!localStorage.getItem(STORAGE_KEY)) setOpen(true);
-    } catch {
-      setOpen(true);
-    }
-  }, []);
 
   const dismiss = () => {
     try {
@@ -74,7 +67,7 @@ const AtlasTour: React.FC<{ onZoomEcuador?: (bounds: typeof ECUADOR_BOUNDS) => v
     dismiss();
   };
 
-  if (!open) return null;
+  if (!open) return <button type="button" onClick={() => { setStep(0); setOpen(true); }} className="mx-6 mb-6 min-h-11 rounded-full border border-[#c9a24a]/50 px-5 text-sm text-[#c9a24a]">How to use the Atlas</button>;
 
   const current = STEPS[step];
   const Icon = current.icon;

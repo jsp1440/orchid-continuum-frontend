@@ -43,6 +43,26 @@ export type UniversityLaboratory = {
   title: string;
   summary: string;
   status: string;
+  data_origin?: string;
+  provenance?: {
+    source: string;
+    live_evidence_services: string[];
+    scientific_citations: string[];
+    notice: string;
+  };
+  inquiry_activity?: {
+    activity_id: string;
+    version: string;
+    mode: 'ephemeral_read_only';
+    assessment_kind: 'formative_practice';
+    scientific_authority: false;
+    steps: Array<{
+      stage: UniversityInquiryStage;
+      prompt: string;
+      evidence_ids: string[];
+      choices: Array<{ id: string; label: string; appropriate: boolean; feedback: string }>;
+    }>;
+  };
   inquiry_sequence: UniversityInquiryStage[];
   evidence_catalog: Array<{
     evidence_id: string;

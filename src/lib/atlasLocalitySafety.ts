@@ -17,8 +17,8 @@ export type SensitivityResolution =
 
 export const UNRESOLVED_FLOOR_DEG = 0.05;
 
-const THREATENED_CODES = new Set(['CR', 'EN', 'VU']);
 const TIER_CELL_DEG: Record<string, number> = { CR: 1, EN: 0.5, VU: 0.25 };
+const TIER_SEVERITY = ['CR', 'EN', 'VU'];
 
 export type SensitivityReason =
   | 'iucn-threatened'
@@ -44,15 +44,11 @@ export interface DisplayedLocation {
 function threatTier(
   point: Pick<AtlasOccurrencePoint, 'iucnCode' | 'conservationStatus'>,
 ): string | null {
-  const code = (point.iucnCode ?? '').trim().toUpperCase();
-  if (THREATENED_CODES.has(code)) return code;
-
-  const status = (point.conservationStatus ?? '').trim().toLowerCase();
-  if (!status) return null;
-  if (status.includes('critically endangered')) return 'CR';
-  if (status.includes('endangered')) return 'EN';
-  if (status.includes('vulnerable')) return 'VU';
-  return null;
+  // The most severe tier either field states. Both fields go through the same
+  // parser hasThreatAssessment uses, so a value recognised as an assessment
+  // ("CR", "IUCN: CR", "Critically Endangered") always yields its tier.
+  const tiers = [parseAssessment(point.iucnCode).tier, parseAssessment(point.conservationStatus).tier];
+  return TIER_SEVERITY.find((tier) => tiers.includes(tier)) ?? null;
 }
 
 export function uncertaintyToCellDeg(uncertaintyM: number | undefined): number {
@@ -98,7 +94,7 @@ export function resolveAtlasLocation(
   let reason: SensitivityReason = 'none';
   let notice = '';
   if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
-    reason = point.iucnCode ? 'iucn-threatened' : 'conservation-status';
+    reason = parseAssessment(point.iucnCode).tier ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km because this taxon is assessed as threatened (${tier}); precise sites are withheld to reduce collection risk.`;
   } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
     reason = 'coordinate-uncertainty';
@@ -154,4 +150,93 @@ export function atlasSensitivityResolution(
   if (threatTier(point) !== null) return 'assessed-threatened';
   if (point.assessmentResolved === false) return 'unresolved';
   return 'assessed-not-threatened';
+}
+
+/**
+ * Only a recognised IUCN assessment counts. Anything else (none, NE, DD, "not yet
+ * assessed", a CITES appendix, free text) leaves the point unresolved, so it gets
+ * the precaution cell rather than precise coordinates: the rule fails closed.
+ */
+const IUCN_CODES = /\b(LC|NT|VU|EN|CR|EX|EW|LR\/(lc|nt|cd)|CR\(PE\)|CR\(PEW\))\b/;
+const IUCN_CATEGORY_NAMES = [
+  'least concern', 'near threatened', 'vulnerable', 'endangered', 'critically endangered',
+  'extinct in the wild', 'extinct', 'lower risk', 'conservation dependent',
+];
+const NOT_AN_ASSESSMENT = /data[\s_-]*deficient|not[\s_-]*(yet[\s_-]*)?(evaluated|assessed)|\b(NE|DD)\b/i;
+
+interface ParsedAssessment {
+  recognised: boolean;
+  tier: string | null;
+}
+
+/**
+ * The single parser for an assessment field. Recognition and tier come from the
+ * same reading, so no value can count as resolved while yielding no tier when it
+ * names a threatened category. Threatened codes match case-insensitively and
+ * inside decorations such as "IUCN: CR" (erring toward protection); the
+ * non-threatened codes stay case-sensitive so prose such as "ex situ" is not
+ * read as an assessment that would release precise coordinates. The most severe
+ * threatened mention wins.
+ */
+function parseAssessment(value?: string | null): ParsedAssessment {
+  const text = (value ?? '').trim();
+  if (!text) return { recognised: false, tier: null };
+  const upper = text.toUpperCase();
+  const lower = text.toLowerCase();
+  const codes = new Set((upper.match(/\b(CR|EN|VU)\b/g) ?? []));
+  if (lower.includes('critically endangered')) codes.add('CR');
+  if (lower.replace('critically endangered', '').includes('endangered')) codes.add('EN');
+  if (lower.includes('vulnerable')) codes.add('VU');
+  const tier = TIER_SEVERITY.find((code) => codes.has(code)) ?? null;
+  // Unassessed wording may qualify another region or assessment. It cannot
+  // cancel an explicit threatened mention or its locality-protection floor.
+  if (tier === null && NOT_AN_ASSESSMENT.test(text)) return { recognised: false, tier: null };
+  const recognised = tier !== null || IUCN_CODES.test(text) || IUCN_CATEGORY_NAMES.some((name) => lower.includes(name));
+  return { recognised, tier };
+}
+
+function isRecognisedAssessment(value?: string | null): boolean {
+  return parseAssessment(value).recognised;
+}
+
+export function hasThreatAssessment(iucnCode?: string | null, conservationStatus?: string | null): boolean {
+  return isRecognisedAssessment(iucnCode) || isRecognisedAssessment(conservationStatus);
+}
+
+/**
+ * Keys whose values a diagnostics surface may print verbatim: names, ranks,
+ * counts and status fields. Every other value is replaced by its type, because
+ * no blocklist of key names or coordinate formats can be complete (coordinates
+ * and place text also arrive as prose, JSON strings and nested number pairs).
+ */
+const DIAGNOSTIC_VALUE_KEYS = new Set([
+  'scientific_name', 'scientificName', 'canonical_name', 'canonicalName', 'species', 'genus', 'family',
+  'subfamily', 'tribe', 'rank', 'taxon_rank', 'taxonRank', 'common_name',
+  'count', 'total', 'limit', 'offset', 'page', 'species_count', 'status', 'ok', 'source',
+  'license', 'rights', 'basis_of_record', 'basisOfRecord', 'year', 'month', 'country', 'country_code',
+  'iucn_code', 'conservation_status', 'is_demo', 'error', 'message', 'detail',
+]);
+
+/**
+ * A printable sample of an API payload for diagnostics: the full key structure
+ * and array lengths, values only for DIAGNOSTIC_VALUE_KEYS (and only when they
+ * are short scalars), and `<type>` placeholders for everything else.
+ */
+export function describePayloadShape(value: unknown, key?: string, depth = 0): unknown {
+  if (depth > 8) return '<depth limit>';
+  if (Array.isArray(value)) {
+    return value.length === 0 ? [] : [...value.slice(0, 3).map((item) => describePayloadShape(item, key, depth + 1)),
+      ...(value.length > 3 ? [`<${value.length - 3} more>`] : [])];
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, inner] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = describePayloadShape(inner, k, depth + 1);
+    }
+    return out;
+  }
+  if (value === null || value === undefined) return value ?? null;
+  const shown = key !== undefined && DIAGNOSTIC_VALUE_KEYS.has(key)
+    && (typeof value !== 'string' || (value.length <= 80 && !/\d{2}/.test(value)));
+  return shown ? value : `<${typeof value}>`;
 }

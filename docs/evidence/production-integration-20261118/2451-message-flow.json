@@ -1,0 +1,68 @@
+{
+  "head": "4927be936f6bb9401e28dce9f48559bb599c0d61",
+  "environment": "local real Speak router; in-memory store; fake transport and evidence/provider seams",
+  "requests": [
+    {
+      "path": "/api/calyx/speak/conversations",
+      "payload": {
+        "project_id": "science"
+      },
+      "status": 201,
+      "operator_message": null
+    },
+    {
+      "path": "/api/calyx/speak/conversations/e2cab741-fb97-4e5b-bc66-fbe6ad9e37d5/turns",
+      "payload": {
+        "message": "Where does Ophrys sphegodes grow?",
+        "research_mode": "auto"
+      },
+      "status": 200,
+      "operator_message": {
+        "message_id": "6fd08c22-95f8-407c-9797-1577d8dd8eb1",
+        "conversation_id": "e2cab741-fb97-4e5b-bc66-fbe6ad9e37d5",
+        "role": "operator",
+        "content": "Where does Ophrys sphegodes grow?",
+        "content_hash": "d7ff67c845e9ba1c7d3a2d39a4f2b8480ff7695adb96c8093804a781d76699f5",
+        "created_at": "2026-11-18T22:46:25.060265+00:00",
+        "metadata": {
+          "context": {
+            "context_is_evidence": false,
+            "context_purpose": "interaction continuity and reference resolution only"
+          },
+          "research_mode": "auto"
+        }
+      }
+    },
+    {
+      "path": "/api/calyx/speak/conversations",
+      "payload": {
+        "project_id": "science"
+      },
+      "status": 201,
+      "operator_message": null
+    },
+    {
+      "path": "/api/calyx/speak/conversations/13ecb21c-b71d-4e4a-bcd3-4f04c04237e3/turns",
+      "payload": {
+        "message": "What evidence supports pollination of Catasetum barbatum?",
+        "research_mode": "auto"
+      },
+      "status": 200,
+      "operator_message": {
+        "message_id": "0bb6c993-7fb4-4537-9ae1-b3fcf75399bb",
+        "conversation_id": "13ecb21c-b71d-4e4a-bcd3-4f04c04237e3",
+        "role": "operator",
+        "content": "What evidence supports pollination of Catasetum barbatum?",
+        "content_hash": "091e10e8724551f40f1335e702fc23b541a393cee442c7fb74928473f43ac1a0",
+        "created_at": "2026-11-18T22:46:25.835234+00:00",
+        "metadata": {
+          "context": {
+            "context_is_evidence": false,
+            "context_purpose": "interaction continuity and reference resolution only"
+          },
+          "research_mode": "auto"
+        }
+      }
+    }
+  ]
+}

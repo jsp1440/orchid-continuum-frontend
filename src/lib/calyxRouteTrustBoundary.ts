@@ -1,4 +1,8 @@
-import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from '@/features/atlas-next/calyxHandoff';
+import {
+  ATLAS_CHECKLIST_LAYER_ORIGIN,
+  ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN,
+  MAX_ATLAS_CALYX_QUESTION_CHARACTERS,
+} from '@/features/atlas-next/calyxHandoff';
 import { ATLAS_NEXT_CALYX_ORIGIN } from '@/features/atlas-next/researchHandoff';
 import { CLASSROOM_INVESTIGATION_ORIGIN } from '@/lib/classroomInvestigationNavigation';
 import {
@@ -53,6 +57,25 @@ const ATLAS_OCCURRENCE_ALLOWED_KEYS = new Set([
   'origin',
   ...QUESTION_CONTEXT_KEYS,
 ]);
+
+const ATLAS_CHECKLIST_ALLOWED_KEYS = new Set(['origin', ...QUESTION_CONTEXT_KEYS]);
+
+function rejectsAtlasChecklistQuestionContext(params: URLSearchParams): boolean {
+  for (const key of params.keys()) {
+    if (!ATLAS_CHECKLIST_ALLOWED_KEYS.has(key)) return true;
+  }
+  for (const key of ATLAS_CHECKLIST_ALLOWED_KEYS) {
+    if (params.getAll(key).length !== 1) return true;
+  }
+  const question = params.get('question') ?? '';
+  return (
+    params.get('origin') !== ATLAS_CHECKLIST_LAYER_ORIGIN ||
+    !question.trim() ||
+    question.length > MAX_ATLAS_CALYX_QUESTION_CHARACTERS ||
+    params.get('question_source') !== 'user' ||
+    params.get('question_is_evidence') !== 'false'
+  );
+}
 
 function hasBoundedCanonicalGenus(params: URLSearchParams): boolean {
   const genus = params.get('genus')?.trim() ?? '';
@@ -150,7 +173,7 @@ export type GovernedCalyxGenusTurnContext = {
  * from smuggling Matrix/Atlas scientific state into a Calyx genus turn.
  *
  * Routed user-question context is producer-governed as well. Only the Atlas
- * occurrence-evidence and Classroom investigation producers may carry the
+ * occurrence-evidence, checklist-layer and Classroom investigation producers may carry the
  * complete non-evidentiary question provenance triple. Research Station,
  * generic genus navigation, and unmanaged origins fail closed if they attempt
  * to attach question context, preventing the generic Calyx parser from
@@ -174,12 +197,23 @@ export type GovernedCalyxGenusTurnContext = {
  * extra locality/evidence/record/project key, malformed question provenance, or
  * non-canonical genus rejects the entire arrival instead of degrading to a
  * genus-only generic Calyx context.
+ *
+ * Atlas checklist-layer carries only a complete, unique non-evidentiary
+ * question triple and its origin. Its dedicated allowlist rejects all identity,
+ * locality and evidence keys, including a canonical genus. A valid question is
+ * left to the question parser without acquiring governed genus authority.
  */
 export function governedCalyxGenusTurnContext(
   search: string,
 ): GovernedCalyxGenusTurnContext | null | undefined {
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
+
+  // Inspect every origin so a duplicate cannot hide this dedicated contract
+  // behind an otherwise valid legacy or governed origin.
+  if (params.getAll('origin').some((value) => value.trim() === ATLAS_CHECKLIST_LAYER_ORIGIN)) {
+    return rejectsAtlasChecklistQuestionContext(params) ? null : undefined;
+  }
 
   if (rejectsQuestionContextForOrigin(params, origin)) return null;
   if (rejectsResearchStationIdentity(params, origin)) return null;

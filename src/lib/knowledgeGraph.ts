@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { COLD_START_TIMEOUT_MS, fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 
 export const KNOWLEDGE_GRAPH_DOMAINS = [
   'taxonomy',
@@ -122,22 +123,20 @@ export function normalizeGenusGraphEvidence(payload: unknown): GenusGraphEvidenc
 export async function fetchGenusGraphEvidence(
   genus: string,
   signal?: AbortSignal,
-  timeoutMs = 8_000,
+  timeoutMs = COLD_START_TIMEOUT_MS,
 ): Promise<GenusGraphResult> {
-  const controller = new AbortController();
-  const abortFromCaller = () => controller.abort();
-  signal?.addEventListener('abort', abortFromCaller, { once: true });
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+  const url = new URL(
+    `${CALYX_BACKEND_BASE_URL}/api/knowledge-graph/genus/${encodeURIComponent(genus)}`,
+  );
+  url.searchParams.set('depth', '2');
+  url.searchParams.set('limit', '500');
+  url.searchParams.set('offset', '0');
 
   try {
-    const url = new URL(
-      `${CALYX_BACKEND_BASE_URL}/api/knowledge-graph/genus/${encodeURIComponent(genus)}`,
-    );
-    url.searchParams.set('depth', '2');
-    url.searchParams.set('limit', '500');
-    url.searchParams.set('offset', '0');
-
-    const response = await fetch(url, { method: 'GET', signal: controller.signal });
+    // One bounded retry: a backend waking from idle must not become a
+    // permanent "did not respond" for the whole rotation (#231).
+    const response = await fetchWithColdStartRetry(url, { method: 'GET' }, signal, { timeoutMs });
+    if (!response) return { status: 'unavailable' };
     if (response.status === 404) return { status: 'not_found' };
     if (!response.ok) return { status: 'unavailable' };
 
@@ -146,8 +145,5 @@ export async function fetchGenusGraphEvidence(
   } catch (error) {
     if (signal?.aborted) throw error;
     return { status: 'unavailable' };
-  } finally {
-    window.clearTimeout(timeout);
-    signal?.removeEventListener('abort', abortFromCaller);
   }
 }

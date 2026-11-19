@@ -60,6 +60,8 @@ vi.mock("@/lib/calyxWorkspace", async () => {
   };
 });
 
+import AtlasAwareCalyxRoute from "@/components/calyx/AtlasAwareCalyxRoute";
+import { atlasChecklistCalyxHref } from "@/features/atlas-next/calyxHandoff";
 import { STORAGE_KEY } from "@/lib/calyxConversation";
 import { CalyxApiError } from "@/lib/calyxWorkspace";
 import CalyxWorkspace from "./CalyxWorkspace";
@@ -203,6 +205,20 @@ describe("CalyxWorkspace conversation lifecycle", () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  it("opens the checklist question in the editable composer and waits for Send", async () => {
+    const question = "Which checklist supports this name?";
+    const href = atlasChecklistCalyxHref(question)!;
+    await act(async () => {
+      root.render(<MemoryRouter initialEntries={[href]}><AtlasAwareCalyxRoute /></MemoryRouter>);
+    });
+    const composer = container.querySelector<HTMLTextAreaElement>("#calyx-message")!;
+    expect(composer.value).toBe(question);
+    expect(composer.readOnly).toBe(false);
+    expect(container.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(false);
+    expect(mocks.createCalyxConversation).not.toHaveBeenCalled();
+    expect(mocks.sendCalyxTurn).not.toHaveBeenCalled();
   });
 
   it("keeps the reset UI clean when new conversation interrupts a pending create", async () => {

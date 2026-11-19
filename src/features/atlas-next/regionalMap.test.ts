@@ -1,14 +1,18 @@
-import { describe, expect, it } from 'vitest';
-import { MAPBOX_TOKEN_ENV_VAR, REGIONAL_LAYERS, mapboxConfig } from './mapboxConfig';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { MAPBOX_TOKEN_ENV_VAR, REGIONAL_LAYERS } from './mapboxConfig';
+
+afterEach(() => { vi.unstubAllEnvs(); });
 
 describe('Mapbox configuration contract', () => {
   it('names the one variable a deployment has to set', () => {
     expect(MAPBOX_TOKEN_ENV_VAR).toBe('VITE_MAPBOX_TOKEN');
   });
 
-  it('reports unconfigured, and names the variable, when nothing is set', () => {
-    // The test environment sets no token, which is the state a fresh
-    // deployment is in — and the state the interface has to explain.
+  it('reports unconfigured, and names the variable, when nothing is set', async () => {
+    // Simulate an unconfigured deployment even when Render injects a token.
+    vi.stubEnv('VITE_MAPBOX_TOKEN', '');
+    vi.resetModules();
+    const { mapboxConfig } = await import('./mapboxConfig');
     const cfg = mapboxConfig();
     expect(cfg.configured).toBe(false);
     expect(cfg.token).toBeNull();

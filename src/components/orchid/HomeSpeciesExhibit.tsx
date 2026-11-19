@@ -11,7 +11,7 @@ import { useDailyGenus } from '@/lib/dailyGenusContext';
 const HomeSpeciesExhibit: React.FC = () => {
   const { genus } = useDailyGenus();
   if (!genus) return null;
-  return <SpeciesExhibit genus={genus} />;
+  return <SpeciesExhibit genus={genus} compact />;
 };
 
 export default HomeSpeciesExhibit;

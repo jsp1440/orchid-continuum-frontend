@@ -132,7 +132,7 @@ const Navbar: React.FC<NavbarProps> = ({ topOffset = 0 }) => {
 
   return (
     <>
-      <header style={{ top: topOffset }} className={'fixed left-0 right-0 z-50 transition-colors duration-300 ' + (scrolled ? 'bg-[#faf7f2]/95 backdrop-blur-md border-b border-quiet shadow-[0_4px_24px_-12px_rgba(28,26,23,0.12)]' : 'bg-[#faf7f2]/80 backdrop-blur-sm border-b border-transparent')}>
+      <header style={{ top: topOffset }} className={'text-ink fixed left-0 right-0 z-50 transition-colors duration-300 ' + (scrolled ? 'bg-[#faf7f2]/95 backdrop-blur-md border-b border-quiet shadow-[0_4px_24px_-12px_rgba(28,26,23,0.12)]' : 'bg-[#faf7f2]/80 backdrop-blur-sm border-b border-transparent')}>
         <div className="max-w-7xl mx-auto px-6 lg:px-10 h-16 flex items-center justify-between gap-6">
           <Link to="/" className="flex items-center gap-3 shrink-0 group" onClick={() => setOpen(false)}>
             <Monogram />
