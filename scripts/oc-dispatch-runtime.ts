@@ -19,8 +19,18 @@ export function retryTransientGitHubRead<T>(method: string, request: () => T, pa
     }
   }
 }
+/** Retry only idempotent GitHub GET gateway failures; never retry a mutation with an unknown outcome. */
+export function retryTransientGitHubRead<T>(method: string, request: () => T, pause: (ms: number) => void): T {
+  for (let attempt = 0; ; attempt++) {
+    try { return request(); }
+    catch (error) {
+      if (method !== 'GET' || attempt >= 2 || ![502, 503, 504].some(code => status(error, code))) throw error;
+      pause(1000 * (2 ** attempt));
+    }
+  }
+}
 function api<T>(path: string, method = 'GET', body?: unknown): T {
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Invalid repository');
+  if (!/^[\\w.-]+\\/[\\w.-]+$/.test(repo)) throw new Error('Invalid repository');
   const args = ['api', `repos/${repo}/${path}`, '--method', method];
   if (body !== undefined) args.push('--input', '-');
   return retryTransientGitHubRead(method, () =>
