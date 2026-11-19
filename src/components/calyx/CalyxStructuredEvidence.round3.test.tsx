@@ -31,7 +31,27 @@ function show(raw: unknown) {
 const openAll = () => {
   for (const b of Array.from(container.querySelectorAll("button"))) act(() => { b.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 };
-const clone = (name: string) => structuredClone(evidenceOf(name)) as Record<string, any>;
+// These tests deliberately corrupt cloned payloads. Check each container while
+// retaining its identity so later edits still affect the payload passed to show.
+function fixtureValueAt(value: unknown, ...path: Array<string | number>): unknown {
+  for (const key of path) {
+    if (value === null || typeof value !== "object") throw new Error(`Expected fixture container at ${key}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+function fixtureRecordAt(value: unknown, ...path: Array<string | number>): Record<string, unknown> {
+  const record = fixtureValueAt(value, ...path);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) throw new Error("Expected fixture record");
+  return record as Record<string, unknown>;
+}
+function fixtureArrayAt(value: unknown, ...path: Array<string | number>): unknown[] {
+  const items = fixtureValueAt(value, ...path);
+  if (!Array.isArray(items)) throw new Error("Expected fixture array");
+  return items;
+}
+
+const clone = (name: string) => structuredClone(evidenceOf(name));
 const section = (kind: string) => container.querySelector(`[data-kind="${kind}"]`);
 const itemTexts = (kind: string) => Array.from(section(kind)?.querySelectorAll('[data-testid="calyx-record-text"]') ?? []).map((n) => n.textContent);
 const notes = (kind: string) => Array.from(section(kind)?.querySelectorAll("li span.block") ?? []).map((n) => n.textContent).join(" | ");
@@ -73,8 +93,8 @@ describe("checklist_remark", () => {
     expect(heading("remark_text")).toContain("0 shown \u00b7 1 held back by the privacy gate");
     expect(notes("remark_text")).toBe("");
     const raw = clone("remark-withheld-by-privacy-gate");
-    raw.subjects[0].evidence.checklist_remark.remarks[0].remark_as_written_by_source = "LEAKED TEXT";
-    raw.subjects[0].evidence.checklist_remark.remarks[0].characters = 77;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "checklist_remark", "remarks", 0).remark_as_written_by_source = "LEAKED TEXT";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "checklist_remark", "remarks", 0).characters = 77;
     show(raw);
     openAll();
     expect(container.textContent).not.toContain("LEAKED TEXT");
@@ -89,11 +109,11 @@ describe("checklist_remark", () => {
   });
   it("(synthetic) a cut text says so; a malformed remark makes only that part unreadable", () => {
     const raw = clone("remark-shown");
-    raw.subjects[0].evidence.checklist_remark.remarks[0].remark_text_cut = true;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "checklist_remark", "remarks", 0).remark_text_cut = true;
     show(raw);
     openAll();
     expect(notes("remark_text")).toContain("The text is cut.");
-    raw.subjects[0].evidence.checklist_remark.remarks[0] = 5;
+    fixtureArrayAt(raw, "subjects", 0, "evidence", "checklist_remark", "remarks")[0] = 5;
     show(raw);
     expect(container.querySelector('[data-testid="calyx-record-unreadable"]')?.textContent).toContain("could not be displayed");
   });
@@ -140,7 +160,7 @@ describe("hybrid_formula", () => {
   });
   it("(synthetic) a reason code the page does not know is shown as returned", () => {
     const raw = clone("hybrid-formula-hedged");
-    raw.subjects[0].evidence.hybrid_formula.formulas[0].parents[0].not_matched_reason = "something_new";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "hybrid_formula", "formulas", 0, "parents", 0).not_matched_reason = "something_new";
     show(raw); openAll();
     expect(notes("hybrid_formula")).toContain("not matched (reason code as returned: something_new)");
   });
@@ -245,42 +265,43 @@ describe("parent_nothotaxa", () => {
   });
   it("(synthetic) an older backend: the 'no list built' code in `state`, no statements, still reads as a limit", () => {
     const raw = clone("parent-nothotaxa-subject-is-a-nothotaxon");
-    const rec = raw.subjects[0].evidence.parent_nothotaxa;
+    const rec = fixtureRecordAt(raw, "subjects", 0, "evidence", "parent_nothotaxa");
     delete rec.resolution; delete rec.statements; rec.state = "LIST_NOT_BUILT_FOR_A_NOTHOTAXON";
     show(raw); openAll();
     expect(heading("parent_nothotaxa")).toContain("no list built for this name");
   });
   it("(synthetic) `all_listed_statements_shown: false` with nothing else to explain it is said; with a cut it is not said twice", () => {
     const raw = clone("parent-nothotaxa-several");
-    raw.subjects[0].evidence.parent_nothotaxa.all_listed_statements_shown = false;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "parent_nothotaxa").all_listed_statements_shown = false;
     show(raw); openAll();
     expect(section("parent_nothotaxa")?.textContent).toContain("Not every listed statement is shown here.");
     show(evidenceOf("parent-nothotaxa-long-first-page")); openAll();
     expect(section("parent_nothotaxa")?.textContent).not.toContain("Not every listed statement is shown here.");
-    expect((evidenceOf("parent-nothotaxa-several") as any).subjects[0].evidence.parent_nothotaxa.all_listed_statements_shown).toBe(true);
+    expect(fixtureRecordAt(evidenceOf("parent-nothotaxa-several"), "subjects", 0, "evidence", "parent_nothotaxa").all_listed_statements_shown).toBe(true);
   });
 });
 
 describe("the fields of backend #2425 head 165716c3 (real captures)", () => {
   it("a withheld remark: the page counts 0 shown and 1 held back from the backend's own numbers", () => {
     for (const name of ["remark-withheld-by-privacy-gate", "remark-withheld-by-privacy-gate-2"]) {
-      const rec = (evidenceOf(name) as any).subjects[0].evidence.checklist_remark;
+      const rec = fixtureRecordAt(evidenceOf(name), "subjects", 0, "evidence", "checklist_remark");
       expect(rec.remarks_shown).toBe(0);
-      expect((evidenceOf(name) as any).subjects[0].counts).toMatchObject({ checklist_remarks_shown: 0, checklist_remarks_withheld_text: 1 });
+      expect(fixtureRecordAt(evidenceOf(name), "subjects", 0).counts).toMatchObject({ checklist_remarks_shown: 0, checklist_remarks_withheld_text: 1 });
       show(evidenceOf(name));
       expect(heading("remark_text")).toContain("0 shown \u00b7 1 held back by the privacy gate");
     }
   });
   it("(synthetic) an older backend counted the withheld remark as shown: the per-remark flag decides", () => {
     const raw = clone("remark-withheld-by-privacy-gate");
-    raw.subjects[0].evidence.checklist_remark.remarks_shown = 1;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "checklist_remark").remarks_shown = 1;
     show(raw);
     expect(heading("remark_text")).toContain("0 shown \u00b7 1 held back by the privacy gate");
   });
   it("matched_taxon_label and is_implied_species_concept are on every parent, the label only where a match was made", () => {
     for (const name of ["hybrid-formula-both-parents-matched", "hybrid-formula-hedged", "hybrid-formula-parent-matched-to-implied-name-switch-on", "hybrid-formula-parent-not-matched-switch-off", "hybrid-formula-qualified-parent", "hybrid-formula-unmatched-parent-no-taxon"]) {
-      for (const f of (evidenceOf(name) as any).subjects[0].evidence.hybrid_formula.formulas) {
-        for (const p of f.parents) {
+      for (const f of fixtureArrayAt(evidenceOf(name), "subjects", 0, "evidence", "hybrid_formula", "formulas")) {
+        for (const parent of fixtureArrayAt(f, "parents")) {
+          const p = fixtureRecordAt(parent);
           expect(typeof p.is_implied_species_concept).toBe("boolean");
           expect(p.matched_taxon_label === null).toBe(p.matched_by_name_to === null && p.matched_to_implied_species_concept === null);
           expect(p.is_implied_species_concept).toBe(p.matched_to_implied_species_concept !== null);
@@ -290,14 +311,14 @@ describe("the fields of backend #2425 head 165716c3 (real captures)", () => {
   });
   it("(synthetic) the boolean alone says implied; a missing label is not invented; an older backend sends neither field", () => {
     const raw = clone("hybrid-formula-both-parents-matched");
-    const parents = raw.subjects[0].evidence.hybrid_formula.formulas[0].parents;
-    parents[0].is_implied_species_concept = true; parents[0].matched_by_name_to = null; parents[0].matched_taxon_label = null;
-    delete parents[1].matched_taxon_label; delete parents[1].is_implied_species_concept;
+    const parents = fixtureArrayAt(raw, "subjects", 0, "evidence", "hybrid_formula", "formulas", 0, "parents");
+    fixtureRecordAt(parents, 0).is_implied_species_concept = true; fixtureRecordAt(parents, 0).matched_by_name_to = null; fixtureRecordAt(parents, 0).matched_taxon_label = null;
+    delete fixtureRecordAt(parents, 1).matched_taxon_label; delete fixtureRecordAt(parents, 1).is_implied_species_concept;
     show(raw); openAll();
     const n = notes("hybrid_formula");
     expect(n).toContain("matched by name to a species-level name, which the graph holds as an implied species concept");
     expect(n).toContain("Parent 2: written \u201cspeculum\u201d \u00b7 read as \u201cOphrys speculum\u201d (rule, code as returned: omitted_genus_same_as_first_parent_in_a_nothospecies) \u00b7 matched by name to a taxon of the graph (a match by name, not a verified identity)");
-    parents[0].matched_taxon_label = 5;
+    fixtureRecordAt(parents, 0).matched_taxon_label = 5;
     show(raw);
     expect(container.querySelector('[data-testid="calyx-record-unreadable"]')?.textContent).toContain("could not be displayed");
   });
@@ -316,14 +337,14 @@ describe("the fields of backend #2425 head 165716c3 (real captures)", () => {
   it("no internal id in any sentence of these hybrid, remark and reverse captures", () => {
     const names = Object.keys(fixtures).filter((n) => /^(remark-|hybrid-|parent-)/.test(n));
     for (const name of names) {
-      const se: any = evidenceOf(name);
+      const se = evidenceOf(name);
       const strings: string[] = [];
-      const walkIt = (v: any, key: string) => {
+      const walkIt = (v: unknown, key: string) => {
         if (typeof v === "string" && ["statement", "explanation"].includes(key)) strings.push(v);
         else if (Array.isArray(v)) v.forEach((x) => (key === "reading" && typeof x === "string" ? strings.push(x) : walkIt(x, key)));
         else if (v && typeof v === "object") Object.entries(v).forEach(([k, x]) => walkIt(x, k));
       };
-      walkIt(se.subjects ?? se, "");
+      walkIt(fixtureRecordAt(se).subjects ?? se, "");
       expect(strings.join(" | "), name).not.toMatch(/taxon:|graph node|kg_node|edge \d|implied:/);
     }
   });
@@ -332,7 +353,7 @@ describe("the fields of backend #2425 head 165716c3 (real captures)", () => {
 describe("(synthetic) cut lists are said to be cut", () => {
   it("a remark list the backend marks as not fully shown, and a formula whose parents are not all shown", () => {
     const raw = clone("remark-shown");
-    raw.subjects[0].evidence.checklist_remark.all_stored_remarks_shown = false;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "checklist_remark").all_stored_remarks_shown = false;
     show(raw);
     openAll();
     expect(section("remark_text")?.textContent).toContain("Not every stored remark of the checklist is shown here.");
@@ -340,7 +361,7 @@ describe("(synthetic) cut lists are said to be cut", () => {
     openAll();
     expect(section("remark_text")?.textContent).not.toContain("Not every stored remark");
     const f = clone("hybrid-formula-both-parents-matched");
-    f.subjects[0].evidence.hybrid_formula.formulas[0].all_parents_shown = false;
+    fixtureRecordAt(f, "subjects", 0, "evidence", "hybrid_formula", "formulas", 0).all_parents_shown = false;
     show(f);
     openAll();
     expect(notes("hybrid_formula")).toContain("Not every parent the formula names is shown here.");

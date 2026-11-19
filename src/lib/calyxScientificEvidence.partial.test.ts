@@ -36,9 +36,9 @@ describe("readScientificEvidence: status partial", () => {
   it("still shows what the block says was not retrieved, per taxon, from the structured part", () => {
     const view = readScientificEvidence(block);
     const subject = view.structured?.subjects[0];
-    expect(subject && !subject.unreadable ? subject.status : null).toBe("partial");
-    const notRetrieved = subject && !subject.unreadable ? subject.sections.find((section) => section.kind === "not_retrieved") : undefined;
-    expect(notRetrieved && !notRetrieved.unreadable ? notRetrieved.items.map((one) => one.text) : []).toEqual(
+    expect(subject && subject.unreadable === false ? subject.status : null).toBe("partial");
+    const notRetrieved = subject && subject.unreadable === false ? subject.sections.find((section) => section.kind === "not_retrieved") : undefined;
+    expect(notRetrieved && notRetrieved.unreadable === false ? notRetrieved.items.map((one) => one.text) : []).toEqual(
       block.evidence.not_retrieved.map((entry) => entry.statement),
     );
   });

@@ -1,0 +1,58 @@
+{
+  "phase": "intentional_red_awaiting_existing_worker",
+  "frontend_base": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
+  "source_refs": {
+    "948": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
+    "979": "39b549355101f4fa69a64c21ad25fe455501e66b",
+    "974": "af1c15793150b3d542c2bbd4e156ff95c49f97fc",
+    "939": "400ac806c8e8b1ebb94eef5ecd70a4255d43486a",
+    "984": "b1bd89f64c3022866892b88002a5adebd2f80838",
+    "985": "d53cf39d1f5b3d399cd6f11e24378e9c6047d80b",
+    "982": "b0fc99ae57c004a0b6cd947d7e7f557c7017d7fd",
+    "983": "0ee226fb097af4baf485452bf0d10b396610d3c7",
+    "988": "7b39c236a81d2dab0a0647cf4e0070d9a984ed65"
+  },
+  "page_sha256": "709cb3cd29aa258faf60825dd6b3c2aa38e4b07bd1adb2205a26d6bfced99302",
+  "immutable_test_sha256": "6521a5802ba24992570a9dbe7572e66e3ff6054728692d283b2c7d4ea24734ae",
+  "targeted_red": {
+    "failed": 2,
+    "passed": 9
+  },
+  "prior_full_selection": {
+    "passed": 4376,
+    "skipped": 2,
+    "failed": 1,
+    "failure": "missing route policy registration for new read-only /atlas/checklist; subsequently corrected and targeted guards171passed"
+  },
+  "repair_allowlist": [
+    "src/features/atlas-checklist/AtlasChecklistPage.tsx"
+  ],
+  "conservative_reservation_usd": "0.04879425",
+  "per_call_cap_usd": "0.10",
+  "period_cap_usd": "1.00",
+  "real_provider_calls_so_far": 0,
+  "deployed": false,
+  "live_verified": false,
+  "prerequisite_checks": {
+    "typecheck": "PASS",
+    "lint": {
+      "errors": 0,
+      "warnings": 44
+    },
+    "deployment_contract": "PASS",
+    "production_build": "PASS",
+    "independent_test_helper_checks": "193 passed across 8 test files; no assertions removed"
+  },
+  "other_frontend_tests": {
+    "passed": 4369,
+    "skipped": 2,
+    "failed": 0,
+    "explicit_exclusion": "src/features/atlas-checklist/AtlasChecklistPage.test.tsx; separately executed 2 expected failures / 9 passes"
+  },
+  "independent_review": {
+    "checker": "Codex review974 lane",
+    "scope": "draft baseline prerequisites, immutable regressions and reservation; not release acceptance",
+    "affected_tests_passed": 327,
+    "typecheck": "PASS"
+  }
+}

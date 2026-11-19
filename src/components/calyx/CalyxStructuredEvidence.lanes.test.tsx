@@ -33,7 +33,22 @@ const open = (label: RegExp) => {
   act(() => { b.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 };
 const button = (label: RegExp) => Array.from(container.querySelectorAll("button")).find((x) => label.test(x.textContent ?? ""))?.textContent;
-const clone = (name: string) => structuredClone(evidenceOf(name)) as Record<string, any>;
+// These tests deliberately corrupt cloned payloads. Check each container while
+// retaining its identity so later edits still affect the payload passed to show.
+function fixtureValueAt(value: unknown, ...path: Array<string | number>): unknown {
+  for (const key of path) {
+    if (value === null || typeof value !== "object") throw new Error(`Expected fixture container at ${key}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+function fixtureRecordAt(value: unknown, ...path: Array<string | number>): Record<string, unknown> {
+  const record = fixtureValueAt(value, ...path);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) throw new Error("Expected fixture record");
+  return record as Record<string, unknown>;
+}
+
+const clone = (name: string) => structuredClone(evidenceOf(name));
 /** The page's own wording around the source's text: item lines, notes and section headings. */
 const own = (selector: string) => Array.from(container.querySelectorAll(selector)).map((n) => n.textContent).join(" | ");
 
@@ -61,7 +76,7 @@ describe("a taxon's common names", () => {
 
   it("(synthetic) a name whose text is not in the data is said to be missing, not dropped", () => {
     const raw = clone("vernacular-names-of-a-taxon");
-    raw.subjects[0].evidence.vernacular_names.names[1].name_as_written = null;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "vernacular_names", "names", 1).name_as_written = null;
     show(raw);
     open(/Common names this checklist gives/);
     expect(all("calyx-record-text").map((n) => n.textContent)).toEqual(["Vanille (DE)", "A name is not shown here (see the statements)."]);
@@ -123,7 +138,7 @@ describe("placement below the genus", () => {
 
   it("(synthetic) a kind the page does not know is shown as returned", () => {
     const raw = clone("placement-of-a-taxon");
-    raw.subjects[0].evidence.infrageneric_placement.placements[0].terms[0].kind = "something_new";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "infrageneric_placement", "placements", 0, "terms", 0).kind = "something_new";
     show(raw);
     open(/What this checklist's remark writes below the genus/);
     expect(text()).toContain("(kind as returned: something_new)");
@@ -157,7 +172,7 @@ describe("a turn that names a group", () => {
 
   it("(synthetic) groups written after this one and other writings sit beside the list with their own counts, never in it", () => {
     const raw = clone("group-taxa-informal-group");
-    Object.assign(raw.subjects[0].evidence.group_taxa, {
+    Object.assign(fixtureRecordAt(raw, "subjects", 0, "evidence", "group_taxa"), {
       narrower_groups: [{ label: "Epidendrum anceps group, polyanthum subgroup", taxa_listed: 3 }],
       other_writings: [{ label: "Epidendrum anceps agg.", taxa_listed: 2 }],
     });
@@ -166,7 +181,7 @@ describe("a turn that names a group", () => {
     expect(container.querySelector('[data-kind="group_other_writings"]')?.textContent).toContain("Epidendrum anceps agg. \u00b7 2 taxa listed");
     open(/Taxa this checklist lists under the group/);
     expect(container.querySelectorAll('[data-kind="group_taxa"] [data-testid="calyx-record-text"]').length).toBeLessThanOrEqual(2);
-    raw.subjects[0].evidence.group_taxa.narrower_groups = [{ taxa_listed: 3 }];
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "group_taxa").narrower_groups = [{ taxa_listed: 3 }];
     show(raw);
     expect(all("calyx-record-unreadable")[0].textContent).toBe("Groups written after this one in the same remark (the source does not say how they relate; separate statements, not added to the list): could not be displayed.");
   });
@@ -195,7 +210,7 @@ describe("pollinators named in a checklist remark", () => {
 
   it("a DOI field on a remark name is not linked", () => {
     const raw = clone("pollination-with-checklist-remark");
-    raw.subjects[0].evidence.remark_pollinator.pollinator_names[0].doi = "10.1234/abcd";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "remark_pollinator", "pollinator_names", 0).doi = "10.1234/abcd";
     show(raw);
     expect(container.querySelector('[data-kind="remark_pollinator"] a')).toBeNull();
     expect(container.querySelector('[data-kind="remark_pollinator"]')?.textContent).not.toContain("10.1234/abcd");
@@ -217,11 +232,11 @@ describe("pollinators named in a checklist remark", () => {
 
   it("(synthetic) a hint or a qualifier is shown as written; a malformed name makes only that part unreadable", () => {
     const raw = clone("pollination-with-checklist-remark");
-    Object.assign(raw.subjects[0].evidence.remark_pollinator.pollinator_names[0], { hint_of_source: "(? male)", qualifier_of_source: "probably" });
+    Object.assign(fixtureRecordAt(raw, "subjects", 0, "evidence", "remark_pollinator", "pollinator_names", 0), { hint_of_source: "(? male)", qualifier_of_source: "probably" });
     show(raw);
     expect(container.querySelector('[data-kind="remark_pollinator"]')?.textContent).toContain("hint as written: (? male)");
     expect(container.querySelector('[data-kind="remark_pollinator"]')?.textContent).toContain("qualifier as written: probably");
-    raw.subjects[0].evidence.remark_pollinator.pollinator_names[0].name_as_written_by_source = 5;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "remark_pollinator", "pollinator_names", 0).name_as_written_by_source = 5;
     show(raw);
     expect(all("calyx-record-unreadable")[0].textContent).toBe("Pollinators named in a checklist remark (a compiler's statement, not a cited record): could not be displayed.");
     expect(all("calyx-evidence-sentences")).toHaveLength(1);

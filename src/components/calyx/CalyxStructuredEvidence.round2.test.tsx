@@ -33,7 +33,27 @@ const open = (label: RegExp) => {
   act(() => { b.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 };
 const button = (label: RegExp) => Array.from(container.querySelectorAll("button")).find((x) => label.test(x.textContent ?? ""))?.textContent;
-const clone = (name: string) => structuredClone(evidenceOf(name)) as Record<string, any>;
+// These tests deliberately corrupt cloned payloads. Check each container while
+// retaining its identity so later edits still affect the payload passed to show.
+function fixtureValueAt(value: unknown, ...path: Array<string | number>): unknown {
+  for (const key of path) {
+    if (value === null || typeof value !== "object") throw new Error(`Expected fixture container at ${key}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+function fixtureRecordAt(value: unknown, ...path: Array<string | number>): Record<string, unknown> {
+  const record = fixtureValueAt(value, ...path);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) throw new Error("Expected fixture record");
+  return record as Record<string, unknown>;
+}
+function fixtureArrayAt(value: unknown, ...path: Array<string | number>): unknown[] {
+  const items = fixtureValueAt(value, ...path);
+  if (!Array.isArray(items)) throw new Error("Expected fixture array");
+  return items;
+}
+
+const clone = (name: string) => structuredClone(evidenceOf(name));
 const occurrences = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
 describe("1. a name held back by the privacy gate", () => {
@@ -46,13 +66,13 @@ describe("1. a name held back by the privacy gate", () => {
   });
   it("(synthetic) the same count on a remark-pollinator block", () => {
     const raw = clone("pollination-with-checklist-remark");
-    raw.subjects[0].evidence.remark_pollinator.names_held_back_by_privacy_gate = 2;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "remark_pollinator").names_held_back_by_privacy_gate = 2;
     show(raw);
     expect(container.querySelector('[data-kind="remark_pollinator"] h5')?.textContent).toContain("1 of 1 shown \u00b7 2 held back by the privacy gate");
   });
   it("(synthetic) a count of zero prints no privacy-gate phrase, as in the backend's own responses where nothing was held back", () => {
     const raw = clone("vernacular-names-of-a-taxon");
-    raw.subjects[0].evidence.vernacular_names.names_held_back_by_privacy_gate = 0;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "vernacular_names").names_held_back_by_privacy_gate = 0;
     show(raw);
     open(/Common names this checklist gives/);
     expect(button(/Common names this checklist gives/)).toContain("3 of 3 shown");
@@ -71,7 +91,7 @@ describe("2. a group that is not found carries the groups the checklist writes d
   });
   it("(synthetic) a cut list of candidates says so", () => {
     const raw = clone("group-not-found-two-writings-named");
-    raw.group_taxa.candidates_truncated = true;
+    fixtureRecordAt(raw, "group_taxa").candidates_truncated = true;
     show(raw);
     expect(container.querySelector('[data-kind="group_candidates"]')?.textContent).toContain("The list of these groups is cut.");
   });
@@ -115,16 +135,16 @@ describe("4. a turn with more than one question", () => {
   });
   it("(synthetic) an also_asked sentence that is not among the notices is shown too; an unreadable one is named", () => {
     const raw = clone("two-questions-only-the-first-read");
-    raw.also_asked = [...raw.also_asked, "Another part was not read."];
+    fixtureRecordAt(raw).also_asked = [...fixtureArrayAt(raw, "also_asked"), "Another part was not read."];
     show(raw);
     expect(all("calyx-notices")[0].textContent).toContain("Another part was not read.");
-    raw.also_asked = "oops";
+    fixtureRecordAt(raw).also_asked = "oops";
     show(raw);
     expect(text()).toContain("The notices could not be displayed.");
   });
   it("(synthetic) a not_applicable turn that carries a notice still shows it", () => {
     const raw = clone("orchid-asked-as-the-pollinator");
-    raw.notices = ["One question is read per turn: another part was not read."];
+    fixtureRecordAt(raw).notices = ["One question is read per turn: another part was not read."];
     show(raw);
     expect(all("calyx-notices")[0].textContent).toContain("another part was not read");
   });
@@ -148,7 +168,7 @@ describe("5. an orchid asked as if it were the pollinator", () => {
 describe("6. the tag beside a vernacular name is built from fields, not from sentences", () => {
   it("shows the tag as written from tag_as_written whatever the sentence says", () => {
     const raw = clone("vernacular-lookup-two-writings");
-    raw.subjects[0].evidence.vernacular_lookup.items[0].statement = "sentence that moved the tag elsewhere";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "vernacular_lookup", "items", 0).statement = "sentence that moved the tag elsewhere";
     show(raw);
     open(/Taxa for which this checklist writes that name/);
     expect(Array.from(container.querySelectorAll('[data-kind="vernacular_lookup"] li span.block')).map((n) => n.textContent).join(" | ")).toContain("name as the source writes it: Pico de loro (Chile)");
@@ -178,7 +198,7 @@ describe("8. remark pollinators carry more of the source", () => {
   });
   it("(synthetic) a stored_name is labelled, never shown as the source's writing", () => {
     const raw = clone("pollination-remark-later-writing-with-its-own-hint");
-    raw.subjects[0].evidence.remark_pollinator.pollinator_names[1].stored_name = "Andrena senecionis Pérez";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "remark_pollinator", "pollinator_names", 1).stored_name = "Andrena senecionis Pérez";
     show(raw);
     expect(container.querySelector('[data-kind="remark_pollinator"]')?.textContent).toContain("name stored and found under: Andrena senecionis P\u00e9rez (derivation");
   });
@@ -189,7 +209,7 @@ describe("8. remark pollinators carry more of the source", () => {
     expect(notes).toContain("the same name is written again in the remark: A. cinerea (N. Africa)");
     expect(notes).not.toContain("hint as written: (Sardinia)");
     const raw = clone("pollinator-taxa-hedges-per-taxon");
-    raw.subjects[0].evidence.pollinator_taxa.taxa[1].source_list_open_ended = true;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "pollinator_taxa", "taxa", 1).source_list_open_ended = true;
     show(raw);
     expect(container.querySelector('[data-kind="pollinator_taxa"]')?.textContent).toContain("The remark goes on after its list of names.");
   });

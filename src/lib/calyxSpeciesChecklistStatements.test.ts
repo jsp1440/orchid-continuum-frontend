@@ -67,17 +67,17 @@ describe("fail closed", () => {
     expect(readSpeciesChecklistStatements(raw)).toEqual({ kind: "inert" });
   });
   it.each([
-    ["no block", (b: any) => { b.scientific_evidence = null; }],
-    ["a block of another status", (b: any) => { b.scientific_evidence.status = "not_resolved"; }],
-    ["a block whose reading is not a list", (b: any) => { b.scientific_evidence.reading = "x"; }],
-    ["a topic_status that is not an object", (b: any) => { b.topic_status = ["read"]; }],
+    ["no block", (b: typeof chloraea.body) => { Object.assign(b, { scientific_evidence: null }); }],
+    ["a block of another status", (b: typeof chloraea.body) => { b.scientific_evidence.status = "not_resolved"; }],
+    ["a block whose reading is not a list", (b: typeof chloraea.body) => { Object.assign(b.scientific_evidence, { reading: "x" }); }],
+    ["a topic_status that is not an object", (b: typeof chloraea.body) => { Object.assign(b, { topic_status: ["read"] }); }],
   ])("an available envelope with %s could not be displayed", (_name, edit) => {
     const body = clone(chloraea.body);
     edit(body);
     expect(readSpeciesChecklistStatements(body)).toEqual({ kind: "could_not_be_displayed" });
   });
   it("(synthetic) topics marked not_read are named as returned", () => {
-    const body: any = clone(chloraea.body);
+    const body = clone(chloraea.body);
     body.topic_status.vernacular_names = "not_read";
     body.all_topics_read = false;
     expect(readSpeciesChecklistStatements(body)).toMatchObject({ kind: "available", topicsNotRead: ["vernacular_names"], allTopicsRead: false });

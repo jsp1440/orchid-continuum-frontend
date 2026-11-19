@@ -74,8 +74,8 @@ describe("a stated gap", () => {
     expect(section?.textContent).not.toMatch(/no statements|none|does not exist|undefined/i);
   });
   it("an available envelope whose block cannot be read says 'could not be displayed'", async () => {
-    const body: any = structuredClone(chloraea.body);
-    body.scientific_evidence.reading = "x";
+    const body = structuredClone(chloraea.body);
+    Object.assign(body.scientific_evidence, { reading: "x" });
     await mount("101", body);
     expect(container.textContent).toContain("Checklist statements could not be displayed");
   });
@@ -114,7 +114,7 @@ describe("available", () => {
   it("a list that was not read to its end says so; a topic marked not read is named", async () => {
     await mount("101", sphegodes.body);
     expect(container.querySelector('[data-testid="species-checklist-not-to-the-end"]')?.textContent).toBe("Not every topic was read to its end; a list may be cut.");
-    const body: any = structuredClone(chloraea.body);
+    const body = structuredClone(chloraea.body);
     body.topic_status.vernacular_names = "not_read";
     body.all_topics_read = false;
     await mount("102", body);

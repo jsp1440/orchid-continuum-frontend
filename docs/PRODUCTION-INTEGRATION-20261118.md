@@ -208,3 +208,48 @@ frontend main, and authorize the bounded provider-free production conversation
 acceptance separately. No merge/deployment/provider authority is inferred here.
 Model calls0; new services/subscriptions0; no spending limit changed. Existing
 runner/Neon/Render marginal usage was not priced or represented as zero cost.
+
+
+## Continuing execution: owned #948 composition and first worker assignment
+
+This section supersedes the earlier next-action status, while preserving that
+historical receipt. Backend #2451, #2443, #2452, #2453 and #2448 are now merged
+through `9f92a99dc3751178af6954b2d36473336401ceaa`. The owner has authorized
+review-governed engineering merges and verified deployments through November25;
+production scientific writes, taxonomy activation and review bypasses remain
+outside that authority.
+
+The existing Codex-owned #948 branch now converges source histories #979, #974,
+#939, #984, #985, #982, #983 and #988 with frontend main
+`7ce582bd20c4f5c2a262b713e2fc6fd202271967`. All source heads are pinned in
+`docs/evidence/production-integration-20261118/frontend948-worker-baseline.json`.
+Foreign-owned source branches are unchanged. This draft is an engineering
+composition, not an independently approved production release.
+
+Integration prerequisites declare the missing test-only React testing library,
+register the existing read-only `/atlas/checklist` route, and use explicit Boolean
+discriminants plus checked mutable test fixtures to satisfy the existing type
+and lint checks. No test assertions, compiler settings or protected workflow
+gates are relaxed. Production build, typecheck and deployment contract pass;
+full lint has zero errors and44 existing warnings.
+
+Two independently reproduced Atlas regressions intentionally remain red before
+repair: selecting a different area leaves old scientific evidence and question
+links visible, and selecting the same area leaves the prior selected taxon.
+The mounted suite has9 passing controls and2 failures, with its immutable test
+SHA256 recorded in the receipt. The existing worker may change only
+`src/features/atlas-checklist/AtlasChecklistPage.tsx`; it must preserve these
+tests, provenance, identities, filters and late-response safeguards.
+
+Next: admit this pinned baseline through the existing backend repair-plan
+manifest, run one bounded API repair, validate without credentials, and obtain
+independent exact-head review before adopting the repair into #948. Estimated
+conservative reservation is $0.04879425 within the configured $0.10/request and
+$1.00/month caps; no spending limit is increased. No provider request has run
+at this baseline. The full visitor journey remains unintegrated and undeployed.
+
+Final baseline rerun: all other frontend suites pass (4369 passed,2 skipped);
+the Atlas suite was executed separately and remains2 failed/9 passed.
+Independent checker:327 affected tests plus typecheck pass, immutable hashes
+match, prerequisite fixture mutations and assertions preserved. This is scoped
+draft-baseline acceptance only, not release approval.

@@ -209,11 +209,11 @@ export default function CalyxEvidencePanel({ evidence }: { evidence: CalyxEviden
 
   const shownSentences = evidence.sentences.slice(0, CALYX_EVIDENCE_SENTENCE_LIMIT);
   const hiddenCount = evidence.sentences.length - shownSentences.length;
-  const readableSubjects = (evidence.structured?.subjects ?? []).flatMap((subject) => (subject.unreadable ? [] : [subject]));
+  const readableSubjects = (evidence.structured?.subjects ?? []).flatMap((subject) => (subject.unreadable === true ? [] : [subject]));
   // Sentences or records that sit in the per-taxon entries (a turn about several
   // taxa has an empty top-level `reading`): the "no sentences" line must not
   // claim the turn returned nothing when the taxa below hold the evidence.
-  const subjectsHoldEvidence = (evidence.structured?.subjects ?? []).some((subject) => subject.unreadable || subject.sentences.length > 0 || subject.sections.length > 0);
+  const subjectsHoldEvidence = (evidence.structured?.subjects ?? []).some((subject) => subject.unreadable === true || subject.sentences.length > 0 || subject.sections.length > 0);
   const subjectLabels = readableSubjects.flatMap((subject) => (subject.label ? [subject.label] : []));
   const topics = evidence.structured?.topics ?? [];
   const anchorLabel = topics.includes("area_taxa") ? "Area" : topics.includes("vernacular_lookup") ? "Common name asked" : topics.includes("group_taxa") ? "Group" : topics.includes("pollinator_taxa") ? "Insect name asked" : "Species";

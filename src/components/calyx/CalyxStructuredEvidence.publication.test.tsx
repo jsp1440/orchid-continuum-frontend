@@ -32,16 +32,36 @@ const open = (label: RegExp) => {
   if (!b) throw new Error(`no button ${label}`);
   act(() => { b.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 };
-const clone = (name: string) => structuredClone(evidenceOf(name)) as Record<string, any>;
+// These tests deliberately corrupt cloned payloads. Check each container while
+// retaining its identity so later edits still affect the payload passed to show.
+function fixtureValueAt(value: unknown, ...path: Array<string | number>): unknown {
+  for (const key of path) {
+    if (value === null || typeof value !== "object") throw new Error(`Expected fixture container at ${key}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+function fixtureRecordAt(value: unknown, ...path: Array<string | number>): Record<string, unknown> {
+  const record = fixtureValueAt(value, ...path);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) throw new Error("Expected fixture record");
+  return record as Record<string, unknown>;
+}
+function fixtureArrayAt(value: unknown, ...path: Array<string | number>): unknown[] {
+  const items = fixtureValueAt(value, ...path);
+  if (!Array.isArray(items)) throw new Error("Expected fixture array");
+  return items;
+}
+
+const clone = (name: string) => structuredClone(evidenceOf(name));
 
 describe("an evidence part this page does not know", () => {
   it("is named as 'could not be displayed' for that part only; sentences and other parts stay; no crash", () => {
     const raw = clone("pollination-species");
-    raw.subjects[0].evidence.weather_forecast = { anything: [1, 2, 3] };
-    raw.subjects[0].evidence.another_new_kind = "text";
-    raw.subjects[0].evidence.ignored_when_empty = null;
+    fixtureRecordAt(raw, "subjects", 0, "evidence").weather_forecast = { anything: [1, 2, 3] };
+    fixtureRecordAt(raw, "subjects", 0, "evidence").another_new_kind = "text";
+    fixtureRecordAt(raw, "subjects", 0, "evidence").ignored_when_empty = null;
     show(raw);
-    expect(all("calyx-evidence-sentences")[0].querySelectorAll("li")).toHaveLength(raw.reading.length);
+    expect(all("calyx-evidence-sentences")[0].querySelectorAll("li")).toHaveLength(fixtureArrayAt(raw, "reading").length);
     const notes = all("calyx-record-unreadable").map((n) => n.textContent);
     expect(notes).toEqual([
       "An evidence part this page does not know (weather_forecast): could not be displayed.",
@@ -52,7 +72,7 @@ describe("an evidence part this page does not know", () => {
   });
   it("an unknown key beside a known kind in a two-taxa turn only affects its own taxon", () => {
     const raw = clone("distribution-two-species");
-    raw.subjects[1].evidence.mystery = {};
+    fixtureRecordAt(raw, "subjects", 1, "evidence").mystery = {};
     show(raw);
     expect(all("calyx-record-unreadable")).toHaveLength(1);
     expect(all("calyx-subject")).toHaveLength(2);
@@ -98,14 +118,14 @@ describe("place of publication", () => {
 
   it("with no year it says so and invents none; a withheld place shows no field of the record", () => {
     const raw = clone("publication-species");
-    const place = raw.subjects[0].evidence.publication.places[0];
+    const place = fixtureRecordAt(raw, "subjects", 0, "evidence", "publication", "places", 0);
     place.year = null;
     show(raw);
     open(/Checklist place of publication/);
     expect(text()).toContain("No year is given for this citation");
     expect(text()).not.toContain("year in parentheses in the citation");
     const withheld = clone("publication-species");
-    Object.assign(withheld.subjects[0].evidence.publication.places[0], { withheld_by_privacy_gate: true, as_written_by_source: "SECRET CITATION" });
+    Object.assign(fixtureRecordAt(withheld, "subjects", 0, "evidence", "publication", "places", 0), { withheld_by_privacy_gate: true, as_written_by_source: "SECRET CITATION" });
     show(withheld); // same mounted section, still open from above
     expect(text()).toContain("Place of publication withheld by the privacy gate.");
     expect(text()).not.toContain("SECRET CITATION");
@@ -113,19 +133,19 @@ describe("place of publication", () => {
 
   it("does not claim a verification state the backend did not report", () => {
     const raw = clone("publication-species");
-    delete raw.subjects[0].evidence.publication.is_verified_publication;
+    delete fixtureRecordAt(raw, "subjects", 0, "evidence", "publication").is_verified_publication;
     show(raw);
     open(/Checklist place of publication/);
     expect(all("calyx-record-note")[0].textContent).toBe("Whether this was checked against the publication is not reported.");
   });
 
   it("a malformed place (non-integer year, non-text citation) makes only that part unreadable", () => {
-    for (const mutate of [(p: any) => { p.year = "1768"; }, (p: any) => { p.as_written_by_source = 5; }]) {
+    for (const mutate of [(p: Record<string, unknown>) => { p.year = "1768"; }, (p: Record<string, unknown>) => { p.as_written_by_source = 5; }]) {
       const raw = clone("publication-species");
-      mutate(raw.subjects[0].evidence.publication.places[0]);
+      mutate(fixtureRecordAt(raw, "subjects", 0, "evidence", "publication", "places", 0));
       show(raw);
       expect(all("calyx-record-unreadable")[0].textContent).toBe("Checklist place of publication: could not be displayed.");
-      expect(all("calyx-evidence-sentences")[0].querySelectorAll("li").length).toBe(raw.reading.length);
+      expect(all("calyx-evidence-sentences")[0].querySelectorAll("li").length).toBe(fixtureArrayAt(raw, "reading").length);
     }
   });
 });
@@ -146,7 +166,7 @@ describe("synonym listing: records_attached", () => {
 
   it("records_attached true or absent adds no note", () => {
     const raw = clone("synonym-resolved-distribution");
-    raw.subjects[0].evidence.synonym_resolution.records_attached = true;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "synonym_resolution").records_attached = true;
     show(raw);
     open(/Name lookup in the checklist/);
     expect(all("calyx-record-note")).toHaveLength(0);

@@ -108,7 +108,7 @@ function SectionBody({ section }: { section: Extract<RecordsSection, { unreadabl
 function Section({ section }: { section: RecordsSection }) {
   const [open, setOpen] = useState(false);
   const bodyId = useId();
-  if (section.unreadable) {
+  if (section.unreadable === true) {
     const label = section.kind === "unknown" ? `An evidence part this page does not know (${section.name})` : HEADINGS[section.kind];
     return <p className="mt-2 text-xs text-muted-foreground" data-testid="calyx-record-unreadable">{label}: could not be displayed.</p>;
   }
@@ -146,7 +146,7 @@ const SCOPE_PREFIX: Partial<Record<string, string>> = {
 };
 
 function Subject({ subject, mainSentences }: { subject: EvidenceSubject; mainSentences: string[] }) {
-  if (subject.unreadable) {
+  if (subject.unreadable === true) {
     return <div className="mt-3 rounded-lg border px-3 py-2 text-xs" data-testid="calyx-subject-unreadable">The records of this taxon could not be displayed.</div>;
   }
   const label = subject.label ?? "Taxon not reported";

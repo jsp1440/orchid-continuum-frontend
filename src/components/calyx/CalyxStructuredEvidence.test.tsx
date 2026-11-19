@@ -34,6 +34,26 @@ const button = (label: RegExp) => {
 };
 const click = (el: HTMLElement) => act(() => { el.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 
+// These tests deliberately corrupt cloned payloads. Check each container while
+// retaining its identity so later edits still affect the payload passed to show.
+function fixtureValueAt(value: unknown, ...path: Array<string | number>): unknown {
+  for (const key of path) {
+    if (value === null || typeof value !== "object") throw new Error(`Expected fixture container at ${key}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+function fixtureRecordAt(value: unknown, ...path: Array<string | number>): Record<string, unknown> {
+  const record = fixtureValueAt(value, ...path);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) throw new Error("Expected fixture record");
+  return record as Record<string, unknown>;
+}
+function fixtureArrayAt(value: unknown, ...path: Array<string | number>): unknown[] {
+  const items = fixtureValueAt(value, ...path);
+  if (!Array.isArray(items)) throw new Error("Expected fixture array");
+  return items;
+}
+
 describe("nothing to show", () => {
   it.each(["not-applicable-general"])("%s renders nothing", (name) => {
     show(evidenceOf(name));
@@ -76,9 +96,9 @@ describe("single taxon, pollination", () => {
   });
 
   it("does not link a malformed DOI and does not link URLs inside source text", () => {
-    const raw = structuredClone(evidenceOf("pollination-species")) as Record<string, any>;
-    raw.subjects[0].evidence.relationships[0].doi = "javascript:alert(1)";
-    raw.subjects[0].evidence.relationships[0].citation_text = "See https://evil.example/x";
+    const raw = structuredClone(evidenceOf("pollination-species"));
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "relationships", 0).doi = "javascript:alert(1)";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "relationships", 0).citation_text = "See https://evil.example/x";
     show(raw);
     click(button(/Cited interaction records/));
     expect(container.querySelectorAll("a")).toHaveLength(Array.from(container.querySelectorAll("a")).filter((a) => a.getAttribute("href")?.startsWith("https://doi.org/10.")).length);
@@ -96,9 +116,9 @@ describe("single taxon, pollination", () => {
   });
 
   it("shows a held-back count and the returned reason, and nothing identifying", () => {
-    const raw = structuredClone(evidenceOf("pollination-quarantined")) as Record<string, any>;
-    raw.subjects[0].evidence.held_back[0].partner = "SECRET PARTNER";
-    raw.subjects[0].evidence.held_back[0].edge_ids = [424242];
+    const raw = structuredClone(evidenceOf("pollination-quarantined"));
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "held_back", 0).partner = "SECRET PARTNER";
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "held_back", 0).edge_ids = [424242];
     show(raw);
     const section = container.querySelector('[data-kind="held_back"]');
     expect(section?.textContent).toContain("2 held back");
@@ -215,17 +235,17 @@ describe("synonym lookups and unresolved names", () => {
 
 describe("unreadable parts are named, and the sentences stay", () => {
   it("shows 'could not be displayed' for a broken part and keeps the sentences and the other parts", () => {
-    const raw = structuredClone(evidenceOf("pollination-species")) as Record<string, any>;
-    raw.subjects[0].evidence.relationships = 7;
+    const raw = structuredClone(evidenceOf("pollination-species"));
+    fixtureRecordAt(raw, "subjects", 0, "evidence").relationships = 7;
     show(raw);
     expect(all("calyx-record-unreadable")[0].textContent).toBe("Cited interaction records: could not be displayed.");
-    expect(all("calyx-evidence-sentences")[0].querySelectorAll("li").length).toBe(raw.reading.length);
+    expect(all("calyx-evidence-sentences")[0].querySelectorAll("li").length).toBe(fixtureArrayAt(raw, "reading").length);
     expect(container.querySelector('[data-kind="not_retrieved"]')).not.toBeNull();
   });
 
   it("shows 'could not be displayed' for a broken taxon entry", () => {
-    const raw = structuredClone(evidenceOf("distribution-two-species")) as Record<string, any>;
-    raw.subjects[0] = null;
+    const raw = structuredClone(evidenceOf("distribution-two-species"));
+    fixtureArrayAt(raw, "subjects")[0] = null;
     show(raw);
     expect(all("calyx-subject-unreadable")).toHaveLength(1);
     expect(all("calyx-subject")).toHaveLength(1);

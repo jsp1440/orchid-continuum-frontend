@@ -32,7 +32,22 @@ const open = (label: RegExp) => {
   if (!b) throw new Error(`no button ${label}`);
   act(() => { b.dispatchEvent(new MouseEvent("click", { bubbles: true })); });
 };
-const clone = (name: string) => structuredClone(evidenceOf(name)) as Record<string, any>;
+// These tests deliberately corrupt cloned payloads. Check each container while
+// retaining its identity so later edits still affect the payload passed to show.
+function fixtureValueAt(value: unknown, ...path: Array<string | number>): unknown {
+  for (const key of path) {
+    if (value === null || typeof value !== "object") throw new Error(`Expected fixture container at ${key}`);
+    value = Reflect.get(value, key);
+  }
+  return value;
+}
+function fixtureRecordAt(value: unknown, ...path: Array<string | number>): Record<string, unknown> {
+  const record = fixtureValueAt(value, ...path);
+  if (record === null || typeof record !== "object" || Array.isArray(record)) throw new Error("Expected fixture record");
+  return record as Record<string, unknown>;
+}
+
+const clone = (name: string) => structuredClone(evidenceOf(name));
 
 describe("an area turn (taxa one checklist lists for an area name)", () => {
   it("is headed by the area, not by a species, and calls the list what the checklist lists", () => {
@@ -93,7 +108,7 @@ describe("an area turn (taxa one checklist lists for an area name)", () => {
   it("(hand-altered copy) says N of M shown when the list is cut", () => {
     const raw = clone("area-taxa-list");
     const taxa = Array.from({ length: 25 }, (_u, i) => ({ taxon: `Altered taxon ${i + 1}`, checklist_row_name: `Altered taxon ${i + 1} X.`, source_marker: null, source_tags: [], marker_meaning: null }));
-    Object.assign(raw.subjects[0].evidence.area_taxa, { taxa, taxa_shown: 25, taxa_listed: 40, all_listed_taxa_shown: false });
+    Object.assign(fixtureRecordAt(raw, "subjects", 0, "evidence", "area_taxa"), { taxa, taxa_shown: 25, taxa_listed: 40, all_listed_taxa_shown: false });
     show(raw); // altered by this test: the fixtures hold at most 25 taxa
     const button = Array.from(container.querySelectorAll("button")).find((b) => /Taxa this checklist lists/.test(b.textContent ?? ""))!;
     expect(button.textContent).toBe("Show Taxa this checklist lists for the area \u00b7 25 of 40 shown");
@@ -103,12 +118,12 @@ describe("an area turn (taxa one checklist lists for an area name)", () => {
 
   it("a malformed taxa list makes only that part unreadable; other writings still show", () => {
     const raw = clone("area-taxa-with-other-writings");
-    raw.subjects[0].evidence.area_taxa.taxa = [{ taxon: 5 }];
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "area_taxa").taxa = [{ taxon: 5 }];
     show(raw);
     expect(all("calyx-record-unreadable")[0].textContent).toBe("Taxa this checklist lists for the area: could not be displayed.");
     expect(container.querySelector('[data-kind="area_other_writings"]')).not.toBeNull();
     const raw2 = clone("area-taxa-with-marker");
-    raw2.subjects[0].evidence.area_taxa.other_writings = [{ label: "Italy", taxa_listed: "3" }];
+    fixtureRecordAt(raw2, "subjects", 0, "evidence", "area_taxa").other_writings = [{ label: "Italy", taxa_listed: "3" }];
     show(raw2);
     expect(all("calyx-record-unreadable")[0].textContent).toBe("Other writings of this area name (separate statements, not added to the list): could not be displayed.");
     expect(container.querySelector('[data-kind="area_taxa"]')).not.toBeNull();
@@ -124,7 +139,7 @@ describe("area as written by the source (area_as_written_by_source)", () => {
   });
   it("(hand-altered copy) when the list is cut it says which marker count belongs to the list shown and which to the whole list", () => {
     const raw = clone("area-taxa-with-marker");
-    Object.assign(raw.subjects[0].evidence.area_taxa, { all_listed_taxa_shown: false, taxa_listed: 40, taxa_shown: 2, taxa_shown_with_a_marker: 1, taxa_listed_with_a_marker: 6 });
+    Object.assign(fixtureRecordAt(raw, "subjects", 0, "evidence", "area_taxa"), { all_listed_taxa_shown: false, taxa_listed: 40, taxa_shown: 2, taxa_shown_with_a_marker: 1, taxa_listed_with_a_marker: 6 });
     show(raw);
     open(/Taxa this checklist lists for the area/);
     const note = all("calyx-record-note")[0].textContent ?? "";
@@ -133,7 +148,7 @@ describe("area as written by the source (area_as_written_by_source)", () => {
   });
   it("(hand-altered copy) a null writing is not rebuilt; the separate marker is shown as returned", () => {
     const raw = clone("area-taxa-with-marker");
-    raw.subjects[0].evidence.area_taxa.taxa[1].area_as_written_by_source = null;
+    fixtureRecordAt(raw, "subjects", 0, "evidence", "area_taxa", "taxa", 1).area_as_written_by_source = null;
     show(raw);
     open(/Taxa this checklist lists for the area/);
     const text2 = container.querySelector('[data-kind="area_taxa"]')?.textContent ?? "";

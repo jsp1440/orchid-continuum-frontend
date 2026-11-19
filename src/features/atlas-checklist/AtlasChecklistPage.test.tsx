@@ -1,9 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AtlasChecklistPage from './AtlasChecklistPage';
 import { parseAtlasCalyxQuestionContext } from '@/features/atlas-next/calyxHandoff';
+
+vi.mock('@/lib/backendConfig', () => ({ CALYX_BACKEND_BASE_URL: 'https://calyx.test' }));
 
 const NOTICE = 'Statements of one checklist; areas, not occurrence records.';
 const GEOMETRY = { state: 'not_held', explanation: 'No outline is held.' };
@@ -129,4 +131,115 @@ describe('AtlasChecklistPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
     await screen.findByText(sentence);
   });
+});
+
+// Add `act` to the existing @testing-library/react named import before appending.
+
+  it('clears the previous area and taxon evidence immediately while a new area is still loading', async () => {
+    let finishFrance!: (value: unknown) => void;
+    const pendingFrance = new Promise<unknown>((resolve) => { finishFrance = resolve; });
+    const twoAreas = {
+      ...AREAS,
+      areas_matching: 2,
+      areas: [...AREAS.areas, {
+        kg_node_id: 2,
+        label: 'France',
+        name_without_direction_prefix: null,
+        taxa_listed: 0,
+      }],
+    };
+    // The more specific France route must precede the generic /area? fixture.
+    mockFetch({
+      '/atlas/checklist/areas': twoAreas,
+      '/atlas/checklist/area?name=France': pendingFrance,
+      '/atlas/checklist/area?': AREA,
+      '/atlas/checklist/taxon/66746': TAXON,
+    });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
+    await screen.findByText(/graph node 66746 · taxon:32953/);
+    expect(screen.getByText(/Aeranthus sesquipedalis/)).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Where does Angraecum sesquipedale grow/ })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /France/ }));
+    // No France response has resolved. Clearing must happen on selection,
+    // not after the next request succeeds; old source/question context must
+    // not remain beside the new selection or an honest loading/empty state.
+    expect(screen.queryByText(/graph node 66746 · taxon:32953/)).toBeNull();
+    expect(screen.queryByText(/Aeranthus sesquipedalis/)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Angraecum sesquipedale' })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Where does Angraecum sesquipedale grow/ })).toBeNull();
+    expect(screen.queryByRole('link', { name: /Which orchids grow in Madagascar/ })).toBeNull();
+
+    finishFrance({
+      ...env,
+      status: 'available',
+      area: { label: 'France' },
+      taxa_listed: 0,
+      taxa_listed_with_a_marker: 0,
+      taxa: [],
+      next_offset: null,
+      calyx: { question: 'Which orchids grow in France?' },
+    });
+    await screen.findByRole('heading', { name: 'France' });
+    expect(screen.queryByText(/graph node 66746 · taxon:32953/)).toBeNull();
+    expect(screen.queryByText(/Aeranthus sesquipedalis/)).toBeNull();
+    expect(screen.queryByRole('link', { name: /Where does Angraecum sesquipedale grow/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /Which orchids grow in France/ })).toBeTruthy();
+  });
+
+  it('ignores an old taxon response that arrives after changing the selected area', async () => {
+    let finishTaxon!: (value: unknown) => void;
+    const pendingTaxon = new Promise<unknown>((resolve) => { finishTaxon = resolve; });
+    mockFetch({
+      '/atlas/checklist/areas': {
+        ...AREAS,
+        areas_matching: 2,
+        areas: [...AREAS.areas, {
+          kg_node_id: 2,
+          label: 'France',
+          name_without_direction_prefix: null,
+          taxa_listed: 0,
+        }],
+      },
+      '/atlas/checklist/area?name=France': {
+        ...env,
+        status: 'available',
+        area: { label: 'France' },
+        taxa_listed: 0,
+        taxa: [],
+        next_offset: null,
+        calyx: null,
+      },
+      '/atlas/checklist/area?': AREA,
+      '/atlas/checklist/taxon/66746': pendingTaxon,
+    });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
+    fireEvent.click(screen.getByRole('button', { name: /France/ }));
+    await screen.findByRole('heading', { name: 'France' });
+    // Flush the resolved JSON promise and React's update queue. A negative
+    // waitFor alone could pass before the stale state callback has executed.
+    await act(async () => {
+      finishTaxon(TAXON);
+      await pendingTaxon;
+    });
+    expect(screen.queryByText(/graph node 66746 · taxon:32953/)).toBeNull();
+    expect(screen.queryByText(/Aeranthus sesquipedalis/)).toBeNull();
+    expect(screen.queryByRole('link', { name: /Where does Angraecum sesquipedale grow/ })).toBeNull();
+  });
+
+
+it('keeps the current area usable when selecting the same area again', async () => {
+  mockFetch({ '/atlas/checklist/areas': AREAS, '/atlas/checklist/area?': AREA, '/atlas/checklist/taxon/66746': TAXON });
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Angraecum sesquipedale' }));
+  await screen.findByText(/graph node 66746 · taxon:32953/);
+  fireEvent.click(screen.getByRole('button', { name: /Madagascar/ }));
+  expect(screen.getByRole('button', { name: 'Angraecum sesquipedale' })).toBeTruthy();
+  expect(screen.queryByText(/graph node 66746 · taxon:32953/)).toBeNull();
+  expect(screen.queryByRole('link', { name: /Where does Angraecum sesquipedale grow/ })).toBeNull();
 });

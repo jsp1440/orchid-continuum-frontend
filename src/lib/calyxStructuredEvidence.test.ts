@@ -16,12 +16,12 @@ function structured(name: string) {
   return view.structured;
 }
 function readable(subject: EvidenceSubject) {
-  if (subject.unreadable) throw new Error("subject unreadable");
+  if (subject.unreadable === true) throw new Error("subject unreadable");
   return subject;
 }
 function sectionOf(subject: EvidenceSubject, kind: string): Extract<RecordsSection, { unreadable: false }> {
   const found = readable(subject).sections.find((one) => one.kind === kind);
-  if (!found || found.unreadable) throw new Error(`no readable ${kind}`);
+  if (!found || found.unreadable === true) throw new Error(`no readable ${kind}`);
   return found;
 }
 
@@ -174,12 +174,36 @@ describe("DOI links", () => {
   ])("%s", (doi, href) => expect(doiHref(doi)).toBe(href));
 });
 
+function mutableRecord(value: unknown): Record<string, unknown> {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) throw new Error("fixture record expected");
+  return Object.fromEntries(Object.entries(value));
+}
+function mutableList(value: unknown): unknown[] {
+  if (!Array.isArray(value)) throw new Error("fixture list expected");
+  return value;
+}
+function fixture(name: string) {
+  return mutableRecord(structuredClone(evidenceOf(name)));
+}
+function firstSubjectEvidence(raw: Record<string, unknown>) {
+  const subject = mutableList(raw.subjects)[0];
+  if (subject === null || typeof subject !== "object" || Array.isArray(subject) || !("evidence" in subject)) throw new Error("fixture subject expected");
+  const evidence = subject.evidence;
+  if (evidence === null || typeof evidence !== "object" || Array.isArray(evidence)) throw new Error("fixture evidence expected");
+  return evidence as Record<string, unknown>;
+}
+function firstRelationship(raw: Record<string, unknown>) {
+  const row = mutableList(firstSubjectEvidence(raw).relationships)[0];
+  if (row === null || typeof row !== "object" || Array.isArray(row)) throw new Error("fixture relationship expected");
+  return row as Record<string, unknown>;
+}
+
 describe("fail closed, part by part", () => {
-  const good = () => structuredClone(evidenceOf("pollination-species")) as Record<string, any>;
+  const good = () => fixture("pollination-species");
 
   it("an unreadable part says so; it does not read as an empty part and does not blank the sentences", () => {
     const raw = good();
-    raw.subjects[0].evidence.relationships = "not a list";
+    firstSubjectEvidence(raw).relationships = "not a list";
     const view = readScientificEvidence(raw);
     expect(view.kind).toBe("available");
     expect(view.sentences).toEqual(raw.reading);
@@ -189,10 +213,10 @@ describe("fail closed, part by part", () => {
   });
 
   it.each([
-    ["a record in the list is not an object", (r: any) => { r.subjects[0].evidence.relationships[0] = 5; }],
-    ["a statement is not text", (r: any) => { r.subjects[0].evidence.relationships[0].statement = 5; }],
-    ["a citation is a number", (r: any) => { r.subjects[0].evidence.relationships[0].citation_text = 5; }],
-    ["held_back is an object", (r: any) => { r.subjects[0].evidence.held_back = {}; }],
+    ["a record in the list is not an object", (r: Record<string, unknown>) => { mutableList(firstSubjectEvidence(r).relationships)[0] = 5; }],
+    ["a statement is not text", (r: Record<string, unknown>) => { firstRelationship(r).statement = 5; }],
+    ["a citation is a number", (r: Record<string, unknown>) => { firstRelationship(r).citation_text = 5; }],
+    ["held_back is an object", (r: Record<string, unknown>) => { firstSubjectEvidence(r).held_back = {}; }],
   ])("relationships/held_back: %s", (_label, mutate) => {
     const raw = good();
     mutate(raw);
@@ -202,23 +226,23 @@ describe("fail closed, part by part", () => {
 
   it("an unreadable distribution, conservation or synonymy part is marked, not dropped", () => {
     for (const [name, key] of [["distribution-species", "distribution"], ["conservation-note", "conservation"], ["synonymy-list-truncated", "synonymy"]] as const) {
-      const raw = structuredClone(evidenceOf(name)) as Record<string, any>;
-      raw.subjects[0].evidence[key] = { areas: [1], notes: [1], synonyms: [1] };
+      const raw = fixture(name);
+      firstSubjectEvidence(raw)[key] = { areas: [1], notes: [1], synonyms: [1] };
       const section = readable(readScientificEvidence(raw).structured!.subjects[0]).sections.find((x) => x.kind === key);
       expect(section?.unreadable).toBe(true);
     }
   });
 
   it("an unreadable subject is marked and its sibling is still read", () => {
-    const raw = structuredClone(evidenceOf("distribution-two-species")) as Record<string, any>;
-    raw.subjects[0] = "oops";
+    const raw = fixture("distribution-two-species");
+    mutableList(raw.subjects)[0] = "oops";
     const s = readScientificEvidence(raw).structured!;
     expect(s.subjects[0]).toEqual({ unreadable: true });
     expect(readable(s.subjects[1]).label).toBe("Chloraea bletioides");
   });
 
   it("unreadable topics, notices and comparison are flagged, not read as empty", () => {
-    const raw = structuredClone(evidenceOf("distribution-two-species")) as Record<string, any>;
+    const raw = fixture("distribution-two-species");
     raw.topics = "distribution";
     raw.notices = [1];
     raw.comparison = { lines: "x" };
@@ -228,8 +252,8 @@ describe("fail closed, part by part", () => {
   });
 
   it("an unknown status or another schema yields no structured part at all", () => {
-    expect(readScientificEvidence({ ...(good() as object), status: "partially_available" }).structured).toBeNull();
-    expect(readScientificEvidence({ ...(good() as object), schema: "oc.calyx-scientific-evidence-context.v2" }).structured).toBeNull();
+    expect(readScientificEvidence({ ...good(), status: "partially_available" }).structured).toBeNull();
+    expect(readScientificEvidence({ ...good(), schema: "oc.calyx-scientific-evidence-context.v2" }).structured).toBeNull();
   });
 
   it("a block of the pre-#2420 shape (no topics, no subjects) still reads, with nothing structured", () => {
