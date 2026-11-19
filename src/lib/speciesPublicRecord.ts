@@ -25,16 +25,35 @@ export async function fetchSpeciesPublicRecord(
   hintName: string | null,
   signal?: AbortSignal,
 ): Promise<SpeciesDossierData | null> {
+  // A stale route must not initiate either lookup or return a late result.
+  if (signal?.aborted) return null;
   const direct = await fetchSpeciesById(taxonomyId, signal).catch(() => null);
+  if (signal?.aborted) return null;
   if (direct) return direct;
 
-  const query = (hintName || subjectNameFromSlug(taxonomyId) || '').trim();
+  const routeName = subjectNameFromSlug(taxonomyId);
+  const numericRouteId = /^\d+$/.test(taxonomyId) ? taxonomyId : '';
+  const query = (hintName || routeName || numericRouteId).trim();
   if (!query) return null;
 
   const results = await searchSpecies(query, 10, signal).catch(() => []);
-  const hit = results.find(
-    (row) => String(row.taxonomy_id) === String(taxonomyId),
-  );
+  if (signal?.aborted) return null;
+  let hit = results.find((row) => String(row.taxonomy_id) === String(taxonomyId));
+
+  // Name-based routes have no numeric taxonomy ID to match. Only accept an
+  // exact scientific-name match if the index identifies exactly one taxon.
+  // Ambiguous names are not silently promoted into a definitive identity.
+  if (!hit && routeName) {
+    const normalize = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const exact = results.filter((row) =>
+      [row.canonical_name, row.scientific_name].some(
+        (name) => typeof name === 'string' && normalize(name) === normalize(routeName),
+      ),
+    );
+    if (new Set(exact.map((row) => String(row.taxonomy_id))).size === 1) {
+      hit = exact[0];
+    }
+  }
   if (!hit) return null;
 
   return {
@@ -57,13 +76,26 @@ function extractRecordFields(
 ): Partial<SpeciesDossierData> {
   const text = (key: keyof SpeciesDossierData) => {
     const value = row[key];
-    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+    // Preserve source text verbatim, including meaningful internal spacing.
+    return typeof value === 'string' && value.trim() ? value : undefined;
   };
+  const nullableText = (key: keyof SpeciesDossierData) =>
+    row[key] === null ? null : text(key);
+
+  // Only project fields modeled by SpeciesDossierData. Do not borrow values
+  // from any other search hit, even when the scientific name is identical.
   return {
     specific_epithet: text('specific_epithet'),
-    common_name: text('common_name'),
-    region: text('region'),
-    habitat: text('habitat'),
-    representative_image_url: text('representative_image_url'),
+    species: text('species'),
+    tribe: nullableText('tribe'),
+    subfamily: nullableText('subfamily'),
+    authority: text('authority'),
+    common_name: nullableText('common_name'),
+    iucn_code: nullableText('iucn_code'),
+    region: nullableText('region'),
+    habitat: nullableText('habitat'),
+    description: nullableText('description'),
+    representative_image_url: nullableText('representative_image_url'),
+    hero_image_url: nullableText('hero_image_url'),
   };
 }
