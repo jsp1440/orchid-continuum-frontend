@@ -178,6 +178,12 @@ function getButton(container: HTMLElement, text: string) {
   return button;
 }
 
+function changeFieldValue(field: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(field.constructor.prototype, "value")?.set;
+  setter?.call(field, value);
+  field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 describe("CalyxWorkspace conversation lifecycle", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -460,7 +466,7 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Calyx could not complete that turn.");
   });
 
-  it("offers an immediate retry path during cold-start recovery", async () => {
+  it("requires a history check before retrying an uncertain turn", async () => {
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
     mocks.sendCalyxTurn
       .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
@@ -502,11 +508,13 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    expect(container.textContent).toContain("Automatic retry in 20s.");
+    expect(container.textContent).toContain("Refresh conversation history and inspect the thread");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      getButton(container, "Retry now").click();
+      const confirmation = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      confirmation.click();
+      getButton(container, "Retry after checking history").click();
     });
     await flush(4);
 
@@ -515,10 +523,22 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Recovered answer");
   });
 
-  it("cancels a pending cold-start retry from the retry controls", async () => {
-    vi.useFakeTimers();
+  it("retains the uncertain-turn guard after dismissing, editing, and attaching a file", async () => {
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
-    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
+    mocks.sendCalyxTurn
+      .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
+      .mockResolvedValueOnce(buildTurnResult("retry-cancel-thread", "Recovered answer"));
+    mocks.getCalyxConversation.mockResolvedValue(
+      buildConversation("retry-cancel-thread", [
+        {
+          message_id: "retry-answer",
+          conversation_id: "retry-cancel-thread",
+          role: "calyx",
+          content: "Recovered answer",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
 
     await act(async () => {
       root.render(
@@ -539,20 +559,34 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     await flush(4);
 
     await act(async () => {
-      getButton(container, "Cancel").click();
+      getButton(container, "Dismiss notice").click();
     });
-    await flush(2);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(21_000);
+      const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
+      changeFieldValue(textarea, "An edited draft");
+      const fileInput = container.querySelector('input[type="file"]') as HTMLInputElement;
+      Object.defineProperty(fileInput, "files", { configurable: true, value: [new File(["data"], "paper.txt", { type: "text/plain" })] });
+      fileInput.dispatchEvent(new Event("change", { bubbles: true }));
+      changeFieldValue(textarea, "Original retry message");
     });
     await flush(2);
 
+    expect(getButton(container, "Review retry safety")).toBeTruthy();
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Automatic retry in");
-    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
-      "Original retry message",
-    );
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("Original retry message");
+
+    await act(async () => getButton(container, "Review retry safety").click());
+    await flush();
+    await act(async () => (container.querySelector('input[type="checkbox"]') as HTMLInputElement).click());
+    await act(async () => getButton(container, "Retry after checking history").click());
+    await flush(4);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain("Recovered answer");
   });
 
   it("does not restore a committed message when the post-turn refresh fails", async () => {
@@ -860,5 +894,60 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+
+  it("ignores a conversation load that finishes after the project changes", async () => {
+    const pendingLoad = deferred<ConversationFixture>();
+    mocks.listCalyxConversations.mockResolvedValue({
+      conversations: [
+        {
+          conversation_id: "old-project-thread",
+          title: "Old project thread",
+          created_at: "2026-08-10T00:00:00Z",
+          message_count: 1,
+        },
+      ],
+      persistence_mode: "postgres",
+    });
+    mocks.getCalyxConversation.mockReturnValue(pendingLoad.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    await act(async () => {
+      getButton(container, "Old project thread").click();
+    });
+    await flush();
+    expect(container.textContent).toContain("Loading conversation…");
+
+    await act(async () => {
+      changeFieldValue(container.querySelector("#calyx-project") as HTMLInputElement, "new-project");
+    });
+    await flush(2);
+    expect(container.textContent).not.toContain("Loading conversation…");
+    expect(getContextValue(container, "Project")).toBe("new-project");
+
+    pendingLoad.resolve(
+      buildConversation("old-project-thread", [
+        {
+          message_id: "old-project-message",
+          conversation_id: "old-project-thread",
+          role: "calyx",
+          content: "Old project response",
+          created_at: "2026-08-10T00:00:03Z",
+        },
+      ]),
+    );
+    await flush(3);
+
+    expect(getContextValue(container, "Project")).toBe("new-project");
+    expect(getContextValue(container, "Conversation")).toBe("Not started yet");
+    expect(container.textContent).not.toContain("Old project response");
   });
 });
