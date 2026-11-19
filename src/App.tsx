@@ -74,6 +74,7 @@ import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
+import CommandCenter from "./pages/CommandCenter";
 
 const queryClient = new QueryClient();
 
@@ -133,6 +134,7 @@ const App = () => (
                   <Route path="/mission-control/matrix-registry-review" element={<ProtectedRoute title="Matrix Registry Review · authenticated reviewers" description="Sign in to derive immutable Matrix registry versions from explicit reviewed canonical concept mappings."><MatrixRegistryConceptReview /></ProtectedRoute>} />
                   <Route path="/mission-control/readiness/homepage" element={<ProtectedRoute title="Homepage readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
                   <Route path="/mission-control/knowledge-graph-readiness" element={<ProtectedRoute title="Knowledge graph readiness · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><HomepageReadiness /></ProtectedRoute>} />
+                  <Route path="/mission-control/command-center" element={<CommandCenter />} />
                   <Route path="/mission-control/ai-orchestration" element={<ProtectedRoute title="AI orchestration · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><AIOrchestration /></ProtectedRoute>} />
                   <Route path="/ai-orchestration" element={<ProtectedRoute title="AI orchestration · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><AIOrchestration /></ProtectedRoute>} />
                   <Route path="/diagnostics/daily-genus" element={<ProtectedRoute title="Daily Genus diagnostics · authenticated members" description="Sign in before viewing operational telemetry. Owner-authorized actions remain separately gated."><DailyGenusDiagnostics /></ProtectedRoute>} />

@@ -93,6 +93,7 @@ export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
 export const COMPONENT_AUTHORIZED_ROUTE_PATTERNS = [
   '/account',
   '/university/review',
+  '/mission-control/command-center',
 ] as const;
 
 export const ROUTE_ACCESS_POLICY = new Map<string, RouteAccessKind>([
