@@ -75,11 +75,11 @@ const ContinuumWeb: React.FC = () => {
   const activeEvidence = graph?.[active] ?? null;
 
   return (
-    <section id="continuum-web" className="relative overflow-hidden border-b border-white/[0.06] bg-[#16271a] text-[#f5f0e8]">
+    <section id="continuum-web" aria-labelledby="continuum-web-heading" className="relative overflow-hidden border-b border-white/[0.06] bg-[#16271a] text-[#f5f0e8]">
       <div className="mx-auto max-w-[1400px] px-6 py-16 lg:px-10 lg:py-20">
         <div className="max-w-4xl">
           <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#c9a24a]">Continuum relationship web</div>
-          <h2 className="mt-4 font-serif text-4xl leading-tight text-[#faf7f2] md:text-5xl">
+          <h2 id="continuum-web-heading" className="mt-4 font-serif text-4xl leading-tight text-[#faf7f2] md:text-5xl">
             Follow <span className="italic text-[#d4b34a]">{genus}</span> outward through documented connections.
           </h2>
           <p className="mt-4 max-w-3xl text-base leading-7 text-[#d7d0c2]">
@@ -91,11 +91,12 @@ const ContinuumWeb: React.FC = () => {
           <div className="rounded-2xl border border-white/10 bg-black/15 p-5">
             <button
               type="button"
+              aria-label={`Open the ${genus} genus page`}
               onClick={() => navigate(`/genus/${encodeURIComponent(genus)}`)}
               className="flex w-full items-center gap-4 rounded-xl border border-[#d4b34a]/35 bg-[#d4b34a]/10 p-4 text-left hover:bg-[#d4b34a]/15"
             >
               <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#d4b34a]/45 text-[#d4b34a]">
-                <Flower2 className="h-6 w-6" />
+                <Flower2 aria-hidden="true" className="h-6 w-6" />
               </div>
               <div>
                 <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#c9a24a]">Featured taxon</p>
@@ -103,7 +104,11 @@ const ContinuumWeb: React.FC = () => {
               </div>
             </button>
 
-            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <div
+              className="mt-4 grid gap-2 sm:grid-cols-2"
+              role="group"
+              aria-label="Featured genus relationship selectors"
+            >
               {RELATIONSHIPS.map((item) => {
                 const Icon = item.icon;
                 const node = graph?.[item.key];
@@ -113,6 +118,9 @@ const ContinuumWeb: React.FC = () => {
                   <button
                     key={item.key}
                     type="button"
+                    id={`continuum-relationship-${item.key}`}
+                    aria-pressed={isActive}
+                    aria-controls="continuum-relationship-evidence"
                     onClick={() => setActive(item.key)}
                     className={`rounded-xl border p-3 text-left transition-colors ${
                       isActive
@@ -121,7 +129,7 @@ const ContinuumWeb: React.FC = () => {
                     }`}
                   >
                     <div className="flex items-center gap-2">
-                      <Icon className="h-4 w-4 text-[#d4b34a]" />
+                      <Icon aria-hidden="true" className="h-4 w-4 text-[#d4b34a]" />
                       <span className="font-mono text-[9px] uppercase tracking-[0.17em] text-[#e8dfce]">{item.label}</span>
                     </div>
                     <p className="mt-2 text-xs text-[#a8a193]">{hasData ? node?.summary : 'Knowledge gap'}</p>
@@ -131,7 +139,13 @@ const ContinuumWeb: React.FC = () => {
             </div>
           </div>
 
-          <article className="rounded-2xl border border-[#d4b34a]/20 bg-[#0d1d12] p-6">
+          <article
+            id="continuum-relationship-evidence"
+            role="region"
+            aria-live="polite"
+            aria-labelledby={`continuum-relationship-${active}`}
+            className="rounded-2xl border border-[#d4b34a]/20 bg-[#0d1d12] p-6"
+          >
             <p className="font-mono text-[9px] uppercase tracking-[0.22em] text-[#c9a24a]">Selected relationship</p>
             <h3 className="mt-3 font-serif text-3xl leading-tight text-[#fff8e7]">{activeDefinition.question}</h3>
 

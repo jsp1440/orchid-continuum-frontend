@@ -454,7 +454,13 @@ export function buildCalyxTurnContext(options: {
 }
 
 export function visibleConversationMessages(messages: CalyxConversation["messages"]) {
-  return messages.filter((message) => message.role === "operator" || message.role === "calyx");
+  // calyxRequest returns response.json() without a runtime shape check, so a
+  // backend reply missing `messages` reaches here as undefined. On the public
+  // /speak-with-calyx route that threw during render and took the whole page
+  // to the root error boundary. An unexpected shape should cost the visitor an
+  // empty transcript, not the page.
+  if (!Array.isArray(messages)) return [];
+  return messages.filter((message) => message?.role === "operator" || message?.role === "calyx");
 }
 
 function formatCitation(citation: CalyxCitation) {

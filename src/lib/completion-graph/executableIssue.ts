@@ -3,6 +3,7 @@ import type { CompletionNode } from './types';
 export type OpenIssueRef = {
   number: number;
   body?: string | null;
+  labels?: string[];
 };
 
 export function graphNodeMarker(nodeId: string): string {
@@ -37,6 +38,11 @@ export function resolveExecutableIssue(
   if (declared) return declared.number;
 
   const marker = graphNodeMarker(node.id);
-  const materialized = openIssues.find((issue) => (issue.body ?? '').includes(marker));
+  const nodeLabel = `oc-node:${node.id}`.toLowerCase();
+  const materialized = openIssues.find(
+    (issue) =>
+      (issue.body ?? '').includes(marker) ||
+      (issue.labels ?? []).some((label) => label.toLowerCase() === nodeLabel),
+  );
   return materialized?.number ?? null;
 }

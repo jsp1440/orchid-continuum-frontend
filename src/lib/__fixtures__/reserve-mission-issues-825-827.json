@@ -1,0 +1,35 @@
+{
+  "source": "GitHub issues jsp1440/orchid-continuum-frontend#825-#827 as filed by the scheduled supervisor on 2026-09-25 (bodies verbatim; labels oc-p2, oc-prepared, oc-discovered)",
+  "issues": [
+    {
+      "number": 825,
+      "title": "Research morphology gap for Gastrochilus calceolaris",
+      "body": "<!-- oc-queue-bridge:jsp1440/orchid-calyx-backend|brain-knowledge-gap|objective:calyx-evidence-gap:b9ebd667dcac936fd10da28f -->\n\nSource: jsp1440/orchid-calyx-backend / brain-knowledge-gap / objective:calyx-evidence-gap:b9ebd667dcac936fd10da28f\n\nPrepared from the canonical backend reserve planner. Material fingerprint: b9ebd667dcac936fd10da28f70538d4990715f5b1d68527f8713d71f1600d3c1\nSemantic key: calyx-evidence-gap:1:morphology\nCanonical bounded research mission:\n- Taxon ID: 1\n- Taxon name: Gastrochilus calceolaris\n- Domain: morphology\n- Research question: Which published sources give morphological evidence (description, fruit capsule, scent, diagnostic comparison with similar species) for Gastrochilus calceolaris? The Orchid Continuum knowledge graph holds no morphology evidence for this taxon. No federated source in the knowledge graph covers it yet. Any evidence found enters as provisional candidate evidence for human review; nothing is published and the knowledge graph is not changed.\n- Human review required: yes\n- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled\n\nOC-GRAPH-NODE: cap-kg-evidence-gap-research-missions\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve",
+      "labels": [
+        "oc-p2",
+        "oc-prepared",
+        "oc-discovered"
+      ]
+    },
+    {
+      "number": 826,
+      "title": "Research morphology gap for Gastrochilus fargesii",
+      "body": "<!-- oc-queue-bridge:jsp1440/orchid-calyx-backend|brain-knowledge-gap|objective:calyx-evidence-gap:06b82120c48d78421f5323f8 -->\n\nSource: jsp1440/orchid-calyx-backend / brain-knowledge-gap / objective:calyx-evidence-gap:06b82120c48d78421f5323f8\n\nPrepared from the canonical backend reserve planner. Material fingerprint: 06b82120c48d78421f5323f8234e6559672619796579af8d16698450cd26c8d4\nSemantic key: calyx-evidence-gap:10:morphology\nCanonical bounded research mission:\n- Taxon ID: 10\n- Taxon name: Gastrochilus fargesii\n- Domain: morphology\n- Research question: Which published sources give morphological evidence (description, fruit capsule, scent, diagnostic comparison with similar species) for Gastrochilus fargesii? The Orchid Continuum knowledge graph holds no morphology evidence for this taxon. No federated source in the knowledge graph covers it yet. Any evidence found enters as provisional candidate evidence for human review; nothing is published and the knowledge graph is not changed.\n- Human review required: yes\n- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled\n\nOC-GRAPH-NODE: cap-kg-evidence-gap-research-missions\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve",
+      "labels": [
+        "oc-p2",
+        "oc-prepared",
+        "oc-discovered"
+      ]
+    },
+    {
+      "number": 827,
+      "title": "Research morphology gap for Robiquetia andamanica",
+      "body": "<!-- oc-queue-bridge:jsp1440/orchid-calyx-backend|brain-knowledge-gap|objective:calyx-evidence-gap:5b4d65b61d8f4cdace6978cf -->\n\nSource: jsp1440/orchid-calyx-backend / brain-knowledge-gap / objective:calyx-evidence-gap:5b4d65b61d8f4cdace6978cf\n\nPrepared from the canonical backend reserve planner. Material fingerprint: 5b4d65b61d8f4cdace6978cf7120602cee799d27acc564e70138cac0de75dbb9\nSemantic key: calyx-evidence-gap:100:morphology\nCanonical bounded research mission:\n- Taxon ID: 100\n- Taxon name: Robiquetia andamanica\n- Domain: morphology\n- Research question: Which published sources give morphological evidence (description, fruit capsule, scent, diagnostic comparison with similar species) for Robiquetia andamanica? The Orchid Continuum knowledge graph holds no morphology evidence for this taxon. No federated source in the knowledge graph covers it yet. Any evidence found enters as provisional candidate evidence for human review; nothing is published and the knowledge graph is not changed.\n- Human review required: yes\n- Automatic publication, KG/taxonomy mutation, and locality disclosure: disabled\n\nOC-GRAPH-NODE: cap-kg-evidence-gap-research-missions\n\nOC-SUPERVISOR-SOURCE: calyx-evidence-gap-reserve",
+      "labels": [
+        "oc-p2",
+        "oc-prepared",
+        "oc-discovered"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "_capture": {
+    "backend_commit": "c346a7219 (orchid-calyx-backend origin/main)",
+    "method": "FastAPI TestClient against app.literature_extraction.routes.router; CALYX_API_KEY unset; CALYX_OWNER_SESSION_SECRET set to a capture-only synthetic value so the owner-session path is configured",
+    "gate": "app/security.py::verify_owner_or_api_key",
+    "note": "These are the backend's own responses to requests without an owner session or API key. The backend emits 401 here, not 403; any 403 used in tests is a synthetic shape."
+  },
+  "list_no_credentials": {
+    "status": 401,
+    "body": {
+      "detail": "Owner session or API key is required"
+    }
+  },
+  "paper_no_credentials": {
+    "status": 401,
+    "body": {
+      "detail": "Owner session or API key is required"
+    }
+  },
+  "list_non_owner_bearer": {
+    "status": 401,
+    "body": {
+      "detail": "Invalid owner session"
+    }
+  }
+}

@@ -10,6 +10,8 @@ import {
   discoverVisionAnalysesForImage,
   getVisionCapabilityStatus,
   listVisionSuggestions,
+  matrixErrorAccess,
+  MATRIX_OWNER_ONLY_PANEL_MESSAGE,
   reviewVisionSuggestion,
   type Certainty,
   type VisionAnalysisSummary,
@@ -64,6 +66,17 @@ function capabilitySummary(capability: VisionCapabilityStatus): {
   };
 }
 
+/**
+ * Vision review is owner-only for members (backend #1647). A refusal here is
+ * said as "limited to owner access" — an access state, not an error.
+ */
+function panelFailure(error: unknown, fallback: string): { status: "idle" | "error"; message: string } {
+  if (matrixErrorAccess(error) === "owner_access_required") {
+    return { status: "idle", message: MATRIX_OWNER_ONLY_PANEL_MESSAGE };
+  }
+  return { status: "error", message: error instanceof Error ? error.message : fallback };
+}
+
 export default function MatrixVisionReviewPanel({ sessionId, disabled, onObservationAccepted }: Props) {
   const [imageId, setImageId] = useState("");
   const [analyses, setAnalyses] = useState<VisionAnalysisSummary[]>([]);
@@ -111,10 +124,11 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
           : "No governed Vision analyses are currently recorded for that image. No new inference was requested.",
       );
     } catch (error) {
-      setStatus("error");
+      const failed = panelFailure(error, "Unable to discover Vision analyses.");
+      setStatus(failed.status);
       setAnalyses([]);
       setSelectedAnalysisId("");
-      setMessage(error instanceof Error ? error.message : "Unable to discover Vision analyses.");
+      setMessage(failed.message);
     }
   }
 
@@ -132,8 +146,9 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
           : "That Vision analysis is already attached to this Matrix session.",
       );
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Unable to attach Vision analysis.");
+      const failed = panelFailure(error, "Unable to attach Vision analysis.");
+      setStatus(failed.status);
+      setMessage(failed.message);
     }
   }
 
@@ -165,8 +180,9 @@ export default function MatrixVisionReviewPanel({ sessionId, disabled, onObserva
           : "Suggestion rejected. The decision is preserved as provenance and is not scored.",
       );
     } catch (error) {
-      setStatus("error");
-      setMessage(error instanceof Error ? error.message : "Unable to review Vision suggestion.");
+      const failed = panelFailure(error, "Unable to review Vision suggestion.");
+      setStatus(failed.status);
+      setMessage(failed.message);
     }
   }
 

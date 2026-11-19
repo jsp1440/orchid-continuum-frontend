@@ -28,11 +28,7 @@ const PILLS: Pill[] = [
     icon: Tent,
     href: 'https://orchid-field-station.lovable.app',
   },
-  {
-    label: 'Deception Lab',
-    icon: FlaskConical,
-    href: 'https://ocudeceptionlab.emergent.sh',
-  },
+  { label: 'Deception Lab', icon: FlaskConical, route: '/deception-lab' },
 ];
 
 const CrossPlatformNav: React.FC = () => {

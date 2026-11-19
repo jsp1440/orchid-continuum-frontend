@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test";
 
 const CANONICAL_TAXON_ID = "taxon:world-plants:phalaenopsis-amabilis";
 const CANONICAL_NAME = "Phalaenopsis amabilis";
+// The app origin playwright.config.ts serves on (E2E_APP_PORT may remap it).
+const APP_ORIGIN = process.env.E2E_APP_URL || "http://127.0.0.1:4173";
 
 test("Species Dossier carries the exact canonical taxon into Matrix as non-evidence", async ({ page }) => {
   const offHostDataRequests: string[] = [];
@@ -26,7 +28,7 @@ test("Species Dossier carries the exact canonical taxon into Matrix as non-evide
 
   const href = await matrixLink.getAttribute("href");
   expect(href).not.toBeNull();
-  const destination = new URL(href!, "http://127.0.0.1:4173");
+  const destination = new URL(href!, APP_ORIGIN);
   expect(destination.pathname).toBe("/orchid-identification");
   expect(Object.fromEntries(destination.searchParams)).toEqual({
     origin: "species-dossier",
@@ -48,4 +50,21 @@ test("Species Dossier carries the exact canonical taxon into Matrix as non-evide
   expect(arrived.searchParams.has("latitude")).toBe(false);
   expect(arrived.searchParams.has("longitude")).toBe(false);
   expect(offHostDataRequests).toEqual([]);
+});
+
+test("Species Dossier shows the governed Atlas envelope as evidence and never draws a coordinate (journey 7)", async ({ page }) => {
+  await page.goto(`/species/${encodeURIComponent(CANONICAL_TAXON_ID)}`);
+
+  const envelope = page.getByTestId("atlas-envelope");
+  await expect(envelope).toBeVisible();
+  await expect(page.getByTestId("atlas-locality-policy")).toContainText(/never draws coordinates/i);
+
+  const withheld = page.getByTestId("atlas-unavailable-layer");
+  await expect(withheld).toHaveCount(5);
+  await expect(withheld).toHaveText(["Occurrence points", "Range", "Protected areas", "Elevation", "Climate"]);
+  await expect(page.getByTestId("atlas-layer")).toHaveCount(0);
+
+  const text = (await envelope.textContent()) ?? "";
+  expect(text).not.toMatch(/-?\d{1,3}\.\d{4,}/);
+  expect(page.url()).toContain(`/species/${encodeURIComponent(CANONICAL_TAXON_ID)}`);
 });

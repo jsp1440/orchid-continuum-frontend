@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { ArrowRight, Check } from 'lucide-react';
 import BotanicalLineArt from './BotanicalLineArt';
+import {
+  missionListMailto,
+  submitMissionListSignup,
+} from '@/lib/missionListSignup';
 
 /**
  * Closing CTA · field updates signup.
@@ -13,6 +17,7 @@ import BotanicalLineArt from './BotanicalLineArt';
 const Mission: React.FC = () => {
   const [email, setEmail] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  const [handedOff, setHandedOff] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,13 +29,18 @@ const Mission: React.FC = () => {
     }
     setLoading(true);
     setError(null);
+    const request = { email, source: 'orchid-continuum-mission' };
     try {
-      await fetch('/api/crm/69fa6c8ae577acf1894f7208/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, source: 'orchid-continuum-mission' }),
-      });
+      const outcome = await submitMissionListSignup(request);
+      if (outcome.kind === 'delivered') {
+        setSubmitted(true);
+        setHandedOff(false);
+        return;
+      }
+      // Undeliverable. Never confirm an address that went nowhere.
+      setHandedOff(true);
       setSubmitted(true);
+      globalThis.location.href = missionListMailto(request);
     } catch {
       setError('Something went wrong. Please try again.');
     } finally {
@@ -80,7 +90,10 @@ const Mission: React.FC = () => {
             </div>
           ) : (
             <div className="inline-flex items-center gap-2 px-5 py-3 rounded-full bg-[#1f3d2b]/8 border border-forest text-forest font-body text-sm">
-              <Check className="h-4 w-4" /> Welcome — you're now part of the Continuum.
+              <Check className="h-4 w-4" />{' '}
+              {handedOff
+                ? 'Your email app should be opening \u2014 send that message and we\u2019ll add you.'
+                : "Welcome \u2014 you're now part of the Continuum."}
             </div>
           )}
           {error && <div className="font-body text-sm text-[#8b3a2a] mt-3">{error}</div>}

@@ -1,0 +1,218 @@
+{
+  "_capture": "Captured verbatim from jsp1440/orchid-calyx-backend main c346a7219 via FastAPI TestClient on app.main (no auth needed; read-only GETs). 'readOnly' was captured with OCU_UNIVERSITY_ENABLED=true and every other OCU_* flag unset: GET /api/learning/release-readiness, /capabilities, /catalog, /chapters/{catalog.chapter.id}, /laboratories/{catalog.laboratory.id}, all HTTP 200. 'disabled' was captured with no OCU_* flags set: release-readiness and capabilities HTTP 200; /catalog returned HTTP 404 UNIVERSITY_DISABLED (recorded as catalogError). Values unmodified.",
+  "readOnly": {
+    "readiness": {
+      "release_contract": "OCU-RELEASE-003",
+      "content_contract": "OCU-SCI-003",
+      "university_enabled": true,
+      "read_only_ready": true,
+      "session_writes_enabled": false,
+      "learner_auth_enabled": false,
+      "persistence": "process_local_memory",
+      "durable_sessions_enabled": false,
+      "durable_gate": {
+        "session_writes_enabled": false,
+        "learner_auth_enabled": false,
+        "durable_flag_enabled": false,
+        "read_only_release_verified": false,
+        "release_evidence_present": false,
+        "release_evidence_valid": false,
+        "release_evidence_id": null,
+        "durable_sessions_enabled": false
+      },
+      "publication_enabled": false,
+      "candidate_knowledge_writes_enabled": false,
+      "calyx_model_calls_enabled": false,
+      "human_review_required": true,
+      "required_read_only_configuration": {
+        "OCU_UNIVERSITY_ENABLED": true,
+        "OCU_UNIVERSITY_SESSION_WRITES_ENABLED": false
+      },
+      "required_durable_identity_configuration": {
+        "OCU_UNIVERSITY_LEARNER_AUTH_ENABLED": true
+      }
+    },
+    "capability": {
+      "enabled": true,
+      "session_writes_enabled": false,
+      "learner_auth_enabled": false,
+      "persistence": "process_local_memory",
+      "durable_sessions_enabled": false,
+      "publication_enabled": false,
+      "candidate_knowledge_writes_enabled": false,
+      "calyx_model_calls_enabled": false
+    },
+    "catalog": {
+      "chapter": {
+        "id": "BITB-CHAPTER-ORCHID-FLOWERING-001",
+        "title": "Why Orchids Flower—or Do Not",
+        "summary": "An evidence-labeled introduction to orchid flowering that separates observation, plausible explanation, and unsupported causal certainty.",
+        "status": "draft"
+      },
+      "laboratory": {
+        "id": "OCU-LAB-FAILURE-TO-BLOOM-001",
+        "title": "Why Did This Orchid Fail to Bloom?",
+        "summary": "A curated scientific-method case using plant images, collection history, light, temperature, fertilizer, flowering evidence, and a label audit.",
+        "status": "draft"
+      },
+      "capability": {
+        "enabled": true,
+        "session_writes_enabled": false,
+        "learner_auth_enabled": false,
+        "persistence": "process_local_memory",
+        "durable_sessions_enabled": false,
+        "publication_enabled": false,
+        "candidate_knowledge_writes_enabled": false,
+        "calyx_model_calls_enabled": false
+      }
+    },
+    "chapter": {
+      "chapter_id": "BITB-CHAPTER-ORCHID-FLOWERING-001",
+      "schema_version": "1.0.0",
+      "title": "Why Orchids Flower—or Do Not",
+      "status": "draft",
+      "summary": "An evidence-labeled introduction to orchid flowering that separates observation, plausible explanation, and unsupported causal certainty.",
+      "learning_objectives": [
+        "Distinguish an observation from an interpretation.",
+        "Form competing testable hypotheses for failure to bloom.",
+        "Evaluate light, temperature, plant condition, and identity evidence.",
+        "State uncertainty and identify the next evidence needed."
+      ],
+      "sections": [
+        {
+          "section_id": "OBSERVATION-FIRST",
+          "title": "Begin with what can actually be observed",
+          "epistemic_status": "instructional",
+          "body": "A plant that has not flowered presents an outcome, not a diagnosis. Leaf color, growth size, root condition, flowering history, and label confidence are observations or records that must be evaluated before a causal explanation is accepted."
+        },
+        {
+          "section_id": "COMPETING-HYPOTHESES",
+          "title": "More than one explanation may fit",
+          "epistemic_status": "supported",
+          "body": "Insufficient light, missing seasonal cues, plant immaturity, root loss, and incorrect identification can produce similar outcomes. A scientific investigation compares alternatives rather than choosing a favorite cause."
+        },
+        {
+          "section_id": "IDENTITY-AS-CONFOUNDER",
+          "title": "Identification determines which requirements apply",
+          "epistemic_status": "provisional",
+          "body": "When a label is not independently verified, cultivation requirements tied to that name remain provisional. Missing flowers may also prevent confident identification, creating an important confounding variable."
+        }
+      ],
+      "laboratory_links": [
+        {
+          "laboratory_id": "OCU-LAB-FAILURE-TO-BLOOM-001",
+          "launch_label": "Investigate a failure-to-bloom case",
+          "required_sections": [
+            "OBSERVATION-FIRST",
+            "COMPETING-HYPOTHESES"
+          ]
+        }
+      ],
+      "publication_allowed": false
+    },
+    "laboratory": {
+      "laboratory_id": "OCU-LAB-FAILURE-TO-BLOOM-001",
+      "schema_version": "1.0.0",
+      "title": "Why Did This Orchid Fail to Bloom?",
+      "status": "draft",
+      "summary": "A curated scientific-method case using plant images, collection history, light, temperature, fertilizer, flowering evidence, and a label audit.",
+      "inquiry_sequence": [
+        "observe",
+        "question",
+        "investigate",
+        "analyze",
+        "interpret",
+        "communicate",
+        "contribute"
+      ],
+      "evidence_catalog": [
+        {
+          "evidence_id": "E-PLANT-IMAGES",
+          "label": "Current plant and root photographs",
+          "epistemic_status": "observed",
+          "summary": "Leaves are dark green; newest growth is full-sized; visible roots are firm."
+        },
+        {
+          "evidence_id": "E-COLLECTION-RECORD",
+          "label": "Three-year collection history",
+          "epistemic_status": "reported",
+          "summary": "Adult division, repotted 16 months ago, label confidence unverified."
+        },
+        {
+          "evidence_id": "E-LIGHT-SERIES",
+          "label": "Daily light integral summary",
+          "epistemic_status": "observed",
+          "summary": "Median DLI 3.4 mol m-2 day-1 across 42 measurement days."
+        },
+        {
+          "evidence_id": "E-TEMPERATURE-SERIES",
+          "label": "Annual temperature summary",
+          "epistemic_status": "observed",
+          "summary": "Winter night median 18.7 C; average day-night difference 5.1 C."
+        },
+        {
+          "evidence_id": "E-LABEL-AUDIT",
+          "label": "Identification and label audit",
+          "epistemic_status": "interpreted",
+          "summary": "The labeled species cannot be confirmed without flowers or provenance."
+        }
+      ],
+      "tutor_mode": "disabled_in_prototype",
+      "publication_allowed": false,
+      "automatic_candidate_knowledge": false,
+      "human_review_required": true
+    }
+  },
+  "disabled": {
+    "readiness": {
+      "release_contract": "OCU-RELEASE-003",
+      "content_contract": "OCU-SCI-003",
+      "university_enabled": false,
+      "read_only_ready": false,
+      "session_writes_enabled": false,
+      "learner_auth_enabled": false,
+      "persistence": "process_local_memory",
+      "durable_sessions_enabled": false,
+      "durable_gate": {
+        "session_writes_enabled": false,
+        "learner_auth_enabled": false,
+        "durable_flag_enabled": false,
+        "read_only_release_verified": false,
+        "release_evidence_present": false,
+        "release_evidence_valid": false,
+        "release_evidence_id": null,
+        "durable_sessions_enabled": false
+      },
+      "publication_enabled": false,
+      "candidate_knowledge_writes_enabled": false,
+      "calyx_model_calls_enabled": false,
+      "human_review_required": true,
+      "required_read_only_configuration": {
+        "OCU_UNIVERSITY_ENABLED": true,
+        "OCU_UNIVERSITY_SESSION_WRITES_ENABLED": false
+      },
+      "required_durable_identity_configuration": {
+        "OCU_UNIVERSITY_LEARNER_AUTH_ENABLED": true
+      }
+    },
+    "capability": {
+      "enabled": false,
+      "session_writes_enabled": false,
+      "learner_auth_enabled": false,
+      "persistence": "process_local_memory",
+      "durable_sessions_enabled": false,
+      "publication_enabled": false,
+      "candidate_knowledge_writes_enabled": false,
+      "calyx_model_calls_enabled": false
+    },
+    "catalogError": {
+      "status": 404,
+      "body": {
+        "detail": {
+          "code": "UNIVERSITY_DISABLED",
+          "message": "Orchid Continuum University prototype is disabled"
+        }
+      }
+    }
+  }
+}

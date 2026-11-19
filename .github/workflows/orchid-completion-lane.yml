@@ -45,10 +45,10 @@ jobs:
       PROVIDER_AUTHORIZED: ${{ inputs.provider_authorized }}
       OC_LEASE_ID: ${{ inputs.lease_id }}
       OC_WAVE_HASH: ${{ inputs.wave_hash }}
-      OC_PROVIDER_NO_API_MODE: 'true'
-      OC_PROVIDER_DISABLED: 'anthropic,gemini,openai'
-      OC_PROVIDER_DAILY_MAX_CALLS: '0'
-      OC_PROVIDER_WAVE_MAX_CALLS: '0'
+      OC_PROVIDER_NO_API_MODE: 'false'
+      OC_PROVIDER_DISABLED: ''
+      OC_PROVIDER_DAILY_MAX_CALLS: '4'
+      OC_PROVIDER_WAVE_MAX_CALLS: '1'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

@@ -172,6 +172,8 @@ describe("prepare candidate proposal", () => {
     );
 
     const proposal = await prepareCandidateProposal(request!);
+    const [url] = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toMatch(/\/api\/scientific-interpretation\/synthesis\/candidate-proposal$/);
     expect(proposal.knowledge_graph_mutation).toBe(false);
     expect(proposal.candidate_persistence_performed).toBe(false);
   });

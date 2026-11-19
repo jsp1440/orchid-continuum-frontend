@@ -227,7 +227,7 @@ export async function prepareCandidateProposal(
   let response: Response;
   try {
     response = await fetch(
-      `${CALYX_BACKEND_BASE_URL}/synthesis/candidate-proposal`,
+      `${CALYX_BACKEND_BASE_URL}/api/scientific-interpretation/synthesis/candidate-proposal`,
       {
         method: "POST",
         credentials: "include",

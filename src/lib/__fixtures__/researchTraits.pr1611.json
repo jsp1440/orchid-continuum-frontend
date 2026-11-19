@@ -1,0 +1,104 @@
+{
+  "_capture": "Captured from jsp1440/orchid-calyx-backend PR #1611 head d68d9a9e (branch claude/r1-C-research-traits, NOT on main) via FastAPI TestClient, using that PR's own FakeService (real ResearchTraitsService.get() pipeline, database boundary replaced) and ROWS fixture. Depends on #1611 merging.",
+  "absent_genus": {
+    "contract_version": "oc-research-traits-v1",
+    "distributions": [],
+    "generated_at": "2026-09-25T14:52:36.901556+00:00",
+    "state": "ABSENT",
+    "subject": {
+      "name": "Cattleya",
+      "rank": "genus"
+    }
+  },
+  "available_species": {
+    "contract_version": "oc-research-traits-v1",
+    "distributions": [
+      {
+        "buckets": [
+          {
+            "count": 3,
+            "value": 42
+          }
+        ],
+        "confidence": null,
+        "evidence_state": "AVAILABLE",
+        "label": "flower width",
+        "receipts": [
+          {
+            "license": null,
+            "record_id": "r-3",
+            "retrieved_at": null,
+            "source_id": "oc_views.trait_resolved_v4",
+            "source_name": null,
+            "source_url": null
+          }
+        ],
+        "sample_size": 3,
+        "trait_id": "flower-width",
+        "unit": "mm"
+      },
+      {
+        "buckets": [
+          {
+            "count": 4,
+            "value": "epiphyte"
+          },
+          {
+            "count": null,
+            "value": "terrestrial"
+          }
+        ],
+        "confidence": 0.7,
+        "evidence_state": "VERIFIED",
+        "label": "growth form",
+        "receipts": [
+          {
+            "license": "CC-BY-4.0",
+            "record_id": "r-1",
+            "retrieved_at": "2026-09-01",
+            "source_id": "eol-traitbank",
+            "source_name": "EOL TraitBank",
+            "source_url": "https://example.org/records/r-1"
+          },
+          {
+            "license": null,
+            "record_id": "r-2",
+            "retrieved_at": null,
+            "source_id": "eol-traitbank",
+            "source_name": "EOL TraitBank",
+            "source_url": null
+          }
+        ],
+        "sample_size": null,
+        "trait_id": "growth-form",
+        "unit": null
+      },
+      {
+        "buckets": [],
+        "confidence": null,
+        "evidence_state": "WITHHELD",
+        "label": "scent class",
+        "receipts": [],
+        "sample_size": null,
+        "trait_id": "scent-class",
+        "unit": null
+      }
+    ],
+    "generated_at": "2026-09-25T14:52:36.887551+00:00",
+    "state": "AVAILABLE",
+    "subject": {
+      "name": "Cattleya purpurata",
+      "rank": "species"
+    }
+  },
+  "unavailable_genus": {
+    "contract_version": "oc-research-traits-v1",
+    "distributions": [],
+    "generated_at": null,
+    "state": "UNAVAILABLE",
+    "subject": {
+      "name": "Cattleya",
+      "rank": "genus"
+    }
+  }
+}

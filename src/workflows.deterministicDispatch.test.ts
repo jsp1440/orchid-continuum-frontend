@@ -7,10 +7,11 @@ describe('deterministic completion dispatch boundary', () => {
   it('fans every admitted issue out through the budgeted real lane with eight independent slots', () => {
     expect(workflow.jobs.lane.uses).toBe('./.github/workflows/orchid-budgeted-completion-lane.yml');
     expect(workflow.jobs.lane.strategy).toEqual({ 'fail-fast': false, 'max-parallel': 8, matrix: { issue: '${{ fromJSON(inputs.issues_json) }}' } });
-    expect(workflow.jobs.lane.with.provider_authorized).toBe(false);
+    expect(workflow.jobs.lane.with.provider_authorized).toBe(true);
   });
-  it('does not forward provider credentials or call the real worker directly', () => {
-    expect(text).not.toMatch(/secrets:|API_KEY|claude-code-action/);
+  it('forwards authorized secrets only through the governed budget wrapper and never calls the real worker directly', () => {
+    expect(text).toContain('secrets: inherit');
+    expect(text).not.toMatch(/API_KEY|claude-code-action/);
     expect(text).not.toContain('./.github/workflows/orchid-completion-lane.yml');
   });
 });

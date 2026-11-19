@@ -195,7 +195,7 @@ const err = (status: number, detail = 'Service unavailable'): Response =>
 //   GET  /api/research/projects/{id}/activity… → listResearchActivity (ResearchActivityPanel)
 //   POST /api/calyx/speak/conversations        → createCalyxConversation
 //   POST /api/calyx/speak/conversations/…/turns → sendCalyxTurn
-//   POST /synthesis/run-manifest               → buildRunManifest
+//   POST /api/scientific-interpretation/synthesis/run-manifest → buildRunManifest
 //
 // Because the first six arrive in non-deterministic order (mix of Promise.all
 // and separate useEffect), we dispatch by URL substring rather than by call

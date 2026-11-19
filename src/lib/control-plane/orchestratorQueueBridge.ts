@@ -39,6 +39,14 @@ export interface ExistingWorkRef {
   title: string;
   state: 'open' | 'closed';
   kind: 'issue' | 'pr';
+  /**
+   * Whether this open lineage occupies a slot of the prepared reserve depth.
+   * Defaults to true. A lineage parked behind a hold (`oc-blocked`,
+   * `oc-owner-gate`, ...) is not executable prepared work, so -- like protected
+   * items -- it still suppresses its own source key and title but must not
+   * starve the refill. Set false only for such held lineages.
+   */
+  holdsReserveSlot?: boolean;
 }
 
 export interface PreparedWork {
@@ -216,7 +224,12 @@ export function planQueueBridge(
       )
       .map((item) => normalizeTitle(item.title)),
   );
-  const preparedOpenCount = [...openSourceKeys].filter((key) => !retiringKeys.has(key)).length;
+  const slotHoldingKeys = new Set(
+    existing
+      .filter((item) => item.state === 'open' && item.holdsReserveSlot !== false)
+      .flatMap((item) => activeLineageKeys(item)),
+  );
+  const preparedOpenCount = [...slotHoldingKeys].filter((key) => !retiringKeys.has(key)).length;
   const slots = Math.max(0, boundedTarget - preparedOpenCount);
 
   const suppressed: QueueBridgePlan['suppressed'] = [];

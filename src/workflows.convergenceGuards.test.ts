@@ -32,7 +32,12 @@ describe('continuous completion convergence guards', () => {
     expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
     snapshot.issues[0].labels.push({ name: 'oc-repair' });
     expect(makePlan(snapshot, [], now, root).leaves[0]).toMatchObject({ issueNumber: 11, repairPr: 90, repairBranch: 'repair-11' });
+    // Merged, not merely closed: a merged lineage is delivered work, so the
+    // repair path stops. A closed-unmerged PR is an abandoned attempt and is
+    // re-admissible up to MAX_ABANDONED_ATTEMPTS, which the dispatch-control
+    // suite covers directly.
     snapshot.prs[0].state = 'closed';
+    snapshot.prs[0].merged = true;
     expect(makePlan(snapshot, [], now, root).issues).toEqual([]);
   });
 
@@ -52,11 +57,17 @@ describe('continuous completion convergence guards', () => {
     const prs = [...Array.from({ length: 501 }, (_, i) => ({ ...unrelated, number: 100 + i })), snapshot.prs[0]];
     expect(lineageFor(11, prs).map(pr => pr.number)).toEqual([90]);
   });
+  it('recognizes every durable lineage marker emitted by governed workers', () => {
+    const { snapshot } = fixture();
+    const marker = { ...snapshot.prs[0], number: 91, body: 'OC-LINEAGE-ISSUE: #11', head: { ref: 'repair-11', sha: 'd'.repeat(40) } };
+    const slashBranch = { ...snapshot.prs[0], number: 92, body: 'bounded repair', head: { ref: 'oc-auto/11-round-2', sha: 'e'.repeat(40) } };
+    expect(lineageFor(11, [snapshot.prs[0], marker, slashBranch]).map(pr => pr.number)).toEqual([90, 91, 92]);
+  });
 
   it('verifies admission at the executable worker before writing any running label', () => {
     const runtime = readFileSync('scripts/oc-dispatch-runtime.ts', 'utf8');
     const admission = runtime.indexOf('assertAdmission(plan, current, issue, now())');
-    const start = runtime.indexOf("transitionLease(store, lease.id, runId, runAttempt, 'running')");
+    const start = runtime.indexOf("transitionLease(store, lease.id, runId, runAttempt, 'running', { requireActive: true })");
     const label = runtime.indexOf(".concat('oc-running')");
     expect(admission).toBeGreaterThan(-1);
     expect(start).toBeGreaterThan(admission);

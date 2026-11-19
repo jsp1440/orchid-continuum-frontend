@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { decideGraphIssueAction, priorityTier, STALE_NODE_DATA_DAYS } from './graphIssueDecision';
+import { decideGraphIssueAction, decideProviderFreeGraphIssueAction, priorityTier, STALE_NODE_DATA_DAYS } from './graphIssueDecision';
 import { graphNodeMarker } from './executableIssue';
 import type { CompletionNode } from './types';
 
@@ -137,5 +137,35 @@ describe('decideGraphIssueAction — fail-closed on stale/ambiguous/missing data
     const selected = node({ id: '' });
     const decision = decideGraphIssueAction(selected, [], NOW);
     expect(decision.action).toBe('fail-closed');
+  });
+});
+
+
+describe('decideProviderFreeGraphIssueAction', () => {
+  it('creates a structured packet only for an explicit deterministic binding', () => {
+    const decision = decideProviderFreeGraphIssueAction(
+      node({ id: 'cap-deployment-contract-validation', name: 'Deployment contract validation' }),
+      [],
+      NOW,
+    );
+    expect(decision.action).toBe('create');
+    if (decision.action !== 'create') throw new Error('expected create');
+    expect(decision.labels).toContain('oc-cap:schema-validation');
+    expect(decision.body).toContain('OC-GRAPH-NODE: cap-deployment-contract-validation');
+    expect(decision.body).toContain('OC-SWARM-CAPABILITY: schema-validation');
+    expect(decision.body).toContain('"schema": "oc.supervisor-task.v1"');
+    expect(decision.packet).toMatchObject({
+      taskId: 'graph:cap-deployment-contract-validation:schema-validation',
+      graphNodeId: 'cap-deployment-contract-validation',
+      providerRequirement: 'none',
+      ownerGateStatus: 'none',
+    });
+  });
+
+  it('fails closed rather than inventing a provider-free route for another leaf', () => {
+    const decision = decideProviderFreeGraphIssueAction(node({ id: 'cap-unbound-feature' }), [], NOW);
+    expect(decision.action).toBe('fail-closed');
+    if (decision.action !== 'fail-closed') throw new Error('expected fail-closed');
+    expect(decision.reason).toContain('no explicit provider-free capability binding');
   });
 });

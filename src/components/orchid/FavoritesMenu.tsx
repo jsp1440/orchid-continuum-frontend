@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Star, X, Loader2, Check, CloudOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
+import { speciesSearchHref } from '@/lib/speciesRouteContext';
 import {
   getFavorites,
   toggleFavorite,
@@ -41,7 +42,7 @@ const useSyncStatus = (): FavoritesSyncStatus =>
 const SyncIndicator: React.FC<{ status: FavoritesSyncStatus }> = ({ status }) => {
   if (status === 'idle') return null;
   const cfg = {
-    saving: { icon: Loader2, label: 'saving…', cls: 'text-charcoal/60', spin: true },
+    saving: { icon: Loader2, label: 'saving…', cls: 'text-[#5c574f]', spin: true },
     saved: { icon: Check, label: 'saved', cls: 'text-[#2f9e44]', spin: false },
     offline: { icon: CloudOff, label: 'offline', cls: 'text-[#d64545]', spin: false },
   }[status];
@@ -88,7 +89,7 @@ const FavoritesMenu: React.FC = () => {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-label="My favorites"
-        className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.18em] uppercase text-charcoal/75 hover:text-forest transition-colors"
+        className="inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.18em] uppercase text-charcoal hover:text-forest transition-colors"
       >
         <span className="relative inline-flex">
           <Star
@@ -117,7 +118,7 @@ const FavoritesMenu: React.FC = () => {
             <span className="font-mono text-[10px] tracking-[0.25em] uppercase text-gold">
               My Favorites
             </span>
-            <span className="font-mono text-[10px] text-charcoal/60 flex items-center gap-2">
+            <span className="font-mono text-[10px] text-[#5c574f] flex items-center gap-2">
               {showSync && <SyncIndicator status={syncStatus} />}
               {favorites.length} this session
             </span>
@@ -125,7 +126,7 @@ const FavoritesMenu: React.FC = () => {
           </div>
 
           {favorites.length === 0 ? (
-            <div className="px-4 py-4 font-body text-[13px] leading-snug text-charcoal/70">
+            <div className="px-4 py-4 font-body text-[13px] leading-snug text-[#5c574f]">
               No favorites yet — tap the star on any species card.
             </div>
           ) : (
@@ -138,7 +139,7 @@ const FavoritesMenu: React.FC = () => {
                   <button
                     onClick={() => {
                       setOpen(false);
-                      navigate('/species');
+                      navigate(speciesSearchHref(name));
                     }}
                     className="flex-1 text-left font-display italic text-[14px] text-ink group-hover:text-forest truncate"
                     title={name}
