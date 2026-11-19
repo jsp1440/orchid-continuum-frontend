@@ -436,4 +436,3 @@ export function activeCultivationHandoff(
 export function resetAdoptedCultivationHandoffs(): void {
   adopted.clear();
 }
-

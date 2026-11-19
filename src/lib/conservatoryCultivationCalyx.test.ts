@@ -462,4 +462,3 @@ describe("the acceptance specimen AM1", () => {
     expect(crossed).toBeNull();
   });
 });
-
