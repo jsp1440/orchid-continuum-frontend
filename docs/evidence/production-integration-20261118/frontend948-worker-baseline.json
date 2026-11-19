@@ -1,5 +1,5 @@
 {
-  "phase": "intentional_red_awaiting_existing_worker",
+  "phase": "corrected_awaiting_final_release_checks",
   "frontend_base": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
   "source_refs": {
     "948": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
@@ -30,7 +30,7 @@
   "conservative_reservation_usd": "0.04879425",
   "per_call_cap_usd": "0.10",
   "period_cap_usd": "1.00",
-  "real_provider_calls_so_far": 0,
+  "real_provider_calls_so_far": 1,
   "deployed": false,
   "live_verified": false,
   "prerequisite_checks": {
@@ -54,5 +54,25 @@
     "scope": "draft baseline prerequisites, immutable regressions and reservation; not release acceptance",
     "affected_tests_passed": 327,
     "typecheck": "PASS"
+  },
+  "worker_attempt": {
+    "workflow_run": 44454452714,
+    "main_sha": "9dd8573def44cfeccde62caefaefa803fc5c7a21",
+    "generation": "PASS",
+    "validation": "BLOCKED RuntimeError; hosted output does not identify the failed command",
+    "publication": "SKIPPED",
+    "actual_cost_usd": "0.014172",
+    "reserved_cost_usd": "0.04879425",
+    "input_tokens": 2984,
+    "output_tokens": 2652,
+    "independent_generated_proposal_tests": {
+      "failed": 1,
+      "passed": 10
+    },
+    "correction": "Keep same-area loaded rows; clear area only when selected label changes; always clear selected taxon",
+    "corrected_tests": {
+      "passed": 11,
+      "failed": 0
+    }
   }
 }

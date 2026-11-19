@@ -132,6 +132,8 @@ export default function AtlasChecklistPage() {
                       setAreaName(a.label);
                       setOffset(0);
                       setTaxonId(null);
+                      setTaxon(null);
+                      if (a.label !== areaName) setArea(null);
                     }}
                   >
                     {a.label} <span className="text-xs">({a.taxa_listed} statements)</span>

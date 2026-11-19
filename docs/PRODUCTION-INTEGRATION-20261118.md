@@ -253,3 +253,37 @@ the Atlas suite was executed separately and remains2 failed/9 passed.
 Independent checker:327 affected tests plus typecheck pass, immutable hashes
 match, prerequisite fixture mutations and assertions preserved. This is scoped
 draft-baseline acceptance only, not release approval.
+
+
+## First paid worker attempt and bounded provider-free correction
+
+Backend #2454 admission source `ba492bdf752c121a849c64199e161b148ce9905a`
+landed as `9dd8573def44cfeccde62caefaefa803fc5c7a21` after independent review
+and required hosted checks. The mechanical two-path merge check passed with
+identical source/landing tree `27b7363f55cf7348fd6bc7534977c716496175ba`.
+Existing worker run44454452714 completed generation successfully:2984 input
+tokens,2652 output tokens,$0.014172 recorded actual cost against$0.04879425
+reserved. This verifies the scoped key/provider transport, not a deployed
+application or unattended integration.
+
+Hosted validation failed with a generic RuntimeError and no failed-command
+identifier in its uploaded blocked receipt; publication was correctly skipped.
+Independent execution of the exact generated page proposal reproduced1 failing
+same-area case/10 passing controls. The model always cleared loaded area rows
+even when the area label did not change, preventing those rows from reloading.
+This observation proves the proposal unsafe regardless of the under-specified
+hosted failure. No source branch was updated while the attempt was running.
+
+The two-line provider-free correction always clears the prior selected taxon,
+but clears area rows only when selecting a different label. It preserves the
+same-area response, filters, request guards, provenance and handoff semantics.
+All11 immutable mounted regressions now pass; test SHA256 is unchanged.
+No second API call was requested. The terminal failed attempt is parked; this
+parent source update makes the old pinned assignment stale rather than silently
+restarting it. Final wider checks and exact-head independent review follow.
+
+Current operational limit: API generation is live verified for this coding
+worker; one unsafe proposal was rejected. Successful automated validation,
+publication and protected integration have not yet been demonstrated by this
+paid attempt. Raw command output remains private; a future diagnostic repair
+should expose only a safe command identifier and exit status.
