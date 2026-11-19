@@ -105,4 +105,14 @@ describe("server-owned Calyx conversation API", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
     await expect(createCalyxConversation()).rejects.toMatchObject({ kind: "network_error", message: "offline" });
   });
+
+  it("classifies an unreadable successful turn response as an uncertain network failure", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockRejectedValue(new TypeError("response body interrupted")),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(sendCalyxTurn("conversation-1", { message: "Did that turn commit?" }))
+      .rejects.toMatchObject({ kind: "network_error", message: "response body interrupted" });
+  });
 });

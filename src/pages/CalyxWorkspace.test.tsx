@@ -178,6 +178,12 @@ function getButton(container: HTMLElement, text: string) {
   return button;
 }
 
+function changeInputValue(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+  setter?.call(input, value);
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
 describe("CalyxWorkspace conversation lifecycle", () => {
   let container: HTMLDivElement;
   let root: Root;
@@ -432,10 +438,50 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(storedWorkspace().conversationId).toBe("saved-conversation");
   });
 
+  it("ignores a conversation load that resolves after the project changes", async () => {
+    const loadOperation = deferred<ConversationFixture>();
+    mocks.listCalyxConversations.mockResolvedValue({
+      conversations: [{
+        conversation_id: "late-conversation",
+        title: "Late conversation",
+        created_at: "2026-08-10T00:00:00Z",
+      }],
+      persistence_mode: "postgres",
+    });
+    mocks.getCalyxConversation.mockReturnValue(loadOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      getButton(container, "Late conversation").click();
+    });
+    await flush(2);
+
+    const projectInput = container.querySelector("#calyx-project") as HTMLInputElement;
+    await act(async () => {
+      changeInputValue(projectInput, "new-project");
+    });
+    await flush(2);
+
+    loadOperation.resolve(buildConversation("late-conversation"));
+    await flush(3);
+
+    expect(projectInput.value).toBe("new-project");
+    expect(getContextValue(container, "Conversation")).toBe("Not started yet");
+    expect(container.textContent).not.toContain("Loading conversation…");
+  });
+
   it("restores the user message to the textarea when the Calyx turn fails", async () => {
     const createdConversation = buildConversation("net-error-conversation");
     mocks.createCalyxConversation.mockResolvedValue(createdConversation);
-    mocks.sendCalyxTurn.mockRejectedValue(new TypeError("Failed to fetch"));
+    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Failed to fetch"));
 
     await act(async () => {
       root.render(
@@ -457,10 +503,44 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
     expect(textarea.value).toBe("What does Calyx know about mycorrhizal networks?");
-    expect(container.textContent).toContain("Calyx could not complete that turn.");
+    expect(container.textContent).toContain("check conversation history before retrying");
+    expect(container.textContent).toContain("Retry anyway");
   });
 
-  it("offers an immediate retry path during cold-start recovery", async () => {
+  it("preserves a newer draft when an earlier network request fails", async () => {
+    const sendOperation = deferred<unknown>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("draft-preservation-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(sendOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Original request");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      mocks.pushTranscript("New draft");
+      sendOperation.reject(new CalyxApiError("network_error", "Connection lost"));
+    });
+    await flush(4);
+
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("New draft");
+    expect(container.textContent).toContain("Retry anyway");
+  });
+
+  it("requires explicit confirmation before retrying an uncertain turn", async () => {
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
     mocks.sendCalyxTurn
       .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
@@ -502,21 +582,28 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    expect(container.textContent).toContain("Automatic retry in 20s.");
+    expect(container.textContent).toContain("may create a duplicate");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      getButton(container, "Retry now").click();
+      mocks.pushTranscript("Another question");
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      getButton(container, "Retry anyway").click();
     });
     await flush(4);
 
     expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+    expect(mocks.sendCalyxTurn.mock.calls[1][1].message).toBe("Wake up please");
     expect(container.textContent).toContain("Recovered answer");
   });
 
-  it("cancels a pending cold-start retry from the retry controls", async () => {
-    vi.useFakeTimers();
+  it("keeps the uncertain-turn guard when the draft is edited", async () => {
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
     mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
 
@@ -539,19 +626,17 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     await flush(4);
 
     await act(async () => {
-      getButton(container, "Cancel").click();
+      mocks.pushTranscript("Changed draft");
     });
-    await flush(2);
-
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(21_000);
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flush(2);
 
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Automatic retry in");
+    expect(container.textContent).toContain("Retry anyway");
     expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
-      "Original retry message",
+      "Original retry message Changed draft",
     );
   });
 
@@ -607,6 +692,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(textarea.value).toBe("");
     expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
     expect(container.textContent).toContain("same turn is not sent twice");
+    expect(container.textContent).toContain("Committed question");
+    expect(container.textContent).toContain("Committed answer");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
   });
 
