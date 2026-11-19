@@ -60,7 +60,8 @@ describe('homepage Atlas source integrity', () => {
 
   it('projects displayed records through the repaired locality boundary', () => {
     const atlas = read('src/components/orchid/HomeAtlasContinuum.tsx');
-    expect(atlas).toContain('toPublicAtlasOccurrence');
+    expect(atlas).toContain('fetchGenusOccurrences(genus, 500, controller.signal, UNRESOLVED_FLOOR_DEG)');
+    expect(atlas).not.toContain('toPublicAtlasOccurrence');
     expect(atlas).toContain('assessmentResolved: false');
     expect(atlas).not.toContain('locality protection, scale transitions');
   });
