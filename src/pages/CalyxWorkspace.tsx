@@ -437,10 +437,10 @@ function CalyxMessageContent({ content }: { content: string }) {
   );
 }
 
-export default function CalyxWorkspace() {
+export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuestion?: string } = {}) {
   const [snapshot, setSnapshot] = useState<CalyxWorkspaceSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialQuestion);
   const [projectId, setProjectId] = useState(DEFAULT_PROJECT_ID);
   const [conversation, setConversation] = useState<CalyxConversation | null>(null);
   const [missions, setMissions] = useState<Record<string, BrainMission>>({});

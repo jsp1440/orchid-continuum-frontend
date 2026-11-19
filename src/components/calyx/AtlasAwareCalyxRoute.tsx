@@ -2,7 +2,7 @@ import { useLayoutEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import CultivationEvaluationFrame from "@/components/calyx/CultivationEvaluationFrame";
-import { ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
+import { ATLAS_CHECKLIST_LAYER_ORIGIN, ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN } from "@/features/atlas-next/calyxHandoff";
 import { ATLAS_NEXT_CALYX_ORIGIN } from "@/features/atlas-next/researchHandoff";
 import { parseCalyxRouteContext } from "@/lib/calyxConversation";
 import {
@@ -108,6 +108,7 @@ export default function AtlasAwareCalyxRoute() {
   const fromAtlasNextGenus = routeContext.origin === ATLAS_NEXT_CALYX_ORIGIN;
   const genus = routeContext.featuredTaxon?.name ?? null;
   const question = routeContext.questionContext?.question ?? null;
+  const checklistQuestion = routeContext.origin === ATLAS_CHECKLIST_LAYER_ORIGIN ? question : null;
   const atlasHref = genus ? featuredTaxonAtlasHref(genus) : "/atlas";
 
   return (
@@ -350,7 +351,7 @@ export default function AtlasAwareCalyxRoute() {
         </section>
       ) : null}
 
-      <CalyxWorkspace />
+      <CalyxWorkspace key={checklistQuestion ? location.key : "workspace"} initialQuestion={checklistQuestion ?? ""} />
     </>
   );
 }
