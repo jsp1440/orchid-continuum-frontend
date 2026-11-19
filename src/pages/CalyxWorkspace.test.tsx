@@ -460,7 +460,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("Calyx could not complete that turn.");
   });
 
-  it("offers an immediate retry path during cold-start recovery", async () => {
+  it("does not automatically resend an uncertain turn and requires acknowledgement before retry", async () => {
+    vi.useFakeTimers();
     mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-thread"));
     mocks.sendCalyxTurn
       .mockRejectedValueOnce(new CalyxApiError("network_error", "Backend asleep"))
@@ -502,57 +503,32 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    expect(container.textContent).toContain("Automatic retry in 20s.");
+    expect(container.textContent).toContain("the connection may have dropped after CALYX completed the turn");
+    expect(container.textContent).toContain("Refresh conversation history and inspect the thread");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    expect((getButton(container, "Send") as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
-      getButton(container, "Retry now").click();
+      await vi.advanceTimersByTimeAsync(21_000);
+    });
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    const retryButton = getButton(container, "Retry after checking history") as HTMLButtonElement;
+    expect(retryButton.disabled).toBe(true);
+    const retryConfirmation = container.querySelector('input[type="checkbox"]') as HTMLInputElement;
+    await act(async () => {
+      retryConfirmation.click();
+    });
+    expect(retryButton.disabled).toBe(false);
+
+    await act(async () => {
+      retryButton.click();
     });
     await flush(4);
 
     expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
     expect(container.textContent).toContain("Recovered answer");
-  });
-
-  it("cancels a pending cold-start retry from the retry controls", async () => {
-    vi.useFakeTimers();
-    mocks.createCalyxConversation.mockResolvedValue(buildConversation("retry-cancel-thread"));
-    mocks.sendCalyxTurn.mockRejectedValue(new CalyxApiError("network_error", "Backend asleep"));
-
-    await act(async () => {
-      root.render(
-        <MemoryRouter>
-          <CalyxWorkspace />
-        </MemoryRouter>,
-      );
-    });
-    await flush(2);
-
-    await act(async () => {
-      mocks.pushTranscript("Original retry message");
-    });
-
-    await act(async () => {
-      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-    });
-    await flush(4);
-
-    await act(async () => {
-      getButton(container, "Cancel").click();
-    });
-    await flush(2);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(21_000);
-    });
-    await flush(2);
-
-    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
-    expect(container.textContent).not.toContain("Automatic retry in");
-    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe(
-      "Original retry message",
-    );
   });
 
   it("does not restore a committed message when the post-turn refresh fails", async () => {
