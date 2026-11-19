@@ -97,7 +97,7 @@ describe('Calyx governed genus route trust boundary', () => {
     expect(routeSource).toContain('rejectsCalyxNavigationContext(location.search)');
     expect(routeSource).toContain('if (rejectedNavigationContext)');
     expect(routeSource.indexOf('if (rejectedNavigationContext)')).toBeLessThan(
-      routeSource.lastIndexOf('<CalyxWorkspace />'),
+      routeSource.search(/<CalyxWorkspace\b/),
     );
     expect(routeSource).toContain('Open Calyx without carried context');
   });
