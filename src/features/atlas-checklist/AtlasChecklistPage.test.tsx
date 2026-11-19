@@ -450,3 +450,88 @@ it.each(['areas', 'area', 'taxon'])('ignores a late old %s rejection after its r
   await act(async () => { old.reject(new Error('Abandoned request failed')); });
   expect(screen.queryByRole('alert')).toBeNull();
 });
+
+const NON_AVAILABLE_RESPONSES = [
+  { status: 'unavailable', reason_code: 'BUSY', httpStatus: 503, message: /graph could not be read/i },
+  { status: 'unavailable', reason_code: 'READ_FAILED', httpStatus: 503, message: /graph could not be read/i },
+  { status: 'not_enabled', reason_code: 'NOT_ENABLED', httpStatus: 200, message: /switched off. Nothing was read/i },
+] as const;
+
+function statusEnvelope(status: string, reason_code: string) {
+  return {
+    ...env, status, read_only: true, reason_code,
+    explanation: status === 'unavailable'
+      ? 'The graph could not be read. A stated gap, not an absence.'
+      : 'The checklist layer is switched off. Nothing was read, and nothing is said about any taxon or area.',
+  };
+}
+
+it.each(NON_AVAILABLE_RESPONSES)('renders an area $reason_code envelope without success fields and recovers to a genuine empty read', async ({ status, reason_code, httpStatus, message }) => {
+  let areaReads = 0;
+  const recovered = deferredResponse();
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = new URL(input);
+    if (url.pathname.endsWith('/areas')) return { ok: true, status: 200, json: async () => AREAS };
+    areaReads += 1;
+    const blocked = areaReads === 2;
+    return { ok: !blocked || httpStatus === 200, status: blocked ? httpStatus : 200,
+      json: async () => areaReads === 1 ? TWO_TAXA : blocked ? statusEnvelope(status, reason_code) : recovered.promise };
+  }));
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+  await screen.findByRole('button', { name: ID.label });
+  fireEvent.change(screen.getByLabelText('Genus'), { target: { value: 'Blocked genus' } });
+  await screen.findByRole('status');
+  expect(screen.getByRole('status').textContent).toMatch(message);
+  expect(screen.queryByRole('button', { name: ID.label })).toBeNull();
+  expect(screen.queryByText(/Statements, not a species count/)).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+  expect(screen.queryByRole('link', { name: /Ask Calyx/ })).toBeNull();
+  const section = screen.getByRole('region', { name: 'Taxa of the area' });
+  expect(section.textContent).not.toMatch(/Loading|0 statements|undefined/i);
+  expect((screen.getByLabelText('Genus') as HTMLInputElement).disabled).toBe(false);
+  expect((screen.getByLabelText('Source signs') as HTMLSelectElement).disabled).toBe(false);
+
+  fireEvent.change(screen.getByLabelText('Genus'), { target: { value: 'Recovered genus' } });
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(section.textContent).toContain('Loading');
+  await act(async () => { recovered.resolve({ ...AREA, taxa_listed: 0, taxa_listed_with_a_marker: 0, taxa: [], next_offset: null, calyx: null }); });
+  await screen.findByText(/0 statements. Statements, not a species count/);
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(section.textContent).not.toMatch(/Loading|undefined/);
+});
+
+it.each(NON_AVAILABLE_RESPONSES)('renders a taxon $reason_code envelope as a status and recovers to another identity', async ({ status, reason_code, httpStatus, message }) => {
+  vi.stubGlobal('fetch', vi.fn(async (input: string) => {
+    const url = new URL(input);
+    const blocked = url.pathname.endsWith('/66746');
+    const body = url.pathname.endsWith('/areas') ? AREAS : url.pathname.endsWith('/area') ? TWO_TAXA
+      : blocked ? statusEnvelope(status, reason_code) : { ...TAXON, identity: OTHER_ID };
+    return { ok: !blocked || httpStatus === 200, status: blocked ? httpStatus : 200, json: async () => body };
+  }));
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: /Madagascar/ }));
+  fireEvent.click(await screen.findByRole('button', { name: ID.label }));
+  await screen.findByRole('status');
+  expect(screen.getByRole('status').textContent).toMatch(message);
+  const section = screen.getByRole('region', { name: 'Evidence for the taxon' });
+  expect(section.textContent).not.toMatch(/Loading|graph node|Not served|undefined/);
+  expect(section.querySelector('a')).toBeNull();
+  expect((screen.getByLabelText('Genus') as HTMLInputElement).disabled).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: OTHER_ID.label }));
+  await screen.findByRole('heading', { name: OTHER_ID.label });
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(section.textContent).toContain('graph node 66747');
+  expect(section.textContent).not.toContain('graph node 66746');
+});
+
+it('gates the areas unavailable envelope before reading area rows or cursors', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => ({
+    ok: false, status: 503, json: async () => statusEnvelope('unavailable', 'READ_FAILED'),
+  })));
+  render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+  await screen.findByRole('status');
+  expect(screen.getByRole('status').textContent).toMatch(/gap.*not an absence/i);
+  expect(screen.queryByRole('button')).toBeNull();
+  expect(document.body.textContent).not.toMatch(/undefined areas|0 areas|Loading/);
+});

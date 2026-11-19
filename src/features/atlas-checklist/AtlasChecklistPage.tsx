@@ -76,9 +76,9 @@ export default function AtlasChecklistPage() {
   const [genus, setGenus] = useState('');
   const [marked, setMarked] = useState<'any' | 'marked' | 'unmarked'>('any');
   const [offset, setOffset] = useState(0);
-  const [area, setArea] = useState<AreaResponse | null>(null);
+  const [areaRead, setArea] = useState<AreaResponse | null>(null);
   const [taxonId, setTaxonId] = useState<number | null>(null);
-  const [taxon, setTaxon] = useState<TaxonResponse | null>(null);
+  const [taxonRead, setTaxon] = useState<TaxonResponse | null>(null);
   const [areasError, setAreasError] = useState<string | null>(null);
   const [areaError, setAreaError] = useState<string | null>(null);
   const [taxonError, setTaxonError] = useState<string | null>(null);
@@ -123,6 +123,10 @@ export default function AtlasChecklistPage() {
   }, [taxonId]);
 
   const gate = areas && areas.status !== 'available' ? areas : null;
+  // Off/unavailable responses contain only the envelope, not success rows,
+  // counts or cursors. Keep that status distinct from both loading and empty.
+  const area = areaRead?.status === 'available' ? areaRead : null;
+  const taxon = taxonRead?.status === 'available' ? taxonRead : null;
 
   return (
     <main className="mx-auto max-w-6xl p-6">
@@ -207,7 +211,8 @@ export default function AtlasChecklistPage() {
                     <option value="unmarked">without</option>
                   </select>
                 </label>
-                {!area && <p className="text-sm">{areaError ? 'Taxa of this area could not be read.' : 'Loading…'}</p>}
+                <Gate data={areaRead} />
+                {!areaRead && <p className="text-sm">{areaError ? 'Taxa of this area could not be read.' : 'Loading…'}</p>}
                 <ul>
                   {area?.taxa.map((t) => (
                     <li key={t.kg_edge_id}>
@@ -226,9 +231,10 @@ export default function AtlasChecklistPage() {
           </section>
           <section aria-label="Evidence for the taxon">
             {taxonId === null && <p className="text-sm">Select a taxon to see what the graph holds, with its sources and review state.</p>}
-            {taxonId !== null && !taxon && !taxonError && <p>Loading…</p>}
+            {taxonId !== null && !taxonRead && !taxonError && <p>Loading…</p>}
             {taxonError && <p>Taxon evidence could not be read.</p>}
-            {taxon && taxon.status !== 'available' && <p>{taxon.explanation}</p>}
+            <Gate data={taxonRead} />
+            {taxonRead && !['available', 'not_enabled', 'unavailable'].includes(taxonRead.status) && <p>{taxonRead.explanation}</p>}
             {taxon?.identity && (
               <>
                 <h2 className="text-lg">{taxon.identity.label}</h2>

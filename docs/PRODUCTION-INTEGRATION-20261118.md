@@ -371,3 +371,35 @@ This verifies one wake-up path, not every future execution or unattended promoti
 The task remains bounded to hourly runs through November 25 Pacific. Source #948
 remains actively owned until this repair's DONE receipt; separate unclaimed work
 is being independently checked without modifying foreign branches.
+
+
+## Exact backend unavailable/off envelope compatibility
+
+The request-state revision `d2906ac3e438884bf0c103ff4333fa8e49ac5280` passed its
+hosted unit, build, lint and browser checks. Independent backend-contract review
+then reproduced a valid area503 response crashing the page: BUSY/READ_FAILED
+unavailable envelopes omit taxa and next_offset, while the client deliberately
+accepts their JSON instead of throwing. This was an inherited #983 integration
+defect, not a reason to treat CI green as full acceptance.
+
+The page now retains raw area/taxon envelopes separately and reads success-only
+rows, counts, cursors, identity panels and handoffs only from available responses.
+Each stream renders the existing unavailable/off messages. Non-available reads
+are neither loading nor invented empty results; genuine available-empty data
+continues to have its own behavior. API transport and backend remain unchanged.
+
+Six additional cases failed before repair, with23 passing controls and3 uncaught
+area crashes. All29 mounted cases now pass, including actual-shaped BUSY,
+READ_FAILED and NOT_ENABLED envelopes, recovery to available-empty area data,
+taxon identity recovery and existing top-level area gating. The prior22 tests
+remain a byte-for-byte prefix. Typecheck, focused lint and diff checks pass.
+Exact-head independent review and fresh hosted checks remain required.
+
+The replacement Continue Orchid integration task delivered its scheduled message
+into this current working session. Workspace and GitHub access were verified;
+the activation independently selected the unclaimed #2392 contribution and
+produced a provider-free convergence candidate, backend #2456 at
+`39a3909f3409ef7ecbd836012cdf657488501b82`, with485 complete worker tests passing.
+That is observed useful work after a scheduled wake-up, not a promise about all
+future activations. The older paused task stays retired. Beta access and separate
+Devin review spending remain unverified, with no paid Devin activation performed.

@@ -1,5 +1,5 @@
 {
-  "phase": "request_state_followup_repaired_awaiting_exact_head_review",
+  "phase": "backend_status_contract_repaired_awaiting_exact_head_review",
   "frontend_base": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
   "source_refs": {
     "948": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
@@ -117,6 +117,23 @@
     "focused_lint": "PASS",
     "test_sha256": "34a2453d7237a22fd748e906421497aff10bf366feebfc16e4a04549f5b5f54e",
     "page_sha256": "8276624c6470bcb41fa942931304b41ae54804ec01d7c15f319decd95d0046a4",
+    "provider_calls": 0
+  },
+  "backend_status_followup": {
+    "source_head": "d2906ac3e438884bf0c103ff4333fa8e49ac5280",
+    "source_head_full_hosted_ci": "unit/build/lint/browser PASS",
+    "red": {
+      "failed": 6,
+      "passed": 23,
+      "uncaught_area_crashes": 3
+    },
+    "fixed_page_tests_passed": 29,
+    "original_22_tests_preserved": true,
+    "contract": "BUSY/READ_FAILED 503 and NOT_ENABLED 200 are envelopes without success rows/cursors",
+    "typecheck": "PASS",
+    "focused_lint": "PASS",
+    "test_sha256": "3fb9b00173cc7ad6e46997269f9cf4a14e899bd39e10a75a023e623f0864558f",
+    "page_sha256": "830e1dec61cae7c8951ce2d190975d4d88f930867e96511ef843bd8e378a6dea",
     "provider_calls": 0
   }
 }
