@@ -35,6 +35,28 @@ const DEMONSTRATION_QUESTION =
   "Which traits distinguish cool-growing Phalaenopsis from warm-growing Phalaenopsis?";
 const UNANSWERABLE_QUESTION = "What colour is the moon made of?";
 
+function minimalPdf(text: string) {
+  const stream = `BT /F1 12 Tf 72 720 Td (${text.replace(/[\\()]/g, "\\$&")}) Tj ET`;
+  const objects = [
+    "<< /Type /Catalog /Pages 2 0 R >>",
+    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+  ];
+  let pdf = "%PDF-1.4\n";
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets.push(pdf.length);
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  pdf += offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n \n`).join("");
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`;
+  return pdf;
+}
+
 test.beforeAll(async ({ browser }) => {
   page = await browser.newPage();
   await page.route("**/*", (route) => {
@@ -147,4 +169,36 @@ test("5. a question the corpus cannot answer produces no conclusion at all", asy
 
   // Governance still holds on a mission that concluded nothing.
   expect(body).toContain("Automatic publication: never");
+});
+
+/* ----------------------------------------------------------------- 6 ----- */
+
+test("6. selected PDF text can be added to a CALYX message while the paper stays visible", async () => {
+  await page.goto("/robots.txt", { waitUntil: "domcontentloaded" });
+  await page.evaluate(() => window.localStorage.clear());
+  await page.goto("/speak-with-calyx", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("#calyx-message")).toBeVisible({ timeout: 20_000 });
+
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "calyx-paper.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(minimalPdf("CALYX PDF selection proof")),
+  });
+
+  await expect(page.getByText("Extracted text · select an excerpt to ask CALYX")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(page.locator("iframe[title='calyx-paper.pdf']")).toBeVisible();
+  await page.locator("pre").filter({ hasText: "CALYX PDF selection proof" }).evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    element.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+  });
+  await page.getByRole("button", { name: "Ask CALYX about selection" }).click();
+  await expect(page.locator("#calyx-message")).toHaveValue(
+    '[From "calyx-paper.pdf"]\nCALYX PDF selection proof',
+  );
 });
