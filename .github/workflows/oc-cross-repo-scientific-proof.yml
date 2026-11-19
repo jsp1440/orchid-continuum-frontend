@@ -7,9 +7,14 @@ on:
       - "src/lib/crossRepoScientificConvergence.test.ts"
       - ".github/workflows/oc-cross-repo-scientific-proof.yml"
   workflow_dispatch:
+    inputs:
+      pull_request:
+        description: Frontend pull request at the checked-out head
+        type: string
+        required: true
 
 permissions:
-  statuses: read
+  pull-requests: read
 
 jobs:
   prove-canonical-evidence-to-calyx:
@@ -18,20 +23,31 @@ jobs:
     env:
       BACKEND_SHA: b4b6b4ff69eb782989f907f1ec6c2b5ddd1509e8
       FRONTEND_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      PR_NUMBER: ${{ github.event.pull_request.number || inputs.pull_request }}
     steps:
       - name: Require the owner-verified private Calyx proof for this head
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          [[ "$FRONTEND_SHA" =~ ^[0-9a-f]{40}$ ]]
-          context="calyx/private-synthetic-proof/$BACKEND_SHA"
-          gh api --paginate "repos/jsp1440/orchid-continuum-frontend/commits/$FRONTEND_SHA/statuses?per_page=100" |
-            jq -se --arg context "$context" '
-              [ .[][] | select(.context == $context) ] | first |
-              .state == "success" and .creator.id == 215432720 and
-              (.target_url | strings |
-                test("^https://github[.]com/jsp1440/orchid-calyx-backend/actions/runs/[1-9][0-9]*$"))
+          [[ "$FRONTEND_SHA" =~ ^[0-9a-f]{40}$ && "$PR_NUMBER" =~ ^[1-9][0-9]*$ ]]
+          repository="repos/jsp1440/orchid-continuum-frontend"
+          gh api "$repository/pulls/$PR_NUMBER" |
+            jq -e --arg head "$FRONTEND_SHA" '
+              .state == "open" and .base.ref == "oc-autonomous-integration" and .head.sha == $head
+            ' >/dev/null
+          gh api --paginate "$repository/issues/$PR_NUMBER/comments?per_page=100" |
+            jq -se --arg frontend "frontend=$FRONTEND_SHA" --arg backend "backend=$BACKEND_SHA" '
+              [ .[][] |
+                select(.user.id == 215432720 and .author_association == "OWNER") |
+                (.body | split("\n")) |
+                select(.[0] == "<!-- oc-calyx-private-proof/v1 -->" and
+                       .[1] == $frontend and .[2] == $backend)
+              ] | last |
+              length == 7 and
+              (.[3] | strings | test("^workflow=[0-9a-f]{40}$")) and
+              (.[4] | strings | test("^run=https://github[.]com/jsp1440/orchid-calyx-backend/actions/runs/[1-9][0-9]*$")) and
+              (.[5] | strings | test("^receipt=[0-9a-f]{64}$")) and .[6] == "state=success"
             ' >/dev/null || {
               echo "::error::Missing owner-verified private Calyx proof for this frontend and backend revision"
               exit 1
