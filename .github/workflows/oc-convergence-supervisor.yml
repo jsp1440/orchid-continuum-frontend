@@ -1,8 +1,7 @@
 name: OC Convergence Supervisor
 
 on:
-  schedule:
-    - cron: '*/5 * * * *'
+  # Scheduled launches paused pending recovery from runner nonexecution.
   push:
     branches: [oc-autonomous-integration]
   workflow_dispatch:
