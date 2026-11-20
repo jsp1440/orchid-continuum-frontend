@@ -1,0 +1,275 @@
+{
+  "chapter": {
+    "chapter_id": "BITB-CHAPTER-ORCHID-FLOWERING-001",
+    "schema_version": "1.0.0",
+    "title": "Why Orchids Flower\u2014or Do Not",
+    "status": "draft",
+    "summary": "An evidence-labeled introduction to orchid flowering that separates observation, plausible explanation, and unsupported causal certainty.",
+    "learning_objectives": [
+      "Distinguish an observation from an interpretation.",
+      "Form competing testable hypotheses for failure to bloom.",
+      "Evaluate light, temperature, plant condition, and identity evidence.",
+      "State uncertainty and identify the next evidence needed."
+    ],
+    "sections": [
+      {
+        "section_id": "OBSERVATION-FIRST",
+        "title": "Begin with what can actually be observed",
+        "epistemic_status": "instructional",
+        "body": "A plant that has not flowered presents an outcome, not a diagnosis. Leaf color, growth size, root condition, flowering history, and label confidence are observations or records that must be evaluated before a causal explanation is accepted."
+      },
+      {
+        "section_id": "COMPETING-HYPOTHESES",
+        "title": "More than one explanation may fit",
+        "epistemic_status": "instructional_uncited",
+        "body": "Insufficient light, missing seasonal cues, plant immaturity, root loss, and incorrect identification can produce similar outcomes. A scientific investigation compares alternatives rather than choosing a favorite cause."
+      },
+      {
+        "section_id": "IDENTITY-AS-CONFOUNDER",
+        "title": "Identification determines which requirements apply",
+        "epistemic_status": "provisional",
+        "body": "When a label is not independently verified, cultivation requirements tied to that name remain provisional. Missing flowers may also prevent confident identification, creating an important confounding variable."
+      }
+    ],
+    "laboratory_links": [
+      {
+        "laboratory_id": "OCU-LAB-FAILURE-TO-BLOOM-001",
+        "launch_label": "Investigate a failure-to-bloom case",
+        "required_sections": [
+          "OBSERVATION-FIRST",
+          "COMPETING-HYPOTHESES"
+        ]
+      }
+    ],
+    "publication_allowed": false
+  },
+  "laboratory": {
+    "laboratory_id": "OCU-LAB-FAILURE-TO-BLOOM-001",
+    "schema_version": "1.0.0",
+    "title": "Why Did This Orchid Fail to Bloom?",
+    "status": "draft",
+    "data_origin": "simulated_instructional_case",
+    "provenance": {
+      "source": "app/university/fixtures.py",
+      "live_evidence_services": [],
+      "scientific_citations": [],
+      "notice": "Simulated instructional case. Photographs, collection history, light and temperature measurements are scenario descriptions, not verified observations. No live Knowledge Graph, MCP, Atlas or literature evidence is connected to this case. The chapter is draft instructional material without scientific citations."
+    },
+    "summary": "A curated scientific-method case using plant images, collection history, light, temperature, fertilizer, flowering evidence, and a label audit.",
+    "inquiry_sequence": [
+      "observe",
+      "question",
+      "investigate",
+      "analyze",
+      "interpret",
+      "communicate",
+      "contribute"
+    ],
+    "evidence_catalog": [
+      {
+        "evidence_id": "E-PLANT-IMAGES",
+        "label": "Current plant and root photographs",
+        "epistemic_status": "simulated_observation",
+        "summary": "Leaves are dark green; newest growth is full-sized; visible roots are firm."
+      },
+      {
+        "evidence_id": "E-COLLECTION-RECORD",
+        "label": "Three-year collection history",
+        "epistemic_status": "simulated_report",
+        "summary": "Adult division, repotted 16 months ago, label confidence unverified."
+      },
+      {
+        "evidence_id": "E-LIGHT-SERIES",
+        "label": "Daily light integral summary",
+        "epistemic_status": "simulated_observation",
+        "summary": "Median DLI 3.4 mol m-2 day-1 across 42 measurement days."
+      },
+      {
+        "evidence_id": "E-TEMPERATURE-SERIES",
+        "label": "Annual temperature summary",
+        "epistemic_status": "simulated_observation",
+        "summary": "Winter night median 18.7 C; average day-night difference 5.1 C."
+      },
+      {
+        "evidence_id": "E-LABEL-AUDIT",
+        "label": "Identification and label audit",
+        "epistemic_status": "simulated_interpretation",
+        "summary": "The labeled species cannot be confirmed without flowers or provenance."
+      }
+    ],
+    "tutor_mode": "disabled_in_prototype",
+    "inquiry_activity": {
+      "activity_id": "OCU-LAB-FAILURE-TO-BLOOM-001-PRACTICE",
+      "version": "1.0.0",
+      "mode": "ephemeral_read_only",
+      "assessment_kind": "formative_practice",
+      "scientific_authority": false,
+      "steps": [
+        {
+          "stage": "observe",
+          "prompt": "Which statement records an observation within this simulated case?",
+          "evidence_ids": [
+            "E-PLANT-IMAGES"
+          ],
+          "choices": [
+            {
+              "id": "observation",
+              "label": "The scenario describes dark-green leaves.",
+              "appropriate": true,
+              "feedback": "Yes. Describe the recorded appearance before proposing a cause. These are simulated descriptions, not actual photographs."
+            },
+            {
+              "id": "diagnosis",
+              "label": "Dark-green leaves prove the cause of failed flowering.",
+              "appropriate": false,
+              "feedback": "An appearance alone does not establish a cause. Separate the description from your interpretation."
+            }
+          ]
+        },
+        {
+          "stage": "question",
+          "prompt": "Which question invites a testable comparison?",
+          "evidence_ids": [
+            "E-LIGHT-SERIES",
+            "E-TEMPERATURE-SERIES"
+          ],
+          "choices": [
+            {
+              "id": "compare",
+              "label": "What evidence could distinguish light limitation from a missing seasonal cue?",
+              "appropriate": true,
+              "feedback": "Compare competing explanations and name measurements that could distinguish them."
+            },
+            {
+              "id": "assume",
+              "label": "How can I prove my favorite explanation is correct?",
+              "appropriate": false,
+              "feedback": "Look for evidence against an explanation as well as evidence supporting it."
+            }
+          ]
+        },
+        {
+          "stage": "investigate",
+          "prompt": "Before applying species-specific requirements, what should you check?",
+          "evidence_ids": [
+            "E-COLLECTION-RECORD",
+            "E-LABEL-AUDIT"
+          ],
+          "choices": [
+            {
+              "id": "identity",
+              "label": "Check identity confidence and document unresolved alternatives.",
+              "appropriate": true,
+              "feedback": "The case label is unverified. Keep species-dependent interpretations provisional."
+            },
+            {
+              "id": "trust-label",
+              "label": "Treat the label as independently verified.",
+              "appropriate": false,
+              "feedback": "The scenario explicitly says label confidence is unverified. Missing evidence is not confirmation."
+            }
+          ]
+        },
+        {
+          "stage": "analyze",
+          "prompt": "What can the simulated light and temperature summaries establish?",
+          "evidence_ids": [
+            "E-LIGHT-SERIES",
+            "E-TEMPERATURE-SERIES"
+          ],
+          "choices": [
+            {
+              "id": "limits",
+              "label": "They describe the case; comparison data and identity checks are still needed.",
+              "appropriate": true,
+              "feedback": "Descriptive summaries alone do not isolate a cause. Ask about timing, comparison conditions and measurement limitations."
+            },
+            {
+              "id": "causation",
+              "label": "They prove one universal flowering threshold for all orchids.",
+              "appropriate": false,
+              "feedback": "A single simulated case cannot establish a universal threshold or a causal relationship."
+            }
+          ]
+        },
+        {
+          "stage": "interpret",
+          "prompt": "Which hypothesis preserves uncertainty?",
+          "evidence_ids": [
+            "E-LIGHT-SERIES",
+            "E-LABEL-AUDIT"
+          ],
+          "choices": [
+            {
+              "id": "provisional",
+              "label": "Light limitation is a candidate explanation to compare with alternatives.",
+              "appropriate": true,
+              "feedback": "A hypothesis is a proposal to test. State what new evidence would weaken it."
+            },
+            {
+              "id": "certain",
+              "label": "Light limitation is the verified diagnosis.",
+              "appropriate": false,
+              "feedback": "Neither verified identity nor a controlled comparison is available. Avoid turning a hypothesis into a diagnosis."
+            }
+          ]
+        },
+        {
+          "stage": "communicate",
+          "prompt": "What belongs in your learning report?",
+          "evidence_ids": [
+            "E-COLLECTION-RECORD",
+            "E-LABEL-AUDIT"
+          ],
+          "choices": [
+            {
+              "id": "transparent",
+              "label": "Case origin, observations, alternatives, uncertainty and the next test.",
+              "appropriate": true,
+              "feedback": "Separate the simulated record, your interpretation and the evidence still needed. Do not cite this exercise as research."
+            },
+            {
+              "id": "omit",
+              "label": "Only the conclusion; omit the simulated origin and uncertainty.",
+              "appropriate": false,
+              "feedback": "Origin and uncertainty are necessary to understand the limits of any conclusion."
+            }
+          ]
+        },
+        {
+          "stage": "contribute",
+          "prompt": "How should this practice result be used?",
+          "evidence_ids": [
+            "E-LABEL-AUDIT"
+          ],
+          "choices": [
+            {
+              "id": "review",
+              "label": "Review it as learning work; future real contributions require the governed review workflow.",
+              "appropriate": true,
+              "feedback": "Practice completion grants no scientific authority. This page neither submits nor publishes learner work."
+            },
+            {
+              "id": "publish",
+              "label": "Automatically publish it as a verified scientific observation.",
+              "appropriate": false,
+              "feedback": "Simulated case work must not become canonical science. Publication and Candidate Knowledge writes remain disabled."
+            }
+          ]
+        }
+      ]
+    },
+    "publication_allowed": false,
+    "automatic_candidate_knowledge": false,
+    "human_review_required": true
+  },
+  "_capture": {
+    "kind": "candidate simulated instructional content, not production evidence",
+    "backend_base_commit": "885b80a083f6e0cac999bc8283f5570251f34c21",
+    "method": "FastAPI TestClient mounting app.university.content_routes.router at /api/learning with OCU_UNIVERSITY_ENABLED=true",
+    "paths": [
+      "/api/learning/chapters/BITB-CHAPTER-ORCHID-FLOWERING-001",
+      "/api/learning/laboratories/OCU-LAB-FAILURE-TO-BLOOM-001"
+    ]
+  }
+}

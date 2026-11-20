@@ -7,14 +7,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  API_BASE_URL,
-  apiRequest,
   isJsonContentType,
   isUsableApiOrigin,
 } from './api';
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('isUsableApiOrigin', () => {
@@ -48,13 +47,17 @@ describe('isUsableApiOrigin', () => {
 
 describe('apiRequest when the origin is unconfigured', () => {
   it('reports unconfigured and never invents data', async () => {
-    // The suite runs with no VITE_API_BASE_URL set, so this is the real
-    // unconfigured path rather than a simulated one.
-    expect(API_BASE_URL).toBe('');
+    // Render injects a real API origin into the build. Exercise the absent
+    // configuration with an isolated module import, never production settings.
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.stubEnv('NEXT_PUBLIC_API_BASE_URL', '');
+    vi.resetModules();
+    const { API_BASE_URL: isolatedBase, apiRequest: isolatedRequest } = await import('./api');
+    expect(isolatedBase).toBe('');
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);
 
-    const result = await apiRequest('/api/species/featured');
+    const result = await isolatedRequest('/api/species/featured');
 
     expect(result.unconfigured).toBe(true);
     expect(result.data).toBeNull();
@@ -62,6 +65,18 @@ describe('apiRequest when the origin is unconfigured', () => {
     // Fails closed: it does not even attempt a request that could resolve
     // against the app's own origin.
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reads the deployment origin from the live environment, not a snapshot', async () => {
+    // Regression guard for the Render build: if api.ts reads a frozen copy of
+    // the environment, vi.stubEnv cannot override what Render injected and
+    // the unconfigured-path test above fails only on Render. A distinct
+    // stubbed origin must be the one the freshly imported module sees.
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api-origin-probe.invalid');
+    vi.resetModules();
+    const { API_BASE_URL: isolatedBase, API_CONFIGURED } = await import('./api');
+    expect(isolatedBase).toBe('https://api-origin-probe.invalid');
+    expect(API_CONFIGURED).toBe(true);
   });
 });
 

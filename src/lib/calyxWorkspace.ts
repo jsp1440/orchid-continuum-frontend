@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from "@/lib/backendConfig";
+import type { CalyxScientificEvidenceContext } from "@/lib/calyxScientificEvidence";
 import { getHomepageDocument, getPlatformCapabilities, type HomepageDocument } from "@/lib/parallelPlatform";
 
 export type CalyxWorkspaceSnapshot = { capabilities: Record<string, unknown> | null; homepage: HomepageDocument | null; orchestrator: Record<string, unknown> | null; orchestratorState: "available" | "authentication_required" | "unavailable"; errors: string[] };
@@ -110,6 +111,10 @@ export type CalyxServerMessage = {
   created_at: string;
   metadata?: Record<string, unknown> & {
     citations?: CalyxCitation[];
+    /** What a saved conversation keeps of the turn's scientific evidence block. */
+    scientific_evidence_status?: string | null;
+    scientific_evidence_mission_id?: string | null;
+    scientific_evidence_packet_id?: string | null;
     synthesis_structure?: CalyxSynthesisStructure | null;
   };
 };
@@ -147,7 +152,14 @@ export type CalyxTurnResponse = {
   calyx_message: CalyxServerMessage;
   answer: string;
   provider: { name: string; model: string; request_hash: string; provider_response_id?: string | null; fallback_error?: string | null; configuration?: Record<string, unknown> };
-  research: { casual: boolean; mission: BrainMission | null; mission_error: string | null; retrieval: Record<string, unknown>; continuum?: Record<string, unknown>; climate?: Record<string, unknown>; citations?: CalyxCitation[] };
+  research: { casual: boolean; mission: BrainMission | null; mission_error: string | null; retrieval: Record<string, unknown>; continuum?: Record<string, unknown>; climate?: Record<string, unknown>; citations?: CalyxCitation[];
+    /**
+     * Graph and source records for this turn (backend schema
+     * `oc.calyx-scientific-evidence-context.v1`). Absent on backends that predate
+     * it. Read it through `readScientificEvidence`, never field by field.
+     */
+    scientific_evidence?: CalyxScientificEvidenceContext | null;
+  };
   synthesis_structure?: CalyxSynthesisStructure | null;
   workspace_outputs?: CalyxWorkspaceOutput[];
   deliverables?: Record<string, unknown>;

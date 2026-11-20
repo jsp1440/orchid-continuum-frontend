@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef } from 'react';
 import type { CircleMarker, LayerGroup, Map as LeafletMap } from 'leaflet';
 import { Globe2, Loader2, Layers as LayersIcon } from 'lucide-react';
 import { useLeaflet } from '@/hooks/useLeaflet';
+import { BASEMAP_TILE_OPTIONS, BASEMAP_TILE_URL } from '@/lib/basemap';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import { resolveAtlasLocation } from '@/lib/atlasLocalitySafety';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
@@ -133,15 +134,7 @@ const LiveAtlasMap: React.FC<Props> = ({
       maxBounds: [[-85, -240], [85, 240]],
     });
 
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      },
-    ).addTo(map);
+    L.tileLayer(BASEMAP_TILE_URL, BASEMAP_TILE_OPTIONS).addTo(map);
 
     mapRef.current = map;
 

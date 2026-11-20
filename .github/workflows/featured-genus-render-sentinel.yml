@@ -2,8 +2,7 @@ name: Featured Genus Render Sentinel
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '23 14 * * *'
+  # Scheduled launches paused pending recovery from runner nonexecution.
 
 permissions:
   contents: read

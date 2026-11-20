@@ -1,4 +1,4 @@
-import { IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import { fetchGenusImagesWithSource } from '@/lib/genusData';
 import type { GenusImage, ImageSource } from '@/lib/genusData';
 
@@ -138,19 +138,27 @@ export async function fetchPublicGenusImages(
   const clean = genus.trim();
   if (!clean) return { images: [], source: 'pending', diagnostic: 'empty genus' };
 
-  const url = `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(clean)}?limit=${limit}`;
+  // The public API serves the identical /images/genus contract with working
+  // CORS; the harvester omits Access-Control-Allow-Origin so browsers cannot
+  // read it — it stays as a fallback attempt after the public API.
+  const urls = [
+    `${BACKEND_BASE_URL}/images/genus/${encodeURIComponent(clean)}?limit=${limit}`,
+    `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(clean)}?limit=${limit}`,
+  ];
 
-  try {
-    const response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
-    if (response.ok) {
-      const payload = await response.json();
-      const images = extractImages(payload).slice(0, limit);
-      if (images.length > 0) {
-        return { images, source: 'live' };
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
+      if (response.ok) {
+        const payload = await response.json();
+        const images = extractImages(payload).slice(0, limit);
+        if (images.length > 0) {
+          return { images, source: 'live' };
+        }
       }
+    } catch (error) {
+      if (signal?.aborted) return { images: [], source: 'pending', diagnostic: 'request aborted' };
     }
-  } catch (error) {
-    if (signal?.aborted) return { images: [], source: 'pending', diagnostic: 'request aborted' };
   }
 
   const fallback = await fetchGenusImagesWithSource(clean, signal, limit);

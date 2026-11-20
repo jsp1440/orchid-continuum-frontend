@@ -1,4 +1,6 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
+import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { binomialOf } from '@/lib/fungalPartner';
 import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
@@ -29,19 +31,61 @@ function isBinomial(scientificName: string): boolean {
   return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
 }
 
-const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
+const HeroOrchid: React.FC<Props> = (props) => {
+  const { genus } = useDailyGenus();
+  return <HeroPhotographs key={genus} {...props} />;
+};
+
+const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = continuum?.media ?? null;
 
   // A URL alone is not sufficient evidence for public publication. All mounted
   // homepage media surfaces share this same source+license boundary.
-  const eligible = publicGenusMediaItems(media?.items ?? []);
-  const named = eligible.find((item) => isBinomial(item.scientific_name));
-  const chosen = named ?? eligible[0] ?? null;
+  const eligible = useMemo(() => publicGenusMediaItems(media?.items ?? [])
+    .filter((item) => isBrowserEmbeddableImageUrl(item.image_url)), [media]);
+  const [failed, setFailed] = useState<Set<string>>(() => new Set());
+  const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [paused, setPaused] = useState(false);
+  const imageRef = useRef<HTMLImageElement>(null);
+  const reducedMotion = usePrefersReducedMotion();
+  const usable = eligible.filter((item) => !failed.has(item.image_url));
+  const chosen = usable.find((item) => item.image_url === selectedUrl)
+    ?? usable.find((item) => isBinomial(item.scientific_name)) ?? usable[0] ?? null;
+  const currentIndex = chosen ? usable.indexOf(chosen) : 0;
+  const advance = (offset: number) => {
+    if (usable.length > 1) setSelectedUrl(usable[(currentIndex + offset + usable.length) % usable.length].image_url);
+  };
 
   useEffect(() => {
-    onSpeciesResolved?.(named ? named.scientific_name : null);
-  }, [named, onSpeciesResolved]);
+    onSpeciesResolved?.(chosen && loadedUrl === chosen.image_url && isBinomial(chosen.scientific_name)
+      ? chosen.scientific_name : null);
+  }, [chosen, loadedUrl, onSpeciesResolved]);
+
+  useEffect(() => {
+    if (!chosen) return;
+    const url = chosen.image_url;
+    if (imageRef.current?.complete && imageRef.current.naturalWidth > 0) {
+      setLoadedUrl(url);
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      setFailed((old) => new Set(old).add(url));
+    }, 9_000);
+    if (loadedUrl === url) window.clearTimeout(timeout);
+    return () => window.clearTimeout(timeout);
+  }, [chosen, loadedUrl]);
+
+  useEffect(() => {
+    if (paused || reducedMotion || !chosen || loadedUrl !== chosen.image_url || usable.length < 2) return;
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        setSelectedUrl(usable[(currentIndex + 1) % usable.length].image_url);
+      }
+    }, 45_000);
+    return () => window.clearInterval(timer);
+  }, [paused, reducedMotion, chosen, loadedUrl, currentIndex, usable]);
 
   const photo: HeroPhotograph | null = chosen
     ? {
@@ -66,9 +110,13 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
       className="relative isolate overflow-hidden bg-[#0e1611]"
       aria-label={`Featured orchid: ${binomial}`}
     >
-      <div className="relative h-[62vh] min-h-[380px] md:h-[64vh] lg:h-[66vh]">
+      <div className={photo ? "relative h-[62vh] min-h-[380px] md:h-[64vh] lg:h-[66vh]" : "relative min-h-[360px]"}>
         {photo ? (
           <img
+            key={photo.imageUrl}
+            ref={imageRef}
+            onLoad={() => setLoadedUrl(photo.imageUrl)}
+            onError={() => setFailed((old) => new Set(old).add(photo.imageUrl))}
             src={photo.imageUrl}
             alt={`${binomial} — photograph supplied by ${photo.sourceName}`}
             className="h-full w-full object-cover"
@@ -76,12 +124,12 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
             decoding="async"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center px-6 text-center">
-            <p className="max-w-md text-[15px] leading-7 text-[#9aa596]">
+          <div className="flex min-h-[360px] w-full items-start justify-end px-6 pt-6 text-right">
+            <p className="max-w-xs text-[13px] leading-6 text-[#9aa596]">
               {state === 'loading'
                 ? 'Finding today’s orchid…'
                 : state === 'no-media'
-                  ? `No approved, fully attributed photograph is available for ${genus} yet.`
+                  ? eligible.length ? 'The approved photographs could not be loaded. Please try again later.' : `No approved, fully attributed photograph is available for ${genus} yet.`
                   : 'The canonical featured-taxon record could not be reached just now.'}
             </p>
           </div>
@@ -97,6 +145,7 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
 
         <div className="absolute inset-x-0 bottom-0 px-6 pb-7 md:px-10 md:pb-9">
           <div className="mx-auto max-w-[1300px]">
+            <p className="mb-3 text-xs uppercase tracking-[0.18em] text-[#d4b34a]">Featured genus · {genus}</p>
             <h1
               className="max-w-[16ch] italic leading-[1.04] tracking-[-0.015em] text-[#f6f3ec]"
               style={{
@@ -124,6 +173,14 @@ const HeroOrchid: React.FC<Props> = ({ onSpeciesResolved }) => {
               Follow this orchid ↓
             </a>
 
+            {usable.length > 1 && (
+              <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-[#f6f3ec]" aria-label="Featured orchid photographs">
+                <button type="button" className="min-h-11 rounded-full border border-white/30 px-4" onClick={() => { setPaused(true); advance(-1); }} aria-label="Previous orchid photograph">←</button>
+                <span>{currentIndex + 1} / {usable.length}</span>
+                <button type="button" className="min-h-11 rounded-full border border-white/30 px-4" onClick={() => { setPaused(true); advance(1); }} aria-label="Next orchid photograph">→</button>
+                <button type="button" className="min-h-11 rounded-full border border-white/30 px-4" onClick={() => setPaused(!paused)}>{paused ? 'Resume photographs' : reducedMotion ? 'Manual photographs' : 'Pause photographs'}</button>
+              </div>
+            )}
             {photo && (
               <p className="mt-5 font-mono text-[10px] leading-5 tracking-[0.02em] text-[#9aa596]">
                 Source: {photo.sourceName}
