@@ -11,6 +11,7 @@ import {
 } from "@/lib/ecologicalNeighborhood";
 import EcologicalNeighborhood from "@/components/orchid/EcologicalNeighborhood";
 import InteractionDiscoveryPanel from "@/components/interactions/InteractionDiscoveryPanel";
+import ScientificNetworkExplorer from "@/components/orchid/ScientificNetworkExplorer";
 
 function valueText(value: unknown, fallback = "Not available") {
   if (value === null || value === undefined || value === "") return fallback;
@@ -182,6 +183,8 @@ export default function RelationshipExplorer() {
           </div>
         </section>
 
+        <ScientificNetworkExplorer initialQuery={initialSpecies} />
+
         {loading ? (
           <Card title="Loading relationship profile">
             <p className="text-slate-600">Assembling Continuum relationship payload…</p>
@@ -295,19 +298,6 @@ export default function RelationshipExplorer() {
                 )}
               </Card>
 
-              <Card title="Relationship network" eyebrow="Preview">
-                <div className="rounded-3xl border border-emerald-100 bg-emerald-50 p-5 text-center">
-                  <div className="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-emerald-700 p-4 text-sm font-semibold text-white shadow-md">
-                    {payload.scientific_name}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 text-xs font-semibold text-emerald-900">
-                    <div className="rounded-full bg-white px-3 py-2">Atlas</div>
-                    <div className="rounded-full bg-white px-3 py-2">Images</div>
-                    <div className="rounded-full bg-white px-3 py-2">Mycorrhiza</div>
-                    <div className="rounded-full bg-white px-3 py-2">Neighborhood</div>
-                  </div>
-                </div>
-              </Card>
             </section>
 
             <InteractionDiscoveryPanel species={initialSpecies} />
