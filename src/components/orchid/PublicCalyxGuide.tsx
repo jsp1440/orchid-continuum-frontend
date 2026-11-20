@@ -59,7 +59,7 @@ const PublicCalyxGuide: React.FC = () => {
               Ask about the evidence already on screen.
             </h2>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[#d8cfbd]/84 md:text-[16px]">
-              Calyx is being grounded in the same Continuum context as the page: <span className="italic">{genus}</span>, its linked relationships, and its explicit knowledge gaps. The guide should explain evidence, not manufacture a complete story when the graph is incomplete.
+              Calyx is the Orchid Continuum’s scientific guide. Start with a question about <span className="italic">{genus}</span> to explore documented relationships and what researchers still need to find out.
             </p>
           </div>
 

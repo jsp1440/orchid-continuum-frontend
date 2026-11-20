@@ -33,15 +33,15 @@ interface Capability {
 const CAPABILITIES: readonly Capability[] = [
   {
     icon: Globe,
-    title: 'The Living Atlas',
-    body: 'Explore mapped orchid records by genus, species, and region.',
+    title: 'Orchid Atlas',
+    body: 'See where orchids have been recorded and compare species and regions on the map.',
     link: 'Open the Atlas',
     href: '/atlas-next',
   },
   {
     icon: ShieldCheck,
     title: 'Conservation',
-    body: 'Explore conservation work and participating organizations.',
+    body: 'Find conservation projects and the people working to protect orchids and their habitats.',
     link: 'Explore Conservation',
     href: '/conservation',
   },
@@ -55,7 +55,7 @@ const CAPABILITIES: readonly Capability[] = [
   {
     icon: FileText,
     title: 'Research Center',
-    body: 'Sign in to explore research projects, traits, and supporting evidence.',
+    body: 'Sign in to follow up on observations, compare traits, and investigate questions with supporting evidence.',
     link: 'Open Research',
     href: '/research',
   },
@@ -76,21 +76,21 @@ const CAPABILITIES: readonly Capability[] = [
   {
     icon: Microscope,
     title: 'Intelligence Graph',
-    body: 'Explore a graph of the orchid collection assembled from data available in your browser.',
+    body: 'See links among orchid records in the collection data available to your browser.',
     link: 'See the Connections',
     href: '/intelligence-graph',
   },
   {
     icon: GraduationCap,
     title: 'Orchid University',
-    body: 'Explore orchid studies, lessons, and laboratory activities.',
+    body: 'Learn orchid biology through guided lessons and laboratory activities.',
     link: 'Start Learning',
     href: '/university',
   },
   {
     icon: MessageCircle,
     title: 'Calyx',
-    body: 'Ask an orchid question and examine the supporting evidence.',
+    body: 'Ask our scientific guide an orchid question and examine the evidence behind its answer.',
     link: 'Speak with Calyx',
     href: '/speak-with-calyx',
   },
@@ -147,18 +147,8 @@ const CapabilityGrid: React.FC = () => {
     >
       <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-14 lg:py-20">
         <div className="max-w-3xl">
-          <div className="flex items-center gap-3">
-            <span className="inline-block w-8 h-px" style={{ background: 'rgba(212,179,74,0.6)' }} />
-            <span
-              className="font-mono uppercase"
-              style={{ fontSize: 13, letterSpacing: '0.34em', color: '#d4b34a', fontWeight: 600 }}
-            >
-              What Becomes Possible
-            </span>
-          </div>
           <h2
             id="homepage-capabilities-heading"
-            className="mt-6"
             style={{
               fontFamily: '"Playfair Display",Georgia,serif',
               fontSize: 'clamp(2rem, 3.6vw, 2.75rem)',

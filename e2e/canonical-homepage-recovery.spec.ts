@@ -42,6 +42,23 @@ test('restored homepage shows the licensed hero and nine working destinations', 
   });
 
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  const expedition = page.getByRole('link', { name: 'Begin Discovery Expedition' });
+  const introduction = page.getByRole('heading', { name: 'Discover the extraordinary world of orchids', level: 1 });
+  const viewport = page.viewportSize()!;
+  for (const size of [viewport, { width: 768, height: 1024 }, { width: 390, height: 844 }]) {
+    await page.setViewportSize(size);
+    await expect(introduction).toBeInViewport();
+    await expect(expedition).toBeInViewport();
+  }
+  await page.setViewportSize(viewport);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveCount(1);
+  await expect(expedition).toHaveAttribute('href', '/atlas-next?expedition=ecuador');
+  await expedition.focus();
+  await expect(expedition).toBeFocused();
+  await expedition.press('Enter');
+  await expect(page).toHaveURL(/\/atlas-next\?expedition=ecuador$/);
+  await page.goBack({ waitUntil: 'domcontentloaded' });
+
   const hero = page.getByRole('region', { name: /^Featured orchid:/ });
   const photograph = hero.getByRole('img');
   await expect(photograph).toBeVisible();
@@ -49,6 +66,8 @@ test('restored homepage shows the licensed hero and nine working destinations', 
   await expect(hero.getByRole('link', { name: 'Creative Commons terms' }))
     .toHaveAttribute('href', 'https://creativecommons.org/licenses/by/4.0/');
   await expect(hero).toContainText('Photographer: Fixture photographer');
+  await expect(page.getByText('Knowledge Graph', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: 'About Orchid Continuum', exact: true })).toHaveAttribute('href', '/about');
 
   const grid = page.getByRole('region', { name: 'Explore Orchid Continuum' });
   const links = grid.getByRole('link');

@@ -21,7 +21,7 @@ describe('HeroOrchid canonical media contract', () => {
   });
 
   it('does not advertise unsupported dependency claims in the hero promise', () => {
-    expect(source).toContain('followed through the evidence the Continuum actually holds');
+    expect(source).toContain('The Featured Genus record is temporarily unavailable.');
     expect(source).not.toContain('everything it depends on');
   });
 });

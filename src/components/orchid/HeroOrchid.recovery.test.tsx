@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HeroOrchid from './HeroOrchid';
 const { daily } = vi.hoisted(() => ({ daily: { current: {} as { genus: string; continuumStatus: string; continuum: { media: { items: { scientific_name: string; image_url: string; source_name: string; license: string; attribution: string | null; media_id: string }[] } } } } }));
@@ -11,7 +12,7 @@ const media = (name: string, url: string) => ({ scientific_name: name, image_url
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>;
 beforeEach(() => { vi.useFakeTimers(); daily.current = { genus: 'Alpha', continuumStatus: 'ready', continuum: { media: { items: [media('Alpha first', 'https://content.eol.org./blocked.jpg'), media('Alpha second', 'https://images.invalid/a.jpg'), media('Alpha third', 'https://images.invalid/b.jpg')] } } }; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers(); });
-const render = (props = {}) => act(() => root.render(<HeroOrchid {...props} />));
+const render = (props = {}) => act(() => root.render(<MemoryRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}><HeroOrchid {...props} /></MemoryRouter>));
 const image = () => host.querySelector('img')!;
 const load = () => act(() => image().dispatchEvent(new Event('load')));
 it('skips blocked first media and preserves that photograph’s identity and source', () => { render(); expect(image().src).toBe('https://images.invalid/a.jpg'); expect(host.textContent).toContain('Alpha second'); expect(host.textContent).toContain('Photographer: Alpha second'); });

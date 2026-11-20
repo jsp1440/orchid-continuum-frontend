@@ -78,12 +78,12 @@ const ContinuumWeb: React.FC = () => {
     <section id="continuum-web" className="relative overflow-hidden border-b border-white/[0.06] bg-[#16271a] text-[#f5f0e8]">
       <div className="mx-auto max-w-[1400px] px-6 py-16 lg:px-10 lg:py-20">
         <div className="max-w-4xl">
-          <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#c9a24a]">Continuum relationship web</div>
+          <div className="font-mono text-[10px] uppercase tracking-[0.3em] text-[#c9a24a]">Knowledge Graph</div>
           <h2 className="mt-4 font-serif text-4xl leading-tight text-[#faf7f2] md:text-5xl">
             Follow <span className="italic text-[#d4b34a]">{genus}</span> outward through documented connections.
           </h2>
           <p className="mt-4 max-w-3xl text-base leading-7 text-[#d7d0c2]">
-            This view no longer performs its own scientific fetch or substitutes generic relationship claims. It consumes the same canonical featured-taxon state as the hero, Genus of the Day, and Calyx context.
+            A knowledge graph connects orchids to the pollinators, fungi, habitats, and research records linked to them. Choose a connection to see what the evidence tells us and where records are still missing.
           </p>
         </div>
 

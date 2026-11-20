@@ -24,6 +24,7 @@ import { mapboxConfig } from './mapboxConfig';
 import { buildInvestigation, type StepId } from './investigation';
 import RegionalMap, { type RegionalView } from './RegionalMap';
 import GuidePanel from './GuidePanel';
+import { ECUADOR_DISCOVERY_URL } from './ecuadorDiscovery';
 
 /**
  * ATLAS-NEXT — the spatial reasoning shell.
@@ -386,6 +387,9 @@ const AtlasNextShell: React.FC = () => {
             className="inline-flex min-h-[40px] items-center gap-2 rounded-full border border-white/15 bg-black/45 px-3.5 text-[11px] uppercase tracking-[0.16em] text-white/75 backdrop-blur transition-colors hover:border-white/40 hover:text-white"
           >
             ← Continuum
+          </Link>
+          <Link to={ECUADOR_DISCOVERY_URL} className="ml-2 inline-flex min-h-[40px] items-center rounded-full border border-[#9addb1]/60 bg-black/60 px-3.5 text-xs font-medium text-[#e3fff0] hover:border-[#9addb1]">
+            Begin Discovery Expedition
           </Link>
           <h1
             className="mt-3 text-[26px] leading-[1.1] text-[#f0ede4] md:text-[34px]"

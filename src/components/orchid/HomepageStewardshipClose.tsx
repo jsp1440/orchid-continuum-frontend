@@ -22,20 +22,27 @@ const HomepageStewardshipClose: React.FC = () => {
               What we know about <span className="italic text-[#d4b34a]">{genus}</span> should lead to the next question — and better protection.
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-7 text-[#d8cfbd]/86">
-              The Continuum keeps evidence, uncertainty, and knowledge gaps visible so growers, students, researchers, and conservation partners can act without confusing an incomplete record with biological absence.
+              Keeping evidence and its limits visible helps growers, students, researchers, and conservation partners decide what to investigate and protect next.
             </p>
             {gapCount > 0 && (
               <p className="mt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-[#c9a24a]">
                 {gapCount} current featured-taxon evidence gap{gapCount === 1 ? '' : 's'} visible in this journey
               </p>
             )}
+            <Link
+              to="/about"
+              className="mt-4 inline-flex min-h-[44px] items-center gap-2 rounded-sm text-sm font-medium text-[#ebca74] underline decoration-[#ebca74]/55 underline-offset-4 hover:decoration-[#ebca74] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ebca74]"
+            >
+              About Orchid Continuum
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </Link>
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Link to={researchHref} className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
               <FlaskConical className="h-5 w-5 text-[#d4b34a]" />
               <p className="mt-3 font-serif text-xl text-[#fffaf0]">Research Station</p>
-              <p className="mt-2 text-sm leading-6 text-[#cfc8b8]/78">Carry this featured genus into the research workflow without promoting route context to evidence.</p>
+              <p className="mt-2 text-sm leading-6 text-[#cfc8b8]/78">Sign in to investigate a question about this genus using the available observations and traits.</p>
             </Link>
             <Link to="/university" className="rounded-2xl border border-white/10 bg-black/15 p-4 transition-colors hover:border-[#d4b34a]/45 hover:bg-[#d4b34a]/8">
               <GraduationCap className="h-5 w-5 text-[#d4b34a]" />

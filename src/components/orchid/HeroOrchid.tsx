@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowDown, ArrowRight, Compass } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { binomialOf } from '@/lib/fungalPartner';
@@ -118,72 +120,82 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
       : 'no-media';
 
   return (
-    <section
-      className="relative isolate overflow-hidden bg-[#0e1611]"
-      aria-label={`Featured orchid: ${binomial}`}
-    >
-      <div className={photo ? "relative h-[62vh] min-h-[380px] md:h-[64vh] lg:h-[66vh]" : "relative min-h-[360px]"}>
-        {photo ? (
-          <img
-            key={photo.imageUrl}
-            ref={imageRef}
-            onLoad={() => setLoadedUrl(photo.imageUrl)}
-            onError={() => setFailed((old) => new Set(old).add(photo.imageUrl))}
-            src={photo.imageUrl}
-            alt={`${binomial} — photograph supplied by ${photo.sourceName}`}
-            className="h-full w-full object-cover"
-            loading="eager"
-            decoding="async"
-          />
-        ) : (
-          <div className="flex min-h-[360px] w-full items-start justify-end px-6 pt-6 text-right">
-            <p className="max-w-xs text-[13px] leading-6 text-[#9aa596]">
-              {state === 'loading'
-                ? 'Finding today’s orchid…'
-                : state === 'no-media'
-                  ? eligible.length ? 'The approved photographs could not be loaded. Please try again later.' : `No approved, fully attributed photograph is available for ${genus} yet.`
-                  : 'The canonical featured-taxon record could not be reached just now.'}
-            </p>
+    <section className="bg-[#0e1c14] text-[#f6f3ec]" aria-labelledby="homepage-heading">
+      <div className="mx-auto grid max-w-[1440px] lg:grid-cols-[minmax(0,0.87fr)_minmax(0,1.13fr)]">
+        <div className="flex flex-col justify-center px-6 py-9 sm:px-10 sm:py-12 lg:py-14 xl:pl-16 xl:pr-12">
+          <p className="text-sm font-semibold text-[#e0bc62]">Orchid Continuum</p>
+          <h1 id="homepage-heading" className="mt-3 max-w-[14ch] font-display text-[clamp(2.55rem,5vw,5rem)] leading-[1.04] tracking-[-0.035em]">
+            Discover the extraordinary world of orchids
+          </h1>
+          <p className="mt-5 max-w-[43ch] text-base leading-7 text-[#ded8ca] sm:text-lg sm:leading-8">
+            We bring maps, observations, and research together so anyone can explore orchid biodiversity. Follow orchids into the habitats, pollinator partnerships, and fungal networks that sustain them and see what it takes to protect them.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Link
+              to="/atlas-next?expedition=ecuador"
+              className="inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full bg-[#ebca74] px-5 text-sm font-semibold text-[#192318] transition-colors hover:bg-[#f5dc9b] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#ebca74]"
+            >
+              <Compass aria-hidden="true" className="h-[18px] w-[18px] shrink-0" />
+              Begin Discovery Expedition
+            </Link>
+            <Link
+              to="/atlas-next"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-sm text-sm font-medium text-[#f6f3ec] underline decoration-[#ebca74]/60 underline-offset-4 hover:decoration-[#ebca74] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#ebca74]"
+            >
+              Explore the Atlas
+              <ArrowRight aria-hidden="true" className="h-4 w-4" />
+            </Link>
           </div>
-        )}
+        </div>
 
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(10,16,12,0.10) 0%, rgba(10,16,12,0.42) 55%, rgba(10,16,12,0.93) 100%)',
-          }}
-        />
-
-        <div className="absolute inset-x-0 bottom-0 px-6 pb-7 md:px-10 md:pb-9">
-          <div className="mx-auto max-w-[1300px]">
-            <p className="mb-3 text-xs uppercase tracking-[0.18em] text-[#d4b34a]">Featured genus · {genus}</p>
-            <h1
-              className="max-w-[16ch] italic leading-[1.04] tracking-[-0.015em] text-[#f6f3ec]"
-              style={{
-                fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
-                fontWeight: 500,
-                fontSize: 'clamp(2rem, 5.2vw, 3.6rem)',
-              }}
-            >
-              {binomial}
-              {authority && (
-                <span className="ml-2 align-baseline text-[0.36em] not-italic tracking-[0.06em] text-[#b9c0b2]">
-                  {authority}
-                </span>
-              )}
-            </h1>
-
-            <p className="mt-3 max-w-[46ch] text-[15px] leading-7 text-[#ddd8cc] md:text-[16px]">
-              One orchid, followed through the evidence the Continuum actually holds.
-            </p>
-
-            <a
-              href="#what-feeds-it"
-              className="mt-5 inline-flex min-h-[48px] items-center gap-2 rounded-full border border-[#e8e3d6]/25 px-5 text-[13px] tracking-[0.02em] text-[#f6f3ec] transition-colors hover:border-[#e8e3d6]/60 hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#d4b34a]"
-            >
-              Follow this orchid ↓
-            </a>
+        <section
+          className="flex min-w-0 flex-col overflow-hidden border-t border-[#f6f3ec]/15 bg-[#101a14] lg:border-l lg:border-t-0"
+          aria-label={`Featured orchid: ${binomial}`}
+        >
+          <div className="relative min-h-[240px] flex-1 bg-[#16221a] sm:min-h-[320px] lg:min-h-[390px]">
+            {photo ? (
+              <img
+                key={photo.imageUrl}
+                ref={imageRef}
+                onLoad={() => setLoadedUrl(photo.imageUrl)}
+                onError={() => setFailed((old) => new Set(old).add(photo.imageUrl))}
+                src={photo.imageUrl}
+                alt={`${binomial} — photograph supplied by ${photo.sourceName}`}
+                className="absolute inset-0 h-full w-full object-cover"
+                loading="eager"
+                decoding="async"
+              />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center bg-[radial-gradient(ellipse_at_center,#273c2a,#152218)] px-6 text-center">
+                <p className="max-w-xs text-sm leading-6 text-[#c1c9ba]">
+                  {state === 'loading'
+                    ? 'Finding today’s orchid…'
+                    : state === 'no-media'
+                      ? eligible.length ? 'The approved photographs could not be loaded. Please try again later.' : `No approved, fully attributed photograph is available for ${genus} yet.`
+                      : 'The Featured Genus record is temporarily unavailable.'}
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="border-t border-[#f6f3ec]/15 px-6 py-5 sm:px-8">
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#e0bc62]">Featured genus · {genus}</p>
+                <h2 className="mt-1 break-words font-display text-[clamp(1.75rem,3vw,2.6rem)] italic leading-tight text-[#f6f3ec]">
+                  {binomial}
+                  {authority && (
+                    <span className="ml-2 align-baseline text-[0.48em] not-italic text-[#c1c9ba]">{authority}</span>
+                  )}
+                </h2>
+              </div>
+              <a
+                href="#what-feeds-it"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-sm text-sm font-medium text-[#ebca74] underline decoration-[#ebca74]/55 underline-offset-4 hover:decoration-[#ebca74] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#ebca74]"
+              >
+                Follow this orchid
+                <ArrowDown aria-hidden="true" className="h-4 w-4" />
+              </a>
+            </div>
 
             {usable.length > 1 && (
               <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-[#f6f3ec]" aria-label="Featured orchid photographs">
@@ -194,7 +206,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
               </div>
             )}
             {photo && (
-              <p className="mt-5 font-mono text-[10px] leading-5 tracking-[0.02em] text-[#9aa596]">
+              <p className="mt-2 break-words text-xs leading-5 text-[#c1c9ba]">
                 Source: {photo.sourceName}
                 {' · License: '}
                 {licenseUrl ? (
@@ -207,7 +219,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
               </p>
             )}
           </div>
-        </div>
+        </section>
       </div>
     </section>
   );
