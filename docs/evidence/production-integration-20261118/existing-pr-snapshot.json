@@ -1,0 +1,303 @@
+{
+  "orchid-calyx-backend": {
+    "open_prs": 231,
+    "selected": [
+      {
+        "baseRefName": "main",
+        "headRefName": "claude/acceptance-create-201-20261118",
+        "headRefOid": "4927be936f6bb9401e28dce9f48559bb599c0d61",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2451,
+        "reviewDecision": "",
+        "title": "Release acceptance command: ask the question when opening the conversation answers 201 (DRAFT; tool only, no service code)",
+        "updatedAt": "2026-11-18T05:39:00Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "claude/world-plants-rights-basis-20261118",
+        "headRefOid": "7d4b01e5f719ff9bb03d5f5907acb16ae825c953",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2450,
+        "reviewDecision": "",
+        "title": "docs(release): World Plants rights basis recorded; reader-role check and connection string (docs only, DRAFT)",
+        "updatedAt": "2026-11-18T04:31:35Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "codex/coordinator-observation-health-20261116",
+        "headRefOid": "abc0c5cf52d203ae6cc2486a46b98b007100d992",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2448,
+        "reviewDecision": "",
+        "title": "fix: report unavailable GitHub observations as unhealthy",
+        "updatedAt": "2026-11-17T05:51:04Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "integration/taxonomy-chain-convergence-20261116",
+        "headRefOid": "a0b2ba08e377e5e4b01910ba113ef79404bbdc66",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2447,
+        "reviewDecision": "",
+        "title": "Taxonomy chain convergence: #2282, #2307, #2390, #2418 and #2430 on current main, parser version 4",
+        "updatedAt": "2026-11-17T18:00:39Z"
+      },
+      {
+        "baseRefName": "codex/pr-repair-continuation-20261115",
+        "headRefName": "codex/independent-repair-no-api-20261116",
+        "headRefOid": "18cee6a46d4248c4a921c1d69f969cbf793237d9",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2443,
+        "reviewDecision": "",
+        "title": "fix: enforce NO_API_MODE in the existing Codex PR repair worker",
+        "updatedAt": "2026-11-16T03:44:34Z"
+      },
+      {
+        "baseRefName": "coordinator/2370-2375-consolidated",
+        "headRefName": "codex/pr-repair-continuation-20261115",
+        "headRefOid": "103a865c78b28dfefbcefcb6b41a34f2d55d8935",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2435,
+        "reviewDecision": "",
+        "title": "feat: execute bounded Codex PR repairs in the existing Calyx factory",
+        "updatedAt": "2026-11-16T03:41:12Z"
+      },
+      {
+        "baseRefName": "claude/wp-checklist-knowledge-2-20261114",
+        "headRefName": "claude/wp-checklist-knowledge-3-20261114",
+        "headRefOid": "d21464ab4a53ea6d03204dda715a1ba4836bcf99",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2425,
+        "reviewDecision": "",
+        "title": "Checklist knowledge 3: the remark of a row, whole, and the formula of a nothotaxon (draft; stacked on #2424)",
+        "updatedAt": "2026-11-15T14:55:28Z"
+      },
+      {
+        "baseRefName": "claude/calyx-synthesis-main-sync-20261114",
+        "headRefName": "claude/wp-checklist-knowledge-20261114",
+        "headRefOid": "a6180e345b18972f901d497f82e8f6dbb9c9c06c",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 2420,
+        "reviewDecision": "",
+        "title": "Checklist knowledge: World Plants distribution, conservation-field notes, synonymy and place of publication \u2192 graph \u2192 MCP \u2192 Brain \u2192 Calyx (six topics beside pollination; names read through listed synonyms)",
+        "updatedAt": "2026-11-15T11:41:51Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "claude/integration-main-sync-20261114",
+        "headRefOid": "ca2d1e5f3385b3c5e2b2973961bcbe788dddfd08",
+        "isDraft": true,
+        "mergeable": "CONFLICTING",
+        "number": 2415,
+        "reviewDecision": "",
+        "title": "Integration on current main: cited relationships store \u2192 MCP \u2192 Brain \u2192 Calyx \u2192 HTTP; graph taxon identity builds (labels, rank, authorship, record key); Atlas contract 2.1.0; end-to-end trace [carries #2393 #2398 #2394 #2395 #2396 #2403 #2411]",
+        "updatedAt": "2026-11-14T13:11:00Z"
+      }
+    ]
+  },
+  "orchid-continuum-frontend": {
+    "open_prs": 75,
+    "selected": [
+      {
+        "baseRefName": "main",
+        "headRefName": "claude/calyx-owner-signin-on-page-claude-authored-20261118",
+        "headRefOid": "7b39c236a81d2dab0a0647cf4e0070d9a984ed65",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 988,
+        "reviewDecision": "REVIEW_REQUIRED",
+        "title": "Draft: type the owner access code on the Calyx page, then ask Calyx (no member account needed)",
+        "updatedAt": "2026-11-18T20:53:33Z"
+      },
+      {
+        "baseRefName": "codex/980-malformed-route-verified-20261115",
+        "headRefName": "chatgpt/939-search-dossier-fields-20261115",
+        "headRefOid": "d53cf39d1f5b3d399cd6f11e24378e9c6047d80b",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 985,
+        "reviewDecision": "",
+        "title": "fix(dossier): retain supplied search-hit imagery and taxon fields (#939)",
+        "updatedAt": "2026-11-15T16:57:55Z"
+      },
+      {
+        "baseRefName": "devin/visitor-journey-recovery",
+        "headRefName": "chatgpt/939-candidate-evidence-isolation-20261115",
+        "headRefOid": "b1bd89f64c3022866892b88002a5adebd2f80838",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 984,
+        "reviewDecision": "",
+        "title": "fix(visitor-journey): withhold route data after canonical candidate selection (#939)",
+        "updatedAt": "2026-11-15T15:00:20Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "claude/atlas-checklist-layer-20261115",
+        "headRefOid": "0ee226fb097af4baf485452bf0d10b396610d3c7",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 983,
+        "reviewDecision": "REVIEW_REQUIRED",
+        "title": "Atlas: checklist distribution layer panel (/atlas/checklist) over the backend's graph routes (draft)",
+        "updatedAt": "2026-11-15T14:02:33Z"
+      },
+      {
+        "baseRefName": "devin/visitor-journey-recovery",
+        "headRefName": "chatgpt/939-empty-image-fallback-20261115",
+        "headRefOid": "b0fc99ae57c004a0b6cd947d7e7f557c7017d7fd",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 982,
+        "reviewDecision": "",
+        "title": "fix(visitor-journey): retry genus image source after empty usable results (#939)",
+        "updatedAt": "2026-11-15T12:59:49Z"
+      },
+      {
+        "baseRefName": "chatgpt/939-public-record-route-identity-20261114",
+        "headRefName": "codex/980-malformed-route-verified-20261115",
+        "headRefOid": "4adc31d07e13d6da48ab11904404e6e50d3ca0fb",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 981,
+        "reviewDecision": "",
+        "title": "fix: preserve malformed-route rejection in #980 public record lookup",
+        "updatedAt": "2026-11-15T08:24:01Z"
+      },
+      {
+        "baseRefName": "devin/visitor-journey-recovery",
+        "headRefName": "chatgpt/939-public-record-route-identity-20261114",
+        "headRefOid": "023c24ecd39713ac57d83a8ca56eec674485f975",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 980,
+        "reviewDecision": "",
+        "title": "Draft: repair species dossier name-route lookup and preserve ambiguous-ID safety (stacked on #939)",
+        "updatedAt": "2026-11-15T08:24:02Z"
+      },
+      {
+        "baseRefName": "claude/wonderful-ritchie-gau631",
+        "headRefName": "claude/calyx-evidence-panel-structured-20261114",
+        "headRefOid": "39b549355101f4fa69a64c21ad25fe455501e66b",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 979,
+        "reviewDecision": "",
+        "title": "Draft: Calyx evidence panel shows the structured evidence (per-taxon records, scopes, held-back counts) \u2014 stacked on #978",
+        "updatedAt": "2026-11-17T18:10:08Z"
+      },
+      {
+        "baseRefName": "coordinator/948-atlas-single-filter-row",
+        "headRefName": "claude/wonderful-ritchie-gau631",
+        "headRefOid": "4dc06a463b48e697f52770727f54edbe597eea66",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 978,
+        "reviewDecision": "",
+        "title": "Draft: Calyx conversation shows the turn's graph evidence records (stacked on the #948 lineage)",
+        "updatedAt": "2026-11-11T15:55:33Z"
+      },
+      {
+        "baseRefName": "fix/render-frontend-build-contract-20261108",
+        "headRefName": "claude/sharp-pasteur-e6c4r1-fe974-build",
+        "headRefOid": "6a63655d6f55e9f2775eea1eb051581f340d81f1",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 975,
+        "reviewDecision": "",
+        "title": "Fix #974 remaining Render test failure: read live import.meta.env in api client",
+        "updatedAt": "2026-11-09T01:31:23Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "fix/render-frontend-build-contract-20261108",
+        "headRefOid": "c651cce75b1f777ec585eadc38f9441b6abc7073",
+        "isDraft": true,
+        "mergeable": "CONFLICTING",
+        "number": 974,
+        "reviewDecision": "REVIEW_REQUIRED",
+        "title": "Fix Render frontend build tests: isolated API/Mapbox env and paused scheduler",
+        "updatedAt": "2026-11-09T01:07:42Z"
+      },
+      {
+        "baseRefName": "codex/homepage-atlas-recovery-20261023",
+        "headRefName": "coordinator/948-atlas-single-filter-row",
+        "headRefOid": "7cbd9aa1cc7b3783478d7e5b2109c39479facce8",
+        "isDraft": false,
+        "mergeable": "MERGEABLE",
+        "number": 968,
+        "reviewDecision": "",
+        "title": "fix(atlas): render active-filter pills once (child of #948)",
+        "updatedAt": "2026-11-07T21:33:55Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "codex/homepage-atlas-recovery-20261023",
+        "headRefOid": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 948,
+        "reviewDecision": "REVIEW_REQUIRED",
+        "title": "fix(homepage): restore orchid photographs and a map-first Atlas journey",
+        "updatedAt": "2026-11-06T01:34:13Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "devin/visitor-journey-recovery",
+        "headRefOid": "400ac806c8e8b1ebb94eef5ecd70a4255d43486a",
+        "isDraft": false,
+        "mergeable": "MERGEABLE",
+        "number": 939,
+        "reviewDecision": "REVIEW_REQUIRED",
+        "title": "fix(visitor-journey): restore Atlas basemap, trusted genus images, and Species Dossier resolution",
+        "updatedAt": "2026-11-15T14:02:54Z"
+      }
+    ]
+  },
+  "Orchid-Continuum-Brain": {
+    "open_prs": 69,
+    "selected": [
+      {
+        "baseRefName": "codex/scientific-foundation-recovery-strategy-002",
+        "headRefName": "claude/scientific-foundation-checkpoint-20261113",
+        "headRefOid": "397d26f9d05817f772684d3ce31e404843d38ae4",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 274,
+        "reviewDecision": "",
+        "title": "docs: Scientific Foundation Recovery checkpoint 2026-11-13 (journey matrix status, CI fixture finding)",
+        "updatedAt": "2026-11-13T22:15:33Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "codex/scientific-foundation-recovery-strategy-002",
+        "headRefOid": "55f5a17eee16d552e25e9419a274090ae4fa2fc7",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 263,
+        "reviewDecision": "",
+        "title": "docs: preserve recovery strategy and Hassler scientific inventory",
+        "updatedAt": "2026-11-04T08:14:11Z"
+      },
+      {
+        "baseRefName": "main",
+        "headRefName": "claude/adoring-darwin-ipk0z0",
+        "headRefOid": "31c5e5b14db5e22ca1c40f61c24a2055dfb13460",
+        "isDraft": true,
+        "mergeable": "MERGEABLE",
+        "number": 240,
+        "reviewDecision": "",
+        "title": "ATLAS-EXPLORER-001: canonical Atlas contracts, validators and build record",
+        "updatedAt": "2026-10-11T16:09:49Z"
+      }
+    ]
+  }
+}

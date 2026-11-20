@@ -21,6 +21,9 @@ export default {
     },
     extend: {
       colors: {
+        // Match the existing CSS palette while enabling opacity variants.
+        charcoal: '#3a3630',
+        forest: '#1f3d2b',
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

@@ -1,8 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Database, Loader2 } from 'lucide-react';
 import AtlasMatrixContinuation from '@/components/atlas/AtlasMatrixContinuation';
 import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
-import { fetchAtlasOccurrences } from '@/lib/ocBackend';
 
 /**
  * AtlasCompletenessBadge — data-provenance strip shown above the map.
@@ -19,18 +18,8 @@ import { fetchAtlasOccurrences } from '@/lib/ocBackend';
  * scope; occurrence/locality/layer/evidence state never crosses the route.
  */
 
-const AtlasCompletenessBadge: React.FC = () => {
-  const [count, setCount] = useState<number | null>(null);
-  const [loading, setLoading] = useState(true);
+const AtlasCompletenessBadge: React.FC<{ count: number; total: number; loading: boolean }> = ({ count, total, loading }) => {
   const { filters } = useAtlasFilters();
-
-  useEffect(() => {
-    const ctrl = new AbortController();
-    fetchAtlasOccurrences(500, ctrl.signal)
-      .then((pts) => setCount(pts.length))
-      .finally(() => setLoading(false));
-    return () => ctrl.abort();
-  }, []);
 
   return (
     <div className="space-y-3">
@@ -45,9 +34,9 @@ const AtlasCompletenessBadge: React.FC = () => {
           ) : (
             <>
               <span className="text-[#c9a24a]">
-                {(count ?? 0).toLocaleString()}
+                {count.toLocaleString()}
               </span>{' '}
-              occurrence records ·{' '}
+              matching records of {total.toLocaleString()} loaded ·{' '}
               <span className="text-[#cfc8b8]/70">
                 Source: Orchid Continuum + GBIF
               </span>

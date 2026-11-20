@@ -32,8 +32,8 @@
  *   until the API is reachable.
  */
 
-import { apiRequest, type ApiResult } from './api';
-import { ATLAS_OCCURRENCES_URL } from './backendConfig';
+import { ApiError, apiRequest, type ApiResult } from './api';
+import { occurrencePayloadToAtlasLayer } from './ocBackend';
 
 // ---------------------------------------------------------------------------
 // Filter & layer types
@@ -89,15 +89,36 @@ export interface AtlasLayer {
 // intelligence layer coming online".
 // ---------------------------------------------------------------------------
 
+export const ATLAS_OCCURRENCES_PATH = '/api/atlas/occurrences';
+
+/**
+ * The public API returns occurrence rows, not an AtlasLayer: adapt them (with the
+ * locality projection) and report any other shape as an error, so a consumer
+ * never reads `features` from a payload that has none (#931).
+ */
+export function adaptOccurrenceResult(result: ApiResult<unknown>): ApiResult<AtlasLayer> {
+  if (!result.data) return { ...result, data: null };
+  const layer = occurrencePayloadToAtlasLayer(result.data);
+  if (layer) return { ...result, data: layer };
+  return {
+    data: null,
+    unconfigured: false,
+    error: new ApiError('The Atlas returned an unrecognised occurrence payload.', 502, ATLAS_OCCURRENCES_PATH),
+  };
+}
+
 export const atlasApi = {
   occurrences(
     filters: AtlasFilters = {},
     signal?: AbortSignal,
   ): Promise<ApiResult<AtlasLayer>> {
-    return apiRequest<AtlasLayer>(ATLAS_OCCURRENCES_URL, {
+    // apiRequest prefixes API_BASE_URL, so this takes the path like the other
+    // atlasApi calls; passing the absolute ATLAS_OCCURRENCES_URL produced
+    // "https://<base>https//<host>/..." (#931).
+    return apiRequest<unknown>(ATLAS_OCCURRENCES_PATH, {
       query: filters as Record<string, string | number | undefined>,
       signal,
-    });
+    }).then(adaptOccurrenceResult);
   },
 
   genusMap(

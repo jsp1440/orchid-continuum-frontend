@@ -1,10 +1,10 @@
-import { BACKEND_BASE_URL } from '@/lib/backendConfig'
+import { ATLAS_OCCURRENCES_URL } from '@/lib/backendConfig'
 import { safeArray, safeNumber, safeString, safeRecord, computeDataAge, dataModeFromAge } from '../shared/normalizers'
 import { loadSubsystemCache, saveSubsystemCache } from '../shared/cache'
 import type { ScientificSubsystemIntelligence, Provenance } from '../shared/types'
 
 const SUBSYSTEM_ID = 'atlas'
-const ATLAS_URL = `${BACKEND_BASE_URL}/atlas/occurrences`
+const ATLAS_URL = ATLAS_OCCURRENCES_URL
 
 export type AtlasIntelligence = ScientificSubsystemIntelligence & {
   occurrenceCount: number

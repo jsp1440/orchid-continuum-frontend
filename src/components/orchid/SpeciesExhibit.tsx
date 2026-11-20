@@ -11,6 +11,7 @@ import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';
 
 type SpeciesExhibitProps = {
   genus: string;
+  compact?: boolean;
   onCountChange?: (count: number) => void;
 };
 
@@ -49,19 +50,21 @@ function UnavailablePanel({ genus, status }: { genus: string; status: SpeciesExh
   );
 }
 
-const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange }) => {
+const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, compact = false, onCountChange }) => {
   const [result, setResult] = useState<SpeciesExhibitFetchResult>({
     status: 'unavailable',
     response: null,
     items: [],
   });
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [selectedTaxonId, setSelectedTaxonId] = useState<string | null>(null);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
+    setExpanded(false);
     setFailedImages(new Set());
     void fetchSpeciesExhibit(genus, controller.signal)
       .then((next) => {
@@ -113,8 +116,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
             {result.items.length} evidence-grounded species {result.items.length === 1 ? 'story' : 'stories'}
           </h3>
           <p className="mt-2 text-sm leading-6 text-[#5d684c]">
-            Every card is a distinct canonical species. Captions, facts, confidence, and caveats come from
-            the server-owned evidence packet; unavailable evidence stays unavailable.
+            Compare species in the featured genus. Open the research profile for sources and detailed evidence; unavailable evidence stays unavailable.
           </p>
         </div>
         <Link
@@ -125,7 +127,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
         </Link>
       </div>
 
-      <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={compact ? "mt-5 grid grid-cols-3 gap-2" : "mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3"}>
         {result.items.map((item) => {
           const selectedCard = item.taxon_id === selected.taxon_id;
           const media = speciesExhibitMediaCandidates(item).find(
@@ -135,7 +137,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
             <button
               key={item.taxon_id}
               type="button"
-              onClick={() => setSelectedTaxonId(item.taxon_id)}
+              onClick={() => { setSelectedTaxonId(item.taxon_id); setExpanded(true); }}
               aria-pressed={selectedCard}
               className={`overflow-hidden rounded-lg border bg-[#fffaf0] text-left transition focus:outline-none focus:ring-2 focus:ring-[#8a6f2d] ${
                 selectedCard ? 'border-[#8a6f2d] shadow-md' : 'border-[#dfd1ad] hover:border-[#b89b52]'
@@ -146,7 +148,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
                   <img
                     src={media.url}
                     alt={`Representative source image for ${item.display_name}`}
-                    className="h-44 w-full object-cover"
+                    className={compact ? "h-24 w-full object-cover sm:h-32" : "h-44 w-full object-cover"}
                     loading="lazy"
                     onError={() => {
                       setFailedImages((current) => {
@@ -161,36 +163,37 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
                   </div>
                 </>
               ) : (
-                <div className="flex h-44 items-center justify-center gap-2 bg-[#efe7d2] px-4 text-center text-xs text-[#6c715e]">
+                <div className={`${compact ? "h-24 sm:h-32" : "h-44"} flex items-center justify-center gap-2 bg-[#efe7d2] px-4 text-center text-xs text-[#6c715e]`}>
                   <ImageOff className="h-4 w-4" />
                   <span>Representative image unavailable</span>
                 </div>
               )}
-              <div className="p-4">
+              <div className={compact ? "p-2 sm:p-3" : "p-4"}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h4 className="font-serif text-xl italic leading-tight text-[#24321f]">
+                    <h4 className={`${compact ? "text-sm sm:text-lg" : "text-xl"} font-serif italic leading-tight text-[#24321f]`}>
                       {item.display_name}
                     </h4>
-                    {item.authorship && (
+                    {!compact && item.authorship && (
                       <p className="mt-1 text-xs not-italic leading-5 text-[#747866]">{item.authorship}</p>
                     )}
                   </div>
-                  <EvidenceBadge state={item.evidence_state} />
+                  {!compact && <EvidenceBadge state={item.evidence_state} />}
                 </div>
-                <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#3f4936]">
+                {!compact && <p className="mt-3 line-clamp-3 text-sm leading-6 text-[#3f4936]">
                   {item.caption ?? 'Species-specific narrative unavailable from connected evidence.'}
-                </p>
-                <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a8062]">
+                </p>}
+                {!compact && <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.14em] text-[#8a8062]">
                   {confidenceLabel(item)}
-                </p>
+                </p>}
               </div>
             </button>
           );
         })}
       </div>
 
-      <article className="mt-5 rounded-lg border border-[#cdbd95] bg-[#fffaf0] p-5">
+      {(!compact || expanded) && <article className="mt-5 rounded-lg border border-[#cdbd95] bg-[#fffaf0] p-5">
+        {compact && <button type="button" onClick={() => setExpanded(false)} className="mb-4 min-h-11 text-sm underline">Close species details</button>}
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="max-w-3xl">
             <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[#8a6f2d]">Selected species</p>
@@ -264,7 +267,7 @@ const SpeciesExhibit: React.FC<SpeciesExhibitProps> = ({ genus, onCountChange })
             </div>
           </div>
         </details>
-      </article>
+      </article>}
     </section>
   );
 };

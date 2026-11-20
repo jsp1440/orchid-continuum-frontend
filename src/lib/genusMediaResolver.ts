@@ -1,4 +1,8 @@
+import { fetchSpeciesExhibit } from '@/lib/speciesExhibit';
+import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
+import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
 import { normalizedMediaKey } from '@/lib/genusProfileDataQuality';
 
 export type GenusMediaItem = {
@@ -48,20 +52,49 @@ const empty = (genus: string, status: GenusMediaResponse['status']): GenusMediaR
  */
 export function publicGenusMediaItems(items: readonly GenusMediaItem[]): GenusMediaItem[] {
   return items.filter(
-    (item) => Boolean(item.source_name?.trim()) && Boolean(item.license?.trim()),
+    (item) => Boolean(item.source_name?.trim()) && Boolean(item.license?.trim()) && isBrowserEmbeddableImageUrl(item.image_url),
   );
 }
 
-/** The only Featured Genus media request path. No external fallback is allowed. */
+/**
+ * Reuse licensed photographs already attached to the canonical species exhibit
+ * when the genus media batch contains only unusable embeds. Never query a
+ * third-party provider, infer a license, or use a different genus.
+ */
+async function exhibitPhotographs(genus: string, signal?: AbortSignal): Promise<GenusMediaItem[]> {
+  const exhibit = await fetchSpeciesExhibit(genus, signal);
+  if (exhibit.status !== 'ok') return [];
+  return exhibit.items.flatMap((card) => speciesExhibitMediaCandidates(card)
+    .filter((photo) => {
+      if (!isBrowserEmbeddableImageUrl(photo.url)) return false;
+      const url = new URL(photo.url);
+      // This adapter is for source photograph records, never herbarium sheets.
+      return ['inaturalist-open-data.s3.amazonaws.com', 'static.inaturalist.org'].includes(url.hostname)
+        && /^\/photos\/\d+\//.test(url.pathname);
+    }).slice(0, 1).map((photo) => ({
+      media_id: String(photo.id ?? photo.url), taxon_id: card.taxon_id,
+      scientific_name: card.full_scientific_name, genus: card.genus,
+      image_url: photo.url, thumbnail_url: photo.url,
+      source_name: photo.source as string, source_record_url: null,
+      license: photo.license, attribution: photo.rights_holder || photo.observer_name,
+      media_kind: 'photograph' as const, quality_score: null,
+    })));
+}
+
+/** Featured Genus media stays within the two canonical Calyx read contracts. */
 export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal): Promise<GenusMediaResponse> {
   const requested = genus.trim();
   if (!requested) return empty(genus, 'invalid_genus');
 
   try {
-    const response = await fetch(
+    // Bounded, with one retry while the backend wakes; previously this request
+    // had no timeout and could hold the whole featured-taxon read model (#231).
+    const response = await fetchWithColdStartRetry(
       `${CALYX_BACKEND_BASE_URL}/api/media/genus/${encodeURIComponent(requested)}?limit=12`,
-      { signal },
+      {},
+      signal,
     );
+    if (!response) return empty(requested, 'service_error');
     if (response.status === 400 || response.status === 404) return empty(requested, 'invalid_genus');
     if (!response.ok) return empty(requested, 'service_error');
 
@@ -73,7 +106,7 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
     // photograph never appears twice on the page — including when a source
     // returns it under differing query strings or trailing slashes.
     const seenUrls = new Set<string>();
-    return {
+    const result: GenusMediaResponse = {
       status: payload.status,
       requested_genus: typeof payload.requested_genus === 'string' ? payload.requested_genus : requested,
       accepted_genus: typeof payload.accepted_genus === 'string' ? payload.accepted_genus : null,
@@ -97,6 +130,14 @@ export async function fetchCalyxGenusMedia(genus: string, signal?: AbortSignal):
         ? payload.summary
         : { eligible_count: 0, returned_count: 0, exclusion_counts: {} },
     };
+    if (result.status === 'ok' && publicGenusMediaItems(result.items).length === 0) {
+      const photographs = await exhibitPhotographs(requested, signal);
+      if (photographs.length) return {
+        ...result, requested_genus: requested, accepted_genus: requested, items: photographs,
+        summary: { eligible_count: photographs.length, returned_count: photographs.length, exclusion_counts: {} },
+      };
+    }
+    return result;
   } catch (error) {
     if ((error as Error)?.name === 'AbortError') throw error;
     return empty(requested, 'service_error');

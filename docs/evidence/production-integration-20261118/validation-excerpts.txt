@@ -1,0 +1,73 @@
+# Verification excerpts; command selections are documented in the report and PR. Full local outputs remain in the executor workspace.
+
+Focused Render-like environment
+ ✓ src/features/atlas-next/regionalMap.test.ts (4 tests) 23ms
+ ✓ src/lib/provider-governor/noApiSchedulerWorkflow.test.ts (17 tests) 24ms
+
+ Test Files  3 passed (3)
+      Tests  37 passed (37)
+   Start at  22:44:53
+   Duration  1.19s (transform 199ms, setup 0ms, collect 307ms, tests 66ms, environment 1ms, prepare 775ms)
+
+
+Focused unset environment
+ ✓ src/lib/apiOriginSafety.test.ts (16 tests) 14ms
+ ✓ src/features/atlas-next/regionalMap.test.ts (4 tests) 8ms
+
+ Test Files  3 passed (3)
+      Tests  37 passed (37)
+   Start at  22:52:59
+   Duration  1.09s (transform 211ms, setup 0ms, collect 270ms, tests 51ms, environment 1ms, prepare 367ms)
+
+
+Full Render-like environment with sandbox local IPC enabled
+ ✓ src/lib/appliedAiDataScience.test.ts (8 tests) 18ms
+ ✓ src/lib/calyxService.test.ts (3 tests) 7ms
+
+ Test Files  344 passed | 1 skipped (345)
+      Tests  3738 passed | 2 skipped (3740)
+   Start at  22:49:58
+   Duration  142.75s (transform 10.26s, setup 0ms, collect 33.41s, tests 73.84s, environment 66.15s, prepare 34.87s)
+
+
+Backend2451 exact-head independent verification
+...........................                                              [100%]
+=============================== warnings summary ===============================
+tests/test_release_acceptance.py::test_http_mode_asks_the_question_when_the_route_answers_201_created
+  /workspace/scideps/starlette/testclient.py:37: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+27 passed, 1 warning in 2.78s
+
+Backend2451 new tests against main script
+  /workspace/scideps/starlette/testclient.py:37: DeprecationWarning: The anyio.abc.BlockingPortal alias is deprecated, use anyio.from_thread.BlockingPortal instead.
+    _PortalFactoryType = typing.Callable[[], typing.ContextManager[anyio.abc.BlockingPortal]]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_release_acceptance.py::test_http_mode_asks_the_question_when_the_route_answers_201_created
+FAILED tests/test_release_acceptance.py::test_http_mode_says_when_the_question_was_never_asked
+2 failed, 25 deselected, 1 warning in 1.99s
+
+Frontend979 evidence contract verification
+ ✓ src/lib/calyxScientificEvidence.partial.test.ts (9 tests) 11ms
+ ✓ src/lib/calyxSpeciesChecklistStatements.test.ts (19 tests) 35ms
+
+ Test Files  14 passed (14)
+      Tests  428 passed (428)
+   Start at  22:45:43
+   Duration  13.76s (transform 1.87s, setup 0ms, collect 6.17s, tests 4.16s, environment 10.53s, prepare 2.21s)
+
+
+Existing Federation relay/source-package verification
+..................................................................       [100%]
+66 passed in 10.46s
+
+Current-main projection, Render-like environment, local IPC enabled
+ ✓ src/lib/appliedAiDataScience.test.ts (8 tests) 15ms
+
+ Test Files  346 passed | 1 skipped (347)
+      Tests  3772 passed | 2 skipped (3774)
+   Start at  22:53:41
+   Duration  133.31s (transform 9.34s, setup 0ms, collect 30.48s, tests 77.72s, environment 60.45s, prepare 31.24s)

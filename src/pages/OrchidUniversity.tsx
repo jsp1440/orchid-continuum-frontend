@@ -89,15 +89,16 @@ const OrchidUniversity: React.FC = () => {
       eyebrow="Orchid University"
       title="A living laboratory"
       titleAccent="for scientific inquiry"
-      intro="Orchid University guides students through the scientific method using real biodiversity data. Every investigation is a real question — about pollinators, climate, habitat, or care — answered with real evidence drawn from the Continuum's living catalogue."
+      showDemoBanner={false}
+      intro="Explore botanical questions through guided lessons and scientific tools. Each activity identifies whether its material is simulated, sourced or unavailable. Persistent learner work and research contributions require the separately governed services."
       heroAside={
         <div className="rounded-xl border border-amber-300/30 bg-amber-300/[0.05] p-5">
           <div className="text-[10px] tracking-[0.25em] uppercase text-amber-200/90 mb-2">
             For students
           </div>
           <p className="text-sm text-white/85 leading-relaxed">
-            Earn a documented record of every investigation you complete —
-            citable, timestamped, and credited to you.
+            Read introductory material without an account. Individual laboratories
+            disclose whether learner records can be saved.
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             <RoleBadge role="student" size="sm" />
@@ -106,6 +107,20 @@ const OrchidUniversity: React.FC = () => {
         </div>
       }
     >
+      <section aria-label="Flowering inquiry lesson" className="max-w-7xl mx-auto px-6 lg:px-10 pt-12">
+        <div className="rounded-2xl border border-emerald-200/30 bg-emerald-300/[0.04] p-7">
+          <h2 className="font-serif text-3xl text-white">Why did this orchid fail to bloom?</h2>
+          <p className="my-4 max-w-3xl text-sm text-white/75">
+            Open the Book in the Brain chapter and explore seven scientific-inquiry stages.
+            This draft laboratory uses an explicitly simulated instructional case.
+            Availability is checked against the backend release gates when you open it.
+            Read-only practice does not save or publish learner work.
+          </p>
+          <Link to="/university/lab" className="inline-flex rounded border border-emerald-200/50 px-4 py-2 text-sm text-white">
+            Open flowering inquiry lesson
+          </Link>
+        </div>
+      </section>
       {/* Live Applied AI & Data Science program */}
       <section className="max-w-7xl mx-auto px-6 lg:px-10 pt-16">
         <div className="rounded-2xl border border-sky-300/25 bg-sky-300/[0.045] p-7 md:p-9">
@@ -113,7 +128,7 @@ const OrchidUniversity: React.FC = () => {
             <div className="max-w-3xl">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="rounded-full border border-emerald-300/30 bg-emerald-300/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-emerald-100">
-                  Live governed lab
+                  Governed lab pathway
                 </span>
                 <span className="rounded-full border border-white/15 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-white/55">
                   OC-AI-DS-001

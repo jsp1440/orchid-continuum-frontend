@@ -71,6 +71,30 @@ describe("building the cultivation handoff", () => {
     expect(JSON.stringify(handoff())).not.toContain("06:30");
   });
 
+  it.each(["2026-02-29", "2026-02-30", "2026-04-31", "1900-02-29"])(
+    "rejects the impossible calendar day %s instead of passing a normalized date to Calyx",
+    (day) => {
+      expect(buildCultivationHandoff({
+        acceptedScientificName: "Phalaenopsis amabilis",
+        locationKind: "shelf",
+        readings: [{ variable: "temperature_c", value: 21, origin: "measured", observed_at: `${day}T06:30:00Z` }],
+      })).toBeNull();
+    },
+  );
+
+  it.each(["2024-02-29", "2000-02-29", "2026-04-30"])(
+    "preserves the valid coarse calendar day %s",
+    (day) => {
+      const built = buildCultivationHandoff({
+        acceptedScientificName: "Phalaenopsis amabilis",
+        locationKind: "shelf",
+        readings: [{ variable: "temperature_c", value: 21, origin: "measured", observed_at: `${day}T06:30:00Z` }],
+      })!;
+      expect(built.observations[0].observed_on).toBe(day);
+      expect(built.observations_are_evidence).toBe(false);
+    },
+  );
+
   it("fails closed rather than handing over a partial question", () => {
     expect(buildCultivationHandoff({ acceptedScientificName: null, locationKind: "shelf", readings: READINGS })).toBeNull();
     expect(buildCultivationHandoff({ acceptedScientificName: "Phalaenopsis", locationKind: "shelf", readings: READINGS })).toBeNull();
@@ -215,6 +239,18 @@ describe("collecting the handoff on arrival", () => {
       [`${CULTIVATION_HANDOFF_STORAGE_PREFIX}${TOKEN}`]: JSON.stringify(tampered),
     });
     expect(readCultivationHandoff(search, storage)).toBeNull();
+  });
+
+  it("revalidates a stored observation's calendar day on the Calyx side", () => {
+    const original = handoff()!;
+    const storage = memoryStorage({
+      [`${CULTIVATION_HANDOFF_STORAGE_PREFIX}${TOKEN}`]: JSON.stringify({
+        ...original,
+        observations: [{ ...original.observations[0], observed_on: "2026-02-30" }],
+      }),
+    });
+    expect(readCultivationHandoff(search, storage)).toBeNull();
+    expect(storage.map.size).toBe(0);
   });
 
   it("never returns a payload whose denials were flipped", () => {
