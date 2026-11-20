@@ -157,9 +157,128 @@ describe("useCalyxSpeechInput", () => {
     act(() => {
       latest!.startListening();
     });
+    const recognition = instances[0];
+    const staleResultHandler = recognition.onresult;
     act(() => {
       latest!.stopListening();
     });
-    expect(instances[0].stop).toHaveBeenCalledTimes(1);
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+    expect(latest!.state).toBe("idle");
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "stale stopped transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
+  });
+
+  it("allows a fresh session after stopping and ignores the stopped session's late result", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const stopped = instances[0];
+    const staleResultHandler = stopped.onresult;
+    act(() => { stopped.onstart?.(); });
+    expect(latest!.state).toBe("listening");
+
+    act(() => {
+      latest!.stopListening();
+      latest!.startListening();
+    });
+
+    expect(instances).toHaveLength(2);
+    expect(instances[1].start).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "previous project transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
+  });
+
+  it("stops and detaches the recognizer when the hook unmounts", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const recognition = instances[0];
+    const staleResultHandler = recognition.onresult;
+
+    act(() => {
+      root!.unmount();
+      root = null;
+    });
+
+    expect(recognition.stop).toHaveBeenCalledTimes(1);
+    expect(recognition.onstart).toBeNull();
+    expect(recognition.onresult).toBeNull();
+    expect(recognition.onerror).toBeNull();
+    expect(recognition.onend).toBeNull();
+
+    act(() => {
+      staleResultHandler?.({
+        resultIndex: 0,
+        results: [{ isFinal: true, 0: { transcript: "late transcript" } }],
+      });
+    });
+    expect(onResultSpy).not.toHaveBeenCalled();
+  });
+
+  it("startListening reports whether a recognizer was actually created", () => {
+    let first: boolean | undefined;
+    let second: boolean | undefined;
+    act(() => {
+      first = latest!.startListening();
+    });
+    act(() => {
+      second = latest!.startListening();
+    });
+    expect(first).toBe(true);
+    expect(second).toBe(false);
+    expect(instances).toHaveLength(1);
+  });
+
+  it("startListening returns false when the recognizer refuses to start", () => {
+    let result: boolean | undefined;
+    const throwingStart = vi.fn(() => {
+      throw new Error("refused");
+    });
+    (window as unknown as { SpeechRecognition: unknown }).SpeechRecognition = class extends FakeSpeechRecognition {
+      start = throwingStart;
+    };
+    act(() => {
+      root!.unmount();
+    });
+    root = createRoot(container!);
+    act(() => {
+      root!.render(<Harness />);
+    });
+    act(() => {
+      result = latest!.startListening();
+    });
+    expect(result).toBe(false);
+    expect(latest!.error).toBe("Voice input could not start.");
+  });
+
+  it("can restart synchronously after the prior recognizer ends before React rerenders", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const previous = instances[0];
+
+    act(() => {
+      latest!.stopListening();
+      previous.onend?.();
+      latest!.startListening();
+    });
+
+    expect(instances).toHaveLength(2);
   });
 });

@@ -135,10 +135,11 @@ describe("CalyxWorkspace scientific evidence", () => {
     await flush(3);
   }
 
-  async function ask(turn: RecordedTurn, includeBlock: boolean) {
+  async function ask(turn: RecordedTurn, includeBlock: boolean, refreshFails = false) {
     mocks.createCalyxConversation.mockResolvedValue(conversation(null));
     mocks.sendCalyxTurn.mockResolvedValue(turnResponse(turn, includeBlock));
-    mocks.getCalyxConversation.mockResolvedValue(conversation(turn, includeBlock));
+    if (refreshFails) mocks.getCalyxConversation.mockRejectedValue(new Error("Synthetic refresh failure"));
+    else mocks.getCalyxConversation.mockResolvedValue(conversation(turn, includeBlock));
     await renderPage();
     await act(async () => { mocks.pushTranscript(turn.question); });
     await act(async () => {
@@ -166,8 +167,8 @@ describe("CalyxWorkspace scientific evidence", () => {
     container.remove();
   });
 
-  it("shows the evidence panel for a turn and prints each sentence once", async () => {
-    await ask(turns.available, true);
+  it.each([false, true])("prints committed evidence once when transcript refresh fails: %s", async (refreshFails) => {
+    await ask(turns.available, true, refreshFails);
 
     expect(panels()).toHaveLength(1);
     expect(panels()[0].dataset.evidenceKind).toBe("available");
