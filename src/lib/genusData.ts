@@ -366,18 +366,20 @@ export function warmBackends(): void {
 }
 
 /** Fetch JSON from an arbitrary base origin with a timeout; null on any error. */
-async function ocFetchFrom<T>(
+export async function ocFetchFrom<T>(
   base: string,
   path: string,
   signal?: AbortSignal,
   timeoutMs = 7000,
+  headers?: HeadersInit,
 ): Promise<T | null> {
+  if (signal?.aborted) return null;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   const onAbort = () => ctrl.abort();
   signal?.addEventListener('abort', onAbort);
   try {
-    const res = await fetch(`${base}${path}`, { signal: ctrl.signal });
+    const res = await fetch(`${base}${path}`, { signal: ctrl.signal, headers });
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
