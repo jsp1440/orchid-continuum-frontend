@@ -1,5 +1,5 @@
 import { BACKEND_BASE_URL, IMAGES_BACKEND_BASE_URL } from '@/lib/backendConfig';
-import { fetchGenusImagesWithSource } from '@/lib/genusData';
+import { fetchGenusImagesWithSource, ocFetchFrom } from '@/lib/genusData';
 import type { GenusImage, ImageSource } from '@/lib/genusData';
 
 export type PublicImageSourceResult = {
@@ -147,18 +147,10 @@ export async function fetchPublicGenusImages(
   ];
 
   for (const url of urls) {
-    try {
-      const response = await fetch(url, { signal, headers: { Accept: 'application/json' } });
-      if (response.ok) {
-        const payload = await response.json();
-        const images = extractImages(payload).slice(0, limit);
-        if (images.length > 0) {
-          return { images, source: 'live' };
-        }
-      }
-    } catch (error) {
-      if (signal?.aborted) return { images: [], source: 'pending', diagnostic: 'request aborted' };
-    }
+    const payload = await ocFetchFrom<unknown>('', url, signal, 7000, { Accept: 'application/json' });
+    if (signal?.aborted) return { images: [], source: 'pending', diagnostic: 'request aborted' };
+    const images = extractImages(payload).slice(0, limit);
+    if (images.length > 0) return { images, source: 'live' };
   }
 
   const fallback = await fetchGenusImagesWithSource(clean, signal, limit);

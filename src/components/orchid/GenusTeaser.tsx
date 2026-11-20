@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ArrowDown } from 'lucide-react';
 import { fetchDailyGenus, genusForToday, type GenusEntry } from '@/lib/genusData';
 import { fetchPublicGenusImages } from '@/lib/publicImageSource';
+import FallbackImage from './FallbackImage';
 
 /**
  * GenusTeaser — a compact "featured specimen" banner shown directly below
@@ -10,7 +11,7 @@ import { fetchPublicGenusImages } from '@/lib/publicImageSource';
  */
 const GenusTeaser: React.FC = () => {
   const [entry, setEntry] = useState<GenusEntry>(() => genusForToday());
-  const [image, setImage] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,7 +27,7 @@ const GenusTeaser: React.FC = () => {
   useEffect(() => {
     const ctrl = new AbortController();
     setLoading(true);
-    setImage(null);
+    setImageUrls([]);
     // fetchGenusSpecies targeted /api/genus/{genus}/photos, which does not
     // exist on either backend (404 verified) — the specimen photo could never
     // load and the teaser always fell back to the flat gradient. The public
@@ -36,8 +37,8 @@ const GenusTeaser: React.FC = () => {
       .then(({ images }) => {
         // Cache and response-body fallbacks may finish after this effect ends.
         if (ctrl.signal.aborted) return;
-        const url = images[0]?.image_url;
-        if (url) setImage(url);
+        const image = images[0];
+        if (image) setImageUrls([image.image_url, ...(image.image_urls ?? [])]);
       })
       .finally(() => {
         if (!ctrl.signal.aborted) setLoading(false);
@@ -63,18 +64,18 @@ const GenusTeaser: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr] items-stretch min-h-[200px]">
           {/* Specimen photo */}
           <div className="relative h-[160px] md:h-auto md:min-h-[210px] overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-[#22361f] to-[#16261d]" />
             {loading ? (
               <div className="absolute inset-0 animate-pulse bg-[#22361f]" />
-            ) : image ? (
-              <img
-                src={image}
+            ) : imageUrls.length > 0 ? (
+              <FallbackImage
+                urls={imageUrls}
                 alt={entry.genus}
                 loading="lazy"
+                shimmer={false}
                 className="absolute inset-0 w-full h-full object-cover"
               />
-            ) : (
-              <div className="absolute inset-0 bg-gradient-to-br from-[#22361f] to-[#16261d]" />
-            )}
+            ) : null}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#10210f] hidden md:block" />
           </div>
 
@@ -83,29 +84,20 @@ const GenusTeaser: React.FC = () => {
             <div className="font-mono text-[10px] tracking-[0.36em] uppercase text-[#d4b34a]">
               Genus of the Day
             </div>
-            {loading ? (
-              <div className="mt-3 space-y-3">
-                <div className="h-9 w-52 rounded bg-[#22361f] animate-pulse" />
-                <div className="h-3 w-80 max-w-full rounded bg-[#22361f] animate-pulse" />
-              </div>
-            ) : (
-              <>
-                <h2
-                  className="mt-2 italic leading-none text-[#faf7f2]"
-                  style={{
-                    fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
-                    fontSize: 'clamp(2.2rem, 5vw, 3.4rem)',
-                    fontWeight: 500,
-                  }}
-                >
-                  {entry.genus}
-                </h2>
-                <div className="mt-2 font-mono text-[11px] tracking-[0.12em] uppercase text-[#cfc8b8]/80">
-                  {entry.family} · {entry.tribe} · {entry.speciesCount} species
-                  {region ? ` · ${region}` : ''}
-                </div>
-              </>
-            )}
+            <h2
+              className="mt-2 italic leading-none text-[#faf7f2]"
+              style={{
+                fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
+                fontSize: 'clamp(2.2rem, 5vw, 3.4rem)',
+                fontWeight: 500,
+              }}
+            >
+              {entry.genus}
+            </h2>
+            <div className="mt-2 font-mono text-[11px] tracking-[0.12em] uppercase text-[#cfc8b8]/80">
+              {entry.family} · {entry.tribe} · {entry.speciesCount} species
+              {region ? ` · ${region}` : ''}
+            </div>
             <div className="mt-5">
               <button
                 type="button"

@@ -30,7 +30,7 @@ describe('GenusTeaser', () => {
     vi.clearAllMocks();
   });
 
-  it('renders the specimen photo from the public image resolver', async () => {
+  it('tries alternate specimen URLs before keeping the gradient', async () => {
     mocks.fetchDailyGenus.mockResolvedValue({
       genus: 'Masdevallia',
       family: 'Orchidaceae',
@@ -43,7 +43,7 @@ describe('GenusTeaser', () => {
         {
           scientific_name: 'Masdevallia veitchiana',
           image_url: 'https://photos.example/veitchiana.jpg',
-          image_urls: ['https://photos.example/veitchiana.jpg'],
+          image_urls: ['https://photos.example/veitchiana.jpg', 'https://photos.example/alternate.jpg'],
         },
       ],
       source: 'live',
@@ -64,6 +64,14 @@ describe('GenusTeaser', () => {
     const img = host.querySelector('img');
     expect(img?.src).toBe('https://photos.example/veitchiana.jpg');
     expect(img?.alt).toBe('Masdevallia');
+
+    await act(async () => img?.dispatchEvent(new Event('error')));
+    const alternate = host.querySelector('img');
+    expect(alternate?.src).toBe('https://photos.example/alternate.jpg');
+    await act(async () => alternate?.dispatchEvent(new Event('error')));
+    expect(host.querySelector('img')).toBeNull();
+    expect(host.querySelector('.bg-gradient-to-br')).not.toBeNull();
+    await act(async () => root.unmount());
   });
 
   it('keeps the gradient fallback when the resolver returns no images', async () => {
@@ -89,5 +97,6 @@ describe('GenusTeaser', () => {
 
     expect(host.querySelector('img')).toBeNull();
     expect(host.textContent).toContain('Masdevallia');
+    await act(async () => root.unmount());
   });
 });

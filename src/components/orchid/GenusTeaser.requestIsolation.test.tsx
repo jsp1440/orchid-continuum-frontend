@@ -50,6 +50,7 @@ describe('GenusTeaser request isolation through the real public resolver', () =>
     host.remove();
     localStorage.clear();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   async function render() {
@@ -85,7 +86,7 @@ describe('GenusTeaser request isolation through the real public resolver', () =>
     await render();
     await act(async () => daily.resolve(beta));
     expect(host.querySelector('.animate-pulse')).not.toBeNull();
-    expect(host.querySelector('h2')).toBeNull();
+    expect(host.querySelector('h2')?.textContent).toBe('Beta');
     expect(host.querySelector('img')).toBeNull();
     await act(async () => pendingBeta.resolve(response('Beta')));
     expectBetaImage();
@@ -112,5 +113,26 @@ describe('GenusTeaser request isolation through the real public resolver', () =>
     expect(host.querySelector('img')?.src).toBe('https://photos.example/Alpha.jpg');
     expect(host.querySelector('.animate-pulse')).toBeNull();
     expect(mocks.invoke).not.toHaveBeenCalled();
+  });
+
+  it('keeps the genus visible and moves to the cache after both image endpoints stall', async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+    mocks.invoke.mockResolvedValue({ data: { images: [image('Alpha')] }, error: null });
+
+    await render();
+    expect(host.querySelector('h2')?.textContent).toBe('Alpha');
+    expect(host.querySelector('img')).toBeNull();
+    await act(async () => vi.advanceTimersByTimeAsync(7000));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mocks.invoke).not.toHaveBeenCalled();
+
+    await act(async () => vi.advanceTimersByTimeAsync(7000));
+    expect(mocks.invoke).toHaveBeenCalledWith('genus-images', { body: { action: 'get', genus: 'Alpha', limit: 5 } });
+    expect(host.querySelector('img')?.src).toBe('https://photos.example/Alpha.jpg');
+    expect(host.querySelector('.animate-pulse')).toBeNull();
   });
 });
