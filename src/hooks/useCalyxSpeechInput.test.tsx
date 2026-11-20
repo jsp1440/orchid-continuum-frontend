@@ -184,6 +184,8 @@ describe("useCalyxSpeechInput", () => {
     });
     const stopped = instances[0];
     const staleResultHandler = stopped.onresult;
+    act(() => { stopped.onstart?.(); });
+    expect(latest!.state).toBe("listening");
 
     act(() => {
       latest!.stopListening();

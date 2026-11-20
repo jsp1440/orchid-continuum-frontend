@@ -8,6 +8,7 @@ import ContinuumThread from './orchid/ContinuumThread';
 import FungalDependency from './orchid/FungalDependency';
 import DailyGenusFeature from './orchid/DailyGenusFeature';
 import ContinuumWeb from './orchid/ContinuumWeb';
+import CapabilityGrid from './orchid/CapabilityGrid';
 import HomeAtlasContinuum from './orchid/HomeAtlasContinuum';
 import PublicCalyxGuide from './orchid/PublicCalyxGuide';
 import HomepageStewardshipClose from './orchid/HomepageStewardshipClose';
@@ -90,6 +91,7 @@ const AppLayout: React.FC = () => {
             </div>
 
             <SafeSection name="Continuum relationships"><ContinuumWeb /></SafeSection>
+            <SafeSection name="Explore Orchid Continuum"><CapabilityGrid /></SafeSection>
 
             <div>
               <SafeSection name="Atlas"><HomeAtlasContinuum /></SafeSection>

@@ -84,11 +84,9 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   }, []);
 
   const startListening = useCallback((): boolean => {
-    // `state` updates asynchronously (only once `onstart` fires), so a rapid
-    // second call can race past `state === "listening"` before it settles.
-    // `recognitionRef.current` is set synchronously below and is the only
-    // reliable guard against creating a second, orphaned recognizer.
-    if (!speechRecognition || state === "listening" || recognitionRef.current) return false;
+    // The ref changes synchronously when a session starts or stops.
+    // React state can still describe the previous session during a restart.
+    if (!speechRecognition || recognitionRef.current) return false;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;
@@ -156,7 +154,7 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
       return false;
     }
     return true;
-  }, [speechRecognition, state]);
+  }, [speechRecognition]);
 
   useEffect(() => () => {
     const recognition = recognitionRef.current;
