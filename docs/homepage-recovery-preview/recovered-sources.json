@@ -1,0 +1,108 @@
+{
+  "purpose": "Recovered existing blueprint source documents. Not a new design or production acceptance report.",
+  "sources": [
+    {
+      "role": "homepage-governance",
+      "file": "homepage-governance.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "docs/design-book/README.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/docs/design-book/README.md"
+    },
+    {
+      "role": "homepage-purpose",
+      "file": "homepage-purpose.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "docs/design-book/01-homepage-constitution.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/docs/design-book/01-homepage-constitution.md"
+    },
+    {
+      "role": "homepage-story",
+      "file": "homepage-story.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "docs/design-book/02-homepage-storyboard.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/docs/design-book/02-homepage-storyboard.md"
+    },
+    {
+      "role": "featured-genus",
+      "file": "featured-genus.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "docs/design-book/03-featured-genus-contract.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/docs/design-book/03-featured-genus-contract.md"
+    },
+    {
+      "role": "homepage-atlas",
+      "file": "homepage-atlas.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "docs/design-book/06-atlas-homepage-experience.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/docs/design-book/06-atlas-homepage-experience.md"
+    },
+    {
+      "role": "calyx-famous-workflow",
+      "file": "calyx-famous-workflow.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "14_ENGINEERING/CALYX-HOMEPAGE-REDESIGN-001-contracts.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/14_ENGINEERING/CALYX-HOMEPAGE-REDESIGN-001-contracts.md"
+    },
+    {
+      "role": "integrated-teaching",
+      "file": "integrated-teaching.md",
+      "repository": "jsp1440/Orchid-Continuum-Brain",
+      "revision": "1c3783bbc3e8164ca0fd5e92758aec92db897eb1",
+      "path": "04_APPLICATIONS/Calyx_Scientific_Teaching_Experience/BLUEPRINT.md",
+      "url": "https://github.com/jsp1440/Orchid-Continuum-Brain/blob/1c3783bbc3e8164ca0fd5e92758aec92db897eb1/04_APPLICATIONS/Calyx_Scientific_Teaching_Experience/BLUEPRINT.md"
+    },
+    {
+      "role": "planetary-atlas-program",
+      "file": "planetary-atlas-program.md",
+      "repository": "jsp1440/orchid-calyx-backend",
+      "revision": "3d15c7b3f5a403ed72fbab78e2ef039e9c8c7d05",
+      "path": "docs/architecture/ATLAS_PLANETARY_INTELLIGENCE_PROGRAM.md",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/blob/3d15c7b3f5a403ed72fbab78e2ef039e9c8c7d05/docs/architecture/ATLAS_PLANETARY_INTELLIGENCE_PROGRAM.md"
+    },
+    {
+      "role": "accepted-atlas-decision",
+      "file": "accepted-atlas-decision.md",
+      "repository": "jsp1440/orchid-calyx-backend",
+      "revision": "3d15c7b3f5a403ed72fbab78e2ef039e9c8c7d05",
+      "path": "docs/architecture/ADR-ATLAS-001-EARTH-SYSTEMS-AND-THEMATIC-CARTOGRAPHY.md",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/blob/3d15c7b3f5a403ed72fbab78e2ef039e9c8c7d05/docs/architecture/ADR-ATLAS-001-EARTH-SYSTEMS-AND-THEMATIC-CARTOGRAPHY.md"
+    },
+    {
+      "role": "calyx-brain-atlas-record",
+      "file": "calyx-brain-atlas-record.md",
+      "repository": "jsp1440/orchid-calyx-backend",
+      "revision": "3d15c7b3f5a403ed72fbab78e2ef039e9c8c7d05",
+      "path": "docs/brain/ATLAS-PLANETARY-INTELLIGENCE-2026-08-07.md",
+      "url": "https://github.com/jsp1440/orchid-calyx-backend/blob/3d15c7b3f5a403ed72fbab78e2ef039e9c8c7d05/docs/brain/ATLAS-PLANETARY-INTELLIGENCE-2026-08-07.md"
+    },
+    {
+      "role": "later-renderer-recommendations",
+      "file": "later-renderer-recommendations.md",
+      "repository": "jsp1440/orchid-continuum-frontend",
+      "revision": "741712aa5bfb39bf8370f977c1f9792efee81467",
+      "path": "docs/atlas-next/SLICE-1-REPORT.md",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/blob/741712aa5bfb39bf8370f977c1f9792efee81467/docs/atlas-next/SLICE-1-REPORT.md"
+    },
+    {
+      "role": "partial-implementation-report",
+      "file": "partial-implementation-report.md",
+      "repository": "jsp1440/orchid-continuum-frontend",
+      "revision": "741712aa5bfb39bf8370f977c1f9792efee81467",
+      "path": "docs/atlas-next/SLICE-2-REPORT.md",
+      "url": "https://github.com/jsp1440/orchid-continuum-frontend/blob/741712aa5bfb39bf8370f977c1f9792efee81467/docs/atlas-next/SLICE-2-REPORT.md"
+    }
+  ],
+  "important_distinctions": [
+    "Older frontend layouts are archival references, not proof of owner acceptance.",
+    "Atlas Planetary Intelligence is broader than a homepage occurrence map.",
+    "Atlas Next reports are partial implementation and technology recommendations, not proof that Google technologies were owner-rejected.",
+    "Archival screenshots block remote APIs and do not validate functionality or scientific claims.",
+    "No Calyx design-generation request was executed. No deployment or paid service activation was performed."
+  ]
+}
