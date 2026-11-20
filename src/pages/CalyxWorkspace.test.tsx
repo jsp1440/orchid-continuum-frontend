@@ -861,4 +861,23 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
   });
+
+  it("links to Mission Control when conversation history requires authentication", async () => {
+    mocks.listCalyxConversations.mockRejectedValue(
+      new CalyxApiError("authentication_required", "Owner authentication is required.", 401),
+    );
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    const signInLink = container.querySelector('a[href="/mission-control"]');
+    expect(signInLink?.textContent).toBe("Mission Control");
+    expect(container.textContent).toContain("to load conversation history.");
+  });
 });
