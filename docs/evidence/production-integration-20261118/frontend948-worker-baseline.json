@@ -1,0 +1,139 @@
+{
+  "phase": "backend_status_contract_repaired_awaiting_exact_head_review",
+  "frontend_base": "7ce582bd20c4f5c2a262b713e2fc6fd202271967",
+  "source_refs": {
+    "948": "cd9b2aaa60edff079c47c1e472978f323ad9b8e7",
+    "979": "39b549355101f4fa69a64c21ad25fe455501e66b",
+    "974": "af1c15793150b3d542c2bbd4e156ff95c49f97fc",
+    "939": "400ac806c8e8b1ebb94eef5ecd70a4255d43486a",
+    "984": "b1bd89f64c3022866892b88002a5adebd2f80838",
+    "985": "d53cf39d1f5b3d399cd6f11e24378e9c6047d80b",
+    "982": "b0fc99ae57c004a0b6cd947d7e7f557c7017d7fd",
+    "983": "0ee226fb097af4baf485452bf0d10b396610d3c7",
+    "988": "7b39c236a81d2dab0a0647cf4e0070d9a984ed65"
+  },
+  "page_sha256": "709cb3cd29aa258faf60825dd6b3c2aa38e4b07bd1adb2205a26d6bfced99302",
+  "immutable_test_sha256": "6521a5802ba24992570a9dbe7572e66e3ff6054728692d283b2c7d4ea24734ae",
+  "targeted_red": {
+    "failed": 2,
+    "passed": 9
+  },
+  "prior_full_selection": {
+    "passed": 4376,
+    "skipped": 2,
+    "failed": 1,
+    "failure": "missing route policy registration for new read-only /atlas/checklist; subsequently corrected and targeted guards171passed"
+  },
+  "repair_allowlist": [
+    "src/features/atlas-checklist/AtlasChecklistPage.tsx"
+  ],
+  "conservative_reservation_usd": "0.04879425",
+  "per_call_cap_usd": "0.10",
+  "period_cap_usd": "1.00",
+  "real_provider_calls_so_far": 1,
+  "deployed": false,
+  "live_verified": false,
+  "prerequisite_checks": {
+    "typecheck": "PASS",
+    "lint": {
+      "errors": 0,
+      "warnings": 44
+    },
+    "deployment_contract": "PASS",
+    "production_build": "PASS",
+    "independent_test_helper_checks": "193 passed across 8 test files; no assertions removed"
+  },
+  "other_frontend_tests": {
+    "passed": 4369,
+    "skipped": 2,
+    "failed": 0,
+    "explicit_exclusion": "src/features/atlas-checklist/AtlasChecklistPage.test.tsx; separately executed 2 expected failures / 9 passes"
+  },
+  "independent_review": {
+    "checker": "Codex review974 lane",
+    "scope": "draft baseline prerequisites, immutable regressions and reservation; not release acceptance",
+    "affected_tests_passed": 327,
+    "typecheck": "PASS"
+  },
+  "worker_attempt": {
+    "workflow_run": 44454452714,
+    "main_sha": "9dd8573def44cfeccde62caefaefa803fc5c7a21",
+    "generation": "PASS",
+    "validation": "BLOCKED RuntimeError; hosted output does not identify the failed command",
+    "publication": "SKIPPED",
+    "actual_cost_usd": "0.014172",
+    "reserved_cost_usd": "0.04879425",
+    "input_tokens": 2984,
+    "output_tokens": 2652,
+    "independent_generated_proposal_tests": {
+      "failed": 1,
+      "passed": 10
+    },
+    "correction": "Keep same-area loaded rows; clear area only when selected label changes; always clear selected taxon",
+    "corrected_tests": {
+      "passed": 11,
+      "failed": 0
+    }
+  },
+  "review_followup": {
+    "source_head": "7c75ed7c324ce14a56412c340c154a7e3754c240",
+    "findings": [
+      "P1 mixed threatened and DD/NE text loses strongest public-location protection",
+      "P2 area picker cannot reach later result pages"
+    ],
+    "privacy_red": {
+      "failed": 29,
+      "passed": 22
+    },
+    "privacy_focused_passed": 119,
+    "pagination_red": {
+      "failed": 3,
+      "passed": 11
+    },
+    "pagination_fixed_passed": 14,
+    "original_atlas_11_cases_preserved": true,
+    "extended_atlas_test_sha256": "0dfde979c062a5effd01548a90ad48baffaaf1c7ac914693d870b7476a40b73c",
+    "page_sha256": "f09bb23c6352766cab8e4405becfcda140ad154634c3f4f9f6e4d548091efa34",
+    "typecheck": "PASS",
+    "focused_lint": "PASS",
+    "provider_calls": 0
+  },
+  "request_state_followup": {
+    "source_head": "769a1ef5f2c5b9f834e8f3c90ded44b84e56bb51",
+    "source_head_hosted_unit_passed": 4428,
+    "source_head_hosted_skipped": 2,
+    "source_head_hosted_browser_passed": 82,
+    "red": {
+      "failed": 5,
+      "passed": 17
+    },
+    "failed_loading_label_controls": {
+      "failed": 2,
+      "passed": 20
+    },
+    "fixed_page_tests_passed": 22,
+    "original_14_tests_preserved": true,
+    "typecheck": "PASS",
+    "focused_lint": "PASS",
+    "test_sha256": "34a2453d7237a22fd748e906421497aff10bf366feebfc16e4a04549f5b5f54e",
+    "page_sha256": "8276624c6470bcb41fa942931304b41ae54804ec01d7c15f319decd95d0046a4",
+    "provider_calls": 0
+  },
+  "backend_status_followup": {
+    "source_head": "d2906ac3e438884bf0c103ff4333fa8e49ac5280",
+    "source_head_full_hosted_ci": "unit/build/lint/browser PASS",
+    "red": {
+      "failed": 6,
+      "passed": 23,
+      "uncaught_area_crashes": 3
+    },
+    "fixed_page_tests_passed": 29,
+    "original_22_tests_preserved": true,
+    "contract": "BUSY/READ_FAILED 503 and NOT_ENABLED 200 are envelopes without success rows/cursors",
+    "typecheck": "PASS",
+    "focused_lint": "PASS",
+    "test_sha256": "3fb9b00173cc7ad6e46997269f9cf4a14e899bd39e10a75a023e623f0864558f",
+    "page_sha256": "830e1dec61cae7c8951ce2d190975d4d88f930867e96511ef843bd8e378a6dea",
+    "provider_calls": 0
+  }
+}

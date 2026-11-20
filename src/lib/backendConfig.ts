@@ -261,5 +261,10 @@ export const ECUADOR_EMBED_BASE_URL = (
   'https://orchid-continuum-ecuador-expedition.onrender.com'
 ).replace(/\/$/, '');
 
-export const ATLAS_OCCURRENCES_URL = `${BACKEND_BASE_URL}/atlas/occurrences`;
-export const ATLAS_OCCURRENCES_PROBE_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences?limit=1`;
+/**
+ * The public API serves occurrences at `/api/atlas/occurrences`; the bare
+ * `/atlas/occurrences` path 404s in production (#931). The health probe is
+ * derived from the data URL so the two can never point at different routes.
+ */
+export const ATLAS_OCCURRENCES_URL = `${BACKEND_BASE_URL}/api/atlas/occurrences`;
+export const ATLAS_OCCURRENCES_PROBE_URL = `${ATLAS_OCCURRENCES_URL}?limit=1`;

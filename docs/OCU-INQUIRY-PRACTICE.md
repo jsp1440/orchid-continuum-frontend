@@ -1,0 +1,210 @@
+# Existing flowering laboratory: ephemeral inquiry practice
+
+Coordination: backend #454, frontend #774, Brain #93.
+Backend inventory, architecture, roadmap and independent checklist:
+https://github.com/jsp1440/orchid-calyx-backend/blob/codex/ocu-living-learning-20261102/docs/OCU-LIVING-LEARNING-20261102.md
+
+The University entry links to the existing /university/lab page. Its existing
+release/capability gates still control content access and durable notebooks.
+An additive backend activity contract provides seven prompts, case references,
+reasoning choices and feedback. The React practice component keeps responses
+and optional notes in page memory only. It makes no API mutation, model call,
+storage write, submission or scientific publication.
+
+This is a simulated instructional case, not a live evidence-backed investigation.
+The page disables the shared live-GBIF badge, displays backend provenance and
+does not invent an activity if an older backend lacks the additive contract.
+Choice feedback is deterministic formative practice; notes are not machine-graded.
+Version changes reset practice. Existing EDA and authenticated notebooks remain separate.
+
+The test fixture was captured from candidate canonical content GET routes via
+FastAPI TestClient, not from production; its _capture metadata describes the source.
+Source base: frontend 57600f246d1b024b37e40851b866722c4a09b58a and backend
+885b80a083f6e0cac999bc8283f5570251f34c21.
+
+Focused test in a full checkout:
+
+```bash
+npx vitest run src/pages/UniversityInquiryJourney.test.tsx src/pages/UniversityLabPrototype.test.tsx
+npm run typecheck
+npm run build
+```
+
+Current verification: 52 University tests across eight files passed, including
+16 StrictMode journey tests. The mounted tests mock shell/notebook/transport.
+Full application and node TypeScript checks passed. Production build passed.
+Changed-file lint passed without findings; repository lint passed with zero errors
+and 44 warnings. No screen-reader certification is claimed.
+
+The production HTTP verification script passed against the existing deployed
+frontend/backend pair, and a separate cloud-browser observation rendered the
+read-only chapter and case. This does not mean the new practice is deployed.
+See the backend report's stored read-only production evidence and exact deployed SHAs.
+
+Independent review must verify exact paired heads, full router/CORS mounting,
+keyboard/focus, narrow-screen rendering, failure states and no writes before
+approving a later integration. No merge, deployment, provider activation or
+durable-session activation is authorized by this draft.
+
+## Review repairs and integration evidence
+
+The separate reviewer confirmed three P2 defects: initial async mount stole focus;
+background content-refresh failures lost notes; malformed activity contracts could
+crash or coerce string truth values. Repairs restrict focus to explicit stage/reset
+actions, retain cached practice during content refresh errors, and validate the
+supported ID/version, exact seven stages, reference identity, booleans and
+no-authority flags. Sixteen StrictMode cases cover the repaired and existing flows.
+
+Loss of release/capability verification remains fail-closed and clears practice.
+The UI discloses this clearing behavior; a loss/recovery regression verifies it.
+Content refresh errors retain practice only while safety verification remains valid.
+
+Backend head 94a24e9c0ddc72042a0e019778327978506f20de passed 76 tests plus two
+subtests in independent and maker runs. The independent reviewer additionally
+verified the exact 326-file dependency closure and passed 20 actual outer-router
+HTTP/auth/CORS assertions without service stubs. Backend hosted checks all passed,
+including 23 contract tests, durable foundation, critical suites/PostgreSQL job,
+source compile, workflow governance, security and BUILD-088E.
+
+An unmocked local browser/API pair passed University entry → flowering lesson →
+all seven actual backend activity stages → feedback and learner notes → final
+review of all seven notes → reset → narrow viewport → reload. Actual frontend
+University traffic used GET only and produced no page errors. No response fixture
+or route fulfillment was used. This is local candidate integration evidence,
+not deployed-candidate acceptance.
+
+Local frontend validation used all 1,113 canonical text/source files and lockfile
+dependencies; 20 pre-existing binary screenshots/static images were omitted.
+This supports code compilation and the text-only learning flow, not a complete
+distributable-asset audit. A broad local test run without git history/binary assets
+has unrelated infrastructure failures and is not an acceptance result.
+
+## Scheduler dependency and development integration
+
+Frontend CI run 41418854663 at e4d23812b418e83ac1a1075296e48a64ee4ffa3f ran
+3,733 tests: 3,730 passed, two skipped, one failed. The failure is
+`src/lib/provider-governor/noApiSchedulerWorkflow.test.ts:13`: it expects
+`on.schedule = [{ cron: '2/5 * * * *' }]`, while the canonical timer is paused.
+Reproduction on unchanged main 57600f246d1b024b37e40851b866722c4a09b58a yielded
+the same failure (one failed, four passed in that file).
+Focused scheduler PR #965 repaired this stale synchronous YAML expectation.
+The owner subsequently authorized incorporation into this University development
+branch, without merging either PR into main. Integration commit
+`ddcca6f7b4540e626f549e077de7918a46b0e1e2` has the previous University head
+`68dcb6760780b695c3a886f6459cc936ba06a80b` and reviewed scheduler head
+`0811fa0ab927ac1c3f51b310919552b4ecce0280` as parents. Independent tree comparison
+confirmed exactly the scheduler test/documentation import and preservation of all
+University and runtime workflow blobs. This PR therefore includes the scheduler
+test repair; runtime scheduling and the intentional pause remain unchanged.
+
+The integrated source passed 152 targeted tests. Hosted CI run 41444591155 passed
+3,756 tests with two skipped, TypeScript, deployment contract, build and lint;
+its final diff-hygiene step identified extra EOF blank lines in two University
+files. Those formatting defects and this outdated scope description were repaired
+in a follow-up commit. Fresh required checks on that final head remain mandatory;
+the current exact SHA and completed results are recorded on PR #964. No release
+exception, main merge, deployment or timer activation is authorized here.
+
+The reference-backend E2E workflow passed on the initial frontend head, but its
+configured backend does not itself prove this University activity. Current-head
+results and exact SHAs are recorded in the PR/coordination comments.
+
+## Reproduce the unmocked pair
+
+Use the exact paired checkouts and backend Python dependencies. Run three terminals:
+
+```bash
+# Backend source dependencies, real University router; local-only test harness.
+PYTHONPATH=/path/to/orchid-calyx-backend python -m uvicorn university_readonly_app:app --app-dir /path/to/orchid-continuum-frontend/scripts --host 127.0.0.1 --port 8000
+# Frontend checkout: these are local build settings, not production changes.
+EXPECTED_RELEASE_SHA="$(git rev-parse HEAD)"
+VITE_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_CALYX_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_IMAGES_BACKEND_BASE_URL=http://127.0.0.1:8000 VITE_RELEASE_SHA="$EXPECTED_RELEASE_SHA" npm run build
+npm run preview -- --host 127.0.0.1 --port 5174 --strictPort
+# Frontend checkout, after installing the official test browser:
+npx playwright install chromium
+EXPECTED_RELEASE_SHA="$(git rev-parse HEAD)"
+node scripts/verify-university-inquiry.mjs http://127.0.0.1:5174 http://127.0.0.1:8000 university-inquiry-evidence.json "$EXPECTED_RELEASE_SHA"
+```
+
+The test harness clears production credentials, disables session writes/durability/
+publication/models, blocks non-loopback connections, and imports the existing
+canonical router. Bind it only to loopback. It is test scaffolding, not a second
+backend or hosted service. CHROMIUM_EXECUTABLE_PATH can select an installed
+official executable. The verifier performs no learner mutations or response mocking.
+
+The expected SHA is a required explicit input from the checked-out candidate, not
+from the served page or its build environment. In a PR workflow, check out the
+authoritative pull-request head and use its full `git rev-parse HEAD` value for
+both build stamping and verification; for a pinned local source snapshot, use
+the independently fetched GitHub PR head after verifying the source blob hashes.
+Never derive the expected value from the actual page metadata. The verifier reads
+actual metadata independently before the journey and again after reload. Missing,
+malformed, unattested or mismatched IDs fail closed. Evidence records both
+`expected_release_sha` and `actual_release_sha` (null until observed).
+
+PASS is written only after the journey, release validation and browser teardown
+all succeed. Teardown rejection writes FAIL and exits unsuccessfully; simultaneous
+journey/teardown errors preserve both error messages. Subprocess negative controls
+in `scripts/verify-university-inquiry.test.mjs` inject an explicitly fake browser
+to challenge lifecycle and SHA rejection. These are regression controls, separate
+from the real browser/backend integration evidence.
+
+## Release configuration and rollback
+
+No new database migration or environment variable is required. Existing
+OCU_UNIVERSITY_ENABLED allows reading; session/durable writes, publication,
+Candidate Knowledge and model flags remain disabled. Production settings are
+not changed by verification.
+
+After owner approval and applicable checks, deploy the approved backend payload
+before the frontend through existing Render services. Old frontends ignore the
+additive fields; repaired frontends show practice unavailable on old backends.
+Rollback selects the previous approved Render revisions or reverts the paired
+commits. There is no new persistent learner data to migrate or roll back.
+
+Backend is ready for owner review on its unchanged independently reviewed green
+head. Frontend readiness requires completed checks and independent review on the
+final integrated head, as recorded on PR #964. The scheduler repair is incorporated
+in this development branch; its separate PR remains unmerged into main. Neither
+PR authorizes automatic merge, deployment or learner-write activation.
+
+## Next-stage prerequisites only
+
+| Capability | Existing implementation | Missing connection and dependencies | Tests / acceptance | Complexity |
+|---|---|---|---|---|
+| Real scientific evidence | TeachingSynthesis, Brain/MCP evidence packets, taxonomy/provenance | Bind reviewed, licensed evidence IDs and taxonomy versions to this lesson after service acceptance | Citations, contradictions and unavailable states survive; simulation stays distinct; no scientific writes | Medium |
+| Personalized tutoring | Brain tutor policy, existing Calyx composition/conversations and EDA call path | Enforce tutor policy over approved common evidence and authorized learner context | Five audience profiles preserve meaning/uncertainty; learner attempt precedes conclusions; no fabricated evidence | Medium/high |
+| Durable continuity | Existing learner_auth, activation_service, durable_repository/discovery; #523/#680/#1113 | Existing migration, identity, release evidence and owner activation gates | Two learners isolated; revision conflict denied; restart continuity; reviewer qualifications preserved | Medium/high |
+| Research Station | Existing EDA/Atlas immutable dataset, plan and promotion interfaces | Verify identity/provenance/rights through current continuation workflow | Exact identities/hashes survive replay; learner work remains noncanonical until review | Medium |
+
+Knowledge Graph, MCP, taxonomy, Atlas, Matrix, Lexicon and literature remain the
+existing scientific interfaces described in the backend inventory. Calyx Resolve
+is an engineering-repair interface, not scientific evidence or grading authority.
+No additional development stage or duplicate knowledge system was implemented.
+
+## Verification maintenance after current-head review
+
+The verifier previously ran HTTP preflight and browser launch outside its failure
+handler, allowing an older PASS file to survive setup failure. Three regression
+cases first reproduced that defect, then passed after moving all fallible setup
+inside the handler and replacing prior evidence with RUNNING before preflight.
+Unreachable HTTP, rejected read-only state and browser-launch failure now write
+fresh FAIL evidence with completion time. Browser cleanup runs only if created.
+These three negative tests are script tests, not live integration evidence.
+
+The separate CORS finding was disproved: the real canonical router already
+inherits its credentialed CORS-header dependency, with both documented loopback
+origins explicitly allowed. Seven independent HTTP assertions covered three
+content endpoints on both origins plus denial of an untrusted origin. The
+cross-port browser proof uses that real dependency; no CORS/security change was made.
+
+The University learning behavior is unchanged by this maintenance repair.
+The test/documentation repair from focused scheduler PR #965 is incorporated
+under owner authorization; no runtime scheduler code or workflow was changed.
+
+A later review reproduced a final-review render failure when a valid same-version
+refresh replaces a previously selected choice ID. The response lookup now fails
+closed to a recovery message, retains the learner note in review, and keeps the
+existing Start again control usable. A mounted refresh regression first failed
+with the original lookup, then passed with the guard. The evidence lookup remains
+covered by the existing validated activity/catalog identity contract.

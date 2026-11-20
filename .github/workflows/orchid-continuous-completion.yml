@@ -3,9 +3,7 @@ name: Orchid Continuous Completion
 # Canonical scheduler. Compatibility entrypoints delegate here; Portfolio
 # Steward remains a separate queue-planning role, outside implementation capacity.
 on:
-  schedule:
-    # Keep the five-minute cadence off the top-of-hour Actions load spike.
-    - cron: '2/5 * * * *'
+  # Scheduled launches paused pending recovery from runner nonexecution.
   pull_request:
     types: [opened, reopened, synchronize, ready_for_review, closed]
   issues:

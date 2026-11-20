@@ -19,6 +19,7 @@ import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
 const AtlasNext = lazy(() => import("./pages/AtlasNext"));
+const AtlasChecklistPage = lazy(() => import("./features/atlas-checklist/AtlasChecklistPage"));
 import OrchidZoo from "./pages/OrchidZoo";
 import OACS from "./pages/OACS";
 import Widgets from "./pages/Widgets";
@@ -112,6 +113,14 @@ const App = () => (
                       </Suspense>
                     }
                   />
+                  <Route
+                    path="/atlas/checklist"
+                    element={
+                      <Suspense fallback={<div className="p-6 text-sm">Loading the checklist layer…</div>}>
+                        <AtlasChecklistPage />
+                      </Suspense>
+                    }
+                  />
                   <Route path="/atlas/:species" element={<Atlas />} />
                   <Route path="/admin" element={<AdminCenter />} />
                   <Route path="/control-center" element={<AdminCenter />} />
@@ -143,7 +152,7 @@ const App = () => (
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />
-                  <Route path="/field" element={<ProtectedRoute title="Sign in to use Calyx Field" description="Field observations and offline drafts stay behind your Orchid Continuum account boundary."><CalyxField /></ProtectedRoute>} />
+                  <Route path="/field" element={<ProtectedRoute allowOfflineSession title="Sign in to use the Orchid Continuum Field Journal" description="Field observations and offline drafts stay behind your Orchid Continuum account boundary."><CalyxField /></ProtectedRoute>} />
                   <Route path="/conservatory/*" element={<ProtectedRoute title="Sign in to view your conservatory" description="Your private living collection, plant passports, QR identifiers, and collection notes live behind authentication."><MyConservatory /></ProtectedRoute>} />
                   <Route path="/research-station/researchers/jeffery-scott-parham" element={<ResearcherJefferyParham />} />
                   <Route path="/research" element={<ProtectedRoute title="Research Center · members only" description="Sign in to access advanced queries, trait explorers, and the conservation research workspace."><ResearchCenter /></ProtectedRoute>} />
