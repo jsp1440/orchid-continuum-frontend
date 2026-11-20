@@ -547,7 +547,8 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   const [selectedDocumentText, setSelectedDocumentText] = useState("");
   const [conversations, setConversations] = useState<Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>>([]);
   const [historyError, setHistoryError] = useState<string | null>(null);
-  const [pendingRetry, setPendingRetry] = useState<{ message: string; projectId: string } | null>(null);
+  const pendingRetries = useRef(new Map<string, { conversationId: string; payload: Parameters<typeof sendCalyxTurn>[1] }>());
+  const [, refreshPendingRetries] = useState(0);
   const [retryConfirmed, setRetryConfirmed] = useState(false);
 
   const submitElapsedSeconds = useElapsedSeconds(submitting);
@@ -564,11 +565,6 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   const speechStartEpochRef = useRef(0);
   const missionLookupAttemptsRef = useRef<Set<string>>(new Set());
 
-  const clearPendingRetry = useCallback(() => {
-    setPendingRetry(null);
-    setRetryConfirmed(false);
-  }, []);
-
   const focusMessageInput = useCallback(() => {
     window.setTimeout(() => messageInputRef.current?.focus(), 0);
   }, []);
@@ -577,9 +573,8 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   const { state: micState, interimTranscript, error: speechInputError, startListening, stopListening } = useCalyxSpeechInput(
     useCallback((transcript: string) => {
       if (speechStartEpochRef.current !== speechContextEpochRef.current) return;
-      clearPendingRetry();
       setMessage((current) => (current ? `${current} ${transcript}`.trim() : transcript));
-    }, [clearPendingRetry]),
+    }, []),
   );
   const startVoiceInput = useCallback(() => {
     // Authorize the current context only if the hook really created a recognizer.
@@ -595,6 +590,8 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   }, [micState, stopListening]);
 
   const normalizedProjectId = normalizeProjectId(projectId);
+  const pendingRetry = pendingRetries.current.get(normalizedProjectId);
+  const canRetryInCurrentThread = pendingRetry?.conversationId === conversation?.conversation_id;
   const projectMismatch = Boolean(conversation && !shouldReuseConversation(conversation, normalizedProjectId));
   const messages = conversation ? visibleConversationMessages(conversation.messages) : [];
   const latestMission = useMemo(() => {
@@ -616,7 +613,6 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     activeProjectIdRef.current = normalizedProjectId;
     if (previousProjectIdRef.current === normalizedProjectId) return;
     previousProjectIdRef.current = normalizedProjectId;
-    clearPendingRetry();
     cancelSpeech();
     invalidateVoiceInput();
 
@@ -640,7 +636,6 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
       setWorkspaceStatus("Project changed; local files, excerpts, and the unsent draft were cleared.");
     }
   }, [
-    clearPendingRetry,
     cancelSpeech,
     documentContext,
     fileTextContent,
@@ -785,11 +780,14 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     return mountedRef.current && requestIdRef.current === requestId && conversationIdRef.current === targetConversationId && activeProjectIdRef.current === targetProjectId;
   }
 
-  const sendMessage = useCallback(async (messageOverride?: string) => {
-    const text = (messageOverride ?? message).trim();
-    if (!text || submissionLockRef.current !== null || (pendingRetry?.message === text && !retryConfirmed)) return;
-    clearPendingRetry();
+  const sendMessage = useCallback(async (retry = false) => {
     const activeProjectId = normalizeProjectId(projectId);
+    const pending = pendingRetries.current.get(activeProjectId);
+    if (submissionLockRef.current !== null) return;
+    if (retry && (!pending || !retryConfirmed || pending.conversationId !== conversationIdRef.current)) return;
+    if (!retry && pending) return;
+    const text = (retry ? pending?.payload.message ?? "" : message).trim();
+    if (!text) return;
     const requestId = requestIdRef.current + 1;
     requestIdRef.current = requestId;
     submissionLockRef.current = requestId;
@@ -798,23 +796,31 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     setAuthRequired(false);
     setOwnerNotice(null);
     setWorkspaceStatus(null);
+    setRetryConfirmed(false);
     setMessage((current) => (current.trim() === text ? "" : current));
     cancelSpeech();
     stopVoiceInput();
     let targetConversationId: string | null = null;
+    let submittedPayload: Parameters<typeof sendCalyxTurn>[1] | null = null;
     let turnCommitted = false;
     try {
       const thread = await ensureConversation(activeProjectId, requestId);
       if (!thread) return;
       targetConversationId = thread.conversation_id;
-      const result = await sendCalyxTurn(thread.conversation_id, {
+      if (retry && thread.conversation_id !== pending?.conversationId) return;
+      submittedPayload = pending?.payload ?? {
         message: text,
         project_id: activeProjectId,
         context: buildCalyxTurnContext({ projectId: activeProjectId, uploadedFiles, selectedAttachment, selectedDocumentText, documentContext, fileTextContent }),
         research_mode: "auto",
         retrieval_limit: 20,
-      });
+      };
+      const result = await sendCalyxTurn(thread.conversation_id, submittedPayload);
       turnCommitted = true;
+      if (retry && pendingRetries.current.get(activeProjectId) === pending) {
+        pendingRetries.current.delete(activeProjectId);
+        if (mountedRef.current) refreshPendingRetries((version) => version + 1);
+      }
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
       // Committed turn: show what the server already committed before the
       // authoritative transcript refresh, so a failed refresh cannot hide it.
@@ -870,6 +876,11 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
       void refreshConversationHistory();
       if (speakReplies && result.answer) speak(result.answer);
     } catch (error) {
+      const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
+      if (mountedRef.current && isNetwork && targetConversationId && submittedPayload && !turnCommitted) {
+        pendingRetries.current.set(activeProjectId, { conversationId: targetConversationId, payload: submittedPayload });
+        refreshPendingRetries((version) => version + 1);
+      }
       if (!isActiveLifecycleRequest(requestId, activeProjectId)) return;
       if (turnCommitted) {
         setAuthRequired(false);
@@ -877,22 +888,15 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
         void refreshConversationHistory();
         return;
       }
-      const isNetwork = error instanceof CalyxApiError && error.kind === "network_error";
-      const isAuth = error instanceof CalyxApiError && error.kind === "authentication_required";
-      const detail = error instanceof CalyxApiError ? (isNetwork ? `${error.message} — the connection may have dropped after CALYX completed the turn. Refresh conversation history and inspect the thread before deciding whether to send again.` : error.message) : "Calyx could not complete that turn.";
-      setAuthRequired(isAuth);
-      setConversationError(detail);
-      if (isNetwork) {
-        setPendingRetry({ message: text, projectId: activeProjectId });
-        setRetryConfirmed(false);
-        void refreshConversationHistory();
-      }
-      setMessage(text);
+      setAuthRequired(error instanceof CalyxApiError && error.kind === "authentication_required");
+      setConversationError(error instanceof CalyxApiError ? error.message : "Calyx could not complete that turn.");
+      if (isNetwork && submittedPayload) void refreshConversationHistory();
+      setMessage((current) => current.trim() ? current : text);
     } finally {
       if (submissionLockRef.current === requestId) submissionLockRef.current = null;
       if (mountedRef.current && requestIdRef.current === requestId) setSubmitting(false);
     }
-  }, [clearPendingRetry, cancelSpeech, documentContext, ensureConversation, fileTextContent, stopVoiceInput, message, pendingRetry, projectId, refreshConversationHistory, retryConfirmed, selectedAttachment, selectedDocumentText, speak, speakReplies, uploadedFiles]);
+  }, [cancelSpeech, documentContext, ensureConversation, fileTextContent, stopVoiceInput, message, projectId, refreshConversationHistory, retryConfirmed, selectedAttachment, selectedDocumentText, speak, speakReplies, uploadedFiles]);
 
   async function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); await sendMessage(); }
 
@@ -900,7 +904,11 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     const nextProjectId = normalizeProjectId(value);
     if (nextProjectId !== activeProjectIdRef.current) {
       activeProjectIdRef.current = nextProjectId;
-      clearPendingRetry();
+      requestIdRef.current += 1;
+      submissionLockRef.current = null;
+      setSubmitting(false);
+      setRetryConfirmed(false);
+      setWorkspaceStatus(null);
       cancelSpeech();
       stopVoiceInput();
     }
@@ -909,7 +917,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
 
   function newConversation() {
     requestIdRef.current += 1;
-    clearPendingRetry();
+    setRetryConfirmed(false);
     cancelSpeech();
     stopVoiceInput();
     conversationIdRef.current = null;
@@ -949,7 +957,6 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   }
 
   function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    clearPendingRetry();
     const files = Array.from(event.target.files ?? []);
     if (files.length) {
       setUploadedFiles((current) => {
@@ -963,7 +970,6 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   }
 
   function removeFile(index: number) {
-    clearPendingRetry();
     setUploadedFiles((current) => current.filter((_, fileIndex) => fileIndex !== index));
     setSelectedAttachmentIndex((current) => {
       if (current === null) return null;
@@ -975,7 +981,8 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   async function loadConversation(conversationId: string) {
     requestIdRef.current += 1;
     const requestId = requestIdRef.current;
-    clearPendingRetry();
+    const targetProjectId = activeProjectIdRef.current;
+    setRetryConfirmed(false);
     cancelSpeech();
     invalidateVoiceInput();
     conversationIdRef.current = null;
@@ -992,14 +999,14 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
     submissionLockRef.current = null;
     try {
       const loaded = await getCalyxConversation(conversationId);
-      if (!mountedRef.current || requestIdRef.current !== requestId) return;
+      if (!isActiveLifecycleRequest(requestId, targetProjectId)) return;
       setConversation(loaded);
       conversationIdRef.current = loaded.conversation_id;
       if (loaded.project_id) setProjectId(loaded.project_id);
       setWorkspaceStatus(null);
       focusMessageInput();
     } catch (error) {
-      if (!mountedRef.current || requestIdRef.current !== requestId) return;
+      if (!isActiveLifecycleRequest(requestId, targetProjectId)) return;
       setWorkspaceStatus(error instanceof CalyxApiError && error.kind === "authentication_required" ? "Sign in at Mission Control to load that conversation." : "Could not load that conversation.");
     }
   }
@@ -1030,7 +1037,6 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   function addDocumentContext(text: string, fileName = selectedAttachment?.name ?? "workspace selection") {
     const prompt = buildCalyxDocumentContextPrompt(fileName, text);
     if (!prompt) return;
-    clearPendingRetry();
     setMessage((current) => (current ? `${current}\n\n${prompt}` : prompt));
     focusMessageInput();
   }
@@ -1056,7 +1062,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
         <div className="grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
           <section className="rounded-xl border bg-card">
             <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
-              {!messages.length ? <div className="mx-auto max-w-3xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p><div className="mt-6 grid gap-3 text-left sm:grid-cols-2">{CALYX_STARTER_QUESTIONS.map((question) => <button className="rounded-2xl border bg-background px-4 py-3 text-sm hover:bg-muted" key={question} onClick={() => { clearPendingRetry(); setMessage(question); focusMessageInput(); }} type="button"><span className="font-medium">Ask CALYX</span><span className="mt-1 block text-muted-foreground">{question}</span></button>)}</div></div> : messages.map((turn) => {
+              {!messages.length ? <div className="mx-auto max-w-3xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p><div className="mt-6 grid gap-3 text-left sm:grid-cols-2">{CALYX_STARTER_QUESTIONS.map((question) => <button className="rounded-2xl border bg-background px-4 py-3 text-sm hover:bg-muted" key={question} onClick={() => { setMessage(question); focusMessageInput(); }} type="button"><span className="font-medium">Ask CALYX</span><span className="mt-1 block text-muted-foreground">{question}</span></button>)}</div></div> : messages.map((turn) => {
                 const citations = turn.role === "calyx" && Array.isArray(turn.metadata?.citations) ? turn.metadata.citations as CalyxCitation[] : [];
                 // The evidence sentences are printed once: in the panel when it can
                 // show them, otherwise where the backend put them in the answer.
@@ -1085,7 +1091,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
             <form className="border-t p-4" onSubmit={submit}>
               {interimTranscript ? <p className="mb-2 text-xs italic text-muted-foreground">{interimTranscript}…</p> : null}
               <label className="sr-only" htmlFor="calyx-message">Message Calyx</label>
-              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => { clearPendingRetry(); setMessage(event.target.value); }} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" ref={messageInputRef} value={message} />
+              <textarea className="min-h-24 w-full resize-y rounded-xl border bg-background px-4 py-3" id="calyx-message" maxLength={MAX_CALYX_MESSAGE_CHARS} onChange={(event) => { setMessage(event.target.value); }} onKeyDown={handleKeyDown} placeholder="Message Calyx… (Ctrl+Enter to send)" ref={messageInputRef} value={message} />
               <div className="mt-1 flex flex-wrap justify-between gap-2"><p className="text-xs text-muted-foreground">No word-count cap; the backend uses model token budgets and preserves long research prompts.</p><p className={`text-xs ${message.length >= MAX_CALYX_MESSAGE_CHARS * 0.9 ? "text-amber-600" : "text-muted-foreground"}`}>{message.length.toLocaleString()} / {MAX_CALYX_MESSAGE_CHARS.toLocaleString()} characters</p></div>
               <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
@@ -1099,11 +1105,27 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
                   <input accept="application/pdf,image/*,.csv,.tsv,.txt,.md,.json" aria-hidden className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} tabIndex={-1} type="file" />
                   {ttsSupported ? <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground"><input checked={speakReplies} className="h-3 w-3" onChange={(event) => { setSpeakReplies(event.target.checked); if (!event.target.checked) cancelSpeech(); }} type="checkbox" />Speak replies</label> : <span className="text-xs text-muted-foreground">Spoken replies unavailable in this browser.</span>}
                 </div>
-                <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim() || (pendingRetry?.message === message.trim() && !retryConfirmed)} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
+                <button className="rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50" disabled={submitting || !message.trim() || Boolean(pendingRetry)} type="submit">{submitting ? "Working…" : projectMismatch ? "Start new project thread" : "Send"}</button>
               </div>
               {projectMismatch ? <p className="mt-3 text-xs text-muted-foreground">The visible thread belongs to project <strong>{normalizeProjectId(conversation?.project_id)}</strong>. Sending now starts a clean CALYX thread for <strong>{normalizedProjectId}</strong>.</p> : null}
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
-              {conversationError ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{pendingRetry ? <div className="mt-3 flex flex-wrap items-center gap-3 text-xs"><label className="flex items-center gap-2"><input checked={retryConfirmed} className="h-3 w-3" onChange={(event) => setRetryConfirmed(event.target.checked)} type="checkbox" />I checked history and still want to send this message again.</label><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60 disabled:opacity-50" disabled={!retryConfirmed} onClick={() => void sendMessage(pendingRetry.message)} type="button">Retry after checking history</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={clearPendingRetry} type="button">Dismiss</button></div> : null}</div> : null}
+              {conversationError ? <p className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert">{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p> : null}
+              {pendingRetry ? (
+                <div className="mt-3 rounded-xl border bg-muted/40 p-3 text-sm">
+                  <p>The connection may have dropped after CALYX completed the turn. Check conversation history before deciding whether to send it again.</p>
+                  {canRetryInCurrentThread ? (
+                    <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+                      <label className="flex items-center gap-2">
+                        <input checked={retryConfirmed} className="h-3 w-3" onChange={(event) => setRetryConfirmed(event.target.checked)} type="checkbox" />
+                        I checked history and still want to send this message again.
+                      </label>
+                      <button className="rounded-full border border-current px-3 py-1 hover:bg-background/60 disabled:opacity-50" disabled={!retryConfirmed || submitting} onClick={() => void sendMessage(true)} type="button">Retry after checking history</button>
+                    </div>
+                  ) : (
+                    <button className="mt-3 rounded-full border px-3 py-1" disabled={submitting} onClick={() => void loadConversation(pendingRetry.conversationId)} type="button">Open conversation to check history</button>
+                  )}
+                </div>
+              ) : null}
             </form>
             {authRequired || snapshot.orchestratorState === "authentication_required" ? (
               <details className="border-t p-4 text-sm" data-testid="calyx-owner-sign-in" key={authRequired ? "needed" : "offered"} open={authRequired}>
@@ -1152,7 +1174,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
 
             <section className="rounded-xl border bg-card p-5">
               <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Preview</p><h2 className="mt-2 text-2xl font-semibold">Scientific viewer</h2></div>{fileTextContent ? <button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!fileTextContent} onClick={askAboutSelection} type="button">{selectedDocumentText ? "Ask CALYX about selection" : "Ask CALYX about visible text"}</button> : null}</div>
-              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3">{structuredPreview ? <div className="space-y-4 rounded-lg border bg-background p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">Structured data preview</p><p className="text-xs text-muted-foreground">{structuredPreview.summary}</p></div><div className="overflow-auto rounded-md border"><table className="min-w-full text-left text-xs"><thead className="bg-muted/60"><tr>{structuredPreview.columns.map((column) => <th className="px-3 py-2 font-medium" key={column}>{column}</th>)}</tr></thead><tbody>{structuredPreview.rows.map((row, rowIndex) => <tr className="border-t align-top" key={`structured-row-${rowIndex}`}>{structuredPreview.columns.map((column) => <td className="px-3 py-2 text-muted-foreground" key={`${column}-${rowIndex}`}>{row[column] === null ? "—" : String(row[column])}</td>)}</tr>)}</tbody></table></div>{structuredPreview.chart ? <ChartContainer className="h-56 w-full" config={{ value: { label: structuredPreview.chart.valueKey, color: "hsl(var(--primary))" } }}><BarChart accessibilityLayer data={structuredPreview.chart.points}><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="label" minTickGap={24} tickLine={false} /><ChartTooltip content={<ChartTooltipContent hideLabel />} /><Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} /></BarChart></ChartContainer> : null}</div> : null}<pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => { clearPendingRetry(); setDocumentContext(event.target.value); }} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
+              {!selectedAttachment ? <p className="mt-4 text-sm text-muted-foreground">Select an attached paper or image to keep it visible while you talk to CALYX.</p> : previewUrl && selectedAttachment.type === "application/pdf" ? <iframe className="mt-4 h-[28rem] w-full rounded-lg border bg-background" src={previewUrl} title={selectedAttachment.name} /> : previewUrl && selectedAttachment.type.startsWith("image/") ? <img alt={selectedAttachment.name} className="mt-4 max-h-[28rem] w-full rounded-lg border object-contain" src={previewUrl} /> : fileTextContent ? <div className="mt-4 space-y-3">{structuredPreview ? <div className="space-y-4 rounded-lg border bg-background p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-sm font-medium">Structured data preview</p><p className="text-xs text-muted-foreground">{structuredPreview.summary}</p></div><div className="overflow-auto rounded-md border"><table className="min-w-full text-left text-xs"><thead className="bg-muted/60"><tr>{structuredPreview.columns.map((column) => <th className="px-3 py-2 font-medium" key={column}>{column}</th>)}</tr></thead><tbody>{structuredPreview.rows.map((row, rowIndex) => <tr className="border-t align-top" key={`structured-row-${rowIndex}`}>{structuredPreview.columns.map((column) => <td className="px-3 py-2 text-muted-foreground" key={`${column}-${rowIndex}`}>{row[column] === null ? "—" : String(row[column])}</td>)}</tr>)}</tbody></table></div>{structuredPreview.chart ? <ChartContainer className="h-56 w-full" config={{ value: { label: structuredPreview.chart.valueKey, color: "hsl(var(--primary))" } }}><BarChart accessibilityLayer data={structuredPreview.chart.points}><CartesianGrid vertical={false} /><XAxis axisLine={false} dataKey="label" minTickGap={24} tickLine={false} /><ChartTooltip content={<ChartTooltipContent hideLabel />} /><Bar dataKey="value" fill="var(--color-value)" radius={[6, 6, 0, 0]} /></BarChart></ChartContainer> : null}</div> : null}<pre className="max-h-[28rem] overflow-auto rounded-lg border bg-background p-4 text-xs leading-6" onMouseUp={handleViewerMouseUp}>{fileTextContent}</pre><textarea className="min-h-24 w-full rounded-lg border bg-background px-3 py-2 text-sm" onChange={(event) => { setDocumentContext(event.target.value); }} placeholder="Paste a paper excerpt or dataset rows to ground the next CALYX turn." value={documentContext} /><div className="flex justify-end"><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={!documentContext.trim()} onClick={addPastedDocumentContext} type="button">Add excerpt to message</button></div></div> : <p className="mt-4 text-sm text-muted-foreground">Preview is available tonight for PDFs, images, and text-oriented research files. Backend upload and canonical rendering remain blocked until the CALYX file contract is deployed.</p>}
               {selectedDocumentText ? <p className="mt-3 text-xs text-muted-foreground">Selected text is ready to append to the next message.</p> : null}
             </section>
           </aside>

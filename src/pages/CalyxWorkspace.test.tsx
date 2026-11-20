@@ -521,6 +521,40 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(storedWorkspace().conversationId).toBe("saved-conversation");
   });
 
+  it("ignores a conversation load that resolves after the project changes", async () => {
+    const loadOperation = deferred<ConversationFixture>();
+    mocks.listCalyxConversations.mockResolvedValue({
+      conversations: [{
+        conversation_id: "late-conversation",
+        title: "Late conversation",
+        created_at: "2026-08-10T00:00:00Z",
+      }],
+      persistence_mode: "postgres",
+    });
+    mocks.getCalyxConversation.mockReturnValue(loadOperation.promise);
+
+    await act(async () => {
+      root.render(<MemoryRouter><CalyxWorkspace /></MemoryRouter>);
+    });
+    await flush(2);
+    await act(async () => {
+      getButton(container, "Late conversation").click();
+    });
+
+    const projectInput = container.querySelector("#calyx-project") as HTMLInputElement;
+    await act(async () => {
+      const setInputValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+      setInputValue?.call(projectInput, "new-project");
+      projectInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    loadOperation.resolve(buildConversation("late-conversation"));
+    await flush(3);
+
+    expect(projectInput.value).toBe("new-project");
+    expect(getContextValue(container, "Conversation")).toBe("Not started yet");
+    expect(container.textContent).not.toContain("Loading conversation…");
+  });
+
   it("restores the user message to the textarea when the Calyx turn fails", async () => {
     const createdConversation = buildConversation("net-error-conversation");
     mocks.createCalyxConversation.mockResolvedValue(createdConversation);
@@ -592,13 +626,21 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     });
     await flush(4);
 
-    expect(container.textContent).toContain("the connection may have dropped after CALYX completed the turn");
-    expect(container.textContent).toContain("Refresh conversation history and inspect the thread");
+    expect(container.textContent).toContain("The connection may have dropped after CALYX completed the turn");
+    expect(container.textContent).toContain("Check conversation history");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
     expect((getButton(container, "Send") as HTMLButtonElement).disabled).toBe(true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(21_000);
+    });
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      mocks.pushTranscript("Edited draft");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
 
@@ -617,6 +659,8 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     expect(mocks.createCalyxConversation).toHaveBeenCalledTimes(1);
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(2);
+    expect(mocks.sendCalyxTurn.mock.calls[1]).toEqual(mocks.sendCalyxTurn.mock.calls[0]);
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toContain("Edited draft");
     expect(container.textContent).toContain("Recovered answer");
   });
 

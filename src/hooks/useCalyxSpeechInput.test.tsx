@@ -266,4 +266,19 @@ describe("useCalyxSpeechInput", () => {
     expect(result).toBe(false);
     expect(latest!.error).toBe("Voice input could not start.");
   });
+
+  it("can restart synchronously after the prior recognizer ends before React rerenders", () => {
+    act(() => {
+      latest!.startListening();
+    });
+    const previous = instances[0];
+
+    act(() => {
+      latest!.stopListening();
+      previous.onend?.();
+      latest!.startListening();
+    });
+
+    expect(instances).toHaveLength(2);
+  });
 });
