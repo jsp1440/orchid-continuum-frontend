@@ -56,6 +56,13 @@ export function publicGenusMediaItems(items: readonly GenusMediaItem[]): GenusMe
   );
 }
 
+export function isInaturalistPhotographUrl(value: string): boolean {
+  if (!isBrowserEmbeddableImageUrl(value)) return false;
+  const url = new URL(value);
+  return ['inaturalist-open-data.s3.amazonaws.com', 'static.inaturalist.org'].includes(url.hostname)
+    && /^\/photos\/\d+\//.test(url.pathname);
+}
+
 /**
  * Reuse licensed photographs already attached to the canonical species exhibit
  * when the genus media batch contains only unusable embeds. Never query a
@@ -65,13 +72,7 @@ async function exhibitPhotographs(genus: string, signal?: AbortSignal): Promise<
   const exhibit = await fetchSpeciesExhibit(genus, signal);
   if (exhibit.status !== 'ok') return [];
   return exhibit.items.flatMap((card) => speciesExhibitMediaCandidates(card)
-    .filter((photo) => {
-      if (!isBrowserEmbeddableImageUrl(photo.url)) return false;
-      const url = new URL(photo.url);
-      // This adapter is for source photograph records, never herbarium sheets.
-      return ['inaturalist-open-data.s3.amazonaws.com', 'static.inaturalist.org'].includes(url.hostname)
-        && /^\/photos\/\d+\//.test(url.pathname);
-    }).slice(0, 1).map((photo) => ({
+    .filter((photo) => isInaturalistPhotographUrl(photo.url)).slice(0, 1).map((photo) => ({
       media_id: String(photo.id ?? photo.url), taxon_id: card.taxon_id,
       scientific_name: card.full_scientific_name, genus: card.genus,
       image_url: photo.url, thumbnail_url: photo.url,

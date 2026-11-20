@@ -1,9 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { binomialOf } from '@/lib/fungalPartner';
-import { publicGenusMediaItems } from '@/lib/genusMediaResolver';
+import { isInaturalistPhotographUrl, publicGenusMediaItems } from '@/lib/genusMediaResolver';
 
 /**
  * HeroOrchid — HOMEPAGE-SLICE-1.
@@ -43,7 +42,10 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   // A URL alone is not sufficient evidence for public publication. All mounted
   // homepage media surfaces share this same source+license boundary.
   const eligible = useMemo(() => publicGenusMediaItems(media?.items ?? [])
-    .filter((item) => isBrowserEmbeddableImageUrl(item.image_url)), [media]);
+    // The NYBG herbarium host carries preserved specimens in the current feed.
+    // Prefer approved observation photographs for the homepage opening.
+    .filter((item) => new URL(item.image_url).hostname !== 'sweetgum.nybg.org')
+    .sort((a, b) => Number(isInaturalistPhotographUrl(b.image_url)) - Number(isInaturalistPhotographUrl(a.image_url))), [media]);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
@@ -99,6 +101,8 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
 
   const binomial = photo ? binomialOf(photo.scientificName) : genus;
   const authority = photo ? photo.scientificName.replace(binomial, '').trim() : '';
+  const licenseUrl = photo?.license.trim().match(/^https?:\/\/creativecommons\.org\/(?:licenses|publicdomain)\/[a-z-]+\/\d+(?:\.\d+)*\/?$/i)?.[0]
+    .replace(/^http:/i, 'https:');
   const state = continuumStatus === 'loading'
     ? 'loading'
     : continuumStatus === 'unavailable' || media?.status === 'service_error'
@@ -184,7 +188,10 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
             {photo && (
               <p className="mt-5 font-mono text-[10px] leading-5 tracking-[0.02em] text-[#9aa596]">
                 Source: {photo.sourceName}
-                {` · License: ${photo.license.toUpperCase()}`}
+                {' · License: '}
+                {licenseUrl ? (
+                  <a href={licenseUrl} className="underline underline-offset-2">Creative Commons terms</a>
+                ) : photo.license.toUpperCase()}
                 {' · '}
                 {photo.attribution
                   ? `Photographer: ${photo.attribution}`
