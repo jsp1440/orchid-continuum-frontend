@@ -53,6 +53,7 @@ test('restored homepage shows the licensed hero and nine working destinations', 
   const grid = page.getByRole('region', { name: 'Explore Orchid Continuum' });
   const links = grid.getByRole('link');
   await expect(links).toHaveCount(9);
+  await expect(grid.getByRole('link', { name: /^Intelligence Graph/ })).toHaveAttribute('href', '/intelligence-graph');
   expect(await links.evaluateAll((items) => items.map((item) => item.getAttribute('href')))).toEqual(destinations);
   const columns = await links.first().evaluate((link) => getComputedStyle(link.parentElement!).gridTemplateColumns);
   expect(columns.split(' ')).toHaveLength(3);

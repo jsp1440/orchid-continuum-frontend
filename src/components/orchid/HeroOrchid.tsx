@@ -30,6 +30,10 @@ function isBinomial(scientificName: string): boolean {
   return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
 }
 
+function photographerCredit(attribution: string | null): string | null {
+  return typeof attribution === 'string' ? attribution.trim() || null : null;
+}
+
 const HeroOrchid: React.FC<Props> = (props) => {
   const { genus } = useDailyGenus();
   return <HeroPhotographs key={genus} {...props} />;
@@ -43,9 +47,13 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   // homepage media surfaces share this same source+license boundary.
   const eligible = useMemo(() => publicGenusMediaItems(media?.items ?? [])
     // The NYBG herbarium host carries preserved specimens in the current feed.
-    // Prefer approved observation photographs for the homepage opening.
+    // Prefer credited photographs, then species names and observation sources.
     .filter((item) => new URL(item.image_url).hostname !== 'sweetgum.nybg.org')
-    .sort((a, b) => Number(isInaturalistPhotographUrl(b.image_url)) - Number(isInaturalistPhotographUrl(a.image_url))), [media]);
+    .sort((a, b) =>
+      Number(Boolean(photographerCredit(b.attribution))) - Number(Boolean(photographerCredit(a.attribution)))
+      || Number(isBinomial(b.scientific_name)) - Number(isBinomial(a.scientific_name))
+      || Number(isInaturalistPhotographUrl(b.image_url)) - Number(isInaturalistPhotographUrl(a.image_url)),
+    ), [media]);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
@@ -54,7 +62,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   const reducedMotion = usePrefersReducedMotion();
   const usable = eligible.filter((item) => !failed.has(item.image_url));
   const chosen = usable.find((item) => item.image_url === selectedUrl)
-    ?? usable.find((item) => isBinomial(item.scientific_name)) ?? usable[0] ?? null;
+    ?? usable[0] ?? null;
   const currentIndex = chosen ? usable.indexOf(chosen) : 0;
   const advance = (offset: number) => {
     if (usable.length > 1) setSelectedUrl(usable[(currentIndex + offset + usable.length) % usable.length].image_url);
@@ -95,7 +103,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
         scientificName: chosen.scientific_name,
         sourceName: chosen.source_name,
         license: chosen.license as string,
-        attribution: chosen.attribution,
+        attribution: photographerCredit(chosen.attribution),
       }
     : null;
 

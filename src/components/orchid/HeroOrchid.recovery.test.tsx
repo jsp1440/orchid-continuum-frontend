@@ -3,7 +3,7 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HeroOrchid from './HeroOrchid';
-const { daily } = vi.hoisted(() => ({ daily: { current: {} as { genus: string; continuumStatus: string; continuum: { media: { items: { scientific_name: string; image_url: string; source_name: string; license: string; attribution: string; media_id: string }[] } } } } }));
+const { daily } = vi.hoisted(() => ({ daily: { current: {} as { genus: string; continuumStatus: string; continuum: { media: { items: { scientific_name: string; image_url: string; source_name: string; license: string; attribution: string | null; media_id: string }[] } } } } }));
 vi.mock('@/lib/dailyGenusContext', () => ({ useDailyGenus: () => daily.current }));
 vi.mock('@/hooks/usePrefersReducedMotion', () => ({ usePrefersReducedMotion: () => false }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -15,6 +15,17 @@ const render = (props = {}) => act(() => root.render(<HeroOrchid {...props} />))
 const image = () => host.querySelector('img')!;
 const load = () => act(() => image().dispatchEvent(new Event('load')));
 it('skips blocked first media and preserves that photograph’s identity and source', () => { render(); expect(image().src).toBe('https://images.invalid/a.jpg'); expect(host.textContent).toContain('Alpha second'); expect(host.textContent).toContain('Photographer: Alpha second'); });
+it.each([null, '   '])('prefers a credited photo over an observation with attribution %j', (attribution) => {
+  const credited = { ...media('Alpha', 'https://images.invalid/credited.jpg'), attribution: '  Fixture photographer  ' };
+  daily.current.continuum.media.items = [
+    { ...media('Alpha observed', 'https://static.inaturalist.org/photos/123/observation.jpg'), attribution },
+    credited,
+  ];
+
+  render();
+  expect(image().src).toBe(credited.image_url);
+  expect(host.textContent).toContain('Photographer: Fixture photographer');
+});
 it('advances on actual image failure and withholds the resolved species until load', () => { const resolved = vi.fn(); render({ onSpeciesResolved: resolved }); expect(resolved).toHaveBeenLastCalledWith(null); act(() => image().dispatchEvent(new Event('error'))); expect(image().src).toBe('https://images.invalid/b.jpg'); load(); expect(resolved).toHaveBeenLastCalledWith('Alpha third'); });
 it('does not leave a stalled image forever', () => { render(); act(() => vi.advanceTimersByTime(9000)); expect(image().src).toBe('https://images.invalid/b.jpg'); act(() => vi.advanceTimersByTime(9000)); expect(host.querySelector('img')).toBeNull(); expect(host.textContent).toContain('could not be loaded'); });
 it('rotates a successfully loaded photograph after 45 seconds, with a pause control', () => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); render(); load(); act(() => vi.advanceTimersByTime(45000)); expect(image().src).toBe('https://images.invalid/b.jpg'); load(); act(() => [...host.querySelectorAll('button')].find(e => e.textContent === 'Pause photographs')!.click()); act(() => vi.advanceTimersByTime(45000)); expect(image().src).toBe('https://images.invalid/b.jpg'); });

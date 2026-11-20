@@ -75,8 +75,8 @@ const CAPABILITIES: readonly Capability[] = [
   },
   {
     icon: Microscope,
-    title: 'Knowledge Graph',
-    body: 'Explore recorded links among orchids, fungi, pollinators, and habitats.',
+    title: 'Intelligence Graph',
+    body: 'Explore a graph of the orchid collection assembled from data available in your browser.',
     link: 'See the Connections',
     href: '/intelligence-graph',
   },
