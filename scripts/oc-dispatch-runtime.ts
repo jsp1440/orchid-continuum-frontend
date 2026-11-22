@@ -23,10 +23,16 @@ export function retryTransientGitHubRead<T>(method: string, request: () => T, pa
   for (let attempt = 0; ; attempt++) {
     try { return request(); }
     catch (error) {
-      if (method !== 'GET' || attempt >= 2 || ![502, 503, 504].some(code => status(error, code))) throw error;
+      if (method !== 'GET' || attempt >= 2 || !isGatewayReadFailure(error)) throw error;
       pause(1000 * (2 ** attempt));
     }
   }
+}
+function isGatewayReadFailure(error: unknown): boolean {
+  if (!(error instanceof Error) || !('stderr' in error)) return false;
+  const firstLine = String(error.stderr).split(/\r?\n/, 1)[0].trim();
+  const diagnostic = /^gh: (?:HTTP (\d{3})|.* \(HTTP (\d{3})\))$/.exec(firstLine);
+  return diagnostic !== null && /^(502|503|504)$/.test(diagnostic[1] ?? diagnostic[2]);
 }
 function api<T>(path: string, method = 'GET', body?: unknown): T {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Invalid repository');

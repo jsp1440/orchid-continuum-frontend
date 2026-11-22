@@ -72,4 +72,30 @@ describe('read-only GitHub API gateway retry', () => {
     }, () => { throw new Error('unexpected pause'); })).toThrow('bad JSON');
     expect(calls).toBe(1);
   });
+
+  it.each([
+    'gh: authorisation failed after upstream HTTP 504 (HTTP 403)\n',
+    'gh: HTTP 5040\n',
+    'unexpected output mentions HTTP 504\n',
+  ])('ignores gateway text outside a GitHub CLI status: %s', stderr => {
+    const request = Object.assign(new Error('non-gateway request failure'), { stderr });
+    let calls = 0;
+    expect(() => retryTransientGitHubRead('GET', () => {
+      calls++;
+      throw request;
+    }, () => { throw new Error('unexpected pause'); })).toThrow(request);
+    expect(calls).toBe(1);
+  });
+
+  it('recognizes a gateway code in the GitHub CLI diagnostic footer', () => {
+    let calls = 0;
+    const error = Object.assign(new Error('gateway timeout'), {
+      stderr: 'gh: gateway timed out (HTTP 504)\n{"message":"gateway timed out"}\n',
+    });
+    expect(retryTransientGitHubRead('GET', () => {
+      if (++calls === 1) throw error;
+      return 'complete page';
+    }, () => {})).toBe('complete page');
+    expect(calls).toBe(2);
+  });
 });
