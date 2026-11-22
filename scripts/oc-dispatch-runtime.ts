@@ -9,12 +9,39 @@ const repo = process.env.GITHUB_REPOSITORY || '';
 const stateBranch = 'oc-dispatch-state';
 const statePath = '.oc/dispatch-ledger.json';
 const now = () => new Date().toISOString();
+/**
+ * A transient GitHub gateway failure must not truncate the complete issues/PR
+ * snapshot, or abort the plan after pages 1..N were successfully read.
+ * Retry ONLY idempotent GETs, with a bounded pause; never repeat a mutation
+ * whose outcome may already have committed. Do not retry 403/rate limits,
+ * which require their own explicit policy and Retry-After handling.
+ *
+ * The injected request and pause keep the exact retry behavior testable
+ * without a network connection, credentials, or paid providers.
+ */
+export function retryTransientGitHubRead<T>(method: string, request: () => T, pause: (ms: number) => void): T {
+  for (let attempt = 0; ; attempt++) {
+    try { return request(); }
+    catch (error) {
+      if (method !== 'GET' || attempt >= 2 || !isGatewayReadFailure(error)) throw error;
+      pause(1000 * (2 ** attempt));
+    }
+  }
+}
+function isGatewayReadFailure(error: unknown): boolean {
+  if (!(error instanceof Error) || !('stderr' in error)) return false;
+  const firstLine = String(error.stderr).split(/\r?\n/, 1)[0].trim();
+  const diagnostic = /^gh: (?:HTTP (\d{3})|.* \(HTTP (\d{3})\))$/.exec(firstLine);
+  return diagnostic !== null && /^(502|503|504)$/.test(diagnostic[1] ?? diagnostic[2]);
+}
 function api<T>(path: string, method = 'GET', body?: unknown): T {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Invalid repository');
   const args = ['api', `repos/${repo}/${path}`, '--method', method];
   if (body !== undefined) args.push('--input', '-');
-  return JSON.parse(execFileSync('gh', args, { input: body === undefined ? undefined : JSON.stringify(body),
-    encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }) || 'null') as T;
+  return retryTransientGitHubRead(method, () =>
+    JSON.parse(execFileSync('gh', args, { input: body === undefined ? undefined : JSON.stringify(body),
+      encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }) || 'null') as T,
+    ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); });
 }
 function status(error: unknown, code: number) {
   return error instanceof Error && 'stderr' in error && String(error.stderr).includes(`HTTP ${code}`);
