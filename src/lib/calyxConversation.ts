@@ -16,9 +16,10 @@ const UNSAFE_HREF_PROTOCOL = /^(javascript|data|vbscript):/i;
 
 marked.use({
   renderer: {
-    link(href: string, title: string | null | undefined, text: string): string {
+    link({ href, title, tokens }): string {
       const safeHref = UNSAFE_HREF_PROTOCOL.test(href ?? "") ? "#" : (href ?? "");
       const titleAttr = title ? ` title="${title}"` : "";
+      const text = this.parser.parseInline(tokens);
       return `<a href="${safeHref}"${titleAttr} rel="noopener noreferrer" target="_blank">${text}</a>`;
     },
   },
