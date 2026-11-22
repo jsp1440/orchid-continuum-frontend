@@ -452,15 +452,15 @@ function nameOf(entry) {
 }
 
 /**
- * Returns the check plus, OUT OF BAND, the name to look up next. The name is
- * response-derived, so it never goes into a check object.
+ * Returns the check plus the sampled name and ID for the next request.
+ * The response-derived name and ID never go into a check object.
  */
 export async function checkSearch(fetchImpl, cfg, taxon) {
   const url = `${cfg.apiBase}/api/species/search?q=${encodeURIComponent(taxon)}`;
   const res = await httpGet(fetchImpl, url, { timeoutMs: cfg.timeoutMs });
   const id = `species-api.search:${taxon}`;
   const base = { journey: 'J3', endpoint: '/api/species/search', query: taxon, ...transportFields(res) };
-  const done = (fields, sampleName = '') => ({ check: check(id, { ...base, ...fields }), sampleName });
+  const done = (fields, sample = null) => ({ check: check(id, { ...base, ...fields }), sample });
   const transport = classifyTransport(res);
   if (transport) return done(transport);
   if (res.status === 404) return done({ status: 'fail', observation: 'not-found', detail: 'search answered 404 for a known genus' });
@@ -469,9 +469,13 @@ export async function checkSearch(fetchImpl, cfg, taxon) {
   if (!Array.isArray(res.json)) return done({ status: 'fail', observation: 'wrong-shape', detail: 'the UI maps the body as an array; this body is not one' });
 
   const scan = scanCoordinateKeys(res.json);
-  const needle = taxon.toLowerCase();
-  const matching = res.json.filter((e) => nameOf(e).toLowerCase().includes(needle) || String(e?.genus || '').toLowerCase() === needle);
-  const withTaxonomyId = res.json.filter((e) => e && typeof e.taxonomy_id === 'string' && e.taxonomy_id);
+  const needle = taxon.trim().toLowerCase();
+  const matching = res.json.filter((entry) => {
+    const genus = typeof entry?.genus === 'string' ? entry.genus.trim().toLowerCase() : '';
+    const name = nameOf(entry).trim().toLowerCase();
+    return genus ? genus === needle : name === needle || name.startsWith(`${needle} `);
+  });
+  const withTaxonomyId = res.json.filter((entry) => typeof entry?.taxonomy_id === 'string' && entry.taxonomy_id.trim());
   const counts = { observedCount: res.json.length, matchingCount: matching.length, withTaxonomyIdCount: withTaxonomyId.length, ...scan };
   if (scan.coordinateKeyCount) {
     return done({ ...counts, status: 'fail', observation: 'coordinate-keys-present', detail: 'taxon-search payload carries coordinate keys' });
@@ -480,8 +484,11 @@ export async function checkSearch(fetchImpl, cfg, taxon) {
   if (!matching.length) {
     return done({ ...counts, status: 'fail', observation: 'present-but-unrelated', detail: 'results returned, none named for the queried genus' });
   }
-  const sample = matching.find((e) => withTaxonomyId.includes(e)) || matching[0];
-  return done({ ...counts, status: 'pass', observation: 'present' }, nameOf(sample));
+  const sample = matching.find((entry) => withTaxonomyId.includes(entry) && nameOf(entry).trim());
+  if (!sample) {
+    return done({ ...counts, status: 'fail', observation: 'missing-taxonomy-identity', detail: 'no matching result has a name and taxonomy identifier' });
+  }
+  return done({ ...counts, status: 'pass', observation: 'present' }, { name: nameOf(sample), taxonomyId: sample.taxonomy_id });
 }
 
 function looksLikeTaxonomy(body) {
@@ -500,10 +507,11 @@ function looksLikeNotFound(body) {
 }
 
 /**
- * `name` is response-derived and only builds the request URL. The check
- * records the search that supplied it and a short hash, never the name.
+ * The response-derived name builds the request URL. The ID binds the response
+ * to the selected search result without recording either field in the report.
  */
-export async function checkByName(fetchImpl, cfg, name, searchCheck) {
+export async function checkByName(fetchImpl, cfg, sample, searchCheck) {
+  const name = sample?.name;
   const id = `species-api.by-name:first-match-for:${searchCheck.query}`;
   const base = {
     journey: 'J3',
@@ -536,6 +544,9 @@ export async function checkByName(fetchImpl, cfg, name, searchCheck) {
   }
   if (!looksLikeTaxonomy(res.json)) {
     return check(id, { ...fields, ...scan, status: 'fail', observation: 'wrong-shape', detail: 'no taxonomy_id with a canonical_name or genus' });
+  }
+  if (res.json.taxonomy_id !== sample.taxonomyId) {
+    return check(id, { ...fields, ...scan, status: 'fail', observation: 'taxonomy-identity-mismatch', detail: 'by-name returned a different taxonomy identifier than search' });
   }
   const taxonomyFieldsPresent = ['family', 'subfamily', 'tribe', 'genus', 'specific_epithet', 'authority'].filter(
     (k) => res.json[k] !== undefined && res.json[k] !== null && res.json[k] !== '',
@@ -681,23 +692,19 @@ export async function checkPublicAtlasView(fetchImpl, cfg) {
 }
 
 /**
- * Once the FE #894 migration revokes anon access to the raw table, a JSON
- * 401/403 there is the intended protection — provided the public view is
- * serving rows. Only then is the base-table refusal reclassified.
+ * The deployed Atlas client still needs the raw table. Keep its read result
+ * independent of the view. A readable view and raw table together do not
+ * demonstrate that the base-table grant has been revoked.
  */
-export function reconcileRevokedBaseTable(checks) {
-  const view = checks.find((c) => c.table === ATLAS_PUBLIC_VIEW);
-  if (!view || view.status !== 'pass') return checks;
-  return checks.map((c) =>
-    c.table === 'atlas_occurrences' && c.status === 'fail' && (c.observation === 'http-401' || c.observation === 'http-403')
-      ? {
-          ...c,
-          status: 'pass',
-          observation: 'base-table-anon-revoked',
-          detail: `anon read of the raw table is refused and the Atlas is served by ${ATLAS_PUBLIC_VIEW}`,
-        }
-      : c,
-  );
+function assessAtlasView(view, tableChecks) {
+  const rawReadable = tableChecks.some((entry) => entry.table === 'atlas_occurrences' && entry.status === 'pass');
+  if (view.status !== 'pass' || !rawReadable) return view;
+  return {
+    ...view,
+    status: 'warn',
+    observation: 'raw-table-still-readable',
+    warning: 'the protected view responds, and anonymous reads from the raw Atlas table still succeed',
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -754,9 +761,9 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
     let proven = false;
     let afterOutage = false;
     for (const taxon of cfg.knownTaxa) {
-      const { check: searchCheck, sampleName } = await checkSearch(fetchImpl, cfg, taxon);
+      const { check: searchCheck, sample } = await checkSearch(fetchImpl, cfg, taxon);
       checks.push(searchCheck);
-      const byName = await checkByName(fetchImpl, cfg, sampleName, searchCheck);
+      const byName = await checkByName(fetchImpl, cfg, sample, searchCheck);
       checks.push(byName);
       if (byName.status === 'pass') proven = true;
       if (searchCheck.status === 'outage' || byName.status === 'outage') afterOutage = true;
@@ -783,8 +790,8 @@ export async function runVerification(cfg, fetchImpl = globalThis.fetch) {
       tableChecks.push(await checkTableCount(fetchImpl, cfg, table));
       tableChecks.push(await checkTableUiColumns(fetchImpl, cfg, table));
     }
-    tableChecks.push(await checkPublicAtlasView(fetchImpl, cfg));
-    checks.push(...reconcileRevokedBaseTable(tableChecks));
+    const view = await checkPublicAtlasView(fetchImpl, cfg);
+    checks.push(...tableChecks, assessAtlasView(view, tableChecks));
   }
 
   const summary = { pass: 0, warn: 0, fail: 0, outage: 0, skipped: 0 };

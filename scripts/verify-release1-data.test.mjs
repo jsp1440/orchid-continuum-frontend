@@ -12,7 +12,6 @@ import {
   checkByName,
   checkNonsense,
   checkPublicAtlasView,
-  reconcileRevokedBaseTable,
   checkSearch,
   checkTableCount,
   checkTableUiColumns,
@@ -224,15 +223,22 @@ describe('species search: outage vs empty vs present vs 404', () => {
 
   it('passes a present result and reports the observed count', async () => {
     const body = [summary('Cattleya labiata'), summary('Cattleya walkeriana'), summary('Laelia anceps')];
-    const { check, sampleName } = await checkSearch(routedFetch([[() => true, () => json(200, body)]]), cfg(), 'Cattleya');
+    const { check, sample } = await checkSearch(routedFetch([[() => true, () => json(200, body)]]), cfg(), 'Cattleya');
     expect(check).toMatchObject({ status: 'pass', observation: 'present', observedCount: 3, matchingCount: 2 });
-    expect(sampleName).toBe('Cattleya labiata');
+    expect(sample).toEqual({ name: 'Cattleya labiata', taxonomyId: 'tx-Cattleya-labiata' });
     expect(JSON.stringify(check)).not.toContain('labiata');
   });
 
   it('fails a 404 search as not-found', async () => {
     const { check } = await checkSearch(routedFetch([[() => true, () => json(404, { detail: 'Not Found' })]]), cfg(), 'Cattleya');
     expect(check).toMatchObject({ status: 'fail', observation: 'not-found' });
+  });
+
+  it('never passes a genus substring or a match without a stable identifier', async () => {
+    const unrelated = routedFetch([[() => true, () => json(200, [summary('Brassocattleya alba')])]]);
+    const unidentified = routedFetch([[() => true, () => json(200, [summary('Cattleya labiata', { taxonomy_id: ' ' })])]]);
+    expect((await checkSearch(unrelated, cfg(), 'Cattleya')).check).toMatchObject({ status: 'fail', observation: 'present-but-unrelated' });
+    expect((await checkSearch(unidentified, cfg(), 'Cattleya')).check).toMatchObject({ status: 'fail', observation: 'missing-taxonomy-identity' });
   });
 
   it('fails an HTML 200 (SPA shell) rather than believing it', async () => {
@@ -251,7 +257,8 @@ describe('species search: outage vs empty vs present vs 404', () => {
 describe('by-name and the nonsense taxon', () => {
   it('passes a taxonomy and records a reference to the name, never the name', async () => {
     const f = routedFetch([[(u) => u.includes('/by-name/'), () => json(200, summary('Cattleya labiata', { family: 'Orchidaceae' }))]]);
-    const c = await checkByName(f, cfg(), 'Cattleya labiata', searchCheckFor('Cattleya'));
+    const sample = { name: 'Cattleya labiata', taxonomyId: 'tx-Cattleya-labiata' };
+    const c = await checkByName(f, cfg(), sample, searchCheckFor('Cattleya'));
     expect(c).toMatchObject({
       id: 'species-api.by-name:first-match-for:Cattleya',
       status: 'pass',
@@ -263,10 +270,19 @@ describe('by-name and the nonsense taxon', () => {
     expect(f.calls[0].url).toBe(`${API}/api/species/by-name/Cattleya%20labiata`);
   });
 
+  it('fails a different by-name identity without reporting either identifier', async () => {
+    const sameNameWrongIdentity = summary('Cattleya labiata', { taxonomy_id: 'other-taxon' });
+    const sample = { name: 'Cattleya labiata', taxonomyId: 'tx-Cattleya-labiata' };
+    const f = routedFetch([[() => true, () => json(200, sameNameWrongIdentity)]]);
+    const c = await checkByName(f, cfg(), sample, searchCheckFor('Cattleya'));
+    expect(c).toMatchObject({ status: 'fail', observation: 'taxonomy-identity-mismatch' });
+    expect(JSON.stringify(c)).not.toMatch(/other-taxon|tx-Cattleya-labiata/);
+  });
+
   it('skips by-name when search produced nothing, naming why', async () => {
     const f = routedFetch([]);
-    expect(await checkByName(f, cfg(), '', searchCheckFor('Cattleya', 'outage'))).toMatchObject({ status: 'skipped', observation: 'search-outage' });
-    expect(await checkByName(f, cfg(), '', searchCheckFor('Cattleya', 'fail'))).toMatchObject({ status: 'skipped', observation: 'search-produced-no-name' });
+    expect(await checkByName(f, cfg(), null, searchCheckFor('Cattleya', 'outage'))).toMatchObject({ status: 'skipped', observation: 'search-outage' });
+    expect(await checkByName(f, cfg(), null, searchCheckFor('Cattleya', 'fail'))).toMatchObject({ status: 'skipped', observation: 'search-produced-no-name' });
     expect(f.calls).toHaveLength(0);
   });
 
@@ -337,7 +353,7 @@ describe('Supabase tables', () => {
     const report = await runVerification(cfg({ apiBase: '' }), f);
     const supabaseOnly = { ...report, checks: report.checks.filter((c) => c.id.startsWith('supabase')) };
     expect(verdictOf(supabaseOnly.checks)).toBe('PASS_WITH_WARNINGS');
-    expect(report.summary.warn).toBe(2);
+    expect(report.checks.filter((c) => c.table === 'species_mycorrhizal' && c.status === 'warn')).toHaveLength(2);
     expect(renderSummary(supabaseOnly)).toMatch(/\*\*Warnings\*\*[\s\S]*supabase\.count:species_mycorrhizal/);
   });
 
@@ -394,14 +410,27 @@ describe('optional protected Atlas view (FE #894)', () => {
     expect(await checkPublicAtlasView(routedFetch([[() => true, () => html(503)]]), cfg())).toMatchObject({ status: 'outage' });
   });
 
-  it('treats a revoked raw table as protection only when the view serves rows', async () => {
-    const revoked = { id: 'supabase.count:atlas_occurrences', table: 'atlas_occurrences', status: 'fail', observation: 'http-403' };
-    const viewPass = { id: 'v', table: VIEW, status: 'pass' };
-    const viewAbsent = { id: 'v', table: VIEW, status: 'warn', observation: 'view_absent' };
-    expect(reconcileRevokedBaseTable([revoked, viewPass])[0]).toMatchObject({ status: 'pass', observation: 'base-table-anon-revoked' });
-    expect(reconcileRevokedBaseTable([revoked, viewAbsent])[0]).toMatchObject({ status: 'fail', observation: 'http-403' });
-    const other = { ...revoked, observation: 'http-400' };
-    expect(reconcileRevokedBaseTable([other, viewPass])[0].status).toBe('fail');
+  it.each([401, 403])('keeps raw-table HTTP %i as a failure even when the view serves rows', async (status) => {
+    const f = routedFetch([
+      [(u) => u.includes(VIEW), () => json(206, [PROTECTED_VIEW_ROW], { 'content-range': '0-0/11' })],
+      [(u) => u.includes('/atlas_occurrences?'), () => json(status, { code: '42501' })],
+      [(u) => u.includes('/rest/v1/'), () => json(206, [{ id: 'a' }], { 'content-range': '0-0/7' })],
+    ]);
+    const report = await runVerification(cfg({ apiBase: '' }), f);
+    expect(report.verdict).toBe('FAIL');
+    expect(report.checks.find((c) => c.id === 'supabase.count:atlas_occurrences')).toMatchObject({ status: 'fail', observation: `http-${status}` });
+    expect(report.checks.find((c) => c.table === VIEW)).toMatchObject({ status: 'pass' });
+  });
+
+  it('warns when anonymous reads of both raw table and view succeed', async () => {
+    const f = routedFetch([
+      [(u) => u.includes(VIEW), () => json(206, [PROTECTED_VIEW_ROW], { 'content-range': '0-0/11' })],
+      [(u) => u.includes('/rest/v1/'), () => json(206, [{ id: 'a' }], { 'content-range': '0-0/7' })],
+    ]);
+    const report = await runVerification(cfg({ apiBase: '' }), f);
+    const supabase = report.checks.filter((c) => c.id.startsWith('supabase'));
+    expect(verdictOf(supabase)).toBe('PASS_WITH_WARNINGS');
+    expect(supabase.find((c) => c.table === VIEW)).toMatchObject({ status: 'warn', observation: 'raw-table-still-readable' });
   });
 
   it('an absent view alone makes the run PASS_WITH_WARNINGS, never FAIL', async () => {
@@ -438,11 +467,11 @@ describe('report', () => {
       [(u) => u.includes('/rest/v1/'), () => json(200, [{ id: 'a' }])],
     ]);
 
-  it('passes end to end and exits 0', async () => {
+  it('passes available reads end to end with the raw-table grant warning', async () => {
     const report = await runVerification(cfg(), healthy());
-    expect(report.verdict).toBe('PASS');
-    expect(report.exitCode).toBe(EXIT_CODES.PASS);
-    expect(report.summary).toMatchObject({ fail: 0, outage: 0, warn: 0 });
+    expect(report.verdict).toBe('PASS_WITH_WARNINGS');
+    expect(report.exitCode).toBe(EXIT_CODES.PASS_WITH_WARNINGS);
+    expect(report.summary).toMatchObject({ fail: 0, outage: 0, warn: 1 });
   });
 
   it('only ever issues GET requests with manual redirects', async () => {
