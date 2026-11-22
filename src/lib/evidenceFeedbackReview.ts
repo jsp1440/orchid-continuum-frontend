@@ -300,7 +300,7 @@ export function formatSafeJson(value: unknown): string {
   const text = JSON.stringify(value, null, 2);
   if (text === undefined) return String(value);
   return text.replace(FORMAT_CHARACTER, (char) =>
-    `\\u${(char.codePointAt(0) ?? 0).toString(16).padStart(4, "0")}`);
+    char.split("").map((unit) => `\\u${unit.charCodeAt(0).toString(16).padStart(4, "0")}`).join(""));
 }
 
 function str(source: Rec, key: string): string {

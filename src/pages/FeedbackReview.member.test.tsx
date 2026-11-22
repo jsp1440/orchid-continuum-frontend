@@ -124,6 +124,18 @@ describe("format characters never render raw in the owner review", () => {
     expect(JSON.parse(text)).toEqual(payload);
   });
 
+  it.each([
+    ["\u{E0001}", "\\udb40\\udc01"],
+    ["\u{E0020}", "\\udb40\\udc20"],
+  ])("round-trips supplementary format characters in keys and values", (char, escape) => {
+    const payload = { [`key${char}`]: [`value${char}`] };
+    const text = formatSafeJson(payload);
+    expect(ANY_FORMAT_CHARACTER.test(text)).toBe(false);
+    expect(text).toContain(`key${escape}`);
+    expect(text).toContain(`value${escape}`);
+    expect(JSON.parse(text)).toEqual(payload);
+  });
+
   it("renders a stored statement, page context and payload with no raw format character", async () => {
     await renderAndOpen(detailWithFormatCharacters());
     expect(ANY_FORMAT_CHARACTER.test(container.textContent ?? "")).toBe(false);
