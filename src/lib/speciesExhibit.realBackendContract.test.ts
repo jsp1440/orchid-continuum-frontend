@@ -20,12 +20,12 @@ const phalaenopsis = (realBackend as Record<string, unknown>).phalaenopsis;
 const dracula = (realBackend as Record<string, unknown>).dracula;
 
 function mockFetchOnceWith(payload: unknown, status = 200) {
-  const res = {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => payload,
-  } as Response;
-  vi.stubGlobal('fetch', vi.fn(async () => res));
+  // A real Response, as browser fetch returns: the client reads the body
+  // through the standard Body API inside its deadline (#973).
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify(payload), { status })),
+  );
 }
 
 afterEach(() => {

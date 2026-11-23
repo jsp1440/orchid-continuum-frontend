@@ -19,6 +19,7 @@ import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
 const AtlasNext = lazy(() => import("./pages/AtlasNext"));
+const AtlasChecklistPage = lazy(() => import("./features/atlas-checklist/AtlasChecklistPage"));
 import OrchidZoo from "./pages/OrchidZoo";
 import OACS from "./pages/OACS";
 import Widgets from "./pages/Widgets";
@@ -109,6 +110,14 @@ const App = () => (
                     element={
                       <Suspense fallback={<div className="flex h-[100dvh] items-center justify-center bg-[#05070b] text-sm text-white/60">Loading the Atlas…</div>}>
                         <AtlasNext />
+                      </Suspense>
+                    }
+                  />
+                  <Route
+                    path="/atlas/checklist"
+                    element={
+                      <Suspense fallback={<div className="p-6 text-sm">Loading the checklist layer…</div>}>
+                        <AtlasChecklistPage />
                       </Suspense>
                     }
                   />

@@ -15,6 +15,7 @@ import React, { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Globe2, Loader2 } from 'lucide-react';
 import { useLeaflet } from '@/hooks/useLeaflet';
+import { BASEMAP_TILE_OPTIONS, BASEMAP_TILE_URL } from '@/lib/basemap';
 import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 
 export interface AtlasMiniMapProps {
@@ -79,15 +80,7 @@ const AtlasMiniMap: React.FC<AtlasMiniMapProps> = ({
       scrollWheelZoom: false,
       maxBounds: [[-85, -240], [85, 240]],
     });
-    L.tileLayer(
-      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-      {
-        attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
-        subdomains: 'abcd',
-        maxZoom: 19,
-      },
-    ).addTo(map);
+    L.tileLayer(BASEMAP_TILE_URL, BASEMAP_TILE_OPTIONS).addTo(map);
     mapRef.current = map;
     return () => {
       map.remove();

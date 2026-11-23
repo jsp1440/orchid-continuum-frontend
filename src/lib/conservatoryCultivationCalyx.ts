@@ -163,7 +163,10 @@ function observedDay(value: unknown): string | null {
   if (typeof value !== 'string') return null;
   const day = value.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  return Number.isNaN(Date.parse(day)) ? null : day;
+  const timestamp = Date.parse(day);
+  if (Number.isNaN(timestamp)) return null;
+  // Date.parse normalizes impossible dates such as February 30 into March.
+  return new Date(timestamp).toISOString().slice(0, 10) === day ? day : null;
 }
 
 function boundedObservation(candidate: unknown): CultivationObservation | null {

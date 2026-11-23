@@ -41,12 +41,12 @@ describe('featured taxon source integrity', () => {
     expect(entry).not.toMatch(/DailyGenusFeatureV[1-5]/);
   });
 
-  it('keeps the public homepage on the concise evidence journey instead of the legacy card stack', () => {
+  it('keeps the evidence journey alongside the restored capability grid', () => {
     const layout = source('components/AppLayout.tsx');
-    for (const legacy of ['WhyContinuumExists','TheKnowledgeGraph','HabitatCards','CapabilityGrid','OrchidGallery','WhyOrchidsMatter','HumanStewardship','NewsFromContinuum','HomeAtlas from']) {
+    for (const legacy of ['WhyContinuumExists','TheKnowledgeGraph','HabitatCards','OrchidGallery','WhyOrchidsMatter','HumanStewardship','NewsFromContinuum','HomeAtlas from']) {
       expect(layout, `AppLayout must not remount legacy homepage surface ${legacy}`).not.toContain(legacy);
     }
-    for (const canonical of ['DailyGenusFeature','ContinuumWeb','HomeAtlasContinuum','PublicCalyxGuide','HomepageStewardshipClose']) {
+    for (const canonical of ['DailyGenusFeature','ContinuumWeb','CapabilityGrid','HomeAtlasContinuum','PublicCalyxGuide','HomepageStewardshipClose']) {
       expect(layout, `AppLayout must keep canonical journey surface ${canonical}`).toContain(canonical);
     }
   });

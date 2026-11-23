@@ -1,4 +1,5 @@
 export const ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN = 'atlas-next-occurrence-evidence';
+export const ATLAS_CHECKLIST_LAYER_ORIGIN = 'atlas-checklist-layer';
 
 const CLASSROOM_INVESTIGATION_ORIGIN = 'classroom-investigation';
 const MAX_GENUS_CHARACTERS = 80;
@@ -29,16 +30,17 @@ function boundedQuestion(question: string | null | undefined): string | null {
  * The three provenance fields are an all-or-nothing contract. Any malformed or
  * incomplete provenance fails closed so duplicated route context can never be
  * mistaken for scientific evidence. Question context is also origin-bound here
- * as defense in depth: only the Atlas occurrence-evidence and Classroom
- * investigation producers may populate this generic parser. Other origins must
- * use their dedicated contracts and cannot acquire a question merely by
- * supplying lookalike query parameters.
+ * as defense in depth: only the Atlas occurrence-evidence, Atlas checklist-layer
+ * and Classroom investigation producers may populate this generic parser. Other
+ * origins must use their dedicated contracts and cannot acquire a question merely
+ * by supplying lookalike query parameters.
  */
 export function parseAtlasCalyxQuestionContext(search: string): AtlasCalyxQuestionContext | null {
   const params = new URLSearchParams(search);
   const origin = params.get('origin')?.trim() ?? '';
   if (
     origin !== ATLAS_NEXT_OCCURRENCE_EVIDENCE_ORIGIN &&
+    origin !== ATLAS_CHECKLIST_LAYER_ORIGIN &&
     origin !== CLASSROOM_INVESTIGATION_ORIGIN
   ) {
     return null;
@@ -83,5 +85,21 @@ export function atlasOccurrenceEvidenceCalyxHref(
     params.set('question_source', 'user');
     params.set('question_is_evidence', 'false');
   }
+  return `/calyx?${params.toString()}`;
+}
+
+/**
+ * Atlas checklist layer → Calyx. Carries one question written by the backend in a closed phrasing over a
+ * graph-confirmed name; no genus, no record fields, no coordinates. The question is not evidence.
+ */
+export function atlasChecklistCalyxHref(question: string | null | undefined): string | null {
+  const activeQuestion = boundedQuestion(question);
+  if (!activeQuestion) return null;
+  const params = new URLSearchParams({
+    origin: ATLAS_CHECKLIST_LAYER_ORIGIN,
+    question: activeQuestion,
+    question_source: 'user',
+    question_is_evidence: 'false',
+  });
   return `/calyx?${params.toString()}`;
 }

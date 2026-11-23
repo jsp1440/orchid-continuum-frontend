@@ -1,0 +1,78 @@
+[
+  {
+    "path": "/atlas/checklist/layer",
+    "status": 200,
+    "top_level_keys": [
+      "layer_id",
+      "title",
+      "group",
+      "status",
+      "geometry",
+      "derivation",
+      "source",
+      "evidence_class",
+      "review_state",
+      "caveats",
+      "facet_groups",
+      "not_used",
+      "not_served",
+      "schema",
+      "enabled",
+      "notice"
+    ]
+  },
+  {
+    "path": "/atlas/checklist/area?name=Madagascar",
+    "status": 200,
+    "top_level_keys": [
+      "schema",
+      "status",
+      "notice",
+      "geometry",
+      "read_only",
+      "layer_id",
+      "reader_state",
+      "query",
+      "area",
+      "taxa_listed",
+      "taxa_listed_with_a_marker",
+      "taxa",
+      "taxa_truncated",
+      "offset",
+      "next_offset",
+      "withheld_count",
+      "order",
+      "other_writings",
+      "note",
+      "withheld_whole_field_count",
+      "calyx"
+    ]
+  },
+  {
+    "path": "/atlas/checklist/area?name=Atlantis",
+    "status": 200,
+    "top_level_keys": [
+      "schema",
+      "status",
+      "notice",
+      "geometry",
+      "read_only",
+      "layer_id",
+      "reader_state",
+      "query",
+      "area",
+      "taxa_listed",
+      "taxa_listed_with_a_marker",
+      "taxa",
+      "taxa_truncated",
+      "offset",
+      "next_offset",
+      "withheld_count",
+      "order",
+      "other_writings",
+      "note",
+      "gap",
+      "calyx"
+    ]
+  }
+]

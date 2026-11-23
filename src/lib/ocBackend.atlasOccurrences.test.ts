@@ -1,0 +1,395 @@
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { ATLAS_OCCURRENCES_PROBE_URL, ATLAS_OCCURRENCES_URL as CONFIG_URL } from './backendConfig';
+import { atlasLayerToEducationalRows } from './appliedAiDataScience';
+import { adaptOccurrenceResult, ATLAS_OCCURRENCES_PATH } from './atlas';
+import { describePayloadShape, hasThreatAssessment, resolveAtlasLocation } from './atlasLocalitySafety';
+import {
+  ATLAS_OCCURRENCES_URL,
+  fetchAtlasOccurrences,
+  fetchGenusOccurrences,
+  occurrencePayloadToAtlasLayer,
+} from './ocBackend';
+
+/**
+ * #931: the Atlas data calls used `/atlas/occurrences`, which 404s on the public
+ * API, while the health probe checked `/api/atlas/occurrences`, which works — so
+ * the probe stayed green while every map drew zero records.
+ */
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('Atlas occurrences route (#931)', () => {
+  it('every Atlas data constant uses the /api route the probe checks', () => {
+    expect(ATLAS_OCCURRENCES_URL.endsWith('/api/atlas/occurrences')).toBe(true);
+    expect(CONFIG_URL.endsWith('/api/atlas/occurrences')).toBe(true);
+    expect(ATLAS_OCCURRENCES_PROBE_URL).toBe(`${CONFIG_URL}?limit=1`);
+  });
+
+  it('no source file builds the bare /atlas/occurrences path again', () => {
+    const root = resolve(process.cwd(), 'src');
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.(ts|tsx)$/.test(name) && !name.endsWith('.test.ts')) {
+          readFileSync(path, 'utf8').split('\n').forEach((line, i) => {
+            // a URL template or string ending in /atlas/occurrences without the /api prefix
+            const code = line.trim();
+            if (code.startsWith('*') || code.startsWith('//') || code.startsWith('/*')) return;
+            if (/[}'"`]\/atlas\/occurrences/.test(line)) offenders.push(`${path}:${i + 1}`);
+          });
+        }
+      }
+    };
+    walk(root);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the map fetch calls the /api route and returns its rows', async () => {
+    const fetchMock = vi.fn(async (_url: string) =>
+      jsonResponse({ results: [{ id: 1, decimal_latitude: 10.01, decimal_longitude: -75.01, scientific_name: 'Phragmipedium kovachii', iucn_code: 'LC' }] }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const points = await fetchGenusOccurrences('Phragmipedium', 5);
+    expect(String(fetchMock.mock.calls[0][0])).toBe(`${ATLAS_OCCURRENCES_URL}?genus=Phragmipedium&limit=5`);
+    expect(points).toHaveLength(1);
+    expect(points[0].species).toBe('Phragmipedium kovachii');
+  });
+
+  it('a 404 still yields an empty list rather than an error or invented points', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ detail: 'Not Found' }, 404)));
+    await expect(fetchAtlasOccurrences(5)).resolves.toEqual([]);
+  });
+});
+
+describe('Atlas occurrences locality projection (#931 acceptance: locality safeguards)', () => {
+  async function pointFor(row: Record<string, unknown>) {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([{ id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, ...row }])));
+    const [point] = await fetchAtlasOccurrences(1);
+    return point;
+  }
+
+  it('a point with no conservation assessment is generalised to the precaution cell', async () => {
+    const p = await pointFor({});
+    expect(p.lat).toBeCloseTo(12.325, 6);
+    expect(p.lng).toBeCloseTo(-77.675, 6);
+  });
+
+  it('a threatened taxon is generalised to its tier cell', async () => {
+    const p = await pointFor({ iucn_code: 'EN' });
+    expect(p.lat).toBeCloseTo(12.25, 6);
+    expect(p.lng).toBeCloseTo(-77.75, 6);
+  });
+
+  it('stated coordinate uncertainty widens the cell', async () => {
+    const p = await pointFor({ iucn_code: 'LC', coordinate_uncertainty_in_meters: 20000 });
+    expect(p.lat).toBeCloseTo(12.375, 6);
+  });
+
+  it('an assessed, non-threatened point with no stated uncertainty keeps its coordinates', async () => {
+    const p = await pointFor({ conservation_status: 'Least Concern' });
+    expect([p.lat, p.lng]).toEqual([12.3456, -77.6543]);
+  });
+});
+
+describe('checker round 10 (#931)', () => {
+  async function pointFor(row: Record<string, unknown>) {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([{ id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, ...row }])));
+    const [point] = await fetchAtlasOccurrences(1);
+    return point;
+  }
+
+  it.each([
+    { iucn_code: 'NE' },
+    { iucn_code: 'DD' },
+    { conservation_status: 'Not Evaluated' },
+    { conservation_status: 'Data Deficient' },
+    { conservation_status: 'unknown' },
+    { properties: { conservation_status: 'Data Deficient' } },
+  ])('F3: a non-assessment value %o is unresolved, not precise', async (row) => {
+    const p = await pointFor(row);
+    expect(p.lat).toBeCloseTo(12.325, 6);
+    expect(p.lng).toBeCloseTo(-77.675, 6);
+  });
+
+  it('F3: the shared rule', () => {
+    expect(hasThreatAssessment(undefined, undefined)).toBe(false);
+    expect(hasThreatAssessment('NE', 'Data Deficient')).toBe(false);
+    expect(hasThreatAssessment('LC', undefined)).toBe(true);
+    expect(hasThreatAssessment(undefined, 'Endangered')).toBe(true);
+    expect(hasThreatAssessment('DD', 'Vulnerable')).toBe(true);
+  });
+
+  it('F4: GeoJSON features are read and projected', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({
+      type: 'FeatureCollection',
+      features: [{ id: 'f1', geometry: { type: 'Point', coordinates: [-77.6543, 12.3456] }, properties: { scientific_name: 'Masdevallia veitchiana' } }],
+    })));
+    const [p] = await fetchAtlasOccurrences(1);
+    expect(p.species).toBe('Masdevallia veitchiana');
+    expect(p.lat).toBeCloseTo(12.325, 6);
+  });
+
+  it.each([
+    ['an array', [{ id: 7, decimal_latitude: 12.3456, decimal_longitude: -77.6543, scientific_name: 'Phragmipedium kovachii', locality: 'secret valley', country: 'PE' }]],
+    ['{total, items}', { total: 1, items: [{ id: 7, latitude: 12.3456, longitude: -77.6543, scientific_name: 'Phragmipedium kovachii', locality: 'secret valley', country: 'PE' }] }],
+    ['a FeatureCollection', { features: [{ id: 7, geometry: { coordinates: [-77.6543, 12.3456] }, properties: { scientific_name: 'Phragmipedium kovachii', locality: 'secret valley', country: 'PE' } }] }],
+  ])('F2: %s becomes a locality-safe AtlasLayer the lab can read', (_label, payload) => {
+    const layer = occurrencePayloadToAtlasLayer(payload);
+    expect(layer?.features).toHaveLength(1);
+    const [f] = layer!.features;
+    expect(f.lat).toBeCloseTo(12.325, 6);
+    expect(JSON.stringify(f.properties)).not.toMatch(/secret valley|12\.3456|77\.6543|latitude|longitude|geometry|locality/);
+    const rows = atlasLayerToEducationalRows(layer!, 10);
+    expect(rows[0].scientific_name).toBe('Phragmipedium kovachii');
+    expect(rows[0].country_code).toBe('PE');
+  });
+
+  it('F2: an unrecognised payload is not a layer', () => {
+    expect(occurrencePayloadToAtlasLayer({ detail: 'oops' })).toBeNull();
+    expect(occurrencePayloadToAtlasLayer('text')).toBeNull();
+  });
+
+  it('F2: the lab adapter turns an unknown payload into an error and rows into a layer', () => {
+    const bad = adaptOccurrenceResult({ data: { detail: 'oops' }, error: null, unconfigured: false });
+    expect(bad.data).toBeNull();
+    expect(bad.error?.message).toMatch(/unrecognised/);
+    const good = adaptOccurrenceResult({
+      data: [{ id: 1, lat: 1.01, lng: 2.02, scientific_name: 'Vanilla planifolia' }], error: null, unconfigured: false,
+    });
+    expect(good.error).toBeNull();
+    expect(good.data?.features[0].properties?.scientific_name).toBe('Vanilla planifolia');
+    const unconfigured = adaptOccurrenceResult({ data: null, error: null, unconfigured: true });
+    expect(unconfigured).toEqual({ data: null, error: null, unconfigured: true });
+  });
+
+  it('F2: atlasApi.occurrences passes a path, not an absolute URL, to apiRequest', () => {
+    expect(ATLAS_OCCURRENCES_PATH).toBe('/api/atlas/occurrences');
+    const source = readFileSync(resolve(process.cwd(), 'src/lib/atlas.ts'), 'utf8');
+    expect(source).toMatch(/apiRequest<unknown>\(ATLAS_OCCURRENCES_PATH,/);
+    expect(source).not.toMatch(/apiRequest[^(]*\(ATLAS_OCCURRENCES_URL/);
+  });
+
+  it('F1: diagnostics samples withhold coordinates and place text, keep the rest', () => {
+    const sample = describePayloadShape({
+      count: 2,
+      results: [{ id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, locality: 'secret valley',
+        geometry: { coordinates: [-77.6543, 12.3456] }, scientific_name: 'Masdevallia veitchiana' }],
+    });
+    const text = JSON.stringify(sample);
+    expect(text).not.toMatch(/12\.3456|77\.6543|secret valley/);
+    expect(text).toContain('Masdevallia veitchiana');
+    expect(text).toContain('"count":2');
+  });
+
+  it('F1: the diagnostics page redacts every printed sample', () => {
+    const page = readFileSync(resolve(process.cwd(), 'src/pages/DailyGenusDiagnostics.tsx'), 'utf8');
+    expect(page).toMatch(/function samplePayload\(payload: unknown\): unknown \{(\s*\/\/[^\n]*\n)+\s*return describePayloadShape\(/);
+  });
+});
+
+describe('checker round 11 (#931)', () => {
+  const LEAKY_ROW = {
+    id: 9,
+    decimal_latitude: 12.3456,
+    decimal_longitude: -77.6543,
+    scientific_name: 'Masdevallia veitchiana',
+    country: 'PE',
+    verbatimCoordinates: '12 20 44N 76 32 35W',
+    verbatimLatitude: '12.3456',
+    verbatimLongitude: '-77.6543',
+    verbatim_coordinates: 'x',
+    private_latitude: 12.34567,
+    private_longitude: -77.65432,
+    obscured_latitude: 12.3,
+    latlng: '12.3456,-77.6543',
+    lat_lng: 'x',
+    latLong: 'x',
+    coords: [12.3456, -77.6543],
+    position: { a: 1 },
+    the_geom: 'POINT(-77.6543 12.3456)',
+    geom_wkt: 'x',
+    wkt: 'x',
+    geojson: { type: 'Point', note: 'inner' },
+    place_guess: 'Near Village X',
+    placeGuess: 'Near Village X',
+    locationRemarks: 'by the waterfall',
+    location_text: 'Village X',
+    locationID: 'loc-1',
+    municipality: 'Village X',
+    county: 'Village X',
+    island: 'Village X',
+    habitat: 'cloud forest above Village X',
+    occurrenceRemarks: 'Village X',
+    notes: 'seen at 12.3456, -77.6543',
+  };
+  const LEAKS = /Village X|waterfall|12\.34|77\.65|20 44N|POINT\(|inner|loc-1/;
+
+  it('F1: diagnostics samples withhold every Darwin Core / iNaturalist place or coordinate key', () => {
+    const text = JSON.stringify(describePayloadShape({ count: 1, results: [LEAKY_ROW] }));
+    expect(text).not.toMatch(LEAKS);
+    expect(text).toContain('Masdevallia veitchiana');
+    expect(text).toContain('"country":"PE"');
+  });
+
+  it('F1: Atlas feature properties are an allowlist, so none of those keys travel', () => {
+    const layer = occurrencePayloadToAtlasLayer([LEAKY_ROW]);
+    const [f] = layer!.features;
+    expect(JSON.stringify(f.properties)).not.toMatch(LEAKS);
+    expect(Object.keys(f.properties ?? {}).sort()).toEqual(['country', 'scientific_name']);
+  });
+
+  it.each([
+    ['Data deficient (DD)', false],
+    ['IUCN: NE', false],
+    ['Not yet assessed', false],
+    ['CITES Appendix II', false],
+    ['some text', false],
+    ['Endangered (EN)', true],
+    ['IUCN Red List: Vulnerable', true],
+    ['Least Concern', true],
+    ['CR', true],
+  ])('F3: %s counts as a threat assessment: %s', (status, expected) => {
+    expect(hasThreatAssessment(undefined, status)).toBe(expected);
+  });
+
+  it('F2: null and non-object rows are skipped, not thrown on', async () => {
+    const layer = occurrencePayloadToAtlasLayer({ data: [null, 1, 'a', [1, 2], { lat: 1.01, lng: 2.02, scientific_name: 'Vanilla planifolia' }] });
+    expect(layer?.features).toHaveLength(1);
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([null, { lat: 1.01, lng: 2.02 }])));
+    await expect(fetchAtlasOccurrences(2)).resolves.toHaveLength(1);
+  });
+});
+
+
+describe('checker round 12 (#931): diagnostics print structure, not values', () => {
+  it.each([
+    ['12.3456°N, 76.5432°W'],
+    ['N12.3456 W76.5432'],
+    ['Lat: 12.3456 Lon: -76.5432'],
+    ['12.34/-76.54'],
+    ['-12,3456; -76,5432'],
+    ["76°32'35\"W"],
+    ['12.345678'],
+    ['lat 12.3456'],
+    ['2 km N of Doi Inthanon summit'],
+    ['near Kinabalu park HQ'],
+    ['{"lat":12.3}'],
+    ['Lake X'],
+  ])('a value under an ordinary key is never printed: %s', (value) => {
+    for (const key of ['notes', 'description', 'fieldNotes', 'dynamicProperties', 'waterBody', 'name', 'state']) {
+      const text = JSON.stringify(describePayloadShape({ results: [{ [key]: value }] }));
+      expect(text).not.toContain(value.slice(0, 6));
+      expect(text).toContain('<string>');
+    }
+  });
+
+  it('a nested numeric pair under an ordinary key is replaced by types', () => {
+    expect(describePayloadShape({ c: { d: [12.3456, -76.5432] } })).toEqual({ c: { d: ['<number>', '<number>'] } });
+  });
+
+  it('allowlisted descriptive values, counts and structure remain', () => {
+    const shape = describePayloadShape({
+      count: 120,
+      results: [1, 2, 3, 4, 5].map(() => ({ scientific_name: 'Masdevallia veitchiana', country: 'PE', year: 2019, notes: 'x' })),
+    }) as { count: number; results: unknown[] };
+    expect(shape.count).toBe(120);
+    expect(shape.results).toHaveLength(4);
+    expect(shape.results[0]).toEqual({ scientific_name: 'Masdevallia veitchiana', country: 'PE', year: 2019, notes: '<string>' });
+    expect(shape.results[3]).toBe('<2 more>');
+  });
+
+  it('an allowlisted key still cannot carry digits-bearing text', () => {
+    expect(describePayloadShape({ species: 'Masdevallia 12.3456, -76.5432' })).toEqual({ species: '<string>' });
+  });
+
+  it('the lab layer keeps coarse region fields and withholds elevation by design', () => {
+    const layer = occurrencePayloadToAtlasLayer([{ lat: 1.01, lng: 2.02, scientific_name: 'Vanilla planifolia', region: 'Andes', elevation_m: 2400 }]);
+    expect(layer?.features[0].properties).toEqual({ scientific_name: 'Vanilla planifolia', region: 'Andes' });
+  });
+});
+
+describe('owner review 5624340140 (#934): one assessment reading for recognition and tier', () => {
+  const EXACT = { lat: 12.3456, lng: -77.6543 };
+  const rowWith = (row: Record<string, unknown>) => [{ id: 1, decimal_latitude: EXACT.lat, decimal_longitude: EXACT.lng, ...row }];
+
+  it.each([
+    [{ conservation_status: 'CR' }, 1],
+    [{ conservation_status: 'EN' }, 0.5],
+    [{ conservation_status: 'VU' }, 0.25],
+    [{ iucn_code: 'IUCN: CR' }, 1],
+    [{ iucn_code: 'cr' }, 1],
+    [{ conservation_status: 'Least Concern', iucn_code: 'EN' }, 0.5],
+  ])('%j is recognised and generalised to its tier cell', async (row, cellDeg) => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(rowWith(row))));
+    const [p] = await fetchAtlasOccurrences(1);
+    const centre = (v: number) => (Math.floor(v / cellDeg) + 0.5) * cellDeg;
+    expect(p.lat).toBeCloseTo(centre(EXACT.lat), 6);
+    expect(p.lng).toBeCloseTo(centre(EXACT.lng), 6);
+    expect(p.lat).not.toBeCloseTo(EXACT.lat, 3);
+  });
+
+  it('the original genus fetch consumer generalises conservation_status "CR"', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(rowWith({ conservation_status: 'CR' }))));
+    const [p] = await fetchGenusOccurrences('Masdevallia', 1);
+    expect(p.lat).toBeCloseTo(12.5, 6);
+    expect(p.lng).toBeCloseTo(-77.5, 6);
+  });
+
+  it('every value recognised as an assessment that names a threatened category yields a tier', () => {
+    for (const value of ['CR', 'EN', 'VU', 'IUCN: CR', 'IUCN EN', 'vu', 'CR(PE)', 'Critically Endangered', 'Endangered', 'Vulnerable']) {
+      expect(hasThreatAssessment(value, null)).toBe(true);
+      expect(hasThreatAssessment(null, value)).toBe(true);
+      expect(resolveAtlasLocation({ lat: EXACT.lat, lng: EXACT.lng, iucnCode: value, assessmentResolved: true }).policy.generalised).toBe(true);
+      expect(resolveAtlasLocation({ lat: EXACT.lat, lng: EXACT.lng, conservationStatus: value, assessmentResolved: true }).policy.generalised).toBe(true);
+    }
+  });
+
+  it('prose that merely contains a lowercase non-threat code is not an assessment', () => {
+    expect(hasThreatAssessment(null, 'ex situ collection')).toBe(false);
+    expect(hasThreatAssessment(null, 'Least Concern')).toBe(true);
+  });
+});
+
+describe('owner review 5624340140 (#934): allowed properties carry only public primitives', () => {
+  const PRIVATE = { private_latitude: 12.3456, private_longitude: -77.6543, locality: 'synthetic-private-site-marker' };
+
+  it('an allowed key holding an object does not travel', () => {
+    const layer = occurrencePayloadToAtlasLayer([
+      { id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, iucn_code: 'CR', source: { name: 'x', ...PRIVATE }, genus: 'Masdevallia' },
+    ]);
+    const props = layer!.features[0].properties as Record<string, unknown>;
+    expect(props.source).toBeUndefined();
+    expect(props.genus).toBe('Masdevallia');
+    expect(JSON.stringify(layer)).not.toMatch(/12\.3456|77\.6543|synthetic-private-site-marker/);
+  });
+
+  it('a nested properties.dataset array does not travel', () => {
+    const layer = occurrencePayloadToAtlasLayer([
+      { id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, iucn_code: 'CR', properties: { dataset: [{ coordinates: [-77.6543, 12.3456], ...PRIVATE }] } },
+    ]);
+    const props = layer!.features[0].properties as Record<string, unknown>;
+    expect(props.dataset).toBeUndefined();
+    expect(JSON.stringify(layer)).not.toMatch(/12\.3456|77\.6543|synthetic-private-site-marker/);
+  });
+
+  it('ordinary primitive metadata still travels', () => {
+    const layer = occurrencePayloadToAtlasLayer([
+      { id: 1, decimal_latitude: 12.3456, decimal_longitude: -77.6543, iucn_code: 'LC', year: 2019, dataset: 'GBIF', country: 'Peru', elevation: 2500, locality: 'x' },
+    ]);
+    const props = layer!.features[0].properties as Record<string, unknown>;
+    expect(props).toMatchObject({ year: 2019, dataset: 'GBIF', country: 'Peru' });
+    expect(props.elevation).toBeUndefined();
+    expect(props.locality).toBeUndefined();
+  });
+});

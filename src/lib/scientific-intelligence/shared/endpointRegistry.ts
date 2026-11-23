@@ -1,4 +1,5 @@
 import {
+  ATLAS_OCCURRENCES_URL,
   BACKEND_BASE_URL,
   CALYX_BACKEND_BASE_URL,
   IMAGES_BACKEND_BASE_URL,
@@ -18,7 +19,7 @@ export const ENDPOINT_REGISTRY: EndpointRegistryEntry[] = [
   },
   {
     subsystem: 'atlas',
-    endpoint: `${BACKEND_BASE_URL}/atlas/occurrences`,
+    endpoint: ATLAS_OCCURRENCES_URL,
     method: 'GET',
     responseShape: '{ total: number, items: Occurrence[] } or Occurrence[]',
     normalizedFields: ['occurrenceCount', 'acceptedTaxa', 'coordinateQuality'],

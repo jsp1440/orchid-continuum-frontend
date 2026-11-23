@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Scatter, ScatterChart, XAxis, YAxis } from "recharts";
 
+import OwnerAccessCodeForm from "@/components/auth/OwnerAccessCodeForm";
+import CalyxEvidencePanel from "@/components/calyx/CalyxEvidencePanel";
 import ScientificSynthesis from "@/components/calyx/ScientificSynthesis";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { useCalyxSpeechInput } from "@/hooks/useCalyxSpeechInput";
@@ -38,6 +40,12 @@ import {
   type MissionSource,
 } from "@/lib/calyxWorkspace";
 import { citationIdentifierParts } from "@/lib/calyxCitationSource";
+import {
+  composeAnswerWithEvidence,
+  readSavedMessageEvidence,
+  readScientificEvidence,
+  type CalyxEvidenceView,
+} from "@/lib/calyxScientificEvidence";
 
 const emptySnapshot: CalyxWorkspaceSnapshot = {
   capabilities: null,
@@ -429,16 +437,21 @@ function CalyxMessageContent({ content }: { content: string }) {
   );
 }
 
-export default function CalyxWorkspace() {
+export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuestion?: string } = {}) {
   const [snapshot, setSnapshot] = useState<CalyxWorkspaceSnapshot>(emptySnapshot);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState(initialQuestion);
   const [projectId, setProjectId] = useState(DEFAULT_PROJECT_ID);
   const [conversation, setConversation] = useState<CalyxConversation | null>(null);
   const [missions, setMissions] = useState<Record<string, BrainMission>>({});
+  // The scientific evidence block of each turn sent in this session, by Calyx
+  // message id. A saved conversation does not carry the block, so a reloaded
+  // turn falls back to what its message metadata kept.
+  const [turnEvidence, setTurnEvidence] = useState<Record<string, CalyxEvidenceView>>({});
   const [submitting, setSubmitting] = useState(false);
   const [conversationError, setConversationError] = useState<string | null>(null);
   const [authRequired, setAuthRequired] = useState(false);
+  const [ownerNotice, setOwnerNotice] = useState<"kept" | "empty" | null>(null);
   const [speakReplies, setSpeakReplies] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [selectedAttachmentIndex, setSelectedAttachmentIndex] = useState<number | null>(null);
@@ -619,6 +632,7 @@ export default function CalyxWorkspace() {
     if (!isActiveLifecycleRequest(requestId, activeProjectId)) return null;
     if (conversation && !shouldReuseConversation(conversation, activeProjectId)) {
       setMissions({});
+      setTurnEvidence({});
       missionLookupAttemptsRef.current.clear();
       setWorkspaceStatus(`Started a clean CALYX thread for project ${activeProjectId}.`);
     } else setWorkspaceStatus(null);
@@ -642,6 +656,7 @@ export default function CalyxWorkspace() {
     setSubmitting(true);
     setConversationError(null);
     setAuthRequired(false);
+    setOwnerNotice(null);
     setWorkspaceStatus(null);
     setMessage((current) => (current.trim() === text ? "" : current));
     cancelSpeech();
@@ -662,6 +677,8 @@ export default function CalyxWorkspace() {
       turnCommitted = true;
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
       if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
+      const evidenceView = readScientificEvidence(result.research.scientific_evidence);
+      if (evidenceView.kind !== "absent") setTurnEvidence((current) => ({ ...current, [result.calyx_message.message_id]: evidenceView }));
       const refreshed = await getCalyxConversation(thread.conversation_id);
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
       setConversation(refreshed);
@@ -722,6 +739,7 @@ export default function CalyxWorkspace() {
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
+      setTurnEvidence({});
     missionLookupAttemptsRef.current.clear();
     setMessage("");
     setConversationError(null);
@@ -736,6 +754,17 @@ export default function CalyxWorkspace() {
     setSelectedDocumentText("");
     window.localStorage.removeItem(STORAGE_KEY);
     focusMessageInput();
+  }
+
+  // The owner access code is typed on this page (OwnerAccessCodeForm signs in through the
+  // same createOwnerSession as Mission Control). The question the refused send put back in
+  // the box is left untouched; the owner taps Send again.
+  function handleOwnerSignedIn() {
+    setOwnerNotice(message.trim() ? "kept" : "empty");
+    setAuthRequired(false);
+    setConversationError(null);
+    void refreshConversationHistory();
+    void loadCalyxWorkspace().then((value) => { if (mountedRef.current) setSnapshot(value); }).catch(() => undefined);
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -775,6 +804,7 @@ export default function CalyxWorkspace() {
     conversationIdRef.current = null;
     setConversation(null);
     setMissions({});
+      setTurnEvidence({});
     missionLookupAttemptsRef.current.clear();
     setMessage("");
     setConversationError(null);
@@ -838,17 +868,23 @@ export default function CalyxWorkspace() {
             <div className="max-h-[62vh] min-h-80 space-y-5 overflow-y-auto p-5" aria-live="polite">
               {!messages.length ? <div className="mx-auto max-w-3xl py-14 text-center"><h2 className="text-2xl font-semibold">What would you like to work on?</h2><p className="mt-3 text-sm text-muted-foreground">Ask a scientific question, request a literature review, or ask Calyx to prepare chart/map-ready research output.</p><div className="mt-6 grid gap-3 text-left sm:grid-cols-2">{CALYX_STARTER_QUESTIONS.map((question) => <button className="rounded-2xl border bg-background px-4 py-3 text-sm hover:bg-muted" key={question} onClick={() => { cancelAutoRetry(); setMessage(question); focusMessageInput(); }} type="button"><span className="font-medium">Ask CALYX</span><span className="mt-1 block text-muted-foreground">{question}</span></button>)}</div></div> : messages.map((turn) => {
                 const citations = turn.role === "calyx" && Array.isArray(turn.metadata?.citations) ? turn.metadata.citations as CalyxCitation[] : [];
+                // The evidence sentences are printed once: in the panel when it can
+                // show them, otherwise where the backend put them in the answer.
+                const answer = turn.role === "calyx"
+                  ? composeAnswerWithEvidence(turn.content, turnEvidence[turn.message_id] ?? readSavedMessageEvidence(turn.metadata))
+                  : null;
                 return (
                   <article className={`max-w-4xl ${turn.role === "operator" ? "ml-auto" : "mr-auto"}`} key={turn.message_id}>
                     <div className={`rounded-2xl px-4 py-3 ${turn.role === "operator" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
-                      {turn.role === "calyx" ? <CalyxMessageContent content={turn.content} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
+                      {answer ? <CalyxMessageContent content={answer.answerText} /> : <p className="whitespace-pre-wrap text-sm leading-6">{turn.content}</p>}
                     </div>
                     {turn.role === "calyx" && ttsSupported ? <button aria-label="Speak this reply" className="mt-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground hover:bg-muted" onClick={() => speak(turn.content)} type="button">🔊 Speak</button> : null}
+                    {answer ? <CalyxEvidencePanel evidence={answer.evidence} /> : null}
                     {turn.role === "calyx" ? <CitationList items={citations} /> : null}
                     {turn.role === "calyx" && turn.metadata?.synthesis_structure ? (
                       <SynthesisDetail structure={turn.metadata.synthesis_structure as CalyxSynthesisStructure} />
                     ) : null}
-                    {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
+                    {turn.role === "calyx" && missions[turn.message_id] ? <details className="mt-2 rounded-xl border bg-background px-4 py-3"><summary className="cursor-pointer text-sm font-medium [overflow-wrap:anywhere]">Research details · mission {missions[turn.message_id].mission_id}</summary><MissionResult mission={missions[turn.message_id]} /></details> : null}
                     {turn.role === "calyx" && turn.metadata?.provider ? <p className="mt-1 text-xs text-muted-foreground">Server reply · {String(turn.metadata.provider)} · {String(turn.metadata.model ?? "model not reported")}</p> : null}
                   </article>
                 );
@@ -879,6 +915,25 @@ export default function CalyxWorkspace() {
               {speechInputError ? <p className="mt-3 text-sm text-destructive" role="alert">{speechInputError}</p> : null}
               {conversationError ? <div className="mt-3 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-sm text-destructive" role="alert"><p>{conversationError}{authRequired ? <> · <Link className="underline" to="/mission-control">Sign in at Mission Control</Link></> : null}</p>{pendingRetry ? <div className="mt-3 flex flex-wrap items-center gap-2 text-xs"><span>Automatic retry in {autoRetryCountdown ?? NETWORK_RETRY_SECONDS}s.</span><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={() => void sendMessage(pendingRetry.message)} type="button">Retry now</button><button className="rounded-full border border-current px-3 py-1 hover:bg-background/60" onClick={cancelAutoRetry} type="button">Cancel</button></div> : null}</div> : null}
             </form>
+            {authRequired || snapshot.orchestratorState === "authentication_required" ? (
+              <details className="border-t p-4 text-sm" data-testid="calyx-owner-sign-in" key={authRequired ? "needed" : "offered"} open={authRequired}>
+                <summary className="min-h-11 cursor-pointer py-2 font-medium">Owner sign-in</summary>
+                <OwnerAccessCodeForm
+                  autoComplete="off"
+                  buttonClassName="min-h-11 rounded-md bg-primary px-4 py-2 font-medium text-primary-foreground disabled:opacity-50"
+                  buttonLabel="Sign in as owner"
+                  className="mt-2 rounded-lg border bg-background p-4"
+                  description="Enter the owner access code to send questions to Calyx. Your question stays in the box above. The code is used once to sign in and is not stored."
+                  formatFailure={(failure) => failure.replace(/^Calyx backend \d+:\s*/, "")}
+                  heading="Owner access code"
+                  idPrefix="calyx-owner"
+                  inputClassName="min-h-11 min-w-[14rem] flex-1 rounded-md border bg-background px-3 py-2 text-base text-foreground"
+                  onSignedIn={handleOwnerSignedIn}
+                  placeholder="Owner access code"
+                />
+              </details>
+            ) : null}
+            {ownerNotice && !authRequired ? <p className="border-t p-4 text-sm text-muted-foreground" role="status">{ownerNotice === "kept" ? "Signed in as owner. Your question is still in the box; tap Send." : "Signed in as owner. Type your question and tap Send."}</p> : null}
           </section>
 
           <aside className="space-y-4">
