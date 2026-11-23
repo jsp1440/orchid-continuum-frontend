@@ -24,7 +24,16 @@ describe('Calyx answer rendering keeps synthesis primary', () => {
   it('renders the answer prose itself as the primary surface', () => {
     // The conversational answer is rendered directly, not decomposed into
     // per-subsystem panels by the client.
-    expect(workspace).toContain('<CalyxMessageContent content={turn.content} />');
+    //
+    // The one thing taken out of the prose is the evidence section the backend
+    // appends under "What the Continuum's evidence records show:", and only
+    // when the evidence panel directly below prints those same sentences
+    // (composeAnswerWithEvidence; covered in calyxScientificEvidence.test.ts
+    // and CalyxWorkspace.evidence.test.tsx). Calyx's own paragraphs are never
+    // split, reordered or summarised by the client.
+    expect(workspace).toContain('<CalyxMessageContent content={answer.answerText} />');
+    expect(workspace).toContain('composeAnswerWithEvidence(turn.content,');
+    expect(workspace.match(/<CalyxMessageContent /g)).toHaveLength(1);
   });
 
   it('puts the synthesis detail behind progressive disclosure, not inline', () => {
@@ -42,6 +51,8 @@ describe('Calyx answer rendering keeps synthesis primary', () => {
       'Evidence vs inference',
     ]) {
       expect(workspace).not.toContain(inventoryHeading);
+      // The evidence panel sits under the answer, so it is held to the same rule.
+      expect(source('components/calyx/CalyxEvidencePanel.tsx')).not.toContain(inventoryHeading);
     }
   });
 });

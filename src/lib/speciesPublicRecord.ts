@@ -1,0 +1,101 @@
+/**
+ * Public species record hydration for the dossier page.
+ *
+ * The public API has no `GET /api/species/{id}` detail endpoint (it 404s), so
+ * `fetchSpeciesById` returns null for every visitor and the dossier's public
+ * record blocks (name, taxonomy, image, conservation) render empty. The
+ * verified `/api/species/search` index exposes the same record fields for the
+ * same taxonomy-id space, so when the detail endpoint misses we recover the
+ * row whose `taxonomy_id` exactly matches the route id — never a name-only
+ * guess at a different record.
+ *
+ * Nothing here invents data: every returned field is copied verbatim from the
+ * public index row. When the index has no row for the id, the function
+ * resolves to null and the page keeps its existing honest empty states.
+ */
+import {
+  fetchSpeciesById,
+  searchSpecies,
+  type SpeciesDossierData,
+} from '@/lib/ocBackend';
+import { subjectNameFromSlug } from '@/lib/speciesDossier';
+
+export async function fetchSpeciesPublicRecord(
+  taxonomyId: string,
+  hintName: string | null,
+  signal?: AbortSignal,
+): Promise<SpeciesDossierData | null> {
+  // A stale route must not initiate either lookup or return a late result.
+  if (signal?.aborted) return null;
+  const direct = await fetchSpeciesById(taxonomyId, signal).catch(() => null);
+  if (signal?.aborted) return null;
+  if (direct) return direct;
+
+  const routeName = subjectNameFromSlug(taxonomyId);
+  const numericRouteId = /^\d+$/.test(taxonomyId) ? taxonomyId : '';
+  const query = (hintName || routeName || numericRouteId).trim();
+  if (!query) return null;
+
+  const results = await searchSpecies(query, 10, signal).catch(() => []);
+  if (signal?.aborted) return null;
+  let hit = results.find((row) => String(row.taxonomy_id) === String(taxonomyId));
+
+  // Name-based routes have no numeric taxonomy ID to match. Only accept an
+  // exact scientific-name match if the index identifies exactly one taxon.
+  // Ambiguous names are not silently promoted into a definitive identity.
+  if (!hit && routeName) {
+    const normalize = (name: string) => name.trim().replace(/\s+/g, ' ').toLowerCase();
+    const exact = results.filter((row) =>
+      [row.canonical_name, row.scientific_name].some(
+        (name) => typeof name === 'string' && normalize(name) === normalize(routeName),
+      ),
+    );
+    if (new Set(exact.map((row) => String(row.taxonomy_id))).size === 1) {
+      hit = exact[0];
+    }
+  }
+  if (!hit) return null;
+
+  return {
+    taxonomy_id: String(hit.taxonomy_id),
+    canonical_name: hit.canonical_name,
+    scientific_name: hit.scientific_name,
+    genus: hit.genus,
+    family: hit.family,
+    conservation_status: hit.conservation_status,
+    ...extractRecordFields(hit as unknown as Record<string, unknown>),
+  };
+}
+
+/**
+ * The search endpoint returns richer fields than its TypeScript surface
+ * declares; pass through only the ones SpeciesDossierData models, verbatim.
+ */
+function extractRecordFields(
+  row: Record<string, unknown>,
+): Partial<SpeciesDossierData> {
+  const text = (key: keyof SpeciesDossierData) => {
+    const value = row[key];
+    // Preserve source text verbatim, including meaningful internal spacing.
+    return typeof value === 'string' && value.trim() ? value : undefined;
+  };
+  const nullableText = (key: keyof SpeciesDossierData) =>
+    row[key] === null ? null : text(key);
+
+  // Only project fields modeled by SpeciesDossierData. Do not borrow values
+  // from any other search hit, even when the scientific name is identical.
+  return {
+    specific_epithet: text('specific_epithet'),
+    species: text('species'),
+    tribe: nullableText('tribe'),
+    subfamily: nullableText('subfamily'),
+    authority: text('authority'),
+    common_name: nullableText('common_name'),
+    iucn_code: nullableText('iucn_code'),
+    region: nullableText('region'),
+    habitat: nullableText('habitat'),
+    description: nullableText('description'),
+    representative_image_url: nullableText('representative_image_url'),
+    hero_image_url: nullableText('hero_image_url'),
+  };
+}

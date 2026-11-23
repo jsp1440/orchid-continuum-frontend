@@ -1,4 +1,5 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
+import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 
 export type SpeciesExhibitMedia = {
   id: string | number | null;
@@ -124,7 +125,18 @@ export function sanitizeSpeciesExhibitCards(items: unknown[]): SpeciesExhibitCar
     seenNames.add(normalizedName);
     if (mediaUrl) seenMedia.add(mediaUrl);
     if (normalizedCaption) seenCaptions.add(normalizedCaption);
-    accepted.push(value);
+    const genusTargets = [value.caption, value.distinguishing_fact]
+      .filter((text): text is string => typeof text === 'string')
+      .flatMap((text) => [...text.matchAll(/species belongs to genus\s*(?:—|:)\s*([^.;]+)/gi)].map((match) => match[1]));
+    const inconsistent = genusTargets.some((target) => normalizeName(target) !== normalizeName(value.genus));
+    accepted.push(inconsistent ? {
+      ...value,
+      caption: null,
+      distinguishing_fact: null,
+      evidence_state: 'unavailable',
+      confidence: { state: 'unavailable', score: null, label: null, basis: 'Inconsistent genus relationship withheld' },
+      caveats: [...value.caveats, 'The returned genus relationship does not match this species record; the claim is withheld.'],
+    } : value);
     if (accepted.length === 9) break;
   }
 
@@ -143,10 +155,14 @@ export async function fetchSpeciesExhibit(
   if (!requested || !/^[A-Za-z-]+$/.test(requested)) return empty('invalid_genus');
 
   try {
-    const response = await fetch(
+    // Bounded, with one retry while the backend wakes; without a timeout a
+    // slow first answer left the exhibit on "Loading…" indefinitely (#231).
+    const response = await fetchWithColdStartRetry(
       `${CALYX_BACKEND_BASE_URL}/api/platform/homepage/genus/${encodeURIComponent(requested)}/species-exhibit?limit=9`,
-      { signal, headers: { Accept: 'application/json' } },
+      { headers: { Accept: 'application/json' } },
+      signal,
     );
+    if (!response) return empty('unavailable');
     if (response.status === 400) return empty('invalid_genus');
     if (response.status === 404 || response.status === 503) return empty('unavailable');
     if (!response.ok) return empty('service_error');
@@ -156,12 +172,13 @@ export async function fetchSpeciesExhibit(
       payload.contract !== 'calyx-species-exhibit-v1' ||
       payload.publication_authority !== false ||
       payload.graph_mutation !== false ||
+      normalizeName(payload.accepted_genus ?? '') !== normalizeName(requested) ||
       !Array.isArray(payload.items)
     ) {
       return empty('service_error');
     }
 
-    const items = sanitizeSpeciesExhibitCards(payload.items);
+    const items = sanitizeSpeciesExhibitCards(payload.items).filter((item) => normalizeName(item.genus) === normalizeName(requested) && normalizeName(item.display_name).split(' ')[0] === normalizeName(requested));
     return {
       status: items.length > 0 ? 'ok' : 'unavailable',
       response: payload as SpeciesExhibitResponse,

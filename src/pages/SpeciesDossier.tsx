@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -16,11 +16,11 @@ import {
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import {
-  fetchSpeciesById,
   fetchMycorrhizal,
   type SpeciesDossierData,
   type MycorrhizalPartner,
 } from '@/lib/ocBackend';
+import { fetchSpeciesPublicRecord } from '@/lib/speciesPublicRecord';
 import {
   fetchSpeciesDossier,
   pageSubject,
@@ -116,23 +116,117 @@ const SpeciesDossier: React.FC = () => {
   const [federation, setFederation] = useState<FederationResolveResult | null>(null);
   const [federationLoading, setFederationLoading] = useState(true);
   const [federationError, setFederationError] = useState(false);
+  const [candidateBusyId, setCandidateBusyId] = useState<string | null>(null);
+  // A chosen Calyx canonical taxon can differ from the public route's taxon ID.
+  // Keep its dossier separate from route-keyed public fields until a verified
+  // crosswalk exists. The key also stops a prior route's selection carrying over.
+  const routeKey = JSON.stringify([taxonomyId, linkedName]);
+  const currentRouteKey = useRef(routeKey);
+  currentRouteKey.current = routeKey;
+  const candidateRequestVersion = useRef(0);
+  const [selectedCandidate, setSelectedCandidate] = useState<{
+    routeKey: string;
+    taxonId: string;
+  } | null>(null);
+  const selectedCandidateId =
+    selectedCandidate?.routeKey === routeKey ? selectedCandidate.taxonId : null;
+
+  // A person resolving a federation ambiguity: re-run the same governed
+  // resolution chain, but with the candidate's canonical taxon id as the route
+  // id. The withheld-state contract is unchanged — a dossier is only shown
+  // when its identity still matches this page's subject name.
+  const selectDossierCandidate = async (candidateTaxonId: string, subjectName: string) => {
+    if (candidateBusyId) return;
+    const requestVersion = ++candidateRequestVersion.current;
+    const originRouteKey = routeKey;
+    const stillCurrent = () =>
+      currentRouteKey.current === originRouteKey &&
+      candidateRequestVersion.current === requestVersion;
+
+    setCandidateBusyId(candidateTaxonId);
+    setDossierError(false);
+    try {
+      const resolution = await resolveDossierForSubject(
+        candidateTaxonId,
+        subjectName,
+        { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
+      );
+      if (!stillCurrent()) return;
+
+      if (resolution.state === 'resolved') {
+        // The old route's public image, conservation, and fungal data must not
+        // be presented as evidence for the newly selected canonical taxon.
+        setSelectedCandidate({ routeKey: originRouteKey, taxonId: candidateTaxonId });
+        setDossier(resolution.dossier);
+        setDossierAmbiguity(null);
+        setFederation(null);
+        setFederationError(false);
+        setFederationLoading(true);
+        resolveFederatedSpecies(
+          { taxonId: resolution.dossier.identity?.taxon_id || candidateTaxonId },
+        )
+          .then((result) => {
+            if (stillCurrent()) setFederation(result);
+          })
+          .catch(() => {
+            if (stillCurrent()) setFederationError(true);
+          })
+          .finally(() => {
+            if (stillCurrent()) setFederationLoading(false);
+          });
+      } else if (resolution.state === 'ambiguous') {
+        setDossierAmbiguity(resolution);
+        setDossierError(true);
+      } else {
+        setDossierError(true);
+      }
+    } catch {
+      if (stillCurrent()) setDossierError(true);
+    } finally {
+      if (stillCurrent()) setCandidateBusyId(null);
+    }
+  };
 
   useEffect(() => {
     if (!taxonomyId) return;
     const ctrl = new AbortController();
+    // Invalidate any candidate selection in flight for the previous route.
+    candidateRequestVersion.current += 1;
+    setSelectedCandidate(null);
+    setCandidateBusyId(null);
     setLoading(true);
-    const speciesRequest = fetchSpeciesById(taxonomyId, ctrl.signal).catch(() => null);
+    // Route-scoped fields cannot survive navigation or be filled by a late
+    // response from the previous species, even if a fetch ignores abort.
+    setData(null);
+    setPartners([]);
+    setMycoStatus(0);
+    const speciesRequest = fetchSpeciesPublicRecord(taxonomyId, linkedName, ctrl.signal).catch(
+      () => null,
+    );
     speciesRequest
-      .then((d) => setData(d))
-      .finally(() => setLoading(false));
+      .then((d) => {
+        if (!ctrl.signal.aborted) setData(d);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setLoading(false);
+      });
 
     setMycoLoading(true);
     fetchMycorrhizal(taxonomyId, ctrl.signal)
       .then(({ status, partners }) => {
+        if (ctrl.signal.aborted) return;
         setMycoStatus(status);
         setPartners(partners);
       })
-      .finally(() => setMycoLoading(false));
+      .catch(() => {
+        if (!ctrl.signal.aborted) {
+          setMycoStatus(0);
+          setPartners([]);
+        }
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setMycoLoading(false);
+      });
 
     // The dossier is shown only when its identity is this page's subject; the
     // route id alone may belong to another id space (see resolveDossierForSubject).
@@ -146,6 +240,7 @@ const SpeciesDossier: React.FC = () => {
     setFederation(null);
     speciesRequest
       .then((d) => {
+        if (ctrl.signal.aborted) return { state: 'unavailable' } as DossierSubjectResolution;
         const publicName =
           d?.canonical_name ||
           d?.scientific_name ||
@@ -177,7 +272,9 @@ const SpeciesDossier: React.FC = () => {
           { taxonId: resolution.dossier.identity?.taxon_id || taxonomyId },
           ctrl.signal,
         )
-          .then((result) => setFederation(result))
+          .then((result) => {
+            if (!ctrl.signal.aborted) setFederation(result);
+          })
           .catch(() => {
             if (!ctrl.signal.aborted) setFederationError(true);
           });
@@ -192,12 +289,18 @@ const SpeciesDossier: React.FC = () => {
         }
       });
 
-    return () => ctrl.abort();
+    return () => {
+      ctrl.abort();
+      candidateRequestVersion.current += 1;
+    };
   }, [taxonomyId, linkedName]);
 
   // On a subject conflict the id-keyed public record may be another species,
   // so neither its name nor its fields stand for this page's subject.
-  const subjectData = subjectConflict ? null : data;
+  const subjectData = subjectConflict || selectedCandidateId ? null : data;
+  const visiblePartners = selectedCandidateId ? [] : partners;
+  const visibleMycoLoading = selectedCandidateId ? false : mycoLoading;
+  const visibleMycoStatus = selectedCandidateId ? 0 : mycoStatus;
   const name =
     subjectConflict?.linkedName ||
     subjectData?.canonical_name ||
@@ -341,6 +444,17 @@ const SpeciesDossier: React.FC = () => {
                   </div>
                 )}
 
+                {selectedCandidateId && (
+                  <p
+                    data-testid="candidate-public-fields-withheld"
+                    className="mt-3 font-body text-[12px] text-[#cfc8b8]/70"
+                  >
+                    Public record and fungal-partner fields from the original route are withheld
+                    for selected canonical taxon {selectedCandidateId} until their identities
+                    are independently matched.
+                  </p>
+                )}
+
                 {/* Taxonomy */}
                 <Block icon={GitBranch} title="Taxonomy">
                   <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -409,14 +523,14 @@ const SpeciesDossier: React.FC = () => {
 
                 {/* Mycorrhizal partners */}
                 <Block icon={Network} title="Mycorrhizal partners">
-                  {mycoLoading ? (
+                  {visibleMycoLoading ? (
                     <div className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.16em] uppercase text-[#cfc8b8]/60">
                       <Loader2 className="h-3 w-3 animate-spin" /> Querying fungal
                       associations…
                     </div>
-                  ) : !subjectConflict && partners.length > 0 ? (
+                  ) : !subjectConflict && visiblePartners.length > 0 ? (
                     <ul className="space-y-3">
-                      {partners.map((p, i) => (
+                      {visiblePartners.map((p, i) => (
                         <li
                           key={i}
                           className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/70 p-4"
@@ -438,7 +552,7 @@ const SpeciesDossier: React.FC = () => {
                   ) : (
                     <Empty>
                       Data coming soon
-                      {mycoStatus === 404 ? ' · no record yet' : ''}.
+                      {visibleMycoStatus === 404 ? ' · no record yet' : ''}.
                     </Empty>
                   )}
                 </Block>
@@ -503,7 +617,20 @@ const SpeciesDossier: React.FC = () => {
                         <ul className="mt-2 space-y-1 font-mono text-[10px] tracking-[0.1em] text-[#cfc8b8]/70">
                           {dossierAmbiguity.candidates.map((candidate) => (
                             <li key={candidate.taxon_id}>
-                              {candidate.accepted_name} · canonical taxon {candidate.taxon_id}
+                              <button
+                                type="button"
+                                disabled={candidateBusyId !== null}
+                                onClick={() =>
+                                  selectDossierCandidate(
+                                    String(candidate.taxon_id),
+                                    dossierAmbiguity.subjectName,
+                                  )
+                                }
+                                className="text-left underline decoration-dotted underline-offset-4 transition-colors hover:text-[#f0e9d8] disabled:opacity-50"
+                              >
+                                {candidate.accepted_name} · canonical taxon {candidate.taxon_id}
+                                {candidateBusyId === String(candidate.taxon_id) ? ' — resolving…' : ''}
+                              </button>
                             </li>
                           ))}
                         </ul>

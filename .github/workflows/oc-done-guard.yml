@@ -15,8 +15,7 @@ on:
       - "src/lib/control-plane/ocDoneGuard.test.ts"
       - "scripts/oc-done-guard.ts"
       - ".github/workflows/oc-done-guard.yml"
-  schedule:
-    - cron: "47 * * * *"
+  # Scheduled launches paused pending recovery from runner nonexecution.
   workflow_dispatch:
     inputs:
       apply:

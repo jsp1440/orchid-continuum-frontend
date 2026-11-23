@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { Link, useSearchParams } from 'react-router-dom';
 import {
@@ -38,6 +38,9 @@ import {
   fetchAtlasFacets,
   applyAtlasFilters,
   canonicalSlug,
+  didAtlasLoadFail,
+  didAtlasLoadIncomplete,
+  resetOrchidContinuumCaches,
   type AtlasOccurrencePoint,
   type AtlasSpeciesRecord,
   type AtlasFacets,
@@ -102,13 +105,13 @@ function ToggleChip({ active, onClick, children }: { active: boolean; onClick: (
 
 function Section({ icon: Icon, title, children }: { icon: React.ComponentType<{ className?: string }>; title: string; children: React.ReactNode }) {
   return (
-    <div className="border-t border-white/[0.06] pt-4">
-      <div className="flex items-center gap-2 mb-2.5">
+    <details open={title === 'Taxonomy'} className="border-t border-white/[0.06] pt-4">
+      <summary className="flex cursor-pointer items-center gap-2 mb-2.5">
         <Icon className="h-3.5 w-3.5 text-[#c9a24a]" />
         <div className="font-mono text-[10px] tracking-[0.26em] uppercase text-[#c9a24a]">{title}</div>
-      </div>
-      <div className="flex flex-wrap gap-1.5">{children}</div>
-    </div>
+      </summary>
+      <div className="flex max-h-56 flex-wrap gap-1.5 overflow-y-auto">{children}</div>
+    </details>
   );
 }
 
@@ -119,6 +122,11 @@ const Atlas: React.FC = () => {
   const [facets, setFacets] = useState<AtlasFacets | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  // 'failed' = the occurrence service returned nothing after its retries;
+  // 'partial' = some pages failed, so the map is incomplete. Neither may be
+  // shown as "0 records" / a complete map: that would read as absence.
+  const [loadOutcome, setLoadOutcome] = useState<'ok' | 'partial' | 'failed'>('ok');
+  const [reloadKey, setReloadKey] = useState(0);
   const { filters, setFilters } = useAtlasFilters();
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set(['occurrence']));
   const [intersectionMode, setIntersectionMode] = useState(false);
@@ -139,11 +147,19 @@ const Atlas: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setLoadOutcome('ok');
     (async () => {
       const [pts, fs] = await Promise.all([fetchAtlasOccurrencePoints(), fetchAtlasFacets()]);
       if (cancelled) return;
       setAllPoints(pts.slice(0, 1000));
       setFacets(fs);
+      setLoadOutcome(
+        pts.length === 0 && didAtlasLoadFail()
+          ? 'failed'
+          : didAtlasLoadFail() || didAtlasLoadIncomplete()
+            ? 'partial'
+            : 'ok',
+      );
       setLoading(false);
       if (pts.length > 1000) {
         setLoadingMore(true);
@@ -157,6 +173,11 @@ const Atlas: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  const retryAtlasLoad = useCallback(() => {
+    resetOrchidContinuumCaches();
+    setReloadKey((key) => key + 1);
   }, []);
 
   useEffect(() => {
@@ -218,8 +239,8 @@ const Atlas: React.FC = () => {
       <Navbar />
       <main className="pt-20">
         <section className="border-b border-white/5">
-          <div className="max-w-[1500px] mx-auto px-6 lg:px-10 py-10">
-            <Link to="/" className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.24em] uppercase text-[#cfc8b8]/55 hover:text-[#c9a24a] transition-colors mb-6">
+          <div className="max-w-[1500px] mx-auto px-6 lg:px-10 py-5">
+            <Link to="/" className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.24em] uppercase text-[#cfc8b8]/55 hover:text-[#c9a24a] transition-colors mb-3">
               <ArrowLeft className="h-3.5 w-3.5" /> Return to Continuum
             </Link>
             <div className="flex flex-wrap items-end justify-between gap-6">
@@ -229,25 +250,20 @@ const Atlas: React.FC = () => {
                   The Atlas <span className="italic text-[#c9a24a]">of Orchidaceae</span>
                 </h1>
                 <p className="mt-4 max-w-2xl text-[14px] text-[#cfc8b8]/80 leading-relaxed">
-                  A live geospatial interface backed by the Orchid Continuum database. Filter by taxonomy, geography, ecology, conservation status, pollinator and mycorrhizal data — then enter Intersection mode to find where biological layers overlap.
+                  Explore recorded observations. Choose a genus or country, then select a point to inspect its source.
                 </p>
               </div>
-              {facets && (
-                <div className="flex flex-wrap gap-3 font-mono text-[10px] tracking-[0.22em] uppercase text-[#cfc8b8]/70">
-                  <Stat label="Species" value={facets.totals.species} />
-                  <Stat label="Occurrences" value={facets.totals.occurrences} />
-                  <Stat label="Georeferenced" value={facets.totals.georeferenced} />
-                  <Stat label="With imagery" value={facets.totals.withImages} />
-                  <Stat label="Pollinator linked" value={facets.totals.withPollinators} />
-                </div>
-              )}
+              <div className="flex flex-wrap gap-3 text-[#cfc8b8]">
+                <Stat label="Matching records" value={filteredPoints.length} />
+                <Stat label="Loaded records" value={allPoints.length} />
+              </div>
             </div>
           </div>
         </section>
 
         <section className="max-w-[1500px] mx-auto px-6 lg:px-10 py-8 grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <aside className="lg:col-span-3">
-            <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 backdrop-blur-md p-5 lg:sticky lg:top-24">
+          <aside className="lg:col-span-3 lg:order-first order-last">
+            <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 backdrop-blur-md p-5 max-h-[70vh] overflow-y-auto lg:sticky lg:top-24">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2"><Filter className="h-4 w-4 text-[#c9a24a]" /><div className="font-mono text-[11px] tracking-[0.28em] uppercase text-[#faf7f2]">Filters</div></div>
                 <button type="button" onClick={resetFilters} className="font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/55 hover:text-[#c9a24a] transition-colors">Reset</button>
@@ -269,7 +285,20 @@ const Atlas: React.FC = () => {
             </div>
           </aside>
 
-          <div className="lg:col-span-9 space-y-5">
+          <div className="lg:col-span-9 space-y-4">
+            {!loading && loadOutcome !== 'ok' && (
+              <div role="alert" data-testid="atlas-load-outcome" className="rounded-2xl border border-[#c9a24a]/45 bg-[#1a1405]/80 p-4 flex flex-wrap items-center justify-between gap-3 text-[13px] leading-relaxed text-[#ead28c]">
+                <span>
+                  {loadOutcome === 'failed'
+                    ? 'Occurrence records could not be loaded from the Orchid Continuum service. This is a connection problem, not evidence that no orchids were recorded.'
+                    : 'Some occurrence records could not be loaded. The map below is incomplete; missing records are a connection gap, not absence.'}
+                </span>
+                <button type="button" onClick={retryAtlasLoad} className="inline-flex items-center gap-2 rounded-full border border-[#c9a24a]/60 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.22em] text-[#c9a24a] hover:bg-[#c9a24a]/10">Retry</button>
+              </div>
+            )}
+            <LiveAtlasMap points={filteredPoints} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={loading} totalLoaded={allPoints.length} focusBounds={focusBounds} focusView={focusView} />
+            {/* One active-filter row, directly under the map it narrows (#948 review: it was rendered twice). */}
+            <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 backdrop-blur-md p-4 flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-2 mr-2"><Layers className="h-4 w-4 text-[#c9a24a]" /><div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#faf7f2]">Layers</div></div>
               {LAYER_DEFS.map((l) => <ToggleChip key={l.key} active={activeLayers.has(l.key)} onClick={() => toggleLayer(l.key)}>{l.label}</ToggleChip>)}
@@ -279,11 +308,9 @@ const Atlas: React.FC = () => {
               <div className="min-w-0"><div className="font-mono text-[10px] tracking-[0.3em] uppercase text-[#c9a24a] mb-1.5">The Living Geography of Orchids</div><h3 className="font-display text-[#faf7f2] text-xl leading-tight">A guided expedition across the planet</h3><p className="mt-1.5 text-[12.5px] text-[#cfc8b8]/75 leading-relaxed max-w-xl">Ten global stops of progressive discovery — evolution, biodiversity, and conservation, with the live map flying to each region.</p></div>
               <button type="button" onClick={() => setGrandTourOpen(true)} className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] font-mono text-[11px] tracking-[0.24em] uppercase transition-colors shadow-lg shadow-[#c9a24a]/20"><Sparkles className="h-4 w-4" /> Begin the Grand Tour</button>
             </div>
-            <AtlasCompletenessBadge />
-            <LiveAtlasMap points={filteredPoints} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={loading} totalLoaded={allPoints.length} focusBounds={focusBounds} focusView={focusView} />
+            <AtlasCompletenessBadge count={filteredPoints.length} total={allPoints.length} loading={loading} />
             <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/70 px-1"><div className="flex items-center gap-2"><Globe2 className="h-3 w-3 text-[#c9a24a]" />{filteredPoints.length.toLocaleString()} of {allPoints.length.toLocaleString()} live records{loadingMore && <span className="ml-2 inline-flex items-center gap-1 text-[#c9a24a]/80"><Loader2 className="h-3 w-3 animate-spin" /> loading more</span>}</div><div className="text-[#7a7466]">Basemap · OpenStreetMap / CARTO · Data · Orchid Continuum + GBIF</div></div>
             <AtlasDebugPanel />
-            <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <ResultList points={filteredPoints} onSelect={setSelected} layerMatch={pointLayerMatch} />
           </div>
         </section>
@@ -310,16 +337,24 @@ function ActiveFilterPills({ filters, setFilters }: { filters: AtlasFilterState;
   addArr('genera', 'Genus'); addArr('tribes', 'Tribe'); addArr('countries', 'Country'); addArr('growthForms', 'Form'); addArr('habitats', 'Habitat'); addArr('iucnCodes', 'IUCN'); addArr('pollinatorTaxa', 'Pollinator'); addArr('datasets', 'Source');
   if (filters.verifiedOnly) pills.push({ label: 'Verified only', remove: () => setFilters((p) => ({ ...p, verifiedOnly: false })) });
   if (pills.length === 0) return null;
-  return <div className="flex flex-wrap gap-2">{pills.map((p, i) => <button key={i} type="button" onClick={p.remove} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[9px] tracking-[0.18em] uppercase text-[#faf7f2] hover:bg-[#c9a24a]/15">{p.label}<X className="h-3 w-3" /></button>)}</div>;
+  return <div role="group" aria-label="Active Atlas filters" className="flex flex-wrap gap-2">{pills.map((p) => <button key={p.label} type="button" onClick={p.remove} aria-label={`Remove filter ${p.label}`} className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-[#c9a24a]/40 bg-[#c9a24a]/[0.08] font-mono text-[9px] tracking-[0.18em] uppercase text-[#faf7f2] hover:bg-[#c9a24a]/15">{p.label}<X className="h-3 w-3" /></button>)}</div>;
 }
 
 function ResultList({ points, onSelect, layerMatch }: { points: AtlasOccurrencePoint[]; onSelect: (p: AtlasOccurrencePoint) => void; layerMatch: (p: AtlasOccurrencePoint) => Record<LayerKey, boolean> }) {
+  const [page, setPage] = useState(0);
+  useEffect(() => setPage(0), [points]);
+  const pageCount = Math.max(1, Math.ceil(points.length / 50));
+  const currentPage = Math.min(page, pageCount - 1);
+  const listRef = useRef<HTMLUListElement>(null);
+  useEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = 0;
+  }, [currentPage, points]);
   if (points.length === 0) return <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 p-8 text-center font-mono text-[10px] tracking-[0.22em] uppercase text-[#7a7466]">Awaiting Orchid Continuum Records · adjust filters</div>;
   return (
     <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 overflow-hidden">
       <div className="px-5 py-3 flex items-center justify-between border-b border-white/[0.06]"><div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a]">Records · {points.length}</div><div className="font-mono text-[9px] tracking-[0.22em] uppercase text-[#7a7466]">Click row → species/habitat card</div></div>
-      <ul className="divide-y divide-white/[0.04] max-h-[480px] overflow-y-auto">
-        {points.map((p) => { const m = layerMatch(p); return (
+      <ul ref={listRef} className="divide-y divide-white/[0.04] max-h-[480px] overflow-y-auto">
+        {points.slice(currentPage * 50, (currentPage + 1) * 50).map((p) => { const m = layerMatch(p); return (
           <li key={p.id}><button type="button" onClick={() => onSelect(p)} className="w-full flex items-center gap-4 px-5 py-3 text-left hover:bg-white/[0.03] transition-colors">
             <div className="w-12 h-12 flex-shrink-0 rounded-sm bg-[#06091a] border border-[#c9a24a]/20 overflow-hidden flex items-center justify-center">{p.imageUrl ? <img src={p.imageUrl} alt="" className="w-full h-full object-cover" /> : <ImageOff className="h-4 w-4 text-[#c9a24a]/40" strokeWidth={1.2} />}</div>
             <div className="flex-1 min-w-0"><div className="font-display italic text-[15px] text-[#faf7f2] truncate">{p.canonicalName}</div><div className="font-mono text-[9px] tracking-[0.20em] uppercase text-[#7a7466] mt-0.5 truncate">{p.country}{p.region ? ` · ${p.region}` : ''}{p.locality ? ` · ${p.locality}` : ''}{p.year ? ` · ${p.year}` : ''}</div></div>
@@ -328,6 +363,11 @@ function ResultList({ points, onSelect, layerMatch }: { points: AtlasOccurrenceP
           </button></li>
         ); })}
       </ul>
+      {pageCount > 1 && <nav aria-label="Occurrence result pages" className="flex items-center justify-between gap-3 p-4 text-sm">
+        <button type="button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)} className="min-h-11 rounded border border-white/20 px-4 disabled:opacity-40">Previous records</button>
+        <span>{currentPage + 1} / {pageCount}</span>
+        <button type="button" disabled={currentPage >= pageCount - 1} onClick={() => setPage(currentPage + 1)} className="min-h-11 rounded border border-white/20 px-4 disabled:opacity-40">Next records</button>
+      </nav>}
     </div>
   );
 }

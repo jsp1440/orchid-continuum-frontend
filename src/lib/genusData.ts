@@ -732,7 +732,26 @@ const server = await readServerImageCache(g, limit);
     }
   }
 
-  // ── 3. Harvester with retry-with-backoff (cold-start tolerant) ──
+  // ── 3a. Public API image library (same contract, CORS-enabled, warm) ──
+  // orchidcontinuumharvester2 omits Access-Control-Allow-Origin, so browsers
+  // can never read its responses. The public API serves the identical
+  // /images/genus/{genus} contract with proper CORS, so it is tried first.
+  if (!signal?.aborted) {
+    const { images: publicResult } = await fetchGenusImagesOnce(
+      g,
+      signal,
+      limit,
+      15000,
+      BACKEND_BASE_URL,
+    );
+    if (publicResult.length > 0) {
+      writeGenusImagesCache(g, publicResult);
+      writeServerImageCache(g, publicResult); // warm the shared cache for everyone
+      return { images: publicResult, source: 'live' };
+    }
+  }
+
+  // ── 3b. Harvester with retry-with-backoff (cold-start tolerant) ──
   // A cold Render dyno routinely needs 20–40s to answer the first request, so
   // the first attempt waits longest. The first non-empty result wins and is
   // persisted to BOTH caches.
@@ -1640,8 +1659,9 @@ async function fetchGenusImagesOnce(
   signal?: AbortSignal,
   limit = 20,
   timeoutMs = 40000,
+  baseUrl = IMAGES_BACKEND_BASE_URL,
 ): Promise<{ images: GenusImage[]; networkError: boolean }> {
-  const url = `${IMAGES_BACKEND_BASE_URL}/images/genus/${encodeURIComponent(g)}?limit=${limit}`;
+  const url = `${baseUrl}/images/genus/${encodeURIComponent(g)}?limit=${limit}`;
   console.log(`[fetchGenusImages] ➜ requesting (timeout ${timeoutMs}ms):`, url);
 
 

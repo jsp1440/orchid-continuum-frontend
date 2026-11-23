@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { AlertTriangle, Beaker, BookOpenCheck, LockKeyhole, ShieldCheck } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
 import UniversityLearnerNotebook from '@/components/university/UniversityLearnerNotebook';
+import UniversityInquiryPractice from '@/components/university/UniversityInquiryPractice';
 import { universityApi } from '@/lib/universityApi';
 import {
   releaseBlockers,
@@ -49,7 +50,8 @@ const UniversityLabPrototype = () => {
           capability.data.persistence === 'postgres_durable')),
   );
   const enabled = Boolean(
-    release.data && safeScienceContent(release.data) && capabilityConsistent,
+    !release.isError && !capability.isError &&
+      release.data && safeScienceContent(release.data) && capabilityConsistent,
   );
   const durableWorkspace = enabled && mode === 'durable';
   const blockers = release.data ? releaseBlockers(release.data) : [];
@@ -77,13 +79,13 @@ const UniversityLabPrototype = () => {
   const chapter = useQuery({
     queryKey: ['university-chapter', catalog.data?.chapter.id],
     queryFn: () => universityApi.chapter(catalog.data!.chapter.id),
-    enabled: Boolean(catalog.data?.chapter.id),
+    enabled: enabled && Boolean(catalog.data?.chapter.id),
     retry: false,
   });
   const laboratory = useQuery({
     queryKey: ['university-laboratory', catalog.data?.laboratory.id],
     queryFn: () => universityApi.laboratory(catalog.data!.laboratory.id),
-    enabled: Boolean(catalog.data?.laboratory.id),
+    enabled: enabled && Boolean(catalog.data?.laboratory.id),
     retry: false,
   });
 
@@ -92,7 +94,8 @@ const UniversityLabPrototype = () => {
       eyebrow="Orchid Continuum University"
       title="Scientific inquiry"
       titleAccent="laboratory"
-      intro="Book in the Brain connected to an evidence-labelled orchid investigation. The interface remains read-only unless the backend proves the separately governed durable-session and learner-identity release gates."
+      showDemoBanner={false}
+      intro="Book in the Brain connected to a draft instructional orchid investigation. The interface remains read-only unless the backend proves the separately governed durable-session and learner-identity release gates."
     >
       <section className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
         {(release.isLoading || capability.isLoading) && (
@@ -111,15 +114,16 @@ const UniversityLabPrototype = () => {
               The frontend could not verify the Calyx University release contract. No educational
               data has been inferred or substituted. Check the deployed API origin and the
               <code className="mx-1">/api/learning/release-readiness</code> endpoint.
+              For safety, losing release verification clears unsaved practice.
             </p>
           </div>
         )}
 
-        {release.data && !enabled && (
+        {release.data && !release.isError && !capability.isError && !enabled && (
           <div className="rounded-2xl border border-amber-300/30 bg-amber-300/[0.07] p-8 md:p-10">
             <div className="mb-4 flex items-center gap-3 text-amber-100">
               <LockKeyhole className="h-5 w-5" />
-              <h2 className="font-serif text-2xl md:text-3xl">{summarizeRelease(release.data)}</h2>
+              <h2 className="font-serif text-2xl md:text-3xl">{mode === 'read_only' || mode === 'durable' ? 'University release verification incomplete' : summarizeRelease(release.data)}</h2>
             </div>
             <p className="max-w-3xl text-sm leading-relaxed text-white/75">
               The University remains closed whenever the backend and capability contracts disagree
@@ -135,8 +139,16 @@ const UniversityLabPrototype = () => {
 
         {enabled && (catalog.isLoading || chapter.isLoading || laboratory.isLoading) && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-white/70">
-            Loading the evidence-backed chapter and laboratory…
+            Loading the instructional chapter and laboratory…
           </div>
+        )}
+
+        {enabled && (catalog.isError || chapter.isError || laboratory.isError) && (
+          <p role="alert" className="rounded-2xl border border-amber-300/30 p-8 text-white">
+            {chapter.data && laboratory.data && catalog.data
+              ? 'University lesson refresh failed. Previously loaded content and your current practice remain available in this page; no substitute data has been loaded.'
+              : 'University lesson content is unavailable. Reload to try again; no substitute case has been loaded.'}
+          </p>
         )}
 
         {enabled && chapter.data && laboratory.data && release.data && (
@@ -182,6 +194,9 @@ const UniversityLabPrototype = () => {
                   <p>
                     Session persistence: {durableWorkspace ? 'verified Postgres durable storage' : 'process-local, non-durable prototype'}.
                   </p>
+                  <p className="my-4 rounded border border-amber-200/40 p-4 text-sm text-amber-50" role="note">
+                    {laboratory.data.provenance?.notice ?? 'Curated instructional case. Live scientific provenance is unavailable; do not treat scenario measurements as verified observations.'}
+                  </p>
                 </div>
               </aside>
             </div>
@@ -209,6 +224,8 @@ const UniversityLabPrototype = () => {
                 ))}
               </div>
             </article>
+
+            <UniversityInquiryPractice key={laboratory.data.laboratory_id + ':' + laboratory.data.inquiry_activity?.version} laboratory={laboratory.data} />
 
             {durableWorkspace && (
               <UniversityLearnerNotebook

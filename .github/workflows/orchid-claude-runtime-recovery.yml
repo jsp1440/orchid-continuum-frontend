@@ -2,8 +2,7 @@ name: Orchid Claude Runtime Recovery — PARKED
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/30 * * * *"
+  # Scheduled launches paused pending recovery from runner nonexecution.
 
 permissions:
   contents: read
