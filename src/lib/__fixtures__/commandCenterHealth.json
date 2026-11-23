@@ -1,0 +1,16 @@
+{
+ "application_ready": {
+  "reason": "probe target not configured",
+  "state": "NOT_CONFIGURED"
+ },
+ "deployed_commit_sha": null,
+ "kind": "LIVE_PROBE",
+ "reachable": {
+  "reason": "probe target not configured",
+  "state": "NOT_CONFIGURED"
+ },
+ "scientific": {
+  "reason": "HTTP health does not establish graph, literature, taxonomy or Brain-MCP correctness",
+  "state": "NOT_ASSESSED"
+ }
+}
