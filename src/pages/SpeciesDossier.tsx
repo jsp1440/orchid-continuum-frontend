@@ -22,6 +22,7 @@ import {
 } from '@/lib/ocBackend';
 import { fetchSpeciesPublicRecord } from '@/lib/speciesPublicRecord';
 import {
+  dossierBackboneTaxonId,
   fetchSpeciesDossier,
   pageSubject,
   resolveDossierForSubject,
@@ -38,6 +39,7 @@ import {
 } from '@/lib/speciesDossier';
 import { speciesDossierMatrixHref } from '@/lib/speciesDossierMatrixNavigation';
 import { speciesDossierContinuumActions } from '@/lib/speciesDossierContinuumNavigation';
+import SpeciesPhotoGallery from '@/features/species-gallery/SpeciesPhotoGallery';
 
 const EVIDENCE_STATE_LABEL: Record<EvidenceState, string> = {
   available: 'Available',
@@ -341,6 +343,12 @@ const SpeciesDossier: React.FC = () => {
   const hasFederatedMatch =
     federation?.status === 'resolved' && Boolean(federation.partner_slug);
 
+  // The photo gallery is keyed by the World Plants backbone id of the dossier's own graph link, never by
+  // the route id (public.orchid_taxonomy, another id space). No one-to-one link, no gallery.
+  const galleryTaxonId =
+    dossier && !dossierError && !subjectConflict ? dossierBackboneTaxonId(dossier) : null;
+  const galleryName = dossier?.identity.accepted_name || dossier?.identity.display_name || name;
+
   const matrixHref = dossier
     ? speciesDossierMatrixHref(dossier.matrix_url, {
         taxonId: dossier.identity.taxon_id || taxonomyId,
@@ -453,6 +461,14 @@ const SpeciesDossier: React.FC = () => {
                     for selected canonical taxon {selectedCandidateId} until their identities
                     are independently matched.
                   </p>
+                )}
+
+                {galleryTaxonId && (
+                  <SpeciesPhotoGallery
+                    key={galleryTaxonId}
+                    taxonId={galleryTaxonId}
+                    speciesName={galleryName}
+                  />
                 )}
 
                 {/* Taxonomy */}
