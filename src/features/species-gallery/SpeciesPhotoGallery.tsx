@@ -96,7 +96,7 @@ function PhotoCredit({ photo, compact = false }: { photo: GalleryImage; compact?
             <a
               href={photo.licence_url}
               target="_blank"
-              rel="noreferrer license"
+              rel="noopener noreferrer license"
               className="text-[#c9a24a] hover:text-[#deb866] underline underline-offset-2"
             >
               {licence}
