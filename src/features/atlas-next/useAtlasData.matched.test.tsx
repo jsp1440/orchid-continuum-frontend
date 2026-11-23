@@ -85,7 +85,20 @@ async function readAt(href: string, points: AtlasOccurrencePoint[]) {
   });
 }
 
-describe('useAtlasData empty state', () => {
+describe('useAtlasData species filtering and empty state', () => {
+  it('returns only the arriving species from the occurrence rows', async () => {
+    await readAt('/atlas-next?species=Cattleya%20purpurata', [
+      synthetic('matching', 'Cattleya purpurata', 10, 20),
+      synthetic('congener', 'Cattleya labiata', 11, 21),
+    ]);
+
+    expect(observed?.kind).toBe('ready');
+    if (observed?.kind !== 'ready') return;
+    expect(observed.points.map((point) => point.canonicalName)).toEqual([
+      'Cattleya purpurata',
+    ]);
+  });
+
   it('reports matched 0 when the species filter matches no record', async () => {
     await readAt('/atlas-next?species=Cattleya%20purpurata', [
       synthetic('a', 'Cattleya labiata', 10, 20),
