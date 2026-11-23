@@ -31,9 +31,10 @@ describe('Calyx answer rendering keeps synthesis primary', () => {
     // (composeAnswerWithEvidence; covered in calyxScientificEvidence.test.ts
     // and CalyxWorkspace.evidence.test.tsx). Calyx's own paragraphs are never
     // split, reordered or summarised by the client.
-    expect(workspace).toContain('<CalyxMessageContent content={answer.answerText} />');
+    expect(workspace).toContain('<CalyxMessageContent content={answer.answerText}');
     expect(workspace).toContain('composeAnswerWithEvidence(turn.content,');
     expect(workspace.match(/<CalyxMessageContent /g)).toHaveLength(1);
+    expect(workspace).toContain('outputs={workspaceOutputsByMessage[turn.message_id]}');
   });
 
   it('puts the synthesis detail behind progressive disclosure, not inline', () => {

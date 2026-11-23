@@ -42,7 +42,7 @@ interface CalyxSpeechInput {
   state: SpeechInputState;
   interimTranscript: string;
   error: string | null;
-  startListening: () => void;
+  startListening: () => boolean;
   stopListening: () => void;
 }
 
@@ -50,6 +50,13 @@ function resolveSpeechRecognition(windowValue: Window | undefined) {
   if (!windowValue) return undefined;
   const speechWindow = windowValue as SpeechWindow;
   return speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+}
+
+function detachRecognition(recognition: BrowserSpeechRecognition) {
+  recognition.onstart = null;
+  recognition.onresult = null;
+  recognition.onerror = null;
+  recognition.onend = null;
 }
 
 export function useCalyxSpeechInput(onResult: (transcript: string) => void): CalyxSpeechInput {
@@ -66,15 +73,20 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
   onResultRef.current = onResult;
 
   const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+
+    detachRecognition(recognition);
+    setInterimTranscript("");
+    setState("idle");
+    recognition.stop();
   }, []);
 
-  const startListening = useCallback(() => {
-    // `state` updates asynchronously (only once `onstart` fires), so a rapid
-    // second call can race past `state === "listening"` before it settles.
-    // `recognitionRef.current` is set synchronously below and is the only
-    // reliable guard against creating a second, orphaned recognizer.
-    if (!speechRecognition || state === "listening" || recognitionRef.current) return;
+  const startListening = useCallback((): boolean => {
+    // The ref changes synchronously when a session starts or stops.
+    // React state can still describe the previous session during a restart.
+    if (!speechRecognition || recognitionRef.current) return false;
 
     const recognition = new speechRecognition();
     recognition.continuous = false;
@@ -139,11 +151,18 @@ export function useCalyxSpeechInput(onResult: (transcript: string) => void): Cal
       if (recognitionRef.current === recognition) recognitionRef.current = null;
       setError("Voice input could not start.");
       setState("idle");
+      return false;
     }
-  }, [speechRecognition, state]);
+    return true;
+  }, [speechRecognition]);
 
   useEffect(() => () => {
-    recognitionRef.current?.stop();
+    const recognition = recognitionRef.current;
+    recognitionRef.current = null;
+    if (!recognition) return;
+
+    detachRecognition(recognition);
+    recognition.stop();
   }, []);
 
   return { state, interimTranscript, error, startListening, stopListening };
