@@ -1814,9 +1814,9 @@ const stubDomains = STUB_DOMAINS.map(buildStubDomain);
 // substituted" message on failure rather than a silent fabricated fallback --
 // confirmed by reading the source, not assumed. featuredGenus.ts is a
 // deterministic, clock-derived rotation (12h UTC window) shared by every
-// homepage element that must show the same genus; fetchFeaturedNarrative()
-// calls a real Supabase edge function and falls back to a locally-composed,
-// science-grounded (not invented) narrative on failure. PublicCalyxGuide's
+// homepage element that must show the same genus; it holds genus names only
+// (the unsourced local narrative/species-count fallbacks were removed).
+// PublicCalyxGuide's
 // prompts are derived from the same continuum relationships/gaps already on
 // screen, and link to /calyx (AtlasAwareCalyxRoute), which renders an
 // explicit non-evidentiary disclosure for the carried genus. #171
@@ -1873,7 +1873,7 @@ const homepageFeaturedGenusGate: CompletionNode = {
     deployedOperational: null,
   },
   evidence: [
-    { kind: 'file', ref: 'src/lib/featuredGenus.ts', note: 'featuredGenusIndex()/featuredGenusName() derive a deterministic genus purely from the current UTC clock (12h window) so every visitor worldwide sees the same genus at the same moment; fetchFeaturedNarrative() calls the real genus-narrative Supabase edge function and falls back to a locally-composed, science-grounded (not invented) narrative on failure.' },
+    { kind: 'file', ref: 'src/lib/featuredGenus.ts', note: 'featuredGenusIndex()/featuredGenusName() derive a deterministic genus purely from the current UTC clock (12h window) so every visitor worldwide sees the same genus at the same moment; the module carries genus names only, with no locally authored taxon facts.' },
     { kind: 'file', ref: 'src/components/orchid/DailyGenusFeature.tsx' },
     { kind: 'file', ref: 'src/components/orchid/HomeSpeciesExhibit.tsx' },
     { kind: 'file', ref: 'src/lib/dailyGenusContext.ts' },

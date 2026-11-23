@@ -147,3 +147,58 @@ export const zooApi = {
 
 export const ZOO_PLACEHOLDER_MESSAGE =
   'Orchid Zoo review pipeline coming online.';
+
+// ---------------------------------------------------------------------------
+// Review queue state
+// ---------------------------------------------------------------------------
+
+/**
+ * What the reviewer workflow may show about the live queue.
+ *
+ * `unavailable` and `empty` are different facts and must not be collapsed:
+ * only a well-formed JSON array with no items is a confirmed empty queue. An
+ * unconfigured API, a failed request, or a malformed payload is an outage, and
+ * nothing is shown in place of the submissions it did not deliver.
+ */
+export type ZooQueueState =
+  | { kind: 'unavailable'; reason: string }
+  | { kind: 'empty' }
+  | { kind: 'present'; items: ZooQueueItem[] };
+
+const REVIEW_STATES = new Set(['pending', 'in_review', 'needs_more_data']);
+
+function isQueueItem(value: unknown): value is ZooQueueItem {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  if (typeof item.submission_id !== 'string' || !item.submission_id.trim()) return false;
+  for (const key of ['thumbnail_url', 'proposed_taxon', 'submitted_at'] as const) {
+    if (item[key] !== undefined && item[key] !== null && typeof item[key] !== 'string') return false;
+  }
+  if (item.review_state !== undefined && item.review_state !== null && !REVIEW_STATES.has(String(item.review_state))) {
+    return false;
+  }
+  return true;
+}
+
+/** Interpret a `GET /api/zoo/queue` result without inventing anything. */
+export function interpretZooQueue(result: ApiResult<unknown>): ZooQueueState {
+  if (result.unconfigured) {
+    return { kind: 'unavailable', reason: 'The Orchid Continuum API is not configured for this deployment.' };
+  }
+  if (result.error) {
+    return { kind: 'unavailable', reason: result.error.message || 'The review queue request failed.' };
+  }
+  const data = result.data;
+  if (!Array.isArray(data)) {
+    return { kind: 'unavailable', reason: 'The review queue response was not a list of submissions.' };
+  }
+  if (!data.every(isQueueItem)) {
+    return { kind: 'unavailable', reason: 'The review queue response contained malformed submissions.' };
+  }
+  if (data.length === 0) return { kind: 'empty' };
+  return { kind: 'present', items: data };
+}
+
+export async function loadZooQueue(signal?: AbortSignal): Promise<ZooQueueState> {
+  return interpretZooQueue(await zooApi.queue(signal));
+}
