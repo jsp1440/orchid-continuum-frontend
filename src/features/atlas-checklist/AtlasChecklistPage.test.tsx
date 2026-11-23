@@ -87,6 +87,16 @@ describe('AtlasChecklistPage', () => {
     expect(screen.queryByLabelText(/Area name/)).toBeNull();
   });
 
+  it.each(['available', 'not_enabled', 'unavailable'])('credits the checklist and its compiler in every state (%s)', async (status) => {
+    mockFetch({ '/atlas/checklist/areas': status === 'available' ? AREAS : { ...env, status } });
+    render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
+    const credit = await screen.findByTestId('checklist-source-credit');
+    expect(credit.textContent).toMatch(/World Plants, the checklist of the Orchidaceae compiled by Dr\. Michael Hassler/);
+    expect(credit.textContent).toMatch(/permits its public use with credit/);
+    expect(credit.querySelector('a[href="https://www.worldplants.de"]')?.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(credit.querySelector('a[href="/partners"]')?.textContent).toBe('Partners & Acknowledgements');
+  });
+
   it('says unavailable as a gap, not an absence', async () => {
     mockFetch({ '/atlas/checklist/areas': { ...env, status: 'unavailable' } });
     render(<MemoryRouter><AtlasChecklistPage /></MemoryRouter>);
