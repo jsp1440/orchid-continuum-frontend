@@ -148,8 +148,7 @@ describe('SpeciesPhotoGallery', () => {
     mockFetch([{ status: 200, json: leakyBody }]);
     const { container } = render(<SpeciesPhotoGallery taxonId="32953" speciesName={NAME} />);
     await screen.findByRole('img', { name: NAME });
-    fireEvent.click(screen.getByRole('button', { name: 'See all photos' }));
-    fireEvent.click(screen.getByRole('button', { name: `Open larger view of photo 2 of ${NAME}` }));
+    fireEvent.click(screen.getByRole('button', { name: `Show photo 2 of ${NAME} larger` }));
     await screen.findByRole('dialog');
     const text = `${container.textContent} ${document.body.textContent}`;
     for (const leaked of ['Jane Observer', 'Secret Ridge', '18.91234', '47.53456', '2021-04-02']) {
@@ -175,7 +174,6 @@ describe('SpeciesPhotoGallery', () => {
     expect(screen.getAllByText('NC Rights Holder').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'CC BY-NC 4.0' })).toBeTruthy();
     expect(screen.getByText(/not for download or reuse/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'See all photos' }));
     fireEvent.click(screen.getByRole('button', { name: `Open larger view of photo 1 of ${NAME}` }));
     await screen.findByRole('dialog');
     const anchors = [...container.querySelectorAll('a'), ...document.body.querySelectorAll('a')];
@@ -234,8 +232,7 @@ describe('SpeciesPhotoGallery', () => {
     mockFetch([{ status: 200, json: body({ images: [photo(1), photo(2)] }) }]);
     render(<SpeciesPhotoGallery taxonId="32953" speciesName={NAME} />);
     await screen.findByRole('img', { name: NAME });
-    fireEvent.click(screen.getByRole('button', { name: 'See all photos' }));
-    const thumb = screen.getByRole('button', { name: `Open larger view of photo 2 of ${NAME}` });
+    const thumb = screen.getByRole('button', { name: `Show photo 2 of ${NAME} larger` });
     thumb.focus();
     // a native button activates on Enter/Space; the browser turns that into a click
     fireEvent.keyDown(thumb, { key: 'Enter' });
@@ -263,5 +260,29 @@ describe('backboneTaxonId', () => {
     expect(backboneTaxonId('calyx:12')).toBeNull();
     expect(backboneTaxonId('')).toBeNull();
     expect(backboneTaxonId(null)).toBeNull();
+  });
+});
+
+describe('SpeciesPhotoGallery layout', () => {
+  it('shows the main photo with the next nine in an on-screen grid, every photo whole, and See all only beyond ten', async () => {
+    const many = Array.from({ length: 12 }, (_, i) => photo(i + 1));
+    mockFetch([{ status: 200, json: body({ primary: many[0], images: many, page: { limit: 24, next_cursor: null } }) }]);
+    const { container } = render(<SpeciesPhotoGallery taxonId="32953" speciesName={NAME} />);
+    await screen.findByRole('img', { name: NAME });
+    const preview = screen.getByRole('list', { name: `More photos of ${NAME}` });
+    expect(within(preview).getAllByRole('listitem')).toHaveLength(9);
+    expect(within(preview).getAllByText(/Holder/).length).toBe(9);
+    // whole photos: nothing is cropped
+    expect(container.querySelector('img.object-cover')).toBeNull();
+    expect(screen.getByRole('button', { name: 'See all photos' })).toBeTruthy();
+  });
+
+  it('with ten or fewer photos there is no See all button: everything is already on screen', async () => {
+    const few = Array.from({ length: 4 }, (_, i) => photo(i + 1));
+    mockFetch([{ status: 200, json: body({ primary: few[0], images: few, page: { limit: 24, next_cursor: null } }) }]);
+    render(<SpeciesPhotoGallery taxonId="32953" speciesName={NAME} />);
+    await screen.findByRole('img', { name: NAME });
+    expect(within(screen.getByRole('list', { name: `More photos of ${NAME}` })).getAllByRole('listitem')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: 'See all photos' })).toBeNull();
   });
 });

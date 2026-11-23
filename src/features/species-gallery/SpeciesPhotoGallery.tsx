@@ -12,7 +12,8 @@ import {
  * SpeciesPhotoGallery — the licence-cleared photos of one backbone taxon.
  *
  * One photo: that photo, large, with its credit and licence. More than one: the primary photo large,
- * then "See all photos", a paged grid whose thumbnails open a larger view.
+ * beside it a 3x3 grid of the next nine (whole photos, never cropped), then "See all photos" when there are more,
+ * a paged grid whose thumbnails open a larger view.
  *
  * What is shown about a photo is a closed list: the rights-holder credit and the licence exactly as the
  * API gives them (with the licence deed linked when given), the sanitised source label and the
@@ -154,6 +155,8 @@ function Note({ children }: { children: React.ReactNode }) {
   );
 }
 
+const PREVIEW_COUNT = 9;
+
 const SpeciesPhotoGallery: React.FC<SpeciesPhotoGalleryProps> = ({ taxonId, speciesName }) => {
   const headingId = useId();
   const gridId = useId();
@@ -250,7 +253,11 @@ const SpeciesPhotoGallery: React.FC<SpeciesPhotoGalleryProps> = ({ taxonId, spec
   }
 
   const all = dedupe([primary, ...gallery]);
-  const many = all.length > 1 || Boolean(nextCursor);
+  // Owner's layout (2026-11-23): the main photo large on the left, the next nine in a 3x3 grid on the right,
+  // every photo shown whole (object-contain, never cropped); "See all photos" only when there are more than ten.
+  const preview = all.slice(1, 1 + PREVIEW_COUNT);
+  // Once opened, the full grid stays open even after the last page has arrived.
+  const hasMore = all.length > 1 + PREVIEW_COUNT || Boolean(nextCursor) || gridOpen;
   const current = viewer === null ? null : all[viewer] ?? null;
 
   return (
@@ -263,21 +270,65 @@ const SpeciesPhotoGallery: React.FC<SpeciesPhotoGalleryProps> = ({ taxonId, spec
         </p>
       )}
 
-      <figure data-testid="primary-photo">
-        <div className="rounded-2xl overflow-hidden bg-[#0a0d1c] border border-white/[0.08]">
-          <img
-            src={primary.url ?? undefined}
-            alt={speciesName}
-            className="w-full max-h-[520px] object-contain bg-black/30"
-            draggable={false}
-          />
-        </div>
-        <figcaption>
-          <PhotoCredit photo={primary} />
-        </figcaption>
-      </figure>
+      <div className="grid gap-5 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] items-start">
+        <figure data-testid="primary-photo" className="m-0">
+          <button
+            type="button"
+            onClick={(event) => {
+              opener.current = event.currentTarget;
+              setViewer(0);
+            }}
+            aria-label={`Open larger view of photo 1 of ${speciesName}`}
+            className="block w-full rounded-2xl overflow-hidden bg-[#0a0d1c] border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a24a]"
+          >
+            <img
+              src={primary.url ?? undefined}
+              alt={speciesName}
+              className="w-full max-h-[560px] object-contain bg-black/30"
+              draggable={false}
+            />
+          </button>
+          <figcaption>
+            <PhotoCredit photo={primary} />
+          </figcaption>
+        </figure>
 
-      {many && (
+        {preview.length > 0 && (
+          <ul
+            data-testid="photo-preview-grid"
+            className="grid grid-cols-3 gap-2"
+            aria-label={`More photos of ${speciesName}`}
+          >
+            {preview.map((photo, offset) => {
+              const index = offset + 1;
+              return (
+                <li key={photo.image_id} className="min-w-0">
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      opener.current = event.currentTarget;
+                      setViewer(index);
+                    }}
+                    aria-label={`Show photo ${index + 1} of ${speciesName} larger`}
+                    className="block w-full aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a24a]"
+                  >
+                    <img
+                      src={photo.url ?? undefined}
+                      alt={`${speciesName}, photo ${index + 1}`}
+                      loading="lazy"
+                      draggable={false}
+                      className="w-full h-full object-contain"
+                    />
+                  </button>
+                  <PhotoCredit photo={photo} compact />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {hasMore && (
         <div className="mt-5">
           <button
             type="button"
@@ -291,7 +342,7 @@ const SpeciesPhotoGallery: React.FC<SpeciesPhotoGalleryProps> = ({ taxonId, spec
 
           {gridOpen && (
             <div id={gridId} className="mt-4">
-              <ul className="grid grid-cols-2 sm:grid-cols-3 gap-4" aria-label={`Photos of ${speciesName}`}>
+              <ul className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4" aria-label={`Photos of ${speciesName}`}>
                 {all.map((photo, index) => (
                   <li key={photo.image_id} className="rounded-xl border border-white/[0.08] bg-[#0a0d1c]/70 p-2">
                     <button
@@ -301,14 +352,14 @@ const SpeciesPhotoGallery: React.FC<SpeciesPhotoGalleryProps> = ({ taxonId, spec
                         setViewer(index);
                       }}
                       aria-label={`Open larger view of photo ${index + 1} of ${speciesName}`}
-                      className="block w-full aspect-square overflow-hidden rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a24a]"
+                      className="block w-full aspect-square overflow-hidden rounded-lg bg-black/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#c9a24a]"
                     >
                       <img
                         src={photo.url ?? undefined}
                         alt={`${speciesName}, photo ${index + 1}`}
                         loading="lazy"
                         draggable={false}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain"
                       />
                     </button>
                     <PhotoCredit photo={photo} compact />
