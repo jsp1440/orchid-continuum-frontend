@@ -42,7 +42,7 @@
 
 import { supabase } from './supabase';
 import { hasThreatAssessment } from './atlasLocalitySafety';
-import { ATLAS_PUBLIC_CURATED_URL, ATLAS_PUBLIC_OCCURRENCES_URL } from './backendConfig';
+import { ATLAS_PUBLIC_CELLS_URL, ATLAS_PUBLIC_CURATED_URL, ATLAS_PUBLIC_OCCURRENCES_URL } from './backendConfig';
 
 // ---------------------------------------------------------------------------
 // Public record shapes
@@ -329,6 +329,8 @@ let liveStatus: 'unknown' | 'live' | 'offline' = 'unknown';
 let atlasLoadFailed = false;
 /** True when some atlas pages loaded but a later page exhausted its retries. */
 let atlasLoadIncomplete = false;
+/** True when the load stopped at ATLAS_MAX_PAGES while the source still held more records. */
+let atlasLoadCapped = false;
 
 /** True when the atlas occurrence load exhausted its retries with no data. */
 export function didAtlasLoadFail(): boolean {
@@ -344,13 +346,23 @@ export function didAtlasLoadIncomplete(): boolean {
   return atlasLoadIncomplete;
 }
 
+/**
+ * True when the occurrence load stopped at the page cap (ATLAS_MAX_PAGES) while
+ * the source held more records: the map shows only the first records, which
+ * must be said rather than presented as the whole Atlas.
+ */
+export function didAtlasLoadCapped(): boolean {
+  return atlasLoadCapped;
+}
+
 const ATLAS_PAGE_RETRIES = 2; // up to 2 retries (3 attempts) per page
 const ATLAS_RETRY_BASE_MS = 600; // backoff: 600ms, then 1200ms
 /** Records per request to the public occurrence route. */
 export const ATLAS_PAGE_SIZE = 1000;
 /** Pages fetched at once after the first one (small, to stay polite to the backend). */
 export const ATLAS_PAGE_CONCURRENCY = 4;
-const ATLAS_MAX_PAGES = 100; // safety cap: 100k occurrences
+/** Safety cap on pages per load (100k occurrences); hitting it sets didAtlasLoadCapped(). */
+export const ATLAS_MAX_PAGES = 100;
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -428,10 +440,15 @@ function publicItemToRow(item: PublicOccurrenceItem): AtlasOccurrenceRow | null 
  * Fetch one page of the public occurrence route with retry-with-backoff.
  * Returns `null` once all attempts are exhausted.
  */
-async function fetchAtlasPageWithRetry(offset: number, pageSize: number): Promise<PublicOccurrencePage | null> {
+async function fetchAtlasPageWithRetry(
+  offset: number,
+  pageSize: number,
+  genus?: string,
+): Promise<PublicOccurrencePage | null> {
+  const genusParam = genus ? `&genus=${encodeURIComponent(genus)}` : '';
   for (let attempt = 0; attempt <= ATLAS_PAGE_RETRIES; attempt++) {
     try {
-      const res = await fetch(`${ATLAS_PUBLIC_OCCURRENCES_URL}?offset=${offset}&limit=${pageSize}`, {
+      const res = await fetch(`${ATLAS_PUBLIC_OCCURRENCES_URL}?offset=${offset}&limit=${pageSize}${genusParam}`, {
         headers: { Accept: 'application/json' },
       });
       if (res.ok) {
@@ -596,6 +613,7 @@ async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
   atlasCachePromise = (async () => {
     atlasLoadFailed = false;
     atlasLoadIncomplete = false;
+    atlasLoadCapped = false;
     // A local array: a load superseded by resetOrchidContinuumCaches() keeps
     // writing to its own rows, never to the next load's.
     const rows: AtlasOccurrenceRow[] = [];
@@ -623,9 +641,11 @@ async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
     if (first.total !== null) {
       // Remaining pages concurrently, at most ATLAS_PAGE_CONCURRENCY in flight.
       const offsets: number[] = [];
-      for (let o = first.offset + first.scanned; o < first.total && offsets.length < ATLAS_MAX_PAGES; o += ATLAS_PAGE_SIZE) {
+      let o = first.offset + first.scanned;
+      for (; o < first.total && offsets.length < ATLAS_MAX_PAGES; o += ATLAS_PAGE_SIZE) {
         offsets.push(o);
       }
+      if (o < first.total) atlasLoadCapped = true;
       await runWithConcurrency(
         offsets.map((offset) => async () => {
           const page = await fetchAtlasPageWithRetry(offset, ATLAS_PAGE_SIZE);
@@ -646,12 +666,14 @@ async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
         const page = await fetchAtlasPageWithRetry(next, ATLAS_PAGE_SIZE);
         if (page === null) {
           atlasLoadIncomplete = true;
+          next = null;
           break;
         }
         append(page);
         publishAtlasProgress({});
         next = page.next_offset;
       }
+      if (next !== null) atlasLoadCapped = true;
     }
 
     if (rows.length > 0) {
@@ -1208,6 +1230,163 @@ export async function fetchAtlasOccurrencePointsLazy(): Promise<{
   return { initial, full };
 }
 
+// ---------------------------------------------------------------------------
+// World overview: record counts per generalised grid cell
+// ---------------------------------------------------------------------------
+
+/** Resolutions the backend's cell route offers (degrees). */
+export const ATLAS_CELL_RESOLUTIONS = [5, 2, 1, 0.5, 0.1] as const;
+export type AtlasCellResolution = (typeof ATLAS_CELL_RESOLUTIONS)[number];
+
+/**
+ * One cell of the public overview. The server counts every record into a cell
+ * no finer than its own public cell (a CR record never below 1 degree) and
+ * sends counts only: no record id, no name.
+ */
+export interface AtlasCell {
+  lat: number;
+  lng: number;
+  cellDeg: number;
+  cellKm: number;
+  count: number;
+  taxa: number;
+}
+
+export interface AtlasCellSummary {
+  cells: AtlasCell[];
+  /** Records counted in the returned cells. */
+  recordCount: number;
+  /** True when the server returned only its most populated cells. */
+  truncated: boolean;
+  resolution: number;
+}
+
+const atlasCellCache = new Map<string, Promise<AtlasCellSummary | null>>();
+
+/**
+ * Fetch the public cell summary. Resolves to `null` when the route is not
+ * reachable (for example a backend that predates it), so the caller can fall
+ * back to per-record points instead of showing an empty map.
+ */
+export function fetchAtlasCells(options: { resolution: AtlasCellResolution; genus?: string }): Promise<AtlasCellSummary | null> {
+  const params = new URLSearchParams({ resolution: String(options.resolution) });
+  if (options.genus) params.set('genus', options.genus);
+  const key = params.toString();
+  const cached = atlasCellCache.get(key);
+  if (cached) return cached;
+  const promise = (async (): Promise<AtlasCellSummary | null> => {
+    try {
+      const res = await fetch(`${ATLAS_PUBLIC_CELLS_URL}?${key}`, { headers: { Accept: 'application/json' } });
+      if (!res.ok) {
+        console.warn(`[orchidContinuum] atlas cells failed: HTTP ${res.status}`);
+        return null;
+      }
+      const body = (await res.json()) as {
+        cells?: { cell_lat: unknown; cell_lng: unknown; cell_deg: unknown; cell_km: unknown; count: unknown; taxa: unknown }[];
+        truncated?: unknown;
+        resolution_deg?: unknown;
+      };
+      if (!body || !Array.isArray(body.cells)) return null;
+      const cells: AtlasCell[] = [];
+      for (const c of body.cells) {
+        if (
+          typeof c.cell_lat !== 'number' || typeof c.cell_lng !== 'number' ||
+          typeof c.cell_deg !== 'number' || typeof c.count !== 'number' ||
+          !(c.cell_deg >= 0.1) || c.count <= 0
+        ) continue;
+        cells.push({
+          lat: c.cell_lat,
+          lng: c.cell_lng,
+          cellDeg: c.cell_deg,
+          cellKm: typeof c.cell_km === 'number' ? c.cell_km : Math.round(c.cell_deg * 111),
+          count: c.count,
+          taxa: typeof c.taxa === 'number' ? c.taxa : 0,
+        });
+      }
+      return {
+        cells,
+        recordCount: cells.reduce((sum, c) => sum + c.count, 0),
+        truncated: body.truncated === true,
+        resolution: typeof body.resolution_deg === 'number' ? body.resolution_deg : options.resolution,
+      };
+    } catch (err) {
+      console.warn('[orchidContinuum] atlas cells threw:', err);
+      return null;
+    }
+  })();
+  atlasCellCache.set(key, promise);
+  // A failure is not cached: the next call asks again.
+  promise.then((result) => { if (result === null) atlasCellCache.delete(key); }, () => atlasCellCache.delete(key));
+  return promise;
+}
+
+// ---------------------------------------------------------------------------
+// Per-record points for one genus (server-side genus filter)
+// ---------------------------------------------------------------------------
+
+export interface AtlasGenusLoad {
+  points: AtlasOccurrencePoint[];
+  /** The genus holds more records than ATLAS_MAX_PAGES pages; only the first are present. */
+  capped: boolean;
+  /** No page could be read. */
+  failed: boolean;
+  /** A later page failed after its retries. */
+  incomplete: boolean;
+}
+
+const atlasGenusCache = new Map<string, Promise<AtlasGenusLoad>>();
+
+/**
+ * Every public point of one genus: the backend filters by genus, so a genus is
+ * loaded completely (up to ATLAS_MAX_PAGES pages) rather than whatever share of
+ * it falls inside the first pages of the whole table. Curated species points of
+ * the genus are included.
+ */
+export function fetchAtlasGenusPoints(genus: string): Promise<AtlasGenusLoad> {
+  const key = genus.trim();
+  const cached = atlasGenusCache.get(key);
+  if (cached) return cached;
+  const promise = (async (): Promise<AtlasGenusLoad> => {
+    const [speciesRows, mycoRows] = await Promise.all([loadSpeciesRows(), loadMycorrhizalRows()]);
+    const speciesById = new Map(speciesRows.map((r) => [r.id, r]));
+    const mycoIdx = buildMycorrhizalIndex(mycoRows);
+    const consIdx = buildConservationIndex(speciesRows);
+    const points: AtlasOccurrencePoint[] = [];
+    for (const row of speciesRows) {
+      if ((row.genus ?? '').trim() !== key || !row.occurrences) continue;
+      row.occurrences.forEach((occ, i) => {
+        if (typeof occ?.lat !== 'number' || typeof occ?.lng !== 'number') return;
+        points.push(curatedOccurrenceToPoint(row, occ, i, mycoIdx));
+      });
+    }
+    let next: number | null = 0;
+    let pages = 0;
+    let failed = false;
+    let incomplete = false;
+    while (next !== null && pages < ATLAS_MAX_PAGES) {
+      const page = await fetchAtlasPageWithRetry(next, ATLAS_PAGE_SIZE, key);
+      if (page === null) {
+        if (pages === 0) failed = true;
+        else incomplete = true;
+        next = null;
+        break;
+      }
+      pages += 1;
+      for (const item of page.items) {
+        const row = publicItemToRow(item);
+        if (!row) continue;
+        const linked = row.species_id ? speciesById.get(row.species_id) : undefined;
+        points.push(atlasRowToPoint(row, linked, mycoIdx, consIdx));
+      }
+      next = page.next_offset;
+    }
+    return { points, capped: next !== null, failed, incomplete };
+  })();
+  atlasGenusCache.set(key, promise);
+  promise.then((result) => { if (result.failed) atlasGenusCache.delete(key); }, () => atlasGenusCache.delete(key));
+  return promise;
+}
+
 
 export async function fetchAtlasOccurrence(
   occurrenceId: string,
@@ -1329,8 +1508,16 @@ function uniqSorted(values: (string | null | undefined)[]): string[] {
   ).sort((a, b) => a.localeCompare(b));
 }
 
-export async function fetchAtlasFacets(): Promise<AtlasFacets> {
-  const [rows, atlasRows] = await Promise.all([loadSpeciesRows(), loadAtlasRows()]);
+/**
+ * Filter facets. `includeOccurrenceRows: false` builds them from the species
+ * table alone, without starting the (capped, many-page) load of every
+ * occurrence; the Atlas overview uses it so its world view stays one request.
+ */
+export async function fetchAtlasFacets(options: { includeOccurrenceRows?: boolean } = {}): Promise<AtlasFacets> {
+  const [rows, atlasRows] = await Promise.all([
+    loadSpeciesRows(),
+    options.includeOccurrenceRows === false ? Promise.resolve([] as AtlasOccurrenceRow[]) : loadAtlasRows(),
+  ]);
 
   const genera = uniqSorted([
     ...rows.map((r) => r.genus),
@@ -1426,6 +1613,9 @@ export function resetOrchidContinuumCaches(): void {
   liveStatus = 'unknown';
   atlasLoadFailed = false;
   atlasLoadIncomplete = false;
+  atlasLoadCapped = false;
+  atlasCellCache.clear();
+  atlasGenusCache.clear();
 }
 
 

@@ -32,15 +32,20 @@ import { tourPanelIndexFromParam, type TourStop } from '@/lib/grandTour';
 import { useAtlasFilters } from '@/contexts/AtlasFilterContext';
 import { SourceCitation } from '@/components/orchid/SourceBadges';
 import { resolveAtlasLocation, toPublicAtlasOccurrence } from '@/lib/atlasLocalitySafety';
+import { ATLAS_RECORDS_ZOOM, cellResolutionForZoom, hasActiveAtlasFilters } from '@/lib/atlasCells';
 import {
   fetchAtlasOccurrencePointsProgressive,
   fetchAtlasOccurrence,
   fetchAtlasFacets,
+  fetchAtlasCells,
+  fetchAtlasGenusPoints,
   applyAtlasFilters,
   canonicalSlug,
   didAtlasLoadFail,
   didAtlasLoadIncomplete,
+  didAtlasLoadCapped,
   resetOrchidContinuumCaches,
+  type AtlasCellSummary,
   type AtlasOccurrencePoint,
   type AtlasSpeciesRecord,
   type AtlasFacets,
@@ -51,10 +56,15 @@ import {
 /**
  * Atlas — live Orchid Continuum biodiversity intelligence interface.
  *
- * Occurrence points come from the Calyx backend's public route, already
- * generalised to grid-cell centres with no locality text (precise
- * coordinates never reach the browser). Points paint as soon as the first
- * page arrives; the remaining pages stream in. No procedural points, no
+ * The world view is one request to the backend's cell summary
+ * (`/atlas/public/cells`): record counts per generalised grid cell, drawn as
+ * shaded squares. Per-record points are fetched only when the visitor filters
+ * (a genus is loaded completely through the server-side genus filter) or
+ * zooms in past ATLAS_RECORDS_ZOOM; if the cell route is unreachable the page
+ * falls back to per-record points. Points come from the public occurrence
+ * route, already generalised to grid-cell centres with no locality text
+ * (precise coordinates never reach the browser). When the per-record load
+ * stops at its page cap the page says so. No procedural points, no
  * synthetic imagery. Missing data is surfaced with explicit
  * "Awaiting Orchid Continuum Record" / "not yet linked" placeholders.
  */
@@ -142,6 +152,23 @@ const Atlas: React.FC = () => {
   const [grandTourOpen, setGrandTourOpen] = useState(tourParamIndex !== null);
   const [tourStartIndex, setTourStartIndex] = useState<number | null>(tourParamIndex);
   const [loadProgress, setLoadProgress] = useState<AtlasLoadProgress | null>(null);
+  const [zoom, setZoom] = useState(2);
+  const [cellSummary, setCellSummary] = useState<AtlasCellSummary | null>(null);
+  const [cellsStatus, setCellsStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  // The per-record load stopped at its page cap: only the first records are shown.
+  const [capped, setCapped] = useState(false);
+
+  const selectedGenera = filters.genera ?? [];
+  const generaKey = [...selectedGenera].sort().join('|');
+  const recordsWanted =
+    hasActiveAtlasFilters(filters) ||
+    intersectionMode ||
+    zoom >= ATLAS_RECORDS_ZOOM ||
+    cellsStatus === 'unavailable' ||
+    !!initialOccurrenceId;
+  const recordMode: 'none' | 'genus' | 'all' = !recordsWanted ? 'none' : selectedGenera.length > 0 ? 'genus' : 'all';
+  const overview = recordMode === 'none';
+  const cellResolution = cellResolutionForZoom(zoom);
 
   const handleGrandTourStop = useCallback(
     (stop: TourStop) => {
@@ -151,15 +178,62 @@ const Atlas: React.FC = () => {
     [setFilters],
   );
 
+  // Facets from the species table only: building them from every occurrence
+  // would start the many-page load the overview exists to avoid. Genera and
+  // countries of loaded records are merged in below.
   useEffect(() => {
+    let cancelled = false;
+    fetchAtlasFacets({ includeOccurrenceRows: false }).then((fs) => { if (!cancelled) setFacets(fs); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  // World overview: one request for counts per generalised cell.
+  const cellsNeeded = zoom < ATLAS_RECORDS_ZOOM;
+  useEffect(() => {
+    if (!cellsNeeded) return;
+    let cancelled = false;
+    fetchAtlasCells({ resolution: cellResolution }).then((summary) => {
+      if (cancelled) return;
+      if (summary === null) {
+        setCellsStatus('unavailable');
+        return;
+      }
+      setCellSummary(summary);
+      setCellsStatus('ready');
+    });
+    return () => { cancelled = true; };
+  }, [cellResolution, cellsNeeded, reloadKey]);
+
+  // Per-record points, only once the visitor filters or zooms in.
+  useEffect(() => {
+    if (recordMode === 'none') return;
     let cancelled = false;
     setLoading(true);
     setLoadOutcome('ok');
     setLoadProgress(null);
+    setCapped(false);
     (async () => {
+      if (recordMode === 'genus') {
+        const loads = await Promise.all(generaKey.split('|').map((genus) => fetchAtlasGenusPoints(genus)));
+        if (cancelled) return;
+        const byId = new Map<string, AtlasOccurrencePoint>();
+        for (const load of loads) for (const p of load.points) byId.set(p.id, p);
+        const pts = [...byId.values()];
+        setAllPoints(pts);
+        setCapped(loads.some((l) => l.capped));
+        setLoadOutcome(
+          pts.length === 0 && loads.every((l) => l.failed)
+            ? 'failed'
+            : loads.some((l) => l.failed || l.incomplete)
+              ? 'partial'
+              : 'ok',
+        );
+        setLoading(false);
+        setLoadingMore(false);
+        return;
+      }
       // Progressive: paint as soon as the first page arrives, then grow as the
       // remaining pages (fetched a few at a time) come in.
-      const facetsPromise = fetchAtlasFacets().then((fs) => { if (!cancelled) setFacets(fs); });
       const pts = await fetchAtlasOccurrencePointsProgressive((points, progress) => {
         if (cancelled) return;
         setAllPoints(points);
@@ -169,6 +243,7 @@ const Atlas: React.FC = () => {
       });
       if (cancelled) return;
       setAllPoints(pts);
+      setCapped(didAtlasLoadCapped());
       setLoadOutcome(
         pts.length === 0 && didAtlasLoadFail()
           ? 'failed'
@@ -178,13 +253,24 @@ const Atlas: React.FC = () => {
       );
       setLoading(false);
       setLoadingMore(false);
-      await facetsPromise;
     })();
     return () => { cancelled = true; };
-  }, [reloadKey]);
+  }, [recordMode, generaKey, reloadKey]);
+
+  const shownFacets = useMemo(() => {
+    if (!facets) return null;
+    const merge = (base: string[], extra: (string | undefined)[]) =>
+      Array.from(new Set([...base, ...extra.filter((v): v is string => !!v && v !== 'Unknown')])).sort((a, b) => a.localeCompare(b));
+    return {
+      ...facets,
+      genera: merge(facets.genera, allPoints.map((p) => p.genus)),
+      countries: merge(facets.countries, allPoints.map((p) => p.country)),
+    };
+  }, [facets, allPoints]);
 
   const retryAtlasLoad = useCallback(() => {
     resetOrchidContinuumCaches();
+    setCellsStatus('loading');
     setReloadKey((key) => key + 1);
   }, []);
 
@@ -262,10 +348,16 @@ const Atlas: React.FC = () => {
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 text-[#cfc8b8]">
-                <Stat label="Matching records" value={filteredPoints.length} />
-                <Stat label="Loaded records" value={allPoints.length} />
-                {loadProgress && !loadProgress.done && loadProgress.total !== null && (
-                  <Stat label="Records in the Atlas" value={loadProgress.total} />
+                {overview ? (
+                  cellSummary && <Stat label="Records in the Atlas" value={cellSummary.recordCount} />
+                ) : (
+                  <>
+                    <Stat label="Matching records" value={filteredPoints.length} />
+                    <Stat label="Loaded records" value={allPoints.length} />
+                    {loadProgress && !loadProgress.done && loadProgress.total !== null && (
+                      <Stat label="Records in the Atlas" value={loadProgress.total} />
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -279,17 +371,17 @@ const Atlas: React.FC = () => {
                 <div className="flex items-center gap-2"><Filter className="h-4 w-4 text-[#c9a24a]" /><div className="font-mono text-[11px] tracking-[0.28em] uppercase text-[#faf7f2]">Filters</div></div>
                 <button type="button" onClick={resetFilters} className="font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/55 hover:text-[#c9a24a] transition-colors">Reset</button>
               </div>
-              {!facets && <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-[#7a7466] flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Loading facets…</div>}
-              {facets && (
+              {!shownFacets && <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-[#7a7466] flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Loading facets…</div>}
+              {shownFacets && (
                 <div className="space-y-4">
-                  <Section icon={GitBranch} title="Taxonomy">{facets.genera.map((g) => <ToggleChip key={g} active={isActive('genera', g)} onClick={() => toggleStringFilter('genera', g)}>{g}</ToggleChip>)}</Section>
-                  {facets.tribes.length > 0 && <Section icon={GitBranch} title="Tribe">{facets.tribes.map((t) => <ToggleChip key={t} active={isActive('tribes', t)} onClick={() => toggleStringFilter('tribes', t)}>{t}</ToggleChip>)}</Section>}
-                  <Section icon={MapPin} title="Country">{facets.countries.map((c) => <ToggleChip key={c} active={isActive('countries', c)} onClick={() => toggleStringFilter('countries', c)}>{c}</ToggleChip>)}</Section>
-                  <Section icon={Leaf} title="Growth habit">{facets.growthForms.map((g) => <ToggleChip key={g} active={isActive('growthForms', g)} onClick={() => toggleStringFilter('growthForms', g)}>{g}</ToggleChip>)}</Section>
-                  {facets.habitats.length > 0 && <Section icon={Leaf} title="Habitat">{facets.habitats.map((h) => <ToggleChip key={h} active={isActive('habitats', h)} onClick={() => toggleStringFilter('habitats', h)}>{h}</ToggleChip>)}</Section>}
-                  <Section icon={ShieldAlert} title="Conservation · IUCN">{facets.iucnCodes.map((c) => <ToggleChip key={c} active={isActive('iucnCodes', c)} onClick={() => toggleStringFilter('iucnCodes', c)}>{c}</ToggleChip>)}</Section>
-                  {facets.pollinatorTaxa.length > 0 && <Section icon={Bug} title="Pollinator taxa">{facets.pollinatorTaxa.slice(0, 24).map((p) => <ToggleChip key={p} active={isActive('pollinatorTaxa', p)} onClick={() => toggleStringFilter('pollinatorTaxa', p)}>{p}</ToggleChip>)}</Section>}
-                  <Section icon={Database} title="Data source">{facets.datasets.map((d) => <ToggleChip key={d} active={isActive('datasets', d)} onClick={() => toggleStringFilter('datasets', d)}>{d}</ToggleChip>)}<ToggleChip active={!!filters.verifiedOnly} onClick={() => setFilters((p) => ({ ...p, verifiedOnly: !p.verifiedOnly }))}>Verified only</ToggleChip></Section>
+                  <Section icon={GitBranch} title="Taxonomy">{shownFacets.genera.map((g) => <ToggleChip key={g} active={isActive('genera', g)} onClick={() => toggleStringFilter('genera', g)}>{g}</ToggleChip>)}</Section>
+                  {shownFacets.tribes.length > 0 && <Section icon={GitBranch} title="Tribe">{shownFacets.tribes.map((t) => <ToggleChip key={t} active={isActive('tribes', t)} onClick={() => toggleStringFilter('tribes', t)}>{t}</ToggleChip>)}</Section>}
+                  <Section icon={MapPin} title="Country">{shownFacets.countries.map((c) => <ToggleChip key={c} active={isActive('countries', c)} onClick={() => toggleStringFilter('countries', c)}>{c}</ToggleChip>)}</Section>
+                  <Section icon={Leaf} title="Growth habit">{shownFacets.growthForms.map((g) => <ToggleChip key={g} active={isActive('growthForms', g)} onClick={() => toggleStringFilter('growthForms', g)}>{g}</ToggleChip>)}</Section>
+                  {shownFacets.habitats.length > 0 && <Section icon={Leaf} title="Habitat">{shownFacets.habitats.map((h) => <ToggleChip key={h} active={isActive('habitats', h)} onClick={() => toggleStringFilter('habitats', h)}>{h}</ToggleChip>)}</Section>}
+                  <Section icon={ShieldAlert} title="Conservation · IUCN">{shownFacets.iucnCodes.map((c) => <ToggleChip key={c} active={isActive('iucnCodes', c)} onClick={() => toggleStringFilter('iucnCodes', c)}>{c}</ToggleChip>)}</Section>
+                  {shownFacets.pollinatorTaxa.length > 0 && <Section icon={Bug} title="Pollinator taxa">{shownFacets.pollinatorTaxa.slice(0, 24).map((p) => <ToggleChip key={p} active={isActive('pollinatorTaxa', p)} onClick={() => toggleStringFilter('pollinatorTaxa', p)}>{p}</ToggleChip>)}</Section>}
+                  <Section icon={Database} title="Data source">{shownFacets.datasets.map((d) => <ToggleChip key={d} active={isActive('datasets', d)} onClick={() => toggleStringFilter('datasets', d)}>{d}</ToggleChip>)}<ToggleChip active={!!filters.verifiedOnly} onClick={() => setFilters((p) => ({ ...p, verifiedOnly: !p.verifiedOnly }))}>Verified only</ToggleChip></Section>
                   <div className="border-t border-white/[0.06] pt-4"><div className="flex items-center gap-2 mb-2"><Network className="h-3.5 w-3.5 text-[#c9a24a]" /><div className="font-mono text-[10px] tracking-[0.26em] uppercase text-[#c9a24a]">Mycorrhizal</div></div><div className="font-mono text-[10px] tracking-[0.14em] uppercase text-[#7a7466] leading-relaxed">Mycorrhizal data not yet linked to occurrence records.</div></div>
                 </div>
               )}
@@ -297,7 +389,19 @@ const Atlas: React.FC = () => {
           </aside>
 
           <div className="lg:col-span-9 space-y-4">
-            {!loading && loadOutcome !== 'ok' && (
+            {!overview && !loading && capped && (
+              <div role="status" data-testid="atlas-load-capped" className="rounded-2xl border border-[#c9a24a]/45 bg-[#1a1405]/80 p-4 text-[13px] leading-relaxed text-[#ead28c]">
+                {recordMode === 'genus'
+                  ? `Showing the first ${allPoints.length.toLocaleString()} records for the selected genus; the Atlas holds more. Narrow the filter to see the rest.`
+                  : `Showing the first ${allPoints.length.toLocaleString()} records; filter by genus to see all.`}
+              </div>
+            )}
+            {overview && cellSummary?.truncated && (
+              <div role="status" data-testid="atlas-cells-truncated" className="rounded-2xl border border-[#c9a24a]/45 bg-[#1a1405]/80 p-4 text-[13px] leading-relaxed text-[#ead28c]">
+                Showing the most populated grid cells only; zoom in or filter by genus to see the rest.
+              </div>
+            )}
+            {!overview && !loading && loadOutcome !== 'ok' && (
               <div role="alert" data-testid="atlas-load-outcome" className="rounded-2xl border border-[#c9a24a]/45 bg-[#1a1405]/80 p-4 flex flex-wrap items-center justify-between gap-3 text-[13px] leading-relaxed text-[#ead28c]">
                 <span>
                   {loadOutcome === 'failed'
@@ -313,7 +417,7 @@ const Atlas: React.FC = () => {
                 Loading {loadProgress.loaded.toLocaleString()}{loadProgress.total !== null ? ` of ${loadProgress.total.toLocaleString()}` : ''} records — showing {allPoints.length.toLocaleString()} while loading
               </div>
             )}
-            <LiveAtlasMap points={filteredPoints} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={loading} totalLoaded={allPoints.length} loadProgress={loadProgress} focusBounds={focusBounds} focusView={focusView} />
+            <LiveAtlasMap points={overview ? [] : filteredPoints} cells={overview ? (cellSummary?.cells ?? null) : null} onZoomChange={setZoom} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={overview ? cellsStatus === 'loading' : loading} totalLoaded={allPoints.length} loadProgress={overview ? null : loadProgress} focusBounds={focusBounds} focusView={focusView} />
             {/* One active-filter row, directly under the map it narrows (#948 review: it was rendered twice). */}
             <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <div className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 backdrop-blur-md p-4 flex flex-wrap items-center gap-3">
@@ -325,10 +429,16 @@ const Atlas: React.FC = () => {
               <div className="min-w-0"><div className="font-mono text-[10px] tracking-[0.3em] uppercase text-[#c9a24a] mb-1.5">The Living Geography of Orchids</div><h3 className="font-display text-[#faf7f2] text-xl leading-tight">A guided expedition across the planet</h3><p className="mt-1.5 text-[12.5px] text-[#cfc8b8]/75 leading-relaxed max-w-xl">Ten global stops of progressive discovery — evolution, biodiversity, and conservation, with the live map flying to each region.</p></div>
               <button type="button" onClick={() => { setTourStartIndex(null); setGrandTourOpen(true); }} className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-full bg-[#c9a24a] text-[#14140a] hover:bg-[#deb866] font-mono text-[11px] tracking-[0.24em] uppercase transition-colors shadow-lg shadow-[#c9a24a]/20"><Sparkles className="h-4 w-4" /> Begin the Grand Tour</button>
             </div>
-            <AtlasCompletenessBadge count={filteredPoints.length} total={allPoints.length} loading={loading} />
-            <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/70 px-1"><div className="flex items-center gap-2"><Globe2 className="h-3 w-3 text-[#c9a24a]" />{filteredPoints.length.toLocaleString()} of {allPoints.length.toLocaleString()} live records{loadingMore && <span className="ml-2 inline-flex items-center gap-1 text-[#c9a24a]/80"><Loader2 className="h-3 w-3 animate-spin" /> loading more{loadProgress?.total != null ? ` · ${loadProgress.total.toLocaleString()} in the Atlas` : ''}</span>}</div><div className="text-[#7a7466]">Basemap · OpenStreetMap / CARTO · Data · Orchid Continuum + GBIF</div></div>
+            {!overview && <AtlasCompletenessBadge count={filteredPoints.length} total={allPoints.length} loading={loading} />}
+            <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/70 px-1"><div className="flex items-center gap-2"><Globe2 className="h-3 w-3 text-[#c9a24a]" />{overview ? <span data-testid="atlas-overview-summary">{cellSummary ? `${cellSummary.recordCount.toLocaleString()} records in ${cellSummary.cells.length.toLocaleString()} grid cells` : 'Loading the world overview'}</span> : <>{filteredPoints.length.toLocaleString()} of {allPoints.length.toLocaleString()} live records</>}{!overview && loadingMore && <span className="ml-2 inline-flex items-center gap-1 text-[#c9a24a]/80"><Loader2 className="h-3 w-3 animate-spin" /> loading more{loadProgress?.total != null ? ` · ${loadProgress.total.toLocaleString()} in the Atlas` : ''}</span>}</div><div className="text-[#7a7466]">Basemap · OpenStreetMap / CARTO · Data · Orchid Continuum + GBIF</div></div>
             <AtlasDebugPanel />
-            <ResultList points={filteredPoints} onSelect={setSelected} layerMatch={pointLayerMatch} />
+            {overview ? (
+              <div data-testid="atlas-overview-hint" className="rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 p-6 text-center text-[13px] leading-relaxed text-[#cfc8b8]/80">
+                World overview: each square counts the records in a generalised grid cell. Choose a genus or zoom in to list individual records. Threatened taxa are never counted into a cell finer than their own public cell.
+              </div>
+            ) : (
+              <ResultList points={filteredPoints} onSelect={setSelected} layerMatch={pointLayerMatch} />
+            )}
           </div>
         </section>
       </main>
