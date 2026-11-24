@@ -47,13 +47,17 @@ describe('uncertaintyToCellDeg', () => {
 });
 
 describe('resolveLocation', () => {
-  it('leaves an unthreatened, precisely located record exactly where it is', () => {
+  it('shows an unthreatened, precisely located record at the 0.1° public cell with no locality text', () => {
     const r = resolveLocation({ ...base });
-    expect(r.lat).toBe(base.lat);
-    expect(r.lng).toBe(base.lng);
-    expect(r.policy.generalised).toBe(false);
-    expect(r.policy.localityTextAllowed).toBe(true);
-    expect(r.policy.notice).toBe('');
+    expect(r.lat).toBeCloseTo(-0.45, 9);
+    expect(r.policy.cellDeg).toBe(0.1);
+    expect(r.policy.reason).toBe('public-precision');
+    expect(r.policy.localityTextAllowed).toBe(false);
+    expect(r.policy.notice).toMatch(/11 km/);
+    // Research access still sees the record as made.
+    const research = resolveLocation({ ...base }, 'research');
+    expect(research.lat).toBe(base.lat);
+    expect(research.policy.generalised).toBe(false);
   });
 
   it('generalises a critically endangered record to a ~110 km cell', () => {
@@ -76,7 +80,8 @@ describe('resolveLocation', () => {
 
   it('does not treat Least Concern as threatened', () => {
     const r = resolveLocation({ ...base, conservationStatus: 'Least Concern', iucnCode: 'LC' });
-    expect(r.policy.generalised).toBe(false);
+    expect(r.policy.cellDeg).toBe(0.1);
+    expect(r.policy.reason).toBe('public-precision');
   });
 
   it('research access sees through threat protection', () => {

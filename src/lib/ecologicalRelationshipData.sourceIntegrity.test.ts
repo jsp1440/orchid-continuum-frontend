@@ -28,7 +28,10 @@ describe('ecological relationship data source integrity', () => {
     );
 
     expect(continuum).toContain(".from('species')");
-    expect(continuum).toContain(".from('atlas_occurrences')");
+    // Occurrences come from the backend's generalised public route; the
+    // browser never reads the raw table (owner rule, Brain KO-0029).
+    expect(continuum).not.toContain(".from('atlas_occurrences')");
+    expect(continuum).toContain('ATLAS_PUBLIC_OCCURRENCES_URL');
     expect(aggregates).toContain('await loadSpeciesRows()');
     expect(aggregates).toContain('await loadAtlasRows()');
     expect(aggregates).toContain('if (!Array.isArray(row.pollinators)) continue');

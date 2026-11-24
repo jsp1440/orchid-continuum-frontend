@@ -53,12 +53,14 @@ describe('the linkage feeding locality protection', () => {
     expect(loc.policy.localityTextAllowed).toBe(false);
   });
 
-  it('publishes the exact site when NOTHING resolves an assessment — the gap this closes', () => {
+  it('never publishes the exact site, even when nothing resolves an assessment: the 0.1° public floor applies', () => {
     const loc = resolveLocation(
       { ...site, iucnCode: undefined, conservationStatus: undefined },
       'public',
     );
-    expect(loc.lat).toBe(site.lat);
-    expect(loc.policy.generalised).toBe(false);
+    expect(loc.lat).not.toBe(site.lat);
+    expect(loc.policy.generalised).toBe(true);
+    expect(loc.policy.cellDeg).toBe(0.1);
+    expect(loc.policy.localityTextAllowed).toBe(false);
   });
 });

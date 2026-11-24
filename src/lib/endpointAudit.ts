@@ -231,8 +231,6 @@ export function auditEndpointBases(): AuditedSource[] {
       bad.map((b) => b.module),
     );
   }
-  // Note: EcuadorExpedition uses an <iframe> embed (not an API fetch); it is
-  // intentionally excluded from this fetch-call audit.
   console.groupEnd();
   /* eslint-enable no-console */
 

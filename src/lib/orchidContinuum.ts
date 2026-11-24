@@ -17,6 +17,12 @@
  *     edge function. Used to populate the homepage globe and the Atlas
  *     page with thousands of real georeferenced points.
  *
+ *     The browser NEVER reads this table (or `species.occurrences`)
+ *     directly any more: the Calyx backend reads it server-side and serves
+ *     only generalised grid-cell centres with no locality text
+ *     (`/atlas/public/occurrences`, `/atlas/public/curated-occurrences`).
+ *     Precise coordinates never reach a public visitor's browser.
+ *
  * Each atlas_occurrence row carries a `species_id` foreign key when the
  * GBIF binomial matches a row in `species`. Unlinked rows still render
  * on the globe and open a card that pulls habitat/conservation from any
@@ -36,6 +42,7 @@
 
 import { supabase } from './supabase';
 import { hasThreatAssessment } from './atlasLocalitySafety';
+import { ATLAS_PUBLIC_CURATED_URL, ATLAS_PUBLIC_OCCURRENCES_URL } from './backendConfig';
 
 // ---------------------------------------------------------------------------
 // Public record shapes
@@ -124,6 +131,15 @@ export interface AtlasOccurrencePoint {
    */
   coordinateUncertaintyM?: number;
   /**
+   * Cell size (degrees) the server already generalised this point to. The
+   * point's lat/lng are that cell's centre, never the recorded site.
+   */
+  publicCellDeg?: number;
+  /** Server-side generalisation notice ("Location generalised to about 11 km …"). */
+  locationNotice?: string;
+  /** Server-side generalisation reason (threat tier, uncertainty, unresolved, public floor). */
+  locationReason?: string;
+  /**
    * Whether a conservation assessment could actually be REACHED for this
    * record — by species_id, or by exact canonical binomial.
    *
@@ -189,6 +205,8 @@ export interface AtlasSpeciesRecord {
 // ---------------------------------------------------------------------------
 
 interface SpeciesOccurrence {
+  /** Generalisation metadata from the server (curated points are generalised too). */
+  public_location?: PublicLocationMeta;
   lat: number;
   lng: number;
   year?: number;
@@ -223,7 +241,19 @@ interface SpeciesRow {
   traits: SpeciesTraits | null;
 }
 
+/** Generalisation metadata the server attaches to every public point. */
+interface PublicLocationMeta {
+  cell_deg: number;
+  reason: string;
+  notice: string;
+}
+
 interface AtlasOccurrenceRow {
+  /** Present on every row served by the backend's public route. */
+  public_location?: PublicLocationMeta;
+  conservation_status?: string | null;
+  iucn_code?: string | null;
+  assessment_resolved?: boolean;
   id: string;
   scientific_name: string;
   accepted_name: string | null;
@@ -239,7 +269,7 @@ interface AtlasOccurrenceRow {
   biome: string | null;
   year: number | null;
   source_dataset: string;
-  source_record_id: string;
+  source_record_id: string | null;
   media_url: string | null;
   verified: boolean | null;
   coordinate_uncertainty_m: number | null;
@@ -272,11 +302,10 @@ interface FrontendOrchidImageRow {
   created_at?: string | null;
 }
 
+// `occurrences` (curated points with raw coordinates and locality text) is NOT
+// selected: curated points come generalised from the backend instead.
 const SPECIES_COLUMNS =
-  'id, slug, genus, epithet, common_name, authority, family, subfamily, tribe, region, countries, habitat, growth_form, ecology, description, conservation_status, iucn_code, image_url, occurrences, pollinators, traits';
-
-const ATLAS_COLUMNS =
-  'id, scientific_name, accepted_name, genus, species, lat, lng, elevation_m, country, region, locality, habitat, biome, year, source_dataset, source_record_id, media_url, verified, coordinate_uncertainty_m, pollinator_data, mycorrhizal_data, species_id';
+  'id, slug, genus, epithet, common_name, authority, family, subfamily, tribe, region, countries, habitat, growth_form, ecology, description, conservation_status, iucn_code, image_url, pollinators, traits';
 
 // ---------------------------------------------------------------------------
 // Module-level cache (single fetch, many consumers)
@@ -317,37 +346,109 @@ export function didAtlasLoadIncomplete(): boolean {
 
 const ATLAS_PAGE_RETRIES = 2; // up to 2 retries (3 attempts) per page
 const ATLAS_RETRY_BASE_MS = 600; // backoff: 600ms, then 1200ms
+/** Records per request to the public occurrence route. */
+export const ATLAS_PAGE_SIZE = 1000;
+/** Pages fetched at once after the first one (small, to stay polite to the backend). */
+export const ATLAS_PAGE_CONCURRENCY = 4;
+const ATLAS_MAX_PAGES = 100; // safety cap: 100k occurrences
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
+interface PublicOccurrenceItem {
+  id: string;
+  scientific_name: string | null;
+  accepted_name: string | null;
+  genus: string | null;
+  species: string | null;
+  species_id: string | null;
+  country: string | null;
+  region: string | null;
+  biome: string | null;
+  year: number | null;
+  elevation_band_m: number | null;
+  source_dataset: string | null;
+  source_record_id: string | null;
+  media_url: string | null;
+  verified: boolean | null;
+  conservation_status: string | null;
+  iucn_code: string | null;
+  assessment_resolved: boolean;
+  pollinator_data: PollinatorRecord[] | null;
+  mycorrhizal_data: MycorrhizalRecord | null;
+  location: { cell_lat: number; cell_lng: number; cell_deg: number; reason: string; notice: string };
+}
+
+interface PublicOccurrencePage {
+  total: number | null;
+  offset: number;
+  scanned: number;
+  next_offset: number | null;
+  items: PublicOccurrenceItem[];
+}
+
 /**
- * Fetch one atlas page with retry-with-backoff. Returns the row batch on
- * success, or `null` once all attempts are exhausted (so the caller can stop
- * paging and surface the inline retry message).
+ * Map one public item to the internal row shape. lat/lng are the CELL CENTRE
+ * the server computed; locality, habitat text and coordinate uncertainty are
+ * never present because the server never sends them.
  */
-async function fetchAtlasPageWithRetry(
-  from: number,
-  pageSize: number,
-): Promise<AtlasOccurrenceRow[] | null> {
+function publicItemToRow(item: PublicOccurrenceItem): AtlasOccurrenceRow | null {
+  const loc = item.location;
+  if (!loc || typeof loc.cell_lat !== 'number' || typeof loc.cell_lng !== 'number') return null;
+  return {
+    id: String(item.id),
+    scientific_name: item.scientific_name ?? [item.genus, item.species].filter(Boolean).join(' '),
+    accepted_name: item.accepted_name ?? null,
+    genus: item.genus ?? null,
+    species: item.species ?? null,
+    lat: loc.cell_lat,
+    lng: loc.cell_lng,
+    elevation_m: item.elevation_band_m ?? null,
+    country: item.country ?? null,
+    region: item.region ?? null,
+    locality: null,
+    habitat: null,
+    biome: item.biome ?? null,
+    year: item.year ?? null,
+    source_dataset: item.source_dataset ?? 'Orchid Continuum',
+    source_record_id: item.source_record_id ?? null,
+    media_url: item.media_url ?? null,
+    verified: item.verified ?? null,
+    coordinate_uncertainty_m: null,
+    pollinator_data: Array.isArray(item.pollinator_data) ? item.pollinator_data : null,
+    mycorrhizal_data: item.mycorrhizal_data ?? null,
+    species_id: item.species_id ?? null,
+    conservation_status: item.conservation_status ?? null,
+    iucn_code: item.iucn_code ?? null,
+    assessment_resolved: item.assessment_resolved,
+    public_location: { cell_deg: loc.cell_deg, reason: loc.reason, notice: loc.notice },
+  };
+}
+
+/**
+ * Fetch one page of the public occurrence route with retry-with-backoff.
+ * Returns `null` once all attempts are exhausted.
+ */
+async function fetchAtlasPageWithRetry(offset: number, pageSize: number): Promise<PublicOccurrencePage | null> {
   for (let attempt = 0; attempt <= ATLAS_PAGE_RETRIES; attempt++) {
     try {
-      const { data, error } = await supabase
-        .from('atlas_occurrences')
-        .select(ATLAS_COLUMNS)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (!error) {
-        return (data ?? []) as AtlasOccurrenceRow[];
+      const res = await fetch(`${ATLAS_PUBLIC_OCCURRENCES_URL}?offset=${offset}&limit=${pageSize}`, {
+        headers: { Accept: 'application/json' },
+      });
+      if (res.ok) {
+        const body = (await res.json()) as Partial<PublicOccurrencePage>;
+        if (body && Array.isArray(body.items)) {
+          return {
+            total: typeof body.total === 'number' ? body.total : null,
+            offset: typeof body.offset === 'number' ? body.offset : offset,
+            scanned: typeof body.scanned === 'number' ? body.scanned : body.items.length,
+            next_offset: typeof body.next_offset === 'number' ? body.next_offset : null,
+            items: body.items,
+          };
+        }
       }
-      console.warn(
-        `[orchidContinuum] atlas page @${from} failed (attempt ${attempt + 1}/${ATLAS_PAGE_RETRIES + 1}):`,
-        error.message,
-      );
+      console.warn(`[orchidContinuum] atlas page @${offset} failed (attempt ${attempt + 1}/${ATLAS_PAGE_RETRIES + 1}): HTTP ${res.status}`);
     } catch (err) {
-      console.warn(
-        `[orchidContinuum] atlas page @${from} threw (attempt ${attempt + 1}/${ATLAS_PAGE_RETRIES + 1}):`,
-        err,
-      );
+      console.warn(`[orchidContinuum] atlas page @${offset} threw (attempt ${attempt + 1}/${ATLAS_PAGE_RETRIES + 1}):`, err);
     }
     if (attempt < ATLAS_PAGE_RETRIES) {
       await sleep(ATLAS_RETRY_BASE_MS * (attempt + 1));
@@ -356,6 +457,99 @@ async function fetchAtlasPageWithRetry(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Progressive load state (first page paints immediately)
+// ---------------------------------------------------------------------------
+
+export interface AtlasLoadProgress {
+  /** Records received so far. */
+  loaded: number;
+  /** Records the source holds (from the first page), or null when unknown. */
+  total: number | null;
+  /** True once every page has arrived or failed. */
+  done: boolean;
+}
+
+let atlasRowsSoFar: AtlasOccurrenceRow[] = [];
+let atlasProgress: AtlasLoadProgress = { loaded: 0, total: null, done: false };
+const atlasProgressListeners = new Set<() => void>();
+
+function publishAtlasProgress(next: Partial<AtlasLoadProgress>): void {
+  atlasProgress = { ...atlasProgress, ...next, loaded: atlasRowsSoFar.length };
+  for (const listener of [...atlasProgressListeners]) {
+    try {
+      listener();
+    } catch (err) {
+      console.warn('[orchidContinuum] atlas progress listener threw:', err);
+    }
+  }
+}
+
+/** Current progress of the occurrence load. */
+export function getAtlasLoadProgress(): AtlasLoadProgress {
+  return atlasProgress;
+}
+
+/** Called after every page arrives (and once when the load finishes). Returns an unsubscribe. */
+export function subscribeAtlasLoadProgress(listener: () => void): () => void {
+  atlasProgressListeners.add(listener);
+  return () => {
+    atlasProgressListeners.delete(listener);
+  };
+}
+
+/** Run `tasks` with at most `limit` in flight. */
+async function runWithConcurrency(tasks: (() => Promise<void>)[], limit: number): Promise<void> {
+  let next = 0;
+  const worker = async () => {
+    while (next < tasks.length) {
+      const task = tasks[next++];
+      await task();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, tasks.length)) }, worker));
+}
+
+/**
+ * Curated species points, generalised by the server, keyed by species id and
+ * in their original order (ids `${speciesId}:${index}` stay stable).
+ */
+async function loadCuratedPublicOccurrences(): Promise<Map<string, SpeciesOccurrence[]>> {
+  const out = new Map<string, SpeciesOccurrence[]>();
+  try {
+    const res = await fetch(ATLAS_PUBLIC_CURATED_URL, { headers: { Accept: 'application/json' } });
+    if (!res.ok) return out;
+    const body = (await res.json()) as {
+      items?: {
+        species_id: string;
+        index: number;
+        year?: number | null;
+        dataset?: string | null;
+        verified?: boolean | null;
+        elevation_band_m?: number | null;
+        location?: { cell_lat: number; cell_lng: number; cell_deg: number; reason: string; notice: string };
+      }[];
+    };
+    for (const item of body.items ?? []) {
+      const loc = item.location;
+      if (!loc || typeof loc.cell_lat !== 'number' || typeof loc.cell_lng !== 'number') continue;
+      const list = out.get(item.species_id) ?? [];
+      list[item.index] = {
+        lat: loc.cell_lat,
+        lng: loc.cell_lng,
+        year: item.year ?? undefined,
+        elevation_m: item.elevation_band_m ?? undefined,
+        dataset: item.dataset ?? undefined,
+        verified: item.verified ?? undefined,
+        public_location: { cell_deg: loc.cell_deg, reason: loc.reason, notice: loc.notice },
+      };
+      out.set(item.species_id, list);
+    }
+  } catch (err) {
+    console.warn('[orchidContinuum] curated occurrence fetch threw:', err);
+  }
+  return out;
+}
 
 async function loadSpeciesRows(): Promise<SpeciesRow[]> {
   if (speciesCachePromise) return speciesCachePromise;
@@ -363,6 +557,7 @@ async function loadSpeciesRows(): Promise<SpeciesRow[]> {
     const PAGE = 1000;
     const all: SpeciesRow[] = [];
     let from = 0;
+    const curatedPromise = loadCuratedPublicOccurrences();
     try {
       for (let i = 0; i < 50; i++) {
         const { data, error } = await supabase
@@ -381,6 +576,11 @@ async function loadSpeciesRows(): Promise<SpeciesRow[]> {
         from += PAGE;
       }
       if (all.length > 0) liveStatus = 'live';
+      const curated = await curatedPromise;
+      for (const row of all) {
+        const occ = curated.get(row.id);
+        row.occurrences = occ ? occ.filter(Boolean) : null;
+      }
       return all;
     } catch (err) {
       console.warn('[orchidContinuum] species fetch threw:', err);
@@ -394,46 +594,75 @@ async function loadSpeciesRows(): Promise<SpeciesRow[]> {
 async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
   if (atlasCachePromise) return atlasCachePromise;
   atlasCachePromise = (async () => {
-    const PAGE = 1000;
-    const all: AtlasOccurrenceRow[] = [];
-    let from = 0;
     atlasLoadFailed = false;
     atlasLoadIncomplete = false;
-    // safety cap of 100 pages (100k atlas occurrences). Each page is fetched
-    // with retry-with-backoff (up to 2 retries) so transient 502s don't blank
-    // the map. If a page ultimately fails after all retries, stop paging.
-    for (let i = 0; i < 100; i++) {
-      const batch = await fetchAtlasPageWithRetry(from, PAGE);
-      if (batch === null) {
-        // All retries exhausted for this page. Only flag a hard failure when
-        // we have no rows at all — partial loads still render a useful map.
-        if (all.length > 0) {
-          atlasLoadIncomplete = true;
-          console.warn(
-            `[orchidContinuum] atlas load stopped at page @${from} after retries — map is incomplete.`,
-          );
-        }
-        if (all.length === 0) {
-          atlasLoadFailed = true;
-          console.warn(
-            '[orchidContinuum] atlas load failed after retries — surfacing inline retry message.',
-          );
-        }
-        break;
+    // A local array: a load superseded by resetOrchidContinuumCaches() keeps
+    // writing to its own rows, never to the next load's.
+    const rows: AtlasOccurrenceRow[] = [];
+    atlasRowsSoFar = rows;
+    atlasProgress = { loaded: 0, total: null, done: false }; // nothing to announce yet
+
+    const append = (page: PublicOccurrencePage) => {
+      for (const item of page.items) {
+        const row = publicItemToRow(item);
+        if (row) rows.push(row);
       }
-      all.push(...batch);
-      if (batch.length < PAGE) break;
-      from += PAGE;
+    };
+
+    // First page alone: it carries the total and paints the map immediately.
+    const first = await fetchAtlasPageWithRetry(0, ATLAS_PAGE_SIZE);
+    if (first === null) {
+      atlasLoadFailed = true;
+      console.warn('[orchidContinuum] atlas load failed after retries — surfacing inline retry message.');
+      publishAtlasProgress({ done: true });
+      return [];
     }
-    if (all.length > 0) {
+    append(first);
+    publishAtlasProgress({ total: first.total });
+
+    if (first.total !== null) {
+      // Remaining pages concurrently, at most ATLAS_PAGE_CONCURRENCY in flight.
+      const offsets: number[] = [];
+      for (let o = first.offset + first.scanned; o < first.total && offsets.length < ATLAS_MAX_PAGES; o += ATLAS_PAGE_SIZE) {
+        offsets.push(o);
+      }
+      await runWithConcurrency(
+        offsets.map((offset) => async () => {
+          const page = await fetchAtlasPageWithRetry(offset, ATLAS_PAGE_SIZE);
+          if (page === null) {
+            atlasLoadIncomplete = true;
+            console.warn(`[orchidContinuum] atlas page @${offset} failed after retries — map is incomplete.`);
+            return;
+          }
+          append(page);
+          publishAtlasProgress({});
+        }),
+        ATLAS_PAGE_CONCURRENCY,
+      );
+    } else {
+      // No total: follow next_offset sequentially.
+      let next = first.next_offset;
+      for (let i = 1; next !== null && i < ATLAS_MAX_PAGES; i++) {
+        const page = await fetchAtlasPageWithRetry(next, ATLAS_PAGE_SIZE);
+        if (page === null) {
+          atlasLoadIncomplete = true;
+          break;
+        }
+        append(page);
+        publishAtlasProgress({});
+        next = page.next_offset;
+      }
+    }
+
+    if (rows.length > 0) {
       liveStatus = 'live';
       atlasLoadFailed = false;
     }
-    return all;
+    publishAtlasProgress({ done: true });
+    return rows;
   })();
   return atlasCachePromise;
 }
-
 
 async function loadMycorrhizalRows(): Promise<MycorrhizalRow[]> {
   if (mycorrhizalCachePromise) return mycorrhizalCachePromise;
@@ -626,8 +855,11 @@ function curatedOccurrenceToPoint(
     assessmentResolved: hasThreatAssessment(row.iucn_code, row.conservation_status),
     imageUrl: row.image_url ?? undefined,
     taxonomyId: row.slug ?? row.id,
-    locality: occ.locality,
+    locality: undefined,
     year: occ.year,
+    publicCellDeg: occ.public_location?.cell_deg,
+    locationNotice: occ.public_location?.notice,
+    locationReason: occ.public_location?.reason,
     pollinators,
     pollinatorTaxon: pollinators[0]?.taxon ?? pollinators[0]?.name,
     mycorrhizal,
@@ -658,6 +890,9 @@ function atlasRowToPoint(
     (row.mycorrhizal_data as MycorrhizalRecord | null | undefined) ??
     undefined;
   const conservation = lookupConservation(consIdx, speciesId, canonical);
+  const iucnCode = linkedSpecies?.iucn_code ?? conservation?.iucn ?? row.iucn_code ?? undefined;
+  const conservationStatus =
+    linkedSpecies?.conservation_status ?? conservation?.status ?? row.conservation_status ?? undefined;
   return {
     id: row.id,
     speciesId,
@@ -676,12 +911,12 @@ function atlasRowToPoint(
     family: linkedSpecies?.family ?? undefined,
     subfamily: linkedSpecies?.subfamily ?? undefined,
     tribe: linkedSpecies?.tribe ?? undefined,
-    conservationStatus: linkedSpecies?.conservation_status ?? conservation?.status,
-    iucnCode: linkedSpecies?.iucn_code ?? conservation?.iucn,
-    assessmentResolved: hasThreatAssessment(
-      linkedSpecies?.iucn_code ?? conservation?.iucn,
-      linkedSpecies?.conservation_status ?? conservation?.status,
-    ),
+    conservationStatus,
+    iucnCode,
+    assessmentResolved: hasThreatAssessment(iucnCode, conservationStatus) || row.assessment_resolved === true,
+    publicCellDeg: row.public_location?.cell_deg,
+    locationNotice: row.public_location?.notice,
+    locationReason: row.public_location?.reason,
     imageUrl: linkedSpecies?.image_url ?? row.media_url ?? undefined,
     taxonomyId: linkedSpecies?.slug ?? undefined,
     locality: row.locality ?? undefined,
@@ -883,18 +1118,26 @@ export async function fetchLivingGalleryRecords(): Promise<LivingGalleryRecord[]
  * Points keep their dataset attribution so the data-source filter works.
  */
 export async function fetchAtlasOccurrencePoints(): Promise<AtlasOccurrencePoint[]> {
-  const [speciesRows, atlasRows, mycoRows] = await Promise.all([
-    loadSpeciesRows(),
-    loadAtlasRows(),
-    loadMycorrhizalRows(),
-  ]);
+  return fetchAtlasOccurrencePointsProgressive();
+}
+
+/**
+ * Like {@link fetchAtlasOccurrencePoints}, but calls `onUpdate` as soon as the
+ * first page of occurrences arrives and again after every later page, so a map
+ * can paint immediately instead of waiting for every page. `progress` keeps the
+ * counts honest ("showing 1,019 of 31,092 while loading").
+ */
+export async function fetchAtlasOccurrencePointsProgressive(
+  onUpdate?: (points: AtlasOccurrencePoint[], progress: AtlasLoadProgress) => void,
+): Promise<AtlasOccurrencePoint[]> {
+  const [speciesRows, mycoRows] = await Promise.all([loadSpeciesRows(), loadMycorrhizalRows()]);
 
   const speciesById = new Map(speciesRows.map((r) => [r.id, r]));
   const mycoIdx = buildMycorrhizalIndex(mycoRows);
   const consIdx = buildConservationIndex(speciesRows);
   const out: AtlasOccurrencePoint[] = [];
 
-  // Curated points (from species.occurrences JSONB)
+  // Curated points (species.occurrences, generalised by the server)
   for (const row of speciesRows) {
     if (!row.occurrences || row.occurrences.length === 0) continue;
     row.occurrences.forEach((occ, i) => {
@@ -903,54 +1146,66 @@ export async function fetchAtlasOccurrencePoints(): Promise<AtlasOccurrencePoint
     });
   }
 
-  // Real ingested occurrences from atlas_occurrences
-  for (const row of atlasRows) {
-    const linked = row.species_id ? speciesById.get(row.species_id) : undefined;
-    out.push(atlasRowToPoint(row, linked, mycoIdx, consIdx));
+  // Ingested occurrences, mapped incrementally as pages arrive.
+  let mapped = 0;
+  const mapNewRows = (rows: AtlasOccurrenceRow[]) => {
+    for (; mapped < rows.length; mapped++) {
+      const row = rows[mapped];
+      const linked = row.species_id ? speciesById.get(row.species_id) : undefined;
+      out.push(atlasRowToPoint(row, linked, mycoIdx, consIdx));
+    }
+  };
+  const emit = () => {
+    mapNewRows(atlasRowsSoFar);
+    onUpdate?.(out.slice(), getAtlasLoadProgress());
+  };
+  const unsubscribe = onUpdate ? subscribeAtlasLoadProgress(emit) : () => undefined;
+  try {
+    if (onUpdate && atlasRowsSoFar.length > 0) emit();
+    const atlasRows = await loadAtlasRows();
+    mapNewRows(atlasRows);
+  } finally {
+    unsubscribe();
   }
-
+  onUpdate?.(out.slice(), getAtlasLoadProgress());
   return out;
 }
 
 /**
- * Lazily fetch the first `limit` points for fast-paint, then a follow-up
- * call returns everything. Used by the homepage globe for instant render.
+ * Resolves with the points available after the FIRST page (fast paint);
+ * `full` resolves with every point once all pages have arrived.
  */
-export async function fetchAtlasOccurrencePointsLazy(limit = 1000): Promise<{
+export async function fetchAtlasOccurrencePointsLazy(): Promise<{
   initial: AtlasOccurrencePoint[];
   full: Promise<AtlasOccurrencePoint[]>;
 }> {
-  const [speciesRows, mycoRows] = await Promise.all([
-    loadSpeciesRows(),
-    loadMycorrhizalRows(),
-  ]);
-  const speciesById = new Map(speciesRows.map((r) => [r.id, r]));
-  const mycoIdx = buildMycorrhizalIndex(mycoRows);
-  const consIdx = buildConservationIndex(speciesRows);
-
-  const { data, error } = await supabase
-    .from('atlas_occurrences')
-    .select(ATLAS_COLUMNS)
-    .limit(limit);
-
-  const initial: AtlasOccurrencePoint[] = [];
-  if (!error && data) {
-    for (const row of data as AtlasOccurrenceRow[]) {
-      const linked = row.species_id ? speciesById.get(row.species_id) : undefined;
-      initial.push(atlasRowToPoint(row, linked, mycoIdx, consIdx));
+  let resolveInitial: (points: AtlasOccurrencePoint[]) => void = () => undefined;
+  const initialPromise = new Promise<AtlasOccurrencePoint[]>((resolve) => {
+    resolveInitial = resolve;
+  });
+  let settled = false;
+  const full = fetchAtlasOccurrencePointsProgressive((points, progress) => {
+    if (!settled && (progress.loaded > 0 || progress.done)) {
+      settled = true;
+      resolveInitial(points);
     }
-  }
-
-  // Curated points are always included in the initial paint.
-  for (const row of speciesRows) {
-    if (!row.occurrences || row.occurrences.length === 0) continue;
-    row.occurrences.forEach((occ, i) => {
-      if (typeof occ?.lat !== 'number' || typeof occ?.lng !== 'number') return;
-      initial.push(curatedOccurrenceToPoint(row, occ, i, mycoIdx));
-    });
-  }
-
-  return { initial, full: fetchAtlasOccurrencePoints() };
+  });
+  full.then(
+    (points) => {
+      if (!settled) {
+        settled = true;
+        resolveInitial(points);
+      }
+    },
+    () => {
+      if (!settled) {
+        settled = true;
+        resolveInitial([]);
+      }
+    },
+  );
+  const initial = await initialPromise;
+  return { initial, full };
 }
 
 
@@ -1165,6 +1420,8 @@ export function isOrchidContinuumLive(): boolean {
 export function resetOrchidContinuumCaches(): void {
   speciesCachePromise = null;
   atlasCachePromise = null;
+  atlasRowsSoFar = [];
+  atlasProgress = { loaded: 0, total: null, done: false };
   mycorrhizalCachePromise = null;
   liveStatus = 'unknown';
   atlasLoadFailed = false;

@@ -32,15 +32,21 @@ interface Props {
   onClose: () => void;
   /** Called whenever the active panel changes — drives the map pan/zoom + filter. */
   onStop: (stop: TourStop) => void;
+  /** Panel to open at (index into ALL_PANELS), e.g. from an `/atlas?tour=` deep link. Overrides saved progress. */
+  initialIndex?: number | null;
 }
 
-const GrandTour: React.FC<Props> = ({ open, onClose, onStop }) => {
+const GrandTour: React.FC<Props> = ({ open, onClose, onStop, initialIndex = null }) => {
   // index into ALL_PANELS: 0 = introduction, 1..10 = stops
   const [index, setIndex] = useState(0);
 
   // Restore saved progress when the tour opens.
   useEffect(() => {
     if (!open) return;
+    if (initialIndex != null && initialIndex >= 0 && initialIndex < ALL_PANELS.length) {
+      setIndex(initialIndex);
+      return;
+    }
     let start = 0;
     try {
       const raw = localStorage.getItem(TOUR_PROGRESS_KEY);
@@ -52,7 +58,7 @@ const GrandTour: React.FC<Props> = ({ open, onClose, onStop }) => {
       /* ignore */
     }
     setIndex(start);
-  }, [open]);
+  }, [open, initialIndex]);
 
   // Persist progress + drive the map whenever the active panel changes.
   useEffect(() => {

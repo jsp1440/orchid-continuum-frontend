@@ -27,7 +27,12 @@ const point = (i: number) => ({
 });
 vi.mock('@/lib/orchidContinuum', async (original) => ({
   ...(await original<typeof import('@/lib/orchidContinuum')>()),
-  fetchAtlasOccurrencePoints: async () => data.points,
+  fetchAtlasOccurrencePointsProgressive: async (
+    onUpdate?: (points: unknown[], progress: { loaded: number; total: number | null; done: boolean }) => void,
+  ) => {
+    onUpdate?.(data.points, { loaded: data.points.length, total: data.points.length, done: true });
+    return data.points;
+  },
   fetchAtlasFacets: async () => ({
     genera: ['Masdevallia'], tribes: [], countries: ['Peru'], growthForms: [], habitats: [], iucnCodes: [],
     pollinatorTaxa: [], datasets: [], totals: {},
