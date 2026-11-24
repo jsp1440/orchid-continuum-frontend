@@ -42,7 +42,7 @@ describe('toPublicAtlasOccurrence', () => {
     expect(result.locality).toBeUndefined();
   });
 
-  it('preserves allowed locality while respecting source coordinate uncertainty', () => {
+  it('withholds locality text from every public projection, even an assessed non-threatened record (owner decision 2026-11-24)', () => {
     const source = point({
       assessmentResolved: true,
       iucnCode: 'LC',
@@ -50,7 +50,8 @@ describe('toPublicAtlasOccurrence', () => {
     });
     const result = toPublicAtlasOccurrence(source);
 
-    expect(result.locality).toBe(source.locality);
+    expect(source.locality).toBeTruthy();
+    expect(result.locality).toBeUndefined();
     expect(result.lat).not.toBe(source.lat);
     expect(result.lng).not.toBe(source.lng);
   });

@@ -55,7 +55,9 @@ export function recordEvidence(
     recency: recencyOf(p.year),
     provenanceComplete: !!p.dataset && !!p.sourceRecordId,
     verified: !!p.verified,
-    coordinatePrecise: !loc.policy.generalised,
+    // The 0.1° public floor applies to every public point; only a record-specific
+    // coarsening (threat, uncertainty, unresolved assessment) makes it an area.
+    coordinatePrecise: !loc.policy.generalised || loc.policy.reason === 'public-precision',
     assessment: sensitivityResolution(p),
   };
 }

@@ -507,4 +507,39 @@ export const STOPS: TourStop[] = [
 /** All panels in order: introduction (index 0) followed by the ten stops. */
 export const ALL_PANELS: TourStop[] = [INTRODUCTION, ...STOPS];
 
+/** Stop number of "The Mountains That Multiply Species" (Tropical Andes · Ecuador & Colombia). */
+export const ANDES_TOUR_STOP_NUMBER = 3;
+
+/** URL-safe slug of a panel title, e.g. "the-mountains-that-multiply-species". */
+export function tourStopSlug(stop: TourStop): string {
+  return stop.title
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+/**
+ * Index into ALL_PANELS for an `/atlas?tour=` deep link: a stop number
+ * ("3") or a title slug ("the-mountains-that-multiply-species"). Null when
+ * the value names no panel.
+ */
+export function tourPanelIndexFromParam(value: string | null | undefined): number | null {
+  const raw = (value ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  if (/^\d+$/.test(raw)) {
+    const n = Number.parseInt(raw, 10);
+    const index = ALL_PANELS.findIndex((panel) => panel.number === n);
+    return index >= 0 ? index : null;
+  }
+  const index = ALL_PANELS.findIndex((panel) => tourStopSlug(panel) === raw);
+  return index >= 0 ? index : null;
+}
+
+/** Deep link that opens the Atlas with the Grand Tour at the given stop number. */
+export function grandTourStopPath(stopNumber: number): string {
+  return `/atlas?tour=${stopNumber}`;
+}
+
 export const TOTAL_STOPS = STOPS.length; // 10

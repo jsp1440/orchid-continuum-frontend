@@ -36,10 +36,12 @@ describe('failing closed on an unresolved assessment', () => {
     );
   });
 
-  it('publishes the exact site once an assessment is reached and is not threatening', () => {
+  it('shows an assessed, non-threatened record at the 0.1° public cell, never the exact site', () => {
     const r = resolveLocation({ ...site, assessmentResolved: true, iucnCode: 'LC' });
-    expect(r.lat).toBe(site.lat);
-    expect(r.policy.generalised).toBe(false);
+    expect(r.lat).not.toBe(site.lat);
+    expect(r.policy.cellDeg).toBe(0.1);
+    expect(r.policy.reason).toBe('public-precision');
+    expect(r.policy.localityTextAllowed).toBe(false);
   });
 
   it('still applies the stronger threat protection when both could apply', () => {
@@ -51,8 +53,10 @@ describe('failing closed on an unresolved assessment', () => {
   it('does not downgrade a caller that never passed the flag', () => {
     // Legacy callers must not be silently coarsened; only an explicit false
     // means "we looked and found nothing".
+    // They still get the public floor, but are not labelled "unresolved".
     const r = resolveLocation({ ...site });
-    expect(r.policy.generalised).toBe(false);
+    expect(r.policy.reason).toBe('public-precision');
+    expect(r.policy.cellDeg).toBe(0.1);
   });
 
   it('names the source when imprecision is what actually coarsened the coordinate', () => {
@@ -72,10 +76,13 @@ describe('failing closed on an unresolved assessment', () => {
     const r = resolveLocation({ ...site, assessmentResolved: false, coordinateUncertaintyM: 40_000 });
     expect(r.policy.localityTextAllowed).toBe(false);
 
-    // With the assessment reached, imprecision alone withholds nothing.
+    // With the assessment reached, the public surface still shows no locality
+    // text (owner decision 2026-11-24); research access may.
     const reached = resolveLocation({ ...site, assessmentResolved: true, coordinateUncertaintyM: 40_000 });
-    expect(reached.policy.localityTextAllowed).toBe(true);
+    expect(reached.policy.localityTextAllowed).toBe(false);
     expect(reached.policy.reason).toBe('coordinate-uncertainty');
+    const research = resolveLocation({ ...site, assessmentResolved: true, coordinateUncertaintyM: 40_000 }, 'research');
+    expect(research.policy.localityTextAllowed).toBe(true);
   });
 
   it('research access sees through the precaution but never through imprecision', () => {

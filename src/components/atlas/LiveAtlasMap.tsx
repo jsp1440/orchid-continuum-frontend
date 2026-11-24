@@ -58,6 +58,11 @@ interface Props {
   loading?: boolean;
   totalLoaded?: number;
   /**
+   * Progress of the occurrence load. While `done` is false the map shows the
+   * points that have arrived and says how many of the total that is.
+   */
+  loadProgress?: { loaded: number; total: number | null; done: boolean } | null;
+  /**
    * When set, the map animates a fitBounds to this rectangle. Used by the
    * Atlas Tour's "Start Ecuador Expedition" action. Pass a NEW object each
    * time you want to re-trigger the zoom.
@@ -90,7 +95,8 @@ function displayedPoint(point: AtlasOccurrencePoint): AtlasOccurrencePoint {
     ...point,
     lat: displayed.lat,
     lng: displayed.lng,
-    locality: displayed.policy.localityTextAllowed ? point.locality : undefined,
+    // Public surface: never locality text, whatever the record carries.
+    locality: undefined,
   };
 }
 
@@ -101,6 +107,7 @@ const LiveAtlasMap: React.FC<Props> = ({
   selectedId,
   loading,
   totalLoaded,
+  loadProgress,
   focusBounds,
   focusView,
 }) => {
@@ -289,6 +296,12 @@ const LiveAtlasMap: React.FC<Props> = ({
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none text-[#c9a24a]" />
               Loading
             </>
+          ) : loadProgress && !loadProgress.done ? (
+            <span data-testid="atlas-map-load-progress" className="inline-flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none text-[#c9a24a]" />
+              Loading {loadProgress.loaded.toLocaleString()}
+              {loadProgress.total !== null ? ` of ${loadProgress.total.toLocaleString()}` : ''} records
+            </span>
           ) : (
             <>
               <LayersIcon className="h-3 w-3 text-[#c9a24a]" />

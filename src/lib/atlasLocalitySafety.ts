@@ -5,6 +5,14 @@
  * map renderers can use the same fail-closed rule. It never jitters records:
  * protected/imprecise coordinates snap to a grid-cell centre so the display
  * communicates an area rather than inventing a plausible false point.
+ *
+ * Owner-approved public precision (2026-11-24; Brain KO-0029, Atlas lane E):
+ * every public point is at least a 0.1° cell centre (about 11 km) and public
+ * surfaces never show locality text. Threatened taxa keep larger cells
+ * (VU 0.25°, EN 0.5°, CR 1°); a stated coordinate uncertainty widens the cell.
+ * The backend applies the SAME policy before data leaves the server
+ * (orchid-calyx-backend app/atlas_intelligence/public_locality.py); both
+ * repositories run the shared vectors in __fixtures__/atlas_locality_vectors.json.
  */
 
 import type { AtlasOccurrencePoint } from './orchidContinuum';
@@ -15,7 +23,9 @@ export type SensitivityResolution =
   | 'assessed-not-threatened'
   | 'unresolved';
 
-export const UNRESOLVED_FLOOR_DEG = 0.05;
+export const UNRESOLVED_FLOOR_DEG = 0.1;
+/** Smallest cell any public visitor is shown (≈11 km). */
+export const PUBLIC_FLOOR_DEG = 0.1;
 
 const TIER_CELL_DEG: Record<string, number> = { CR: 1, EN: 0.5, VU: 0.25 };
 const TIER_SEVERITY = ['CR', 'EN', 'VU'];
@@ -25,6 +35,7 @@ export type SensitivityReason =
   | 'conservation-status'
   | 'coordinate-uncertainty'
   | 'unresolved-assessment'
+  | 'public-precision'
   | 'none';
 
 export interface LocalityPolicy {
@@ -78,22 +89,34 @@ export function resolveAtlasLocation(
   point: Pick<
     AtlasOccurrencePoint,
     'lat' | 'lng' | 'iucnCode' | 'conservationStatus' | 'coordinateUncertaintyM' | 'assessmentResolved'
-  >,
+  > & Partial<Pick<AtlasOccurrencePoint, 'publicCellDeg' | 'locationNotice' | 'locationReason'>>,
   access: AtlasAccessLevel = 'public',
   floorCellDeg = 0,
 ): DisplayedLocation {
+  const isPublic = access !== 'research';
   const tier = threatTier(point);
   const uncertaintyCell = uncertaintyToCellDeg(point.coordinateUncertaintyM);
   const unresolved = point.assessmentResolved === false && !tier;
-  const precautionCell = unresolved && access !== 'research' ? UNRESOLVED_FLOOR_DEG : 0;
-  const threatCell = tier && access !== 'research' ? TIER_CELL_DEG[tier] : 0;
+  const precautionCell = unresolved && isPublic ? UNRESOLVED_FLOOR_DEG : 0;
+  const threatCell = tier && isPublic ? TIER_CELL_DEG[tier] : 0;
+  const publicCell = isPublic ? PUBLIC_FLOOR_DEG : 0;
+  // A point that arrived already generalised by the server carries its cell;
+  // never draw it finer than that.
+  const serverCell =
+    typeof point.publicCellDeg === 'number' && Number.isFinite(point.publicCellDeg) && point.publicCellDeg > 0
+      ? point.publicCellDeg
+      : 0;
 
-  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg);
+  const localCell = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg, publicCell);
+  const cellDeg = Math.max(localCell, serverCell);
   const location = snapToCell(point.lat, point.lng, cellDeg);
 
   let reason: SensitivityReason = 'none';
   let notice = '';
-  if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
+  if (serverCell > localCell && point.locationNotice) {
+    reason = (point.locationReason as SensitivityReason | undefined) ?? 'coordinate-uncertainty';
+    notice = point.locationNotice;
+  } else if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
     reason = parseAssessment(point.iucnCode).tier ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km because this taxon is assessed as threatened (${tier}); precise sites are withheld to reduce collection risk.`;
   } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
@@ -102,6 +125,9 @@ export function resolveAtlasLocation(
   } else if (precautionCell > 0) {
     reason = 'unresolved-assessment';
     notice = `Location generalised to about ${km(precautionCell)} km because the Continuum could not resolve a conservation assessment for this name. This precaution is not a claim that the taxon is threatened.`;
+  } else if (publicCell > 0) {
+    reason = 'public-precision';
+    notice = `Location generalised to about ${km(publicCell)} km for public display; precise coordinates and locality text are not published.`;
   }
 
   return {
@@ -110,7 +136,8 @@ export function resolveAtlasLocation(
       generalised: cellDeg > 0,
       cellDeg,
       reason,
-      localityTextAllowed: threatCell === 0 && precautionCell === 0,
+      // Public visitors never see locality text (owner decision 2026-11-24).
+      localityTextAllowed: !isPublic && threatCell === 0 && precautionCell === 0,
       notice,
     },
   };

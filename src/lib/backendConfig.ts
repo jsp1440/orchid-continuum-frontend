@@ -255,11 +255,13 @@ export const LEGACY_ONRENDER_BASE_URL = (
   'https://orchidcontinuum.onrender.com'
 ).replace(/\/$/, '');
 
-export const ECUADOR_EMBED_BASE_URL = (
-  env.VITE_ECUADOR_EMBED_BASE_URL ||
-  env.VITE_ECUADOR_EXPEDITION_EMBED_URL ||
-  'https://orchid-continuum-ecuador-expedition.onrender.com'
-).replace(/\/$/, '');
+/**
+ * Public Atlas occurrence points, generalised on the server (Calyx backend,
+ * `app/atlas_intelligence/public_occurrences.py`): grid-cell centres only, no
+ * raw coordinates and no locality text ever reach the browser.
+ */
+export const ATLAS_PUBLIC_OCCURRENCES_URL = `${CALYX_BACKEND_BASE_URL}/atlas/public/occurrences`;
+export const ATLAS_PUBLIC_CURATED_URL = `${CALYX_BACKEND_BASE_URL}/atlas/public/curated-occurrences`;
 
 /**
  * The public API serves occurrences at `/api/atlas/occurrences`; the bare

@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
@@ -53,7 +53,7 @@ import MycorrhizaProfile from "./pages/MycorrhizaProfile";
 import Gallery from "./pages/Gallery";
 import IntelligenceGraph from "./pages/IntelligenceGraph";
 import Climate from "./pages/Climate";
-import EcuadorExpedition from "./pages/EcuadorExpedition";
+import { ANDES_TOUR_STOP_NUMBER, grandTourStopPath } from "./lib/grandTour";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
 import Privacy from "./pages/Privacy";
@@ -103,7 +103,8 @@ const App = () => (
                   <Route path="/genus/:name" element={<GenusDetail />} />
                   <Route path="/species/:slug" element={<SpeciesDossier />} />
                   <Route path="/about" element={<About />} />
-                  <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
+                  {/* Retired: the Ecuador expedition embedded an external service that no longer exists. Its content lives on as the Grand Tour's Andes stop. */}
+                  <Route path="/atlas/ecuador" element={<Navigate to={grandTourStopPath(ANDES_TOUR_STOP_NUMBER)} replace />} />
                   <Route path="/atlas" element={<Atlas />} />
                   <Route
                     path="/atlas-next"

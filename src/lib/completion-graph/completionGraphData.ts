@@ -356,8 +356,8 @@ const atlasDomain = branch({
       parentId: 'module-atlas-next',
       name: 'Guided expedition tours',
       evidence: [
-        { kind: 'route', ref: '/atlas/ecuador' },
-        { kind: 'file', ref: 'src/pages/EcuadorExpedition.tsx' },
+        { kind: 'route', ref: '/atlas?tour=3' },
+        { kind: 'file', ref: 'src/lib/grandTour.ts' },
       ],
       nextAction: 'Confirm tour content is real expedition data, not placeholder copy, and add an acceptance gate.',
       lane: 'PRODUCT_COMPLETION',
