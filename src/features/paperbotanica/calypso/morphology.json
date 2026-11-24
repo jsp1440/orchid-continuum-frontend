@@ -1,0 +1,231 @@
+{
+  "version": "calypso-flower/1",
+  "species_id": "calypso-bulbosa",
+  "scientific_name": "Calypso bulbosa (L.) Oakes",
+  "stage": "fully_open",
+  "variety": "UNKNOWN",
+  "specimen_id": null,
+  "review": "PENDING BOTANICAL REVIEW",
+  "sources": [
+    {
+      "id": "FNA-BURKE",
+      "title": "Flora of North America floral treatment, reproduced by UW Burke Herbarium",
+      "url": "https://burkeherbarium.org/imagecollection/taxon.php?Taxon=Calypso+bulbosa",
+      "locator": "From Flora of North America; Flowers",
+      "creator": "Flora of North America Editorial Committee; Burke page Don Knoke and David Giblin",
+      "license": "Reference facts paraphrased; copyrighted text and photographs not redistributed",
+      "accessed": "2026-11-02"
+    },
+    {
+      "id": "NAOCC",
+      "title": "Go Orchids: Calypso bulbosa",
+      "url": "https://goorchids.northamericanorchidcenter.org/species/calypso/bulbosa/",
+      "locator": "Facts About; flower characteristics; varieties",
+      "creator": "North American Orchid Conservation Center",
+      "license": "Reference facts only; no template or artwork copied; no partnership implied",
+      "accessed": "2026-11-02"
+    },
+    {
+      "id": "NPS",
+      "title": "Calypso Orchid",
+      "url": "https://www.nps.gov/articles/000/calypso-orchid.htm",
+      "locator": "General Description",
+      "creator": "Tim Shepherd, NPS Klamath Inventory and Monitoring Network",
+      "license": "Facts paraphrased; no third-party photographs redistributed",
+      "accessed": "2026-11-02"
+    }
+  ],
+  "characters": [
+    {
+      "id": "segments",
+      "statement": "Three narrow sepals and two similar lateral petals spread around the floral center; pink to magenta is typical, with color variation.",
+      "status": "OBSERVED",
+      "basis": "Published description, paraphrased",
+      "sources": [
+        "FNA-BURKE",
+        "NPS"
+      ],
+      "reported_mm": {
+        "length": [
+          10,
+          24
+        ],
+        "width": [
+          1.5,
+          5
+        ]
+      }
+    },
+    {
+      "id": "lip",
+      "statement": "The saccate labellum has an apron, paired apical horns and bristles; its interior can carry contrasting marks.",
+      "status": "OBSERVED",
+      "basis": "Published description, paraphrased",
+      "sources": [
+        "FNA-BURKE",
+        "NPS"
+      ],
+      "reported_mm": {
+        "length": [
+          13,
+          23
+        ],
+        "width": [
+          4,
+          13
+        ]
+      }
+    },
+    {
+      "id": "column",
+      "statement": "A broad, flattened, winged column lies over the lip opening.",
+      "status": "OBSERVED",
+      "basis": "Published description, paraphrased",
+      "sources": [
+        "NPS"
+      ],
+      "reported_mm": null
+    },
+    {
+      "id": "orientation",
+      "statement": "The flower is bilaterally symmetric, with the lip below the column; Go Orchids classifies it as resupinate. This kit does not reconstruct developmental twisting.",
+      "status": "OBSERVED",
+      "basis": "Published description, paraphrased",
+      "sources": [
+        "NAOCC"
+      ],
+      "reported_mm": null
+    }
+  ],
+  "parameters": {
+    "status": "HYPOTHETICAL",
+    "basis": "Nominal dimensions from the v1 physical kit, at floral scale. Pose, cupping, exact hue and offsets are illustrative. No calibrated specimen.",
+    "organs": [
+      {
+        "id": "DS",
+        "character": "segments",
+        "length_mm": 18,
+        "width_mm": 4,
+        "angle_deg": 0,
+        "curvature": 2,
+        "cup": 0.5,
+        "origin_mm": [
+          0,
+          0,
+          0
+        ],
+        "shape": "lanceolate",
+        "color": "#b9659b"
+      },
+      {
+        "id": "LS-L",
+        "character": "segments",
+        "length_mm": 18,
+        "width_mm": 4,
+        "angle_deg": 76,
+        "curvature": 2,
+        "cup": 0.5,
+        "origin_mm": [
+          0,
+          0,
+          0
+        ],
+        "shape": "lanceolate",
+        "color": "#b9659b"
+      },
+      {
+        "id": "LS-R",
+        "character": "segments",
+        "length_mm": 18,
+        "width_mm": 4,
+        "angle_deg": -76,
+        "curvature": 2,
+        "cup": 0.5,
+        "origin_mm": [
+          0,
+          0,
+          0
+        ],
+        "shape": "lanceolate",
+        "color": "#b9659b"
+      },
+      {
+        "id": "LP-L",
+        "character": "segments",
+        "length_mm": 18,
+        "width_mm": 4,
+        "angle_deg": 38,
+        "curvature": 2,
+        "cup": 0.5,
+        "origin_mm": [
+          0,
+          0,
+          0
+        ],
+        "shape": "lanceolate",
+        "color": "#c876ab"
+      },
+      {
+        "id": "LP-R",
+        "character": "segments",
+        "length_mm": 18,
+        "width_mm": 4,
+        "angle_deg": -38,
+        "curvature": 2,
+        "cup": 0.5,
+        "origin_mm": [
+          0,
+          0,
+          0
+        ],
+        "shape": "lanceolate",
+        "color": "#c876ab"
+      },
+      {
+        "id": "LAB",
+        "character": "lip",
+        "length_mm": 18,
+        "width_mm": 10,
+        "angle_deg": 180,
+        "curvature": 4,
+        "cup": 4,
+        "origin_mm": [
+          0,
+          0,
+          1
+        ],
+        "shape": "pouch",
+        "color": "#f5dfd4"
+      },
+      {
+        "id": "COL",
+        "character": "column",
+        "length_mm": 10,
+        "width_mm": 8,
+        "angle_deg": 180,
+        "curvature": 2,
+        "cup": 1,
+        "origin_mm": [
+          0,
+          0,
+          4
+        ],
+        "shape": "column",
+        "color": "#c788ac"
+      }
+    ]
+  },
+  "unknown": [
+    "torsion",
+    "ovary dimensions",
+    "developmental transitions",
+    "glossary accession",
+    "voucher identity",
+    "calibrated landmarks"
+  ],
+  "limitations": [
+    "Lip surface is open. Apron, horns, bristles, column wings and markings are described but unresolved by these meshes.",
+    "Bilateral pose assumes equal left and right organs. Individual asymmetry is unknown.",
+    "Only the fully open floral organs are represented."
+  ]
+}

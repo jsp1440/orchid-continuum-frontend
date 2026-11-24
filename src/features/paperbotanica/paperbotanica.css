@@ -154,3 +154,14 @@
   .paperbotanica-sources { grid-column: auto; }
   .paperbotanica-canvas { min-height: 360px; }
 }
+
+.calypso-lab { padding: clamp(1.25rem, 4vw, 4rem) max(1.25rem, calc((100vw - 64rem) / 2)); line-height: 1.6; }
+.calypso-lab header { border-bottom: 2px solid #305e49; padding-bottom: 1.5rem; }
+.calypso-lab section { padding: 1.6rem 0; border-bottom: 1px solid #bccbc0; }
+.calypso-lab h1, .calypso-lab h2 { color: #214735; font-family: Georgia, serif; }
+.calypso-lab h1 { font-size: clamp(2.25rem, 6vw, 4rem); }
+.calypso-lab h2 { font-size: 1.75rem; margin-bottom: .8rem; }
+.calypso-lab p, .calypso-lab details, .calypso-lab label { margin: .65rem 0; }
+.calypso-lab a { text-decoration: underline; }
+.calypso-lab select, .calypso-lab button { border: 1px solid #386044; border-radius: .35rem; padding: .35rem .8rem; }
+.calypso-lab input { margin-left: .75rem; accent-color: #305e49; }

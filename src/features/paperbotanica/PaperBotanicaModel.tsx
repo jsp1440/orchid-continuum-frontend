@@ -9,14 +9,8 @@ interface ProjectedTriangle {
 }
 
 export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesName: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const dragRef = useRef<{ x: number; y: number } | null>(null);
   const [model, setModel] = useState<GlbModel | null>(null);
   const [error, setError] = useState("");
-  const [yaw, setYaw] = useState(0.65);
-  const [pitch, setPitch] = useState(-0.18);
-  const [zoom, setZoom] = useState(1);
-
   useEffect(() => {
     const controller = new AbortController();
     setModel(null);
@@ -33,6 +27,19 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
       });
     return () => controller.abort();
   }, [url]);
+
+  if (error) return <div className="paperbotanica-viewer-message" role="alert">{error}</div>;
+  if (!model) return <div className="paperbotanica-viewer-message">Loading original parametric reconstruction…</div>;
+
+  return <FlowerCanvas model={model} speciesName={speciesName} />;
+}
+
+export function FlowerCanvas({ model, speciesName }: { model: GlbModel; speciesName: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dragRef = useRef<{ x: number; y: number } | null>(null);
+  const [yaw, setYaw] = useState(0.65);
+  const [pitch, setPitch] = useState(-0.18);
+  const [zoom, setZoom] = useState(1);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -102,9 +109,6 @@ export function PaperBotanicaModel({ url, speciesName }: { url: string; speciesN
     if (canvasRef.current) observer.observe(canvasRef.current);
     return () => observer.disconnect();
   }, [draw]);
-
-  if (error) return <div className="paperbotanica-viewer-message" role="alert">{error}</div>;
-  if (!model) return <div className="paperbotanica-viewer-message">Loading original parametric reconstruction…</div>;
 
   return (
     <div className="paperbotanica-model">

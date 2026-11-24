@@ -1,0 +1,44 @@
+{
+  "species_id": "calypso-bulbosa",
+  "accepted_name": "Calypso bulbosa",
+  "taxonomy_confidence": "HIGH \u2014 GBIF Backbone match recorded on 2026-11-01; botanical geometry remains hypothetical.",
+  "registry_source": "https://www.gbif.org/species/5323572",
+  "organs": {
+    "DS": {
+      "label": "Dorsal sepal",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    },
+    "LS-L": {
+      "label": "Left lateral sepal",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    },
+    "LS-R": {
+      "label": "Right lateral sepal",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    },
+    "LP-L": {
+      "label": "Left lateral petal",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    },
+    "LP-R": {
+      "label": "Right lateral petal",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    },
+    "LAB": {
+      "label": "Labellum",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    },
+    "COL": {
+      "label": "Column",
+      "attachment": "flower_center",
+      "symmetry": "bilateral"
+    }
+  },
+  "scope": "Registry identities and qualitative model relationships. Attachment coordinates and bilateral pose are hypothetical."
+}

@@ -326,6 +326,9 @@ const SpeciesDossier: React.FC = () => {
                     <MessagesSquare className="h-4 w-4" /> Ask Calyx
                   </Link>
                 )}
+                {import.meta.env.DEV && !subjectConflict && paperHref && new URL(paperHref, window.location.origin).searchParams.get('species')?.toLowerCase() === 'calypso bulbosa' && (
+                  <Link to={paperHref + '&lab=calypso'}>Inspect Calypso reconstruction · botanical review pending</Link>
+                )}
                 {paperHref && !subjectConflict && (
                   <Link to={paperHref} className="mt-3 w-full inline-flex items-center justify-center px-5 py-3 rounded-full border border-[#c9a24a]/50 text-[#c9a24a]">
                     Inspect PaperBotanica drafts — sign-in and review required
