@@ -262,6 +262,12 @@ export const LEGACY_ONRENDER_BASE_URL = (
  */
 export const ATLAS_PUBLIC_OCCURRENCES_URL = `${CALYX_BACKEND_BASE_URL}/atlas/public/occurrences`;
 export const ATLAS_PUBLIC_CURATED_URL = `${CALYX_BACKEND_BASE_URL}/atlas/public/curated-occurrences`;
+/**
+ * Public Atlas grid-cell summary (`app/atlas_intelligence/public_cells.py`):
+ * record counts per generalised cell, never finer than each record's own
+ * public cell, with no record ids or names.
+ */
+export const ATLAS_PUBLIC_CELLS_URL = `${CALYX_BACKEND_BASE_URL}/atlas/public/cells`;
 
 /**
  * The public API serves occurrences at `/api/atlas/occurrences`; the bare
