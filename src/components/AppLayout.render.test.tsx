@@ -88,4 +88,25 @@ describe("AppLayout renders the public homepage", () => {
     expect(container.textContent).not.toContain("Something went wrong");
     expect(container.textContent).not.toContain("The page encountered an unexpected error");
   });
+
+  it("explains the Orchid Continuum first, above the featured orchid", () => {
+    act(() => {
+      root.render(
+        <MemoryRouter initialEntries={["/"]}>
+          <AppLayout />
+        </MemoryRouter>,
+      );
+    });
+    const intro = container.querySelector("#what-is-the-continuum");
+    expect(intro).not.toBeNull();
+    const headings = Array.from(intro!.querySelectorAll("h3")).map((h) => h.textContent);
+    expect(headings).toEqual(["What it is", "Why it matters", "How it was made", "What you can do"]);
+
+    // The explainer is the first section in <main>, ahead of the hero photograph.
+    const firstSection = container.querySelector("main section");
+    expect(firstSection?.id).toBe("what-is-the-continuum");
+
+    const links = Array.from(intro!.querySelectorAll("a")).map((a) => a.getAttribute("href"));
+    expect(links).toEqual(expect.arrayContaining(["/species", "/atlas", "/calyx", "/lexicon"]));
+  });
 });
