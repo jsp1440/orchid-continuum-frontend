@@ -1,0 +1,31 @@
+{
+  "reference": "Lindman 416, figure 1",
+  "reference_sha256": "9a405f0eb6ef728d008f8ae56eb56589acb11d5738ccd4279ebe8181052917d2",
+  "freeze_commit": "cd161bf8878fa5698d36adb98b6adf4f70f73a3e",
+  "n": 1,
+  "landmarks_px": {
+    "base": [
+      191,
+      92
+    ],
+    "dorsal": [
+      191,
+      20
+    ],
+    "lip": [
+      224,
+      166
+    ]
+  },
+  "reference_ratio": 1.125342883275258,
+  "model_ratio": 1.0,
+  "signed_projected_ratio_difference": -0.1253428832752581,
+  "interpretation": "Apparent lip reach / dorsal sepal reach. Pose differs; biological dimension error is unknown.",
+  "diagnostic": [
+    "Five narrow rays around the center in both views.",
+    "Lip below column in both views.",
+    "Dark lip markings and yellow tuft visible on plate; missing in untextured reconstruction.",
+    "Paired terminal projections visible in figure 3; absent from smooth model lip."
+  ],
+  "unavailable": "No scale bar or matched camera, specimen, 3D landmarks or replicate digitizations. Metric length error, registered contour, displacement, symmetry and curvature errors unavailable."
+}

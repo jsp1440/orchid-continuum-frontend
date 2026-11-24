@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { useEffect, useRef, useState } from "react";
 import {
   downloadPaperBotanicaPackage,
@@ -33,7 +34,16 @@ function DraftView({ speciesId, speciesName, view }: { speciesId: string; specie
     <figcaption>{view} · hypothetical reconstruction</figcaption></figure>;
 }
 
+const Lab = import.meta.env.DEV ? lazy(() => import("./CalypsoLab")) : null;
+
 export default function PaperBotanicaPage() {
+  if (Lab && new URLSearchParams(window.location.search).get("lab") === "calypso") {
+    return <Suspense fallback={<p>Loading floral evidence…</p>}><Lab /></Suspense>;
+  }
+  return <Gallery />;
+}
+
+function Gallery() {
   const [collection, setCollection] = useState<PaperBotanicaCollection | null>(null);
   const [selected, setSelected] = useState<PaperBotanicaSpecies | null>(null);
   const [profile, setProfile] = useState<PaperBotanicaProfile | null>(null);
