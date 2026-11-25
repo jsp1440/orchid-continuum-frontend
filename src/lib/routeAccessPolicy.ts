@@ -65,6 +65,8 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/coming-soon/:section',
   '/coming-soon',
   '/privacy',
+  '/contributors',
+  '/contributors/:slug',
   '*',
 ] as const;
 
@@ -93,6 +95,13 @@ export const ROUTER_AUTHENTICATED_ROUTE_PATTERNS = [
 export const COMPONENT_AUTHORIZED_ROUTE_PATTERNS = [
   '/account',
   '/university/review',
+  // Literature review: public items, but each page renders the reviewer-token
+  // boundary for the reviewer's own drafts and contributions.
+  '/review',
+  '/review/paper/:doi',
+  '/review/card/:itemId',
+  // Curator view: renders the existing owner access-code sign-in itself.
+  '/curation/literature',
 ] as const;
 
 export const ROUTE_ACCESS_POLICY = new Map<string, RouteAccessKind>([
