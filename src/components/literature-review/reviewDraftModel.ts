@@ -39,4 +39,3 @@ export function paperDraftToInput(draft: PaperDraft): PaperSubmissionInput {
     not_sure: draft.not_sure,
   };
 }
-

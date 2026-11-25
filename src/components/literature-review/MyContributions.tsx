@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import {
   AUTHORSHIP_NOTE,
+  LiteratureReviewError,
   AWARD_BASIS_LABELS,
   CONTRIBUTOR_TITLE,
   RECOGNITION_DESCRIPTION_MAX,
@@ -10,6 +11,7 @@ import {
   describeReviewFailure,
   getMe,
   isHttpsUrl,
+  safeHttpsUrl,
   updatePreferences,
   updateRecognition,
   type MyProfile,
@@ -55,6 +57,21 @@ export function RecognitionConsentForm({
   const [description, setDescription] = useState(existing?.description ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** Fields the server flagged (e.g. LOCALITY_IN_PUBLIC_TEXT detail.fields), highlighted below. */
+  const [flagged, setFlagged] = useState<Record<string, string>>({});
+
+  const flag = (field: string) => ({
+    className: flagged[field] ? `${fieldClass} border-amber-300 ring-1 ring-amber-300` : fieldClass,
+    "aria-invalid": flagged[field] ? true : undefined,
+    "data-flagged": flagged[field] ? "true" : undefined,
+    "data-testid": `recognition-${field}`,
+  });
+  const FlagNote = ({ field }: { field: string }) =>
+    flagged[field] ? (
+      <p className="-mt-2 text-xs text-amber-200" data-testid={`recognition-${field}-flag`}>
+        {`This field was flagged (${flagged[field]}). Public entries cannot include localities such as collection sites or coordinates; please remove it.`}
+      </p>
+    ) : null;
 
   const linkInvalid = link.trim() !== "" && !isHttpsUrl(link.trim());
   const valid = !consent || (displayName.trim() !== "" && description.trim() !== "" && description.length <= RECOGNITION_DESCRIPTION_MAX && !linkInvalid);
@@ -64,16 +81,18 @@ export function RecognitionConsentForm({
     if (!valid || busy) return;
     setBusy(true);
     setMessage(null);
+    setFlagged({});
     try {
       await onSave({
         consent,
         display_name: displayName.trim(),
         ...(affiliation.trim() ? { affiliation: affiliation.trim() } : {}),
-        ...(link.trim() ? { link: link.trim() } : {}),
+        ...(link.trim() ? { link: safeHttpsUrl(link.trim()) ?? link.trim() } : {}),
         description: description.trim(),
       });
       setMessage(consent ? "Saved. A curator approves public entries before they are listed." : "Saved. You will not be listed publicly.");
     } catch (cause) {
+      if (cause instanceof LiteratureReviewError && cause.fields) setFlagged(cause.fields);
       setMessage(describeReviewFailure(cause));
     } finally {
       setBusy(false);
@@ -94,21 +113,31 @@ export function RecognitionConsentForm({
         <>
           <label className="grid gap-1 text-sm text-white">
             Display name
-            <input className={fieldClass} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={200} />
+            <input {...flag("display_name")} value={displayName} onChange={(e) => setDisplayName(e.target.value)} maxLength={200} />
           </label>
+          <FlagNote field="display_name" />
           <label className="grid gap-1 text-sm text-white">
             Affiliation (optional)
-            <input className={fieldClass} value={affiliation} onChange={(e) => setAffiliation(e.target.value)} maxLength={300} />
+            <input {...flag("affiliation")} value={affiliation} onChange={(e) => setAffiliation(e.target.value)} maxLength={300} />
           </label>
+          <FlagNote field="affiliation" />
           <label className="grid gap-1 text-sm text-white">
             Professional link (optional, https only)
-            <input className={fieldClass} value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" maxLength={500} />
+            <input {...flag("link")} value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://" maxLength={500} />
           </label>
+          <FlagNote field="link" />
           {linkInvalid ? <p role="alert" className="text-xs text-amber-200">The link must start with https://</p> : null}
           <label className="grid gap-1 text-sm text-white">
             Short description of your contribution ({description.length}/{RECOGNITION_DESCRIPTION_MAX})
-            <textarea className={fieldClass} rows={3} value={description} onChange={(e) => setDescription(e.target.value)} maxLength={RECOGNITION_DESCRIPTION_MAX} />
+            <textarea
+              {...flag("description")}
+              rows={3}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={RECOGNITION_DESCRIPTION_MAX}
+            />
           </label>
+          <FlagNote field="description" />
           <p className="text-xs text-white/45">Please do not include collection sites or other locality details.</p>
         </>
       ) : null}
@@ -116,7 +145,11 @@ export function RecognitionConsentForm({
         <button type="submit" disabled={!valid || busy} className="rounded-full bg-emerald-300 px-4 py-2 text-xs font-semibold text-[#0d1f17] disabled:opacity-50">
           {consent ? "Save recognition" : existing?.consent ? "Withdraw public recognition" : "Save choice"}
         </button>
-        {message ? <p role="status" className="text-xs text-white/70">{message}</p> : null}
+        {message ? (
+          <p role={Object.keys(flagged).length ? "alert" : "status"} className="text-xs text-white/70">
+            {message}
+          </p>
+        ) : null}
       </div>
     </form>
   );
@@ -155,8 +188,19 @@ function InvitationPreference({ profile, token, onChanged }: { profile: MyProfil
   );
 }
 
-export default function MyContributions({ token, load = getMe }: { token: string; load?: typeof getMe }) {
-  const [state, setState] = useState<{ status: "loading" } | { status: "ok"; me: MyProfile } | { status: "failed"; message: string }>({
+export default function MyContributions({
+  token,
+  load = getMe,
+  onForget,
+}: {
+  token: string;
+  load?: typeof getMe;
+  /** Clears the stored reviewer key; offered when the server rejects it. */
+  onForget?: () => void;
+}) {
+  const [state, setState] = useState<
+    { status: "loading" } | { status: "ok"; me: MyProfile } | { status: "failed"; message: string; keyRejected: boolean }
+  >({
     status: "loading",
   });
 
@@ -166,7 +210,11 @@ export default function MyContributions({ token, load = getMe }: { token: string
       .then((me) => setState({ status: "ok", me }))
       .catch((cause) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
-        setState({ status: "failed", message: describeReviewFailure(cause) });
+        setState({
+          status: "failed",
+          message: describeReviewFailure(cause),
+          keyRejected: cause instanceof LiteratureReviewError && cause.kind === "unauthorized",
+        });
       });
     return controller;
   }, [token, load]);
@@ -179,15 +227,20 @@ export default function MyContributions({ token, load = getMe }: { token: string
   if (state.status === "loading") return <p className="text-sm text-white/60">Loading your contributions…</p>;
   if (state.status === "failed")
     return (
-      <p role="alert" className="text-sm text-amber-200" data-testid="my-contributions-error">
-        {state.message}
-      </p>
+      <div role="alert" className="text-sm text-amber-200" data-testid="my-contributions-error">
+        <p>{state.message}</p>
+        {state.keyRejected && onForget ? (
+          <button type="button" className="mt-2 rounded-full border border-amber-200/50 px-3 py-1 text-xs" onClick={onForget}>
+            Forget this key
+          </button>
+        ) : null}
+      </div>
     );
 
   const { me } = state;
   const p = me.progress;
   const rec = me.recognition;
-  const citable = rec?.listed ? (rec.citable_path ?? (rec.slug ? contributorPath(rec.slug) : null)) : null;
+  const citable = rec?.listed && rec.slug ? contributorPath(rec.slug) : null;
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
   return (

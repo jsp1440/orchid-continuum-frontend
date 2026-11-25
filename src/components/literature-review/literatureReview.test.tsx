@@ -281,3 +281,326 @@ describe("fail closed", () => {
     expect(calls.some((c) => c.url.includes("/curation/"))).toBe(false);
   });
 });
+
+describe("curation shows only values the server sent", () => {
+  it("labels unknown values verbatim and missing verification as Not verified", async () => {
+    stubFetch((url) => {
+      if (url.includes("/curation/queue"))
+        return {
+          status: 200,
+          body: {
+            principal_id: "owner",
+            items: [
+              {
+                item: { ...CARD, topic: "ethnobotany" },
+                current_item_version: 1,
+                submissions: [
+                  {
+                    submission_id: "s-1",
+                    reviewer: { reviewer_id: "rv-1", name: "Reviewer A", email: "reviewer-a@example.org" },
+                    item_version: 1,
+                    submitted_at: "t1",
+                    verdict: "maybe",
+                    corrections: ["geography"],
+                    verification: { counts_toward_recognition: "yes", note: "" },
+                  },
+                  {
+                    submission_id: "s-2",
+                    reviewer: { reviewer_id: "rv-2", name: "Reviewer B", email: "reviewer-b@example.org" },
+                    item_version: 1,
+                    submitted_at: "t2",
+                    verdict: "supported",
+                    corrections: [],
+                    verification: null,
+                  },
+                ],
+                agreement: { versions: [{ item_version: 1, submissions: 2, status: "partial", verdict_counts: { supported: 1, maybe: 1 }, corrections: {} }] },
+                decisions: [],
+                latest_decision: { decision: "escalate", note: "", curator_principal: "owner", submission_ids: [], decided_at: "t3" },
+              },
+            ],
+          },
+        };
+      if (url.includes("/curation/reviewers")) return { status: 200, body: { thresholds: { paper_reviews: 3, claim_reviews: 10 }, reviewers: [] } };
+      return undefined;
+    });
+    const check = vi.fn(async () => ({ authenticated: true, status: "ok", owner: "owner", token: "cookie", expires_at: null, allowedActions: {} }));
+    at("/curation/literature", "/curation/literature", <LiteratureCuration checkSession={check as never} />);
+    await screen.findAllByTestId("curation-submission");
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("Verdict: Unknown value: maybe");
+    expect(text).toContain("Corrections: Unknown value: geography");
+    expect(text).toContain("Counts toward recognition: Unknown value: yes");
+    expect(text).toContain("Counts toward recognition: Not verified");
+    expect(text).toContain("Unknown value: partial");
+    expect(text).toContain("Unknown value: maybe 1");
+    expect(text).toContain("Latest decision: Unknown value: escalate");
+    expect(text).not.toMatch(/Latest decision: Defer/);
+  });
+
+  it("review home shows an unknown topic verbatim", async () => {
+    stubFetch((url) => (url.includes("kind=paper") ? { status: 200, body: { items: [{ ...PAPER, topic: "ethnobotany" }] } } : undefined));
+    at("/review", "/review", <LiteratureReview />);
+    expect(await screen.findByText(/Unknown value: ethnobotany/)).toBeTruthy();
+  });
+});
+
+describe("rejected reviewer key", () => {
+  it("offers Forget this key, reopens the identity dialog, and keeps the form draft", async () => {
+    localStorage.setItem(REVIEWER_TOKEN_STORAGE_KEY, "stale-key");
+    let registered = false;
+    stubFetch((url, init) => {
+      if (url.includes("/items/")) return { status: 200, body: CARD };
+      if (url.includes("/drafts/")) return init.method === "PUT" ? { status: 200, body: {} } : { status: 404, body: {} };
+      if (url.endsWith("/reviewers")) {
+        registered = true;
+        return { status: 201, body: { reviewer_token: "fresh-key" } };
+      }
+      if (url.endsWith("/submissions")) {
+        const auth = new Headers(init.headers).get("Authorization");
+        return auth === "Bearer fresh-key"
+          ? { status: 201, body: RECEIPT }
+          : { status: 401, body: { detail: { code: "REVIEWER_TOKEN_INVALID", message: "x" } } };
+      }
+      return undefined;
+    });
+    at("/review/card/card%3Af-1", "/review/card/:itemId", <LiteratureReviewCard />);
+    await screen.findByText("Synthetic claim about pollination.");
+    fireEvent.click(screen.getByLabelText("Unsupported"));
+    fireEvent.change(screen.getByLabelText("Explanation"), { target: { value: "kept explanation" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit this review" }));
+
+    const alert = await screen.findByTestId("key-rejected");
+    expect(screen.queryByTestId("identity-form")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Forget this key and register again" }));
+    expect(localStorage.getItem(REVIEWER_TOKEN_STORAGE_KEY)).toBeNull();
+    expect(alert.isConnected).toBe(false);
+    const form = await screen.findByTestId("identity-form");
+    expect((screen.getByLabelText("Explanation") as HTMLTextAreaElement).value).toBe("kept explanation");
+
+    fireEvent.change(screen.getByLabelText("Name (required)"), { target: { value: "Reviewer A" } });
+    fireEvent.change(screen.getByLabelText("Email (required)"), { target: { value: "reviewer-a@example.org" } });
+    fireEvent.click(screen.getByTestId("privacy-ack"));
+    fireEvent.submit(form);
+    await screen.findByTestId("submit-receipt");
+    expect(registered).toBe(true);
+    const last = submissions().at(-1)!;
+    expect(JSON.parse(String(last.init.body))).toMatchObject({ verdict: "unsupported", explanation: "kept explanation" });
+  });
+
+  it("checks a pasted key with GET /me before storing it", async () => {
+    stubFetch((url, init) => {
+      if (url.includes("kind=paper")) return { status: 200, body: { items: [] } };
+      if (url.endsWith("/me")) {
+        const auth = new Headers(init.headers).get("Authorization");
+        return auth === "Bearer good-key"
+          ? {
+              status: 200,
+              body: {
+                profile: { name: "Reviewer A", email: "reviewer-a@example.org", future_invitations_opt_in: false },
+                submissions: [],
+                progress: { paper_reviews: { verified: 0, required: 3, met: false }, claim_reviews: { verified: 0, required: 10, met: false } },
+                award: null,
+                recognition: null,
+              },
+            }
+          : { status: 401, body: { detail: { code: "REVIEWER_TOKEN_INVALID", message: "x" } } };
+      }
+      return undefined;
+    });
+    at("/review", "/review", <LiteratureReview />);
+    const input = await screen.findByLabelText(/Enter your reviewer key/);
+    fireEvent.change(input, { target: { value: "bad-key" } });
+    fireEvent.submit(input.closest("form")!);
+    expect((await screen.findByTestId("use-key-error")).textContent).toMatch(/not recognised/);
+    expect(localStorage.getItem(REVIEWER_TOKEN_STORAGE_KEY)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/Enter your reviewer key/), { target: { value: "good-key" } });
+    fireEvent.submit(screen.getByLabelText(/Enter your reviewer key/).closest("form")!);
+    await screen.findByTestId("my-contributions");
+    expect(localStorage.getItem(REVIEWER_TOKEN_STORAGE_KEY)).toBe("good-key");
+  });
+
+  it("My contributions offers Forget this key when the stored key is rejected", async () => {
+    const onForget = vi.fn();
+    render(
+      <MemoryRouter>
+        <MyContributions
+          token="stale"
+          onForget={onForget}
+          load={async () => {
+            const { LiteratureReviewError } = await import("@/lib/literatureReviewApi");
+            throw new LiteratureReviewError("unauthorized", "x", 401, "REVIEWER_TOKEN_INVALID");
+          }}
+        />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Forget this key" }));
+    expect(onForget).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("draft kept across first registration", () => {
+  it("does not reset close-read state when the server has no draft and browser storage is blocked", async () => {
+    const setItem = vi.spyOn(Storage.prototype, "setItem").mockImplementation((key: string, value: string) => {
+      if (key.startsWith("oc.literatureReview.draft")) throw new Error("blocked");
+      // Drafts are blocked; the reviewer token can still be stored.
+      (localStorage as unknown as Record<string, string>)[key] = value;
+    });
+    const puts: string[] = [];
+    stubFetch((url, init) => {
+      if (url.includes("kind=paper")) return { status: 200, body: { items: [PAPER] } };
+      if (url.includes("kind=card")) return { status: 200, body: { items: [CARD] } };
+      if (url.endsWith("/reviewers")) return { status: 201, body: { reviewer_token: "tok-synthetic" } };
+      if (url.endsWith("/submissions")) return { status: 201, body: { ...RECEIPT, item_id: PAPER.item_id } };
+      if (url.includes("/drafts/")) {
+        if (init.method === "PUT") {
+          puts.push(String(init.body));
+          return { status: 200, body: {} };
+        }
+        return { status: 404, body: { detail: { code: "NOT_FOUND", message: "x" } } };
+      }
+      return undefined;
+    });
+    try {
+      at(`/review/paper/${encodeURIComponent(DOI)}`, "/review/paper/:doi", <LiteratureReviewPaper />);
+      fireEvent.change(await screen.findByLabelText("Key findings, in your words"), { target: { value: "My own reading." } });
+      fireEvent.click(screen.getByRole("button", { name: /Save my findings/ }));
+      await screen.findByTestId("paper-review-form");
+      fireEvent.click(screen.getByRole("button", { name: "Submit paper review" }));
+      const form = await screen.findByTestId("identity-form");
+      fireEvent.change(screen.getByLabelText("Name (required)"), { target: { value: "Reviewer A" } });
+      fireEvent.change(screen.getByLabelText("Email (required)"), { target: { value: "reviewer-a@example.org" } });
+      fireEvent.click(screen.getByTestId("privacy-ack"));
+      fireEvent.submit(form);
+      await screen.findByTestId("submit-receipt");
+      // Still revealed, findings still present, after the token appeared.
+      expect(screen.getByTestId("own-findings-locked").textContent).toContain("My own reading.");
+      expect(screen.queryByTestId("close-read-gate")).toBeNull();
+      await waitFor(() => expect(puts.length).toBeGreaterThan(0));
+      expect(JSON.parse(puts[0]).payload).toMatchObject({ reveal: "saved", own_key_findings: "My own reading." });
+      const body = JSON.parse(String(submissions().at(-1)!.init.body));
+      expect(body).toMatchObject({ own_findings_before_reveal: true, own_key_findings: "My own reading." });
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+});
+
+describe("backend b6b99753 recognition details", () => {
+  const awarded = () =>
+    me({
+      award: { title: "Calyx Scientific Review Contributor", basis: "claim_reviews", awarded_at: "2026-11-20T00:00:00Z" },
+      resume_wording: "Server résumé wording.",
+    });
+
+  it("highlights the field named by LOCALITY_IN_PUBLIC_TEXT without echoing the text", async () => {
+    stubFetch((url) =>
+      url.endsWith("/me/recognition")
+        ? {
+            status: 422,
+            body: { detail: { code: "LOCALITY_IN_PUBLIC_TEXT", message: "The description contains a locality.", fields: { description: "coordinates" } } },
+          }
+        : undefined,
+    );
+    render(
+      <MemoryRouter>
+        <MyContributions token="tok" load={async () => awarded()} />
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByTestId("recognition-consent"));
+    fireEvent.change(screen.getByTestId("recognition-display_name"), { target: { value: "Reviewer A" } });
+    fireEvent.change(screen.getByTestId("recognition-description"), { target: { value: "Reviewed papers near 0.000, 0.000" } });
+    fireEvent.submit(screen.getByTestId("recognition-form"));
+    const note = await screen.findByTestId("recognition-description-flag");
+    expect(note.textContent).toMatch(/coordinates/);
+    expect(screen.getByTestId("recognition-description").getAttribute("aria-invalid")).toBe("true");
+    expect(screen.getByTestId("recognition-display_name").getAttribute("aria-invalid")).toBeNull();
+    expect(screen.queryByTestId("recognition-display_name-flag")).toBeNull();
+    expect(screen.getByRole("alert").textContent).toMatch(/locality/i);
+  });
+
+  it("shows no citable link while slug is null or the entry is not listed", async () => {
+    render(
+      <MemoryRouter>
+        <MyContributions
+          token="tok"
+          load={async () => ({
+            ...awarded(),
+            recognition: {
+              consent: true,
+              consent_updated_at: "t",
+              display_name: "Reviewer A",
+              affiliation: null,
+              link: null,
+              description: "d",
+              curator_approved: false,
+              listed: false,
+              slug: "reviewer-a-x1y2",
+              citable_path: null,
+            },
+          })}
+        />
+      </MemoryRouter>,
+    );
+    await screen.findByTestId("award");
+    expect(screen.queryByTestId("citable-link")).toBeNull();
+    expect(screen.getByText(/waiting for curator approval/)).toBeTruthy();
+  });
+
+  it("builds the citable link from the slug once listed", async () => {
+    render(
+      <MemoryRouter>
+        <MyContributions
+          token="tok"
+          load={async () => ({
+            ...awarded(),
+            recognition: {
+              consent: true,
+              consent_updated_at: "t",
+              display_name: "Reviewer A",
+              affiliation: null,
+              link: null,
+              description: "d",
+              curator_approved: true,
+              listed: true,
+              slug: "reviewer-a-x1y2",
+              citable_path: "/contributors/reviewer-a-x1y2",
+            },
+          })}
+        />
+      </MemoryRouter>,
+    );
+    const link = await screen.findByTestId("citable-link");
+    expect(link.querySelector("a")?.getAttribute("href")).toBe("/contributors/reviewer-a-x1y2");
+  });
+
+  it("curator reviewer rows say 'No public page yet' when a recognition row has no slug", async () => {
+    stubFetch((url) => {
+      if (url.includes("/curation/queue")) return { status: 200, body: { principal_id: "owner", items: [] } };
+      if (url.includes("/curation/reviewers"))
+        return {
+          status: 200,
+          body: {
+            thresholds: { paper_reviews: 3, claim_reviews: 10 },
+            reviewers: [
+              {
+                reviewer_id: "rv-1",
+                name: "Reviewer A",
+                email: "reviewer-a@example.org",
+                future_invitations_opt_in: false,
+                progress: { paper_reviews: { verified: 0, required: 3, met: false }, claim_reviews: { verified: 10, required: 10, met: true } },
+                award: { title: "Calyx Scientific Review Contributor", basis: "claim_reviews", awarded_at: "t" },
+                recognition: { slug: null, consent: false, consent_updated_at: null, curator_approved: false, display_name: "", affiliation: null, link: null, description: "" },
+              },
+            ],
+          },
+        };
+      return undefined;
+    });
+    const check = vi.fn(async () => ({ authenticated: true, status: "ok", owner: "owner", token: "cookie", expires_at: null, allowedActions: {} }));
+    at("/curation/literature", "/curation/literature", <LiteratureCuration checkSession={check as never} />);
+    fireEvent.click(await screen.findByRole("tab", { name: /Reviewers/ }));
+    expect((await screen.findByTestId("public-page")).textContent).toBe("No public page yet");
+  });
+});

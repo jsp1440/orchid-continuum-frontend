@@ -7,7 +7,7 @@ import { EMPTY_PAPER_DRAFT, type PaperDraft } from "@/components/literature-revi
 import { useReviewerIdentity } from "@/components/literature-review/useReviewerIdentity";
 import { DRAFT_STATUS_LABEL, useReviewDraft } from "@/lib/literatureReviewDrafts";
 import {
-  TOPIC_LABELS,
+  topicLabel,
   describeReviewFailure,
   listItems,
   reviewCardPath,
@@ -102,7 +102,7 @@ export default function LiteratureReviewPaper() {
                 <h2 className="font-serif text-2xl text-white">{load.value.paper_title || load.value.doi}</h2>
                 <p className="mt-1 text-sm text-white/65">{load.value.citation}</p>
                 <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-white/40">
-                  {TOPIC_LABELS[load.value.topic]} · DOI {load.value.doi} · version {load.value.item_version}
+                  {topicLabel(load.value.topic)} · DOI {load.value.doi} · version {load.value.item_version}
                 </p>
                 {load.value.input_note ? <p className="mt-2 text-xs text-white/55">What the extractor read: {load.value.input_note}</p> : null}
               </header>

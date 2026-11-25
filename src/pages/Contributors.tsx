@@ -5,6 +5,7 @@ import {
   AUTHORSHIP_NOTE,
   CONTRIBUTOR_TITLE,
   PURPOSE_TEXT,
+  contributorPath,
   describeReviewFailure,
   getContributor,
   listContributors,
@@ -58,7 +59,7 @@ export function ContributorsList() {
             <ul className="grid gap-3">
               {state.value.contributors.map((c) => (
                 <li key={c.slug} className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                  <Link to={c.citable_path} className="font-serif text-lg text-white hover:text-emerald-200">
+                  <Link to={contributorPath(c.slug)} className="font-serif text-lg text-white hover:text-emerald-200">
                     {c.display_name}
                   </Link>
                   {c.affiliation ? <p className="text-xs text-white/55">{c.affiliation}</p> : null}
@@ -117,7 +118,7 @@ export function ContributorDetail() {
               </blockquote>
               <p className="text-xs text-white/55">
                 Cite this page: {origin}
-                {state.value.citable_path}
+                {contributorPath(state.value.slug)}
               </p>
               <p className="text-xs text-white/55">{state.value.authorship_note}</p>
             </article>

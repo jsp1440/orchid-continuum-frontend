@@ -12,7 +12,9 @@ import {
   LiteratureReviewError,
   VERDICTS,
   VERDICT_LABELS,
+  contributorPath,
   describeReviewFailure,
+  enumLabel,
   getCurationQueue,
   getCuratorReviewers,
   postAward,
@@ -40,12 +42,14 @@ const smallButton = "rounded-full border border-white/20 px-3 py-1 text-xs text-
 
 type Session = "checking" | "signed_out" | "signed_in";
 
+const AGREEMENT_LABELS: Record<string, string> = { agree: "agree", differ: "differ", not_applicable: "not applicable" };
+
 function Answer({ s }: { s: CurationSubmission }) {
   return (
     <dl className="grid gap-1 text-xs text-white/75">
-      {s.verdict ? <div><dt className="inline text-white/45">Verdict: </dt><dd className="inline">{VERDICT_LABELS[s.verdict]}</dd></div> : null}
+      {s.verdict !== null ? <div><dt className="inline text-white/45">Verdict: </dt><dd className="inline">{enumLabel(VERDICT_LABELS, s.verdict)}</dd></div> : null}
       {s.corrections.length ? (
-        <div><dt className="inline text-white/45">Corrections: </dt><dd className="inline">{s.corrections.map((c) => CORRECTION_LABELS[c]).join(", ")}</dd></div>
+        <div><dt className="inline text-white/45">Corrections: </dt><dd className="inline">{s.corrections.map((c) => enumLabel(CORRECTION_LABELS, c)).join(", ")}</dd></div>
       ) : null}
       {s.own_key_findings !== null ? (
         <div>
@@ -84,7 +88,13 @@ function Verification({ s, onDone }: { s: CurationSubmission; onDone: () => void
     <div className="mt-2 grid gap-1 border-t border-white/10 pt-2" data-testid="verification">
       <p className="text-[11px] text-white/55">
         Counts toward recognition:{" "}
-        {s.verification ? (s.verification.counts_toward_recognition ? "yes" : "no") : "not verified"}
+        {!s.verification
+          ? "Not verified"
+          : s.verification.counts_toward_recognition === true
+            ? "yes"
+            : s.verification.counts_toward_recognition === false
+              ? "no"
+              : `Unknown value: ${s.verification.counts_raw}`}
         {s.verification?.verified_by ? ` · by ${s.verification.verified_by}` : ""}
       </p>
       <input className={field} placeholder="Verification note" value={note} onChange={(e) => setNote(e.target.value)} />
@@ -155,12 +165,15 @@ function QueueEntry({ entry, onChanged }: { entry: CurationQueueEntry; onChanged
       <div className="mt-3 grid gap-1 text-xs text-white/70" data-testid="agreement">
         {entry.agreement.map((v) => (
           <p key={v.item_version}>
-            Version {v.item_version}: {v.submissions} submission(s) · <strong>{v.status.replace("_", " ")}</strong>
-            {v.verdict_counts
-              ? ` · ${VERDICTS.filter((k) => v.verdict_counts?.[k]).map((k) => `${VERDICT_LABELS[k]} ${v.verdict_counts?.[k]}`).join(", ")}`
+            Version {v.item_version}: {v.submissions} submission(s) · <strong>{enumLabel(AGREEMENT_LABELS, v.status)}</strong>
+            {v.verdict_counts && Object.keys(v.verdict_counts).length
+              ? ` · ${Object.entries(v.verdict_counts).map(([k, n]) => `${enumLabel(VERDICT_LABELS, k)} ${n}`).join(", ")}`
               : ""}
-            {CORRECTIONS.some((c) => v.corrections[c])
-              ? ` · corrections: ${CORRECTIONS.filter((c) => v.corrections[c]).map((c) => `${CORRECTION_LABELS[c]} ${v.corrections[c]}`).join(", ")}`
+            {Object.values(v.corrections).some((n) => n > 0)
+              ? ` · corrections: ${Object.entries(v.corrections)
+                  .filter(([, n]) => n > 0)
+                  .map(([k, n]) => `${enumLabel(CORRECTION_LABELS, k)} ${n}`)
+                  .join(", ")}`
               : ""}
           </p>
         ))}
@@ -188,7 +201,7 @@ function QueueEntry({ entry, onChanged }: { entry: CurationQueueEntry; onChanged
 
       {entry.latest_decision ? (
         <p className="mt-3 text-xs text-emerald-100">
-          Latest decision: {DECISION_LABELS[entry.latest_decision.decision]} by {entry.latest_decision.curator_principal} · {entry.latest_decision.decided_at}
+          Latest decision: {enumLabel(DECISION_LABELS, entry.latest_decision.decision)} by {entry.latest_decision.curator_principal} · {entry.latest_decision.decided_at}
           {entry.latest_decision.note ? ` — ${entry.latest_decision.note}` : ""}
         </p>
       ) : null}
@@ -259,6 +272,9 @@ function ReviewerRow({ r, onChanged }: { r: CuratorReviewer; onChanged: () => vo
         <div className="mt-2 rounded-lg border border-white/10 p-2 text-xs text-white/75" data-testid="recognition-approval">
           <p>
             Public recognition: {r.recognition.consent ? "consented" : "not consented / withdrawn"} · {r.recognition.curator_approved ? "approved" : "not approved"}
+          </p>
+          <p data-testid="public-page">
+            {r.recognition.slug ? `Public page: ${contributorPath(r.recognition.slug)}${r.recognition.listed ? "" : " (not listed)"}` : "No public page yet"}
           </p>
           {r.recognition.consent ? (
             <p className="mt-1">

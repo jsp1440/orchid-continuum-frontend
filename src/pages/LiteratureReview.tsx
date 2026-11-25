@@ -7,7 +7,11 @@ import {
   PURPOSE_TEXT,
   TOPICS,
   TOPIC_LABELS,
+  topicLabel,
+  LiteratureReviewError,
+  clearReviewerToken,
   describeReviewFailure,
+  getMe,
   listItems,
   readReviewerToken,
   reviewCardPath,
@@ -62,7 +66,7 @@ function ByPaper() {
               </Link>
               <p className="mt-1 text-xs text-white/55">{item.citation}</p>
               <p className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-white/40">
-                {TOPIC_LABELS[item.topic]} · DOI {item.doi}
+                {topicLabel(item.topic)} · DOI {item.doi}
                 {item.kind === "paper" ? ` · ${item.card_item_ids.length} extracted claims` : ""}
               </p>
             </li>
@@ -110,16 +114,36 @@ function ByTopic() {
   );
 }
 
-function UseExistingKey({ onUse }: { onUse: (token: string) => void }) {
+/**
+ * A pasted key is checked with GET /me before it is stored, so a mistyped or
+ * revoked key never becomes this browser's identity.
+ */
+function UseExistingKey({ onUse, check = getMe }: { onUse: (token: string) => void; check?: typeof getMe }) {
   const [value, setValue] = useState("");
-  function submit(event: FormEvent) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  async function submit(event: FormEvent) {
     event.preventDefault();
     const key = value.trim();
     setValue("");
-    if (key) onUse(key);
+    if (!key) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await check(key);
+      onUse(key);
+    } catch (cause) {
+      setError(
+        cause instanceof LiteratureReviewError && cause.kind === "unauthorized"
+          ? "That reviewer key was not recognised. Nothing was saved."
+          : describeReviewFailure(cause),
+      );
+    } finally {
+      setBusy(false);
+    }
   }
   return (
-    <form onSubmit={submit} className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/70">
+    <form onSubmit={(e) => void submit(e)} className="mt-3 flex flex-wrap items-center gap-2 text-xs text-white/70">
       <label htmlFor="existing-reviewer-key">Reviewed before on another device? Enter your reviewer key:</label>
       <input
         id="existing-reviewer-key"
@@ -129,9 +153,14 @@ function UseExistingKey({ onUse }: { onUse: (token: string) => void }) {
         onChange={(e) => setValue(e.target.value)}
         className="min-w-[12rem] flex-1 rounded-md border border-white/15 bg-black/20 px-2 py-1 text-white"
       />
-      <button type="submit" className="rounded-full border border-white/20 px-3 py-1">
-        Use key
+      <button type="submit" disabled={busy} className="rounded-full border border-white/20 px-3 py-1 disabled:opacity-50">
+        {busy ? "Checking…" : "Use key"}
       </button>
+      {error ? (
+        <p role="alert" className="w-full text-amber-200" data-testid="use-key-error">
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }
@@ -178,7 +207,13 @@ export default function LiteratureReview() {
             </h2>
             {token ? (
               <div className="mt-3">
-                <MyContributions token={token} />
+                <MyContributions
+                  token={token}
+                  onForget={() => {
+                    clearReviewerToken();
+                    setToken(null);
+                  }}
+                />
               </div>
             ) : (
               <>

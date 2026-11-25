@@ -107,6 +107,8 @@ export class LiteratureReviewError extends Error {
   readonly status: number | null;
   readonly code: string | null;
   readonly retryAfterSeconds: number | null;
+  /** Field-level detail, e.g. LOCALITY_IN_PUBLIC_TEXT's {field: kind}. The offending text is never echoed. */
+  readonly fields: Record<string, string> | null;
 
   constructor(
     kind: LiteratureReviewFailureKind,
@@ -114,6 +116,7 @@ export class LiteratureReviewError extends Error {
     status: number | null = null,
     code: string | null = null,
     retryAfterSeconds: number | null = null,
+    fields: Record<string, string> | null = null,
   ) {
     super(message);
     this.name = "LiteratureReviewError";
@@ -121,6 +124,7 @@ export class LiteratureReviewError extends Error {
     this.status = status;
     this.code = code;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.fields = fields;
   }
 }
 
@@ -216,7 +220,8 @@ export type CardItem = {
   doi: string;
   paper_title: string;
   citation: string;
-  topic: ReviewTopic;
+  /** Raw server value; display through topicLabel(). */
+  topic: string;
   paper_item_id: string | null;
   claim: string;
   orchid_name: string | null;
@@ -233,7 +238,8 @@ export type PaperItem = {
   doi: string;
   paper_title: string;
   citation: string;
-  topic: ReviewTopic;
+  /** Raw server value; display through topicLabel(). */
+  topic: string;
   input_note: string | null;
   card_item_ids: string[];
 };
@@ -315,9 +321,10 @@ export type OwnSubmission = {
   item_id: string;
   item_version: number;
   item_version_was_current: boolean | null;
-  kind: "card" | "paper" | null;
+  /** Raw server values. */
+  kind: string | null;
   doi: string;
-  verdict: Verdict | null;
+  verdict: string | null;
   submitted_at: string;
   supersedes_submission_id: string | null;
   /** null = not yet verified by a curator */
@@ -370,7 +377,9 @@ export type ContributorsPage = {
 };
 
 export type CurationVerification = {
-  counts_toward_recognition: boolean;
+  /** null when the server sent something other than a boolean; see counts_raw. */
+  counts_toward_recognition: boolean | null;
+  counts_raw: string;
   note: string;
   verified_by: string | null;
   verified_at: string | null;
@@ -382,14 +391,15 @@ export type CurationSubmission = {
   reviewer_name: string;
   reviewer_email: string;
   reviewer_education_training: string | null;
-  kind: "card" | "paper" | null;
+  kind: string | null;
   item_version: number;
   item_version_was_current: boolean | null;
   submitted_at: string;
   supersedes_submission_id: string | null;
   superseded_by_submission_id: string | null;
-  verdict: Verdict | null;
-  corrections: Correction[];
+  /** Raw server values; display through enumLabel(). */
+  verdict: string | null;
+  corrections: string[];
   explanation: string | null;
   source_citation: string | null;
   own_key_findings: string | null;
@@ -404,16 +414,18 @@ export type CurationSubmission = {
 export type AgreementVersion = {
   item_version: number;
   submissions: number;
-  status: "agree" | "differ" | "not_applicable";
-  verdict_counts: Partial<Record<Verdict, number>> | null;
-  corrections: Partial<Record<Correction, number>>;
+  /** Raw server value: "agree" | "differ" | "not_applicable" expected. */
+  status: string;
+  verdict_counts: Record<string, number> | null;
+  corrections: Record<string, number>;
   not_sure: number | null;
 };
 
 export type CurationDecision = {
   decision_id: string | null;
   item_version: number | null;
-  decision: CurationDecisionKind;
+  /** Raw server value; display through enumLabel(DECISION_LABELS, …). */
+  decision: string;
   note: string;
   curator_principal: string;
   decided_at: string;
@@ -450,6 +462,15 @@ export type CuratorThresholds = { paper_reviews: number; claim_reviews: number }
 // ---------------------------------------------------------------------------
 
 type Auth = { kind: "reviewer"; token: string } | { kind: "curator" } | { kind: "public" };
+
+function fieldsOf(payload: unknown): Record<string, string> | null {
+  const detail = payload && typeof payload === "object" ? (payload as { detail?: unknown }).detail : null;
+  const fields = detail && typeof detail === "object" && !Array.isArray(detail) ? (detail as { fields?: unknown }).fields : null;
+  if (!fields || typeof fields !== "object" || Array.isArray(fields)) return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(fields as Record<string, unknown>)) out[k] = typeof v === "string" ? v : String(v);
+  return Object.keys(out).length ? out : null;
+}
 
 function codeOf(payload: unknown): { code: string | null; message: string | null } {
   if (!payload || typeof payload !== "object") return { code: null, message: null };
@@ -518,7 +539,8 @@ async function request<T>(
       const retry = Number.parseInt(response.headers?.get?.("Retry-After") ?? "", 10);
       throw new LiteratureReviewError("rate_limited", message ?? "Rate limited.", status, code, Number.isFinite(retry) && retry > 0 ? retry : null);
     }
-    if (status >= 400 && status < 500) throw new LiteratureReviewError("rejected", message ?? "Rejected.", status, code);
+    if (status >= 400 && status < 500)
+      throw new LiteratureReviewError("rejected", message ?? "Rejected.", status, code, null, fieldsOf(payload));
     throw new LiteratureReviewError("unavailable", message ?? "Unavailable.", status, code);
   }
   return payload as T;
@@ -534,8 +556,29 @@ const optStr = (v: unknown): string | null => (typeof v === "string" && v.trim()
 const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const bool = (v: unknown): boolean | null => (typeof v === "boolean" ? v : null);
 
-function topicOf(v: unknown): ReviewTopic {
-  return (TOPICS as readonly string[]).includes(v as string) ? (v as ReviewTopic) : "other";
+/**
+ * The server's value as text, exactly as sent. Enumerated fields keep the raw
+ * value so the page can label known values and show anything else as
+ * "Unknown value: <raw>" — never substituting a value the server did not send.
+ */
+function rawText(v: unknown): string {
+  if (typeof v === "string") return v;
+  if (v === undefined) return "(missing)";
+  try {
+    return JSON.stringify(v) ?? String(v);
+  } catch {
+    return String(v);
+  }
+}
+
+/** Label a known enumerated value; show anything else verbatim as an unknown value. */
+export function enumLabel(labels: Record<string, string>, raw: string | null | undefined): string {
+  if (raw === null || raw === undefined) return "Not recorded";
+  return Object.prototype.hasOwnProperty.call(labels, raw) ? labels[raw] : `Unknown value: ${raw}`;
+}
+
+export function topicLabel(raw: string): string {
+  return enumLabel(TOPIC_LABELS, raw);
 }
 
 function itemKind(raw: Record<string, unknown>): "card" | "paper" | null {
@@ -560,7 +603,7 @@ export function normaliseItem(raw: unknown): ReviewItem {
     doi,
     paper_title: str(raw.paper_title) ?? "",
     citation: str(raw.citation) ?? "",
-    topic: topicOf(raw.topic),
+    topic: rawText(raw.topic),
     input_note: optStr(raw.input_note),
   };
   if (kind === "paper") {
@@ -617,28 +660,24 @@ export function normaliseRecognition(raw: unknown): RecognitionState | null {
   const consent = bool(raw.consent) ?? false;
   const curator_approved = bool(raw.curator_approved) ?? false;
   const slug = optStr(raw.slug);
-  const citable = optStr(raw.citable_path);
   return {
     consent,
     consent_updated_at: optStr(raw.consent_updated_at),
     display_name: str(raw.display_name) ?? "",
     affiliation: optStr(raw.affiliation),
-    link: optStr(raw.link),
+    link: safeHttpsUrl(optStr(raw.link)),
     description: str(raw.description) ?? "",
     curator_approved,
     listed: bool(raw.listed) ?? (consent && curator_approved),
     slug,
-    // Only a same-site /contributors/ path is accepted as the citable link.
-    citable_path: citable && citable.startsWith("/contributors/") ? citable : null,
+    // Built from the slug only; a server-sent path is never trusted as a link.
+    citable_path: slug ? contributorPath(slug) : null,
   };
 }
 
-function verdictOf(v: unknown): Verdict | null {
-  return (VERDICTS as readonly unknown[]).includes(v) ? (v as Verdict) : null;
-}
-
-function kindOf(v: unknown): "card" | "paper" | null {
-  return v === "card" || v === "paper" ? v : null;
+/** Raw text when present; null only when the server sent null/nothing. */
+function rawOrNull(v: unknown): string | null {
+  return v === null || v === undefined ? null : rawText(v);
 }
 
 export function normaliseMe(raw: unknown): MyProfile {
@@ -660,9 +699,9 @@ export function normaliseMe(raw: unknown): MyProfile {
       item_id: str(s.item_id) ?? "",
       item_version: num(s.item_version) ?? 0,
       item_version_was_current: bool(s.item_version_was_current),
-      kind: kindOf(s.kind),
+      kind: rawOrNull(s.kind),
       doi: str(s.doi) ?? "",
-      verdict: verdictOf(s.verdict),
+      verdict: rawOrNull(s.verdict),
       submitted_at: str(s.submitted_at) ?? "",
       supersedes_submission_id: optStr(s.supersedes_submission_id),
       counts_toward_recognition: bool(s.counts_toward_recognition),
@@ -681,17 +720,16 @@ function normaliseContributor(raw: unknown): PublicContributor {
   const slug = str(raw.slug);
   const display_name = str(raw.display_name);
   if (!slug || !display_name) malformed("contributor");
-  const link = optStr(raw.link);
-  const citable = optStr(raw.citable_path);
   return {
     slug,
     display_name,
     affiliation: optStr(raw.affiliation),
-    link: link && /^https:\/\//i.test(link) ? link : null,
+    link: safeHttpsUrl(optStr(raw.link)),
     description: str(raw.description) ?? "",
     title: str(raw.title) ?? CONTRIBUTOR_TITLE,
     awarded_on: optStr(raw.awarded_on),
-    citable_path: citable && citable.startsWith("/contributors/") ? citable : contributorPath(slug),
+    // Built from the slug only; a server-sent path is never trusted as a link.
+    citable_path: contributorPath(slug),
     resume_wording: optStr(raw.resume_wording) ?? RESUME_WORDING,
   };
 }
@@ -701,9 +739,9 @@ function normaliseCurationSubmission(raw: unknown): CurationSubmission {
   const submission_id = str(raw.submission_id);
   if (!submission_id) malformed("submission");
   const reviewer = isObj(raw.reviewer) ? raw.reviewer : {};
-  const corrections = Array.isArray(raw.corrections)
-    ? raw.corrections.filter((c): c is Correction => (CORRECTIONS as readonly unknown[]).includes(c))
-    : [];
+  // Every correction the server sent is kept (as text); unknown ones are
+  // shown as unknown values rather than dropped.
+  const corrections = Array.isArray(raw.corrections) ? raw.corrections.map(rawText) : [];
   const v = isObj(raw.verification) ? raw.verification : null;
   return {
     submission_id,
@@ -711,13 +749,13 @@ function normaliseCurationSubmission(raw: unknown): CurationSubmission {
     reviewer_name: str(reviewer.name) ?? "",
     reviewer_email: str(reviewer.email) ?? "",
     reviewer_education_training: optStr(reviewer.education_training),
-    kind: kindOf(raw.kind),
+    kind: rawOrNull(raw.kind),
     item_version: num(raw.item_version) ?? 0,
     item_version_was_current: bool(raw.item_version_was_current),
     submitted_at: str(raw.submitted_at) ?? "",
     supersedes_submission_id: optStr(raw.supersedes_submission_id),
     superseded_by_submission_id: optStr(raw.superseded_by_submission_id),
-    verdict: verdictOf(raw.verdict),
+    verdict: rawOrNull(raw.verdict),
     corrections,
     explanation: optStr(raw.explanation),
     source_citation: optStr(raw.source_citation),
@@ -728,7 +766,8 @@ function normaliseCurationSubmission(raw: unknown): CurationSubmission {
     not_sure: bool(raw.not_sure),
     verification: v
       ? {
-          counts_toward_recognition: bool(v.counts_toward_recognition) ?? false,
+          counts_toward_recognition: bool(v.counts_toward_recognition),
+          counts_raw: rawText(v.counts_toward_recognition),
           note: str(v.note) ?? "",
           verified_by: optStr(v.verified_by),
           verified_at: optStr(v.verified_at),
@@ -737,11 +776,12 @@ function normaliseCurationSubmission(raw: unknown): CurationSubmission {
   };
 }
 
-function countMap<K extends string>(raw: unknown, keys: readonly K[]): Partial<Record<K, number>> {
-  const out: Partial<Record<K, number>> = {};
+/** Every numeric count the server sent, keyed by its raw name (unknown keys kept). */
+function countMap(raw: unknown): Record<string, number> {
+  const out: Record<string, number> = {};
   if (!isObj(raw)) return out;
-  for (const k of keys) {
-    const n = num(raw[k]);
+  for (const [k, v] of Object.entries(raw)) {
+    const n = num(v);
     if (n !== null) out[k] = n;
   }
   return out;
@@ -751,7 +791,7 @@ function normaliseDecision(d: Record<string, unknown>): CurationDecision {
   return {
     decision_id: optStr(d.decision_id),
     item_version: num(d.item_version),
-    decision: (DECISIONS as readonly unknown[]).includes(d.decision) ? (d.decision as CurationDecisionKind) : "defer",
+    decision: rawText(d.decision),
     note: str(d.note) ?? "",
     curator_principal: str(d.curator_principal) ?? "",
     decided_at: str(d.decided_at) ?? "",
@@ -773,9 +813,9 @@ function normaliseQueueEntry(raw: unknown): CurationQueueEntry {
     agreement: versions.map((v) => ({
       item_version: num(v.item_version) ?? 0,
       submissions: num(v.submissions) ?? 0,
-      status: v.status === "agree" || v.status === "differ" ? v.status : "not_applicable",
-      verdict_counts: isObj(v.verdict_counts) ? countMap(v.verdict_counts, VERDICTS) : null,
-      corrections: countMap(v.corrections, CORRECTIONS),
+      status: rawText(v.status),
+      verdict_counts: isObj(v.verdict_counts) ? countMap(v.verdict_counts) : null,
+      corrections: countMap(v.corrections),
       not_sure: num(v.not_sure),
     })),
     decisions: Array.isArray(raw.decisions) ? raw.decisions.filter(isObj).map(normaliseDecision) : [],
@@ -990,13 +1030,24 @@ export async function setRecognitionApproval(reviewerId: string, action: "approv
 // Small helpers shared by the pages
 // ---------------------------------------------------------------------------
 
-export function isHttpsUrl(value: string): boolean {
+/**
+ * An https URL re-serialised through URL, or null. Whitespace, quotes, angle
+ * brackets and backslashes are refused outright rather than repaired.
+ */
+export function safeHttpsUrl(value: string | null | undefined): string | null {
+  if (typeof value !== "string" || !value) return null;
+  if (/[\s"'<>\\`]/.test(value)) return null;
   try {
     const url = new URL(value);
-    return url.protocol === "https:";
+    if (url.protocol !== "https:" || !url.hostname) return null;
+    return url.href;
   } catch {
-    return false;
+    return null;
   }
+}
+
+export function isHttpsUrl(value: string): boolean {
+  return safeHttpsUrl(value) !== null;
 }
 
 export function reviewPaperPath(doi: string): string {

@@ -6,8 +6,14 @@ vi.mock("@/lib/backendConfig", () => ({ CALYX_BACKEND_BASE_URL: "https://calyx.t
 import {
   LiteratureReviewError,
   REVIEWER_TOKEN_STORAGE_KEY,
+  DECISION_LABELS,
+  VERDICT_LABELS,
   describeReviewFailure,
+  enumLabel,
+  getContributor,
   getCurationQueue,
+  safeHttpsUrl,
+  topicLabel,
   getItem,
   getMe,
   listContributors,
@@ -202,5 +208,70 @@ describe("literature review client", () => {
     expect(me.progress.eligible_bases).toEqual(["claim_reviews"]);
     expect(me.award).toBeNull();
     expect(me.resume_wording).toBeNull();
+  });
+
+  it("keeps unknown enumerated values verbatim instead of substituting known ones", async () => {
+    stubFetch(200, {
+      principal_id: "owner",
+      items: [
+        {
+          item: { ...CARD, topic: "ethnobotany" },
+          current_item_version: 2,
+          submissions: [
+            {
+              submission_id: "s-1",
+              reviewer: { reviewer_id: "rv-1", name: "Reviewer A", email: "reviewer-a@example.org" },
+              item_version: 2,
+              verdict: "maybe",
+              corrections: ["taxon", "geography"],
+              verification: { counts_toward_recognition: "yes", note: "" },
+            },
+            { submission_id: "s-2", reviewer: {}, item_version: 2, verdict: "supported", corrections: [], verification: null },
+          ],
+          agreement: { versions: [{ item_version: 2, submissions: 2, status: "partial", verdict_counts: { supported: 1, maybe: 1 }, corrections: { geography: 1 } }] },
+          decisions: [{ decision: "escalate", note: "", curator_principal: "owner", submission_ids: [], decided_at: "t" }],
+          latest_decision: { decision: "escalate", note: "", curator_principal: "owner", submission_ids: [], decided_at: "t" },
+        },
+      ],
+    });
+    const [entry] = await getCurationQueue();
+    expect(topicLabel(entry.item.topic)).toBe("Unknown value: ethnobotany");
+    expect(enumLabel(DECISION_LABELS, entry.latest_decision!.decision)).toBe("Unknown value: escalate");
+    expect(entry.decisions[0].decision).toBe("escalate");
+    const [a, b] = entry.submissions;
+    expect(enumLabel(VERDICT_LABELS, a.verdict)).toBe("Unknown value: maybe");
+    expect(a.corrections).toEqual(["taxon", "geography"]);
+    expect(a.verification).toMatchObject({ counts_toward_recognition: null, counts_raw: "yes" });
+    expect(b.verification).toBeNull();
+    expect(entry.agreement[0].status).toBe("partial");
+    expect(entry.agreement[0].verdict_counts).toEqual({ supported: 1, maybe: 1 });
+    expect(entry.agreement[0].corrections).toEqual({ geography: 1 });
+  });
+
+  it("accepts only clean https links, re-serialised", () => {
+    expect(safeHttpsUrl("https://example.org/a b")).toBeNull();
+    expect(safeHttpsUrl(" https://example.org")).toBeNull();
+    expect(safeHttpsUrl('https://example.org/"x')).toBeNull();
+    expect(safeHttpsUrl("https://example.org/'x")).toBeNull();
+    expect(safeHttpsUrl("https://example.org/<x>")).toBeNull();
+    expect(safeHttpsUrl("https://example.org\\x")).toBeNull();
+    expect(safeHttpsUrl("http://example.org")).toBeNull();
+    expect(safeHttpsUrl("javascript:alert(1)")).toBeNull();
+    expect(safeHttpsUrl("HTTPS://Example.ORG")).toBe("https://example.org/");
+  });
+
+  it("builds the citable path from the slug only and drops unsafe links", async () => {
+    stubFetch(200, {
+      slug: "reviewer-a-x1y2",
+      display_name: "Reviewer A",
+      link: "http://insecure.example.org",
+      description: "d",
+      citable_path: "/contributors/../curation/literature",
+    });
+    const entry = await getContributor("reviewer-a-x1y2");
+    expect(entry.citable_path).toBe("/contributors/reviewer-a-x1y2");
+    expect(entry.link).toBeNull();
+    stubFetch(200, { slug: "../curation", display_name: "X", description: "d" });
+    expect((await getContributor("x")).citable_path).toBe("/contributors/..%2Fcuration");
   });
 });
