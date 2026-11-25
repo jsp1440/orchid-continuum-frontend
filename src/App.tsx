@@ -74,6 +74,11 @@ import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
+import LiteratureReview from "./pages/LiteratureReview";
+import LiteratureReviewPaper from "./pages/LiteratureReviewPaper";
+import LiteratureReviewCard from "./pages/LiteratureReviewCard";
+import { ContributorsList, ContributorDetail } from "./pages/Contributors";
+import LiteratureCuration from "./pages/LiteratureCuration";
 
 const queryClient = new QueryClient();
 
@@ -150,6 +155,12 @@ const App = () => (
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
                   <Route path="/literature" element={<ProtectedRoute title="Literature corpus · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty corpus."><Literature /></ProtectedRoute>} />
                   <Route path="/literature/:paperId" element={<ProtectedRoute title="Literature extraction · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty extraction."><LiteraturePaper /></ProtectedRoute>} />
+                  <Route path="/review" element={<LiteratureReview />} />
+                  <Route path="/review/paper/:doi" element={<LiteratureReviewPaper />} />
+                  <Route path="/review/card/:itemId" element={<LiteratureReviewCard />} />
+                  <Route path="/contributors" element={<ContributorsList />} />
+                  <Route path="/contributors/:slug" element={<ContributorDetail />} />
+                  <Route path="/curation/literature" element={<LiteratureCuration />} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />

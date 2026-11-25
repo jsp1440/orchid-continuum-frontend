@@ -58,6 +58,8 @@ const Footer: React.FC = () => {
       items: [
         { label: 'Partners', route: '/partners' },
         { label: 'Get involved', route: '/get-involved' },
+        { label: 'Review Calyx literature', route: '/review' },
+        { label: 'Contributors', route: '/contributors' },
         { label: 'Conservation', route: '/conservation' },
         { label: 'Data & evidence', route: '/knowledge' },
         { label: 'Privacy & data', route: '/privacy' },

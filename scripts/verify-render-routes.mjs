@@ -53,6 +53,9 @@ export const ROUTES = Object.freeze([
   '/university/applied-ai-data-science',
   '/culture/orchids-on-screen',
   '/classroom/investigation',
+  '/review',
+  '/contributors',
+  '/curation/literature',
 ]);
 
 const DEFAULT_BASE_URL = 'https://orchid-continuum-frontend-vof6.onrender.com';
