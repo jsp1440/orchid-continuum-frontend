@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { createContext, FormEvent, useContext, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   fetchRelationshipExplorerPayload,
   RelationshipExplorerPayload,
+  type RelationshipExplorerStatus,
   TEST_SPECIES,
 } from "@/lib/relationshipExplorer";
 import {
@@ -46,10 +47,39 @@ function Card({
   );
 }
 
+// Unavailable, not-found and invalid are different facts and none of them is
+// "no records yet". Each gets its own wording.
+const NOT_OK_STATUS_COPY: Partial<Record<RelationshipExplorerStatus, { title: string; detail: string }>> = {
+  unavailable: {
+    title: "Relationship service unavailable",
+    detail:
+      "The relationship service could not be reached, so this species could not be checked. This is not a statement that no records exist.",
+  },
+  not_found: {
+    title: "Species not found in the relationship service",
+    detail:
+      "The relationship service answered, and it has no relationship profile under this name. Check the spelling or try an accepted name.",
+  },
+  invalid: {
+    title: "Relationship service response unreadable",
+    detail:
+      "A response arrived but it was not a readable relationship payload, so nothing from it is shown. This is not a statement that no records exist.",
+  },
+};
+
+// Status of the relationship payload for the cards below. While it is not
+// "ok", EmptyState must not claim absence ("No ... yet"): nothing was checked.
+const RelationshipStatusContext = createContext<RelationshipExplorerStatus | null>(null);
+
 function EmptyState({ message }: { message: string }) {
+  const status = useContext(RelationshipStatusContext);
+  const notOk = (status && NOT_OK_STATUS_COPY[status]) || null;
   return (
-    <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-      {message}
+    <div
+      className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600"
+      data-relationship-status={notOk ? status : undefined}
+    >
+      {notOk ? `Not shown: ${notOk.title.toLowerCase()}.` : message}
     </div>
   );
 }
@@ -135,7 +165,10 @@ export default function RelationshipExplorer() {
   const cards = payload?.cards;
   const neighborhoodCounts = countNeighborhoodCards(neighborhoodCards);
 
+  const notOk = (payload && NOT_OK_STATUS_COPY[payload.status]) || null;
+
   return (
+    <RelationshipStatusContext.Provider value={payload?.status ?? null}>
     <main className="min-h-screen bg-gradient-to-b from-emerald-50 via-white to-white px-4 py-10 text-slate-900 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl space-y-8">
         <header className="rounded-[2rem] bg-gradient-to-br from-emerald-900 via-emerald-800 to-slate-900 p-8 text-white shadow-xl">
@@ -212,6 +245,16 @@ export default function RelationshipExplorer() {
                 </div>
                 {profile?.description ? (
                   <p className="mt-5 text-slate-700">{profile.description}</p>
+                ) : null}
+                {notOk ? (
+                  <div
+                    role="alert"
+                    data-relationship-status={payload.status}
+                    className="mt-5 rounded-2xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900"
+                  >
+                    <div className="font-semibold">{notOk.title}</div>
+                    <div className="mt-1">{notOk.detail}</div>
+                  </div>
                 ) : null}
               </Card>
 
@@ -339,7 +382,11 @@ export default function RelationshipExplorer() {
                   ))}
                 </div>
               ) : (
-                <EmptyState message="No images are available through this MVP payload yet." />
+                // The gallery is looked up from the genus image library whatever the
+                // relationship status, so its empty state is its own.
+                <RelationshipStatusContext.Provider value={null}>
+                  <EmptyState message="No images are available through this MVP payload yet." />
+                </RelationshipStatusContext.Provider>
               )}
             </Card>
 
@@ -389,5 +436,6 @@ export default function RelationshipExplorer() {
         ) : null}
       </div>
     </main>
+    </RelationshipStatusContext.Provider>
   );
 }

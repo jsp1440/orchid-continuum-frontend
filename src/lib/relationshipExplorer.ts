@@ -1,12 +1,12 @@
 // src/lib/relationshipExplorer.ts
-// BUILD 209B — Relationship Explorer live image hardening.
-// Safe MVP payloads still keep the page useful while the API matures, but the
-// image gallery no longer uses fabricated placeholder URLs. We attempt the live
-// Orchid Continuum trusted genus image library and only mark image_gallery true
-// when real image URLs are available.
+// Relationship Explorer client. Fails closed: a field the API does not return
+// stays null, and a failed, missing, or unreadable response is reported by
+// `status` and never replaced with canned relationship content. The image
+// gallery is separate: it comes from the live trusted genus image library and
+// image_gallery is only marked true when real image URLs are available.
 
 import { binomialOf, fetchGenusImagesWithSource, type GenusImage } from "@/lib/genusData";
-
+import { isJsonContentType, isUsableApiOrigin } from "@/lib/api";
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "https://orchid-continuum-public-api.onrender.com";
 
 export interface CardAvailability {
@@ -77,8 +77,28 @@ export interface RelationshipExplorerPayload {
   fungal_dependency: FungalDependency | null;
   reasoning: ReasoningItem[] | null;
   interaction_summary: InteractionRecord[] | null;
-  source: "api" | "safe-mvp" | "mock";
+  /**
+   * "api" only when the relationship service answered with a readable payload
+   * (status "ok"). "none" for every other status. "safe-mvp" and "mock" are
+   * retained in the type for older consumers and are no longer produced.
+   */
+  source: "api" | "safe-mvp" | "mock" | "none";
+  /** Outcome of the relationship-service request. See RelationshipExplorerStatus. */
+  status: RelationshipExplorerStatus;
 }
+
+/**
+ * These states are distinct and must stay distinct:
+ * - ok:          the service returned a JSON object; null fields mean the
+ *                service returned nothing for them.
+ * - not_found:   the service answered 404 for this name.
+ * - unavailable: the service could not be checked (transport failure, non-404
+ *                error status, or no usable API origin). Says nothing about
+ *                whether records exist.
+ * - invalid:     a response arrived but was not a readable JSON object (for
+ *                example the SPA shell served as a 200), or no name was given.
+ */
+export type RelationshipExplorerStatus = "ok" | "not_found" | "unavailable" | "invalid";
 
 type RelationshipExplorerApiPayload = Partial<
   Omit<RelationshipExplorerPayload, "cards" | "source">
@@ -110,28 +130,22 @@ function emptyCards(): CardAvailability {
   };
 }
 
-function emptyPayload(name: string, source: "api" | "safe-mvp" | "mock" = "mock"): RelationshipExplorerPayload {
-  const [genus, speciesEpithet] = name.split(" ");
+function emptyPayload(
+  name: string,
+  status: RelationshipExplorerStatus,
+): RelationshipExplorerPayload {
   return {
     scientific_name: name,
-    cards: { ...emptyCards(), species_profile: !!name },
-    species_profile: name
-      ? {
-          scientific_name: name,
-          genus: genus || null,
-          species_epithet: speciesEpithet || null,
-          author: null,
-          common_name: null,
-          description: null,
-        }
-      : null,
+    cards: emptyCards(),
+    species_profile: null,
     atlas_summary: null,
     image_gallery: null,
     mycorrhiza_claims: null,
     fungal_dependency: null,
     reasoning: null,
     interaction_summary: null,
-    source,
+    source: status === "ok" ? "api" : "none",
+    status,
   };
 }
 
@@ -228,228 +242,113 @@ async function withLiveGallery(payload: RelationshipExplorerPayload): Promise<Re
   }
 }
 
-function normalizePayload(name: string, raw: unknown): RelationshipExplorerPayload {
-  if (!raw || typeof raw !== "object") return emptyPayload(name);
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function objectOrNull<T>(value: unknown): T | null {
+  return isPlainObject(value) ? (value as T) : null;
+}
+
+function arrayOrNull<T>(value: unknown): T[] | null {
+  return Array.isArray(value) ? (value as T[]) : null;
+}
+
+/**
+ * Normalize a live API body. Nothing is filled in from anywhere else: a field
+ * the API omits, returns as null, or returns with the wrong shape stays null,
+ * and a card flag is true only when the API did not mark it false and its
+ * field actually carries content.
+ */
+function normalizePayload(name: string, raw: unknown): RelationshipExplorerPayload | null {
+  if (!isPlainObject(raw)) return null;
 
   const payload = raw as RelationshipExplorerApiPayload;
-  const fallback = SAFE_MVP_PAYLOADS[name.toLowerCase()] || emptyPayload(name, "api");
-  const cards: CardAvailability =
-    payload.cards && typeof payload.cards === "object"
-      ? { ...emptyCards(), ...payload.cards }
-      : payload.mvp_card_status && typeof payload.mvp_card_status === "object"
-        ? { ...emptyCards(), ...payload.mvp_card_status }
-        : fallback.cards;
+  const apiCards: Partial<CardAvailability> = isPlainObject(payload.cards)
+    ? payload.cards
+    : isPlainObject(payload.mvp_card_status)
+      ? payload.mvp_card_status
+      : {};
+  const allowed = (key: keyof CardAvailability) => apiCards[key] !== false;
 
-  const imageGallery = cleanGallery(Array.isArray(payload.image_gallery) ? payload.image_gallery : fallback.image_gallery);
+  const speciesProfile = objectOrNull<SpeciesProfile>(payload.species_profile);
+  const atlasSummary = objectOrNull<AtlasSummary>(payload.atlas_summary);
+  const mycorrhizaClaims = arrayOrNull<MycorrhizaClaim>(payload.mycorrhiza_claims);
+  const fungalDependency = objectOrNull<FungalDependency>(payload.fungal_dependency);
+  const reasoning = arrayOrNull<ReasoningItem>(payload.reasoning);
+  const interactionSummary = arrayOrNull<InteractionRecord>(payload.interaction_summary);
+  const imageGallery = cleanGallery(arrayOrNull<GalleryImage>(payload.image_gallery));
 
   return {
-    scientific_name: payload.scientific_name || fallback.scientific_name || name,
-    cards: { ...cards, image_gallery: imageGallery.length > 0 },
-    species_profile: payload.species_profile ?? fallback.species_profile,
-    atlas_summary: payload.atlas_summary ?? fallback.atlas_summary,
+    scientific_name:
+      typeof payload.scientific_name === "string" && payload.scientific_name.trim()
+        ? payload.scientific_name
+        : name,
+    cards: {
+      species_profile: allowed("species_profile") && speciesProfile !== null,
+      atlas_summary: allowed("atlas_summary") && atlasSummary !== null,
+      image_gallery: imageGallery.length > 0,
+      interaction_summary: allowed("interaction_summary") && !!interactionSummary?.length,
+      interaction_panel: apiCards.interaction_panel === true && !!interactionSummary?.length,
+      reasoning: allowed("reasoning") && !!reasoning?.length,
+      mycorrhiza_claims: allowed("mycorrhiza_claims") && !!mycorrhizaClaims?.length,
+      fungal_dependency: allowed("fungal_dependency") && fungalDependency !== null,
+    },
+    species_profile: speciesProfile,
+    atlas_summary: atlasSummary,
     image_gallery: imageGallery.length ? imageGallery : null,
-    mycorrhiza_claims: Array.isArray(payload.mycorrhiza_claims) ? payload.mycorrhiza_claims : fallback.mycorrhiza_claims,
-    fungal_dependency: payload.fungal_dependency ?? fallback.fungal_dependency,
-    reasoning: Array.isArray(payload.reasoning) ? payload.reasoning : fallback.reasoning,
-    interaction_summary: Array.isArray(payload.interaction_summary) ? payload.interaction_summary : fallback.interaction_summary,
+    mycorrhiza_claims: mycorrhizaClaims,
+    fungal_dependency: fungalDependency,
+    reasoning,
+    interaction_summary: interactionSummary,
     source: "api",
+    status: "ok",
   };
 }
 
-export async function fetchRelationshipExplorerPayload(scientificName: string): Promise<RelationshipExplorerPayload> {
-  const name = decodeURIComponent(scientificName || "Angraecum sesquipedale").trim();
-  if (!name) return emptyPayload("");
+async function requestRelationshipPayload(name: string): Promise<RelationshipExplorerPayload> {
+  // A relative or malformed base would resolve to the SPA shell; treat it as
+  // a service that cannot be checked rather than issuing the request.
+  if (!isUsableApiOrigin(API_BASE)) return emptyPayload(name, "unavailable");
 
+  let response: Response;
   try {
-    const response = await fetch(
+    response = await fetch(
       `${API_BASE}/api/relationship-explorer/species/${encodeURIComponent(name)}`,
       { headers: { Accept: "application/json" } },
     );
-    if (response.ok) {
-      const raw = await response.json();
-      return withLiveGallery(normalizePayload(name, raw));
-    }
   } catch {
-    // The safe MVP fallback below is intentional.
+    return emptyPayload(name, "unavailable");
   }
 
-  return withLiveGallery(SAFE_MVP_PAYLOADS[name.toLowerCase()] || emptyPayload(name));
+  if (response.status === 404) return emptyPayload(name, "not_found");
+  if (!response.ok) return emptyPayload(name, "unavailable");
+  // A 200 that is not JSON is the SPA shell or a proxy page, not an answer.
+  if (!isJsonContentType(response.headers.get("content-type"))) return emptyPayload(name, "invalid");
+
+  let raw: unknown;
+  try {
+    raw = await response.json();
+  } catch {
+    return emptyPayload(name, "invalid");
+  }
+  return normalizePayload(name, raw) ?? emptyPayload(name, "invalid");
 }
 
-const SAFE_MVP_PAYLOADS: Record<string, RelationshipExplorerPayload> = {
-  "angraecum sesquipedale": {
-    scientific_name: "Angraecum sesquipedale",
-    source: "safe-mvp",
-    cards: {
-      species_profile: true,
-      atlas_summary: true,
-      image_gallery: false,
-      interaction_summary: false,
-      interaction_panel: false,
-      reasoning: true,
-      mycorrhiza_claims: true,
-      fungal_dependency: true,
-    },
-    species_profile: {
-      scientific_name: "Angraecum sesquipedale",
-      genus: "Angraecum",
-      species_epithet: "sesquipedale",
-      author: "Thouars",
-      common_name: "Darwin's orchid / Comet orchid",
-      description:
-        "Safe MVP payload from Build 203C: atlas signal, reasoning, mycorrhizal claims, and fungal dependency are available. Living images are pulled separately from the Orchid Continuum image library when available.",
-    },
-    atlas_summary: {
-      occurrence_count: 1,
-      atlas_readiness: "atlas_seed",
-      atlas_confidence_score: 0.024,
-      countries: null,
-      elevation_range: null,
-    },
-    image_gallery: null,
-    mycorrhiza_claims: [
-      {
-        fungal_taxon: "fungal partner candidate",
-        relationship_type: "orchid mycorrhiza",
-        evidence: "2 mycorrhizal literature claims are available in the Continuum safe payload.",
-        source: "oc_ecology.literature_mycorrhiza_symbiosis_claims",
-      },
-    ],
-    fungal_dependency: {
-      dependency_level: "seed/protocorm dependency",
-      notes: "1 fungal dependency evidence record is attached for seed/protocorm orchid mycorrhiza.",
-    },
-    reasoning: [
-      {
-        statement:
-          "This species represents a high-value reasoning example connecting floral specialization, pollinator prediction, coevolution, and island biogeography.",
-        confidence: "moderate_reasoning_confidence · score 0.567",
-        basis:
-          "Build 203C safe payload: reasoning_density=high_reasoning_density; fired_rule_count=5; validation pathway compares spur length, pollinator proboscis length, distribution, and literature evidence.",
-      },
-    ],
-    interaction_summary: null,
-  },
+/**
+ * Always resolves; inspect `status` before reading the evidence fields. The
+ * image gallery is looked up from the genus image library for every status,
+ * because it does not depend on the relationship service.
+ */
+export async function fetchRelationshipExplorerPayload(scientificName: string): Promise<RelationshipExplorerPayload> {
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(scientificName || "Angraecum sesquipedale");
+  } catch {
+    return emptyPayload(scientificName, "invalid");
+  }
+  const name = decoded.trim();
+  if (!name) return emptyPayload("", "invalid");
 
-  "dendrobium anosmum": {
-    scientific_name: "Dendrobium anosmum",
-    source: "safe-mvp",
-    cards: {
-      species_profile: true,
-      atlas_summary: true,
-      image_gallery: false,
-      interaction_summary: true,
-      interaction_panel: true,
-      reasoning: false,
-      mycorrhiza_claims: false,
-      fungal_dependency: false,
-    },
-    species_profile: {
-      scientific_name: "Dendrobium anosmum",
-      genus: "Dendrobium",
-      species_epithet: "anosmum",
-      author: null,
-      common_name: "Fragrant dendrobium",
-      description:
-        "Safe MVP payload from Build 203C: this is the current best pollinator/interaction test species for the Relationship Explorer. Living images are pulled separately from the Orchid Continuum image library when available.",
-    },
-    atlas_summary: {
-      occurrence_count: 0,
-      atlas_readiness: "needs_occurrence_data",
-      atlas_confidence_score: 0,
-      countries: null,
-      elevation_range: null,
-    },
-    image_gallery: null,
-    mycorrhiza_claims: null,
-    fungal_dependency: null,
-    reasoning: null,
-    interaction_summary: [
-      {
-        partner: "interaction partner available",
-        interaction_type: "display-ready interaction signal",
-        source:
-          "oc_api.v_species_globi_interaction_summary_v1 · total_display_ready_interactions=1 · distinct_partner_taxa=1",
-      },
-    ],
-  },
-
-  "cattleya maxima": {
-    scientific_name: "Cattleya maxima",
-    source: "safe-mvp",
-    cards: {
-      species_profile: true,
-      atlas_summary: true,
-      image_gallery: false,
-      interaction_summary: false,
-      interaction_panel: false,
-      reasoning: false,
-      mycorrhiza_claims: true,
-      fungal_dependency: false,
-    },
-    species_profile: {
-      scientific_name: "Cattleya maxima",
-      genus: "Cattleya",
-      species_epithet: "maxima",
-      author: "Lindl.",
-      common_name: null,
-      description:
-        "Safe MVP payload from Build 203C: atlas and one mycorrhizal literature claim are available. Living images are pulled separately from the Orchid Continuum image library when available.",
-    },
-    atlas_summary: {
-      occurrence_count: 2,
-      atlas_readiness: "atlas_seed",
-      atlas_confidence_score: 0.048,
-      countries: null,
-      elevation_range: null,
-    },
-    image_gallery: null,
-    mycorrhiza_claims: [
-      {
-        fungal_taxon: "fungal partner candidate",
-        relationship_type: "orchid mycorrhiza",
-        evidence: "1 mycorrhizal literature claim is available in the Continuum safe payload.",
-        source: "oc_ecology.literature_mycorrhiza_symbiosis_claims",
-      },
-    ],
-    fungal_dependency: null,
-    reasoning: null,
-    interaction_summary: null,
-  },
-
-  "dracula vampira": {
-    scientific_name: "Dracula vampira",
-    source: "safe-mvp",
-    cards: {
-      species_profile: true,
-      atlas_summary: true,
-      image_gallery: false,
-      interaction_summary: false,
-      interaction_panel: false,
-      reasoning: false,
-      mycorrhiza_claims: false,
-      fungal_dependency: false,
-    },
-    species_profile: {
-      scientific_name: "Dracula vampira",
-      genus: "Dracula",
-      species_epithet: "vampira",
-      author: "(Luer) Luer",
-      common_name: null,
-      description:
-        "Safe MVP payload from Build 203C: atlas signal is available; interaction and fungal layers are not populated yet. Living images are pulled separately from the Orchid Continuum image library when available.",
-    },
-    atlas_summary: {
-      occurrence_count: 7,
-      atlas_readiness: "atlas_partial",
-      atlas_confidence_score: 0.168,
-      countries: null,
-      elevation_range: null,
-    },
-    image_gallery: null,
-    mycorrhiza_claims: null,
-    fungal_dependency: null,
-    reasoning: null,
-    interaction_summary: null,
-  },
-};
+  return withLiveGallery(await requestRelationshipPayload(name));
+}
