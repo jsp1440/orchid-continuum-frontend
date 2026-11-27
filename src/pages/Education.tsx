@@ -12,6 +12,11 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import PageShell from '@/components/orchid/PageShell';
+import {
+  EDUCATION_HERO_NOTE,
+  EDUCATION_TOPIC_CONTENT,
+  type EducationTopicContent,
+} from '@/lib/educationTopics';
 
 /**
  * Education — BloomBot-powered contextual learning hub.
@@ -21,87 +26,24 @@ import PageShell from '@/components/orchid/PageShell';
  * BloomBot's "first response" before linking out to deeper content.
  */
 
-interface Topic {
-  key: string;
-  title: string;
+type Topic = EducationTopicContent & {
   icon: React.ComponentType<{ className?: string }>;
-  summary: string;
-  detail: string;
-  category: 'environment' | 'physiology' | 'health' | 'partnership';
-}
+};
 
-const TOPICS: Topic[] = [
-  {
-    key: 'vpd',
-    title: 'VPD — Vapor Pressure Deficit',
-    icon: Droplets,
-    category: 'environment',
-    summary:
-      'How "thirsty" the air feels to the plant. Combines temperature and humidity into a single transpiration-driving number.',
-    detail:
-      'Most orchids thrive between 0.6 – 1.2 kPa during the day. Higher VPD pulls water out of leaves; lower VPD slows transpiration and risks fungal pressure. Track VPD instead of raw humidity to compare across temperatures.',
-  },
-  {
-    key: 'par-dli',
-    title: 'PAR & DLI — Light Intensity & Daily Sum',
-    icon: Sun,
-    category: 'environment',
-    summary:
-      'PAR is the rate of photosynthetically active light. DLI is the daily integrated total — the unit orchids actually respond to.',
-    detail:
-      'Phalaenopsis: 6 – 10 mol·m⁻²·d⁻¹. Cattleya: 15 – 25. Vanda: 25 – 40. Hitting the right DLI matters more than peak intensity — short bright bursts can equal long gentle days.',
-  },
-  {
-    key: 'physiology',
-    title: 'Orchid Physiology',
-    icon: Microscope,
-    category: 'physiology',
-    summary:
-      'Velamen-clad roots, CAM photosynthesis, pseudobulbs, and resupinate flowers — the structural toolkit of Orchidaceae.',
-    detail:
-      'Most epiphytic orchids run CAM photosynthesis, opening stomata at night. Velamen on aerial roots absorbs water in seconds and shields the cortex from UV. Pseudobulbs buffer drought. Understanding the toolkit explains every culture rule.',
-  },
-  {
-    key: 'pests',
-    title: 'Pests & Diseases',
-    icon: Bug,
-    category: 'health',
-    summary:
-      'Scale, mealybug, spider mite, thrips — and the bacterial / fungal blights that follow.',
-    detail:
-      'Most outbreaks trace back to airflow + VPD. Identify early with a hand lens. Treat scale and mealybug with horticultural oil; mites with a strong water rinse and predatory mites; bacteria with Physan and dry tissue.',
-  },
-  {
-    key: 'metabolic',
-    title: 'Metabolic Disorders',
-    icon: Activity,
-    category: 'health',
-    summary:
-      'Edema, oxalate burn, calcium-deficiency tip burn — non-pathogenic problems caused by environment.',
-    detail:
-      'Edema (water-blister) appears when roots take up water faster than leaves transpire. Calcium tip burn shows when transpiration is too slow to pull Ca²⁺ to leaf margins. Both are environmental tells, not infections.',
-  },
-  {
-    key: 'mycorrhiza',
-    title: 'Mycorrhiza',
-    icon: Sprout,
-    category: 'partnership',
-    summary:
-      'Every orchid seed germinates with a fungal partner. The relationship continues, often invisibly, into adulthood.',
-    detail:
-      'Tulasnella, Ceratobasidium, Sebacina dominate orchid associations. Specificity ranges from generalist to single-fungus dependence. In conservation, sourcing the right mycobiont can be the difference between germination and silence.',
-  },
-  {
-    key: 'pollination',
-    title: 'Pollination',
-    icon: Flower2,
-    category: 'partnership',
-    summary:
-      'Deception, reward, sexual mimicry, perfume harvesting — orchids deploy the most diverse pollination strategies of any plant family.',
-    detail:
-      'Roughly a third of orchid species offer no reward at all. Ophrys mimics female bees; Catasetum forcibly attaches pollinia; Coryanthes traps and bathes its visitor. The Continuum links each species to documented partners via GloBI.',
-  },
-];
+const TOPIC_ICONS: Record<string, Topic['icon']> = {
+  vpd: Droplets,
+  'par-dli': Sun,
+  physiology: Microscope,
+  pests: Bug,
+  metabolic: Activity,
+  mycorrhiza: Sprout,
+  pollination: Flower2,
+};
+
+const TOPICS: Topic[] = EDUCATION_TOPIC_CONTENT.map(t => ({
+  ...t,
+  icon: TOPIC_ICONS[t.key] ?? BookOpen,
+}));
 
 const CATEGORY_LABEL: Record<Topic['category'], string> = {
   environment: 'Environment',
@@ -141,9 +83,7 @@ const Education: React.FC = () => {
             </div>
           </div>
           <p className="text-xs text-white/60 leading-relaxed">
-            BloomBot threads these explanations into species pages, the
-            Atlas, and OACS readings — so the right concept appears at the
-            moment you need it.
+            {EDUCATION_HERO_NOTE}
           </p>
         </div>
       }
