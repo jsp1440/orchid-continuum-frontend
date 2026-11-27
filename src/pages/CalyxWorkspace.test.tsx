@@ -861,4 +861,31 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
   });
+
+  it("renders repeated degraded connection errors without duplicate React keys", async () => {
+    mocks.loadCalyxWorkspace.mockResolvedValue({
+      capabilities: null,
+      homepage: null,
+      orchestrator: null,
+      orchestratorState: "unavailable",
+      errors: ["TypeError: Failed to fetch", "TypeError: Failed to fetch"],
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    const degradedSection = Array.from(container.querySelectorAll("section")).find(
+      (section) => section.textContent?.includes("Degraded connections"),
+    );
+    expect(degradedSection?.querySelectorAll("li")).toHaveLength(2);
+    expect(consoleError.mock.calls.flat().join(" ")).not.toContain("same key");
+    consoleError.mockRestore();
+  });
 });
