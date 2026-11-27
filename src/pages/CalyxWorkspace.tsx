@@ -676,6 +676,49 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
       });
       turnCommitted = true;
       if (!isCurrentRequest(requestId, targetConversationId, activeProjectId)) return;
+      if (
+        result.conversation_id === thread.conversation_id &&
+        typeof result.operator_message?.message_id === "string" &&
+        Boolean(result.operator_message.message_id.trim()) &&
+        result.operator_message?.role === "operator" &&
+        typeof result.calyx_message?.message_id === "string" &&
+        Boolean(result.calyx_message.message_id.trim()) &&
+        result.calyx_message?.role === "calyx" &&
+        result.operator_message.conversation_id === thread.conversation_id &&
+        result.calyx_message.conversation_id === thread.conversation_id &&
+        result.operator_message.message_id !== result.calyx_message.message_id
+      ) {
+        setConversation((current) => {
+          if (
+            !current ||
+            current.conversation_id !== thread.conversation_id ||
+            !shouldReuseConversation(current, activeProjectId) ||
+            !isCurrentRequest(requestId, targetConversationId, activeProjectId) ||
+            !Array.isArray(current.messages)
+          ) {
+            return current;
+          }
+          const seenMessageIds = new Set(
+            current.messages
+              .map((item) => item?.message_id)
+              .filter((messageId): messageId is string => typeof messageId === "string" && Boolean(messageId.trim())),
+          );
+          const committedMessages = [result.operator_message, result.calyx_message].filter(
+            (item) => {
+              if (seenMessageIds.has(item.message_id)) return false;
+              seenMessageIds.add(item.message_id);
+              return true;
+            },
+          );
+          if (!committedMessages.length) return current;
+          return {
+            ...current,
+            updated_at: result.calyx_message.created_at || current.updated_at,
+            persistence_mode: result.persistence_mode,
+            messages: [...current.messages, ...committedMessages],
+          };
+        });
+      }
       if (result.research.mission) setMissions((current) => ({ ...current, [result.calyx_message.message_id]: result.research.mission as BrainMission }));
       const evidenceView = readScientificEvidence(result.research.scientific_evidence);
       if (evidenceView.kind !== "absent") setTurnEvidence((current) => ({ ...current, [result.calyx_message.message_id]: evidenceView }));

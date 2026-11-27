@@ -145,6 +145,62 @@ function buildTurnResult(conversationId: string, answer = "Done.") {
   };
 }
 
+const invalidCommittedTurnCases = [
+  {
+    name: "response for a different conversation",
+    mutate: (turn: Record<string, unknown>) => { turn.conversation_id = "other-thread"; },
+  },
+  {
+    name: "operator message for a different conversation",
+    mutate: (turn: Record<string, unknown>) => {
+      (turn.operator_message as Record<string, unknown>).conversation_id = "other-thread";
+    },
+  },
+  {
+    name: "Calyx message for a different conversation",
+    mutate: (turn: Record<string, unknown>) => {
+      (turn.calyx_message as Record<string, unknown>).conversation_id = "other-thread";
+    },
+  },
+  {
+    name: "operator message with the wrong role",
+    mutate: (turn: Record<string, unknown>) => {
+      (turn.operator_message as Record<string, unknown>).role = "calyx";
+    },
+  },
+  {
+    name: "Calyx message with the wrong role",
+    mutate: (turn: Record<string, unknown>) => {
+      (turn.calyx_message as Record<string, unknown>).role = "operator";
+    },
+  },
+  {
+    name: "two messages with the same server ID",
+    mutate: (turn: Record<string, unknown>) => {
+      const operator = turn.operator_message as Record<string, unknown>;
+      (turn.calyx_message as Record<string, unknown>).message_id = operator.message_id;
+    },
+  },
+  {
+    name: "an empty server message ID",
+    mutate: (turn: Record<string, unknown>) => {
+      (turn.operator_message as Record<string, unknown>).message_id = "  ";
+    },
+  },
+  {
+    name: "a missing server message ID",
+    mutate: (turn: Record<string, unknown>) => {
+      delete (turn.calyx_message as Record<string, unknown>).message_id;
+    },
+  },
+  {
+    name: "a non-string server message ID",
+    mutate: (turn: Record<string, unknown>) => {
+      (turn.operator_message as Record<string, unknown>).message_id = 7;
+    },
+  },
+];
+
 function storedWorkspace() {
   return JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "{}") as {
     conversationId?: string;
@@ -176,6 +232,12 @@ function getButton(container: HTMLElement, text: string) {
   );
   if (!button) throw new Error(`Missing button ${text}`);
   return button;
+}
+
+function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), "value")?.set;
+  setter?.call(element, value);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
 describe("CalyxWorkspace conversation lifecycle", () => {
@@ -605,8 +667,164 @@ describe("CalyxWorkspace conversation lifecycle", () => {
 
     const textarea = container.querySelector("#calyx-message") as HTMLTextAreaElement;
     expect(textarea.value).toBe("");
+    expect(container.textContent).toContain("Committed question");
+    expect(container.textContent).toContain("Committed answer");
     expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
     expect(container.textContent).toContain("same turn is not sent twice");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(invalidCommittedTurnCases)(
+    "does not append a $name when the post-turn refresh fails",
+    async ({ mutate }) => {
+      const invalidTurn = JSON.parse(JSON.stringify(buildTurnResult("validated-thread", "Must not render"))) as Record<string, unknown>;
+      mutate(invalidTurn);
+      mocks.createCalyxConversation.mockResolvedValue(buildConversation("validated-thread"));
+      mocks.sendCalyxTurn.mockResolvedValue(invalidTurn);
+      mocks.getCalyxConversation.mockRejectedValue(new TypeError("refresh failed"));
+
+      await act(async () => {
+        root.render(
+          <MemoryRouter>
+            <CalyxWorkspace />
+          </MemoryRouter>,
+        );
+      });
+      await flush(2);
+
+      await act(async () => {
+        mocks.pushTranscript("Validate this server exchange");
+      });
+      await act(async () => {
+        container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      });
+      await flush(4);
+
+      expect(container.textContent).not.toContain("Must not render");
+      expect(container.textContent).not.toContain("Validate this server exchange");
+      expect(container.textContent).toContain("CALYX completed the turn, but the conversation could not be refreshed.");
+      expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toBe("");
+      expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("does not repeat a server message already in the active transcript", async () => {
+    const existing = buildConversation("existing-thread", [
+      {
+        message_id: "existing-operator",
+        conversation_id: "existing-thread",
+        role: "operator",
+        content: "Earlier question",
+        created_at: "2026-08-10T00:00:02Z",
+      },
+    ]);
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ conversationId: existing.conversation_id, projectId: existing.project_id }),
+    );
+    const response = buildTurnResult("existing-thread", "New answer");
+    response.operator_message.message_id = "existing-operator";
+    response.operator_message.content = "Do not replace the earlier question";
+    mocks.getCalyxConversation
+      .mockResolvedValueOnce(existing)
+      .mockRejectedValueOnce(new TypeError("refresh failed"));
+    mocks.sendCalyxTurn.mockResolvedValue(response);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("New question");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(4);
+
+    expect(container.textContent).toContain("Earlier question");
+    expect(container.textContent).toContain("New answer");
+    expect(container.textContent).not.toContain("Do not replace the earlier question");
+    expect(container.querySelectorAll('[aria-live="polite"] article')).toHaveLength(2);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not let a pending turn contaminate a newly selected project", async () => {
+    const turnOperation = deferred<ReturnType<typeof buildTurnResult>>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("project-switch-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(turnOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Question from the first project");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+
+    await act(async () => {
+      setInputValue(container.querySelector("#calyx-project") as HTMLInputElement, "second-project");
+    });
+    await flush(2);
+    turnOperation.resolve(buildTurnResult("project-switch-thread", "Answer from the first project"));
+    await flush(4);
+
+    expect(container.textContent).not.toContain("Question from the first project");
+    expect(container.textContent).not.toContain("Answer from the first project");
+    expect(getContextValue(container, "Project")).toBe("second-project");
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
+    expect(mocks.sendCalyxTurn).toHaveBeenCalledWith(
+      "project-switch-thread",
+      expect.objectContaining({ project_id: "calyx-speak" }),
+    );
+    expect(mocks.getCalyxConversation).not.toHaveBeenCalledWith("project-switch-thread");
+  });
+
+  it("does not let a pending turn contaminate a new conversation", async () => {
+    const turnOperation = deferred<ReturnType<typeof buildTurnResult>>();
+    mocks.createCalyxConversation.mockResolvedValue(buildConversation("abandoned-thread"));
+    mocks.sendCalyxTurn.mockReturnValue(turnOperation.promise);
+
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(2);
+
+    await act(async () => {
+      mocks.pushTranscript("Question from the abandoned thread");
+    });
+    await act(async () => {
+      container.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    await flush(2);
+
+    await act(async () => {
+      getButton(container, "New conversation").click();
+    });
+    turnOperation.resolve(buildTurnResult("abandoned-thread", "Answer from the abandoned thread"));
+    await flush(4);
+
+    expect(container.textContent).not.toContain("Question from the abandoned thread");
+    expect(container.textContent).not.toContain("Answer from the abandoned thread");
+    expect(getContextValue(container, "Conversation")).toBe("Not started yet");
     expect(mocks.sendCalyxTurn).toHaveBeenCalledTimes(1);
   });
 
