@@ -26,6 +26,8 @@ import Footer from '@/components/orchid/Footer';
 import LiveAtlasMap from '@/components/atlas/LiveAtlasMap';
 import AtlasDebugPanel from '@/components/atlas/AtlasDebugPanel';
 import AtlasCompletenessBadge from '@/components/atlas/AtlasCompletenessBadge';
+import AtlasLocationProtectionNote from '@/components/atlas/AtlasLocationProtectionNote';
+import { getAtlasOccurrenceSource, type AtlasOccurrenceSource } from '@/lib/atlasOccurrenceSource';
 import AtlasTour from '@/components/atlas/AtlasTour';
 import GrandTour from '@/components/atlas/GrandTour';
 import type { TourStop } from '@/lib/grandTour';
@@ -119,6 +121,7 @@ const Atlas: React.FC = () => {
   const [facets, setFacets] = useState<AtlasFacets | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [occurrenceSource, setOccurrenceSource] = useState<AtlasOccurrenceSource>(() => getAtlasOccurrenceSource());
   const { filters, setFilters } = useAtlasFilters();
   const [activeLayers, setActiveLayers] = useState<Set<LayerKey>>(new Set(['occurrence']));
   const [intersectionMode, setIntersectionMode] = useState(false);
@@ -142,6 +145,7 @@ const Atlas: React.FC = () => {
     (async () => {
       const [pts, fs] = await Promise.all([fetchAtlasOccurrencePoints(), fetchAtlasFacets()]);
       if (cancelled) return;
+      setOccurrenceSource(getAtlasOccurrenceSource());
       setAllPoints(pts.slice(0, 1000));
       setFacets(fs);
       setLoading(false);
@@ -282,6 +286,7 @@ const Atlas: React.FC = () => {
             <AtlasCompletenessBadge />
             <LiveAtlasMap points={filteredPoints} activeLayers={activeLayers} onSelect={setSelected} selectedId={selected?.id ?? null} loading={loading} totalLoaded={allPoints.length} focusBounds={focusBounds} focusView={focusView} />
             <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[9px] tracking-[0.22em] uppercase text-[#cfc8b8]/70 px-1"><div className="flex items-center gap-2"><Globe2 className="h-3 w-3 text-[#c9a24a]" />{filteredPoints.length.toLocaleString()} of {allPoints.length.toLocaleString()} live records{loadingMore && <span className="ml-2 inline-flex items-center gap-1 text-[#c9a24a]/80"><Loader2 className="h-3 w-3 animate-spin" /> loading more</span>}</div><div className="text-[#7a7466]">Basemap · OpenStreetMap / CARTO · Data · Orchid Continuum + GBIF</div></div>
+            <AtlasLocationProtectionNote source={occurrenceSource} />
             <AtlasDebugPanel />
             <ActiveFilterPills filters={filters} setFilters={setFilters} />
             <ResultList points={filteredPoints} onSelect={setSelected} layerMatch={pointLayerMatch} />

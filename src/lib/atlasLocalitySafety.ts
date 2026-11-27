@@ -8,6 +8,8 @@
  */
 
 import type { AtlasOccurrencePoint } from './orchidContinuum';
+import { CITES_APPENDIX_I_FLOOR_DEG, isCitesAppendixIOrchid } from './atlasCitesAppendixI';
+import { sourcePrecisionPolicy, sourcePublishedCellDeg, sourceWithheld } from './atlasOccurrenceSource';
 
 export type AtlasAccessLevel = 'public' | 'research';
 export type SensitivityResolution =
@@ -78,11 +80,25 @@ export function snapToCell(lat: number, lng: number, cellDeg: number): { lat: nu
 
 const km = (deg: number) => Math.round(deg * 111);
 
+export type AtlasLocatablePoint = Pick<
+  AtlasOccurrencePoint,
+  'lat' | 'lng' | 'iucnCode' | 'conservationStatus' | 'coordinateUncertaintyM' | 'assessmentResolved'
+> &
+  Partial<
+    Pick<
+      AtlasOccurrencePoint,
+      | 'genus'
+      | 'species'
+      | 'canonicalName'
+      | 'acceptedName'
+      | 'publishedCellDeg'
+      | 'publishedPrecisionReason'
+      | 'localityWithheldAtSource'
+    >
+  >;
+
 export function resolveAtlasLocation(
-  point: Pick<
-    AtlasOccurrencePoint,
-    'lat' | 'lng' | 'iucnCode' | 'conservationStatus' | 'coordinateUncertaintyM' | 'assessmentResolved'
-  >,
+  point: AtlasLocatablePoint,
   access: AtlasAccessLevel = 'public',
   floorCellDeg = 0,
 ): DisplayedLocation {
@@ -91,15 +107,37 @@ export function resolveAtlasLocation(
   const unresolved = point.assessmentResolved === false && !tier;
   const precautionCell = unresolved && access !== 'research' ? UNRESOLVED_FLOOR_DEG : 0;
   const threatCell = tier && access !== 'research' ? TIER_CELL_DEG[tier] : 0;
+  const citesCell = access !== 'research' && isCitesAppendixIOrchid(point) ? CITES_APPENDIX_I_FLOOR_DEG : 0;
+  // The protected view already generalised this row. No access level can make
+  // it finer again, and the client never renders it finer than the source did.
+  const sourceCell = sourcePublishedCellDeg(point);
 
-  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg);
+  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, citesCell, sourceCell, floorCellDeg);
   const location = snapToCell(point.lat, point.lng, cellDeg);
+  const source = sourcePrecisionPolicy(point);
 
   let reason: SensitivityReason = 'none';
   let notice = '';
-  if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
+  if (
+    threatCell > 0 &&
+    threatCell >= uncertaintyCell &&
+    threatCell >= precautionCell &&
+    threatCell >= citesCell &&
+    threatCell >= sourceCell
+  ) {
     reason = point.iucnCode ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km because this taxon is assessed as threatened (${tier}); precise sites are withheld to reduce collection risk.`;
+  } else if (
+    source &&
+    sourceCell >= uncertaintyCell &&
+    sourceCell >= precautionCell &&
+    sourceCell >= citesCell
+  ) {
+    reason = source.reason;
+    notice = source.notice;
+  } else if (citesCell > 0 && citesCell >= uncertaintyCell && citesCell >= precautionCell) {
+    reason = 'conservation-status';
+    notice = `Location generalised to about ${km(citesCell)} km because this taxon is listed in CITES Appendix I; precise sites are withheld to reduce collection risk.`;
   } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
     reason = 'coordinate-uncertainty';
     notice = `Shown as an area of about ${km(uncertaintyCell)} km because the source record states ${Math.round(point.coordinateUncertaintyM as number)} m coordinate uncertainty.`;
@@ -114,7 +152,7 @@ export function resolveAtlasLocation(
       generalised: cellDeg > 0,
       cellDeg,
       reason,
-      localityTextAllowed: threatCell === 0 && precautionCell === 0,
+      localityTextAllowed: threatCell === 0 && precautionCell === 0 && citesCell === 0 && !sourceWithheld(point),
       notice,
     },
   };

@@ -35,6 +35,17 @@
 
 
 import { supabase } from './supabase';
+import {
+  ATLAS_BASE_TABLE,
+  ATLAS_PUBLIC_VIEW,
+  ATLAS_PUBLIC_VIEW_COLUMNS,
+  atlasRelationFor,
+  isMissingRelationError,
+  markAtlasPublicViewMissing,
+  recordAtlasOccurrenceSource,
+  resolveAtlasOccurrenceSourceMode,
+  type AtlasOccurrenceSourceMode,
+} from './atlasOccurrenceSource';
 
 // ---------------------------------------------------------------------------
 // Public record shapes
@@ -133,6 +144,16 @@ export interface AtlasOccurrencePoint {
    * distinct names among the occurrences.
    */
   assessmentResolved?: boolean;
+  /**
+   * Grid cell (degrees) the protected `atlas_occurrences_public` view already
+   * applied to `lat` / `lng`. Undefined for rows read from the base table.
+   * Renderers treat it as a floor: nothing is drawn finer than the source.
+   */
+  publishedCellDeg?: number;
+  /** The view's reason for `publishedCellDeg` (e.g. `threatened`, `unresolved-assessment`). */
+  publishedPrecisionReason?: string;
+  /** True when the view withheld free-text locality for this row. */
+  localityWithheldAtSource?: boolean;
 }
 
 
@@ -245,6 +266,11 @@ interface AtlasOccurrenceRow {
   pollinator_data: PollinatorRecord[] | null;
   mycorrhizal_data: MycorrhizalRecord | null;
   species_id: string | null;
+  // Present only on rows read from `atlas_occurrences_public`.
+  published_cell_deg?: number | null;
+  published_precision_reason?: string | null;
+  locality_withheld?: boolean | null;
+  assessment_resolved?: boolean | null;
 }
 
 interface MycorrhizalRow {
@@ -276,6 +302,50 @@ const SPECIES_COLUMNS =
 
 const ATLAS_COLUMNS =
   'id, scientific_name, accepted_name, genus, species, lat, lng, elevation_m, country, region, locality, habitat, biome, year, source_dataset, source_record_id, media_url, verified, coordinate_uncertainty_m, pollinator_data, mycorrhizal_data, species_id';
+
+// ---------------------------------------------------------------------------
+// Atlas occurrence read path (protected view first; see atlasOccurrenceSource)
+// ---------------------------------------------------------------------------
+
+function currentAtlasSourceMode(): AtlasOccurrenceSourceMode {
+  const env = import.meta.env as Record<string, string | undefined>;
+  return resolveAtlasOccurrenceSourceMode(env.VITE_ATLAS_OCCURRENCE_SOURCE);
+}
+
+interface AtlasQueryResult {
+  data: unknown;
+  error: { code?: string | null; message?: string | null; details?: string | null; hint?: string | null } | null;
+  status?: number;
+}
+
+/**
+ * Run one atlas query against the relation the source mode selects. In `auto`
+ * mode a MISSING view (migration not yet applied) falls back to the base table
+ * once; every other failure is returned unchanged so it is retried against the
+ * same relation and never downgrades the Atlas to raw rows.
+ */
+async function queryAtlasRelation(
+  run: (relation: string, columns: string) => PromiseLike<AtlasQueryResult>,
+): Promise<AtlasQueryResult> {
+  const mode = currentAtlasSourceMode();
+  let relation: string = atlasRelationFor(mode);
+  let res = await run(relation, relation === ATLAS_PUBLIC_VIEW ? ATLAS_PUBLIC_VIEW_COLUMNS : ATLAS_COLUMNS);
+  if (
+    res.error &&
+    mode === 'auto' &&
+    relation === ATLAS_PUBLIC_VIEW &&
+    isMissingRelationError(res.error, res.status)
+  ) {
+    markAtlasPublicViewMissing();
+    console.warn(
+      '[orchidContinuum] atlas_occurrences_public is not available yet; reading atlas_occurrences with client-side generalisation only.',
+    );
+    relation = ATLAS_BASE_TABLE;
+    res = await run(relation, ATLAS_COLUMNS);
+  }
+  if (!res.error) recordAtlasOccurrenceSource(relation);
+  return res;
+}
 
 // ---------------------------------------------------------------------------
 // Module-level cache (single fetch, many consumers)
@@ -319,11 +389,13 @@ async function fetchAtlasPageWithRetry(
 ): Promise<AtlasOccurrenceRow[] | null> {
   for (let attempt = 0; attempt <= ATLAS_PAGE_RETRIES; attempt++) {
     try {
-      const { data, error } = await supabase
-        .from('atlas_occurrences')
-        .select(ATLAS_COLUMNS)
-        .order('id', { ascending: true })
-        .range(from, from + pageSize - 1);
+      const { data, error } = await queryAtlasRelation((relation, columns) =>
+        supabase
+          .from(relation)
+          .select(columns)
+          .order('id', { ascending: true })
+          .range(from, from + pageSize - 1),
+      );
       if (!error) {
         return (data ?? []) as AtlasOccurrenceRow[];
       }
@@ -678,6 +750,11 @@ function atlasRowToPoint(
       typeof row.coordinate_uncertainty_m === 'number'
         ? row.coordinate_uncertainty_m
         : undefined,
+    publishedCellDeg:
+      typeof row.published_cell_deg === 'number' ? row.published_cell_deg : undefined,
+    publishedPrecisionReason: row.published_precision_reason ?? undefined,
+    localityWithheldAtSource:
+      typeof row.locality_withheld === 'boolean' ? row.locality_withheld : undefined,
   };
 }
 
@@ -908,10 +985,9 @@ export async function fetchAtlasOccurrencePointsLazy(limit = 1000): Promise<{
   const mycoIdx = buildMycorrhizalIndex(mycoRows);
   const consIdx = buildConservationIndex(speciesRows);
 
-  const { data, error } = await supabase
-    .from('atlas_occurrences')
-    .select(ATLAS_COLUMNS)
-    .limit(limit);
+  const { data, error } = await queryAtlasRelation((relation, columns) =>
+    supabase.from(relation).select(columns).limit(limit),
+  );
 
   const initial: AtlasOccurrencePoint[] = [];
   if (!error && data) {
