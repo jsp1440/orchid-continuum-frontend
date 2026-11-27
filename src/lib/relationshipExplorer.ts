@@ -96,7 +96,8 @@ export interface RelationshipExplorerPayload {
  *                error status, or no usable API origin). Says nothing about
  *                whether records exist.
  * - invalid:     a response arrived but was not a readable JSON object (for
- *                example the SPA shell served as a 200), or no name was given.
+ *                example the SPA shell served as a 200), a rendered list held
+ *                an element that is not an object, or no name was given.
  */
 export type RelationshipExplorerStatus = "ok" | "not_found" | "unavailable" | "invalid";
 
@@ -255,10 +256,27 @@ function arrayOrNull<T>(value: unknown): T[] | null {
 }
 
 /**
+ * The page reads properties of every element of mycorrhiza_claims,
+ * interaction_summary and reasoning, so each element has to be an object.
+ * One element that is not makes the whole body unreadable: dropping it would
+ * silently shorten the list the service sent.
+ */
+function hasOnlyObjectElements(value: unknown[] | null): boolean {
+  return value === null || value.every(isPlainObject);
+}
+
+/** reasoning[].statement is rendered as-is, so it cannot be an object or array. */
+function hasRenderableStatement(item: unknown): boolean {
+  const statement = (item as { statement?: unknown }).statement;
+  return statement === null || typeof statement !== "object";
+}
+
+/**
  * Normalize a live API body. Nothing is filled in from anywhere else: a field
  * the API omits, returns as null, or returns with the wrong shape stays null,
  * and a card flag is true only when the API did not mark it false and its
- * field actually carries content.
+ * field actually carries content. Returns null (reported as "invalid") when
+ * the body is not an object or a rendered list holds an unreadable element.
  */
 function normalizePayload(name: string, raw: unknown): RelationshipExplorerPayload | null {
   if (!isPlainObject(raw)) return null;
@@ -278,6 +296,15 @@ function normalizePayload(name: string, raw: unknown): RelationshipExplorerPaylo
   const reasoning = arrayOrNull<ReasoningItem>(payload.reasoning);
   const interactionSummary = arrayOrNull<InteractionRecord>(payload.interaction_summary);
   const imageGallery = cleanGallery(arrayOrNull<GalleryImage>(payload.image_gallery));
+
+  if (
+    !hasOnlyObjectElements(mycorrhizaClaims) ||
+    !hasOnlyObjectElements(interactionSummary) ||
+    !hasOnlyObjectElements(reasoning) ||
+    !(reasoning ?? []).every(hasRenderableStatement)
+  ) {
+    return null;
+  }
 
   return {
     scientific_name:

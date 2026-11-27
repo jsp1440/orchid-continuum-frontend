@@ -29,15 +29,28 @@ const MycorrhizaProfile: React.FC = () => {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const list = await fetchMycorrhizalAggregates();
+      let list = await fetchMycorrhizalAggregates();
       if (cancelled) return;
-      setAll(list);
-      setReadFailed(didRelationshipReadFail('mycorrhiza'));
+      let failed = didRelationshipReadFail('mycorrhiza');
+      let p: MycorrhizalAggregate | null = null;
       if (taxa) {
-        const p = await fetchMycorrhiza(taxa);
-        if (!cancelled) setProfile(p);
+        // A failed mycorrhizal read is not cached, so this second read retries it.
+        p = await fetchMycorrhiza(taxa);
+        if (cancelled) return;
+        if (failed && !didRelationshipReadFail('mycorrhiza')) {
+          // The retry succeeded and is now the cached answer: take the index from
+          // it too, so the page does not show the first read's empty index and
+          // "could not be checked" alert beside a profile from the second read.
+          list = await fetchMycorrhizalAggregates();
+          if (cancelled) return;
+        }
+        // The outcome shown is the outcome of the last read behind what is rendered.
+        failed = didRelationshipReadFail('mycorrhiza');
       }
-      if (!cancelled) setLoading(false);
+      setAll(list);
+      setProfile(p);
+      setReadFailed(failed);
+      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [taxa]);

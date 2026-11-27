@@ -222,6 +222,72 @@ describe("fetchRelationshipExplorerPayload: failure states stay distinct and car
     expectNoEvidence(payload);
   });
 
+  it("200 with a non-JSON or missing content type -> invalid, even when the body parses as JSON", async () => {
+    // Synthetic body. It would normalize to an ok payload if the content-type
+    // check were skipped, so this pins the check itself, not JSON.parse.
+    const body = JSON.stringify({
+      scientific_name: "Dracula vampira",
+      mycorrhiza_claims: [
+        { fungal_taxon: "Synthetic test taxon", relationship_type: null, evidence: null, source: "synthetic-test" },
+      ],
+    });
+    const cases: Array<Record<string, string>> = [
+      { "content-type": "text/html; charset=utf-8" },
+      { "content-type": "text/plain" },
+      {},
+    ];
+    for (const headers of cases) {
+      stubFetch(async () => {
+        const response = new Response(body, { status: 200, headers });
+        // Response adds text/plain for a string body; drop it for the bare case.
+        if (!("content-type" in headers)) response.headers.delete("content-type");
+        return response;
+      });
+      const payload = await fetchRelationshipExplorerPayload("Dracula vampira");
+      expect(payload.status).toBe("invalid");
+      expectNoEvidence(payload);
+    }
+  });
+
+  it("an array field with an element the page cannot render -> invalid, never ok", async () => {
+    // The page reads properties of every element of these three arrays.
+    const claim = { fungal_taxon: "Synthetic test taxon", relationship_type: null, evidence: null, source: "synthetic-test" };
+    const bodies: Array<Record<string, unknown>> = [
+      { mycorrhiza_claims: [null, "x", 3] },
+      { mycorrhiza_claims: [claim, null] },
+      { mycorrhiza_claims: [[claim]] },
+      { interaction_summary: [{ partner: "Synthetic partner", interaction_type: null, source: null }, "x"] },
+      { reasoning: [{ statement: "Synthetic statement", confidence: null, basis: null }, 7] },
+      // statement is rendered as-is; an object there cannot be shown.
+      { reasoning: [{ statement: { text: "Synthetic statement" }, confidence: null, basis: null }] },
+      { reasoning: [{ statement: ["Synthetic statement"], confidence: null, basis: null }] },
+    ];
+    for (const body of bodies) {
+      stubFetch(async () => jsonResponse({ scientific_name: "Cattleya maxima", ...body }));
+      const payload = await fetchRelationshipExplorerPayload("Cattleya maxima");
+      expect(payload.status).toBe("invalid");
+      expectNoEvidence(payload);
+    }
+  });
+
+  it("well-formed array elements and empty arrays stay ok", async () => {
+    stubFetch(async () =>
+      jsonResponse({
+        scientific_name: "Cattleya maxima",
+        mycorrhiza_claims: [],
+        interaction_summary: [{ partner: "Synthetic partner", interaction_type: null, source: null }],
+        reasoning: [{ statement: "Synthetic statement", confidence: null, basis: null }, { confidence: null }],
+      }),
+    );
+    const payload = await fetchRelationshipExplorerPayload("Cattleya maxima");
+    expect(payload.status).toBe("ok");
+    expect(payload.mycorrhiza_claims).toEqual([]);
+    expect(payload.cards.mycorrhiza_claims).toBe(false);
+    expect(payload.interaction_summary).toHaveLength(1);
+    expect(payload.reasoning).toHaveLength(2);
+    expect(payload.cards.reasoning).toBe(true);
+  });
+
   it("a blank name is invalid and issues no request", async () => {
     const fetchMock = stubFetch(async () => jsonResponse({}));
     const payload = await fetchRelationshipExplorerPayload("   ");

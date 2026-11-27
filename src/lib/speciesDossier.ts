@@ -312,6 +312,11 @@ export async function fetchSpeciesDossier(
     payload = await readJson<unknown>(response);
   } catch (error) {
     if (error instanceof SpeciesDossierRequestError || signal?.aborted) throw error;
+    // Only a parse failure says the body is not JSON. Any other failure means the body never
+    // fully arrived (the read broke mid-stream), which is a transport failure: nothing was
+    // received that could be judged against the contract. Rethrown as-is, it is read as
+    // `service_unavailable` like a failed fetch.
+    if (!(error instanceof SyntaxError)) throw error;
     // A 200 whose body is not JSON at all.
     throw new SpeciesDossierRequestError(INVALID_DOSSIER_CONTRACT, {
       status: response.status,
