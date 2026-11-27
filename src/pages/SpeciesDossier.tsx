@@ -25,7 +25,7 @@ import {
   dossierBackboneTaxonId,
   fetchSpeciesDossier,
   pageSubject,
-  resolveDossierForSubject,
+  resolveDossierForSubjectWithReason,
   resolveFederatedSpecies,
   sectionExcerpts,
   sectionMessage,
@@ -75,6 +75,22 @@ const DOSSIER_SECTIONS: Array<{ key: keyof SpeciesDossierEnvelope; label: string
   { key: 'research_gaps', label: 'Research gaps' },
 ];
 
+// Why no dossier is shown. Each line says only what is known: absence, a withheld mismatch, an
+// unreachable service and a malformed answer are different facts.
+type DossierUnavailableReason = NonNullable<
+  Extract<DossierSubjectResolution, { state: 'unavailable' }>['reason']
+>;
+const DOSSIER_UNAVAILABLE_COPY: Record<DossierUnavailableReason, string> = {
+  not_found: 'No canonical taxon record exists for this species.',
+  identity_mismatch:
+    'Withheld: the canonical record found for this page is a different taxon than the one this page is about.',
+  service_unavailable:
+    'The evidence service could not be reached, so it is not known whether a dossier exists.',
+  invalid_contract:
+    'The evidence service answered, but its response did not match the dossier contract, so nothing from it is shown.',
+  no_subject: 'No species identifier or name was given to look up.',
+};
+
 function formatConfidence(confidence: number | null): string {
   if (typeof confidence !== 'number' || !Number.isFinite(confidence)) {
     return 'confidence not supplied';
@@ -109,6 +125,8 @@ const SpeciesDossier: React.FC = () => {
   const [dossier, setDossier] = useState<SpeciesDossierEnvelope | null>(null);
   const [dossierLoading, setDossierLoading] = useState(true);
   const [dossierError, setDossierError] = useState(false);
+  const [dossierUnavailableReason, setDossierUnavailableReason] =
+    useState<DossierUnavailableReason | null>(null);
   const [subjectConflict, setSubjectConflict] = useState<
     Extract<PageSubject, { state: 'conflict' }> | null
   >(null);
@@ -147,8 +165,9 @@ const SpeciesDossier: React.FC = () => {
 
     setCandidateBusyId(candidateTaxonId);
     setDossierError(false);
+    setDossierUnavailableReason(null);
     try {
-      const resolution = await resolveDossierForSubject(
+      const resolution = await resolveDossierForSubjectWithReason(
         candidateTaxonId,
         subjectName,
         { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
@@ -181,6 +200,7 @@ const SpeciesDossier: React.FC = () => {
         setDossierError(true);
       } else {
         setDossierError(true);
+        setDossierUnavailableReason(resolution.reason ?? null);
       }
     } catch {
       if (stillCurrent()) setDossierError(true);
@@ -234,6 +254,7 @@ const SpeciesDossier: React.FC = () => {
     // route id alone may belong to another id space (see resolveDossierForSubject).
     setDossierLoading(true);
     setDossierError(false);
+    setDossierUnavailableReason(null);
     setDossierAmbiguity(null);
     setSubjectConflict(null);
     setDossier(null);
@@ -255,7 +276,7 @@ const SpeciesDossier: React.FC = () => {
           if (!ctrl.signal.aborted) setSubjectConflict(subject);
           return { state: 'unavailable' } as DossierSubjectResolution;
         }
-        return resolveDossierForSubject(
+        return resolveDossierForSubjectWithReason(
           taxonomyId,
           subject.name,
           { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
@@ -267,6 +288,7 @@ const SpeciesDossier: React.FC = () => {
         if (resolution.state !== 'resolved') {
           setDossierError(true);
           if (resolution.state === 'ambiguous') setDossierAmbiguity(resolution);
+          else setDossierUnavailableReason(resolution.reason ?? null);
           return undefined;
         }
         setDossier(resolution.dossier);
@@ -653,7 +675,18 @@ const SpeciesDossier: React.FC = () => {
                       )}
                     </div>
                   ) : dossierError || !dossier ? (
-                    <Empty>Evidence dossier is not currently available.</Empty>
+                    <div data-testid="dossier-unavailable">
+                      <Empty>Evidence dossier is not currently available.</Empty>
+                      {dossierUnavailableReason && (
+                        <div
+                          data-testid="dossier-unavailable-reason"
+                          data-reason={dossierUnavailableReason}
+                          className="mt-2"
+                        >
+                          <Empty>{DOSSIER_UNAVAILABLE_COPY[dossierUnavailableReason]}</Empty>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                     <div className="space-y-4">
                       {DOSSIER_SECTIONS.map(({ key, label }) => (
