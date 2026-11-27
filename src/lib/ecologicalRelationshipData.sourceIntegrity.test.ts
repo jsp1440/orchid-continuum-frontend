@@ -72,4 +72,19 @@ describe('ecological relationship data source integrity', () => {
     expect(mycorrhiza).toContain('fetchMycorrhizalAggregates()');
     expect(mycorrhiza).toContain('No mycorrhizal data will be fabricated.');
   });
+
+  it('keeps a failed relationship read distinct from an empty one', () => {
+    const pollinator = source('pages/PollinatorProfile.tsx');
+    const mycorrhiza = source('pages/MycorrhizaProfile.tsx');
+
+    expect(continuum).toContain(
+      "export function didRelationshipReadFail(kind: 'pollinators' | 'mycorrhiza'): boolean",
+    );
+    expect(pollinator).toContain("didRelationshipReadFail('pollinators')");
+    expect(pollinator).toContain('Pollinator relationship records could not be checked');
+    expect(pollinator).toContain('!loading && taxa && !pollinator && !readFailed');
+    expect(mycorrhiza).toContain("didRelationshipReadFail('mycorrhiza')");
+    expect(mycorrhiza).toContain('Mycorrhizal relationship records could not be checked');
+    expect(mycorrhiza).toContain('!loading && !readFailed && all.length === 0');
+  });
 });
