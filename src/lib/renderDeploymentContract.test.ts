@@ -13,6 +13,12 @@ import { join } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import {
+  FORBIDDEN_VERCEL_PATHS,
+  validateVercelFiles,
+  validateVercelKillSwitch,
+} from '../../scripts/verify-deployment-contract.mjs';
+
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
@@ -25,9 +31,12 @@ function walk(dir: string, out: string[] = []): string[] {
 const sourceFiles = walk('src').filter((f) => !/\.(test|spec)\.tsx?$/.test(f));
 
 describe('Render is the only deployment target', () => {
-  it('ships no Vercel configuration', () => {
-    expect(existsSync('vercel.json')).toBe(false);
-    expect(existsSync('.vercel')).toBe(false);
+  it('ships no Vercel configuration beyond the Git-deployment kill switch', async () => {
+    for (const path of FORBIDDEN_VERCEL_PATHS) {
+      expect(existsSync(path), path).toBe(false);
+    }
+    expect(existsSync('vercel.json')).toBe(true);
+    expect(await validateVercelFiles()).toEqual([]);
   });
 
   it('keeps the SPA fallback last in public/_redirects', () => {
@@ -61,6 +70,74 @@ describe('Render is the only deployment target', () => {
     expect(env).toContain('VITE_API_BASE_URL');
     expect(env).toContain('orchid-calyx-backend.onrender.com');
     expect(env).toContain('orchid-continuum-public-api.onrender.com');
+  });
+});
+
+describe('the vercel.json kill switch', () => {
+  const schema = 'https://openapi.vercel.sh/vercel.json';
+  const check = (config: unknown) => validateVercelKillSwitch(JSON.stringify(config));
+
+  it('accepts only the form that disables every Git deployment', () => {
+    expect(check({ git: { deploymentEnabled: false } })).toEqual([]);
+    expect(check({ $schema: schema, git: { deploymentEnabled: false } })).toEqual([]);
+  });
+
+  it('rejects deploymentEnabled: true', () => {
+    expect(check({ git: { deploymentEnabled: true } })).not.toEqual([]);
+  });
+
+  it('rejects anything that is not the boolean false', () => {
+    for (const value of ['false', 0, null, []]) {
+      expect(check({ git: { deploymentEnabled: value } }), JSON.stringify(value)).not.toEqual([]);
+    }
+    expect(check({ git: {} })).not.toEqual([]);
+    expect(check({})).not.toEqual([]);
+  });
+
+  it.each([
+    ['builds', [{ src: 'package.json', use: '@vercel/static-build' }]],
+    ['rewrites', [{ source: '/(.*)', destination: '/index.html' }]],
+    ['framework', 'vite'],
+    ['buildCommand', 'npm run build'],
+    ['outputDirectory', 'dist'],
+    ['ignoreCommand', 'exit 1'],
+    ['headers', []],
+    ['github', { enabled: true }],
+  ])('rejects the extra key %s', (key, value) => {
+    const failures = check({ [key]: value, git: { deploymentEnabled: false } });
+    expect(failures.join('\n')).toContain(`"${key}"`);
+  });
+
+  it('rejects extra keys inside git', () => {
+    expect(check({ git: { deploymentEnabled: false, autoAlias: true } })).not.toEqual([]);
+  });
+
+  it('rejects a per-branch map that enables any branch', () => {
+    expect(check({ git: { deploymentEnabled: { main: true } } })).not.toEqual([]);
+    expect(check({ git: { deploymentEnabled: { 'feature-*': false, main: true } } })).not.toEqual(
+      [],
+    );
+  });
+
+  it('rejects an all-false per-branch map, which still deploys unlisted branches', () => {
+    expect(check({ git: { deploymentEnabled: { main: false, '*': false } } })).not.toEqual([]);
+  });
+
+  it('rejects a foreign $schema', () => {
+    expect(check({ $schema: 'https://example.com/x.json', git: { deploymentEnabled: false } }))
+      .not.toEqual([]);
+  });
+
+  it('rejects duplicate keys rather than trusting last-wins parsing', () => {
+    expect(
+      validateVercelKillSwitch('{"git":{"deploymentEnabled":true,"deploymentEnabled":false}}'),
+    ).not.toEqual([]);
+  });
+
+  it('rejects invalid JSON and non-object roots', () => {
+    expect(validateVercelKillSwitch('{')).not.toEqual([]);
+    expect(validateVercelKillSwitch('false')).not.toEqual([]);
+    expect(validateVercelKillSwitch('[]')).not.toEqual([]);
   });
 });
 
