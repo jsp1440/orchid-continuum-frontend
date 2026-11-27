@@ -1,0 +1,973 @@
+{
+  "_capture": {
+    "backend_commit": "ea06b664b (orchid-calyx-backend PR #1704, branch claude/gate8-per-judge-auth, after repair round 1; unmerged). First captured at 5657dd07 and recaptured here after the blind-name contract changed.",
+    "method": "FastAPI TestClient against app.show_app.create_show_app() on in-memory SQLite, using the synthetic show fixture from tests/test_judge_auth_blind_judging.py (synthetic exhibitors, judges and plants; no real show data)",
+    "server_config": "CALYX_API_KEY and CALYX_JUDGE_TOKEN_SECRET set to the backend test suite's capture-only values; the judge_me_unconfigured_503 scenario unsets CALYX_JUDGE_TOKEN_SECRET",
+    "tokens": "The ocj_ tokens below were minted by that throwaway in-memory database with a test-only secret. They authenticate nothing on any deployed backend.",
+    "sequence": "Captured in one run, in order: the event is open (not blind) for judge_plants_open and judge_scan_open, then set blind; the first plant carries a legacy id-derived tag until owner_reissue_qr_tokens; judge C is assigned only Paphiopedilum; judge A's credential is revoked just before judge_me_revoked_401, then retried with JUDGE_AUTH_FAILURE_LIMIT_PER_CREDENTIAL=2 for judge_me_rate_limited_429; after the event is set blind the owner sets one plant's blind_display_name (owner_set_blind_display_name) and tries an exhibitor-derived one (owner_set_blind_display_name_warning_409). owner_issue_without_owner_key_401 is an owner route called with no owner key (what a browser owner session receives on these routes today); owner_issue_unconfigured_503 is issuance with CALYX_JUDGE_TOKEN_SECRET unset.",
+    "note": "Every entry is a real backend response (status + body). Any other error shape used in tests is labelled synthetic in that test."
+  },
+  "judge_autosave_scorecard": {
+    "body": {
+      "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+      "plant": {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true
+      },
+      "scorecard_handle": "s_3bc64636233bba7f5a288b61",
+      "scores": [
+        {
+          "choice": null,
+          "criterion_id": "da3d8875-2e41-46e6-a396-80cde589d680",
+          "value": 42.0,
+          "value_rank": null
+        }
+      ],
+      "status": "draft",
+      "submitted_at": null,
+      "total": null,
+      "version": 1
+    },
+    "request": {
+      "auth": "judge",
+      "body": {
+        "notes": "bench check",
+        "scores": [
+          {
+            "criterion_id": "da3d8875-2e41-46e6-a396-80cde589d680",
+            "value": 42
+          }
+        ]
+      },
+      "method": "PUT",
+      "path": "/api/judge-portal/scorecards/s_3bc64636233bba7f5a288b61"
+    },
+    "status": 200
+  },
+  "judge_autosave_submitted_409": {
+    "body": {
+      "detail": "Scorecard already submitted. Cannot edit."
+    },
+    "request": {
+      "auth": "judge",
+      "body": {
+        "scores": [
+          {
+            "criterion_id": "da3d8875-2e41-46e6-a396-80cde589d680",
+            "value": 1
+          }
+        ]
+      },
+      "method": "PUT",
+      "path": "/api/judge-portal/scorecards/s_3bc64636233bba7f5a288b61"
+    },
+    "status": 409
+  },
+  "judge_categories": {
+    "body": [
+      {
+        "description": null,
+        "id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "name": "Cattleya",
+        "sort_order": 0
+      },
+      {
+        "description": null,
+        "id": "f93603ee-17ff-4826-82e2-d281097d83ce",
+        "name": "Phalaenopsis",
+        "sort_order": 1
+      },
+      {
+        "description": null,
+        "id": "03dc59ce-4109-4272-b346-897db8fe93f9",
+        "name": "Paphiopedilum",
+        "sort_order": 2
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events/e97ee931-d89f-4513-8a3c-e4deee2b16b9/categories"
+    },
+    "status": 200
+  },
+  "judge_categories_out_of_scope_404": {
+    "body": {
+      "detail": "Not found in your judging assignments"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events/does-not-exist/categories"
+    },
+    "status": 404
+  },
+  "judge_criteria": {
+    "body": [
+      {
+        "award_id": "ribbon",
+        "award_name": "Class ribbon",
+        "criteria": [
+          {
+            "choices_json": null,
+            "criteria_description": null,
+            "criteria_id": "da3d8875-2e41-46e6-a396-80cde589d680",
+            "criteria_name": "Form",
+            "points_max": 50.0,
+            "points_min": 0.0,
+            "scoring_type": "numeric",
+            "weighting": 1.0
+          }
+        ]
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/criteria"
+    },
+    "status": 200
+  },
+  "judge_events": {
+    "body": [
+      {
+        "id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "is_blind": false,
+        "judging_type": "standard",
+        "name": "Ribbon judging",
+        "status": "draft"
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events"
+    },
+    "status": 200
+  },
+  "judge_events_blind": {
+    "body": [
+      {
+        "id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "is_blind": true,
+        "judging_type": "standard",
+        "name": "Ribbon judging",
+        "status": "draft"
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events"
+    },
+    "status": 200
+  },
+  "judge_get_scorecard": {
+    "body": {
+      "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+      "plant": {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true
+      },
+      "scorecard_handle": "s_3bc64636233bba7f5a288b61",
+      "scores": [],
+      "status": "draft",
+      "submitted_at": null,
+      "total": null,
+      "version": 1
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scorecards/s_3bc64636233bba7f5a288b61"
+    },
+    "status": 200
+  },
+  "judge_me": {
+    "body": {
+      "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+      "expires_at": "2026-10-01T08:11:41.321521",
+      "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+      "judge_name": "Judge A",
+      "scope": {
+        "category_ids": null,
+        "event_ids": null
+      },
+      "show_id": "53692d54-c054-47b7-a18e-878a47260574"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/me"
+    },
+    "status": 200
+  },
+  "judge_me_no_token_401": {
+    "body": {
+      "detail": "A judge credential (Authorization: Bearer ocj_...) is required"
+    },
+    "request": {
+      "auth": "none",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/me"
+    },
+    "status": 401
+  },
+  "judge_me_owner_key_401": {
+    "body": {
+      "detail": "A judge credential (Authorization: Bearer ocj_...) is required"
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/me"
+    },
+    "status": 401
+  },
+  "judge_me_rate_limited_429": {
+    "body": {
+      "detail": "Too many failed judge sign-in attempts. Wait and try again."
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/me"
+    },
+    "retry_after": "300",
+    "status": 429
+  },
+  "judge_me_revoked_401": {
+    "body": {
+      "detail": "Judge credential has been revoked"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/me"
+    },
+    "status": 401
+  },
+  "judge_me_unconfigured_503": {
+    "body": {
+      "detail": "Judge authentication is not configured"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/me"
+    },
+    "status": 503
+  },
+  "judge_other_judges_card_404": {
+    "body": {
+      "detail": "Not found in your judging assignments"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scorecards/s_3bc64636233bba7f5a288b61"
+    },
+    "status": 404
+  },
+  "judge_plants_blind": {
+    "body": [
+      {
+        "blind": true,
+        "category_id": "03dc59ce-4109-4272-b346-897db8fe93f9",
+        "category_name": "Paphiopedilum",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_209dd46fdbd99db370ad13bb",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true,
+        "scorecard_handle": "s_79f8b2b82998a09c5d09ea33"
+      },
+      {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true,
+        "scorecard_handle": "s_3bc64636233bba7f5a288b61"
+      },
+      {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_c421082393fad31b3a4fb288",
+        "plant_name": "Cattleya labiata",
+        "plant_name_source": "owner_approved",
+        "plant_name_withheld": false,
+        "scorecard_handle": "s_546c50ddb06f69ba115b5e6d"
+      },
+      {
+        "blind": true,
+        "category_id": "f93603ee-17ff-4826-82e2-d281097d83ce",
+        "category_name": "Phalaenopsis",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_cf0c45f5a0137e53d9df5759",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true,
+        "scorecard_handle": "s_401998dd715e54536abe2ddc"
+      },
+      {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_f78aa06634310c87018340f1",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true,
+        "scorecard_handle": "s_f97a348a9764f3e08b217168"
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events/e97ee931-d89f-4513-8a3c-e4deee2b16b9/plants"
+    },
+    "status": 200
+  },
+  "judge_plants_open": {
+    "body": [
+      {
+        "blind": false,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "exhibitor_name": "Rosalind Featherstonehaugh",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "notes": "bench 4",
+        "plant_handle": "p_a0f3c50b3d579a57d8131e51",
+        "plant_name": "Cattleya trianae",
+        "plant_name_source": "entry",
+        "plant_name_withheld": false,
+        "scorecard_handle": "s_c9716310a16f14e4856e4859"
+      },
+      {
+        "blind": false,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "exhibitor_name": "Jos\u00e9 \u00c1lvarez",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "notes": "bench 4",
+        "plant_handle": "p_addf7e0c83dbacb823c73312",
+        "plant_name": "Cattleya Jose Alvarez Gold",
+        "plant_name_source": "entry",
+        "plant_name_withheld": false,
+        "scorecard_handle": "s_2eeca3c9818f62d1e41b4427"
+      },
+      {
+        "blind": false,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "exhibitor_name": "Bartholomew Quince",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "notes": "bench 4",
+        "plant_handle": "p_b6acb367ad575d4e693512fa",
+        "plant_name": "Cattleya labiata",
+        "plant_name_source": "entry",
+        "plant_name_withheld": false,
+        "scorecard_handle": "s_70d26d6358e54174279956d3"
+      },
+      {
+        "blind": false,
+        "category_id": "03dc59ce-4109-4272-b346-897db8fe93f9",
+        "category_name": "Paphiopedilum",
+        "exhibitor_name": "Bartholomew Quince",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "notes": "bench 4",
+        "plant_handle": "p_be1171664fac0957997b6108",
+        "plant_name": "Paphiopedilum rothschildianum",
+        "plant_name_source": "entry",
+        "plant_name_withheld": false,
+        "scorecard_handle": "s_f6bba1e92450bb787ceccc76"
+      },
+      {
+        "blind": false,
+        "category_id": "f93603ee-17ff-4826-82e2-d281097d83ce",
+        "category_name": "Phalaenopsis",
+        "exhibitor_name": "Rosalind Featherstonehaugh",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "notes": "bench 4",
+        "plant_handle": "p_ded18f6ace64c92a1aea71e5",
+        "plant_name": "Phal. Featherstonehaugh's Delight",
+        "plant_name_source": "entry",
+        "plant_name_withheld": false,
+        "scorecard_handle": "s_019d72da336fe0d6d535f152"
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events/e97ee931-d89f-4513-8a3c-e4deee2b16b9/plants"
+    },
+    "status": 200
+  },
+  "judge_scan_blind": {
+    "body": {
+      "judging_event": {
+        "id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "is_blind": true,
+        "judging_type": "standard",
+        "name": "Ribbon judging",
+        "status": "draft"
+      },
+      "plant": {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_f78aa06634310c87018340f1",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true
+      },
+      "scorecard": {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": true,
+          "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+          "category_name": "Cattleya",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "plant_handle": "p_f78aa06634310c87018340f1",
+          "plant_name": null,
+          "plant_name_source": "withheld",
+          "plant_name_withheld": true
+        },
+        "scorecard_handle": "s_f97a348a9764f3e08b217168",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      }
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scan/QR-FDB8711FA0E7983B4BE9"
+    },
+    "status": 200
+  },
+  "judge_scan_blind_legacy_409": {
+    "body": {
+      "detail": "This tag uses a retired id-derived token. Ask the show owner to re-issue tags."
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scan/QR-A9050C3681A2"
+    },
+    "status": 409
+  },
+  "judge_scan_open": {
+    "body": {
+      "judging_event": {
+        "id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "is_blind": false,
+        "judging_type": "standard",
+        "name": "Ribbon judging",
+        "status": "draft"
+      },
+      "plant": {
+        "blind": false,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "exhibitor_name": "Rosalind Featherstonehaugh",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "notes": "bench 4",
+        "plant_handle": "p_a0f3c50b3d579a57d8131e51",
+        "plant_name": "Cattleya trianae",
+        "plant_name_source": "entry",
+        "plant_name_withheld": false
+      },
+      "scorecard": {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": false,
+          "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+          "category_name": "Cattleya",
+          "exhibitor_name": "Rosalind Featherstonehaugh",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "notes": "bench 4",
+          "plant_handle": "p_a0f3c50b3d579a57d8131e51",
+          "plant_name": "Cattleya trianae",
+          "plant_name_source": "entry",
+          "plant_name_withheld": false
+        },
+        "scorecard_handle": "s_c9716310a16f14e4856e4859",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      }
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scan/QR-A9050C3681A2"
+    },
+    "status": 200
+  },
+  "judge_scan_out_of_scope_404": {
+    "body": {
+      "detail": "Not found in your judging assignments"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scan/QR-C47B76FA317981D1BF2E"
+    },
+    "status": 404
+  },
+  "judge_scan_unknown_404": {
+    "body": {
+      "detail": "Not found in your judging assignments"
+    },
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/scan/QR-NOTATAG0000000000000"
+    },
+    "status": 404
+  },
+  "judge_scorecards_blind": {
+    "body": [
+      {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": true,
+          "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+          "category_name": "Cattleya",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "plant_handle": "p_911cd498ee01f45f03fba1f2",
+          "plant_name": null,
+          "plant_name_source": "withheld",
+          "plant_name_withheld": true
+        },
+        "scorecard_handle": "s_3bc64636233bba7f5a288b61",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      },
+      {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": true,
+          "category_id": "f93603ee-17ff-4826-82e2-d281097d83ce",
+          "category_name": "Phalaenopsis",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "plant_handle": "p_cf0c45f5a0137e53d9df5759",
+          "plant_name": null,
+          "plant_name_source": "withheld",
+          "plant_name_withheld": true
+        },
+        "scorecard_handle": "s_401998dd715e54536abe2ddc",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      },
+      {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": true,
+          "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+          "category_name": "Cattleya",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "plant_handle": "p_c421082393fad31b3a4fb288",
+          "plant_name": "Cattleya labiata",
+          "plant_name_source": "owner_approved",
+          "plant_name_withheld": false
+        },
+        "scorecard_handle": "s_546c50ddb06f69ba115b5e6d",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      },
+      {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": true,
+          "category_id": "03dc59ce-4109-4272-b346-897db8fe93f9",
+          "category_name": "Paphiopedilum",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "plant_handle": "p_209dd46fdbd99db370ad13bb",
+          "plant_name": null,
+          "plant_name_source": "withheld",
+          "plant_name_withheld": true
+        },
+        "scorecard_handle": "s_79f8b2b82998a09c5d09ea33",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      },
+      {
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant": {
+          "blind": true,
+          "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+          "category_name": "Cattleya",
+          "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+          "plant_handle": "p_f78aa06634310c87018340f1",
+          "plant_name": null,
+          "plant_name_source": "withheld",
+          "plant_name_withheld": true
+        },
+        "scorecard_handle": "s_f97a348a9764f3e08b217168",
+        "status": "draft",
+        "submitted_at": null,
+        "total": null,
+        "version": 1
+      }
+    ],
+    "request": {
+      "auth": "judge",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judge-portal/events/e97ee931-d89f-4513-8a3c-e4deee2b16b9/scorecards"
+    },
+    "status": 200
+  },
+  "judge_submit_scorecard": {
+    "body": {
+      "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+      "plant": {
+        "blind": true,
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "category_name": "Cattleya",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_name": null,
+        "plant_name_source": "withheld",
+        "plant_name_withheld": true
+      },
+      "scorecard_handle": "s_3bc64636233bba7f5a288b61",
+      "scores": [
+        {
+          "choice": null,
+          "criterion_id": "da3d8875-2e41-46e6-a396-80cde589d680",
+          "value": 42.0,
+          "value_rank": null
+        }
+      ],
+      "status": "submitted",
+      "submitted_at": "2026-09-30T20:11:41.453936",
+      "total": 42.0,
+      "version": 2
+    },
+    "request": {
+      "auth": "judge",
+      "body": {
+        "final_comment": "fine"
+      },
+      "method": "POST",
+      "path": "/api/judge-portal/scorecards/s_3bc64636233bba7f5a288b61/submit"
+    },
+    "status": 200
+  },
+  "owner_issue_credential": {
+    "body": {
+      "created_at": "2026-09-30T20:11:41.321521",
+      "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+      "expires_at": "2026-10-01T08:11:41.321521",
+      "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+      "label": "tablet 1",
+      "revoked_at": null,
+      "revoked_previous": 0,
+      "scope": {
+        "category_ids": null,
+        "event_ids": null
+      },
+      "show_id": "53692d54-c054-47b7-a18e-878a47260574",
+      "state": "active",
+      "token": "ocj_afaecc5925cb4c90e0849c3c9e3844c3_0DvRpbdbZTOq5bTWi6I3XqQSa4GCE1_k528ZPuvP8Tc",
+      "token_notice": "Shown once. Only a keyed hash is stored; issue a new credential if it is lost.",
+      "token_type": "Bearer"
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": {
+        "expires_in_minutes": 720,
+        "label": "tablet 1"
+      },
+      "method": "POST",
+      "path": "/api/judges/4b084798-164a-4396-9b87-975bd0fab719/credentials"
+    },
+    "status": 200
+  },
+  "owner_issue_credential_judge_c": {
+    "body": {
+      "created_at": "2026-09-30T20:11:41.328503",
+      "credential_id": "a147fbe3193fe931a6818522ae583d62",
+      "expires_at": "2026-10-01T20:11:41.328503",
+      "judge_id": "47391360-570b-4f67-a97c-602a9df72c59",
+      "label": null,
+      "revoked_at": null,
+      "revoked_previous": 0,
+      "scope": {
+        "category_ids": null,
+        "event_ids": null
+      },
+      "show_id": "53692d54-c054-47b7-a18e-878a47260574",
+      "state": "active",
+      "token": "ocj_a147fbe3193fe931a6818522ae583d62_WeLKZPuc0YY-zwUS68AwmI2dKgLVJ913nSlaTjbrmDU",
+      "token_notice": "Shown once. Only a keyed hash is stored; issue a new credential if it is lost.",
+      "token_type": "Bearer"
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": {},
+      "method": "POST",
+      "path": "/api/judges/47391360-570b-4f67-a97c-602a9df72c59/credentials"
+    },
+    "status": 200
+  },
+  "owner_issue_unconfigured_503": {
+    "body": {
+      "detail": "Judge authentication is not configured"
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": {},
+      "method": "POST",
+      "path": "/api/judges/61136998-8ef0-4ce7-b26a-2eaaa0425cb9/credentials"
+    },
+    "status": 503
+  },
+  "owner_issue_without_owner_key_401": {
+    "body": {
+      "detail": "Invalid or missing API key"
+    },
+    "request": {
+      "auth": "none",
+      "body": {},
+      "method": "POST",
+      "path": "/api/judges/61136998-8ef0-4ce7-b26a-2eaaa0425cb9/credentials"
+    },
+    "status": 401
+  },
+  "owner_judge_audit": {
+    "body": [
+      {
+        "action": "get_scorecard",
+        "category_id": null,
+        "created_at": "2026-09-30T20:11:41.466228",
+        "credential_id": "a147fbe3193fe931a6818522ae583d62",
+        "detail": "Not found in your judging assignments",
+        "http_status": 404,
+        "id": "4f5d8549-d736-41c5-925b-a5e903483c60",
+        "judge_id": "47391360-570b-4f67-a97c-602a9df72c59",
+        "judging_event_id": null,
+        "outcome": "not_found",
+        "plant_handle": null,
+        "plant_id": null,
+        "scorecard_id": null
+      },
+      {
+        "action": "autosave_scorecard",
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "created_at": "2026-09-30T20:11:41.461749",
+        "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+        "detail": "Scorecard already submitted. Cannot edit.",
+        "http_status": 409,
+        "id": "8be8a29a-0fc3-49d1-a991-44a55e34f488",
+        "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "outcome": "conflict",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_id": "dc0d3a50-f631-4bc1-8a87-98c5faedd662",
+        "scorecard_id": "c444b714-bf87-4c68-bd17-cfb1dd666ada"
+      },
+      {
+        "action": "submit_scorecard",
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "created_at": "2026-09-30T20:11:41.456299",
+        "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+        "detail": null,
+        "http_status": 200,
+        "id": "c0d21042-51cd-4ba3-a754-ee3296e8c1b1",
+        "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "outcome": "ok",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_id": "dc0d3a50-f631-4bc1-8a87-98c5faedd662",
+        "scorecard_id": "c444b714-bf87-4c68-bd17-cfb1dd666ada"
+      },
+      {
+        "action": "autosave_scorecard",
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "created_at": "2026-09-30T20:11:41.445370",
+        "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+        "detail": null,
+        "http_status": 200,
+        "id": "60ee8d4d-83c3-4777-8107-4167e30a6ef6",
+        "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "outcome": "ok",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_id": "dc0d3a50-f631-4bc1-8a87-98c5faedd662",
+        "scorecard_id": "c444b714-bf87-4c68-bd17-cfb1dd666ada"
+      },
+      {
+        "action": "get_scorecard",
+        "category_id": "d1709aa7-ba8e-40ed-9c1b-b9e540dc0be7",
+        "created_at": "2026-09-30T20:11:41.432827",
+        "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+        "detail": null,
+        "http_status": 200,
+        "id": "39abc29a-24e6-49ba-bf0a-8d364f91fddd",
+        "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+        "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+        "outcome": "ok",
+        "plant_handle": "p_911cd498ee01f45f03fba1f2",
+        "plant_id": "dc0d3a50-f631-4bc1-8a87-98c5faedd662",
+        "scorecard_id": "c444b714-bf87-4c68-bd17-cfb1dd666ada"
+      }
+    ],
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judging/judge-audit"
+    },
+    "status": 200
+  },
+  "owner_list_credentials": {
+    "body": [
+      {
+        "created_at": "2026-09-30T20:11:41.321521",
+        "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+        "expires_at": "2026-10-01T08:11:41.321521",
+        "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+        "label": "tablet 1",
+        "revoked_at": null,
+        "scope": {
+          "category_ids": null,
+          "event_ids": null
+        },
+        "show_id": "53692d54-c054-47b7-a18e-878a47260574",
+        "state": "active"
+      }
+    ],
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": null,
+      "method": "GET",
+      "path": "/api/judges/4b084798-164a-4396-9b87-975bd0fab719/credentials"
+    },
+    "status": 200
+  },
+  "owner_reissue_qr_tokens": {
+    "body": {
+      "judging_event_id": "e97ee931-d89f-4513-8a3c-e4deee2b16b9",
+      "plants": 5,
+      "reissued": 1
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": null,
+      "method": "POST",
+      "path": "/api/judging/events/e97ee931-d89f-4513-8a3c-e4deee2b16b9/reissue-qr-tokens"
+    },
+    "status": 200
+  },
+  "owner_revoke_credential": {
+    "body": {
+      "created_at": "2026-09-30T20:11:41.321521",
+      "credential_id": "afaecc5925cb4c90e0849c3c9e3844c3",
+      "expires_at": "2026-10-01T08:11:41.321521",
+      "judge_id": "4b084798-164a-4396-9b87-975bd0fab719",
+      "label": "tablet 1",
+      "revoked_at": "2026-09-30T20:11:41.474003",
+      "scope": {
+        "category_ids": null,
+        "event_ids": null
+      },
+      "show_id": "53692d54-c054-47b7-a18e-878a47260574",
+      "state": "revoked"
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": null,
+      "method": "POST",
+      "path": "/api/judge-credentials/afaecc5925cb4c90e0849c3c9e3844c3/revoke"
+    },
+    "status": 200
+  },
+  "owner_set_blind_display_name": {
+    "body": {
+      "blind_display_name": "Cattleya labiata",
+      "plant_id": "3a4960f6-2a84-4d38-b99a-23be854cc8ee",
+      "warnings": []
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": {
+        "blind_display_name": "Cattleya labiata"
+      },
+      "method": "PUT",
+      "path": "/api/judging/plants/3a4960f6-2a84-4d38-b99a-23be854cc8ee/blind-display-name"
+    },
+    "status": 200
+  },
+  "owner_set_blind_display_name_warning_409": {
+    "body": {
+      "detail": {
+        "message": "This display name may identify the exhibitor. Resend with confirm_despite_warnings to keep it.",
+        "warnings": [
+          "contains an exhibitor name word"
+        ]
+      }
+    },
+    "request": {
+      "auth": "owner X-API-Key",
+      "body": {
+        "blind_display_name": "Phal. Featherstonehaugh's Delight"
+      },
+      "method": "PUT",
+      "path": "/api/judging/plants/ad735ba5-cd54-4e03-8023-9d45baac6c42/blind-display-name"
+    },
+    "status": 409
+  }
+}
