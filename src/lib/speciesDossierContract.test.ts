@@ -293,4 +293,38 @@ describe('fetchSpeciesDossier', () => {
     expect(error).toMatchObject({ status: 200, invalidContract: true });
     expect(dossierFailureReason(error)).toBe('invalid_contract');
   });
+
+  it('keeps a fully received 200 whose body is empty or truncated JSON as invalid_contract', async () => {
+    for (const body of ['', '{"contract_version":"oc-species-dossier-v1","identity":']) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(body, { status: 200 })));
+      const error = await failure(() => fetchSpeciesDossier('synthetic-1'));
+      expect(error).toMatchObject({ status: 200, invalidContract: true });
+      expect(dossierFailureReason(error)).toBe('invalid_contract');
+    }
+  });
+
+  it('reads a 200 whose body read fails mid-stream as service_unavailable, not invalid_contract', async () => {
+    // The status line arrived but the body did not: nothing was received that could be judged
+    // against the contract, so this is a transport failure, not a contract violation.
+    const readFailure = new TypeError('synthetic: connection lost while reading the body');
+    const brokenBody = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"contract_version":"oc-species-dossier-v1",'));
+        },
+        pull(controller) {
+          controller.error(readFailure);
+        },
+      });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async () =>
+        new Response(brokenBody(), { status: 200, headers: { 'content-type': 'application/json' } }),
+      ),
+    );
+    const error = await failure(() => fetchSpeciesDossier('synthetic-1'));
+    expect(error).toBe(readFailure);
+    expect(error).not.toBeInstanceOf(SpeciesDossierRequestError);
+    expect(dossierFailureReason(error)).toBe('service_unavailable');
+  });
 });
