@@ -4,12 +4,13 @@
 
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Bug, Loader2, ImageOff, Network } from 'lucide-react';
+import { ArrowLeft, Bug, Loader2, ImageOff, Network, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import AtlasMiniMap from '@/components/orchid/AtlasMiniMap';
 import { Awaiting, SourceCitation } from '@/components/orchid/SourceBadges';
 import {
+  didRelationshipReadFail,
   fetchAtlasOccurrencePoints,
   fetchPollinator,
   fetchPollinatorAggregates,
@@ -23,6 +24,8 @@ const PollinatorProfile: React.FC = () => {
   const [pollinator, setPollinator] = useState<PollinatorAggregate | null>(null);
   const [all, setAll] = useState<PollinatorAggregate[]>([]);
   const [points, setPoints] = useState<AtlasOccurrencePoint[]>([]);
+  // A failed species read is not evidence that no pollinator is linked.
+  const [readFailed, setReadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -37,6 +40,7 @@ const PollinatorProfile: React.FC = () => {
         if (cancelled) return;
         setPollinator(p);
         setAll(list);
+        setReadFailed(didRelationshipReadFail('pollinators'));
         if (p) {
           const sciSet = new Set(p.species.map((s) => s.scientificName));
           setPoints(allPoints.filter((pt) => sciSet.has(pt.canonicalName)));
@@ -45,6 +49,7 @@ const PollinatorProfile: React.FC = () => {
         const list = await fetchPollinatorAggregates();
         if (cancelled) return;
         setAll(list);
+        setReadFailed(didRelationshipReadFail('pollinators'));
       }
       if (!cancelled) setLoading(false);
     })();
@@ -68,15 +73,37 @@ const PollinatorProfile: React.FC = () => {
           </div>
         )}
 
+        {!loading && readFailed && (
+          <div className="max-w-3xl mx-auto px-6 pt-12">
+            <div
+              role="alert"
+              data-testid="relationship-read-outcome"
+              className="rounded-2xl border border-[#c9a24a]/30 bg-[#0a0d1c]/70 p-8"
+            >
+              <AlertTriangle className="h-7 w-7 text-[#c9a24a]/70 mb-4" strokeWidth={1.2} />
+              <div className="font-mono text-[10px] tracking-[0.24em] uppercase text-[#c9a24a]/85 mb-2">
+                Pollinator relationship records could not be checked
+              </div>
+              <p className="text-[14px] text-[#cfc8b8]/80 leading-relaxed">
+                The read of the Continuum's relationship records did not complete, so this page
+                cannot say whether a pollinator relationship is recorded.{' '}
+                {(taxa ? !pollinator : all.length === 0)
+                  ? 'This is not evidence that no relationship exists. Reload the page to try again.'
+                  : 'The relationships shown below may be incomplete. Reload the page to try again.'}
+              </p>
+            </div>
+          </div>
+        )}
+
         {!loading && !taxa && (
-          <PollinatorIndex all={all} />
+          <PollinatorIndex all={all} readFailed={readFailed} />
         )}
 
         {!loading && taxa && pollinator && (
           <PollinatorView pollinator={pollinator} points={points} />
         )}
 
-        {!loading && taxa && !pollinator && (
+        {!loading && taxa && !pollinator && !readFailed && (
           <div className="max-w-3xl mx-auto px-6 py-20 text-center">
             <Bug className="h-9 w-9 text-[#c9a24a]/50 mx-auto mb-4" strokeWidth={1.2} />
             <div className="font-display text-2xl text-[#faf7f2] mb-3">Pollinator relationship not yet linked</div>
@@ -90,7 +117,7 @@ const PollinatorProfile: React.FC = () => {
   );
 };
 
-const PollinatorIndex: React.FC<{ all: PollinatorAggregate[] }> = ({ all }) => (
+const PollinatorIndex: React.FC<{ all: PollinatorAggregate[]; readFailed: boolean }> = ({ all, readFailed }) => (
   <section className="max-w-[1400px] mx-auto px-6 lg:px-10 py-12">
     <Link to="/atlas" className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.24em] uppercase text-[#cfc8b8]/55 hover:text-[#c9a24a] mb-6">
       <ArrowLeft className="h-3.5 w-3.5" /> Atlas
@@ -103,7 +130,8 @@ const PollinatorIndex: React.FC<{ all: PollinatorAggregate[] }> = ({ all }) => (
     </h1>
 
     {all.length === 0 ? (
-      <Awaiting what="Pollinator data" />
+      // "Not yet linked" is only said after a read that succeeded with no rows.
+      readFailed ? null : <Awaiting what="Pollinator data" />
     ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
         {all.map((p) => (
