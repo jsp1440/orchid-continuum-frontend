@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   speechInputState: "unsupported" as "unsupported" | "idle" | "listening",
   startListening: vi.fn(),
   stopListening: vi.fn(),
+  extractPdfText: vi.fn(),
 }));
 
 vi.mock("@/hooks/useCalyxSpeechInput", () => ({
@@ -43,6 +44,10 @@ vi.mock("@/hooks/useCalyxSpeechOutput", () => ({
     cancel: vi.fn(),
     supported: false,
   }),
+}));
+
+vi.mock("@/lib/calyxPdfText", () => ({
+  extractCalyxPdfText: mocks.extractPdfText,
 }));
 
 vi.mock("@/lib/calyxWorkspace", async () => {
@@ -181,8 +186,14 @@ function getButton(container: HTMLElement, text: string) {
 describe("CalyxWorkspace conversation lifecycle", () => {
   let container: HTMLDivElement;
   let root: Root;
+  let originalCreateObjectURL: PropertyDescriptor | undefined;
+  let originalRevokeObjectURL: PropertyDescriptor | undefined;
 
   beforeEach(() => {
+    originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, "createObjectURL");
+    originalRevokeObjectURL = Object.getOwnPropertyDescriptor(URL, "revokeObjectURL");
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "about:blank") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
     window.localStorage.clear();
     container = document.createElement("div");
     document.body.appendChild(container);
@@ -197,14 +208,20 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     mocks.speechInputState = "unsupported";
     mocks.startListening.mockReset();
     mocks.stopListening.mockReset();
+    mocks.extractPdfText.mockReset().mockResolvedValue({ text: "Paper text for selection.", truncated: false });
   });
 
   afterEach(async () => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     await act(async () => {
       root.unmount();
     });
     container.remove();
+    if (originalCreateObjectURL) Object.defineProperty(URL, "createObjectURL", originalCreateObjectURL);
+    else Reflect.deleteProperty(URL, "createObjectURL");
+    if (originalRevokeObjectURL) Object.defineProperty(URL, "revokeObjectURL", originalRevokeObjectURL);
+    else Reflect.deleteProperty(URL, "revokeObjectURL");
   });
 
   it("opens the checklist question in the editable composer and waits for Send", async () => {
@@ -860,5 +877,42 @@ describe("CalyxWorkspace conversation lifecycle", () => {
     expect(getContextValue(container, "Conversation")).toBe("history-thread");
     expect(container.textContent).toContain("saved answer");
     expect(storedWorkspace().conversationId).toBe("history-thread");
+  });
+
+  it("extracts local PDF text and appends a selected excerpt to the message", async () => {
+    await act(async () => {
+      root.render(
+        <MemoryRouter>
+          <CalyxWorkspace />
+        </MemoryRouter>,
+      );
+    });
+    await flush(3);
+
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const paper = new File(["pdf bytes"], "paper.pdf", { type: "application/pdf" });
+    Object.defineProperty(input, "files", { configurable: true, value: [paper] });
+    await act(async () => {
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await flush(3);
+
+    expect(mocks.extractPdfText).toHaveBeenCalledWith(paper, expect.any(AbortSignal));
+    expect(container.querySelector("iframe")?.getAttribute("title")).toBe("paper.pdf");
+    expect(container.querySelector("pre")?.textContent).toBe("Paper text for selection.");
+
+    vi.spyOn(window, "getSelection").mockReturnValue({
+      toString: () => "selected paper excerpt",
+    } as Selection);
+    await act(async () => {
+      container.querySelector("pre")?.dispatchEvent(new MouseEvent("mouseup", { bubbles: true }));
+    });
+    await act(async () => {
+      getButton(container, "Ask CALYX about selection").click();
+    });
+
+    expect((container.querySelector("#calyx-message") as HTMLTextAreaElement).value).toContain(
+      '[From "paper.pdf"]\nselected paper excerpt',
+    );
   });
 });
