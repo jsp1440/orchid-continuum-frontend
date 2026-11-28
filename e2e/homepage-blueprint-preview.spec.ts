@@ -68,3 +68,38 @@ test('offers a truthful fallback when WebGL is unavailable', async ({ page }) =>
   await atlas.getByRole('button', { name: '2D map', exact: true }).click();
   await expect(atlas.getByRole('button', { name: '2D map', exact: true })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('the tablet can leave the 2D map while its zoom is settling', async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+  await page.route('**/atlas/public/occurrences?**', route => {
+    const genus = new URL(route.request().url()).searchParams.get('genus');
+    return route.fulfill({ json: { scanned: 1, next_offset: null, items: [{
+      id: 1, genus, species: 'alba', location: { cell_lat: 5.5, cell_lng: 19.5, cell_deg: 1 },
+    }] } });
+  });
+  await page.goto('/homepage-recovery-preview');
+  const atlas = page.locator('#living-atlas');
+  await atlas.getByRole('button', { name: '2D map' }).click();
+  const map = atlas.locator('.leaflet-container');
+  await expect(map.locator('canvas')).toBeVisible();
+  const tileZoom = () => map.locator('img.leaflet-tile').evaluateAll(tiles => Math.max(...tiles.map(tile =>
+    Number(new URL((tile as HTMLImageElement).src).pathname.split('/')[1]))));
+  await expect.poll(tileZoom).toBeGreaterThan(0);
+  const originalZoom = await tileZoom();
+  await map.focus();
+  await page.keyboard.press('+');
+  await expect.poll(tileZoom).toBe(originalZoom + 1);
+  // The next frame starts Leaflet's 250 ms CSS zoom completion timer.
+  await page.keyboard.press('+');
+  await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  // Unmount inside Leaflet's 250 ms CSS zoom completion window, regardless of scroll position.
+  await atlas.getByRole('button', { name: 'Globe', exact: true }).evaluate(button => (button as HTMLButtonElement).click());
+  await expect(map).toHaveCount(0);
+  await page.waitForTimeout(350);
+  expect(errors).toEqual([]);
+  await expect(page.locator('html')).toHaveCSS('scroll-behavior', 'auto');
+});

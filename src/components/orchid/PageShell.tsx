@@ -56,7 +56,6 @@ const PageShell: React.FC<PageShellProps> = ({
     >
       <style>{`
         .font-serif { font-family: 'Cormorant Garamond', 'Playfair Display', Georgia, serif; font-weight: 500; letter-spacing: -0.01em; }
-        html { scroll-behavior: smooth; }
       `}</style>
       <Navbar />
 
