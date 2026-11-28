@@ -40,6 +40,7 @@ export const PUBLIC_ROUTE_PATTERNS = [
   '/climate',
   '/intelligence-graph',
   '/knowledge',
+  '/knowledge-graph',
   '/relationship-explorer',
   '/relationship-explorer/:species',
   '/research-station/researchers/jeffery-scott-parham',

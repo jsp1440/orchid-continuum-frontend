@@ -84,16 +84,11 @@ const HomeContinuumIntro: React.FC = () => (
           >
             Connecting the world's orchid knowledge.
           </h1>
-        <figure className="relative my-2 overflow-hidden md:col-start-2 md:row-start-1 md:row-span-3 rounded-2xl bg-stone-900">
-          <img className="h-32 w-full sm:h-52 object-cover md:h-80" src="/images/discovery/346870202.webp" alt="Blue-violet flowers of Disa graminifolia" />
-          <div className="absolute inset-x-2 top-2 rounded bg-black/80 px-3 py-2 text-white">
-            <p className="text-[10px] uppercase tracking-widest text-amber-200">Illustration · how knowledge connects</p>
-            <div className="mt-1 flex items-center gap-1 text-xs sm:text-sm">
-              <span>Species</span><span aria-hidden="true" className="h-px w-5 bg-amber-200" />
-              <span>Specimen</span><span aria-hidden="true" className="h-px w-5 bg-amber-200" />
-              <span>Study</span><span aria-hidden="true" className="h-px w-5 bg-amber-200" />
-              <span>Fungus</span>
-            </div>
+        <figure className="relative my-2 grid grid-cols-[.85fr_1.15fr] overflow-hidden rounded-2xl bg-[#0b2426] md:col-start-2 md:row-start-1 md:row-span-3">
+          <img className="h-36 w-full object-cover sm:h-56 md:h-80" src="/images/discovery/346870202.webp" alt="Blue-violet flowers of Disa graminifolia" />
+          <div className="flex min-w-0 flex-col justify-center px-1 pb-7 pt-1 md:px-3">
+            <p className="text-center text-[10px] uppercase tracking-widest text-amber-200">Illustration · how knowledge connects</p>
+            <img src="/images/graph/conceptual-web.svg" className="mx-auto max-h-24 w-full sm:max-h-40 md:max-h-64" alt="Conceptual web of fungi, pollinators, species, specimens, regions, field notes, photographs, botanical plates and publications. Each group connects to several others." />
           </div>
           <figcaption className="absolute inset-x-0 bottom-0 bg-black/80 px-4 py-2 text-sm">
             <i>Disa graminifolia</i> · <a className="underline" href={discoveryPhotos.find(photo => photo.id === 346870202)?.source}>iNaturalist photograph</a> · CC0

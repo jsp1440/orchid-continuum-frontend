@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react';
+import { lazy, Suspense, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import DailyGenusGraphEvidence from '@/components/orchid/DailyGenusGraphEvidence';
+
+const PublicTraversalExplorer = lazy(() => import('@/components/orchid/PublicTraversalExplorer'));
 
 const guide = [
   { title: 'Taxonomy and ontology', body: 'A genus groups related species. A graph node represents an entity such as a taxon or paper. A typed edge records how two entities are related. Check the accepted name and its synonyms when comparing sources.', label: 'Browse species', to: '/species' },
@@ -40,6 +42,7 @@ export default function PublicKnowledgeGraph() {
           <DailyGenusGraphEvidence key={genus} genus={genus} />
           <Link className="mt-3 inline-block underline" to={`/genus/${encodeURIComponent(genus)}`}>Open the {genus} genus profile</Link>
         </section>
+        <Suspense fallback={<p>Loading the network explorer…</p>}><PublicTraversalExplorer /></Suspense>
         <section className="mb-9 rounded-lg border border-stone-400 p-5">
           <h2 className="font-serif text-2xl">Which fungi were studied with <i>Epidendrum secundum</i>?</h2>
           <p className="my-2 leading-relaxed">On 28 November 2026, a one-hop read of orchid taxon 8104 returned two fungal associations, <i>Ceratobasidium</i> and <i>Sebacina vermifera</i>. Graph edges 337340 and 337341 cite the same study of germination and seedling growth. They represent two associations from one source. Their scope is the study conditions.</p>
