@@ -280,11 +280,14 @@ export async function fetchContinuumGraph(genus: string, signal?: AbortSignal): 
   const nodes: Record<string, unknown> = ok && data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
   if (speciesCount == null && typeof data?.hub?.species_count === 'number') speciesCount = data.hub.species_count;
 
+  const reportedGenus = ok && typeof data?.genus === 'string' ? data.genus.trim() : '';
   return {
-    genus: ok && data?.genus ? data.genus : g,
+    genus: reportedGenus || g,
     speciesCount,
     description,
-    isFallback: false,
+    // Keep the request label for existing displays, but distinguish a service
+    // that actually identified this genus from an unbound response.
+    isFallback: !reportedGenus,
     knowledge: mapNode(nodes.knowledge, { unit: 'species' }),
     geography: mapNode(nodes.geography, { unit: 'record' }),
     climate: mapNode(nodes.climate, { climate: true }),

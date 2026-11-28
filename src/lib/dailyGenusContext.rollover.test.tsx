@@ -17,7 +17,7 @@ vi.mock('./supabase', () => ({
 
 const requests: string[] = [];
 const photographs: string[] = [];
-let failure: 'wrong-genus' | 'taxonomy' | 'evidence' | 'media' | 'photo' | 'pending' | 'live-only-photo' | null;
+let failure: 'wrong-genus' | 'unbound-evidence' | 'wrong-evidence-genus' | 'unbound-media' | 'taxonomy' | 'evidence' | 'media' | 'photo' | 'pending' | 'live-only-photo' | null;
 
 function response(input: RequestInfo | URL) {
   const url = new URL(String(input));
@@ -27,7 +27,7 @@ function response(input: RequestInfo | URL) {
   if (url.pathname.startsWith('/api/media/genus/')) {
     const image = `https://images.example/${genus}.jpg`;
     return Response.json({
-      status: 'ok', requested_genus: genus, accepted_genus: genus,
+      status: 'ok', requested_genus: genus, accepted_genus: broken === 'unbound-media' ? null : genus,
       items: [...(broken === 'live-only-photo' ? [{ scientific_name: genus + ' bella', genus,
         image_url: 'https://d2jcv3kl45hlgi.cloudfront.net/cover.jpg', source_name: 'Archive',
         license: 'CC BY', attribution: 'Photographer' }] : []), { scientific_name: `${genus} alba`, genus, image_url: image, source_name: 'Specimen archive',
@@ -40,7 +40,8 @@ function response(input: RequestInfo | URL) {
       domain_coverage: { taxonomy: { nodes: broken === 'taxonomy' ? 0 : 2, edges: 0 } } });
   }
   if (url.pathname === '/api/continuum/graph') {
-    return Response.json({ genus, nodes: broken === 'evidence' ? {} : {
+    const reported = broken === 'unbound-evidence' ? {} : { genus: broken === 'wrong-evidence-genus' ? 'Vanilla' : genus };
+    return Response.json({ ...reported, nodes: broken === 'evidence' ? {} : {
       fungi: { status: 'empty', source: 'curated source', count: 0 },
     } });
   }
@@ -109,7 +110,7 @@ it('loads next-window taxonomy, relationship evidence and the usable photo befor
   expect(displays.slice(1)).not.toContain(`${next}//loading`);
 });
 
-it.each(['wrong-genus', 'taxonomy', 'evidence', 'media', 'photo'] as const)(
+it.each(['wrong-genus', 'taxonomy', 'evidence', 'unbound-evidence', 'wrong-evidence-genus', 'unbound-media', 'media', 'photo'] as const)(
   'retains the working exhibit for %s failure and bounds the retry across focus events', async (problem) => {
     const { view } = await mount();
     failure = problem;
