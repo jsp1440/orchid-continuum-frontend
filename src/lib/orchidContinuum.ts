@@ -1344,6 +1344,7 @@ const atlasGenusCache = new Map<string, Promise<AtlasGenusLoad>>();
  */
 export function fetchAtlasGenusPoints(genus: string): Promise<AtlasGenusLoad> {
   const key = genus.trim();
+  const genusLower = key.toLowerCase();
   const cached = atlasGenusCache.get(key);
   if (cached) return cached;
   const promise = (async (): Promise<AtlasGenusLoad> => {
@@ -1353,7 +1354,7 @@ export function fetchAtlasGenusPoints(genus: string): Promise<AtlasGenusLoad> {
     const consIdx = buildConservationIndex(speciesRows);
     const points: AtlasOccurrencePoint[] = [];
     for (const row of speciesRows) {
-      if ((row.genus ?? '').trim() !== key || !row.occurrences) continue;
+      if (row.genus?.trim().toLowerCase() !== genusLower || !row.occurrences) continue;
       row.occurrences.forEach((occ, i) => {
         if (typeof occ?.lat !== 'number' || typeof occ?.lng !== 'number') return;
         points.push(curatedOccurrenceToPoint(row, occ, i, mycoIdx));
@@ -1661,8 +1662,9 @@ export function applyAtlasFilters(
   points: AtlasOccurrencePoint[],
   f: AtlasFilterState,
 ): AtlasOccurrencePoint[] {
+  const genera = new Set(f.genera?.map((genus) => genus.toLowerCase()));
   return points.filter((p) => {
-    if (!anyIn(p.genus, f.genera)) return false;
+    if (genera.size && !genera.has(p.genus.toLowerCase())) return false;
     if (!anyIn(p.canonicalName, f.species)) return false;
     if (!anyInArr(p.countries.length ? p.countries : [p.country], f.countries)) return false;
     if (!anyIn(p.region, f.regions)) return false;
