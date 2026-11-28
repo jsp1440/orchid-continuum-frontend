@@ -460,7 +460,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
   const [documentContext, setDocumentContext] = useState("");
   const [selectedDocumentText, setSelectedDocumentText] = useState("");
   const [conversations, setConversations] = useState<Array<{ conversation_id: string; title?: string | null; created_at: string; message_count?: number }>>([]);
-  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<"authentication_required" | "unavailable" | null>(null);
   const [autoRetryCountdown, setAutoRetryCountdown] = useState<number | null>(null);
   const [pendingRetry, setPendingRetry] = useState<{ message: string; projectId: string } | null>(null);
 
@@ -612,7 +612,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
       setHistoryError(null);
     } catch (error) {
       if (!mountedRef.current) return;
-      setHistoryError(error instanceof CalyxApiError && error.kind === "authentication_required" ? "Sign in at Mission Control to load conversation history." : "Conversation history unavailable.");
+      setHistoryError(error instanceof CalyxApiError && error.kind === "authentication_required" ? "authentication_required" : "unavailable");
     }
   }, []);
 
@@ -951,7 +951,7 @@ export default function CalyxWorkspace({ initialQuestion = "" }: { initialQuesti
 
             <section className="rounded-xl border bg-card p-5">
               <div className="flex items-start justify-between gap-3"><div><p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">History</p><h2 className="mt-2 text-2xl font-semibold">Prior CALYX threads</h2></div><button className="rounded-md border px-3 py-2 text-xs hover:bg-muted disabled:opacity-50" disabled={submitting} onClick={() => void refreshConversationHistory()} type="button">Refresh</button></div>
-              {historyError ? <p className="mt-4 text-sm text-muted-foreground">{historyError}</p> : null}
+              {historyError === "authentication_required" ? <p className="mt-4 text-sm text-muted-foreground">Sign in at <Link className="underline" to="/mission-control">Mission Control</Link> to load conversation history.</p> : historyError === "unavailable" ? <p className="mt-4 text-sm text-muted-foreground">Conversation history unavailable.</p> : null}
               {conversations.length ? <ul className="mt-4 space-y-3">{conversations.map((thread) => <li className="rounded-xl border p-3" key={thread.conversation_id}><button className="w-full text-left disabled:opacity-50" disabled={submitting} onClick={() => void loadConversation(thread.conversation_id)} type="button"><p className="font-medium">{thread.title || thread.conversation_id}</p><p className="mt-1 text-xs text-muted-foreground">{new Date(thread.created_at).toLocaleString()} · {thread.message_count ?? 0} messages</p></button></li>)}</ul> : !historyError ? <p className="mt-4 text-sm text-muted-foreground">No prior CALYX threads surfaced by the backend yet.</p> : null}
             </section>
 
