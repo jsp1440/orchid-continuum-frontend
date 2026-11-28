@@ -57,9 +57,11 @@ function Where() {
 }
 
 describe('Andes tour stop deep link', () => {
-  it('stop 3 is the Andes stop, addressable by number or slug', () => {
+  it('opens in the Andes while preserving existing numeric and slug links', () => {
     const index = tourPanelIndexFromParam(String(ANDES_TOUR_STOP_NUMBER));
-    expect(index).not.toBeNull();
+    expect(index).toBe(1);
+    expect(ALL_PANELS[0].number).toBe(0);
+    expect(ALL_PANELS[tourPanelIndexFromParam('1')!].subtitle).toBe('California Floristic Province');
     const stop = ALL_PANELS[index!];
     expect(stop.title).toBe('The Mountains That Multiply Species');
     expect(stop.subtitle).toContain('Ecuador & Colombia');

@@ -101,7 +101,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 1 — CALIFORNIA FLORISTIC PROVINCE ----
   {
     number: 1,
-    kicker: 'Stop 1 · Mediterranean climate',
+    kicker: 'Mediterranean climate',
     title: 'Where Fog Creates Life',
     subtitle: 'California Floristic Province',
     geo: [
@@ -146,7 +146,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 2 — MEDITERRANEAN BASIN ----
   {
     number: 2,
-    kicker: 'Stop 2 · The terrestrial cradle',
+    kicker: 'The terrestrial cradle',
     title: 'The Theatre of Deception',
     subtitle: 'Mediterranean Basin',
     geo: [
@@ -186,7 +186,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 3 — THE ANDES ----
   {
     number: 3,
-    kicker: 'Stop 3 · The global epicenter',
+    kicker: 'The global epicenter',
     title: 'The Mountains That Multiply Species',
     subtitle: 'The Tropical Andes · Ecuador & Colombia',
     geo: [
@@ -226,7 +226,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 4 — BRAZIL: ATLANTIC FOREST ----
   {
     number: 4,
-    kicker: 'Stop 4 · A forest within a forest',
+    kicker: 'A forest within a forest',
     title: 'The Forgotten Forest',
     subtitle: 'Mata Atlântica · Brazil',
     geo: [
@@ -266,7 +266,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 5 — MADAGASCAR ----
   {
     number: 5,
-    kicker: 'Stop 5 · The island laboratory',
+    kicker: 'The island laboratory',
     title: 'The Comet and the Moth',
     subtitle: 'Madagascar',
     geo: [
@@ -306,7 +306,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 6 — CAPE FLORISTIC REGION ----
   {
     number: 6,
-    kicker: 'Stop 6 · Diversity in miniature',
+    kicker: 'Diversity in miniature',
     title: 'The Smallest Kingdom of Plants',
     subtitle: 'Cape Floristic Region · South Africa',
     geo: [
@@ -346,7 +346,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 7 — SOUTHEAST ASIA / BORNEO ----
   {
     number: 7,
-    kicker: 'Stop 7 · The canopy world',
+    kicker: 'The canopy world',
     title: 'A City in the Trees',
     subtitle: 'Borneo & the Malay Archipelago',
     geo: [
@@ -386,7 +386,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 8 — NEW GUINEA ----
   {
     number: 8,
-    kicker: 'Stop 8 · The last frontier',
+    kicker: 'The last frontier',
     title: 'The Island Still Being Discovered',
     subtitle: 'New Guinea',
     geo: [
@@ -426,7 +426,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 9 — EASTERN AUSTRALIA ----
   {
     number: 9,
-    kicker: 'Stop 9 · The underground orchids',
+    kicker: 'The underground orchids',
     title: 'The Orchids That Hide',
     subtitle: 'Eastern & Southwestern Australia',
     geo: [
@@ -466,7 +466,7 @@ export const STOPS: TourStop[] = [
   // ---- STOP 10 — THE TEMPERATE NORTH / GLOBAL SYNTHESIS ----
   {
     number: 10,
-    kicker: 'Stop 10 · Synthesis',
+    kicker: 'Synthesis',
     title: 'The Quiet Orchids of the North',
     subtitle: 'Temperate & Boreal Eurasia · North America',
     geo: [
@@ -505,7 +505,10 @@ export const STOPS: TourStop[] = [
 ];
 
 /** All panels in order: introduction (index 0) followed by the ten stops. */
-export const ALL_PANELS: TourStop[] = [INTRODUCTION, ...STOPS];
+const [california, mediterranean, andes, brazil, ...remainingStops] = STOPS;
+export const ALL_PANELS: TourStop[] = [
+  INTRODUCTION, andes, brazil, california, mediterranean, ...remainingStops,
+];
 
 /** Stop number of "The Mountains That Multiply Species" (Tropical Andes · Ecuador & Colombia). */
 export const ANDES_TOUR_STOP_NUMBER = 3;

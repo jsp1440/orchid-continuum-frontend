@@ -626,7 +626,7 @@ const GenusDetail: React.FC = () => {
               <div className="font-mono text-[10px] tracking-[0.28em] uppercase text-[#c9a24a] mb-3">
                 Occurrences &amp; ecological partners
               </div>
-              <GenusOccurrenceMap genus={entry.genus} regions={entry.regions} />
+              <GenusOccurrenceMap genus={entry.genus} />
               {/* Static label-map kept as a compact legend strip below the globe. */}
               <div className="mt-4">
                 <DistributionMap regions={entry.regions} />

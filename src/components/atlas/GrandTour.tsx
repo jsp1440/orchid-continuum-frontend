@@ -11,6 +11,7 @@ import {
 import {
   ALL_PANELS,
   TOTAL_STOPS,
+  tourPanelIndexFromParam,
   TOUR_PROGRESS_KEY,
   GRAND_TOUR_TITLE,
   GRAND_TOUR_SUBTITLE,
@@ -24,7 +25,7 @@ import {
  * (mobile) so the live Leaflet map remains visible underneath and animates
  * to each stop's coordinates via the `onStop` callback. PREVIOUS / NEXT
  * navigation, a progress indicator, and a SKIP TOUR link are provided.
- * Progress (panel index) is persisted in localStorage.
+ * Progress (stable stop number) is persisted in localStorage.
  */
 
 interface Props {
@@ -49,11 +50,7 @@ const GrandTour: React.FC<Props> = ({ open, onClose, onStop, initialIndex = null
     }
     let start = 0;
     try {
-      const raw = localStorage.getItem(TOUR_PROGRESS_KEY);
-      if (raw != null) {
-        const n = parseInt(raw, 10);
-        if (!Number.isNaN(n) && n >= 0 && n < ALL_PANELS.length) start = n;
-      }
+      start = tourPanelIndexFromParam(localStorage.getItem(TOUR_PROGRESS_KEY)) ?? 0;
     } catch {
       /* ignore */
     }
@@ -64,7 +61,7 @@ const GrandTour: React.FC<Props> = ({ open, onClose, onStop, initialIndex = null
   useEffect(() => {
     if (!open) return;
     try {
-      localStorage.setItem(TOUR_PROGRESS_KEY, String(index));
+      localStorage.setItem(TOUR_PROGRESS_KEY, String(ALL_PANELS[index].number));
     } catch {
       /* ignore */
     }
@@ -139,7 +136,7 @@ const GrandTour: React.FC<Props> = ({ open, onClose, onStop, initialIndex = null
           {/* Progress */}
           <div className="mt-4 flex items-center gap-3">
             <div className="gt-mono text-[9px] tracking-[0.26em] uppercase text-[#c9a24a] whitespace-nowrap">
-              {isIntro ? 'Introduction' : `Stop ${panel.number} of ${TOTAL_STOPS}`}
+              {isIntro ? 'Introduction' : `Stop ${index} of ${TOTAL_STOPS}`}
             </div>
             <div className="flex-1 h-1 rounded-full bg-white/10 overflow-hidden">
               <div

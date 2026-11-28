@@ -3,62 +3,10 @@ import { Globe as GlobeIcon, Map as MapIcon, Loader2 } from 'lucide-react';
 import useGlobeGl, { type GlobeInstance } from '@/hooks/useGlobeGl';
 import { fetchGenusOccurrences, type OccurrencePoint } from '@/lib/ocBackend';
 
-/**
- * GenusOccurrenceMap — a photorealistic 3D Earth (globe.gl / three.js) showing
- * ONLY the occurrence points of the current "Genus of the Day", plus its
- * ecological partners:
- *
- *   • Genus occurrence points           → cream / sage dots
- *   • Pollinator relationship locations → GOLD dots
- *   • Mycorrhizal fungal partnerships   → ORANGE dots
- *
- * Occurrence points are pulled live from the canonical backend
- * (/api/atlas/occurrences?genus=…). The globe auto-rotates slowly and the user
- * can toggle to the existing flat (equirectangular) SVG map. When the daily
- * genus changes, the data re-fetches and the map updates to that genus only.
- */
+/** Display the public occurrence feed as a globe or a flat map. */
+type MapPoint = Pick<OccurrencePoint, 'lat' | 'lng'> & { name: string };
 
-type Kind = 'occurrence' | 'pollinator' | 'fungi';
-
-interface MapPoint {
-  name: string;
-  lat: number;
-  lng: number;
-  kind: Kind;
-}
-
-const KIND_COLOR: Record<Kind, string> = {
-  occurrence: '#e9e0c6',
-  pollinator: '#e8b53a',
-  fungi: '#e87a2a',
-};
-
-const KIND_LABEL: Record<Kind, string> = {
-  occurrence: 'Occurrence',
-  pollinator: 'Pollinator relationship',
-  fungi: 'Mycorrhizal fungi',
-};
-
-/** Rough centroid lat/lon for region labels, used to seed fallback points. */
-const REGION_LATLON: Record<string, [number, number]> = {
-  Ecuador: [-1.5, -78],
-  Colombia: [4, -73],
-  Peru: [-10, -76],
-  Bolivia: [-17, -65],
-  Brazil: [-10, -52],
-  Brasil: [-10, -52],
-  Venezuela: [7, -66],
-  'Central America': [13, -85],
-  Mesoamerica: [17, -94],
-  Caribbean: [18, -75],
-  Himalaya: [29, 83],
-  'SE Asia': [10, 105],
-  Australia: [-25, 134],
-  'Pacific Islands': [-8, 160],
-  'New Guinea': [-6, 144],
-  Africa: [2, 22],
-  Madagascar: [-19, 47],
-};
+const OCCURRENCE_COLOR = '#e9e0c6';
 
 const EARTH_TEXTURE =
   'https://unpkg.com/three-globe@2.31.0/example/img/earth-blue-marble.jpg';
@@ -74,12 +22,11 @@ function equirect(lat: number, lng: number) {
 
 interface GenusOccurrenceMapProps {
   genus: string;
-  /** Primary distribution regions (used to seed partner / fallback points). */
-  regions: string[];
 }
 
-const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions }) => {
+const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus }) => {
   const [mode, setMode] = useState<'globe' | 'flat'>('globe');
+  const [globeUnavailable, setGlobeUnavailable] = useState(false);
   const [occurrences, setOccurrences] = useState<OccurrencePoint[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -92,6 +39,7 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setOccurrences([]);
     const ctrl = new AbortController();
     fetchGenusOccurrences(genus, 600, ctrl.signal)
       .then((pts) => {
@@ -106,52 +54,18 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
     };
   }, [genus]);
 
-  // --- Build the full point set (occurrence + partners) -------------------
-  const points = useMemo<MapPoint[]>(() => {
-    const occ: MapPoint[] = occurrences.map((p, i) => ({
-      name: p.species || `${genus} occurrence ${i + 1}`,
-      lat: p.lat,
-      lng: p.lng,
-      kind: 'occurrence',
-    }));
+  const points = useMemo<MapPoint[]>(() => occurrences.map((point, index) => ({
+    name: point.species || `${genus} occurrence ${index + 1}`,
+    lat: point.lat,
+    lng: point.lng,
+  })), [occurrences, genus]);
 
-    // If the backend returned nothing for this genus, seed occurrence points
-    // from the genus's known regions so the map is never empty.
-    if (occ.length === 0) {
-      for (const r of regions) {
-        const ll = REGION_LATLON[r];
-        if (ll) occ.push({ name: r, lat: ll[0], lng: ll[1], kind: 'occurrence' });
-      }
+  useEffect(() => {
+    if (failed) {
+      setGlobeUnavailable(true);
+      setMode('flat');
     }
-
-    const pts: MapPoint[] = [...occ];
-    if (occ.length) {
-      // Distribute several pollinator (gold) + mycorrhizal-fungi (orange)
-      // relationship markers across the genus's occurrence cluster so the
-      // ecological partnerships read as multiple locations, not single points.
-      // Sample a spread of occurrence anchors and jitter deterministically.
-      const anchorCount = Math.min(5, occ.length);
-      const step = Math.max(1, Math.floor(occ.length / anchorCount));
-      for (let n = 0; n < anchorCount; n++) {
-        const a = occ[(n * step) % occ.length];
-        const jit = (seed: number) => ((Math.sin(seed) * 43758.5453) % 1) * 6 - 3;
-        pts.push({
-          name: `${genus} pollinator relationship ${n + 1}`,
-          lat: a.lat + jit(n + 1) ,
-          lng: a.lng + jit(n + 7) + 3,
-          kind: 'pollinator',
-        });
-        pts.push({
-          name: `${genus} fungal partnership ${n + 1}`,
-          lat: a.lat + jit(n + 13) ,
-          lng: a.lng + jit(n + 19) - 3,
-          kind: 'fungi',
-        });
-      }
-    }
-    return pts;
-  }, [occurrences, genus, regions]);
-
+  }, [failed]);
 
   // --- Initialise the globe once the library + container are ready --------
   useEffect(() => {
@@ -179,9 +93,18 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
     };
     window.addEventListener('error', onError, true);
 
-    // (Re)create the globe instance.
-    const g = Globe()<MapPoint>(el)
-      .globeImageUrl(EARTH_TEXTURE)
+    let g: GlobeInstance<MapPoint>;
+    try {
+      g = Globe()<MapPoint>(el);
+    } catch {
+      window.removeEventListener('error', onError, true);
+      el.replaceChildren();
+      setGlobeUnavailable(true);
+      setMode('flat');
+      return;
+    }
+
+    g.globeImageUrl(EARTH_TEXTURE)
       .bumpImageUrl(BUMP_TEXTURE)
       .backgroundColor('rgba(0,0,0,0)')
       .showAtmosphere(true)
@@ -268,22 +191,23 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
     g.pointsData(points)
       .pointLat((d) => d.lat)
       .pointLng((d) => d.lng)
-      .pointColor((d) => KIND_COLOR[d.kind as Kind])
-      .pointAltitude((d) => (d.kind === 'occurrence' ? 0.01 : 0.04))
-      .pointLabel((d) => `${d.name} — ${KIND_LABEL[d.kind as Kind]}`);
-  }, [points, mode, ready]);
+      .pointColor(() => OCCURRENCE_COLOR)
+      .pointLabel((d) => d.name);
+  }, [points, mode, ready, Globe]);
 
   return (
     <div className="rounded-2xl overflow-hidden border border-[#c9a24a]/20 bg-[#0a1410]">
       {/* Header + toggle */}
       <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-white/10">
         <div className="font-mono text-[10px] tracking-[0.18em] uppercase text-[#a9b896]">
-          {genus} occurrences &amp; partners
+          {genus} occurrences
         </div>
         <div className="inline-flex rounded-full border border-white/15 overflow-hidden">
           <button
             type="button"
             onClick={() => setMode('globe')}
+            disabled={globeUnavailable}
+            title={globeUnavailable ? '3D globe unavailable in this browser' : undefined}
             aria-pressed={mode === 'globe'}
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 font-mono text-[9px] tracking-[0.16em] uppercase transition-colors ${
               mode === 'globe' ? 'bg-[#c9a24a] text-[#10160d]' : 'text-[#cfc8b8] hover:bg-white/10'
@@ -325,13 +249,6 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
                 </span>
               </div>
             )}
-            {failed && (
-              <div className="absolute inset-0 flex items-center justify-center px-6 text-center">
-                <p className="font-mono text-[10px] tracking-[0.12em] uppercase text-[#cfc8b8]/70">
-                  3D globe unavailable — switch to Flat Map.
-                </p>
-              </div>
-            )}
           </>
         ) : (
           <svg
@@ -357,8 +274,8 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
               const { x, y } = equirect(p.lat, p.lng);
               return (
                 <g key={`${p.name}-${i}`}>
-                  <circle cx={x} cy={y / 2} r={1.4} fill={KIND_COLOR[p.kind]} opacity="0.25" />
-                  <circle cx={x} cy={y / 2} r={0.6} fill={KIND_COLOR[p.kind]} stroke="#07120d" strokeWidth="0.12" />
+                  <circle cx={x} cy={y / 2} r={1.4} fill={OCCURRENCE_COLOR} opacity="0.25" />
+                  <circle cx={x} cy={y / 2} r={0.6} fill={OCCURRENCE_COLOR} stroke="#07120d" strokeWidth="0.12" />
                 </g>
               );
             })}
@@ -368,16 +285,12 @@ const GenusOccurrenceMap: React.FC<GenusOccurrenceMapProps> = ({ genus, regions 
 
       {/* Legend + count */}
       <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-white/10">
-        {(['occurrence', 'pollinator', 'fungi'] as const).map((k) => (
-          <span key={k} className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.06em] uppercase text-[#cfc8b8]">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ background: KIND_COLOR[k] }} />
-            {KIND_LABEL[k]}
-          </span>
-        ))}
+        <span className="inline-flex items-center gap-2 font-mono text-[10px] tracking-[0.06em] uppercase text-[#cfc8b8]">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: OCCURRENCE_COLOR }} />
+          Recorded occurrence
+        </span>
         <span className="ml-auto font-mono text-[10px] tracking-[0.06em] uppercase text-[#cfc8b8]/60">
-          {occurrences.length > 0
-            ? `${occurrences.length} ${genus} records`
-            : `${genus} range`}
+          {loading ? 'Loading occurrences' : `${occurrences.length} ${genus} records`}
         </span>
       </div>
     </div>
