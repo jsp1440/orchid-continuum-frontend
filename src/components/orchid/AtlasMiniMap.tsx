@@ -75,6 +75,8 @@ const AtlasMiniMap: React.FC<AtlasMiniMapProps> = ({
       maxZoom: 10,
       worldCopyJump: true,
       zoomControl: false,
+      // Leaflet's CSS zoom completion can outlive a mini-map that is replaced by another view.
+      zoomAnimation: false,
       attributionControl: true,
       preferCanvas: true,
       scrollWheelZoom: false,
