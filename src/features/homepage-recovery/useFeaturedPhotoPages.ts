@@ -8,7 +8,7 @@ import { fetchFeaturedPhotoPage, PhotoPageError } from './featuredPhotoPages';
 const BATCH_PAGES = 3;
 
 /** The gallery mounts once per 12-hour genus selection. Keep its working photos in stable order as pages arrive. */
-export function useFeaturedPhotoPages(genus: string, fallback: GenusMediaItem[], visible: boolean, index: number, failed: string[]) {
+export function useFeaturedPhotoPages(genus: string, fallback: GenusMediaItem[], visible: boolean, selection: { name: string | null; index: number }, failed: string[]) {
   const client = useQueryClient();
   const queryKey = useMemo(() => ['featured-species-photo-page', genus], [genus]);
   const query = useInfiniteQuery({
@@ -48,6 +48,8 @@ export function useFeaturedPhotoPages(genus: string, fallback: GenusMediaItem[],
   const resetNeeded = repeated || (query.error instanceof PhotoPageError && query.error.status === 409);
   const current = resetNeeded ? fallback : ordered;
   const items = useMemo(() => current.filter(item => !failed.includes(item.image_url)), [current, failed]);
+  const selectedIndex = selection.name === null ? -1 : items.findIndex(item => featuredSpeciesLabel(item.scientific_name).toLowerCase() === selection.name);
+  const index = selectedIndex >= 0 ? selectedIndex : Math.min(selection.index, Math.max(0, items.length - 1));
   const needsPage = items.length < index + 10;
   const { hasNextPage, isFetching, isError, fetchNextPage } = query;
   useEffect(() => {
@@ -68,7 +70,7 @@ export function useFeaturedPhotoPages(genus: string, fallback: GenusMediaItem[],
     }
   };
   return {
-    items, extend, retry,
+    items, index, extend, retry,
     unavailable: isError || repeated, loading: isFetching,
     canWrap: (count > 0 && pages === appliedPages && !hasNextPage && !repeated) || (count === 0 && isError),
     canSearch: needsPage && hasNextPage && !isFetching && !isError && !repeated && count >= budget,

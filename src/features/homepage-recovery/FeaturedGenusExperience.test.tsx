@@ -207,3 +207,37 @@ it.runIf(import.meta.env.VITE_PHOTO_REFERENCE_TEST === 'true')('traverses the re
   expect(host.querySelector('figure a')?.getAttribute('href')).toContain('dossierCandidate=95500');
   expect(host.querySelector('figcaption')?.textContent).toContain('Rights holder');
 });
+
+
+it('continues a bounded unattended scan when the initial pages contain no displayable photos', async () => {
+  daily.continuum!.media.items = [];
+  const cursors: (string | null)[] = [];
+  vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+    const cursor = new URL(url).searchParams.get('cursor');
+    cursors.push(cursor);
+    if (cursor === 'third') return page([returned('bella', 2)], null);
+    return page([], cursor === null ? 'first' : cursor === 'first' ? 'second' : 'third');
+  }));
+  render(); await settle();
+  expect(cursors).toEqual([null, 'first', 'second']);
+  expect(host.textContent).not.toContain('No displayable photographs');
+  expect(host.textContent).toContain('More photo pages to search');
+  expect(host.textContent).toContain('Continue searching for photographs');
+  await act(async () => { await vi.advanceTimersByTimeAsync(45_000); });
+  await settle();
+  expect(cursors).toEqual([null, 'first', 'second', 'third']);
+  expect(host.querySelector('figure img')?.getAttribute('alt')).toBe('Masdevallia bella');
+});
+
+it('keeps the selected species and credit when a preceding thumbnail fails', async () => {
+  daily.continuum!.media.items = ['alba', 'bella', 'caudata', 'densa'].map(name => photo(name));
+  vi.stubGlobal('fetch', vi.fn(async () => page([], null)));
+  render(); await settle();
+  act(() => host.querySelector<HTMLButtonElement>('[aria-label="Study Masdevallia bella"]')!.click());
+  act(() => host.querySelector('[aria-label="Open dossier for Masdevallia alba"] img')!.dispatchEvent(new Event('error')));
+  await settle();
+  expect(host.querySelector('figure img')?.getAttribute('alt')).toBe('Masdevallia bella');
+  expect(host.querySelector('figcaption')?.textContent).toContain('Photographer bella');
+  clickNext();
+  expect(host.querySelector('figure img')?.getAttribute('alt')).toBe('Masdevallia caudata');
+});

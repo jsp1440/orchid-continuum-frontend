@@ -1,7 +1,7 @@
 import { featuredSpecies, featuredSpeciesLabel } from './featuredSpecies';
 import type { GenusMediaItem } from '@/lib/genusMediaResolver';
 import { useFeaturedPhotoPages } from './useFeaturedPhotoPages';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { featuredTaxonCalyxHref, featuredTaxonGenusProfileHref, featuredTaxonMatrixHref } from '@/lib/featuredTaxonNavigation';
@@ -25,8 +25,8 @@ export default function FeaturedGenusExperience() {
 function GenusGallery({ genus, continuum, continuumStatus }: ReturnType<typeof useDailyGenus>) {
   const reduced = usePrefersReducedMotion();
   const section = useRef<HTMLElement>(null);
-  const [selection, setSelection] = useState(0);
-  const [pendingNext, setPendingNext] = useState<number | null>(null);
+  const [selection, setSelection] = useState<{ name: string | null; index: number }>({ name: null, index: 0 });
+  const [pendingNext, setPendingNext] = useState(false);
   const [failed, setFailed] = useState<string[]>([]);
   const [paused, setPaused] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -34,43 +34,47 @@ function GenusGallery({ genus, continuum, continuumStatus }: ReturnType<typeof u
   const [visible, setVisible] = useState(false);
   const fallback = useMemo(() => featuredSpecies(continuum?.genus === genus ? continuum.media.items : [], genus), [continuum, genus]);
   const pages = useFeaturedPhotoPages(genus, fallback, visible, selection, failed);
-  const { items, extend, canWrap } = pages;
-  const index = Math.min(selection, Math.max(0, items.length - 1));
+  const { items, index, extend, canWrap, canSearch } = pages;
+  const selectIndex = useCallback((next: number) => {
+    const photo = items[next];
+    if (photo) setSelection({ name: featuredSpeciesLabel(photo.scientific_name).toLowerCase(), index: next });
+  }, [items]);
   const active = items[index];
   const choose = (next: number) => {
     setPaused(true);
     extend();
-    setPendingNext(null);
-    if (next >= 0 && next < items.length) setSelection(next);
-    else if (items.length && (next < 0 || canWrap)) setSelection((next + items.length) % items.length);
-    else if (next >= items.length) setPendingNext(next);
+    setPendingNext(false);
+    if (next >= 0 && next < items.length) selectIndex(next);
+    else if (items.length && (next < 0 || canWrap)) selectIndex((next + items.length) % items.length);
+    else if (next >= items.length) setPendingNext(true);
   };
   useEffect(() => {
-    if (pendingNext === null) return;
-    if (pendingNext < items.length) {
-      setSelection(pendingNext);
-      setPendingNext(null);
+    if (!pendingNext) return;
+    if (index + 1 < items.length) {
+      selectIndex(index + 1);
+      setPendingNext(false);
     } else if (canWrap && items.length) {
-      setSelection(0);
-      setPendingNext(null);
+      selectIndex(0);
+      setPendingNext(false);
     }
-  }, [pendingNext, items.length, canWrap]);
+  }, [pendingNext, items.length, index, selectIndex, canWrap]);
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: 0.25 });
     if (section.current) observer.observe(section.current);
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
-    if (paused || hovered || focused || reduced || !visible || !items.length) return;
+    if (paused || hovered || focused || reduced || !visible || (!items.length && !canSearch)) return;
     const timer = window.setInterval(() => {
       if (document.hidden) return;
       extend();
-      if (index + 1 < items.length) setSelection(index + 1);
-      else if (canWrap) setSelection(0);
-      else setPendingNext(index + 1);
+      if (!items.length) return;
+      if (index + 1 < items.length) selectIndex(index + 1);
+      else if (canWrap) selectIndex(0);
+      else setPendingNext(true);
     }, 45_000);
     return () => window.clearInterval(timer);
-  }, [paused, hovered, focused, reduced, visible, index, items.length, canWrap, extend]);
+  }, [paused, hovered, focused, reduced, visible, index, items.length, canWrap, canSearch, extend, selectIndex]);
   const tiles = items.slice(index + 1, index + 10);
   if (canWrap && tiles.length < 9) tiles.push(...items.slice(0, Math.min(index, 9 - tiles.length)));
   return <section ref={section} id="featured-genus" className="recovery-feature recovery-width" aria-labelledby="featured-heading"
@@ -82,7 +86,7 @@ function GenusGallery({ genus, continuum, continuumStatus }: ReturnType<typeof u
       <figure className="recovery-hero-photo" data-uncropped={active && active.unmodified_only !== false}>
         {active ? <Link className="recovery-photo-link" to={speciesPageHrefForMedia(active.scientific_name, active.taxon_id)} aria-label={`Open dossier for pictured ${active.scientific_name}`}><img key={active.image_url} src={active.image_url} alt={active.scientific_name}
           onError={() => setFailed(previous => [...previous, active.image_url])} /></Link>
-          : <div className="recovery-photo-empty" role="status">{continuumStatus === 'loading' || pages.loading ? 'Finding source-licensed photographs…' : 'Photographs are not available from the current source response.'}</div>}
+          : <div className="recovery-photo-empty" role="status">{continuumStatus === 'loading' || pages.loading ? 'Finding source-licensed photographs…' : canSearch ? 'More photo pages to search.' : 'Photographs are not available from the current source response.'}</div>}
         {active && <figcaption><h3><i>{featuredSpeciesLabel(active.scientific_name)}</i></h3>
           <p><PhotoCredit item={active} /></p>
           {active.share_alike_notice === true && <p>ShareAlike applies to adaptations of this photograph.</p>}
@@ -110,9 +114,9 @@ function GenusGallery({ genus, continuum, continuumStatus }: ReturnType<typeof u
         {pages.canSearch && <button onClick={pages.extend}>Continue searching for photographs</button>}
         {pages.loading && !active && <p role="status">Checking the public photo collection…</p>}
         <div className="recovery-controls"><button disabled={items.length < 2} onClick={() => choose(index - 1)} aria-label="Previous species">←</button>
-          <button disabled={items.length < 2} onClick={() => setPaused(value => !value)}>{paused || reduced ? 'Study mode' : 'Pause rotation'}</button>
-          <button disabled={!items.length || pendingNext !== null || (items.length === 1 && canWrap)} onClick={() => choose(index + 1)} aria-label="Next species">→</button>
-          <span>{items.length ? `${index + 1} / ${items.length} loaded` : pages.loading || continuumStatus === 'loading' ? 'Finding photographs…' : (pages.unavailable ? 'Photographs unavailable' : 'No displayable photographs')}</span></div>
+          <button disabled={items.length < 2 && !canSearch} onClick={() => setPaused(value => !value)}>{paused || reduced ? 'Study mode' : 'Pause rotation'}</button>
+          <button disabled={!items.length || pendingNext || (items.length === 1 && canWrap)} onClick={() => choose(index + 1)} aria-label="Next species">→</button>
+          <span>{items.length ? `${index + 1} / ${items.length} loaded` : pages.loading || continuumStatus === 'loading' ? 'Finding photographs…' : (canSearch ? 'More photo pages to search' : pages.unavailable ? 'Photographs unavailable' : 'No displayable photographs')}</span></div>
         <p className="recovery-note">{reduced ? 'Automatic rotation is off for reduced motion.' : paused ? 'Paused for study. Select Study mode to resume the 45-second rotation.' : 'Rotation pauses while you read, focus a control, or leave this section.'}</p>
         <div className="recovery-genus-story"><h3>Meet the genus</h3>
           <p>Follow the photographs into the genus record to explore what has been documented, and what remains unknown.</p>
