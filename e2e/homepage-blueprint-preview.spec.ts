@@ -48,6 +48,13 @@ for (const viewport of [{ width: 1366, height: 1024 }, { width: 1024, height: 76
 
 test('offers a truthful fallback when WebGL is unavailable', async ({ page }) => {
   await page.route('**/*', route => ['127.0.0.1', 'localhost'].includes(new URL(route.request().url()).hostname) ? route.continue() : route.abort());
+  await page.route('**/atlas/public/occurrences?**', route => {
+    const genus = new URL(route.request().url()).searchParams.get('genus');
+    return route.fulfill({ json: { items: [{
+      id: 1, genus, scientific_name: `${genus} fixture`, species: 'fixture', country: 'Testland',
+      conservation_status: 'CR', location: { cell_lat: 12.5, cell_lng: 45.5, cell_deg: 1 },
+    }], scanned: 1, next_offset: null } });
+  });
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', { value: function(contextId: string, ...args: unknown[]) {
