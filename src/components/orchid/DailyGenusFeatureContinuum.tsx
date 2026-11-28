@@ -238,6 +238,12 @@ const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> =
           </div>
           <div className="flex flex-wrap gap-2 self-start md:self-auto">
             <Link
+              to="/homepage-recovery-preview#featured-genus"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#b59a58] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#665321] hover:bg-[#fff7df]"
+            >
+              Explore the species gallery <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+            <Link
               to={atlasHref}
               className="inline-flex items-center gap-2 rounded-lg border border-[#b59a58] px-4 py-2 font-mono text-[10px] uppercase tracking-[0.18em] text-[#665321] hover:bg-[#fff7df]"
             >

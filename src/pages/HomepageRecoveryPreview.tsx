@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { AppProvider } from '@/contexts/AppContext';
@@ -8,6 +9,11 @@ import HomepageAtlasExperience from '@/features/homepage-recovery/HomepageAtlasE
 import '@/features/homepage-recovery/recovery.css';
 
 export default function HomepageRecoveryPreview() {
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === '#featured-genus') document.getElementById('featured-genus')?.scrollIntoView();
+  }, [hash]);
+
   return <AppProvider><DailyGenusProvider><div className="homepage-recovery"><Navbar />
     <main id="main-content"><div className="recovery-preview-label">Design recovery preview · Reconstructed from the original homepage and Brain blueprints</div>
       <header className="recovery-opening"><div className="recovery-width"><p className="recovery-kicker">Orchid Continuum</p>
