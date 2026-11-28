@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import discoveryPhotos from '@/lib/discoveryPhotos.json';
 
 /**
  * HomeContinuumIntro — the first-screen explanation of the Orchid Continuum:
@@ -71,17 +72,42 @@ const HomeContinuumIntro: React.FC = () => (
         The Orchid Continuum
       </p>
 
-      <h2
-        id="continuum-intro-title"
-        className="mt-3 max-w-4xl leading-[1.08] tracking-[-0.01em] text-[#fffaf0]"
-        style={{
-          fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
-          fontWeight: 500,
-          fontSize: 'clamp(1.35rem, 3vw, 2.4rem)',
-        }}
-      >
-        A living orchid knowledge system, built for science and public wonder.
-      </h2>
+      <div className="grid items-center gap-5 md:grid-cols-2">
+        <div>
+          <h1
+            id="continuum-intro-title"
+            className="mt-3 max-w-4xl leading-[1.08] tracking-[-0.01em] text-[#fffaf0]"
+            style={{
+              fontFamily: '"Playfair Display","Cormorant Garamond",Georgia,serif',
+              fontWeight: 500,
+              fontSize: 'clamp(2.2rem, 5vw, 4.8rem)',
+            }}
+          >
+            Connecting the world's orchid knowledge.
+          </h1>
+          <p className="mt-3 max-w-xl text-base leading-relaxed text-stone-200">Centuries of field notes, specimens and studies describe the same orchids under different names. The Continuum connects those records for research, education and conservation.</p>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-stone-200">Calyx is an AI-assisted guide to botanical evidence. Use it to examine a source, compare interpretations or unpack a scientific term.</p>
+          <nav aria-label="Start exploring" className="my-4 flex flex-wrap gap-3">
+            <Link className="rounded-full bg-amber-200 px-4 py-2 font-medium text-stone-900" to="/knowledge-graph">Explore the Graph</Link>
+            <Link className="rounded-full border border-amber-200 px-4 py-2" to="/calyx">Meet Calyx</Link>
+          </nav>
+        </div>
+        <figure className="relative overflow-hidden rounded-2xl bg-stone-900">
+          <img className="h-52 w-full object-cover md:h-80" src="/images/discovery/346870202.webp" alt="Blue-violet flowers of Disa graminifolia" />
+          <div className="absolute inset-x-2 top-2 rounded bg-black/80 px-3 py-2 text-white">
+            <p className="text-[10px] uppercase tracking-widest text-amber-200">Illustration · how knowledge connects</p>
+            <div className="mt-1 flex items-center gap-1 text-xs sm:text-sm">
+              <span>Species</span><span aria-hidden="true" className="h-px w-5 bg-amber-200" />
+              <span>Specimen</span><span aria-hidden="true" className="h-px w-5 bg-amber-200" />
+              <span>Study</span><span aria-hidden="true" className="h-px w-5 bg-amber-200" />
+              <span>Fungus</span>
+            </div>
+          </div>
+          <figcaption className="absolute inset-x-0 bottom-0 bg-black/80 px-4 py-2 text-sm">
+            <i>Disa graminifolia</i> · <a className="underline" href={discoveryPhotos.find(photo => photo.id === 346870202)?.source}>iNaturalist photograph</a> · CC0
+          </figcaption>
+        </figure>
+      </div>
 
       <div className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
         {PARTS.map((part) => (

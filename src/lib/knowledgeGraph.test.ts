@@ -45,6 +45,16 @@ describe('normalizeGenusGraphEvidence', () => {
     ]);
   });
 
+  it('projects only a focal taxonomy edge with a public numeric source identifier', () => {
+    const edge = { id: 7, from: 42, to: 85, edge_type: 'genus_contains_species', provenance: { source_table: 'public.taxonomy_species', source_pk: '123' } };
+    const result = normalizeGenusGraphEvidence({
+      ...validPayload, focal_node: { id: 42, label: 'Cattleya' },
+      nodes: [{ id: 85, node_type: 'taxon', label: 'Cattleya aclandiae', payload: { coordinates: 'private' } }],
+      edges: [edge, { ...edge, from: 84 }, { ...edge, provenance: { source_table: 'occurrences', source_pk: 'private' } }],
+    });
+    expect(result?.speciesLinks).toEqual([{ species: 'Cattleya aclandiae', edgeId: 7, taxonomyId: '123' }]);
+  });
+
   it('rejects malformed graph counts instead of presenting invented evidence', () => {
     expect(normalizeGenusGraphEvidence({
       ...validPayload,
