@@ -81,7 +81,7 @@ function RelationshipCard({
   serviceAnswered: boolean;
 }) {
   const evidence = deriveEcologicalEvidence({
-    serviceAnswered,
+    serviceAnswered: serviceAnswered && node?.status !== 'unavailable',
     hasLinkedEvidence: Boolean(node?.hasData),
     linkedSummary: node?.summary ?? null,
   });
@@ -99,7 +99,7 @@ function RelationshipCard({
         </span>
       </div>
       <h3 className="mt-2 font-serif text-2xl leading-tight text-[#24321f]">{question}</h3>
-      <p className="mt-3 text-sm font-medium text-[#3d4936]">{evidence.detail}</p>
+      <p className="mt-3 text-sm font-medium text-[#3d4936]">{node && !node.hasData ? node.summary : evidence.detail}</p>
       {showItems ? (
         <ul className="mt-3 space-y-1 text-sm leading-6 text-[#5d684c]">
           {node?.items?.slice(0, 3).map((item) => <li key={item}>• {item}</li>)}
@@ -108,6 +108,8 @@ function RelationshipCard({
       <p className="mt-3 text-xs leading-5 text-[#747d68]">
         {evidence.state === 'available'
           ? 'Shown only because the Continuum relationship endpoint returned linked evidence for this featured genus. It describes the genus, not every species within it.'
+          : node?.status === 'unavailable'
+            ? 'This source did not supply a measurement for the genus.'
           : evidence.reason === 'service-unavailable'
             ? 'No fallback relationship claim is substituted while the evidence service is unreachable.'
             : 'This is a knowledge gap, not evidence that the relationship is biologically absent.'}
