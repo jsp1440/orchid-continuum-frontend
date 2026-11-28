@@ -3,7 +3,7 @@ import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
-import { normalizedMediaKey } from '@/lib/genusProfileDataQuality';
+import { displayScientificName, normalizedMediaKey } from '@/lib/genusProfileDataQuality';
 
 export type GenusMediaItem = MediaLicenceTerms & {
   media_id: string;
@@ -69,10 +69,12 @@ export function isHeroBinomial(scientificName: string): boolean {
 }
 
 /** Keep preflight and the public homepage hero in the same display order. */
-export function homepageHeroMedia(items: readonly GenusMediaItem[]): GenusMediaItem[] {
+export function homepageHeroMedia(items: readonly GenusMediaItem[], genus: string): GenusMediaItem[] {
   const credited = (item: GenusMediaItem) => typeof item.attribution === 'string' && Boolean(item.attribution.trim());
   return publicGenusMediaItems(items)
-    .filter(item => new URL(item.image_url).hostname !== 'sweetgum.nybg.org')
+    .filter(item => item.genus?.toLowerCase() === genus.toLowerCase()
+      && displayScientificName(item.scientific_name).split(' ')[0].toLowerCase() === genus.toLowerCase()
+      && new URL(item.image_url).hostname !== 'sweetgum.nybg.org')
     .sort((a, b) => Number(credited(b)) - Number(credited(a))
       || Number(isHeroBinomial(b.scientific_name)) - Number(isHeroBinomial(a.scientific_name))
       || Number(isInaturalistPhotographUrl(b.image_url)) - Number(isInaturalistPhotographUrl(a.image_url)));

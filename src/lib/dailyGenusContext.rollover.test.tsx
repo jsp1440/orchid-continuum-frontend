@@ -17,12 +17,13 @@ vi.mock('./supabase', () => ({
 
 const requests: string[] = [];
 const photographs: string[] = [];
-let failure: 'wrong-genus' | 'unbound-evidence' | 'wrong-evidence-genus' | 'unbound-media' | 'taxonomy' | 'evidence' | 'media' | 'photo' | 'pending' | 'live-only-photo' | null;
+let failure: 'wrong-genus' | 'unbound-evidence' | 'wrong-evidence-genus' | 'unbound-media' | 'taxonomy' | 'evidence' | 'media' | 'photo' | 'all-services' | 'pending' | 'live-only-photo' | null;
 
 function response(input: RequestInfo | URL) {
   const url = new URL(String(input));
   const genus = url.searchParams.get('genus') || url.pathname.split('/').pop()!;
   requests.push(genus);
+  if (failure === 'all-services') return new Response(null, { status: 500 });
   const broken = genus === next ? failure : null;
   if (url.pathname.startsWith('/api/media/genus/')) {
     const image = `https://images.example/${genus}.jpg`;
@@ -200,4 +201,19 @@ it('cancels pending media, taxonomy and relationship requests when the provider 
   await advance(lead);
   expect(signals.every(signal => signal.aborted)).toBe(true);
   expect(signals).toHaveLength(3);
+});
+
+it.each([true, false])('offers one same-window recovery after a completely unavailable initial visit (recovered=%s)', async recovered => {
+  failure = 'all-services';
+  const { view } = await mount();
+  expect(view.container.textContent).toBe(`${current}//unavailable`);
+  expect(requests).toHaveLength(3);
+  if (recovered) failure = null;
+  await act(async () => {
+    document.dispatchEvent(new Event('visibilitychange'));
+    window.dispatchEvent(new Event('online'));
+  });
+  expect(view.container.textContent).toBe(recovered ? `${current}/${current}/ready` : `${current}//unavailable`);
+  await act(async () => { window.dispatchEvent(new Event('pageshow')); });
+  expect(requests).toHaveLength(6);
 });

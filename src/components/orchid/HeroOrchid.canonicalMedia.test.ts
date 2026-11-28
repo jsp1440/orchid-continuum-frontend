@@ -13,7 +13,7 @@ describe('HeroOrchid canonical media contract', () => {
   });
 
   it('fails closed through the shared public media boundary when source or license provenance is missing', () => {
-    expect(source).toContain('homepageHeroMedia(media?.items ?? [])');
+    expect(source).toContain('homepageHeroMedia(media?.items ?? [], genus)');
     expect(mediaResolverSource).toContain('return publicGenusMediaItems(items)');
     expect(mediaResolverSource).toContain('Boolean(item.source_name?.trim())');
     expect(mediaResolverSource).toContain('Boolean(item.license?.trim())');

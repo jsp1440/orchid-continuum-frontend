@@ -38,7 +38,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = continuum?.media ?? null;
 
-  const eligible = useMemo(() => homepageHeroMedia(media?.items ?? []), [media]);
+  const eligible = useMemo(() => homepageHeroMedia(media?.items ?? [], genus), [media, genus]);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);

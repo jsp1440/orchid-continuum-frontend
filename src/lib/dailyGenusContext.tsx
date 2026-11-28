@@ -122,19 +122,23 @@ function checkHeroPhoto(url: string, signal: AbortSignal): Promise<void> {
   });
 }
 
+function hasRelationshipResponse(relationships: FeaturedTaxonContinuum['relationships'], genus: string) {
+  return relationships?.genus === genus && !relationships.isFallback
+    && [relationships.knowledge, relationships.geography, relationships.climate, relationships.pollinators,
+      relationships.fungi, relationships.conservation, relationships.cultivation]
+      .some(node => node.status === 'available' || node.status === 'empty');
+}
+
 async function prepareExhibit(genus: string, signal: AbortSignal) {
   const exhibit = await fetchFeaturedTaxonContinuum(genus, signal);
   const { media, graph, relationships } = exhibit;
   const taxonomy = exhibit.domains.find(item => item.domain === 'taxonomy');
   const recoveryHero = featuredSpecies(media.items, genus)[0];
-  const homepageHero = homepageHeroMedia(media.items)[0];
+  const homepageHero = homepageHeroMedia(media.items, genus)[0];
   if (exhibit.genus !== genus || graph.status !== 'ok' || graph.evidence.genus !== genus
-    || taxonomy?.state !== 'known' || relationships?.genus !== genus || relationships.isFallback
-    || ![relationships.knowledge, relationships.geography, relationships.climate, relationships.pollinators,
-      relationships.fungi, relationships.conservation, relationships.cultivation]
-      .some(node => node.status === 'available' || node.status === 'empty')
+    || taxonomy?.state !== 'known' || !hasRelationshipResponse(relationships, genus)
     || media.status !== 'ok' || media.requested_genus !== genus || media.accepted_genus !== genus || !recoveryHero
-    || homepageHero?.genus !== genus || homepageHero.scientific_name.trim().split(/\s+/)[0] !== genus) {
+    || !homepageHero) {
     throw new Error(`Incomplete featured exhibit for ${genus}`);
   }
   // The two homepage routes may rank different photos first. Load each distinct
@@ -163,6 +167,8 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     let staged: ReturnType<typeof prefetchWindow> | undefined;
     let timer: ReturnType<typeof setTimeout>;
     let hasDisplay = false;
+    let retryInitialOnResume = false;
+    let initialRetried = false;
 
     async function display(at: number, signal: AbortSignal, candidate?: ReturnType<typeof prefetchWindow>) {
       const current = () => !signal.aborted && Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS === at;
@@ -183,17 +189,22 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         }
         if (!current()) return;
         if (continuum.genus !== genus) throw new Error(`Unexpected featured genus for ${genus}`);
+        if (!hasDisplay && continuum.media.status !== 'ok' && continuum.media.status !== 'no_approved_media'
+          && continuum.graph.status !== 'ok' && !hasRelationshipResponse(continuum.relationships, genus)) {
+          throw new Error('No featured exhibit source responded with usable data');
+        }
         hasDisplay = true;
         setState({ genus, continuum, continuumStatus: 'ready', diagnostic: identity.diagnostic });
       } catch (error) {
         if (!current()) return;
+        retryInitialOnResume = !hasDisplay && !initialRetried;
         const diagnostic = `[Featured taxon] ${genus}: ${String(error)}`;
         setState(previous => previous.continuum ? { ...previous, diagnostic }
           : { genus, continuum: null, continuumStatus: 'unavailable', diagnostic });
       }
     }
 
-    function schedule() {
+    function schedule(event?: Event) {
       clearTimeout(timer);
       if (document.hidden) return;
       const now = Date.now();
@@ -203,7 +214,9 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         staged.controller.abort();
         staged = undefined;
       }
-      if (currentStart !== start) {
+      if (currentStart !== start || (event && retryInitialOnResume)) {
+        initialRetried = currentStart === start;
+        retryInitialOnResume = false;
         active?.abort();
         active = new AbortController();
         currentStart = start;
@@ -223,12 +236,14 @@ export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     schedule();
     document.addEventListener('visibilitychange', schedule);
     window.addEventListener('pageshow', schedule);
+    window.addEventListener('online', schedule);
     return () => {
       clearTimeout(timer);
       active?.abort();
       staged?.controller.abort();
       document.removeEventListener('visibilitychange', schedule);
       window.removeEventListener('pageshow', schedule);
+      window.removeEventListener('online', schedule);
     };
   }, []);
 

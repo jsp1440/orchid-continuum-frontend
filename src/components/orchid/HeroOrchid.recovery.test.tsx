@@ -3,11 +3,11 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HeroOrchid from './HeroOrchid';
-const { daily } = vi.hoisted(() => ({ daily: { current: {} as { genus: string; continuumStatus: string; continuum: { media: { items: { scientific_name: string; image_url: string; source_name: string; license: string; attribution: string | null; media_id: string }[] } } } } }));
+const { daily } = vi.hoisted(() => ({ daily: { current: {} as { genus: string; continuumStatus: string; continuum: { media: { items: { genus: string; scientific_name: string; image_url: string; source_name: string; license: string; attribution: string | null; media_id: string }[] } } } } }));
 vi.mock('@/lib/dailyGenusContext', () => ({ useDailyGenus: () => daily.current }));
 vi.mock('@/hooks/usePrefersReducedMotion', () => ({ usePrefersReducedMotion: () => false }));
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-const media = (name: string, url: string) => ({ scientific_name: name, image_url: url, source_name: 'Fixture source', license: 'CC-BY', attribution: name, media_id: url });
+const media = (name: string, url: string) => ({ genus: name.split(' ')[0], scientific_name: name, image_url: url, source_name: 'Fixture source', license: 'CC-BY', attribution: name, media_id: url });
 let host: HTMLDivElement, root: ReturnType<typeof createRoot>;
 beforeEach(() => { vi.useFakeTimers(); daily.current = { genus: 'Alpha', continuumStatus: 'ready', continuum: { media: { items: [media('Alpha first', 'https://content.eol.org./blocked.jpg'), media('Alpha second', 'https://images.invalid/a.jpg'), media('Alpha third', 'https://images.invalid/b.jpg')] } } }; host = document.createElement('div'); document.body.append(host); root = createRoot(host); });
 afterEach(() => { act(() => root.unmount()); host.remove(); vi.useRealTimers(); });
@@ -31,3 +31,18 @@ it('does not leave a stalled image forever', () => { render(); act(() => vi.adva
 it('rotates a successfully loaded photograph after 45 seconds, with a pause control', () => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); render(); load(); act(() => vi.advanceTimersByTime(45000)); expect(image().src).toBe('https://images.invalid/b.jpg'); load(); act(() => [...host.querySelectorAll('button')].find(e => e.textContent === 'Pause photographs')!.click()); act(() => vi.advanceTimersByTime(45000)); expect(image().src).toBe('https://images.invalid/b.jpg'); });
 it('manual next pauses automatic rotation', () => { render(); act(() => host.querySelector<HTMLButtonElement>('[aria-label="Next orchid photograph"]')!.click()); load(); act(() => vi.advanceTimersByTime(45000)); expect(image().src).toBe('https://images.invalid/b.jpg'); expect(host.textContent).toContain('Resume photographs'); });
 it('clears failures and old identity when the featured genus changes', () => { render(); act(() => image().dispatchEvent(new Event('error'))); daily.current = { ...daily.current, genus: 'Beta', continuum: { media: { items: [media('Beta new', 'https://images.invalid/a.jpg')] } } }; render(); expect(image().alt).toContain('Beta new'); expect(image().src).toBe('https://images.invalid/a.jpg'); expect(host.textContent).not.toContain('Alpha third'); });
+
+it('keeps all carousel choices bound to the featured genus even when the response mixes names', () => {
+  daily.current.continuum.media.items = [
+    media('Alpha first', 'https://images.invalid/first.jpg'),
+    media('Beta foreign', 'https://images.invalid/foreign.jpg'),
+    { ...media('Alpha mislabeled', 'https://images.invalid/mislabeled.jpg'), genus: 'Beta' },
+    { ...media('Beta mislabeled', 'https://images.invalid/bad-name.jpg'), genus: 'Alpha' },
+    media('Alpha last', 'https://images.invalid/last.jpg'),
+  ];
+  render();
+  act(() => host.querySelector<HTMLButtonElement>('[aria-label="Next orchid photograph"]')!.click());
+  expect(image().src).toBe('https://images.invalid/last.jpg');
+  act(() => host.querySelector<HTMLButtonElement>('[aria-label="Next orchid photograph"]')!.click());
+  expect(image().src).toBe('https://images.invalid/first.jpg');
+});
