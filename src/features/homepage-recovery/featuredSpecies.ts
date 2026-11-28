@@ -20,4 +20,3 @@ export function featuredSpecies(items: GenusMediaItem[], genus: string): GenusMe
       taxa.add(taxon); photos.add(photo); return true;
     });
 }
-
