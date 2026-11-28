@@ -11,7 +11,11 @@ for (const viewport of [{ width: 1366, height: 1024 }, { width: 1024, height: 76
     });
     await page.route('https://example.org/*.png', route => route.fulfill({ contentType: 'image/png', body: png }));
     await page.route('**/api/media/genus/**', route => {
-      const genus = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!);
+      const [, encodedGenus, suffix] = new URL(route.request().url()).pathname.match(/^\/api\/media\/genus\/([^/]+)(?:\/(species-page))?$/)!;
+      const genus = decodeURIComponent(encodedGenus);
+      if (suffix === 'species-page') return route.fulfill({ json: {
+        schema: 'oc.featured-genus.species-photo-page.v1', accepted_genus: genus, items: [], page: { limit: 10, next_cursor: null },
+      } });
       return route.fulfill({ json: { status: 'ok', requested_genus: genus, accepted_genus: genus, items: ['alba', 'bella', 'caudata', 'densa', 'exigua', 'flava', 'gracilis', 'hirtzii', 'ignea', 'jucunda', 'kimballiana', 'lenta'].map((name, index) => ({
         media_id: String(index), genus, scientific_name: `${genus} ${name}`, image_url: `https://example.org/${name}.png`, thumbnail_url: `https://example.org/${name}.png`, source_name: 'Test fixture; not scientific evidence', source_record_url: `https://example.org/records/${name}`, license: 'CC BY 4.0', attribution: `Test photographer ${name}`, media_kind: 'photograph',
         ...(name === 'bella' ? { license: 'CC BY-ND 4.0', licence_url: 'https://creativecommons.org/licenses/by-nd/4.0/', unmodified_only: true } : { unmodified_only: false }),
@@ -22,10 +26,15 @@ for (const viewport of [{ width: 1366, height: 1024 }, { width: 1024, height: 76
     if (viewport.width < 1280) await expect(page.getByRole('button', { name: 'Toggle navigation' })).toBeVisible();
     const exhibit = page.locator('#featured-genus');
     await expect(exhibit.locator('.recovery-species-grid button')).toHaveCount(9);
+    const tile = exhibit.locator('.recovery-species-grid').getByRole('link', { name: /^Open dossier for .* bella$/ });
+    await expect(tile.locator('img')).toHaveAttribute('src', 'https://example.org/bella.png');
+    await expect(tile.locator('img')).toHaveCSS('object-fit', 'contain');
+    const tileDossier = await tile.getAttribute('href');
     await exhibit.getByRole('button', { name: /Study .* bella$/ }).click();
+    await expect(tile).toHaveCount(0);
+    await expect(exhibit.getByRole('link', { name: /^Open dossier for pictured .* bella$/ })).toHaveAttribute('href', tileDossier!);
     await expect(exhibit.locator('figure img')).toHaveAttribute('src', 'https://example.org/bella.png');
     await expect(exhibit.locator('figure img')).toHaveCSS('object-fit', 'contain');
-    await expect(exhibit.getByRole('button', { name: /Study .* bella$/ }).locator('img')).toHaveCSS('object-fit', 'contain');
     await expect(exhibit.getByRole('link', { name: 'CC BY-ND 4.0' })).toHaveAttribute('href', 'https://creativecommons.org/licenses/by-nd/4.0/');
     await expect(exhibit.locator('figcaption')).toContainText('Test photographer bella');
     await expect(exhibit.getByRole('link', { name: 'Original source record ↗' })).toHaveAttribute('href', 'https://example.org/records/bella');
