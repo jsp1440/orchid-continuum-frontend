@@ -138,6 +138,19 @@ describe('DailyGenusFeatureContinuum media integrity', () => {
     expect(container.textContent).toContain('Recorded as Cattleya labiata Lindl.');
   });
 
+  it('selects the verified homepage hero and filters every gallery item by genus and publication rights', () => {
+    mocks.useDailyGenus.mockReturnValue(state({ continuum: continuumWithMedia([
+      mediaItem({ image_url: 'https://cdn.example.test/unlicensed.jpg', license: null }),
+      mediaItem({ image_url: 'https://cdn.example.test/mismatched.jpg', genus: 'Vanilla' }),
+      mediaItem({ image_url: 'https://cdn.example.test/misnamed.jpg', scientific_name: 'Vanilla alba' }),
+      mediaItem({ image_url: 'https://cdn.example.test/later.jpg', attribution: null }),
+      mediaItem({ image_url: 'https://cdn.example.test/chosen.jpg', attribution: 'Photographer' }),
+    ]) as never }));
+    render();
+    expect(container.querySelector('figure img')?.getAttribute('src')).toBe('https://cdn.example.test/chosen.jpg');
+    expect(container.querySelector('img[src*="unlicensed"], img[src*="mismatched"], img[src*="misnamed"]')).toBeNull();
+  });
+
   it('drops a broken photograph from the page and yields to the next approved one', () => {
     mocks.useDailyGenus.mockReturnValue(
       state({
