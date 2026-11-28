@@ -41,7 +41,7 @@
 
 
 import { supabase } from './supabase';
-import { hasThreatAssessment } from './atlasLocalitySafety';
+import { hasThreatAssessment, toPublicAtlasOccurrence } from './atlasLocalitySafety';
 import { ATLAS_PUBLIC_CELLS_URL, ATLAS_PUBLIC_CURATED_URL, ATLAS_PUBLIC_OCCURRENCES_URL } from './backendConfig';
 
 // ---------------------------------------------------------------------------
@@ -444,12 +444,14 @@ async function fetchAtlasPageWithRetry(
   offset: number,
   pageSize: number,
   genus?: string,
+  signal?: AbortSignal,
 ): Promise<PublicOccurrencePage | null> {
   const genusParam = genus ? `&genus=${encodeURIComponent(genus)}` : '';
   for (let attempt = 0; attempt <= ATLAS_PAGE_RETRIES; attempt++) {
+    if (signal?.aborted) return null;
     try {
       const res = await fetch(`${ATLAS_PUBLIC_OCCURRENCES_URL}?offset=${offset}&limit=${pageSize}${genusParam}`, {
-        headers: { Accept: 'application/json' },
+        headers: { Accept: 'application/json' }, signal,
       });
       if (res.ok) {
         const body = (await res.json()) as Partial<PublicOccurrencePage>;
@@ -465,6 +467,7 @@ async function fetchAtlasPageWithRetry(
       }
       console.warn(`[orchidContinuum] atlas page @${offset} failed (attempt ${attempt + 1}/${ATLAS_PAGE_RETRIES + 1}): HTTP ${res.status}`);
     } catch (err) {
+      if (signal?.aborted) return null;
       console.warn(`[orchidContinuum] atlas page @${offset} threw (attempt ${attempt + 1}/${ATLAS_PAGE_RETRIES + 1}):`, err);
     }
     if (attempt < ATLAS_PAGE_RETRIES) {
@@ -1323,6 +1326,26 @@ export function fetchAtlasCells(options: { resolution: AtlasCellResolution; genu
 // ---------------------------------------------------------------------------
 // Per-record points for one genus (server-side genus filter)
 // ---------------------------------------------------------------------------
+
+/** One keyset page for the homepage, independent of the full Atlas load. */
+export async function fetchAtlasGenusSample(genus: string, signal: AbortSignal) {
+  const key = genus.trim().toLowerCase();
+  if (!key) return null;
+  const page = await fetchAtlasPageWithRetry(0, 500, key, signal);
+  if (!page) return null;
+
+  const points: AtlasOccurrencePoint[] = [];
+  for (const item of page.items.slice(0, 500)) {
+    if (!item || item.id == null || !item.location || !Number.isFinite(item.location.cell_deg) ||
+        item.location.cell_deg <= 0) continue;
+    const row = publicItemToRow(item);
+    if (!row || !Number.isFinite(row.lat) || !Number.isFinite(row.lng) ||
+        Math.abs(row.lat) > 90 || Math.abs(row.lng) > 180) continue;
+    const point = atlasRowToPoint(row);
+    if (point.genus.trim().toLowerCase() === key) points.push(toPublicAtlasOccurrence(point));
+  }
+  return { points, more: page.next_offset !== null || page.items.length > 500, scanned: page.scanned };
+}
 
 export interface AtlasGenusLoad {
   points: AtlasOccurrencePoint[];

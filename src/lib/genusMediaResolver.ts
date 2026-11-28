@@ -1,11 +1,11 @@
-import { fetchSpeciesExhibit } from '@/lib/speciesExhibit';
+import { fetchSpeciesExhibit, type MediaLicenceTerms } from '@/lib/speciesExhibit';
 import { speciesExhibitMediaCandidates } from '@/lib/speciesExhibitMedia';
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 import { isBrowserEmbeddableImageUrl } from '@/lib/embeddableImageUrl';
 import { normalizedMediaKey } from '@/lib/genusProfileDataQuality';
 
-export type GenusMediaItem = {
+export type GenusMediaItem = MediaLicenceTerms & {
   media_id: string;
   taxon_id: string | null;
   scientific_name: string;
@@ -78,6 +78,8 @@ async function exhibitPhotographs(genus: string, signal?: AbortSignal): Promise<
       image_url: photo.url, thumbnail_url: photo.url,
       source_name: photo.source as string, source_record_url: null,
       license: photo.license, attribution: photo.rights_holder || photo.observer_name,
+      licence_name: photo.licence_name, licence_url: photo.licence_url,
+      share_alike_notice: photo.share_alike_notice, unmodified_only: photo.unmodified_only,
       media_kind: 'photograph' as const, quality_score: null,
     })));
 }

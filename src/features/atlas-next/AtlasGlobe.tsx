@@ -53,6 +53,8 @@ interface Props {
   focus: Focus | null;
   autoRotate: boolean;
   onSelect: (id: string | null) => void;
+  /** Let embedded consumers offer a usable fallback when WebGL is unavailable. */
+  onUnavailable?: () => void;
   onHover?: (id: string | null, clientX: number, clientY: number) => void;
   /** Reported whenever the camera settles, so the shell can show where it is. */
   onCameraChange?: (view: { lat: number; lng: number; distance: number }) => void;
@@ -69,6 +71,7 @@ const AtlasGlobe: React.FC<Props> = ({
   focus,
   autoRotate,
   onSelect,
+  onUnavailable,
   onHover,
   onCameraChange,
 }) => {
@@ -79,6 +82,8 @@ const AtlasGlobe: React.FC<Props> = ({
   // the FIRST render's callbacks — which resolve a click against an empty
   // dataset and silently do nothing. Every handler is reached through a ref
   // that each render refreshes.
+  const unavailableRef = useRef(onUnavailable);
+  unavailableRef.current = onUnavailable;
   const cameraChangeRef = useRef(onCameraChange);
   const selectRef = useRef(onSelect);
   const hoverRef = useRef(onHover);
@@ -195,7 +200,8 @@ const AtlasGlobe: React.FC<Props> = ({
     try {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
     } catch {
-      // No WebGL. The shell renders its own fallback; leave the mount empty.
+      // The renderer cannot draw; give its consumer a chance to offer a 2D view.
+      unavailableRef.current?.();
       return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));

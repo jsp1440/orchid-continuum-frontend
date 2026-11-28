@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import HomeSpeciesExhibit from '@/components/orchid/HomeSpeciesExhibit';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
@@ -72,6 +73,11 @@ const AppLayout: React.FC = () => {
   // The species the hero photograph actually names, so the dependency section
   // asks about the same orchid the visitor is looking at.
   const [heroSpecies, setHeroSpecies] = useState<string | null>(null);
+
+  const { hash } = useLocation();
+  useEffect(() => {
+    if (hash === '#species-in-focus') document.getElementById('species-in-focus')?.scrollIntoView();
+  }, [hash]);
 
   return (
     <div className="min-h-screen bg-[#1a2e1a] antialiased">

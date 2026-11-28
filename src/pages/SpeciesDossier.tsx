@@ -27,6 +27,7 @@ import {
   pageSubject,
   resolveDossierForSubject,
   resolveFederatedSpecies,
+  sameScientificName,
   sectionExcerpts,
   sectionMessage,
   type DossierSubjectResolution,
@@ -100,6 +101,9 @@ const SpeciesDossier: React.FC = () => {
   // names its subject, so the dossier can be checked against it.
   const [searchParams] = useSearchParams();
   const linkedName = (searchParams.get('name') ?? '').trim() || null;
+  const candidateParam = searchParams.get('dossierCandidate') ?? '';
+  const dossierCandidate = linkedName === taxonomyId && /^\d+$/.test(candidateParam)
+    ? candidateParam : null;
 
   const [data, setData] = useState<SpeciesDossierData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -122,7 +126,7 @@ const SpeciesDossier: React.FC = () => {
   // A chosen Calyx canonical taxon can differ from the public route's taxon ID.
   // Keep its dossier separate from route-keyed public fields until a verified
   // crosswalk exists. The key also stops a prior route's selection carrying over.
-  const routeKey = JSON.stringify([taxonomyId, linkedName]);
+  const routeKey = JSON.stringify([taxonomyId, linkedName, dossierCandidate]);
   const currentRouteKey = useRef(routeKey);
   currentRouteKey.current = routeKey;
   const candidateRequestVersion = useRef(0);
@@ -244,6 +248,7 @@ const SpeciesDossier: React.FC = () => {
       .then((d) => {
         if (ctrl.signal.aborted) return { state: 'unavailable' } as DossierSubjectResolution;
         const publicName =
+          (dossierCandidate && sameScientificName(linkedName, d?.scientific_name) ? d?.scientific_name : null) ||
           d?.canonical_name ||
           d?.scientific_name ||
           [d?.genus, d?.species ?? d?.specific_epithet].filter(Boolean).join(' ') ||
@@ -256,7 +261,7 @@ const SpeciesDossier: React.FC = () => {
           return { state: 'unavailable' } as DossierSubjectResolution;
         }
         return resolveDossierForSubject(
-          taxonomyId,
+          dossierCandidate ?? taxonomyId,
           subject.name,
           { fetchDossier: fetchSpeciesDossier, resolveSpecies: resolveFederatedSpecies },
           ctrl.signal,
@@ -295,7 +300,7 @@ const SpeciesDossier: React.FC = () => {
       ctrl.abort();
       candidateRequestVersion.current += 1;
     };
-  }, [taxonomyId, linkedName]);
+  }, [taxonomyId, linkedName, dossierCandidate]);
 
   // On a subject conflict the id-keyed public record may be another species,
   // so neither its name nor its fields stand for this page's subject.

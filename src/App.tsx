@@ -19,6 +19,7 @@ import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
 import About from "./pages/About";
 import Atlas from "./pages/Atlas";
+const HomepageRecoveryPreview = lazy(() => import("./pages/HomepageRecoveryPreview"));
 const AtlasNext = lazy(() => import("./pages/AtlasNext"));
 const AtlasChecklistPage = lazy(() => import("./features/atlas-checklist/AtlasChecklistPage"));
 import OrchidZoo from "./pages/OrchidZoo";
@@ -96,6 +97,7 @@ const App = () => (
               <AtlasFilterProvider>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  <Route path="/homepage-recovery-preview" element={<Suspense fallback={<p>Loading homepage preview…</p>}><HomepageRecoveryPreview /></Suspense>} />
                   <Route path="/lexicon/*" element={<LexiconAppLayout />} />
                   <Route path="/continuum-next" element={<ContinuumNext />} />
                   <Route path="/relationship-matrix" element={<RelationshipMatrixNext />} />
