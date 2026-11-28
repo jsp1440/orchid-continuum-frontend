@@ -14,6 +14,7 @@ for (const viewport of [{ width: 1366, height: 1024 }, { width: 1024, height: 76
       const genus = decodeURIComponent(new URL(route.request().url()).pathname.split('/').at(-1)!);
       return route.fulfill({ json: { status: 'ok', requested_genus: genus, accepted_genus: genus, items: ['alba', 'bella', 'caudata', 'densa', 'exigua', 'flava', 'gracilis', 'hirtzii', 'ignea', 'jucunda', 'kimballiana', 'lenta'].map((name, index) => ({
         media_id: String(index), genus, scientific_name: `${genus} ${name}`, image_url: `https://example.org/${name}.png`, thumbnail_url: `https://example.org/${name}.png`, source_name: 'Test fixture; not scientific evidence', source_record_url: `https://example.org/records/${name}`, license: 'CC BY 4.0', attribution: `Test photographer ${name}`, media_kind: 'photograph',
+        ...(name === 'bella' ? { license: 'CC BY-ND 4.0', licence_url: 'https://creativecommons.org/licenses/by-nd/4.0/', unmodified_only: true } : { unmodified_only: false }),
       })) } });
     });
     await page.goto('/homepage-recovery-preview');
@@ -23,8 +24,14 @@ for (const viewport of [{ width: 1366, height: 1024 }, { width: 1024, height: 76
     await expect(exhibit.locator('.recovery-species-grid button')).toHaveCount(9);
     await exhibit.getByRole('button', { name: /Study .* bella$/ }).click();
     await expect(exhibit.locator('figure img')).toHaveAttribute('src', 'https://example.org/bella.png');
+    await expect(exhibit.locator('figure img')).toHaveCSS('object-fit', 'contain');
+    await expect(exhibit.getByRole('button', { name: /Study .* bella$/ }).locator('img')).toHaveCSS('object-fit', 'contain');
+    await expect(exhibit.getByRole('link', { name: 'CC BY-ND 4.0' })).toHaveAttribute('href', 'https://creativecommons.org/licenses/by-nd/4.0/');
     await expect(exhibit.locator('figcaption')).toContainText('Test photographer bella');
-    await expect(exhibit.locator('figcaption a')).toHaveAttribute('href', 'https://example.org/records/bella');
+    await expect(exhibit.getByRole('link', { name: 'Original source record ↗' })).toHaveAttribute('href', 'https://example.org/records/bella');
+    const selectedName = (await exhibit.locator('figcaption h3').innerText()).trim();
+    const subject = encodeURIComponent(selectedName);
+    await expect(exhibit.getByRole('link', { name: `Species dossier for ${selectedName}` })).toHaveAttribute('href', `/species/${subject}?name=${subject}`);
     for (let i = 0; i < 9; i++) await exhibit.getByRole('button', { name: 'Next species', exact: true }).click();
     await expect(exhibit.locator('figure img')).toHaveAttribute('src', 'https://example.org/kimballiana.png');
     const genus = (await exhibit.locator('h2').innerText()).trim();

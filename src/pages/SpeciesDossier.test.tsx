@@ -667,6 +667,28 @@ describe('dossier subject identity across id spaces', () => {
       knowledge_graph: emptySection({ state: 'available', summary: 'Labiata relations.' }),
     });
 
+  it('uses a photo candidate only for the named dossier, keeping its ID out of public record lookups', async () => {
+    const name = 'Cattleya labiata Lindl.';
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: '6056', canonical_name: 'Cattleya labiata', scientific_name: name,
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(labiata());
+    renderPage(`/species/${encodeURIComponent(name)}?name=${encodeURIComponent(name)}&dossierCandidate=7904`);
+    await flush();
+    expect(mocks.fetchSpeciesById).toHaveBeenCalledWith(name, expect.anything());
+    expect(mocks.fetchSpeciesDossier).toHaveBeenCalledWith('7904', expect.anything());
+    expect(container.textContent).toContain('Labiata relations.');
+  });
+
+  it('withholds the evidence when a photo candidate refers to a different species', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue(null);
+    mocks.fetchSpeciesDossier.mockResolvedValue(caladenia());
+    renderPage('/species/Cattleya%20labiata?name=Cattleya%20labiata&dossierCandidate=6056');
+    await flush();
+    expect(mocks.resolveFederatedSpecies).toHaveBeenCalledWith({ name: 'Cattleya labiata' }, expect.anything());
+    expect(container.textContent).not.toContain('Caladenia relations.');
+  });
+
   it('shows the dossier of the linked species, not of the colliding route id', async () => {
     // Production: public search "Cattleya labiata" is 6056 and links here with
     // its name; Calyx 6056 is Caladenia x suffusa; public detail 404s.

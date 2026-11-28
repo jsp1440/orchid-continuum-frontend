@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useParams, useSearchParams } from 'react-router-dom';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import FeaturedGenusExperience from './FeaturedGenusExperience';
 import { featuredSpecies } from './featuredSpecies';
@@ -25,10 +25,45 @@ it('keeps the selected photograph, full source identity, caption and credit sync
   render(); act(() => host.querySelector<HTMLButtonElement>('[aria-label="Study Masdevallia bella"]')!.click());
   expect(host.querySelector('figure img')?.getAttribute('src')).toContain('/bella.jpg');
   expect(host.querySelector('figcaption')?.textContent).toContain('Photographer bella');
-  expect(host.querySelector('figcaption a')?.getAttribute('href')).toContain('/records/bella');
+  expect(host.querySelector('figcaption a[target="_blank"]')?.getAttribute('href')).toContain('/records/bella');
+  expect(host.querySelector('figcaption a[aria-label="Species dossier for Masdevallia bella"]')?.getAttribute('href')).toBe('/species/Masdevallia%20bella?name=Masdevallia%20bella');
   expect(host.querySelector('[aria-pressed=true]')?.getAttribute('aria-label')).toBe('Study Masdevallia bella');
   act(() => vi.advanceTimersByTime(90_000));
   expect(host.querySelector('figure img')?.getAttribute('src')).toContain('/bella.jpg');
+});
+it('opens the dossier with the full source name even when the media has a numeric identifier', () => {
+  const name = 'Masdevallia rosa-mariae var. minor (A.Smith) B.Jones';
+  daily.continuum!.media.items = [photo('alba'), photo('rosa-mariae', { scientific_name: name, taxon_id: '6056' })];
+  function Destination() {
+    const { slug } = useParams();
+    const [query] = useSearchParams();
+    return <output>{JSON.stringify([slug, query.get('name'), query.get('dossierCandidate')])}</output>;
+  }
+  act(() => root.render(<MemoryRouter><Routes>
+    <Route path="/" element={<FeaturedGenusExperience />} />
+    <Route path="/species/:slug" element={<Destination />} />
+  </Routes></MemoryRouter>));
+  const tile = host.querySelector<HTMLAnchorElement>(`a[aria-label="Open dossier for ${name}"]`)!;
+  expect(tile.closest('button')).toBeNull();
+  act(() => tile.click());
+  expect(host.querySelector('output')?.textContent).toBe(JSON.stringify([name, name, '6056']));
+});
+it('shows the selected photo’s licence and ShareAlike notice, and preserves restricted pictures in both views', () => {
+  const deed = 'https://creativecommons.org/licenses/by-sa/4.0/';
+  daily.continuum!.media.items = [
+    photo('alba', { licence_name: 'CC BY-SA 4.0', licence_url: deed, share_alike_notice: true, unmodified_only: false }),
+    photo('bella', { license: 'CC BY-ND', unmodified_only: true }),
+  ];
+  render();
+  expect(host.querySelector('figcaption a[rel~=license]')?.textContent).toBe('CC BY-SA 4.0');
+  expect(host.querySelector('figcaption a[rel~=license]')?.getAttribute('href')).toBe(deed);
+  expect(host.querySelector('figcaption')?.textContent).toContain('ShareAlike');
+  const study = host.querySelector<HTMLButtonElement>('[aria-label="Study Masdevallia bella"]')!;
+  expect(study.querySelector('img')?.dataset.uncropped).toBe('true');
+  act(() => study.click());
+  expect(host.querySelector('figure')?.dataset.uncropped).toBe('true');
+  expect(host.querySelector('figcaption a[rel~=license]')).toBeNull();
+  expect(host.querySelector('figcaption')?.textContent).not.toContain('ShareAlike');
 });
 it('advances through a moving nine-species window, beyond the first nine', () => {
   render(); for (let i = 0; i < 10; i++) act(() => host.querySelector<HTMLButtonElement>('[aria-label="Next species"]')!.click());

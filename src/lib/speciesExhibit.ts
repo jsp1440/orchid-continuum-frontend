@@ -1,7 +1,14 @@
 import { CALYX_BACKEND_BASE_URL } from '@/lib/backendConfig';
 import { fetchWithColdStartRetry } from '@/lib/coldStartFetch';
 
-export type SpeciesExhibitMedia = {
+export type MediaLicenceTerms = {
+  licence_name?: string | null;
+  licence_url?: string | null;
+  share_alike_notice?: boolean;
+  unmodified_only?: boolean;
+};
+
+export type SpeciesExhibitMedia = MediaLicenceTerms & {
   id: string | number | null;
   url: string;
   source: string | null;

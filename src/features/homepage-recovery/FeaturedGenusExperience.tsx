@@ -5,6 +5,7 @@ import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { displayScientificName } from '@/lib/genusProfileDataQuality';
 import { featuredTaxonCalyxHref, featuredTaxonGenusProfileHref, featuredTaxonMatrixHref } from '@/lib/featuredTaxonNavigation';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
+import { speciesPageHrefForMedia } from '@/lib/speciesDossier';
 
 export default function FeaturedGenusExperience() {
   const { genus, continuum, continuumStatus } = useDailyGenus();
@@ -20,6 +21,10 @@ export default function FeaturedGenusExperience() {
     .filter(item => !failed.includes(item.image_url)), [continuum, genus, failed]);
   const index = selection.genus === genus && items.length ? selection.index % items.length : 0;
   const active = items[index];
+  const licenceLabel = active?.licence_name || active?.license;
+  const licenceUrl = (active?.licence_url || active?.license)?.trim()
+    .match(/^https?:\/\/creativecommons\.org\/(?:licenses|publicdomain)\/[a-z-]+\/\d+(?:\.\d+)*(?:\/[a-z-]+)?\/?$/i)?.[0]
+    .replace(/^http:/i, 'https:');
   const choose = (next: number) => { setPaused(true); setSelection({ genus, index: (next + items.length) % items.length }); };
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: 0.25 });
@@ -40,24 +45,32 @@ export default function FeaturedGenusExperience() {
     <div className="recovery-section-heading"><div><p className="recovery-kicker">A living introduction · Featured Genus</p>
       <h2 id="featured-heading"><i>{genus}</i></h2></div><span className="recovery-note">A new genus every 12 hours · Stay and study</span></div>
     <div className="recovery-exhibit">
-      <figure className="recovery-hero-photo">
+      <figure className="recovery-hero-photo" data-uncropped={active && active.unmodified_only !== false}>
         {active ? <img key={active.image_url} src={active.image_url} alt={active.scientific_name}
           onError={() => setFailed(previous => [...previous, active.image_url])} />
           : <div className="recovery-photo-empty" role="status">{continuumStatus === 'loading' ? 'Finding source-licensed photographs…' : 'Photographs are not available from the current source response.'}</div>}
         {active && <figcaption><h3><i>{displayScientificName(active.scientific_name)}</i></h3>
-          <p>{active.attribution || 'Photographer not supplied'} · {active.source_name} · {active.license}</p>
-          {active.source_record_url && /^https?:\/\//i.test(active.source_record_url) && <a href={active.source_record_url} target="_blank" rel="noreferrer">Original source record ↗</a>}
+          <p>{active.attribution || 'Photographer not supplied'} · {active.source_name} · {licenceUrl
+            ? <a href={licenceUrl} target="_blank" rel="noopener noreferrer license">{licenceLabel}</a> : licenceLabel}</p>
+          {active.share_alike_notice === true && <p>ShareAlike applies to adaptations of this photograph.</p>}
+          <div className="recovery-photo-links">
+            <Link to={speciesPageHrefForMedia(active.scientific_name, active.taxon_id)} aria-label={`Species dossier for ${active.scientific_name}`}>Species dossier</Link>
+            {active.source_record_url && /^https?:\/\//i.test(active.source_record_url) && <a href={active.source_record_url} target="_blank" rel="noreferrer">Original source record ↗</a>}
+          </div>
         </figcaption>}
       </figure>
       <div className="recovery-study"><p className="recovery-kicker">One genus, many forms</p>
-        <p>Choose a photograph to study its species. Its name, credit, and source travel together.</p>
+        <p>Choose a photograph to study it here, or select its name to open the species dossier.</p>
         <div className="recovery-species-grid" role="group" aria-label={`${genus} species photographs`}>
-          {items.slice(start, start + 9).map((item, offset) => <button key={item.media_id + item.image_url} type="button"
-            aria-label={`Study ${displayScientificName(item.scientific_name)}`} aria-pressed={start + offset === index}
-            onClick={() => choose(start + offset)}>
-            <img src={item.image_url} alt="" loading="lazy" onError={() => setFailed(previous => [...previous, item.image_url])} />
-            <span><i>{displayScientificName(item.scientific_name).split(' ').slice(1).join(' ')}</i></span>
-          </button>)}
+          {items.slice(start, start + 9).map((item, offset) => <div key={item.media_id + item.image_url}>
+            <button type="button" aria-label={`Study ${displayScientificName(item.scientific_name)}`}
+              aria-pressed={start + offset === index} onClick={() => choose(start + offset)}>
+              <img src={item.image_url} alt="" loading="lazy" data-uncropped={item.unmodified_only !== false} onError={() => setFailed(previous => [...previous, item.image_url])} />
+            </button>
+            <Link to={speciesPageHrefForMedia(item.scientific_name, item.taxon_id)} aria-label={`Open dossier for ${item.scientific_name}`}>
+              <i>{displayScientificName(item.scientific_name).split(' ').slice(1).join(' ')}</i>
+            </Link>
+          </div>)}
         </div>
         {items.length > 0 && items.length < 9 && <p className="recovery-note">{items.length} displayable source photographs are available in this response; the exhibit supports up to nine at a time.</p>}
         <div className="recovery-controls"><button disabled={items.length < 2} onClick={() => choose(index - 1)} aria-label="Previous species">←</button>

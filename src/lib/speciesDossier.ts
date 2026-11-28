@@ -456,3 +456,10 @@ export function speciesPageHref(taxonomyId: string, scientificName?: string | nu
   const base = `/species/${encodeURIComponent(taxonomyId)}`;
   return name ? `${base}?name=${encodeURIComponent(name)}` : base;
 }
+
+/** The media contract's ID is a dossier candidate; the public species route is keyed by name. */
+export function speciesPageHrefForMedia(scientificName: string, taxonId: string | null): string {
+  const name = scientificName.replace(/\s+/g, ' ').trim();
+  const href = speciesPageHref(name, name);
+  return taxonId && /^\d+$/.test(taxonId) ? `${href}&dossierCandidate=${taxonId}` : href;
+}
