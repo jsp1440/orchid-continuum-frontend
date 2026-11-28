@@ -13,6 +13,7 @@ import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 import AtlasAwareCalyxRoute from "@/components/calyx/AtlasAwareCalyxRoute";
 import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
 
+import PublicKnowledgeGraph from "./pages/PublicKnowledgeGraph";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
@@ -151,6 +152,7 @@ const App = () => (
                   <Route path="/mycorrhizae/:taxa" element={<MycorrhizaProfile />} />
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/climate" element={<Climate />} />
+                  <Route path="/knowledge-graph" element={<PublicKnowledgeGraph />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
                   <Route path="/literature" element={<ProtectedRoute title="Literature corpus · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty corpus."><Literature /></ProtectedRoute>} />

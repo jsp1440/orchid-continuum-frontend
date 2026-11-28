@@ -1,4 +1,5 @@
 import React from 'react';
+import discoveryPhotos from '@/lib/discoveryPhotos.json';
 import { Link } from 'react-router-dom';
 import {
   Globe,
@@ -96,13 +97,14 @@ const CAPABILITIES: readonly Capability[] = [
   },
 ];
 
-const CapabilityCard: React.FC<{ cap: Capability }> = ({ cap }) => {
+const CapabilityCard: React.FC<{ cap: Capability; photo: typeof discoveryPhotos[number] }> = ({ cap, photo }) => {
   const Icon = cap.icon;
   return (
     <Link
       to={cap.href}
       className="group block text-left rounded-2xl border border-[#d4b34a]/20 bg-[#13241a] p-6 transition-colors hover:border-[#d4b34a]/55 hover:bg-[#16291c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#e6c563]"
     >
+      <img aria-hidden="true" alt="" loading="lazy" src={`/images/discovery/${photo.id}.webp`} className="mb-4 aspect-[5/2] w-full rounded-lg object-cover" />
       <span className="inline-flex items-center justify-center h-12 w-12 rounded-xl bg-[#d4b34a]/12 text-[#e6c563]">
         <Icon className="h-6 w-6" strokeWidth={1.6} />
       </span>
@@ -172,8 +174,8 @@ const CapabilityGrid: React.FC = () => {
         </div>
 
         <div className="mt-9 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {CAPABILITIES.map((cap) => (
-            <CapabilityCard key={cap.title} cap={cap} />
+          {CAPABILITIES.map((cap, index) => (
+            <CapabilityCard key={cap.title} cap={cap} photo={discoveryPhotos[index]} />
           ))}
         </div>
       </div>

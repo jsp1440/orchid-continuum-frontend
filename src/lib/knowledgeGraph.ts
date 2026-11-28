@@ -36,6 +36,7 @@ export type EcologicalDomainEvidence = {
 
 export type GenusGraphEvidence = {
   genus: string;
+  speciesLinks?: Array<{ species: string; edgeId: number; taxonomyId: string }>;
   domains: DomainEvidence[];
   /**
    * Canonical ecological coverage returned by the backend graph vocabulary.
@@ -88,6 +89,33 @@ function normalizeDomainCoverage<TDomain extends string>(
   return normalized;
 }
 
+// Only the public genus-to-species backbone is projected. Other node payloads
+// can carry locality or unreviewed material and are never sent to the view.
+function genusSpeciesLinks(payload: JsonRecord, focal: JsonRecord) {
+  if (!Array.isArray(payload.nodes) || !Array.isArray(payload.edges)) return [];
+  const speciesNames = new Map<number, string>();
+  for (const node of payload.nodes) {
+    if (isRecord(node) && node.node_type === 'taxon' && typeof node.id === 'number' &&
+        typeof node.label === 'string' && /^[A-Za-z×][A-Za-z× .-]{1,100}$/.test(node.label)) {
+      speciesNames.set(node.id, node.label);
+    }
+  }
+  const links: NonNullable<GenusGraphEvidence['speciesLinks']> = [];
+  for (const edge of payload.edges) {
+    if (!isRecord(edge) || edge.edge_type !== 'genus_contains_species' ||
+        edge.from !== focal.id || typeof edge.to !== 'number' ||
+        typeof edge.id !== 'number' || !Number.isSafeInteger(edge.id) || !isRecord(edge.provenance)) continue;
+    const { source_table, source_pk } = edge.provenance;
+    const species = speciesNames.get(edge.to);
+    if (species && source_table === 'public.taxonomy_species' &&
+        typeof source_pk === 'string' && /^\d{1,20}$/.test(source_pk)) {
+      links.push({ species, edgeId: edge.id, taxonomyId: source_pk });
+    }
+    if (links.length === 12) break;
+  }
+  return links;
+}
+
 export function normalizeGenusGraphEvidence(payload: unknown): GenusGraphEvidence | null {
   if (!isRecord(payload) || !isRecord(payload.focal_node) || !isRecord(payload.graph)) return null;
   if (!isRecord(payload.pagination) || !isRecord(payload.domain_coverage)) return null;
@@ -111,6 +139,7 @@ export function normalizeGenusGraphEvidence(payload: unknown): GenusGraphEvidenc
 
   return {
     genus: genus.trim(),
+    speciesLinks: genusSpeciesLinks(payload, payload.focal_node),
     domains,
     ecologicalDomains,
     nodeCount,

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, Database, Loader2 } from 'lucide-react';
 import {
@@ -58,6 +59,19 @@ const EvidenceGrid: React.FC<{ evidence: GenusGraphEvidence }> = ({ evidence }) 
         );
       })}
     </div>
+    {Boolean(evidence.speciesLinks?.length) && (
+      <details className="my-4 rounded border border-stone-400 p-3">
+        <summary className="cursor-pointer font-medium">Inspect genus-to-species links (up to 12)</summary>
+        <ul className="mt-2 space-y-2">
+          {evidence.speciesLinks?.map(link => (
+            <li key={link.edgeId}>
+              {evidence.genus} contains <Link className="underline" to={`/species/${encodeURIComponent(link.species)}`}>{link.species}</Link>
+              <small className="block">Graph edge {link.edgeId} · taxonomy_species record {link.taxonomyId}</small>
+            </li>
+          ))}
+        </ul>
+      </details>
+    )}
     <p className="mt-4 text-xs leading-5 text-[#6e765f]">
       Returned graph: {evidence.nodeCount} connected nodes and {evidence.edgeCount} links. Counts reflect graph-backed evidence, not completeness of scientific knowledge.
     </p>
@@ -93,7 +107,7 @@ const DailyGenusGraphEvidence: React.FC<{ genus: string }> = ({ genus }) => {
         </div>
       )}
       {state.status === 'not_found' && <StatusMessage title="No graph record found" body={`No published genus node is available for ${genus}.`} />}
-      {state.status === 'unavailable' && <StatusMessage title="Graph evidence unavailable" body="The public graph service could not be reached. The curated Featured Genus content remains available above." />}
+      {state.status === 'unavailable' && <StatusMessage title="Graph evidence unavailable" body="The public graph service could not be reached. Try the graph read again later." />}
       {state.status === 'invalid' && <StatusMessage title="Graph response could not be verified" body="No graph counts are shown because the response did not match the public evidence contract." />}
       {state.status === 'ok' && <EvidenceGrid evidence={state.evidence} />}
     </section>
