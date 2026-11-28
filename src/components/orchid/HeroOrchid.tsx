@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
 import { binomialOf } from '@/lib/fungalPartner';
-import { isInaturalistPhotographUrl, publicGenusMediaItems } from '@/lib/genusMediaResolver';
+import { homepageHeroMedia, isHeroBinomial } from '@/lib/genusMediaResolver';
 
 /**
  * HeroOrchid — HOMEPAGE-SLICE-1.
@@ -25,11 +25,6 @@ interface Props {
   onSpeciesResolved?: (scientificName: string | null) => void;
 }
 
-function isBinomial(scientificName: string): boolean {
-  const parts = scientificName.trim().split(/\s+/);
-  return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
-}
-
 function photographerCredit(attribution: string | null): string | null {
   return typeof attribution === 'string' ? attribution.trim() || null : null;
 }
@@ -43,17 +38,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
   const media = continuum?.media ?? null;
 
-  // A URL alone is not sufficient evidence for public publication. All mounted
-  // homepage media surfaces share this same source+license boundary.
-  const eligible = useMemo(() => publicGenusMediaItems(media?.items ?? [])
-    // The NYBG herbarium host carries preserved specimens in the current feed.
-    // Prefer credited photographs, then species names and observation sources.
-    .filter((item) => new URL(item.image_url).hostname !== 'sweetgum.nybg.org')
-    .sort((a, b) =>
-      Number(Boolean(photographerCredit(b.attribution))) - Number(Boolean(photographerCredit(a.attribution)))
-      || Number(isBinomial(b.scientific_name)) - Number(isBinomial(a.scientific_name))
-      || Number(isInaturalistPhotographUrl(b.image_url)) - Number(isInaturalistPhotographUrl(a.image_url)),
-    ), [media]);
+  const eligible = useMemo(() => homepageHeroMedia(media?.items ?? []), [media]);
   const [failed, setFailed] = useState<Set<string>>(() => new Set());
   const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
   const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
@@ -69,7 +54,7 @@ const HeroPhotographs: React.FC<Props> = ({ onSpeciesResolved }) => {
   };
 
   useEffect(() => {
-    onSpeciesResolved?.(chosen && loadedUrl === chosen.image_url && isBinomial(chosen.scientific_name)
+    onSpeciesResolved?.(chosen && loadedUrl === chosen.image_url && isHeroBinomial(chosen.scientific_name)
       ? chosen.scientific_name : null);
   }, [chosen, loadedUrl, onSpeciesResolved]);
 

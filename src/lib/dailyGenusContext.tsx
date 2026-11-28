@@ -9,6 +9,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { featuredGenusName, WINDOW_MS } from '@/lib/featuredGenus';
+import { homepageHeroMedia } from '@/lib/genusMediaResolver';
 import { featuredSpecies } from '@/features/homepage-recovery/featuredSpecies';
 import { supabase } from '@/lib/supabase';
 import { fetchFeaturedTaxonContinuum, type FeaturedTaxonContinuum } from '@/lib/featuredTaxonContinuum';
@@ -125,16 +126,21 @@ async function prepareExhibit(genus: string, signal: AbortSignal) {
   const exhibit = await fetchFeaturedTaxonContinuum(genus, signal);
   const { media, graph, relationships } = exhibit;
   const taxonomy = exhibit.domains.find(item => item.domain === 'taxonomy');
-  const hero = featuredSpecies(media.items, genus)[0];
+  const recoveryHero = featuredSpecies(media.items, genus)[0];
+  const homepageHero = homepageHeroMedia(media.items)[0];
   if (exhibit.genus !== genus || graph.status !== 'ok' || graph.evidence.genus !== genus
     || taxonomy?.state !== 'known' || relationships?.genus !== genus || relationships.isFallback
     || ![relationships.knowledge, relationships.geography, relationships.climate, relationships.pollinators,
       relationships.fungi, relationships.conservation, relationships.cultivation]
       .some(node => node.status === 'available' || node.status === 'empty')
-    || media.status !== 'ok' || media.requested_genus !== genus || media.accepted_genus !== genus || !hero) {
+    || media.status !== 'ok' || media.requested_genus !== genus || media.accepted_genus !== genus || !recoveryHero
+    || homepageHero?.genus !== genus || homepageHero.scientific_name.trim().split(/\s+/)[0] !== genus) {
     throw new Error(`Incomplete featured exhibit for ${genus}`);
   }
-  await checkHeroPhoto(hero.image_url, signal);
+  // The two homepage routes may rank different photos first. Load each distinct
+  // first choice, bounded to two URLs, before changing the shared identity.
+  const urls = new Set([recoveryHero.image_url, homepageHero.image_url]);
+  await Promise.all(Array.from(urls, url => checkHeroPhoto(url, signal)));
   return exhibit;
 }
 

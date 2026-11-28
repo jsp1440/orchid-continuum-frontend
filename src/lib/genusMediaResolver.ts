@@ -63,6 +63,21 @@ export function isInaturalistPhotographUrl(value: string): boolean {
     && /^\/photos\/\d+\//.test(url.pathname);
 }
 
+export function isHeroBinomial(scientificName: string): boolean {
+  const parts = scientificName.trim().split(/\s+/);
+  return parts.length >= 2 && /^[a-z-]+$/.test(parts[1]);
+}
+
+/** Keep preflight and the public homepage hero in the same display order. */
+export function homepageHeroMedia(items: readonly GenusMediaItem[]): GenusMediaItem[] {
+  const credited = (item: GenusMediaItem) => typeof item.attribution === 'string' && Boolean(item.attribution.trim());
+  return publicGenusMediaItems(items)
+    .filter(item => new URL(item.image_url).hostname !== 'sweetgum.nybg.org')
+    .sort((a, b) => Number(credited(b)) - Number(credited(a))
+      || Number(isHeroBinomial(b.scientific_name)) - Number(isHeroBinomial(a.scientific_name))
+      || Number(isInaturalistPhotographUrl(b.image_url)) - Number(isInaturalistPhotographUrl(a.image_url)));
+}
+
 /**
  * Reuse licensed photographs already attached to the canonical species exhibit
  * when the genus media batch contains only unusable embeds. Never query a

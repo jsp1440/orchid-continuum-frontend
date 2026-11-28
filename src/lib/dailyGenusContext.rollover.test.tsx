@@ -17,7 +17,7 @@ vi.mock('./supabase', () => ({
 
 const requests: string[] = [];
 const photographs: string[] = [];
-let failure: 'wrong-genus' | 'taxonomy' | 'evidence' | 'media' | 'photo' | 'pending' | null;
+let failure: 'wrong-genus' | 'taxonomy' | 'evidence' | 'media' | 'photo' | 'pending' | 'live-only-photo' | null;
 
 function response(input: RequestInfo | URL) {
   const url = new URL(String(input));
@@ -28,7 +28,9 @@ function response(input: RequestInfo | URL) {
     const image = `https://images.example/${genus}.jpg`;
     return Response.json({
       status: 'ok', requested_genus: genus, accepted_genus: genus,
-      items: [{ scientific_name: `${genus} alba`, genus, image_url: image, source_name: 'Specimen archive',
+      items: [...(broken === 'live-only-photo' ? [{ scientific_name: genus + ' bella', genus,
+        image_url: 'https://d2jcv3kl45hlgi.cloudfront.net/cover.jpg', source_name: 'Archive',
+        license: 'CC BY', attribution: 'Photographer' }] : []), { scientific_name: `${genus} alba`, genus, image_url: image, source_name: 'Specimen archive',
         license: broken === 'media' ? null : 'CC BY', attribution: 'Photographer' }],
     });
   }
@@ -64,7 +66,7 @@ beforeEach(() => {
     set src(url: string) {
       photographs.push(url);
       if (failure === 'pending') return;
-      void Promise.resolve().then(() => failure === 'photo' ? this.onerror?.() : this.onload?.());
+      void Promise.resolve().then(() => (failure === 'photo' || url.includes('cloudfront.net')) ? this.onerror?.() : this.onload?.());
     }
   });
 });
@@ -113,15 +115,25 @@ it.each(['wrong-genus', 'taxonomy', 'evidence', 'media', 'photo'] as const)(
     failure = problem;
     await advance(1000 + lead);
     const calls = requests.length;
-    act(() => {
+    await act(async () => {
       window.dispatchEvent(new Event('pageshow'));
       document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(30_000);
     });
     expect(requests).toHaveLength(calls);
     expect(requests.filter(name => name === next)).toHaveLength(6);
     expect(view.container.textContent).toBe(`${current}/${current}/ready`);
   },
 );
+
+it('validates both mounted homepage hero projections when they rank different records first', async () => {
+  const { view } = await mount();
+  failure = 'live-only-photo';
+  await advance(1000 + lead);
+  expect(photographs.filter(url => url.includes('cloudfront.net'))).toHaveLength(2);
+  expect(photographs.filter(url => url.includes('images.example'))).toHaveLength(2);
+  expect(view.container.textContent).toBe(`${current}/${current}/ready`);
+});
 
 it('uses the single boundary attempt to recover a headline photo that failed during preparation', async () => {
   const { view } = await mount();
