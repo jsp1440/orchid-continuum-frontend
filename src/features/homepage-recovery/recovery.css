@@ -14,23 +14,24 @@
 .recovery-note{font-size:13px;color:#647063;line-height:1.55}
 .recovery-exhibit{display:grid;grid-template-columns:1.1fr 1fr;gap:32px}
 .recovery-hero-photo{position:relative;min-height:490px;background:#dfe4d7;overflow:hidden;border-radius:3px}
-.recovery-hero-photo>img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.recovery-hero-photo .recovery-photo-link img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
 .recovery-hero-photo figcaption{position:absolute;bottom:0;left:0;right:0;padding:64px 24px 20px;background:linear-gradient(transparent,rgba(8,25,17,.94));color:#fff}
 .recovery-hero-photo h3{font-family:Georgia,serif;font-size:28px}
 .recovery-hero-photo figcaption p,.recovery-hero-photo figcaption a{font-size:12px}
 .recovery-hero-photo figcaption a{text-decoration:underline}
 .recovery-photo-links{display:flex;flex-wrap:wrap;column-gap:16px}
 .recovery-hero-photo[data-uncropped=true]{display:flex;flex-direction:column}
-.recovery-hero-photo[data-uncropped=true]>img{position:static;flex:1;height:0;min-height:220px;object-fit:contain}
+.recovery-hero-photo[data-uncropped=true]>.recovery-photo-link{position:relative;flex:1;min-height:220px}
+.recovery-hero-photo[data-uncropped=true] .recovery-photo-link img{object-fit:contain}
 .recovery-hero-photo[data-uncropped=true]>figcaption{position:static;padding:16px 24px;background:#102218}
 .recovery-photo-empty{display:grid;place-content:center;min-height:490px;padding:30px;text-align:center;color:#52604a}
 .recovery-study>p{margin-bottom:14px}
 .recovery-species-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
-.recovery-species-grid button{display:block;width:100%;aspect-ratio:1.3;overflow:hidden;background:#dfe4d7;border:2px solid transparent;border-radius:2px}
-.recovery-species-grid button[aria-pressed=true]{border-color:#9d7b26;box-shadow:0 0 0 2px #d4b34a}
+.recovery-species-grid .recovery-tile-photo{display:block;width:100%;aspect-ratio:1.3;overflow:hidden;background:#dfe4d7;border:2px solid transparent;border-radius:2px}
+.recovery-species-grid small{display:block;font-size:11px;line-height:1.3;overflow-wrap:anywhere}
 .recovery-species-grid img{width:100%;height:100%;object-fit:cover}
 .recovery-species-grid img[data-uncropped=true]{object-fit:contain}
-.recovery-species-grid a{display:block;overflow-wrap:anywhere;padding:4px;font-size:13px;line-height:1.3;text-align:center;text-decoration:underline;text-underline-offset:2px}
+.recovery-species-grid button{display:block;overflow-wrap:anywhere;padding:4px;font-size:13px;line-height:1.3;text-align:center;text-decoration:underline;text-underline-offset:2px}
 .recovery-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:14px 0 10px}
 .recovery-controls button{border:1px solid #9ca48e;padding:7px 13px;border-radius:3px;min-height:44px;font-size:14px}
 .recovery-controls button[aria-pressed=true]{background:#d4b34a;color:#14271e}
@@ -86,7 +87,7 @@
 .recovery-map-surface{height:350px}
 .recovery-preview-label{font-size:11px}
 .recovery-atlas{padding:32px 0}
-.recovery-species-grid button{aspect-ratio:1.2}
+.recovery-species-grid .recovery-tile-photo{aspect-ratio:1.2}
 }
 
 /* Keep the existing navigation usable on tablets without changing other routes. */

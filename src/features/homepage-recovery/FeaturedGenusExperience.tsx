@@ -1,44 +1,78 @@
-import { featuredSpecies } from './featuredSpecies';
+import { featuredSpecies, featuredSpeciesLabel } from './featuredSpecies';
+import type { GenusMediaItem } from '@/lib/genusMediaResolver';
+import { useFeaturedPhotoPages } from './useFeaturedPhotoPages';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useDailyGenus } from '@/lib/dailyGenusContext';
-import { displayScientificName } from '@/lib/genusProfileDataQuality';
 import { featuredTaxonCalyxHref, featuredTaxonGenusProfileHref, featuredTaxonMatrixHref } from '@/lib/featuredTaxonNavigation';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 import { speciesPageHrefForMedia } from '@/lib/speciesDossier';
 
+function PhotoCredit({ item }: { item: GenusMediaItem }) {
+  const label = item.licence_name || item.license;
+  const url = (item.licence_url || item.license)?.trim()
+    .match(/^https?:\/\/creativecommons\.org\/(?:licenses|publicdomain)\/[a-z-]+\/\d+(?:\.\d+)*(?:\/[a-z-]+)?\/?$/i)?.[0]
+    .replace(/^http:/i, 'https:');
+  return <>{item.attribution || 'Photographer not supplied'} · {item.source_name} · {url
+    ? <a href={url} target="_blank" rel="noopener noreferrer license">{label}</a> : label}</>;
+}
+
 export default function FeaturedGenusExperience() {
-  const { genus, continuum, continuumStatus } = useDailyGenus();
+  const daily = useDailyGenus();
+  return <GenusGallery key={daily.genus} {...daily} />;
+}
+
+function GenusGallery({ genus, continuum, continuumStatus }: ReturnType<typeof useDailyGenus>) {
   const reduced = usePrefersReducedMotion();
   const section = useRef<HTMLElement>(null);
-  const [selection, setSelection] = useState({ genus, index: 0 });
+  const [selection, setSelection] = useState(0);
+  const [pendingNext, setPendingNext] = useState<number | null>(null);
   const [failed, setFailed] = useState<string[]>([]);
   const [paused, setPaused] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
-  const items = useMemo(() => featuredSpecies(continuum?.genus === genus ? continuum.media.items : [], genus)
-    .filter(item => !failed.includes(item.image_url)), [continuum, genus, failed]);
-  const index = selection.genus === genus && items.length ? selection.index % items.length : 0;
+  const fallback = useMemo(() => featuredSpecies(continuum?.genus === genus ? continuum.media.items : [], genus), [continuum, genus]);
+  const pages = useFeaturedPhotoPages(genus, fallback, visible, selection, failed);
+  const { items, extend, canWrap } = pages;
+  const index = Math.min(selection, Math.max(0, items.length - 1));
   const active = items[index];
-  const licenceLabel = active?.licence_name || active?.license;
-  const licenceUrl = (active?.licence_url || active?.license)?.trim()
-    .match(/^https?:\/\/creativecommons\.org\/(?:licenses|publicdomain)\/[a-z-]+\/\d+(?:\.\d+)*(?:\/[a-z-]+)?\/?$/i)?.[0]
-    .replace(/^http:/i, 'https:');
-  const choose = (next: number) => { setPaused(true); setSelection({ genus, index: (next + items.length) % items.length }); };
+  const choose = (next: number) => {
+    setPaused(true);
+    extend();
+    setPendingNext(null);
+    if (next >= 0 && next < items.length) setSelection(next);
+    else if (items.length && (next < 0 || canWrap)) setSelection((next + items.length) % items.length);
+    else if (next >= items.length) setPendingNext(next);
+  };
+  useEffect(() => {
+    if (pendingNext === null) return;
+    if (pendingNext < items.length) {
+      setSelection(pendingNext);
+      setPendingNext(null);
+    } else if (canWrap && items.length) {
+      setSelection(0);
+      setPendingNext(null);
+    }
+  }, [pendingNext, items.length, canWrap]);
   useEffect(() => {
     const observer = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting), { threshold: 0.25 });
     if (section.current) observer.observe(section.current);
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
-    if (paused || hovered || focused || reduced || !visible || items.length < 2) return;
+    if (paused || hovered || focused || reduced || !visible || !items.length) return;
     const timer = window.setInterval(() => {
-      if (!document.hidden) setSelection({ genus, index: (index + 1) % items.length });
+      if (document.hidden) return;
+      extend();
+      if (index + 1 < items.length) setSelection(index + 1);
+      else if (canWrap) setSelection(0);
+      else setPendingNext(index + 1);
     }, 45_000);
     return () => window.clearInterval(timer);
-  }, [paused, hovered, focused, reduced, visible, genus, index, items.length]);
-  const start = Math.min(Math.max(0, index - 4), Math.max(0, items.length - 9));
+  }, [paused, hovered, focused, reduced, visible, index, items.length, canWrap, extend]);
+  const tiles = items.slice(index + 1, index + 10);
+  if (canWrap && tiles.length < 9) tiles.push(...items.slice(0, Math.min(index, 9 - tiles.length)));
   return <section ref={section} id="featured-genus" className="recovery-feature recovery-width" aria-labelledby="featured-heading"
     onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     onFocusCapture={() => setFocused(true)} onBlurCapture={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setFocused(false); }}>
@@ -46,12 +80,11 @@ export default function FeaturedGenusExperience() {
       <h2 id="featured-heading"><i>{genus}</i></h2></div><span className="recovery-note">A new genus every 12 hours · Stay and study</span></div>
     <div className="recovery-exhibit">
       <figure className="recovery-hero-photo" data-uncropped={active && active.unmodified_only !== false}>
-        {active ? <img key={active.image_url} src={active.image_url} alt={active.scientific_name}
-          onError={() => setFailed(previous => [...previous, active.image_url])} />
-          : <div className="recovery-photo-empty" role="status">{continuumStatus === 'loading' ? 'Finding source-licensed photographs…' : 'Photographs are not available from the current source response.'}</div>}
-        {active && <figcaption><h3><i>{displayScientificName(active.scientific_name)}</i></h3>
-          <p>{active.attribution || 'Photographer not supplied'} · {active.source_name} · {licenceUrl
-            ? <a href={licenceUrl} target="_blank" rel="noopener noreferrer license">{licenceLabel}</a> : licenceLabel}</p>
+        {active ? <Link className="recovery-photo-link" to={speciesPageHrefForMedia(active.scientific_name, active.taxon_id)} aria-label={`Open dossier for pictured ${active.scientific_name}`}><img key={active.image_url} src={active.image_url} alt={active.scientific_name}
+          onError={() => setFailed(previous => [...previous, active.image_url])} /></Link>
+          : <div className="recovery-photo-empty" role="status">{continuumStatus === 'loading' || pages.loading ? 'Finding source-licensed photographs…' : 'Photographs are not available from the current source response.'}</div>}
+        {active && <figcaption><h3><i>{featuredSpeciesLabel(active.scientific_name)}</i></h3>
+          <p><PhotoCredit item={active} /></p>
           {active.share_alike_notice === true && <p>ShareAlike applies to adaptations of this photograph.</p>}
           <div className="recovery-photo-links">
             <Link to={speciesPageHrefForMedia(active.scientific_name, active.taxon_id)} aria-label={`Species dossier for ${active.scientific_name}`}>Species dossier</Link>
@@ -60,23 +93,26 @@ export default function FeaturedGenusExperience() {
         </figcaption>}
       </figure>
       <div className="recovery-study"><p className="recovery-kicker">One genus, many forms</p>
-        <p>Choose a photograph to study it here, or select its name to open the species dossier.</p>
+        <p>Open a photograph for its species dossier, or select a name to study the species here.</p>
         <div className="recovery-species-grid" role="group" aria-label={`${genus} species photographs`}>
-          {items.slice(start, start + 9).map((item, offset) => <div key={item.media_id + item.image_url}>
-            <button type="button" aria-label={`Study ${displayScientificName(item.scientific_name)}`}
-              aria-pressed={start + offset === index} onClick={() => choose(start + offset)}>
+          {tiles.map((item) => <div key={item.media_id + item.image_url}>
+            <Link className="recovery-tile-photo" to={speciesPageHrefForMedia(item.scientific_name, item.taxon_id)} aria-label={`Open dossier for ${item.scientific_name}`}>
               <img src={item.image_url} alt="" loading="lazy" data-uncropped={item.unmodified_only !== false} onError={() => setFailed(previous => [...previous, item.image_url])} />
-            </button>
-            <Link to={speciesPageHrefForMedia(item.scientific_name, item.taxon_id)} aria-label={`Open dossier for ${item.scientific_name}`}>
-              <i>{displayScientificName(item.scientific_name).split(' ').slice(1).join(' ')}</i>
             </Link>
+            <button type="button" aria-label={`Study ${featuredSpeciesLabel(item.scientific_name)}`} onClick={() => choose(items.indexOf(item))}>
+              <i>{featuredSpeciesLabel(item.scientific_name).split(' ').slice(1).join(' ')}</i>
+            </button>
+            <small><PhotoCredit item={item} /></small>
           </div>)}
         </div>
-        {items.length > 0 && items.length < 9 && <p className="recovery-note">{items.length} displayable source photographs are available in this response; the exhibit supports up to nine at a time.</p>}
+        {canWrap && items.length > 0 && items.length < 10 && <p className="recovery-note">{items.length} displayable photographs available in this selection.</p>}
+        {pages.unavailable && <p role="status">Additional species photographs are unavailable. <button onClick={pages.retry}>Retry photographs</button></p>}
+        {pages.canSearch && <button onClick={pages.extend}>Continue searching for photographs</button>}
+        {pages.loading && !active && <p role="status">Checking the public photo collection…</p>}
         <div className="recovery-controls"><button disabled={items.length < 2} onClick={() => choose(index - 1)} aria-label="Previous species">←</button>
           <button disabled={items.length < 2} onClick={() => setPaused(value => !value)}>{paused || reduced ? 'Study mode' : 'Pause rotation'}</button>
-          <button disabled={items.length < 2} onClick={() => choose(index + 1)} aria-label="Next species">→</button>
-          <span>{items.length ? `${index + 1} / ${items.length}` : 'No photographs'}</span></div>
+          <button disabled={!items.length || pendingNext !== null || (items.length === 1 && canWrap)} onClick={() => choose(index + 1)} aria-label="Next species">→</button>
+          <span>{items.length ? `${index + 1} / ${items.length} loaded` : pages.loading || continuumStatus === 'loading' ? 'Finding photographs…' : (pages.unavailable ? 'Photographs unavailable' : 'No displayable photographs')}</span></div>
         <p className="recovery-note">{reduced ? 'Automatic rotation is off for reduced motion.' : paused ? 'Paused for study. Select Study mode to resume the 45-second rotation.' : 'Rotation pauses while you read, focus a control, or leave this section.'}</p>
         <div className="recovery-genus-story"><h3>Meet the genus</h3>
           <p>Follow the photographs into the genus record to explore what has been documented, and what remains unknown.</p>
