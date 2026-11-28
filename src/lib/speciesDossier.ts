@@ -179,13 +179,125 @@ export type FederationResolveResult = {
   explanation: string;
 };
 
+/**
+ * A failed Calyx species request. `status` is the HTTP status the backend answered with (null when
+ * no answer arrived or the answer was not a contract body), `errorCode` is the backend's own
+ * `detail.error` when it names one (e.g. `identity_mismatch`), and `invalidContract` marks a 200
+ * whose body is not the published contract.
+ */
+export class SpeciesDossierRequestError extends Error {
+  readonly status: number | null;
+  readonly errorCode: string | null;
+  readonly invalidContract: boolean;
+
+  constructor(
+    message: string,
+    options: { status?: number | null; errorCode?: string | null; invalidContract?: boolean } = {},
+  ) {
+    super(message);
+    this.name = 'SpeciesDossierRequestError';
+    this.status = options.status ?? null;
+    this.errorCode = options.errorCode ?? null;
+    this.invalidContract = options.invalidContract === true;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function backendErrorCode(body: string): string | null {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    const detail = isRecord(parsed) ? parsed.detail : null;
+    return isRecord(detail) && typeof detail.error === 'string' && detail.error ? detail.error : null;
+  } catch {
+    return null;
+  }
+}
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `Calyx request failed with ${response.status}`);
+    throw new SpeciesDossierRequestError(body || `Calyx request failed with ${response.status}`, {
+      status: response.status,
+      errorCode: backendErrorCode(body),
+    });
   }
   return (await response.json()) as T;
 }
+
+const EVIDENCE_STATES: readonly string[] = [
+  'available',
+  'provisional',
+  'conflicting',
+  'modeled',
+  'inferred',
+  'unavailable',
+];
+
+/**
+ * The dossier sections the species page renders. `mycorrhizae` is in the envelope but is not
+ * rendered from it (the page has its own mycorrhizal block), so it is not validated here.
+ */
+export const SPECIES_DOSSIER_RENDERED_SECTIONS = [
+  'nomenclature',
+  'protologue',
+  'type_material',
+  'historical_media',
+  'living_media',
+  'morphology',
+  'distribution',
+  'ecology',
+  'phenology',
+  'pollinators',
+  'conservation',
+  'literature',
+  'cultivation',
+  'knowledge_graph',
+  'calyx_narrative',
+  'research_gaps',
+] as const satisfies ReadonlyArray<keyof SpeciesDossierEnvelope>;
+
+function nonEmptyString(value: unknown): boolean {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+function isRecordArray(value: unknown): boolean {
+  return Array.isArray(value) && value.every(isRecord);
+}
+
+function isDossierSection(value: unknown): boolean {
+  return (
+    isRecord(value) &&
+    typeof value.state === 'string' &&
+    EVIDENCE_STATES.includes(value.state) &&
+    isRecordArray(value.items) &&
+    isRecordArray(value.receipts)
+  );
+}
+
+/**
+ * Boundary check for an `oc-species-dossier-v1` body. Returns the payload itself, untouched, when
+ * the fields the species page reads have the contract's shape, and null otherwise. Nothing is
+ * repaired, defaulted or dropped: a body that fails is not a dossier. Keys this client does not
+ * know are allowed, so an additive backend field never hides a real dossier.
+ */
+export function parseSpeciesDossierEnvelope(payload: unknown): SpeciesDossierEnvelope | null {
+  if (!isRecord(payload)) return null;
+  if (payload.contract_version !== 'oc-species-dossier-v1') return null;
+  const identity = payload.identity;
+  if (!isRecord(identity)) return null;
+  if (!nonEmptyString(identity.taxon_id) || !nonEmptyString(identity.accepted_name)) return null;
+  for (const key of SPECIES_DOSSIER_RENDERED_SECTIONS) {
+    if (!isDossierSection(payload[key])) return null;
+  }
+  if (!isRecordArray(payload.partner_references)) return null;
+  return payload as unknown as SpeciesDossierEnvelope;
+}
+
+const INVALID_DOSSIER_CONTRACT =
+  'The species dossier response did not match the oc-species-dossier-v1 contract.';
 
 export async function fetchSpeciesDossier(
   taxonId: string,
@@ -195,7 +307,30 @@ export async function fetchSpeciesDossier(
     `${CALYX_BACKEND_BASE_URL}/api/platform/species/${encodeURIComponent(taxonId)}/dossier`,
     { signal },
   );
-  return readJson<SpeciesDossierEnvelope>(response);
+  let payload: unknown;
+  try {
+    payload = await readJson<unknown>(response);
+  } catch (error) {
+    if (error instanceof SpeciesDossierRequestError || signal?.aborted) throw error;
+    // Only a parse failure says the body is not JSON. Any other failure means the body never
+    // fully arrived (the read broke mid-stream), which is a transport failure: nothing was
+    // received that could be judged against the contract. Rethrown as-is, it is read as
+    // `service_unavailable` like a failed fetch.
+    if (!(error instanceof SyntaxError)) throw error;
+    // A 200 whose body is not JSON at all.
+    throw new SpeciesDossierRequestError(INVALID_DOSSIER_CONTRACT, {
+      status: response.status,
+      invalidContract: true,
+    });
+  }
+  const dossier = parseSpeciesDossierEnvelope(payload);
+  if (!dossier) {
+    throw new SpeciesDossierRequestError(INVALID_DOSSIER_CONTRACT, {
+      status: response.status,
+      invalidContract: true,
+    });
+  }
+  return dossier;
 }
 
 export async function fetchSpeciesAtlas(
@@ -293,6 +428,23 @@ export function sectionMessage(section: DossierSection): string {
 // is the page's subject; otherwise the subject name is resolved through the
 // canonical federation resolver, and an ambiguous name is left for a human.
 
+/**
+ * Why no dossier is shown. These are different facts and are kept apart:
+ * - `not_found`: the backend answered that no canonical record exists;
+ * - `identity_mismatch`: a canonical record was found but it is a different taxon than the page's
+ *   subject (by the exact-name rule below, or by the backend's own 409), so it is withheld;
+ * - `service_unavailable`: the backend could not be reached or could not answer, so whether a
+ *   dossier exists is not known;
+ * - `invalid_contract`: the backend answered 200 with a body that is not the dossier contract;
+ * - `no_subject`: neither a route id nor a subject name was given to look up.
+ */
+export type DossierUnavailableReason =
+  | 'not_found'
+  | 'identity_mismatch'
+  | 'service_unavailable'
+  | 'invalid_contract'
+  | 'no_subject';
+
 export type DossierSubjectResolution =
   | { state: 'resolved'; dossier: SpeciesDossierEnvelope; via: 'route_id' | 'subject_name' }
   | {
@@ -300,7 +452,22 @@ export type DossierSubjectResolution =
       subjectName: string;
       candidates: FederationResolveResult['candidates'];
     }
-  | { state: 'unavailable' };
+  | { state: 'unavailable'; reason?: DossierUnavailableReason };
+
+/** `DossierSubjectResolution` whose `unavailable` member always says why. */
+export type DossierSubjectResolutionWithReason =
+  | Exclude<DossierSubjectResolution, { state: 'unavailable' }>
+  | { state: 'unavailable'; reason: DossierUnavailableReason };
+
+/** The reason a failed dossier request stands for. An unrecognised failure is never read as absence. */
+export function dossierFailureReason(error: unknown): DossierUnavailableReason {
+  if (error instanceof SpeciesDossierRequestError) {
+    if (error.invalidContract) return 'invalid_contract';
+    if (error.status === 404) return 'not_found';
+    if (error.status === 409 && error.errorCode === 'identity_mismatch') return 'identity_mismatch';
+  }
+  return 'service_unavailable';
+}
 
 export type DossierSubjectDeps = {
   fetchDossier: (taxonId: string, signal?: AbortSignal) => Promise<SpeciesDossierEnvelope>;
@@ -356,32 +523,48 @@ export function subjectNameFromSlug(slug: string | null | undefined): string | n
   return name;
 }
 
-export async function resolveDossierForSubject(
+/**
+ * `resolveDossierForSubject`, with the reason kept when no dossier is shown. The identity rules are
+ * the same; only the `unavailable` result differs, by naming its cause.
+ */
+export async function resolveDossierForSubjectWithReason(
   routeId: string,
   subjectName: string | null,
   deps: DossierSubjectDeps,
   signal?: AbortSignal,
-): Promise<DossierSubjectResolution> {
+): Promise<DossierSubjectResolutionWithReason> {
+  const unavailable = (reason: DossierUnavailableReason): DossierSubjectResolutionWithReason => ({
+    state: 'unavailable',
+    reason,
+  });
   let byRoute: SpeciesDossierEnvelope | null = null;
+  // Set exactly when the route dossier could not be had.
+  let routeReason: DossierUnavailableReason = 'service_unavailable';
   try {
     byRoute = await deps.fetchDossier(routeId, signal);
   } catch (error) {
     if (signal?.aborted) throw error;
     byRoute = null;
+    routeReason = dossierFailureReason(error);
   }
 
   const subject = subjectName && subjectName.trim() ? subjectName.trim() : null;
   if (byRoute && (!subject || isSubject(byRoute, subject))) {
     return { state: 'resolved', dossier: byRoute, via: 'route_id' };
   }
-  if (!subject) return { state: 'unavailable' };
+  if (!subject) return unavailable(routeId.trim() ? routeReason : 'no_subject');
+
+  // No dossier by name: a route record that exists but is another taxon is withheld as a mismatch;
+  // otherwise the route failure itself is the reason.
+  const withoutNameMatch = (): DossierSubjectResolutionWithReason =>
+    unavailable(byRoute ? 'identity_mismatch' : routeReason);
 
   let resolution: FederationResolveResult;
   try {
     resolution = await deps.resolveSpecies({ name: subject }, signal);
   } catch (error) {
     if (signal?.aborted) throw error;
-    return { state: 'unavailable' };
+    return unavailable('service_unavailable');
   }
 
   // The resolver normalises names before matching (it drops forma, subspecies
@@ -395,10 +578,10 @@ export async function resolveDossierForSubject(
     );
     return candidates.length > 0
       ? { state: 'ambiguous', subjectName: subject, candidates }
-      : { state: 'unavailable' };
+      : withoutNameMatch();
   }
   if (resolution.status !== 'resolved' || !resolution.taxon_id) {
-    return { state: 'unavailable' };
+    return withoutNameMatch();
   }
   let dossier: SpeciesDossierEnvelope | null =
     byRoute && byRoute.identity?.taxon_id === resolution.taxon_id ? byRoute : null;
@@ -407,12 +590,26 @@ export async function resolveDossierForSubject(
       dossier = await deps.fetchDossier(resolution.taxon_id, signal);
     } catch (error) {
       if (signal?.aborted) throw error;
-      return { state: 'unavailable' };
+      return unavailable(dossierFailureReason(error));
     }
   }
   return isSubject(dossier, subject)
     ? { state: 'resolved', dossier, via: 'subject_name' }
-    : { state: 'unavailable' };
+    : unavailable('identity_mismatch');
+}
+
+/**
+ * The dossier for the species a page is about, or why none is shown as a bare `unavailable`.
+ * Callers that tell the visitor why use `resolveDossierForSubjectWithReason`.
+ */
+export async function resolveDossierForSubject(
+  routeId: string,
+  subjectName: string | null,
+  deps: DossierSubjectDeps,
+  signal?: AbortSignal,
+): Promise<DossierSubjectResolution> {
+  const resolution = await resolveDossierForSubjectWithReason(routeId, subjectName, deps, signal);
+  return resolution.state === 'unavailable' ? { state: 'unavailable' } : resolution;
 }
 
 export type PageSubject =

@@ -1,15 +1,18 @@
 /**
  * /mycorrhizae/[taxa] — fungal association profile.
  * If no mycorrhizal records exist, renders an honest "Awaiting" page.
+ * If the relationship read failed, says the records could not be checked
+ * instead: a failed read is not evidence that no association is recorded.
  */
 
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Network, Loader2, ImageOff } from 'lucide-react';
+import { ArrowLeft, Network, Loader2, ImageOff, AlertTriangle } from 'lucide-react';
 import Navbar from '@/components/orchid/Navbar';
 import Footer from '@/components/orchid/Footer';
 import { Awaiting } from '@/components/orchid/SourceBadges';
 import {
+  didRelationshipReadFail,
   fetchMycorrhiza,
   fetchMycorrhizalAggregates,
   type MycorrhizalAggregate,
@@ -20,19 +23,34 @@ const MycorrhizaProfile: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<MycorrhizalAggregate | null>(null);
   const [all, setAll] = useState<MycorrhizalAggregate[]>([]);
+  const [readFailed, setReadFailed] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     (async () => {
-      const list = await fetchMycorrhizalAggregates();
+      let list = await fetchMycorrhizalAggregates();
       if (cancelled) return;
-      setAll(list);
+      let failed = didRelationshipReadFail('mycorrhiza');
+      let p: MycorrhizalAggregate | null = null;
       if (taxa) {
-        const p = await fetchMycorrhiza(taxa);
-        if (!cancelled) setProfile(p);
+        // A failed mycorrhizal read is not cached, so this second read retries it.
+        p = await fetchMycorrhiza(taxa);
+        if (cancelled) return;
+        if (failed && !didRelationshipReadFail('mycorrhiza')) {
+          // The retry succeeded and is now the cached answer: take the index from
+          // it too, so the page does not show the first read's empty index and
+          // "could not be checked" alert beside a profile from the second read.
+          list = await fetchMycorrhizalAggregates();
+          if (cancelled) return;
+        }
+        // The outcome shown is the outcome of the last read behind what is rendered.
+        failed = didRelationshipReadFail('mycorrhiza');
       }
-      if (!cancelled) setLoading(false);
+      setAll(list);
+      setProfile(p);
+      setReadFailed(failed);
+      setLoading(false);
     })();
     return () => { cancelled = true; };
   }, [taxa]);
@@ -62,7 +80,27 @@ const MycorrhizaProfile: React.FC = () => {
             </div>
           )}
 
-          {!loading && all.length === 0 && (
+          {!loading && readFailed && (
+            <div
+              role="alert"
+              data-testid="relationship-read-outcome"
+              className="mt-10 rounded-2xl border border-[#c9a24a]/30 bg-[#0a0d1c]/70 p-8 max-w-2xl"
+            >
+              <AlertTriangle className="h-7 w-7 text-[#c9a24a]/70 mb-4" strokeWidth={1.2} />
+              <div className="font-mono text-[10px] tracking-[0.24em] uppercase text-[#c9a24a]/85 mb-2">
+                Mycorrhizal relationship records could not be checked
+              </div>
+              <p className="text-[14px] text-[#cfc8b8]/80 leading-relaxed">
+                The read of the Continuum's relationship records did not complete, so this page
+                cannot say whether a fungal association is recorded.{' '}
+                {all.length === 0
+                  ? 'This is not evidence that no association exists. Reload the page to try again.'
+                  : 'The associations shown below may be incomplete. Reload the page to try again.'}
+              </p>
+            </div>
+          )}
+
+          {!loading && !readFailed && all.length === 0 && (
             <div className="mt-10 rounded-2xl border border-white/[0.08] bg-[#0a0d1c]/70 p-10 max-w-2xl">
               <Network className="h-9 w-9 text-[#c9a24a]/50 mb-4" strokeWidth={1.2} />
               <div className="font-mono text-[10px] tracking-[0.24em] uppercase text-[#c9a24a]/70 mb-2">

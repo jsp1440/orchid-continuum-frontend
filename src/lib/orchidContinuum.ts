@@ -317,6 +317,31 @@ let mycorrhizalCachePromise: Promise<MycorrhizalRow[]> | null = null;
 let liveStatus: 'unknown' | 'live' | 'offline' = 'unknown';
 
 // ---------------------------------------------------------------------------
+// Relationship read health
+// ---------------------------------------------------------------------------
+//
+// The pollinator and mycorrhizal aggregates are built from the `species` and
+// `species_mycorrhizal` reads. Both loaders resolve to rows even when the read
+// failed, so an empty aggregate alone cannot tell "no relationship is recorded"
+// from "the records could not be read". These flags keep the two apart; the
+// profile pages read `didRelationshipReadFail()` before saying a relationship
+// is not yet linked.
+let speciesReadFailed = false;
+let mycorrhizalReadFailed = false;
+/** Bumped by resetOrchidContinuumCaches() so a superseded read cannot set a flag. */
+let relationshipReadEpoch = 0;
+
+/**
+ * True when the most recent read behind a relationship aggregate failed, so an
+ * empty (or short) result is NOT evidence that no relationship is recorded.
+ * Pollinators come from the species read; mycorrhizal associations are
+ * `species_mycorrhizal` rows joined to species, so either read failing counts.
+ */
+export function didRelationshipReadFail(kind: 'pollinators' | 'mycorrhiza'): boolean {
+  return kind === 'pollinators' ? speciesReadFailed : speciesReadFailed || mycorrhizalReadFailed;
+}
+
+// ---------------------------------------------------------------------------
 // Atlas occurrence load health
 // ---------------------------------------------------------------------------
 //
@@ -570,6 +595,10 @@ async function loadCuratedPublicOccurrences(): Promise<Map<string, SpeciesOccurr
 
 async function loadSpeciesRows(): Promise<SpeciesRow[]> {
   if (speciesCachePromise) return speciesCachePromise;
+  const epoch = relationshipReadEpoch;
+  const markSpeciesRead = (failed: boolean) => {
+    if (epoch === relationshipReadEpoch) speciesReadFailed = failed;
+  };
   speciesCachePromise = (async () => {
     const PAGE = 1000;
     const all: SpeciesRow[] = [];
@@ -585,6 +614,7 @@ async function loadSpeciesRows(): Promise<SpeciesRow[]> {
         if (error) {
           console.warn('[orchidContinuum] species fetch failed:', error.message);
           liveStatus = 'offline';
+          markSpeciesRead(true);
           return all;
         }
         const batch = (data ?? []) as SpeciesRow[];
@@ -593,6 +623,7 @@ async function loadSpeciesRows(): Promise<SpeciesRow[]> {
         from += PAGE;
       }
       if (all.length > 0) liveStatus = 'live';
+      markSpeciesRead(false);
       const curated = await curatedPromise;
       for (const row of all) {
         const occ = curated.get(row.id);
@@ -602,6 +633,7 @@ async function loadSpeciesRows(): Promise<SpeciesRow[]> {
     } catch (err) {
       console.warn('[orchidContinuum] species fetch threw:', err);
       liveStatus = 'offline';
+      markSpeciesRead(true);
       return all;
     }
   })();
@@ -688,22 +720,33 @@ async function loadAtlasRows(): Promise<AtlasOccurrenceRow[]> {
 
 async function loadMycorrhizalRows(): Promise<MycorrhizalRow[]> {
   if (mycorrhizalCachePromise) return mycorrhizalCachePromise;
-  mycorrhizalCachePromise = (async () => {
+  const epoch = relationshipReadEpoch;
+  const attempt = (async (): Promise<{ rows: MycorrhizalRow[]; failed: boolean }> => {
     try {
       const { data, error } = await supabase
         .from('species_mycorrhizal')
         .select('id, species_id, scientific_name, fungal_taxon, fungal_family, association_type, note, source');
       if (error) {
         console.warn('[orchidContinuum] mycorrhizal fetch failed:', error.message);
-        return [];
+        return { rows: [], failed: true };
       }
-      return (data ?? []) as MycorrhizalRow[];
+      return { rows: (data ?? []) as MycorrhizalRow[], failed: false };
     } catch (err) {
       console.warn('[orchidContinuum] mycorrhizal fetch threw:', err);
-      return [];
+      return { rows: [], failed: true };
     }
   })();
-  return mycorrhizalCachePromise;
+  const settled: Promise<MycorrhizalRow[]> = attempt.then(({ rows, failed }) => {
+    if (epoch === relationshipReadEpoch) {
+      mycorrhizalReadFailed = failed;
+      // A failed read is not an empty table: do not keep it as the cached
+      // answer, so the next consumer retries instead of inheriting "no rows".
+      if (failed && mycorrhizalCachePromise === settled) mycorrhizalCachePromise = null;
+    }
+    return rows;
+  });
+  mycorrhizalCachePromise = settled;
+  return settled;
 }
 
 // ---------------------------------------------------------------------------
@@ -1611,6 +1654,9 @@ export function resetOrchidContinuumCaches(): void {
   atlasProgress = { loaded: 0, total: null, done: false };
   mycorrhizalCachePromise = null;
   liveStatus = 'unknown';
+  speciesReadFailed = false;
+  mycorrhizalReadFailed = false;
+  relationshipReadEpoch += 1;
   atlasLoadFailed = false;
   atlasLoadIncomplete = false;
   atlasLoadCapped = false;

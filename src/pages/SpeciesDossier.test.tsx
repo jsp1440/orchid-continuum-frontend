@@ -1095,3 +1095,141 @@ describe('dossier subject identity across id spaces', () => {
     expect(container.querySelector('a[href^="/atlas"]')).toBeNull();
   });
 });
+
+describe('why the evidence dossier is not shown', () => {
+  const actualDossierClient = vi.importActual<typeof import('@/lib/speciesDossier')>(
+    '@/lib/speciesDossier',
+  );
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function reasonElement(): HTMLElement | null {
+    return container.querySelector<HTMLElement>('[data-testid="dossier-unavailable-reason"]');
+  }
+
+  async function settle() {
+    for (let i = 0; i < 20 && !container.querySelector('[data-testid="dossier-unavailable"]'); i += 1) {
+      await flush();
+    }
+  }
+
+  async function renderWithDossierFailure(options: { status?: number; errorCode?: string; invalidContract?: boolean }) {
+    const { SpeciesDossierRequestError } = await actualDossierClient;
+    mocks.fetchSpeciesDossier.mockRejectedValue(
+      new SpeciesDossierRequestError('synthetic failure', options),
+    );
+    renderPage();
+    await settle();
+  }
+
+  it('says no canonical record exists when the backend answers 404', async () => {
+    await renderWithDossierFailure({ status: 404 });
+    expect(reasonElement()?.getAttribute('data-reason')).toBe('not_found');
+    expect(reasonElement()?.textContent).toBe('No canonical taxon record exists for this species.');
+    expect(container.textContent).toContain('Evidence dossier is not currently available.');
+  });
+
+  it('says the service could not be reached on a 503, without claiming absence', async () => {
+    await renderWithDossierFailure({ status: 503 });
+    expect(reasonElement()?.getAttribute('data-reason')).toBe('service_unavailable');
+    expect(reasonElement()?.textContent).toContain('could not be reached');
+    expect(container.textContent).not.toContain('No canonical taxon record exists');
+  });
+
+  it('says the service could not be reached when the request itself fails', async () => {
+    mocks.fetchSpeciesDossier.mockRejectedValue(new TypeError('Failed to fetch'));
+    renderPage();
+    await settle();
+    expect(reasonElement()?.getAttribute('data-reason')).toBe('service_unavailable');
+  });
+
+  it('says the dossier is withheld on a backend identity mismatch', async () => {
+    await renderWithDossierFailure({ status: 409, errorCode: 'identity_mismatch' });
+    expect(reasonElement()?.getAttribute('data-reason')).toBe('identity_mismatch');
+    expect(reasonElement()?.textContent).toContain('Withheld');
+    expect(reasonElement()?.textContent).toContain('different taxon');
+  });
+
+  it('says the dossier is withheld when the record under this id is another species', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'cattleya-labiata',
+      canonical_name: 'Cattleya percivaliana',
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+    renderPage();
+    await settle();
+    expect(reasonElement()?.getAttribute('data-reason')).toBe('identity_mismatch');
+    expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+  });
+
+  it('gives each reason its own line', async () => {
+    const seen = new Set<string>();
+    for (const options of [
+      { status: 404 },
+      { status: 503 },
+      { status: 409, errorCode: 'identity_mismatch' },
+      { status: 200, invalidContract: true },
+    ]) {
+      await renderWithDossierFailure(options);
+      seen.add(reasonElement()?.textContent ?? '');
+      act(() => root.unmount());
+      root = createRoot(container);
+    }
+    expect(seen.has('')).toBe(false);
+    expect(seen.size).toBe(4);
+  });
+
+  it('renders the contract message, not a crash, for a malformed 200 from the real client', async () => {
+    const { fetchSpeciesDossier } = await actualDossierClient;
+    // A dossier with one rendered section missing and one with a state outside the contract.
+    const malformed: Record<string, unknown> = { ...dossier(), ecology: { state: 'verified' } };
+    delete malformed.morphology;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(malformed), { status: 200 })),
+    );
+    mocks.fetchSpeciesDossier.mockImplementation(fetchSpeciesDossier);
+
+    renderPage();
+    await settle();
+
+    expect(reasonElement()?.getAttribute('data-reason')).toBe('invalid_contract');
+    expect(reasonElement()?.textContent).toContain('did not match the dossier contract');
+    expect(container.querySelectorAll('[data-testid="dossier-section"]')).toHaveLength(0);
+    // The rest of the page still renders.
+    expect(container.querySelector('h1')?.textContent).toBe('Cattleya labiata');
+  });
+
+  it('shows the same well-formed body from the real client as a dossier', async () => {
+    const { fetchSpeciesDossier } = await actualDossierClient;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(dossier()), { status: 200 })),
+    );
+    mocks.fetchSpeciesDossier.mockImplementation(fetchSpeciesDossier);
+
+    renderPage();
+    for (let i = 0; i < 20 && !container.querySelector('[data-testid="dossier-section"]'); i += 1) {
+      await flush();
+    }
+
+    expect(container.querySelector('[data-testid="dossier-unavailable"]')).toBeNull();
+    expect(container.querySelectorAll('[data-testid="dossier-section"]').length).toBeGreaterThan(0);
+  });
+
+  it('shows no reason line when the subject is ambiguous or the link conflicts', async () => {
+    mocks.fetchSpeciesById.mockResolvedValue({
+      taxonomy_id: 'cattleya-labiata',
+      canonical_name: 'Cattleya percivaliana',
+    });
+    mocks.fetchSpeciesDossier.mockResolvedValue(dossier());
+    renderPage('/species/cattleya-labiata?name=Cattleya%20labiata');
+    for (let i = 0; i < 20 && !container.querySelector('[data-testid="dossier-subject-conflict"]'); i += 1) {
+      await flush();
+    }
+    expect(container.querySelector('[data-testid="dossier-subject-conflict"]')).not.toBeNull();
+    expect(reasonElement()).toBeNull();
+  });
+});

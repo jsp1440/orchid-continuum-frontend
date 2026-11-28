@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   pageSubject,
   resolveDossierForSubject,
+  resolveDossierForSubjectWithReason,
   sameScientificName,
   subjectNameFromSlug,
+  SpeciesDossierRequestError,
   type FederationResolveResult,
   type SpeciesDossierEnvelope,
 } from './speciesDossier';
@@ -227,5 +229,149 @@ describe('pageSubject', () => {
       linkedName: 'Cattleya labiata',
       publicName: 'Cattleya percivaliana',
     });
+  });
+});
+
+describe('resolveDossierForSubjectWithReason', () => {
+  const notFound = () => new SpeciesDossierRequestError('synthetic 404', { status: 404 });
+  const unavailable = () => new SpeciesDossierRequestError('synthetic 503', { status: 503 });
+  const mismatch = () =>
+    new SpeciesDossierRequestError('synthetic 409', { status: 409, errorCode: 'identity_mismatch' });
+  const invalid = () =>
+    new SpeciesDossierRequestError('synthetic malformed 200', { status: 200, invalidContract: true });
+
+  it('resolves exactly as resolveDossierForSubject does', async () => {
+    const deps = {
+      fetchDossier: vi.fn().mockResolvedValue(envelope('7904', 'Cattleya labiata')),
+      resolveSpecies: vi.fn(),
+    };
+    expect(await resolveDossierForSubjectWithReason('7904', 'Cattleya labiata', deps)).toEqual(
+      await resolveDossierForSubject('7904', 'Cattleya labiata', deps),
+    );
+  });
+
+  it.each([
+    ['not_found', notFound],
+    ['service_unavailable', unavailable],
+    ['identity_mismatch', mismatch],
+    ['invalid_contract', invalid],
+    ['service_unavailable', () => new TypeError('Failed to fetch')],
+  ] as const)('says %s when the route dossier fails that way and no name is known', async (reason, make) => {
+    const deps = { fetchDossier: vi.fn().mockRejectedValue(make()), resolveSpecies: vi.fn() };
+    expect(await resolveDossierForSubjectWithReason('6056', null, deps)).toEqual({
+      state: 'unavailable',
+      reason,
+    });
+    expect(deps.resolveSpecies).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['not_found', notFound],
+    ['service_unavailable', unavailable],
+    ['invalid_contract', invalid],
+  ] as const)(
+    'keeps %s from the route dossier when the subject name resolves to nothing',
+    async (reason, make) => {
+      const deps = {
+        fetchDossier: vi.fn().mockRejectedValue(make()),
+        resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'unresolved' })),
+      };
+      expect(await resolveDossierForSubjectWithReason('6056', 'Cattleya labiata', deps)).toEqual({
+        state: 'unavailable',
+        reason,
+      });
+    },
+  );
+
+  it('says no_subject when there is neither a route id nor a name', async () => {
+    const deps = { fetchDossier: vi.fn().mockRejectedValue(notFound()), resolveSpecies: vi.fn() };
+    expect(await resolveDossierForSubjectWithReason('  ', null, deps)).toEqual({
+      state: 'unavailable',
+      reason: 'no_subject',
+    });
+  });
+
+  it('says identity_mismatch when the route record is another species and the name resolves to nothing', async () => {
+    const deps = {
+      fetchDossier: vi.fn().mockResolvedValue(envelope('6056', 'Caladenia x suffusa')),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'unresolved' })),
+    };
+    expect(await resolveDossierForSubjectWithReason('6056', 'Cattleya labiata', deps)).toEqual({
+      state: 'unavailable',
+      reason: 'identity_mismatch',
+    });
+  });
+
+  it('says identity_mismatch when the resolved dossier is not the subject', async () => {
+    const deps = {
+      fetchDossier: vi.fn(async (id: string) =>
+        id === '6056' ? envelope('6056', 'Caladenia x suffusa') : envelope('7904', 'Cattleya labiata'),
+      ),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'resolved', taxon_id: '7904' })),
+    };
+    expect(
+      await resolveDossierForSubjectWithReason('6056', 'Cattleya labiata fo. alba', deps),
+    ).toEqual({ state: 'unavailable', reason: 'identity_mismatch' });
+  });
+
+  it('says service_unavailable when the name resolver cannot be reached', async () => {
+    const deps = {
+      fetchDossier: vi.fn().mockRejectedValue(notFound()),
+      resolveSpecies: vi.fn().mockRejectedValue(unavailable()),
+    };
+    expect(await resolveDossierForSubjectWithReason('6056', 'Cattleya labiata', deps)).toEqual({
+      state: 'unavailable',
+      reason: 'service_unavailable',
+    });
+  });
+
+  it('carries the reason of the dossier the name resolved to', async () => {
+    const deps = {
+      fetchDossier: vi.fn(async (id: string) => {
+        throw id === '6056' ? notFound() : invalid();
+      }),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'resolved', taxon_id: '7904' })),
+    };
+    expect(await resolveDossierForSubjectWithReason('6056', 'Cattleya labiata', deps)).toEqual({
+      state: 'unavailable',
+      reason: 'invalid_contract',
+    });
+  });
+
+  it('still lists exact-name candidates for an ambiguous name', async () => {
+    const candidates = [
+      { taxon_id: '1', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+      { taxon_id: '2', accepted_name: 'Cattleya labiata', match_state: 'accepted_name' },
+    ];
+    const deps = {
+      fetchDossier: vi.fn().mockRejectedValue(notFound()),
+      resolveSpecies: vi.fn().mockResolvedValue(resolution({ status: 'ambiguous', candidates })),
+    };
+    expect(await resolveDossierForSubjectWithReason('6056', 'Cattleya labiata', deps)).toEqual({
+      state: 'ambiguous',
+      subjectName: 'Cattleya labiata',
+      candidates,
+    });
+  });
+
+  it('rethrows when the request was aborted', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const deps = { fetchDossier: vi.fn().mockRejectedValue(notFound()), resolveSpecies: vi.fn() };
+    await expect(
+      resolveDossierForSubjectWithReason('6056', null, deps, ctrl.signal),
+    ).rejects.toBeInstanceOf(SpeciesDossierRequestError);
+  });
+});
+
+describe('resolveDossierForSubject', () => {
+  it('keeps its bare unavailable result', async () => {
+    const deps = {
+      fetchDossier: vi
+        .fn()
+        .mockRejectedValue(new SpeciesDossierRequestError('synthetic 404', { status: 404 })),
+      resolveSpecies: vi.fn(),
+    };
+    expect(await resolveDossierForSubject('6056', null, deps)).toStrictEqual({ state: 'unavailable' });
   });
 });
