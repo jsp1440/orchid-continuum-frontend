@@ -37,7 +37,8 @@ for (const viewport of [{ width: 1366, height: 1024 }, { width: 1024, height: 76
     const genus = (await exhibit.locator('h2').innerText()).trim();
     const atlas = page.locator('#living-atlas');
     await expect(atlas.getByRole('heading', { level: 3 })).toContainText(genus);
-    await expect(atlas.getByRole('link', { name: 'Open the Atlas workspace ↗' })).toHaveAttribute('href', `/atlas-next?genera=${genus}`);
+    await expect(atlas.getByRole('link', { name: 'Open the Atlas workspace ↗' })).toHaveAttribute('href', `/atlas?genera=${genus}`);
+    await expect(atlas.getByRole('link', { name: `Explore ${genus} in Atlas Next ↗` })).toHaveAttribute('href', `/atlas-next?genera=${genus}`);
     await atlas.getByRole('button', { name: '2D map', exact: true }).click();
     await expect(atlas.getByRole('button', { name: '2D map', exact: true })).toHaveAttribute('aria-pressed', 'true');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
