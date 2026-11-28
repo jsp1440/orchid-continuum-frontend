@@ -108,7 +108,8 @@ beforeEach(() => {
     return new Response(JSON.stringify({
       total: null, offset, limit: 1000, scanned: 1, returned: 1,
       next_offset: more ? offset + 1 : null,
-      items: [item(offset, genus)],
+      // The public occurrence source can file a mixed-case scientific name under a lowercase genus.
+      items: [item(offset, genus.toLowerCase())],
     }));
   }));
 });
