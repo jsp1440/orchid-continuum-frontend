@@ -3,6 +3,7 @@ import HomeSpeciesExhibit from '@/components/orchid/HomeSpeciesExhibit';
 import { DailyGenusProvider } from '@/lib/dailyGenusContext';
 import { HeroSpeciesProvider } from '@/lib/heroSpeciesContext';
 import Navbar from './orchid/Navbar';
+import HomeContinuumIntro from './orchid/HomeContinuumIntro';
 import HeroOrchid from './orchid/HeroOrchid';
 import ContinuumThread from './orchid/ContinuumThread';
 import FungalDependency from './orchid/FungalDependency';
@@ -80,6 +81,9 @@ const AppLayout: React.FC = () => {
       <main>
         <DailyGenusProvider>
           <HeroSpeciesProvider>
+            {/* First screen: what the Orchid Continuum is, why it matters, how it
+                was made and what a visitor can do — the owner's original explainer. */}
+            <SafeSection name="Orchid Continuum introduction"><HomeContinuumIntro /></SafeSection>
             {/* HOMEPAGE-SLICE-1: one orchid, then one dependency, joined by a thread. */}
             <SafeSection name="Home hero"><HeroOrchid onSpeciesResolved={setHeroSpecies} /></SafeSection>
             <ContinuumThread />

@@ -1,0 +1,293 @@
+{
+  "description": "Shared test vectors for the public Atlas locality policy. Identical copies live in orchid-calyx-backend tests/fixtures/atlas_locality_vectors.json and orchid-continuum-frontend src/lib/__fixtures__/atlas_locality_vectors.json. All coordinates are SYNTHETIC. The expected cell centre is ((cell_row + 0.5) * cell_deg, (cell_col + 0.5) * cell_deg).",
+  "vectors": [
+    {
+      "name": "ordinary record with a least-concern assessment",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "LC",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.1,
+        "reason": "public-precision",
+        "cell_km": 11,
+        "cell_row": 123,
+        "cell_col": -457
+      }
+    },
+    {
+      "name": "no assessment reachable (unresolved)",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": null,
+        "conservation_status": null,
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": false,
+        "cell_deg": 0.1,
+        "reason": "unresolved-assessment",
+        "cell_km": 11,
+        "cell_row": 123,
+        "cell_col": -457
+      }
+    },
+    {
+      "name": "IUCN vulnerable",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "VU",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.25,
+        "reason": "iucn-threatened",
+        "cell_km": 28,
+        "cell_row": 49,
+        "cell_col": -183
+      }
+    },
+    {
+      "name": "conservation status Endangered",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": null,
+        "conservation_status": "Endangered",
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.5,
+        "reason": "conservation-status",
+        "cell_km": 56,
+        "cell_row": 24,
+        "cell_col": -92
+      }
+    },
+    {
+      "name": "decorated IUCN critically endangered",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "IUCN: CR",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 1.0,
+        "reason": "iucn-threatened",
+        "cell_km": 111,
+        "cell_row": 12,
+        "cell_col": -46
+      }
+    },
+    {
+      "name": "status critically endangered beats an LC code",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "LC",
+        "conservation_status": "Critically Endangered",
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 1.0,
+        "reason": "conservation-status",
+        "cell_km": 111,
+        "cell_row": 12,
+        "cell_col": -46
+      }
+    },
+    {
+      "name": "small uncertainty widens an ordinary point to 0.1",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "LC",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": 5000
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.1,
+        "reason": "coordinate-uncertainty",
+        "cell_km": 11,
+        "cell_row": 123,
+        "cell_col": -457
+      }
+    },
+    {
+      "name": "large uncertainty beats the VU cell",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "VU",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": 50000
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.5,
+        "reason": "coordinate-uncertainty",
+        "cell_km": 56,
+        "cell_row": 24,
+        "cell_col": -92
+      }
+    },
+    {
+      "name": "negligible uncertainty keeps the public floor",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": "NT",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": 1000
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.1,
+        "reason": "public-precision",
+        "cell_km": 11,
+        "cell_row": 123,
+        "cell_col": -457
+      }
+    },
+    {
+      "name": "data deficient is not an assessment",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": null,
+        "conservation_status": "Data Deficient",
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": false,
+        "cell_deg": 0.1,
+        "reason": "unresolved-assessment",
+        "cell_km": 11,
+        "cell_row": 123,
+        "cell_col": -457
+      }
+    },
+    {
+      "name": "unassessed wording cannot cancel a threatened mention",
+      "input": {
+        "lat": 12.34,
+        "lng": -45.67,
+        "iucn_code": null,
+        "conservation_status": "DD; regionally VU",
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.25,
+        "reason": "conservation-status",
+        "cell_km": 28,
+        "cell_row": 49,
+        "cell_col": -183
+      }
+    },
+    {
+      "name": "southern and eastern hemisphere near the antimeridian",
+      "input": {
+        "lat": -0.05,
+        "lng": 179.99,
+        "iucn_code": "LC",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 0.1,
+        "reason": "public-precision",
+        "cell_km": 11,
+        "cell_row": -1,
+        "cell_col": 1799
+      }
+    },
+    {
+      "name": "CR near the antimeridian, western side",
+      "input": {
+        "lat": -33.21,
+        "lng": -179.5,
+        "iucn_code": "CR",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 1.0,
+        "reason": "iucn-threatened",
+        "cell_km": 111,
+        "cell_row": -34,
+        "cell_col": -180
+      }
+    },
+    {
+      "name": "not yet assessed stays unresolved",
+      "input": {
+        "lat": 51.5,
+        "lng": 0.12,
+        "iucn_code": null,
+        "conservation_status": "not yet assessed",
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": false,
+        "cell_deg": 0.1,
+        "reason": "unresolved-assessment",
+        "cell_km": 11,
+        "cell_row": 515,
+        "cell_col": 1
+      }
+    },
+    {
+      "name": "prose such as ex situ is not an assessment",
+      "input": {
+        "lat": 51.5,
+        "lng": 0.12,
+        "iucn_code": null,
+        "conservation_status": "kept ex situ",
+        "coordinate_uncertainty_m": null
+      },
+      "expected": {
+        "assessment_resolved": false,
+        "cell_deg": 0.1,
+        "reason": "unresolved-assessment",
+        "cell_km": 11,
+        "cell_row": 515,
+        "cell_col": 1
+      }
+    },
+    {
+      "name": "very large uncertainty beats EN",
+      "input": {
+        "lat": 4.56,
+        "lng": 101.23,
+        "iucn_code": "EN",
+        "conservation_status": null,
+        "coordinate_uncertainty_m": 200000
+      },
+      "expected": {
+        "assessment_resolved": true,
+        "cell_deg": 1.0,
+        "reason": "coordinate-uncertainty",
+        "cell_km": 111,
+        "cell_row": 4,
+        "cell_col": 101
+      }
+    }
+  ]
+}

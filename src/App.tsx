@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AtlasFilterProvider } from "@/contexts/AtlasFilterContext";
@@ -13,6 +13,7 @@ import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 import AtlasAwareCalyxRoute from "@/components/calyx/AtlasAwareCalyxRoute";
 import LexiconAppLayout from "@/features/lexicon/LexiconAppLayout";
 
+import PublicKnowledgeGraph from "./pages/PublicKnowledgeGraph";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import SpeciesDossier from "./pages/SpeciesDossier";
@@ -54,7 +55,7 @@ import MycorrhizaProfile from "./pages/MycorrhizaProfile";
 import Gallery from "./pages/Gallery";
 import IntelligenceGraph from "./pages/IntelligenceGraph";
 import Climate from "./pages/Climate";
-import EcuadorExpedition from "./pages/EcuadorExpedition";
+import { ANDES_TOUR_STOP_NUMBER, grandTourStopPath } from "./lib/grandTour";
 import GenusDetail from "./pages/GenusDetail";
 import ComingSoon from "./pages/ComingSoon";
 import Privacy from "./pages/Privacy";
@@ -75,6 +76,11 @@ import MatrixRegistryConceptReview from "./pages/MatrixRegistryConceptReview";
 import CalyxWorkspace from "./pages/CalyxWorkspace";
 import CalyxMobile from "./pages/CalyxMobile";
 import HomepageReadiness from "./pages/HomepageReadiness";
+import LiteratureReview from "./pages/LiteratureReview";
+import LiteratureReviewPaper from "./pages/LiteratureReviewPaper";
+import LiteratureReviewCard from "./pages/LiteratureReviewCard";
+import { ContributorsList, ContributorDetail } from "./pages/Contributors";
+import LiteratureCuration from "./pages/LiteratureCuration";
 
 const queryClient = new QueryClient();
 
@@ -105,7 +111,8 @@ const App = () => (
                   <Route path="/genus/:name" element={<GenusDetail />} />
                   <Route path="/species/:slug" element={<SpeciesDossier />} />
                   <Route path="/about" element={<About />} />
-                  <Route path="/atlas/ecuador" element={<EcuadorExpedition />} />
+                  {/* Retired: the Ecuador expedition embedded an external service that no longer exists. Its content lives on as the Grand Tour's Andes stop. */}
+                  <Route path="/atlas/ecuador" element={<Navigate to={grandTourStopPath(ANDES_TOUR_STOP_NUMBER)} replace />} />
                   <Route path="/atlas" element={<Atlas />} />
                   <Route
                     path="/atlas-next"
@@ -147,10 +154,17 @@ const App = () => (
                   <Route path="/mycorrhizae/:taxa" element={<MycorrhizaProfile />} />
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/climate" element={<Climate />} />
+                  <Route path="/knowledge-graph" element={<PublicKnowledgeGraph />} />
                   <Route path="/intelligence-graph" element={<IntelligenceGraph />} />
                   <Route path="/knowledge" element={<IntelligenceGraph />} />
                   <Route path="/literature" element={<ProtectedRoute title="Literature corpus · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty corpus."><Literature /></ProtectedRoute>} />
                   <Route path="/literature/:paperId" element={<ProtectedRoute title="Literature extraction · signed-in access" description="Sign in first. The literature-extraction service currently answers only an owner session or API-key access, so a member sign-in alone does not open it yet — the page will say so rather than show an empty extraction."><LiteraturePaper /></ProtectedRoute>} />
+                  <Route path="/review" element={<LiteratureReview />} />
+                  <Route path="/review/paper/:doi" element={<LiteratureReviewPaper />} />
+                  <Route path="/review/card/:itemId" element={<LiteratureReviewCard />} />
+                  <Route path="/contributors" element={<ContributorsList />} />
+                  <Route path="/contributors/:slug" element={<ContributorDetail />} />
+                  <Route path="/curation/literature" element={<LiteratureCuration />} />
                   <Route path="/relationship-explorer" element={<RelationshipExplorer />} />
                   <Route path="/relationship-explorer/:species" element={<RelationshipExplorer />} />
                   <Route path="/collection" element={<ProtectedRoute title="Sign in to view your collection" description="Your Orchid Continuum collection — saved specimens, observations, and field notes — lives behind authentication."><MyCollection /></ProtectedRoute>} />

@@ -940,7 +940,7 @@ const SynthesisPanel: React.FC<{
   );
 };
 
-const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ projectId }) => {
+const ProjectWorkbench: React.FC<{ projectId?: string | null }> = ({ projectId }) => {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   // Lifted so every "continue" link carries the thread the synthesis opened.
   // Without it a follow-up asked in Calyx would restart the subject instead of
@@ -1320,6 +1320,14 @@ const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ pro
       </SectionShell>
     </div>
   );
+};
+
+// A project owns the entire investigation lifecycle, including pending loads,
+// synthesis, conversation continuation, manifests and candidate proposals.
+// Remount together so no old-project callback can populate a new investigation.
+const ResearchStationWorkbench: React.FC<{ projectId?: string | null }> = ({ projectId }) => {
+  const id = projectId?.trim() || null;
+  return <ProjectWorkbench key={id ? `project:${id}` : 'latest-project'} projectId={id} />;
 };
 
 export default ResearchStationWorkbench;

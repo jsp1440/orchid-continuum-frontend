@@ -45,13 +45,18 @@ export type SensitivityResolution =
 /**
  * Precautionary cell applied when no assessment can be reached.
  *
- * 0.05 degrees is roughly 5.5 km — coarse enough that it does not lead anyone
- * to a plant, fine enough that a country or landscape view still reads. It is a
- * POLICY CONSTANT, not a scientific one: it is the one number to change if the
- * owner wants the public Atlas more or less cautious, and changing it changes
- * nothing else.
+ * 0.1 degrees is roughly 11 km (owner decision 2026-11-24: the old 0.05 floor
+ * was raised to the public floor). It is a POLICY CONSTANT, not a scientific
+ * one.
  */
-export const UNRESOLVED_FLOOR_DEG = 0.05;
+export const UNRESOLVED_FLOOR_DEG = 0.1;
+
+/**
+ * Smallest cell any PUBLIC visitor is shown, whatever the record (≈11 km;
+ * owner decision 2026-11-24, Brain KO-0029). The server applies the same floor
+ * before data leaves it, so this is a second line, not the only one.
+ */
+export const PUBLIC_FLOOR_DEG = 0.1;
 
 /** IUCN threat codes that trigger locality protection. */
 const THREATENED_CODES = new Set(['CR', 'EN', 'VU']);
@@ -70,6 +75,8 @@ export type SensitivityReason =
   | 'coordinate-uncertainty'
   /** No assessment could be reached, so precision is withheld precautionarily. */
   | 'unresolved-assessment'
+  /** Ordinary record shown at the public floor; no locality text is published. */
+  | 'public-precision'
   | 'none';
 
 export interface LocalityPolicy {
@@ -143,7 +150,9 @@ export function resolveLocation(
   point: Pick<
     AtlasOccurrencePoint,
     'lat' | 'lng' | 'iucnCode' | 'conservationStatus' | 'coordinateUncertaintyM'
-  > & { assessmentResolved?: boolean },
+  > & { assessmentResolved?: boolean } & Partial<
+      Pick<AtlasOccurrencePoint, 'publicCellDeg' | 'locationNotice' | 'locationReason'>
+    >,
   access: AtlasAccessLevel = 'public',
   floorCellDeg = 0,
 ): DisplayedLocation {
@@ -163,14 +172,24 @@ export function resolveLocation(
   // of the observation itself and no authorisation makes it more precise.
   const threatCell = tier && access !== 'research' ? TIER_CELL_DEG[tier] : 0;
 
-  const cellDeg = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg);
+  const publicCell = access !== 'research' ? PUBLIC_FLOOR_DEG : 0;
+  // A point the server already generalised is never drawn finer than its cell.
+  const serverCell =
+    typeof point.publicCellDeg === 'number' && Number.isFinite(point.publicCellDeg) && point.publicCellDeg > 0
+      ? point.publicCellDeg
+      : 0;
+  const localCell = Math.max(threatCell, uncertaintyCell, precautionCell, floorCellDeg, publicCell);
+  const cellDeg = Math.max(localCell, serverCell);
   const { lat, lng } = snapToCell(point.lat, point.lng, cellDeg);
 
   // Reasons are ranked by which one actually decided the rendering, so the
   // notice always explains the constraint in force rather than a weaker one.
   let reason: SensitivityReason = 'none';
   let notice = '';
-  if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
+  if (serverCell > localCell && point.locationNotice) {
+    reason = (point.locationReason as SensitivityReason | undefined) ?? 'coordinate-uncertainty';
+    notice = point.locationNotice;
+  } else if (threatCell > 0 && threatCell >= uncertaintyCell && threatCell >= precautionCell) {
     reason = point.iucnCode ? 'iucn-threatened' : 'conservation-status';
     notice = `Location generalised to about ${km(threatCell)} km. This species is assessed as threatened (${tier}), and precise sites are withheld to reduce collection risk.`;
   } else if (uncertaintyCell > 0 && uncertaintyCell >= precautionCell) {
@@ -179,6 +198,9 @@ export function resolveLocation(
   } else if (precautionCell > 0) {
     reason = 'unresolved-assessment';
     notice = `Location generalised to about ${km(precautionCell)} km. The Continuum holds no conservation assessment for this name, so the Atlas does not publish a precise site. This is a precaution about what we do not know — it is not a statement that the species is threatened.`;
+  } else if (publicCell > 0) {
+    reason = 'public-precision';
+    notice = `Location generalised to about ${km(publicCell)} km for public display; precise coordinates and locality text are not published.`;
   }
 
   return {
@@ -192,7 +214,8 @@ export function resolveLocation(
       // the coordinate — threat-based or precautionary. A locality string
       // defeats generalisation, so it has to follow the same rule. Source
       // imprecision is different: nothing is being withheld there.
-      localityTextAllowed: threatCell === 0 && precautionCell === 0,
+      // Public visitors never see locality text (owner decision 2026-11-24).
+      localityTextAllowed: access === 'research' && threatCell === 0 && precautionCell === 0,
       notice,
     },
   };

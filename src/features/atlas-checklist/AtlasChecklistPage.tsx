@@ -131,6 +131,13 @@ export default function AtlasChecklistPage() {
   return (
     <main className="mx-auto max-w-6xl p-6">
       <h1 className="text-2xl">Atlas · checklist distribution</h1>
+      {/* Source credit of this module (owner decision recorded on orchid-calyx-backend#2450): the compiler supplied the
+          checklist and permits its public use with credit. The site-wide credit is on /partners. */}
+      <p className="text-xs" data-testid="checklist-source-credit">
+        Checklist data: <a href="https://www.worldplants.de" target="_blank" rel="noopener noreferrer" className="underline">World Plants</a>,
+        the checklist of the Orchidaceae compiled by Dr. Michael Hassler, who supplied it to the Orchid Continuum and permits
+        its public use with credit. See <Link to="/partners" className="underline">Partners &amp; Acknowledgements</Link>.
+      </p>
       {areas && <p className="text-sm">{areas.notice}</p>}
       {areas && <p className="text-sm">Geometry: {areas.geometry.state.replace('_', ' ')}. {areas.geometry.explanation}</p>}
       {areasError && <p role="alert">{areasError}</p>}

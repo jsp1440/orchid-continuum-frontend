@@ -9,12 +9,24 @@ const repo = process.env.GITHUB_REPOSITORY || '';
 const stateBranch = 'oc-dispatch-state';
 const statePath = '.oc/dispatch-ledger.json';
 const now = () => new Date().toISOString();
+/** Retry only transient GitHub GET gateway errors; never replay mutations. */
+export function retryTransientGitHubRead<T>(method: string, request: () => T, pause: (ms: number) => void): T {
+  for (let attempt = 0; ; attempt++) {
+    try { return request(); }
+    catch (error) {
+      if (method !== 'GET' || attempt >= 2 || ![502, 503, 504].some(code => status(error, code))) throw error;
+      pause(1000 * (2 ** attempt));
+    }
+  }
+}
 function api<T>(path: string, method = 'GET', body?: unknown): T {
   if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Invalid repository');
   const args = ['api', `repos/${repo}/${path}`, '--method', method];
   if (body !== undefined) args.push('--input', '-');
-  return JSON.parse(execFileSync('gh', args, { input: body === undefined ? undefined : JSON.stringify(body),
-    encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }) || 'null') as T;
+  return retryTransientGitHubRead(method, () =>
+    JSON.parse(execFileSync('gh', args, { input: body === undefined ? undefined : JSON.stringify(body),
+      encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }) || 'null') as T,
+    ms => { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); });
 }
 function status(error: unknown, code: number) {
   return error instanceof Error && 'stderr' in error && String(error.stderr).includes(`HTTP ${code}`);

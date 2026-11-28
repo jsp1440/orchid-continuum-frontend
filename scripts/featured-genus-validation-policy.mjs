@@ -28,3 +28,17 @@ export function isExpectedOptionalSnapshotFailure(response) {
     && url.searchParams.getAll("select").length === 1
     && url.searchParams.getAll("snapshot_date").length === 1;
 }
+
+/**
+ * The Featured Genus section is located by the stable id its heading carries
+ * (`aria-labelledby` on the section in DailyGenusFeatureContinuum), never by
+ * incidental copy. A text locator such as "Featured Genus" only matched this
+ * section while the relationship cards happened to render the phrase "this
+ * featured genus"; in any other evidence state it silently fell through to a
+ * different section (the Atlas band) and the sentinel reported a render failure
+ * for an element it was not looking at.
+ */
+export const FEATURED_GENUS_SECTION_SELECTOR = 'section[aria-labelledby="featured-genus-title"]';
+
+/** The honest no-media states the Featured Genus section is allowed to show. */
+export const FEATURED_GENUS_NO_MEDIA_PATTERN = /No approved Continuum photograph available|No verified Orchid Continuum photograph|This approved photograph could not be loaded\. No substitute image is shown\./i;

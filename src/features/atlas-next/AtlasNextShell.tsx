@@ -226,7 +226,7 @@ const AtlasNextShell: React.FC = () => {
             ? MARK_SELECTED
             : gapMode
               ? base
-              : loc.policy.generalised
+              : loc.policy.generalised && loc.policy.reason !== 'public-precision'
                 ? MARK_PROTECTED
                 : MARK_COLOR,
         haloDeg: loc.policy.cellDeg,

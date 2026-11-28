@@ -3,8 +3,9 @@ import type { CircleMarker, LayerGroup, Map as LeafletMap } from 'leaflet';
 import { Globe2, Loader2, Layers as LayersIcon } from 'lucide-react';
 import { useLeaflet } from '@/hooks/useLeaflet';
 import { BASEMAP_TILE_OPTIONS, BASEMAP_TILE_URL } from '@/lib/basemap';
-import type { AtlasOccurrencePoint } from '@/lib/orchidContinuum';
+import type { AtlasCell, AtlasOccurrencePoint } from '@/lib/orchidContinuum';
 import { resolveAtlasLocation } from '@/lib/atlasLocalitySafety';
+import { cellFill, cellLabel } from '@/lib/atlasCells';
 import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
 
 /**
@@ -27,6 +28,10 @@ import { usePrefersReducedMotion } from '@/hooks/usePrefersReducedMotion';
  *   habitat, climate, conservation).
  * - Click a point → onSelect(point) so the parent opens the species card.
  * - selectedId draws a highlighted ring around the currently-open point.
+ * - `cells` (the world overview) draws one square per generalised grid cell,
+ *   shaded by its record count, in place of points. The server never counts a
+ *   record into a cell finer than its own public cell; clicking a cell zooms
+ *   into it.
  */
 
 export type LayerKey =
@@ -58,6 +63,11 @@ interface Props {
   loading?: boolean;
   totalLoaded?: number;
   /**
+   * Progress of the occurrence load. While `done` is false the map shows the
+   * points that have arrived and says how many of the total that is.
+   */
+  loadProgress?: { loaded: number; total: number | null; done: boolean } | null;
+  /**
    * When set, the map animates a fitBounds to this rectangle. Used by the
    * Atlas Tour's "Start Ecuador Expedition" action. Pass a NEW object each
    * time you want to re-trigger the zoom.
@@ -69,6 +79,10 @@ interface Props {
    * time you want to re-trigger the animation.
    */
   focusView?: AtlasFocusView | null;
+  /** When set, the map draws these count cells instead of `points`. */
+  cells?: AtlasCell[] | null;
+  /** Called with the zoom level once the map exists and after every zoom. */
+  onZoomChange?: (zoom: number) => void;
 }
 
 const GENUS_COLOR: Record<string, string> = {
@@ -90,7 +104,8 @@ function displayedPoint(point: AtlasOccurrencePoint): AtlasOccurrencePoint {
     ...point,
     lat: displayed.lat,
     lng: displayed.lng,
-    locality: displayed.policy.localityTextAllowed ? point.locality : undefined,
+    // Public surface: never locality text, whatever the record carries.
+    locality: undefined,
   };
 }
 
@@ -101,8 +116,11 @@ const LiveAtlasMap: React.FC<Props> = ({
   selectedId,
   loading,
   totalLoaded,
+  loadProgress,
   focusBounds,
   focusView,
+  cells,
+  onZoomChange,
 }) => {
   const { ready, error, L } = useLeaflet();
   const reducedMotion = usePrefersReducedMotion();
@@ -118,6 +136,13 @@ const LiveAtlasMap: React.FC<Props> = ({
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
+  const onZoomChangeRef = useRef(onZoomChange);
+  useEffect(() => {
+    onZoomChangeRef.current = onZoomChange;
+  }, [onZoomChange]);
+  const cellLayerRef = useRef<LayerGroup | null>(null);
+  const showCells = Array.isArray(cells);
+  const cellRecordCount = useMemo(() => (cells ?? []).reduce((sum, c) => sum + c.count, 0), [cells]);
 
   useEffect(() => {
     if (!ready || !L || !containerRef.current || mapRef.current) return;
@@ -137,11 +162,14 @@ const LiveAtlasMap: React.FC<Props> = ({
     L.tileLayer(BASEMAP_TILE_URL, BASEMAP_TILE_OPTIONS).addTo(map);
 
     mapRef.current = map;
+    map.on('zoomend', () => onZoomChangeRef.current?.(map.getZoom()));
+    onZoomChangeRef.current?.(map.getZoom());
 
     return () => {
       map.remove();
       mapRef.current = null;
       occurrenceLayerRef.current = null;
+      cellLayerRef.current = null;
       haloLayerRefs.current = {};
       highlightRef.current = null;
     };
@@ -156,7 +184,7 @@ const LiveAtlasMap: React.FC<Props> = ({
       occurrenceLayerRef.current = null;
     }
 
-    if (!activeLayers.has('occurrence')) return;
+    if (!activeLayers.has('occurrence') || showCells) return;
 
     const group = L.layerGroup();
     for (const p of displayPoints) {
@@ -182,7 +210,39 @@ const LiveAtlasMap: React.FC<Props> = ({
     }
     group.addTo(map);
     occurrenceLayerRef.current = group;
-  }, [displayPoints, ready, L, activeLayers]);
+  }, [displayPoints, ready, L, activeLayers, showCells]);
+
+  useEffect(() => {
+    if (!ready || !L || !mapRef.current) return;
+    const map = mapRef.current;
+    if (cellLayerRef.current) {
+      map.removeLayer(cellLayerRef.current);
+      cellLayerRef.current = null;
+    }
+    if (!cells || !activeLayers.has('occurrence')) return;
+    const maxCount = cells.reduce((m, c) => Math.max(m, c.count), 1);
+    const group = L.layerGroup();
+    for (const cell of cells) {
+      const half = cell.cellDeg / 2;
+      const bounds: [[number, number], [number, number]] = [
+        [Math.max(-90, cell.lat - half), cell.lng - half],
+        [Math.min(90, cell.lat + half), cell.lng + half],
+      ];
+      const fill = cellFill(cell.count, maxCount);
+      const square = L.rectangle(bounds, {
+        color: fill.color,
+        weight: 0.5,
+        opacity: 0.6,
+        fillColor: fill.color,
+        fillOpacity: fill.opacity,
+      });
+      square.bindTooltip(escapeHtml(cellLabel(cell)), { direction: 'top', opacity: 1 });
+      square.on('click', () => map.fitBounds(bounds, { animate: !reducedMotion, maxZoom: 6 }));
+      group.addLayer(square);
+    }
+    group.addTo(map);
+    cellLayerRef.current = group;
+  }, [cells, ready, L, activeLayers, reducedMotion]);
 
   useEffect(() => {
     if (!ready || !L || !mapRef.current) return;
@@ -201,7 +261,7 @@ const LiveAtlasMap: React.FC<Props> = ({
         map.removeLayer(existing);
         delete haloLayerRefs.current[spec.key];
       }
-      if (!activeLayers.has(spec.key)) continue;
+      if (!activeLayers.has(spec.key) || showCells) continue;
 
       const group = L.layerGroup();
       for (const p of displayPoints) {
@@ -219,7 +279,7 @@ const LiveAtlasMap: React.FC<Props> = ({
       group.addTo(map);
       haloLayerRefs.current[spec.key] = group;
     }
-  }, [displayPoints, ready, L, activeLayers]);
+  }, [displayPoints, ready, L, activeLayers, showCells]);
 
   useEffect(() => {
     if (!ready || !L || !mapRef.current) return;
@@ -271,10 +331,11 @@ const LiveAtlasMap: React.FC<Props> = ({
   }, [focusView, ready, L]);
 
   const legend = useMemo(() => {
+    if (showCells) return [];
     const counts = new Map<string, number>();
     for (const p of displayPoints) counts.set(p.genus, (counts.get(p.genus) ?? 0) + 1);
     return Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
-  }, [displayPoints]);
+  }, [displayPoints, showCells]);
 
   return (
     <div role="region" aria-label="Living Atlas map" className="relative rounded-2xl border border-white/[0.08] overflow-hidden bg-[#06091a]">
@@ -289,6 +350,17 @@ const LiveAtlasMap: React.FC<Props> = ({
               <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none text-[#c9a24a]" />
               Loading
             </>
+          ) : showCells ? (
+            <span data-testid="atlas-map-cell-count" className="inline-flex items-center gap-2">
+              <LayersIcon className="h-3 w-3 text-[#c9a24a]" />
+              {cellRecordCount.toLocaleString()} records in {(cells ?? []).length.toLocaleString()} cells
+            </span>
+          ) : loadProgress && !loadProgress.done ? (
+            <span data-testid="atlas-map-load-progress" className="inline-flex items-center gap-2">
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none text-[#c9a24a]" />
+              Loading {loadProgress.loaded.toLocaleString()}
+              {loadProgress.total !== null ? ` of ${loadProgress.total.toLocaleString()}` : ''} records
+            </span>
           ) : (
             <>
               <LayersIcon className="h-3 w-3 text-[#c9a24a]" />
@@ -341,7 +413,11 @@ const LiveAtlasMap: React.FC<Props> = ({
         <div
           ref={containerRef}
           role="application"
-          aria-label={`Interactive map with ${displayPoints.length.toLocaleString()} generalized orchid records`}
+          aria-label={
+            showCells
+              ? `Interactive map with ${cellRecordCount.toLocaleString()} orchid records counted in generalized grid cells`
+              : `Interactive map with ${displayPoints.length.toLocaleString()} generalized orchid records`
+          }
           className="absolute inset-0"
           style={{ background: '#e8ece6' }}
         />

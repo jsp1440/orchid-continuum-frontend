@@ -81,8 +81,8 @@ describe('Atlas occurrences locality projection (#931 acceptance: locality safeg
 
   it('a point with no conservation assessment is generalised to the precaution cell', async () => {
     const p = await pointFor({});
-    expect(p.lat).toBeCloseTo(12.325, 6);
-    expect(p.lng).toBeCloseTo(-77.675, 6);
+    expect(p.lat).toBeCloseTo(12.35, 6);
+    expect(p.lng).toBeCloseTo(-77.65, 6);
   });
 
   it('a threatened taxon is generalised to its tier cell', async () => {
@@ -96,9 +96,10 @@ describe('Atlas occurrences locality projection (#931 acceptance: locality safeg
     expect(p.lat).toBeCloseTo(12.375, 6);
   });
 
-  it('an assessed, non-threatened point with no stated uncertainty keeps its coordinates', async () => {
+  it('an assessed, non-threatened point is still snapped to the 0.1° public cell (owner decision 2026-11-24)', async () => {
     const p = await pointFor({ conservation_status: 'Least Concern' });
-    expect([p.lat, p.lng]).toEqual([12.3456, -77.6543]);
+    expect(p.lat).toBeCloseTo(12.35, 6);
+    expect(p.lng).toBeCloseTo(-77.65, 6);
   });
 });
 
@@ -118,8 +119,8 @@ describe('checker round 10 (#931)', () => {
     { properties: { conservation_status: 'Data Deficient' } },
   ])('F3: a non-assessment value %o is unresolved, not precise', async (row) => {
     const p = await pointFor(row);
-    expect(p.lat).toBeCloseTo(12.325, 6);
-    expect(p.lng).toBeCloseTo(-77.675, 6);
+    expect(p.lat).toBeCloseTo(12.35, 6);
+    expect(p.lng).toBeCloseTo(-77.65, 6);
   });
 
   it('F3: the shared rule', () => {
@@ -137,7 +138,7 @@ describe('checker round 10 (#931)', () => {
     })));
     const [p] = await fetchAtlasOccurrences(1);
     expect(p.species).toBe('Masdevallia veitchiana');
-    expect(p.lat).toBeCloseTo(12.325, 6);
+    expect(p.lat).toBeCloseTo(12.35, 6);
   });
 
   it.each([
@@ -148,7 +149,7 @@ describe('checker round 10 (#931)', () => {
     const layer = occurrencePayloadToAtlasLayer(payload);
     expect(layer?.features).toHaveLength(1);
     const [f] = layer!.features;
-    expect(f.lat).toBeCloseTo(12.325, 6);
+    expect(f.lat).toBeCloseTo(12.35, 6);
     expect(JSON.stringify(f.properties)).not.toMatch(/secret valley|12\.3456|77\.6543|latitude|longitude|geometry|locality/);
     const rows = atlasLayerToEducationalRows(layer!, 10);
     expect(rows[0].scientific_name).toBe('Phragmipedium kovachii');

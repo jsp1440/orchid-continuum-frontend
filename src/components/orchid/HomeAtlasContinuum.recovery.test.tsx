@@ -20,8 +20,8 @@ it.each<[string, number | undefined, number, number]>([
   ['CR', undefined, 12.5, 45.5],
   ['EN', undefined, 12.25, 45.75],
   ['LC', 9000, 12.35, 45.65],
-  ['LC', undefined, 12.325, 45.675],
-  ['DD', undefined, 12.325, 45.675],
+  ['LC', undefined, 12.35, 45.65],
+  ['DD', undefined, 12.35, 45.65],
 ])('preserves the public cell for assessment %s and uncertainty %s', async (status, uncertainty, lat, lng) => {
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ items: [{
     scientific_name: 'Alpha fixture', lat: 12.34567, lng: 45.67891,

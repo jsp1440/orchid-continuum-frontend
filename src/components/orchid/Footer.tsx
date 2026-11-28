@@ -27,6 +27,7 @@ const Footer: React.FC = () => {
       title: 'Explore',
       items: [
         { label: 'Featured Genus', anchor: '#species-in-focus' },
+        { label: 'Knowledge Graph', route: '/knowledge-graph' },
         { label: 'Intelligence Graph', route: '/knowledge' },
         { label: 'Ask Calyx', route: '/calyx' },
         { label: 'Atlas', route: '/atlas' },
@@ -58,6 +59,8 @@ const Footer: React.FC = () => {
       items: [
         { label: 'Partners', route: '/partners' },
         { label: 'Get involved', route: '/get-involved' },
+        { label: 'Review Calyx literature', route: '/review' },
+        { label: 'Contributors', route: '/contributors' },
         { label: 'Conservation', route: '/conservation' },
         { label: 'Data & evidence', route: '/knowledge' },
         { label: 'Privacy & data', route: '/privacy' },

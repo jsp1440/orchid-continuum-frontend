@@ -43,8 +43,8 @@ function RelationshipEvidence({ node }: { node: WebNodeData | null | undefined }
   if (!node?.hasData) {
     return (
       <div className="mt-3 rounded-lg border border-dashed border-white/15 bg-black/15 p-3">
-        <p className="text-sm text-[#d6cfbf]">Not linked in the current Continuum view.</p>
-        <p className="mt-1 text-xs leading-5 text-[#958f82]">This is a knowledge gap, not evidence of biological absence.</p>
+        <p className="text-sm text-[#d6cfbf]">{node?.summary ?? 'Evidence source unavailable'}</p>
+        <p className="mt-1 text-xs leading-5 text-[#958f82]">{node?.status === 'empty' ? 'The queried source returned no matching records.' : 'The source did not supply a measurement.'}</p>
       </div>
     );
   }
@@ -107,7 +107,6 @@ const ContinuumWeb: React.FC = () => {
               {RELATIONSHIPS.map((item) => {
                 const Icon = item.icon;
                 const node = graph?.[item.key];
-                const hasData = Boolean(node?.hasData);
                 const isActive = item.key === active;
                 return (
                   <button
@@ -124,7 +123,7 @@ const ContinuumWeb: React.FC = () => {
                       <Icon className="h-4 w-4 text-[#d4b34a]" />
                       <span className="font-mono text-[9px] uppercase tracking-[0.17em] text-[#e8dfce]">{item.label}</span>
                     </div>
-                    <p className="mt-2 text-xs text-[#a8a193]">{hasData ? node?.summary : 'Knowledge gap'}</p>
+                    <p className="mt-2 text-xs text-[#a8a193]">{node?.summary ?? 'Evidence source unavailable'}</p>
                   </button>
                 );
               })}

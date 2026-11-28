@@ -130,7 +130,41 @@ export type SpeciesDossierEnvelope = {
   matrix_url: string;
   partner_references: PartnerReference[];
   provenance: EvidenceReceipt[];
+  /**
+   * Additive block of the backend dossier route (identity_bridge.for_page): the graph node of this page
+   * taxon, linked only by exact accepted name with exactly one active node. `canonical_key` is
+   * `taxon:<public.taxonomy_species.id>` (or `taxon:implied:<genus>_<epithet>`); `older_id` is this
+   * page's own public.orchid_taxonomy id. Absent from older backends.
+   */
+  graph_identity?: DossierGraphIdentity | null;
 };
+
+export type DossierGraphIdentity = {
+  status: 'available' | 'not_enabled' | 'unavailable' | string;
+  link_state: 'linked' | 'no_graph_node' | 'no_page_taxon' | 'ambiguous' | 'not_found' | string | null;
+  older_id?: string | null;
+  kg_node_id?: number | null;
+  canonical_key?: string | null;
+  canonical_key_kind?: 'backbone_row' | 'implied_species_concept' | 'other' | string | null;
+  backbone_id?: string | null;
+  accepted_name?: string | null;
+};
+
+/**
+ * The World Plants backbone taxon id of a dossier (the `<id>` of its graph key `taxon:<id>`), or null.
+ * Only a one-to-one `linked` identity names one; an ambiguous, unlinked or unavailable identity names
+ * none, and the route id (another id space) is never used in its place.
+ */
+export function dossierBackboneTaxonId(dossier: SpeciesDossierEnvelope | null | undefined): string | null {
+  const identity = dossier?.graph_identity;
+  if (!identity || identity.status !== 'available' || identity.link_state !== 'linked') return null;
+  if (identity.canonical_key_kind !== 'backbone_row' && identity.canonical_key_kind !== 'implied_species_concept') {
+    return null;
+  }
+  const key = (identity.canonical_key ?? '').trim();
+  const id = key.startsWith('taxon:') ? key.slice('taxon:'.length) : '';
+  return /^(?:[0-9]{1,12}|implied:[a-z][a-z0-9_-]{0,160})$/.test(id) ? id : null;
+}
 
 export type FederationResolveResult = {
   status: 'resolved' | 'ambiguous' | 'unresolved' | 'invalid';

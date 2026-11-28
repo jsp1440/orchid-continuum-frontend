@@ -15,7 +15,7 @@ const PublicCalyxGuide: React.FC = () => {
       icon: Bug,
       question: relationships?.pollinators.hasData
         ? `What does the documented pollinator evidence for ${genus} actually show?`
-        : `Why is missing pollinator evidence for ${genus} scientifically useful?`,
+        : `Which sources could document pollination in ${genus}?`,
     },
     {
       label: 'Fungi',
@@ -29,7 +29,7 @@ const PublicCalyxGuide: React.FC = () => {
       icon: Globe2,
       question: relationships?.geography.hasData
         ? `What can the occurrence evidence tell us about where ${genus} is known?`
-        : `What does it mean when geographic evidence is not yet linked for ${genus}?`,
+        : `Which sources can I consult for geographic records of ${genus}?`,
     },
     {
       label: 'Evidence',

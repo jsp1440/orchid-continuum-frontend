@@ -215,9 +215,9 @@ export async function fetchGeneraCount(signal?: AbortSignal): Promise<number> {
   return GENERA_FALLBACK_COUNT;
 }
 
-export interface WebNodeData { count: number | null; summary: string; items: string[]; hasData: boolean; worstStatus?: 'CR' | 'EN' | 'VU' | 'LC' | null; }
+export interface WebNodeData { status?: 'available' | 'empty' | 'unavailable'; count: number | null; summary: string; items: string[]; hasData: boolean; worstStatus?: 'CR' | 'EN' | 'VU' | 'LC' | null; }
 export interface ContinuumGraphData { genus: string; speciesCount: number | null; description: string; isFallback: boolean; fungi: WebNodeData; pollinators: WebNodeData; climate: WebNodeData; geography: WebNodeData; conservation: WebNodeData; cultivation: WebNodeData; knowledge: WebNodeData; }
-const EMPTY_NODE: WebNodeData = { count: null, summary: 'No data yet', items: [], hasData: false };
+const UNAVAILABLE_NODE: WebNodeData = { status: 'unavailable', count: null, summary: 'Evidence source unavailable', items: [], hasData: false };
 function pickNum(o: Record<string, unknown>, keys: string[]): number | null {
   for (const k of keys) { const v = o[k]; if (typeof v === 'number' && Number.isFinite(v)) return v; if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v); }
   return null;
@@ -226,21 +226,18 @@ function pickStr(o: Record<string, unknown>, keys: string[]): string | null {
   for (const k of keys) { const v = o[k]; if (typeof v === 'string' && v.trim()) return v.trim(); }
   return null;
 }
-const CATTLEYA_FALLBACK: ContinuumGraphData = {
-  genus: 'Cattleya', speciesCount: 113, description: 'Showy epiphytic orchids of Central & South America.', isFallback: true,
-  fungi: { count: 14, summary: '14 partnerships', items: ['Tulasnella', 'Rhizoctonia', 'Ceratobasidium'], hasData: true },
-  pollinators: { count: 8, summary: '8 linked', items: ['Euglossine bees', 'Bumblebees', 'Carpenter bees'], hasData: true },
-  climate: { count: null, summary: 'Montane · 600–2,000m', items: ['Tropical montane', '600–2,000 m elevation'], hasData: true },
-  geography: { count: 1202, summary: '21 countries · 1,202 records', items: ['Brazil', 'Colombia', 'Venezuela'], hasData: true },
-  conservation: { count: 54, summary: '12 EN · 8 VU · 34 LC', items: ['12 Endangered', '8 Vulnerable', '34 Least Concern'], hasData: true, worstStatus: 'EN' },
-  cultivation: { count: 23, summary: '23 grower records', items: ['Cattleya labiata', 'Cattleya mossiae', 'Cattleya warscewiczii'], hasData: true },
-  knowledge: { count: 156, summary: '156 literature records', items: ['Taxonomic revisions', 'Field surveys', 'OREP extractions'], hasData: true },
-};
 function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}): WebNodeData {
-  if (!raw || typeof raw !== 'object') return EMPTY_NODE;
+  if (!raw || typeof raw !== 'object') return UNAVAILABLE_NODE;
   const o = raw as Record<string, unknown>;
   const status = typeof o.status === 'string' ? o.status.toLowerCase() : '';
   const count = pickNum(o, ['count', 'total', 'records']);
+  const suppliedSummary = pickStr(o, ['summary']);
+  if (status === 'unavailable' || (status === 'empty' && !o.source)) {
+    return { ...UNAVAILABLE_NODE, summary: suppliedSummary ?? UNAVAILABLE_NODE.summary };
+  }
+  if (status === 'empty' && count === 0 && o.source) {
+    return { status: 'empty', count: 0, summary: suppliedSummary ?? 'No records returned for this genus', items: [], hasData: false };
+  }
   const rawItems = Array.isArray(o.items) ? o.items : [];
   const items: string[] = [];
   for (const it of rawItems) {
@@ -255,7 +252,7 @@ function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}):
     }
   }
   const hasData = status === 'available' || (count != null && count > 0) || items.length > 0;
-  if (!hasData) return EMPTY_NODE;
+  if (!hasData) return UNAVAILABLE_NODE;
   let summary: string;
   if (opts.climate) {
     summary = items.find((s) => /m$/.test(s)) || (count != null ? `${count.toLocaleString()} records` : 'Profile available');
@@ -265,24 +262,20 @@ function mapNode(raw: unknown, opts: { unit?: string; climate?: boolean } = {}):
   } else {
     summary = 'Data available';
   }
-  return { count: count ?? null, summary, items: items.slice(0, 3), hasData: true };
+  return { status: 'available', count: count ?? null, summary: suppliedSummary ?? summary, items: items.slice(0, 3), hasData: true };
 }
 
 export async function fetchContinuumGraph(genus: string, signal?: AbortSignal): Promise<ContinuumGraphData> {
-  if (!genus) {
-    console.warn('[ContinuumWeb] fetchContinuumGraph called with empty genus. Returning Cattleya fallback as a diagnostic.');
-    return { ...CATTLEYA_FALLBACK, isFallback: true };
-  }
-  const g = genus;
+  const g = genus.trim();
   const q = encodeURIComponent(g);
   let speciesCount: number | null = null;
   const description = `Daily featured orchid genus from the Continuum taxonomy.`;
 
-  const { ok, data } = await getJson<{
+  const { ok, data } = g ? await getJson<{
     genus?: string;
     hub?: { species_count?: number };
     nodes?: Record<string, unknown>;
-  }>(`${OC_BACKEND_BASE}/api/continuum/graph?genus=${q}`, signal, 9000);
+  }>(`${OC_BACKEND_BASE}/api/continuum/graph?genus=${q}`, signal, 9000) : { ok: false, data: null };
 
   const nodes: Record<string, unknown> = ok && data && data.nodes && typeof data.nodes === 'object' ? data.nodes : {};
   if (speciesCount == null && typeof data?.hub?.species_count === 'number') speciesCount = data.hub.species_count;
