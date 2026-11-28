@@ -7,8 +7,10 @@
  * of independently fetching or inventing scientific content.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { featuredGenusName, msUntilNextRotation } from '@/lib/featuredGenus';
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { featuredGenusName, WINDOW_MS } from '@/lib/featuredGenus';
+import { homepageHeroMedia } from '@/lib/genusMediaResolver';
+import { featuredSpecies } from '@/features/homepage-recovery/featuredSpecies';
 import { supabase } from '@/lib/supabase';
 import { fetchFeaturedTaxonContinuum, type FeaturedTaxonContinuum } from '@/lib/featuredTaxonContinuum';
 
@@ -66,116 +68,184 @@ export function useDailyGenus(): DailyGenusState {
   return useContext(DailyGenusContext);
 }
 
-export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [state, setState] = useState<DailyGenusState>({
-    genus: initialGenus,
-    continuum: null,
-    continuumStatus: 'loading',
-    diagnostic: null,
+
+const PREFETCH_LEAD_MS = 5 * 60_000;
+
+async function resolveWindowGenus(at: number, signal: AbortSignal) {
+  const local = featuredGenusName(at);
+  const today = new Date(at).toISOString().slice(0, 10);
+  if (!DAILY_SNAPSHOT_ENABLED) return {
+    genus: local,
+    diagnostic: `[Genus of the Day] Snapshot adapter is disabled for this deployment; using deterministic identity ${local}.`,
+  };
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal.aborted) throw new Error('Window cancelled');
+  signal.addEventListener('abort', abort, { once: true });
+  const timer = setTimeout(abort, 10_000);
+  try {
+    const { data, error } = await supabase.from('daily_genus_snapshot')
+      .select('genus, snapshot_date').eq('snapshot_date', today).abortSignal(controller.signal).single();
+    const genus = !error && data?.snapshot_date === today && canonicalDailySnapshotGenus(data.genus);
+    if (genus) return { genus, diagnostic: null };
+  } catch (error) {
+    if (signal.aborted) throw error;
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', abort);
+  }
+  return { genus: local, diagnostic: `Snapshot unavailable or invalid for ${today}; using ${local}.` };
+}
+
+/** Load the photo the homepage would actually show, with one bounded browser request. */
+function checkHeroPhoto(url: string, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const photo = new Image();
+    function finish(ok: boolean) {
+      clearTimeout(timer);
+      signal.removeEventListener('abort', fail);
+      photo.onload = null;
+      photo.onerror = null;
+      if (ok) resolve();
+      else {
+        photo.removeAttribute('src');
+        reject(new Error('Featured photograph could not be loaded'));
+      }
+    }
+    const fail = () => finish(false);
+    const timer = setTimeout(fail, 10_000);
+    photo.onload = () => finish(photo.naturalWidth > 0 && photo.naturalHeight > 0);
+    photo.onerror = fail;
+    if (signal.aborted) return fail();
+    signal.addEventListener('abort', fail, { once: true });
+    photo.src = url;
   });
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const requestRef = useRef(0);
+}
 
-  const hydrateContinuum = useCallback(async (genus: string, diagnostic: string | null) => {
-    const request = ++requestRef.current;
-    setState({ genus, continuum: null, continuumStatus: 'loading', diagnostic });
-    try {
-      const continuum = await fetchFeaturedTaxonContinuum(genus);
-      if (request !== requestRef.current) return;
-      setState({ genus: continuum.genus, continuum, continuumStatus: 'ready', diagnostic });
-    } catch (error) {
-      if (request !== requestRef.current) return;
-      setState({
-        genus,
-        continuum: null,
-        continuumStatus: 'unavailable',
-        diagnostic: [diagnostic, `[Featured taxon] Continuum hydration unavailable for ${genus}: ${String(error)}`]
-          .filter(Boolean)
-          .join(' '),
-      });
-    }
-  }, []);
+function hasRelationshipResponse(relationships: FeaturedTaxonContinuum['relationships'], genus: string) {
+  return relationships?.genus === genus && !relationships.isFallback
+    && [relationships.knowledge, relationships.geography, relationships.climate, relationships.pollinators,
+      relationships.fungi, relationships.conservation, relationships.cultivation]
+      .some(node => node.status === 'available' || node.status === 'empty');
+}
 
-  const validateSnapshot = useCallback(async () => {
-    const local = featuredGenusName();
-    const today = new Date().toISOString().slice(0, 10);
-    if (!DAILY_SNAPSHOT_ENABLED) {
-      await hydrateContinuum(
-        local,
-        `[Genus of the Day] Snapshot adapter is disabled for this deployment; using deterministic identity ${local}.`,
-      );
-      return;
-    }
-    try {
-      const { data, error } = await supabase
-        .from('daily_genus_snapshot')
-        .select('genus, snapshot_date')
-        .eq('snapshot_date', today)
-        .single();
+async function prepareExhibit(genus: string, signal: AbortSignal) {
+  const exhibit = await fetchFeaturedTaxonContinuum(genus, signal);
+  const { media, graph, relationships } = exhibit;
+  const taxonomy = exhibit.domains.find(item => item.domain === 'taxonomy');
+  const recoveryHero = featuredSpecies(media.items, genus)[0];
+  const homepageHero = homepageHeroMedia(media.items, genus)[0];
+  if (exhibit.genus !== genus || graph.status !== 'ok' || graph.evidence.genus !== genus
+    || taxonomy?.state !== 'known' || !hasRelationshipResponse(relationships, genus)
+    || media.status !== 'ok' || media.requested_genus !== genus || media.accepted_genus !== genus || !recoveryHero
+    || !homepageHero) {
+    throw new Error(`Incomplete featured exhibit for ${genus}`);
+  }
+  // The two homepage routes may rank different photos first. Load each distinct
+  // first choice, bounded to two URLs, before changing the shared identity.
+  const urls = new Set([recoveryHero.image_url, homepageHero.image_url]);
+  await Promise.all(Array.from(urls, url => checkHeroPhoto(url, signal)));
+  return exhibit;
+}
 
-      const rawSnapshotGenus = !error && data ? data.genus : null;
-      const snapshotGenus = canonicalDailySnapshotGenus(rawSnapshotGenus);
-      if (snapshotGenus) {
-        await hydrateContinuum(snapshotGenus, null);
-        return;
-      }
+function prefetchWindow(at: number) {
+  const controller = new AbortController();
+  const identity = resolveWindowGenus(at, controller.signal);
+  // A failed speculative request has no visitor-visible effect.
+  const exhibit = identity.then(({ genus }) => prepareExhibit(genus, controller.signal)).catch(() => null);
+  return { at, controller, identity, exhibit };
+}
 
-      const invalidSnapshotDiagnostic =
-        !error && data && typeof rawSnapshotGenus === 'string' && rawSnapshotGenus.trim()
-          ? `[Genus of the Day] Snapshot identity for ${today} was not a bounded canonical genus; using deterministic identity ${local}.`
-          : `[Genus of the Day] Snapshot unavailable for ${today}; using deterministic identity ${local}.`;
-
-      await hydrateContinuum(local, invalidSnapshotDiagnostic);
-    } catch (error) {
-      await hydrateContinuum(
-        local,
-        `[Genus of the Day] Snapshot query unavailable; using deterministic identity ${local}. Error: ${String(error)}`,
-      );
-    }
-  }, [hydrateContinuum]);
-
-  useEffect(() => { void validateSnapshot(); }, [validateSnapshot]);
-
-  const clearTimer = useCallback(() => {
-    if (timerRef.current != null) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-  }, []);
-
-  const scheduleNextRefresh = useCallback(() => {
-    clearTimer();
-    timerRef.current = setTimeout(() => {
-      void validateSnapshot();
-      scheduleNextRefresh();
-    }, msUntilNextRotation() + 500);
-  }, [clearTimer, validateSnapshot]);
+export const DailyGenusProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [state, setState] = useState<DailyGenusState>(() => ({
+    genus: featuredGenusName(), continuum: null, continuumStatus: 'loading', diagnostic: null,
+  }));
 
   useEffect(() => {
-    scheduleNextRefresh();
-    return clearTimer;
-  }, [scheduleNextRefresh, clearTimer]);
+    let currentStart: number | null = null;
+    let active: AbortController | undefined;
+    let staged: ReturnType<typeof prefetchWindow> | undefined;
+    let timer: ReturnType<typeof setTimeout>;
+    let hasDisplay = false;
+    let retryInitialOnResume = false;
+    let initialRetried = false;
 
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void validateSnapshot();
-        scheduleNextRefresh();
-      } else clearTimer();
-    };
-    const onPageShow = (event: PageTransitionEvent) => {
-      if (event.persisted) {
-        void validateSnapshot();
-        scheduleNextRefresh();
+    async function display(at: number, signal: AbortSignal, candidate?: ReturnType<typeof prefetchWindow>) {
+      const current = () => !signal.aborted && Math.floor(Date.now() / WINDOW_MS) * WINDOW_MS === at;
+      let genus = featuredGenusName(at);
+      try {
+        // Resolve again at rollover: tomorrow's snapshot can change after preparation.
+        const identity = await resolveWindowGenus(at, signal);
+        genus = identity.genus;
+        if (!current()) return;
+        let continuum: FeaturedTaxonContinuum | null = null;
+        if (candidate && (await candidate.identity).genus === genus) continuum = await candidate.exhibit;
+        if (!current()) return;
+        if (!continuum) {
+          candidate?.controller.abort();
+          // One boundary attempt on a missed or invalid prefetch. Only the initial
+          // visit permits partial source coverage; never clear a working exhibit.
+          continuum = await (hasDisplay ? prepareExhibit : fetchFeaturedTaxonContinuum)(genus, signal);
+        }
+        if (!current()) return;
+        if (continuum.genus !== genus) throw new Error(`Unexpected featured genus for ${genus}`);
+        if (!hasDisplay && continuum.media.status !== 'ok' && continuum.media.status !== 'no_approved_media'
+          && continuum.graph.status !== 'ok' && !hasRelationshipResponse(continuum.relationships, genus)) {
+          throw new Error('No featured exhibit source responded with usable data');
+        }
+        hasDisplay = true;
+        setState({ genus, continuum, continuumStatus: 'ready', diagnostic: identity.diagnostic });
+      } catch (error) {
+        if (!current()) return;
+        retryInitialOnResume = !hasDisplay && !initialRetried;
+        const diagnostic = `[Featured taxon] ${genus}: ${String(error)}`;
+        setState(previous => previous.continuum ? { ...previous, diagnostic }
+          : { genus, continuum: null, continuumStatus: 'unavailable', diagnostic });
       }
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    window.addEventListener('pageshow', onPageShow);
+    }
+
+    function schedule(event?: Event) {
+      clearTimeout(timer);
+      if (document.hidden) return;
+      const now = Date.now();
+      const start = Math.floor(now / WINDOW_MS) * WINDOW_MS;
+      const next = start + WINDOW_MS;
+      if (staged && staged.at < start) {
+        staged.controller.abort();
+        staged = undefined;
+      }
+      if (currentStart !== start || (event && retryInitialOnResume)) {
+        initialRetried = currentStart === start;
+        retryInitialOnResume = false;
+        active?.abort();
+        active = new AbortController();
+        currentStart = start;
+        void display(start, active.signal, staged?.at === start ? staged : undefined);
+      }
+      if (now < next - PREFETCH_LEAD_MS) {
+        timer = setTimeout(schedule, next - PREFETCH_LEAD_MS - now);
+      } else {
+        if (staged?.at !== next) {
+          staged?.controller.abort();
+          staged = prefetchWindow(next);
+        }
+        timer = setTimeout(schedule, next - now);
+      }
+    }
+
+    schedule();
+    document.addEventListener('visibilitychange', schedule);
+    window.addEventListener('pageshow', schedule);
+    window.addEventListener('online', schedule);
     return () => {
-      document.removeEventListener('visibilitychange', onVisible);
-      window.removeEventListener('pageshow', onPageShow);
+      clearTimeout(timer);
+      active?.abort();
+      staged?.controller.abort();
+      document.removeEventListener('visibilitychange', schedule);
+      window.removeEventListener('pageshow', schedule);
+      window.removeEventListener('online', schedule);
     };
-  }, [validateSnapshot, scheduleNextRefresh, clearTimer]);
+  }, []);
 
   return <DailyGenusContext.Provider value={state}>{children}</DailyGenusContext.Provider>;
 };

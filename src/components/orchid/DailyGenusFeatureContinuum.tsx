@@ -19,7 +19,7 @@ import {
   EVIDENCE_STATE_LABEL,
   type EcologicalEvidence,
 } from '@/lib/genusProfileDataQuality';
-import type { GenusMediaItem } from '@/lib/genusMediaResolver';
+import { homepageHeroMedia, type GenusMediaItem } from '@/lib/genusMediaResolver';
 
 const DOMAIN_LABELS: Record<ContinuumDomainState['domain'], string> = {
   taxonomy: 'Taxonomy',
@@ -169,7 +169,7 @@ function ContinuumPhotograph({
 
 const DailyGenusFeatureContinuum: React.FC<{ continuation?: React.ReactNode }> = ({ continuation }) => {
   const { genus, continuum, continuumStatus } = useDailyGenus();
-  const media = React.useMemo(() => continuum?.media.items ?? [], [continuum]);
+  const media = React.useMemo(() => homepageHeroMedia(continuum?.media.items ?? [], genus), [continuum, genus]);
 
   // Photographs whose URL failed to load in this session. They are excluded
   // from later selection so a dead URL cannot occupy a gallery slot.

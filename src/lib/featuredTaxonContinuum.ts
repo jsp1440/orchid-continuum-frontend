@@ -121,12 +121,14 @@ export async function fetchFeaturedTaxonContinuum(
 ): Promise<FeaturedTaxonContinuum> {
   const requested = normalizeFeaturedTaxonGenus(genus);
 
-  const [media, graph, relationships] = await Promise.all([
+  const [media, graph, relationshipResponse] = await Promise.all([
     fetchCalyxGenusMedia(requested, signal),
     fetchGenusGraphEvidence(requested, signal),
     fetchContinuumGraph(requested, signal).catch(() => null),
   ]);
 
+  const relationships = relationshipResponse?.genus === requested && !relationshipResponse.isFallback
+    ? relationshipResponse : null;
   const domains = domainStates(graph);
   return {
     genus: graph.status === 'ok'
